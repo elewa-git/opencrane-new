@@ -56,7 +56,7 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
 ## Design rules for the main building blocks
 
 ### Computers
-- **One computer per assistant** (recommended; confirm as decision 7). Conversations are threads on that computer. A team assistant has its own computer with team scope only; group chats always use the team computer, never a personal one.
+- **One computer per assistant** (recommended; confirm as decision 6). Conversations are threads on that computer. A team assistant has its own computer with team scope only; group chats always use the team computer, never a personal one.
 - **Binding:**
   - Warm Pods are tenant-neutral until claimed.
   - At claim, OpenCrane binds a Pod to one assistant and issues a short-lived token.
@@ -124,7 +124,7 @@ Hosted MCP servers never run inside the gateway.
 - **Commands write one event, nothing else ("listen to yourself").** A command validates, then does **one atomic append** to the event log. State tables (conversations, budgets, approvals, memberships) are **projections** kept up to date by listeners. There are no multi-table business transactions and no "write state, then publish".
 - **The only synchronous atomic step is a conditional append,** where a rule needs one consistent answer: an expected stream version, or a unique key, on the budget stream (reserve), the approval (use once) and state-guarded commands (only a *pending* approval can be decided). One stream per rule serialises concurrent writers without locks across tables. Budgets use a **single-writer budget actor per silo**: one leader-elected process in the decision service handles reserve and settle requests **in order**, in memory, and appends each result. The expected stream version stays only as a fence, so a stale leader after failover can't write. There are no locks and, in normal operation, no conflicts. The budget stream holds every ceiling (global, paying group, optional assistant), so a single conditional append checks all of them and records the one charge; that is ample at silo scale. OpenFGA is a **projection** too: its tuples are rebuilt from membership and grant events, never edited directly.
 - **Consistency windows are explicit:** the UI may lag its own writes by milliseconds, and revocation takes effect within a documented bound (target under 2 seconds) as listeners update OpenFGA and the credential-release rules.
-- **Delivery:** JetStream **ordered consumers** feed projections (consumer sequence and row in one Postgres transaction) and a per-silo dispatcher. The dispatcher hands each event to the job queue (see decision 8), which fans it out to subscriber queues, **in order per stream** (per conversation, per budget), using pg-boss `key_strict_fifo` queues keyed by stream id. There is one writer per stream at a time, so **projections need no locks**, and different streams run in parallel. A failing event holds back only its own stream (strict FIFO) and raises an alert; it is never skipped. Delivery is at-least-once: handlers are idempotent (keyed by event id), retried with backoff, and failed events land in a monitored dead-letter queue that can be replayed. `LISTEN/NOTIFY` wakes the browser streams.
+- **Delivery:** JetStream **ordered consumers** feed projections (consumer sequence and row in one Postgres transaction) and a per-silo dispatcher. The dispatcher hands each event to the job queue (see decision 7), which fans it out to subscriber queues, **in order per stream** (per conversation, per budget), using pg-boss `key_strict_fifo` queues keyed by stream id. There is one writer per stream at a time, so **projections need no locks**, and different streams run in parallel. A failing event holds back only its own stream (strict FIFO) and raises an alert; it is never skipped. Delivery is at-least-once: handlers are idempotent (keyed by event id), retried with backoff, and failed events land in a monitored dead-letter queue that can be replayed. `LISTEN/NOTIFY` wakes the browser streams.
 - **Three event sources, one log:**
   1. server commands (decisions, approvals, admin changes);
   2. computer reports (Codex events through the bridge);
@@ -180,7 +180,7 @@ Hosted MCP servers never run inside the gateway.
 
 | Store | Holds | Why |
 |---|---|---|
-| **Event store (NATS JetStream, decision 3)** | Every event, one subject per entity (see the [catalogue](docs/architecture/events.md)). The only source of truth; R3 replicated, unlimited retention, backed up | Apache-2.0; per-subject conditional appends; ordered consumers; doubles as a bus |
+| **Event store (NATS JetStream, decision 2)** | Every event, one subject per entity (see the [catalogue](docs/architecture/events.md)). The only source of truth; R3 replicated, unlimited retention, backed up | Apache-2.0; per-subject conditional appends; ordered consumers; doubles as a bus |
 | **PostgreSQL (CNPG), database `opencrane`** | **Content projections**, all replayable: members, teams, assistants and owners, computers, conversations, messages, activity, approvals, installed MCP servers and tool modes, connections (secret references only), grants, budgets, usage, routines, audit view, plus projection checkpoints | Queryable content; drop and rebuild by replay | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
 | same cluster, database `jobs` | pg-boss queues: ordered per-stream delivery to reactions, retries, dead-letter, cron (routines, monthly budget period, dreaming, housekeeping) | pg-boss runs on Postgres; no extra queue service |
 | same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
@@ -231,6 +231,15 @@ Both are short-lived and signed by OpenCrane. The gateway verifies them and forw
 
 Each spike is one night of agent work plus a morning decision. The result is a one-page ADR in `docs/adr/`.
 
+**Start gate:** the prototype and MVP work starts once **S0.1 (Codex in a computer), S0.2 (gateway + IAM context) and S0.8 (handler runtime)** pass. The other spikes run alongside, just ahead of the phase that needs them:
+
+| Spike | Must pass before |
+|---|---|
+| S0.7 (event store) | the event core in Phase 1 (fallback: Postgres event store) |
+| S0.3 (warm pool + snapshots) | Phase 2 |
+| S0.5 (live view / takeover) | Phase 3 |
+| S0.4 (brain isolation delta) | Phase 4 |
+
 | # | Spike | Pass condition | Decides |
 |---|---|---|---|
 | S0.1 | **Codex app-server in a GKE Agent Sandbox Pod** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
@@ -238,9 +247,8 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
 | S0.4 | **Company brain isolation (delta only)** | Reuse OpenCrane 1's Cognee 1.5.4 contract suite (`apps/_infra/cognee/tests`: ACL on/off negative control, dataset-owned membership and search, graph chunks per document, deletion and restart recovery), which already proves these. Add only what it never covered: **memify/dreaming per scope** never writes into or reads from another dataset; deletion still removes data after consolidation; the **deployed configuration** (real model and embedding dimensions, not the stub); access selected by the brain MCP from `ext_authz` IAM context; latency with many datasets; the all-Postgres graph option vs Ladybug | Brain layout and graph backend |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
-| S0.7 | **Event store: NATS JetStream (fallback: Postgres event store)** | Conditional append per entity subject (expected last-subject sequence); ordered replay into a projection with the consumer sequence checkpointed in the same Postgres transaction; dispatcher into pg-boss; replay rebuilds a projection; R3 failover without lost or reordered events; many-subject scale (at least 1M entity subjects); backup and restore of the stream | Event store (decision 3) |
-| S0.8 | **Handler runtime: pg-boss vs Restate vs Hatchet vs Temporal** | Per-key ordered handlers (one writer per stream); retries and dead-letter; **logs and history per handler in a UI**; the budget actor as a keyed single writer; licence review; ops cost per silo | Handler runtime (decision 8) |
-| S0.6 | **Kortix as a base?** | Self-hosted with our model gateway; check orgs/roles, change-request approvals, the sandbox layer and the licence | Whether to build the product layer on Kortix instead |
+| S0.7 | **Event store: NATS JetStream (fallback: Postgres event store)** | Conditional append per entity subject (expected last-subject sequence); ordered replay into a projection with the consumer sequence checkpointed in the same Postgres transaction; dispatcher into pg-boss; replay rebuilds a projection; R3 failover without lost or reordered events; many-subject scale (at least 1M entity subjects); backup and restore of the stream | Event store (decision 2) |
+| S0.8 | **Handler runtime: pg-boss vs Restate vs Hatchet vs Temporal** | Per-key ordered handlers (one writer per stream); retries and dead-letter; **logs and history per handler in a UI**; the budget actor as a keyed single writer; licence review; ops cost per silo | Handler runtime (decision 7) |
 
 ## Phases and acceptance
 
@@ -263,7 +271,7 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 
 | Milestone | Nights of agent work | Calendar (5 nights/week, with rework) |
 |---|---|---|
-| Phase 0: spikes and decisions (S0.1–S0.8) | 8 | **Week 1–2** |
+| Phase 0: start-gate spikes S0.1, S0.2, S0.8 (others run alongside later phases) | 3 (+4 alongside) | **Week 1** |
 | Phase 1: foundation (incl. event core) | 5–7 | Week 2–4 |
 | **Phase 2: working prototype** | 5–7 | **About week 4–5** |
 | Phase 3: governed work | 9–12 | Week 6–9 (first live governed action around week 7) |
@@ -273,7 +281,7 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 
 **What moves the date:**
 - **Human bandwidth, the main limit.** Morning review, decisions, and human-only steps: identity-provider changes, approvals that need a real re-login, visual approval.
-- **Spike outcomes.** Adopting Kortix could cut Phases 2–4 substantially. A failed harness or gateway spike adds about 1–2 weeks.
+- **Spike outcomes.** A failed harness, gateway or handler-runtime spike adds about 1–2 weeks before the start gate.
 - **Live bring-up.** OpenCrane 1 needed 20–30 ledger entries per fresh install. Scripted, weekly installs from Phase 1 onwards are meant to bring that down.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
@@ -301,8 +309,7 @@ Record the source commit in each copied file's header or README.
 ## Open decisions (owner)
 
 1. Brain store: Cognee (SurrealDB's BSL licence conflicts with the OSI-only rule, so it stays only as a reference design). Spike S0.4 still proves scope isolation.
-2. Build on Kortix, or on Codex plus our own product layer. Decided by spike S0.6.
-3. **Event store: NATS JetStream (decided direction; confirm in S0.7).** KurrentDB is ruled out: its KLv1 licence is not acceptable for customer silos. JetStream is Apache-2.0 (CNCF) and provides:
+2. **Event store: NATS JetStream (decided direction; confirm in S0.7).** KurrentDB is ruled out: its KLv1 licence is not acceptable for customer silos. JetStream is Apache-2.0 (CNCF) and provides:
    - one subject per entity stream (e.g. `ev.conversation.<id>`);
    - **conditional appends** with `Nats-Expected-Last-Subject-Sequence`;
    - ordered consumers for projections;
@@ -311,11 +318,11 @@ Record the source commit in each copied file's header or README.
    - unlimited retention for the source of truth.
 
    It also serves as the message bus if one is needed later. Fallback if S0.7 fails: a PostgreSQL event store (Message DB, or Emmett once its licence is confirmed).
-4. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
-5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
-6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
-7. **Computer per assistant, not per conversation** (recommended). A person's assistant keeps one computer across its conversations, with the same logins, workspace and browser profile, like one laptop per colleague. A team assistant has one computer with team scope. Delegated children run as sub-agents in the same computer unless they need a different scope, in which case they get their own.
-8. **Handler runtime: pg-boss (recommended), unless S0.8 favours Restate, Hatchet or Temporal.** Temporal (MIT) is the most complete: entity workflows as single writers per key, Updates for synchronous answers, native schedules and timers, and a per-run history UI. Its costs are a cluster per silo (or shared namespaces), determinism and versioning rules on workflow code, and keeping its workflow history from becoming a second source of truth; it would run processes, while facts stay in the event store. Restate's Virtual Objects give one writer per key, durable handlers and a UI per invocation; Hatchet (MIT, on Postgres) gives key-based concurrency queues with monitoring and logs per run. Either could replace pg-boss plus our own dispatcher and handler dashboards. Absurd is no longer needed. The computer design removes turn orchestration, so what remains is cron, retries, event fan-out and **ordered per-stream processing**. pg-boss does all of that natively on Postgres, the last through `key_strict_fifo` queues; Absurd adds durable multi-step workflows the design no longer needs.
+3. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
+4. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
+5. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
+6. **Computer per assistant, not per conversation** (recommended). A person's assistant keeps one computer across its conversations, with the same logins, workspace and browser profile, like one laptop per colleague. A team assistant has one computer with team scope. Delegated children run as sub-agents in the same computer unless they need a different scope, in which case they get their own.
+7. **Handler runtime: pg-boss (recommended), unless S0.8 favours Restate, Hatchet or Temporal.** Temporal (MIT) is the most complete: entity workflows as single writers per key, Updates for synchronous answers, native schedules and timers, and a per-run history UI. Its costs are a cluster per silo (or shared namespaces), determinism and versioning rules on workflow code, and keeping its workflow history from becoming a second source of truth; it would run processes, while facts stay in the event store. Restate's Virtual Objects give one writer per key, durable handlers and a UI per invocation; Hatchet (MIT, on Postgres) gives key-based concurrency queues with monitoring and logs per run. Either could replace pg-boss plus our own dispatcher and handler dashboards. Absurd is no longer needed. The computer design removes turn orchestration, so what remains is cron, retries, event fan-out and **ordered per-stream processing**. pg-boss does all of that natively on Postgres, the last through `key_strict_fifo` queues; Absurd adds durable multi-step workflows the design no longer needs.
 
 ## Risks
 
