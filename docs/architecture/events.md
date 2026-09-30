@@ -17,7 +17,9 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message and memory text is encrypted with a per-conversation or per-scope key, so "forget" deletes the key (crypto-shredding) and appends a tombstone event.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
 
-## How events are delivered (KurrentDB)
+## How events are delivered
+
+The rules below were written for KurrentDB and apply equally to the PostgreSQL event store now recommended (plan decision 3). With Postgres, a catch-up subscription reads the event table in global-position order, and the store must ensure no event is skipped while an earlier transaction is still committing.
 
 - **Order comes from KurrentDB itself.** Each stream is strictly ordered by its revision (0, 1, 2…). The `$all` log gives every event one global position.
 - **Use catch-up subscriptions, never persistent subscriptions, for anything that depends on order.** KurrentDB's persistent subscriptions are competing consumers: even the "Pinned" strategy doesn't guarantee order, and retries can redeliver out of order. OpenCrane 1's activation queue on a persistent subscription also suffered head-of-line blocking and parked messages that needed an operator to replay.

@@ -149,6 +149,13 @@ Hosted MCP servers never run inside the gateway.
   - the `workers` Deployment, scaled on queue depth (KEDA's PostgreSQL scaler).
   
   Computers are scaled by Agent Sandbox itself.
+- **Logs and traces per handler:** every projection and reaction is a named handler with its own pg-boss queue (e.g. `settle-budget`, `wake-computer`, `update-openfga`).
+  - Each run logs structured JSON with `handler`, `event_id`, `event_type`, `stream`, `attempt` and `trace_id`, and is one OpenTelemetry span.
+  - A trace follows command → event → reactions → follow-up events.
+  - Filter logs by `handler` in Cloud Logging or Loki; each handler gets a dashboard (runs, failures, latency, dead-letter).
+  - pg-boss keeps each job's state, attempts and last error in Postgres.
+  - An admin "event timeline" view shows, for any event, which handlers ran, their status and a link to their logs.
+  - Noisy or risky handlers can run as their own Deployment (label `handler=`) without changing code.
 - **Watching the system:** OpenTelemetry from every component, to Cloud Monitoring or a Grafana stack (Prometheus, Loki, Tempo). Required metrics and alerts:
   - **projection lag:** checkpoint behind the `$all` head;
   - **dispatcher lag;**
@@ -192,6 +199,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
 | S0.4 | **Company brain isolation** | Cognee with one dataset per scope, and memify run per scope, cannot read another scope; the same test on SurrealDB with row-level permissions | Brain store: Cognee or SurrealDB |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
+| S0.7 | **Postgres event store** | Expected-version appends per stream; ordered catch-up reading with no missed events under concurrent commits; inline projection in the append transaction; replay rebuilds a projection | Event store (decision 3) |
 | S0.6 | **Kortix as a base?** | Self-hosted with our model gateway; check orgs/roles, change-request approvals, the sandbox layer and the licence | Whether to build the product layer on Kortix instead |
 
 ## Phases and acceptance
@@ -254,7 +262,12 @@ Record the source commit in each copied file's header or README.
 
 1. Brain store: Cognee or SurrealDB. Decided by spike S0.4.
 2. Build on Kortix, or on Codex plus our own product layer. Decided by spike S0.6.
-3. **Event store: KurrentDB (recommended) or a separate PostgreSQL event database.** Since events are the only truth and Postgres holds replayable content, a native event store fits: per-stream expected versions, ordered catch-up subscriptions and stream-per-entity. OpenCrane 1's KurrentDB chart, TLS and backup scripts can be reused. Commands write **only** there. A Postgres event database is the fallback if one engine per silo matters more.
+3. **Event store: a PostgreSQL event database (recommended) or KurrentDB.** Use a separate `events` database in the silo's CNPG cluster, via a TypeScript event-store library (Emmett, once its licence is confirmed; otherwise Message DB or a small in-house table). The reasons:
+   - one engine and one point-in-time backup, so events and content always restore consistently;
+   - OSI licences throughout (KurrentDB's KLv1 is source-available, not open source, and restricts offering it as a hosted service, which needs legal review for customer silos);
+   - inline projections in the append transaction for the few read models that must be instantly consistent (approvals, budget view).
+
+   **Spike S0.7** must prove per-stream expected versions, gap-free ordered reading despite concurrent commits, and catch-up subscriptions. KurrentDB (native streams) and NATS JetStream (per-subject expected sequence, and a real bus) are the alternatives if it fails.
 4. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
 5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
@@ -263,6 +276,7 @@ Record the source commit in each copied file's header or README.
 
 ## Risks
 
+- **Licences:** KurrentDB (KLv1) and SurrealDB (BSL) are not OSI open source. Prefer OSI components in customer silos, or get legal sign-off.
 - **Young components:** agentgateway had a high-severity MCP authorisation advisory in 2026, and Agent Substrate isn't ready. Pin versions, track advisories, and keep policy decisions in OpenCrane so the gateway can be swapped.
 - **Harness dependency:** keep the computer bridge thin, so Codex can be swapped for OpenCode or Goose.
 - **Dreaming and permission laundering:** consolidation runs per scope as a scoped principal, and memory never grants anything.
