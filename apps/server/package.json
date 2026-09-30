@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@opencrane/events": "0.1.0",
+    "@opencrane/observability": "0.1.0",
     "fastify": "5.12.5",
     "ws": "8.22.0",
     "zod": "4.6.5"
