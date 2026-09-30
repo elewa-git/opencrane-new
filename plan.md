@@ -231,12 +231,12 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 
 | Milestone | Nights of agent work | Calendar (5 nights/week, with rework) |
 |---|---|---|
-| Phase 0: spikes and decisions | 6 | **Week 1–2** |
+| Phase 0: spikes and decisions (S0.1–S0.8) | 8 | **Week 1–2** |
 | Phase 1: foundation (incl. event core) | 5–7 | Week 2–4 |
 | **Phase 2: working prototype** | 5–7 | **About week 4–5** |
-| Phase 3: governed work | 9–12 | Week 5–8 (first live governed action around week 6) |
-| Phase 4: company product | 12–17 | Week 8–13 |
-| Phase 5: qualification | 5–7 plus human-run live tests | Week 13–16 |
+| Phase 3: governed work | 9–12 | Week 6–9 (first live governed action around week 7) |
+| Phase 4: company product | 12–17 | Week 9–14 |
+| Phase 5: qualification | 5–7 plus human-run live tests | Week 14–17 |
 | **MVP** | **About 42–58 nights** | **About 12–17 weeks** |
 
 **What moves the date:**
