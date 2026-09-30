@@ -101,8 +101,15 @@ Hosted MCP servers never run inside the gateway.
 - **Audit record = server decisions + gateway observations + computer reports**, joined by shared ids: conversation, turn, step permit, reservation and approval. The gateway forwards the permit id upstream and logs it.
   - The audit view marks each line's source.
   - An effect in the gateway log without a matching permit or decision is an alert.
-- **Web app:** the server streams chat text and activity to the browser over SSE, and the browser never connects to the `EVENTS` stream (the source of truth). The live view is a separate stream.
-- **Later option:** a separate, browser-facing NATS account with **UI subjects** per conversation (`ui.conv.<id>`), filled by a projection that decrypts and redacts each event per audience. Browsers connect over NATS WebSocket with short-lived tokens issued by an **auth callout** in opencrane-server (permissions computed from OpenFGA). Removal kicks the connection. This gives built-in resume by sequence, but adds a public NATS endpoint; adopt it only if SSE becomes a bottleneck.
+- **Web app realtime over WebSocket** (one connection per browser tab to opencrane-server). The browser never connects to the `EVENTS` stream.
+  - **Subscribe:** the client sends `subscribe {conversation, since}`. The server checks OpenFGA, replays anything after `since` from the projection, then pushes live updates: chat text as it streams, activity, approvals, presence. Every message carries the conversation's position, so a reconnect resumes with no gaps.
+  - **Revocation:** on `participant.removed` or `member.removed`, the server immediately unsubscribes the affected sockets, and closes the socket if the member is gone.
+  - **Commands stay on the HTTP API** (the API of record for every client: idempotency keys, OpenAPI). The socket may carry lightweight actions (typing, presence, "mark read") as typed messages with request ids and acknowledgements.
+  - **Protocol:** versioned, typed JSON messages (zod schemas shared with the web app) over the plain `ws` library.
+  - **Security:** the session cookie is checked on upgrade, with a strict `Origin` check (defence against cross-site WebSocket hijacking), heartbeats, per-connection rate limits, and backpressure (drop live deltas, never drop state updates).
+  - **Scaling across server replicas:** each replica receives the per-conversation updates it needs through internal NATS core subjects (not the `EVENTS` stream), so any replica can serve any socket. Ingress: WebSocket-enabled routes with long idle timeouts.
+  - The live view and takeover already use WebSocket (KasmVNC), so the web app has one realtime technology.
+- **Later option:** browsers connect to NATS over WebSocket directly, on a separate browser-facing account with redacted per-conversation UI subjects and short-lived tokens from an auth callout. Consider it only if the server's WebSocket layer becomes a bottleneck.
 
 ### Live view and takeover
 - **The stream never leaves the Pod directly.** The KasmVNC stream reaches people only through the OpenCrane server's authenticated proxy.

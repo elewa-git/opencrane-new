@@ -93,11 +93,11 @@ If a stale read slips past validation, the expected-version check rejects the ap
 |---|---|---|---|
 | `conversation.created` | command | conversations | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
-| `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser stream |
-| `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser stream; notify on failure |
-| `agent.message_completed` | bridge (reported) | messages | browser stream. Streamed text deltas are sent live and not stored as events |
-| `agent.reasoning_summarised` | bridge (reported) | activity | browser stream |
-| `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser stream |
+| `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
+| `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
+| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Streamed text deltas are sent live and not stored as events |
+| `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
+| `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
 
 ### Tools, approvals and effects
