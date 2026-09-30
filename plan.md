@@ -108,6 +108,27 @@ Hosted MCP servers never run inside the gateway.
 - **Permissions:** viewing is for conversation participants; control is for the requester or whoever they grant it to.
 - **Takeover pauses the agent** and is audited as a human action. Browser sessions made during a takeover stay in the computer's profile, so snapshots are sensitive data.
 
+## Data stores
+
+**One PostgreSQL per silo** (a CNPG cluster with several databases, point-in-time backups to GCS) holds almost everything. Other stores are added only where Postgres genuinely can't do the job.
+
+| Store | Holds | Why |
+|---|---|---|
+| **PostgreSQL (CNPG), database `opencrane`** | Members, assistants, computers, conversations and messages (append-only), activity events, approvals, budgets (reservations, settlements, price table), MCP catalogue and connection metadata, audit | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
+| same cluster, database `absurd` | Durable jobs: approvals waiting, schedules, settlement, dreaming runs | Absurd runs on Postgres; no extra queue |
+| same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
+| same cluster, database `cognee` (+ pgvector) | Cognee metadata and embeddings | Cognee supports pgvector and Postgres for relational data |
+| **Cognee graph store** | The knowledge graph | Cognee's default embedded graph (Ladybug) on a per-silo volume with snapshots. Its all-Postgres graph option is attractive but documented as a demo; qualify it in S0.4 before relying on it |
+| **Object storage (GCS)** | Uploads and generated files, Pod Snapshots, database backups | Not a database; per-silo buckets, encrypted |
+| **Secret store** (Kubernetes Secrets or GCP Secret Manager) | Company model keys, per-user credentials, the token-signing key | Secrets never go in Postgres |
+
+**Not in the first version:**
+- **KurrentDB:** add it only if long histories or audit streams need it.
+- **SurrealDB:** it replaces the Cognee stores only if spike S0.4 chooses it.
+- **Redis:** only if the gateway runs several replicas and needs shared rate-limit counters. Budgets don't need it; they live in Postgres behind `ext_authz`.
+
+**Zitadel** keeps its own database, run by the platform or as Zitadel Cloud. It is shared across silos with one organisation per customer, as in OpenCrane 1.
+
 ## Phase 0: spikes (decide before building)
 
 Each spike is one night of agent work plus a morning decision. The result is a one-page ADR in `docs/adr/`.
