@@ -231,11 +231,11 @@ Both are short-lived and signed by OpenCrane. The gateway verifies them and forw
 
 Each spike is one night of agent work plus a morning decision. The result is a one-page ADR in `docs/adr/`.
 
-**Start gate:** the prototype and MVP work starts once **S0.1 (Codex in a computer), S0.2 (gateway + IAM context) and S0.8 (handler runtime)** pass. The other spikes run alongside, just ahead of the phase that needs them:
+**Start gate:** the prototype and MVP work starts once **S0.1 (Codex in a computer), S0.2 (gateway + IAM context) and S0.7 (NATS JetStream event store)** pass. The other spikes run alongside, just ahead of the phase that needs them:
 
 | Spike | Must pass before |
 |---|---|
-| S0.7 (event store) | the event core in Phase 1 (fallback: Postgres event store) |
+| S0.8 (handler runtime) | the reactions part of Phase 1's event core; pg-boss is the default if it hasn't reported yet |
 | S0.3 (warm pool + snapshots) | Phase 2 |
 | S0.5 (live view / takeover) | Phase 3 |
 | S0.4 (brain isolation delta) | Phase 4 |
@@ -271,7 +271,7 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 
 | Milestone | Nights of agent work | Calendar (5 nights/week, with rework) |
 |---|---|---|
-| Phase 0: start-gate spikes S0.1, S0.2, S0.8 (others run alongside later phases) | 3 (+4 alongside) | **Week 1** |
+| Phase 0: start-gate spikes S0.1, S0.2, S0.7 (others run alongside later phases) | 3 (+4 alongside) | **Week 1** |
 | Phase 1: foundation (incl. event core) | 5–7 | Week 2–4 |
 | **Phase 2: working prototype** | 5–7 | **About week 4–5** |
 | Phase 3: governed work | 9–12 | Week 6–9 (first live governed action around week 7) |
@@ -281,7 +281,7 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 
 **What moves the date:**
 - **Human bandwidth, the main limit.** Morning review, decisions, and human-only steps: identity-provider changes, approvals that need a real re-login, visual approval.
-- **Spike outcomes.** A failed harness, gateway or handler-runtime spike adds about 1–2 weeks before the start gate.
+- **Spike outcomes.** A failed harness, gateway or event-store spike adds about 1–2 weeks before the start gate (the event store falls back to Postgres).
 - **Live bring-up.** OpenCrane 1 needed 20–30 ledger entries per fresh install. Scripted, weekly installs from Phase 1 onwards are meant to bring that down.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
