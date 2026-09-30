@@ -1,7 +1,12 @@
-node_modules/
-dist/
+*.log
+*.tgz
+.DS_Store
 .env
 .env.*
+.tools/
+coverage/
+dist/
 keys/
-*.log
-.DS_Store
+node_modules/
+spikes/**/.state/
+spikes/**/data/
