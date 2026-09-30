@@ -62,6 +62,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
 | `scope-<id>` | brain permission scope | memory written, corrected, forgotten, consolidated, promoted |
 | `routine-<id>` | scheduled routine | created, due, paused, retired |
+| `delegation-<id>` | delegated child task | started, completed |
 | `security-<silo>` | silo | alerts |
 
 ## Catalogue
@@ -116,6 +117,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 |---|---|---|---|
 | `mcp.server_registered` | admin | catalogue (draft) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
 | `mcp.server_discovered` | reaction | catalogue (tools, schema digests) | — |
+| `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | admin | tool modes (Allow / Ask / Block) | regenerate gateway config |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tool_list_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
