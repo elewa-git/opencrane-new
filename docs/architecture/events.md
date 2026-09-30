@@ -16,6 +16,8 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 4. **Projections and reactions are separate.** A replay rebuilds projections only. Reactions (waking a computer, pushing gateway config, sending mail) keep their own checkpoints, are idempotent, and are switched off during a rebuild.
 5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message and memory text is encrypted with a per-conversation or per-scope key, so "forget" deletes the key (crypto-shredding) and appends a tombstone event.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
+7. **Idempotency is by event id, not by the event store's duplicate window.** Every projection and reaction records the event ids it has applied, and commands use expected-sequence appends. JetStream's `Nats-Msg-Id` de-duplication only lasts for its duplicate window and is lost on backup/restore (found in spike S0.7), so it is an optimisation, never the guarantee.
+8. **Brief write pauses are normal.** When the JetStream stream leader fails, writes pause for roughly 5–8 seconds while a new leader is elected (measured in S0.7). Commands retry with backoff, and the UI shows the message as "saving" rather than failing.
 
 ## How events are delivered (NATS JetStream)
 

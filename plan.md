@@ -35,6 +35,8 @@ Consequences:
 
 Local stdio tools inside the computer (Playwright, document tools) are exempt until Codex supports 2026-07-28 over stdio; their network traffic still passes the gateway.
 
+**Found in spike S0.1a:** Codex 0.159 proposes 2025-06-18 at `initialize` and uses `Mcp-Session-Id` unless the server answers 2026-07-28. It sends the method and tool-name headers only in that case, and it accepts any version without checking. So OpenCrane's MCP servers and the gateway must **enforce** 2026-07-28 themselves. Whether Codex can run fully stateless (no `initialize`, no session) is being tested in round 2.
+
 ## Responsibility split: gateway vs server
 
 The gateway **enforces**; the OpenCrane server **decides** and owns the truth. The gateway holds nothing it can't lose: no business state, no per-user secrets at rest, and no decisions beyond static rules generated from server configuration.
@@ -63,6 +65,11 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
   - A Pod never returns to the pool after a binding ends; it is destroyed.
   - Idle computers are suspended to per-silo encrypted Pod Snapshots.
 - **No lasting secrets in a computer.** Codex, Playwright and KasmVNC run inside it. All network traffic goes through the gateway, and the package mirror is reached through it as well.
+- **Local forwarding proxy in every computer** (found in spike S0.1a):
+  - Codex talks only to `127.0.0.1`. The bridge sets the current turn token on the proxy at each turn, and the proxy adds the computer and turn tokens as HTTP headers before forwarding to the gateway.
+  - Codex holds **no real provider key**: a key given to Codex is readable by the agent's own shell commands and is written to its shell snapshots.
+  - Codex's own approval prompts are not policy. Policy lives at the gateway; inside the computer, Codex runs its sandbox with on-request approval.
+  - The bridge processes Codex notifications strictly in arrival order.
 - **Delegated children** run as Codex sub-agents in the same computer. They get their own computer only when they need a different scope.
 
 ### Installing an MCP server
@@ -76,6 +83,13 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
 8. **Watch:** tool-list or schema changes are held until re-reviewed.
 
 Hosted MCP servers never run inside the gateway.
+
+**Gateway hardening (found in spike S0.2):**
+- The decision service is deny-by-default: only `server/discover`, `tools/list` and `tools/call` pass, and batches, case variants, duplicate keys, `resources/*` and unknown methods are refused.
+- Bearer tokens (computer and turn) and arbitrary client headers are never forwarded upstream; only a small header allowlist passes.
+- Credential headers are overwritten on every route.
+- Approvals are bound to requester, conversation, turn, assistant and the argument digest.
+- Requests without an output-token bound are refused or capped before budget reservation.
 
 ### Per-user MCP credentials (e.g. per-user Odoo)
 - **Default:** one stateless MCP deployment. Per call, the decision service releases *this user's* lease for the selected profile, and the gateway injects it. The MCP server trusts only the injected credential and ignores identity in arguments.
