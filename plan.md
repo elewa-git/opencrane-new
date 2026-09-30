@@ -214,7 +214,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 
 | Phase | Scope | Done when (live on a fresh install) | PRs (estimate) |
 |---|---|---|---|
-| **1. Foundation** | Repository scaffold (pnpm workspace, four apps: `web`, `server`, `computer`, `deploy`); CI with required checks; Helm umbrella from OpenCrane 1 charts; CNPG with backups on; Zitadel sign-in (copied auth library); OpenFGA with the first model | Sign in and out on the test silo; a backup exists; the restore drill passes | 10–14 |
+| **1. Foundation** | Repository scaffold (pnpm workspace, four apps: `web`, `server`, `computer`, `deploy`); CI with required checks; Helm umbrella from OpenCrane 1 charts; CNPG with backups; NATS JetStream `EVENTS` stream (R3); **event core**: typed catalogue, command → conditional append, projection runner with checkpoints, dispatcher → handler runtime, replay tool, per-handler logs and traces; Zitadel sign-in (copied auth library); OpenFGA as a projection; WebSocket realtime skeleton | Sign in and out on the test silo; `member.joined` flows through to members and OpenFGA projections; a projection is dropped and rebuilt by replay; backup and restore drill passes | 14–18 |
 | **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); the bridge; claim and bind from the warm pool; chat UI from OpenCrane 1 components; file upload into the workspace; models through agentgateway with a simple cap | A person chats with their assistant, it reads an uploaded PDF, and the answer survives a reload and a Pod replacement | 15–20 |
 | **3. Governed work** | Decision service: EUR price table, reserve-before-call, settlement from gateway logs; Allow/Ask/Block with the approval card; the MCP install flow; per-user connections and credential injection; the Odoo MCP (our `odoo-mcp-server`, remote mode); screenshots; live view; takeover; audit | One Odoo read and one approved Odoo write pass live, with every refusal case; the budget stops the next call at its limit; takeover is audited | 25–35 |
 | **4. Company product** | Groups, shared team assistants and child chats; members, tools, models, budgets, usage and audit screens; company brain as an MCP server (remember/recall/correct/forget, dreaming per scope, provenance); scheduled routines (`routine.due` → `message.posted` to the assistant); delegation (Codex sub-agents under one root budget) | Each user story passes on the test silo, with cross-user, cross-scope and cross-silo denial | 35–50 |
@@ -232,12 +232,12 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 | Milestone | Nights of agent work | Calendar (5 nights/week, with rework) |
 |---|---|---|
 | Phase 0: spikes and decisions | 6 | **Week 1–2** |
-| Phase 1: foundation | 4–5 | Week 2–3 |
-| **Phase 2: working prototype** | 5–7 | **About week 3–4** |
+| Phase 1: foundation (incl. event core) | 5–7 | Week 2–4 |
+| **Phase 2: working prototype** | 5–7 | **About week 4–5** |
 | Phase 3: governed work | 9–12 | Week 5–8 (first live governed action around week 6) |
 | Phase 4: company product | 12–17 | Week 8–13 |
 | Phase 5: qualification | 5–7 plus human-run live tests | Week 13–16 |
-| **MVP** | **About 40–55 nights** | **About 11–16 weeks** |
+| **MVP** | **About 42–58 nights** | **About 12–17 weeks** |
 
 **What moves the date:**
 - **Human bandwidth, the main limit.** Morning review, decisions, and human-only steps: identity-provider changes, approvals that need a real re-login, visual approval.

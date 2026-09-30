@@ -130,7 +130,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 
 ## Status
 
-**Planning.** This repository starts OpenCrane 2. It succeeds the original OpenCrane platform (local folder `opencrane-2`, commit `10abd0ef6`) and reuses its product contract, decisions, hardened infrastructure and proven components. See [plan.md](plan.md) for the spikes, phases, rules and estimate: **a prototype in about 3–4 weeks and the MVP in about 11–16 weeks** of nightly agentic cycles.
+**Planning.** This repository starts OpenCrane 2. It succeeds the original OpenCrane platform (local folder `opencrane-2`, commit `10abd0ef6`) and reuses its product contract, decisions, hardened infrastructure and proven components. See [plan.md](plan.md) for the spikes, phases, rules and estimate: **a prototype in about 4–5 weeks and the MVP in about 12–17 weeks** of nightly agentic cycles.
 
 Carried over so far:
 - [Product contract](docs/product/product-contract.md)
