@@ -53,6 +53,49 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
 | Live view and takeover (human → computer) | — | Its own authenticated proxy | KasmVNC |
 | Audit | Emits OpenTelemetry logs | The authoritative record: decisions, approvals, reservations, reconciled with gateway logs | — |
 
+## Design rules for the main building blocks
+
+### Computers
+- **One computer per assistant** (recommended; confirm as decision 7). Conversations are threads on that computer. A team assistant has its own computer with team scope only; group chats always use the team computer, never a personal one.
+- **Binding:**
+  - Warm Pods are tenant-neutral until claimed.
+  - At claim, OpenCrane binds a Pod to one assistant and issues a short-lived token.
+  - A Pod never returns to the pool after a binding ends; it is destroyed.
+  - Idle computers are suspended to per-silo encrypted Pod Snapshots.
+- **No lasting secrets in a computer.** Codex, Playwright and KasmVNC run inside it. All network traffic goes through the gateway, and the package mirror is reached through it as well.
+- **Delegated children** run as Codex sub-agents in the same computer. They get their own computer only when they need a different scope.
+
+### Installing an MCP server
+1. **Register:** the admin enters a URL or picks an image.
+2. **Validate:** SSRF guard for remote servers. Signed, scanned images for hosted servers, deployed in `<silo>-mcp` with egress to their upstream only.
+3. **Discover:** `server/discover` (2026-07-28 required) and the tool list, through a quarantine route. Store schema digests.
+4. **Review:** Allow automatically / Ask / Block per tool. Defaults come from MCP hints: read-only → Allow, destructive → Ask.
+5. **Publish:** generate the gateway route, CEL allowlist and `ext_authz` binding.
+6. **Grant:** OpenFGA relations for people, teams and assistants.
+7. **Connect** (if the server needs credentials): the person or admin completes OAuth or a bearer login in OpenCrane. Credentials go to the secret store, bound to user + profile.
+8. **Watch:** tool-list or schema changes are held until re-reviewed.
+
+Hosted MCP servers never run inside the gateway.
+
+### Per-user MCP credentials (e.g. per-user Odoo)
+- **Default:** one stateless MCP deployment. Per call, the decision service releases *this user's* lease for the selected profile, and the gateway injects it. The MCP server trusts only the injected credential and ignores identity in arguments.
+- **Fallback, for servers that only take startup credentials:** one instance per user, scaled to zero when idle. Never inside the user's computer.
+- **Team assistants** use either a company connection (a bot user owned by an admin) or the requester's own profile; this is decided per connection.
+- **Audit:** every credential release is recorded (user, profile, computer, tool, request).
+
+### Company brain
+- **Scoped datasets:** one Cognee dataset per permission scope (person, team, space or channel).
+- **Reads:** a read covers only the scopes that OpenFGA allows for the human ∩ agent.
+- **Dreaming** (memify) runs per scope, as that scope's principal, and never across scopes. Every derived fact keeps provenance to its sources.
+- **Promotion across scopes** (personal → team → company) is an explicit, approved grant change.
+- **Access path:** the brain is reached as an MCP server (`remember`, `recall`, `correct`, `forget`) through the gateway, so it follows the same decision path as any tool.
+- **Messy per-document sources** (mailboxes, CRM records) are queried live through MCP with the person's own credentials, not copied into the brain.
+
+### Live view and takeover
+- **The stream never leaves the Pod directly.** The KasmVNC stream reaches people only through the OpenCrane server's authenticated proxy.
+- **Permissions:** viewing is for conversation participants; control is for the requester or whoever they grant it to.
+- **Takeover pauses the agent** and is audited as a human action. Browser sessions made during a takeover stay in the computer's profile, so snapshots are sensitive data.
+
 ## Phase 0: spikes (decide before building)
 
 Each spike is one night of agent work plus a morning decision. The result is a one-page ADR in `docs/adr/`.
@@ -72,8 +115,8 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 |---|---|---|---|
 | **1. Foundation** | Repository scaffold (pnpm workspace, four apps: `web`, `server`, `computer`, `deploy`); CI with required checks; Helm umbrella from OpenCrane 1 charts; CNPG with backups on; Zitadel sign-in (copied auth library); OpenFGA with the first model | Sign in and out on the test silo; a backup exists; the restore drill passes | 10–14 |
 | **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); the bridge; claim and bind from the warm pool; chat UI from OpenCrane 1 components; file upload into the workspace; models through agentgateway with a simple cap | A person chats with their assistant, it reads an uploaded PDF, and the answer survives a reload and a Pod replacement | 15–20 |
-| **3. Governed work** | Decision service: EUR price table, reserve-before-call, settlement from gateway logs; Allow/Ask/Block with the approval card; credential injection; an Odoo MCP adapter (from the `mcp-file-generator` template); screenshots; live view; takeover; audit | One Odoo read and one approved Odoo write pass live, with every refusal case; the budget stops the next call at its limit; takeover is audited | 25–35 |
-| **4. Company product** | Groups, shared team assistants and child chats; members, tools, models, budgets, usage and audit screens; company brain (remember/recall/correct/forget, dreaming per scope, provenance); scheduled routines (Absurd schedule → message to the computer); delegation (Codex sub-agents under one root budget) | Each user story passes on the test silo, with cross-user, cross-scope and cross-silo denial | 35–50 |
+| **3. Governed work** | Decision service: EUR price table, reserve-before-call, settlement from gateway logs; Allow/Ask/Block with the approval card; the MCP install flow; per-user connections and credential injection; the Odoo MCP (our `odoo-mcp-server`, remote mode); screenshots; live view; takeover; audit | One Odoo read and one approved Odoo write pass live, with every refusal case; the budget stops the next call at its limit; takeover is audited | 25–35 |
+| **4. Company product** | Groups, shared team assistants and child chats; members, tools, models, budgets, usage and audit screens; company brain as an MCP server (remember/recall/correct/forget, dreaming per scope, provenance); scheduled routines (Absurd schedule → message to the computer); delegation (Codex sub-agents under one root budget) | Each user story passes on the test silo, with cross-user, cross-scope and cross-silo denial | 35–50 |
 | **5. Qualification and hardening** | Weekly fresh installs; backup/restore of Postgres, Cognee and snapshots together; security review of the gateway and live-view exposure; negative tests; operator docs | A release candidate passes the full journey list on a fresh install; no open Critical/High finding | 15–20 |
 
 ## Estimate
