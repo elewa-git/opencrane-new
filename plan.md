@@ -101,7 +101,8 @@ Hosted MCP servers never run inside the gateway.
 - **Audit record = server decisions + gateway observations + computer reports**, joined by shared ids: conversation, turn, step permit, reservation and approval. The gateway forwards the permit id upstream and logs it.
   - The audit view marks each line's source.
   - An effect in the gateway log without a matching permit or decision is an alert.
-- **Web app:** the server streams chat text and activity to the browser over SSE. The live view is a separate stream.
+- **Web app:** the server streams chat text and activity to the browser over SSE, and the browser never connects to the `EVENTS` stream (the source of truth). The live view is a separate stream.
+- **Later option:** a separate, browser-facing NATS account with **UI subjects** per conversation (`ui.conv.<id>`), filled by a projection that decrypts and redacts each event per audience. Browsers connect over NATS WebSocket with short-lived tokens issued by an **auth callout** in opencrane-server (permissions computed from OpenFGA). Removal kicks the connection. This gives built-in resume by sequence, but adds a public NATS endpoint; adopt it only if SSE becomes a bottleneck.
 
 ### Live view and takeover
 - **The stream never leaves the Pod directly.** The KasmVNC stream reaches people only through the OpenCrane server's authenticated proxy.
