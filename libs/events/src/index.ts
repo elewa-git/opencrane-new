@@ -27,3 +27,5 @@ export {
 } from './registry.ts';
 
 export { parseEventByType, type ParseEventByTypeResult } from './parse.ts';
+
+export { expectedSubject } from './subject.ts';

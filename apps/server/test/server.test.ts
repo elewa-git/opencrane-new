@@ -123,7 +123,9 @@ describe('server skeleton', () => {
               time: '2026-09-30T10:00:00.000Z',
               subject: 'member-alice',
               silo: 'acme',
-              data: { memberId: 'mem_1', email: 'alice@example.com', displayName: 'Alice', role: 'member' },
+              // memberId matches the subject's "member-<memberId>" binding
+              // (libs/events checks this too, not only the data shape).
+              data: { memberId: 'alice', email: 'alice@example.com', displayName: 'Alice', role: 'member' },
             },
           }),
         );
