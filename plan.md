@@ -19,6 +19,24 @@ Reach the MVP defined in the [product contract](docs/product/product-contract.md
   - nothing merges red;
   - decisions are issues with a needed-by date, never prose in this file.
 
+## Responsibility split: gateway vs server
+
+The gateway **enforces**; the OpenCrane server **decides** and owns the truth. The gateway holds nothing it can't lose: no business state, no per-user secrets at rest, and no decisions beyond static rules generated from server configuration.
+
+| Concern | agentgateway | OpenCrane server | Other |
+|---|---|---|---|
+| Computer tokens | Verifies signature, expiry and audience (JWKS) | Mints them at claim; holds the signing key | Secret store |
+| Coarse allowlist (which models, MCP servers, web domains exist in this silo) | Enforces it (CEL rules, routes) | Generates the gateway config from admin settings | — |
+| Fine decisions (this computer, this tool, these arguments; Allow/Ask/Block; human ∩ agent) | Calls `ext_authz`, fails closed | Decides | OpenFGA |
+| Budgets | Rate limits as a safety net; usage logs | EUR price table, reserve before the call, settle from logs | Postgres |
+| Approvals | Denies until approved | Approval records, UI, single-use approvals bound to arguments | — |
+| Company model keys (BYOK) | Uses them as backend credentials | Admin screen writes or rotates them | Kubernetes Secret or Secret Manager |
+| Personal / connection credentials (OAuth, bearer) | Injects them into the upstream request | Connect, consent, refresh, revoke; hands the credential to the gateway per call | Secret store |
+| Model routing, failover, MCP protocol, tool federation | ✅ | — | — |
+| Web egress | Forward proxy with allowlist and logging | Allowlist policy | NetworkPolicy makes the gateway the only way out |
+| Live view and takeover (human → computer) | — | Its own authenticated proxy | KasmVNC |
+| Audit | Emits OpenTelemetry logs | The authoritative record: decisions, approvals, reservations, reconciled with gateway logs | — |
+
 ## Phase 0: spikes (decide before building)
 
 Each spike is one night of agent work plus a morning decision. The result is a one-page ADR in `docs/adr/`.
