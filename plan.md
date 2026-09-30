@@ -195,6 +195,38 @@ Hosted MCP servers never run inside the gateway.
 
 **Zitadel** keeps its own database, run by the platform or as Zitadel Cloud. It is shared across silos with one organisation per customer, as in OpenCrane 1.
 
+## IAM context in every gateway decision
+
+`ext_authz` must **always** have the full IAM context of a call. It never decides on the computer's identity alone.
+
+**Two tokens on every call:**
+- The **computer token** (from claim and bind) says *which computer and assistant* is calling.
+- The **turn token** says *on whose behalf*. The server issues it when it delivers a message, approval or routine firing to the computer; the bridge attaches it to every call Codex makes for that turn. It carries silo, conversation, turn, requester, assistant, and the delegation chain (root requester → parent turn). A routine firing carries the routine owner; a team assistant's call carries the person who asked.
+
+Both are short-lived and signed by OpenCrane. The gateway verifies them and forwards their claims to `ext_authz`.
+
+**What `ext_authz` assembles for each call:**
+
+| Part | Source |
+|---|---|
+| Who | Requester, assistant, computer and delegation chain (from the tokens) |
+| Live status | Membership and role, team memberships, whether the assistant and computer are active (projections) |
+| Permission | OpenFGA: requester ∩ assistant may use this tool, model, scope or destination |
+| Tool rules | Allow / Ask / Block mode, and the approval state for these exact arguments |
+| Credential | The connection and profile bound to the requester (or the company connection) |
+| Money | Budget actor: reserve the worst case for the paying group |
+
+**Always available:**
+- The decision service, OpenFGA (backed by CNPG with a standby) and the budget actor run with at least 2 replicas each in the silo, with disruption budgets and high priority.
+- If any part of the context can't be read, the decision is **deny** (fail closed), and the assistant pauses with a clear reason.
+
+**Always current:**
+- Permissions are never granted from a stale cache. OpenFGA is queried per decision, with higher consistency after a recent revocation.
+- IAM projections are watched for lag, and a revocation takes effect within 2 seconds.
+- Only immutable facts (tool schemas, price table) are cached.
+
+**Always recorded:** each decision appends an event with the decision, the requester and assistant, and a digest of the IAM context used. Audit can then show exactly which rights allowed or refused a call.
+
 ## Phase 0: spikes (decide before building)
 
 Each spike is one night of agent work plus a morning decision. The result is a one-page ADR in `docs/adr/`.
@@ -202,7 +234,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | # | Spike | Pass condition | Decides |
 |---|---|---|---|
 | S0.1 | **Codex app-server in a GKE Agent Sandbox Pod** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
-| S0.2 | **agentgateway decision hook** | Speaks MCP 2026-07-28 end to end; rejects other versions and header/body tool mismatches; `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
+| S0.2 | **agentgateway decision hook** | Every call reaches `ext_authz` with verified computer and turn token claims, and the decision uses live OpenFGA, membership and budget context (a revoked member is denied within 2 seconds; missing context → deny); speaks MCP 2026-07-28 end to end; rejects other versions and header/body tool mismatches; `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
 | S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
 | S0.4 | **Company brain isolation** | Cognee with one dataset per scope, and memify run per scope as that scope's principal, cannot read another scope; deletion removes the data; the all-Postgres graph option is evaluated against Ladybug | Brain layout and graph backend |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
