@@ -141,6 +141,24 @@ Hosted MCP servers never run inside the gateway.
   - Handlers never call each other directly; they emit new events.
 - **Later, without changing the core:** Debezium change data capture publishes the event log to NATS JetStream or Kafka for SIEM export, analytics across silos or external integrations. Postgres stays the source of truth.
 
+## Runtime and operations
+
+- **No serverless platform in the MVP.** Projections and reactions are small TypeScript handlers in one `workers` Deployment per silo, fed by the dispatcher and pg-boss. Per-stream order, retries and dead-letter already come from pg-boss; a function platform would add cold starts and a second networking layer, and it would make per-stream ordering harder, not easier.
+- **KEDA** (event-driven autoscaling) where scaling to zero pays off:
+  - per-user hosted MCP instances (the fallback pattern);
+  - the `workers` Deployment, scaled on queue depth (KEDA's PostgreSQL scaler).
+  
+  Computers are scaled by Agent Sandbox itself.
+- **Watching the system:** OpenTelemetry from every component, to Cloud Monitoring or a Grafana stack (Prometheus, Loki, Tempo). Required metrics and alerts:
+  - **projection lag:** checkpoint behind the `$all` head;
+  - **dispatcher lag;**
+  - **dead-letter size**, and **streams held** by a failing event;
+  - **revocation latency:** `member.removed` → OpenFGA updated (target under 2 seconds);
+  - **budget-actor latency;**
+  - **gateway decision latency and fail-closed count;**
+  - **effects without a permit**, which should always be zero.
+- **Later:** Knative becomes worth considering only when assistants build and publish their own small apps (the "micro-app" idea). Those apps benefit from scale-to-zero serving; the core does not.
+
 ## Data stores
 
 **One PostgreSQL per silo** (a CNPG cluster with several databases, point-in-time backups to GCS) holds almost everything. Other stores are added only where Postgres genuinely can't do the job.
