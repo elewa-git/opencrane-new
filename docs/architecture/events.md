@@ -17,6 +17,13 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message and memory text is encrypted with a per-conversation or per-scope key, so "forget" deletes the key (crypto-shredding) and appends a tombstone event.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
 
+## How events are delivered (KurrentDB)
+
+- **Order comes from KurrentDB itself.** Each stream is strictly ordered by its revision (0, 1, 2…). The `$all` log gives every event one global position.
+- **Use catch-up subscriptions, never persistent subscriptions, for anything that depends on order.** KurrentDB's persistent subscriptions are competing consumers: even the "Pinned" strategy doesn't guarantee order, and retries can redeliver out of order. OpenCrane 1's activation queue on a persistent subscription also suffered head-of-line blocking and parked messages that needed an operator to replay.
+- **Projections:** one catch-up subscription per projection reads `$all` (filtered by stream prefix). **The projection row and its checkpoint are written in the same Postgres transaction**, so a restart never applies an event twice or skips one.
+- **Reactions:** one dispatcher per silo reads `$all` in order and enqueues each event into pg-boss `key_strict_fifo`, keyed by stream id and deduplicated by event id. pg-boss then gives per-stream order with parallelism across streams, plus retries and dead-letter. The dispatcher's checkpoint is also kept in Postgres.
+
 ## How a command works
 
 ```
