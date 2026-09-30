@@ -4,7 +4,14 @@
 import type { Server as HttpServer } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
-import { errorMessageSchema, helloMessageSchema, type HelloEcho } from './protocol.ts';
+import { parseEventByType } from '@opencrane/events';
+import {
+  errorMessageSchema,
+  eventValidationResultSchema,
+  helloMessageSchema,
+  validateEventMessageSchema,
+  type HelloEcho,
+} from './protocol.ts';
 
 export const WEBSOCKET_PATH = '/ws';
 
@@ -34,20 +41,35 @@ export function attachWebSocketServer(httpServer: HttpServer, logger: FastifyBas
         return;
       }
 
-      const result = helloMessageSchema.safeParse(parsed);
-      if (!result.success) {
-        socket.send(
-          JSON.stringify(errorMessageSchema.parse({ type: 'error', message: 'expected a hello message' })),
-        );
+      const hello = helloMessageSchema.safeParse(parsed);
+      if (hello.success) {
+        const echo: HelloEcho = {
+          type: 'hello',
+          text: hello.data.text,
+          echoedAt: new Date().toISOString(),
+        };
+        socket.send(JSON.stringify(echo));
         return;
       }
 
-      const echo: HelloEcho = {
-        type: 'hello',
-        text: result.data.text,
-        echoedAt: new Date().toISOString(),
-      };
-      socket.send(JSON.stringify(echo));
+      const validateEvent = validateEventMessageSchema.safeParse(parsed);
+      if (validateEvent.success) {
+        // The cross-package path: @opencrane/events binds this event's
+        // `type` to the registry and checks `data` against that type's own
+        // schema (never the generic z.unknown() placeholder).
+        const outcome = parseEventByType(validateEvent.data.event);
+        const reply = outcome.success
+          ? { type: 'eventValidationResult' as const, valid: true }
+          : { type: 'eventValidationResult' as const, valid: false, reason: outcome.reason };
+        socket.send(JSON.stringify(eventValidationResultSchema.parse(reply)));
+        return;
+      }
+
+      socket.send(
+        JSON.stringify(
+          errorMessageSchema.parse({ type: 'error', message: 'expected a hello or validateEvent message' }),
+        ),
+      );
     });
 
     socket.on('error', (err: Error) => {

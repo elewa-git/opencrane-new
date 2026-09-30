@@ -14,11 +14,19 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 const cataloguePath = path.join(repoRoot, 'docs/architecture/events.md');
 
+// An event type is always written `<stream-word>.<past-tense-words>`, all
+// lower case, e.g. `member.joined` or `mcp.tool_list_changed`. Other things
+// the catalogue writes in backticks — an OpenFGA relation like `member` or
+// `acts_for`, or `ext_authz` — never contain a dot, so this pattern is
+// enough to tell an event name apart from everything else in backticks.
+const EVENT_TYPE_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
+
 /**
  * Pulls every backticked event name out of the "## Catalogue" section's
- * tables. Each table's first column lists one or more event types, like
- * `` `a.b` `` or `` `a.b` / `c.d` / `e.f` ``; a row's other columns are
- * prose, not event names, so only the first cell is read.
+ * tables — from *any* cell, not only the first column. An event is
+ * sometimes only named in a Reactions cell (for example "→ `mcp.server_
+ * rejected`"), and that still counts: if it isn't caught here, the
+ * catalogue can drift from the registry without this check ever noticing.
  *
  * @param {string} markdown
  * @returns {Set<string>}
@@ -42,13 +50,11 @@ export function parseCatalogueEventTypes(markdown) {
   const section = lines.slice(start + 1, end);
 
   const eventTypes = new Set();
-  let inEventTable = false;
 
   for (const line of section) {
     const trimmed = line.trim();
     if (!trimmed.startsWith('|')) {
-      // A blank line (or anything else) ends whatever table we were in.
-      inEventTable = false;
+      // Not a table row (a heading, a blank line, prose).
       continue;
     }
 
@@ -58,20 +64,19 @@ export function parseCatalogueEventTypes(markdown) {
       .map((cell) => cell.trim());
     const firstCell = cells[0] ?? '';
 
-    if (firstCell === 'Event') {
-      inEventTable = true;
-      continue;
-    }
-    // The header separator row, e.g. "|---|---|---|---|".
-    if (/^:?-+:?$/.test(firstCell)) {
-      continue;
-    }
-    if (!inEventTable) {
+    // Skip the header row ("| Event | Emitted by | ... |") and the header
+    // separator row ("|---|---|---|---|"). Every other row in this section
+    // belongs to one of the catalogue's event tables.
+    if (firstCell === 'Event' || /^:?-+:?$/.test(firstCell)) {
       continue;
     }
 
-    for (const match of firstCell.matchAll(/`([^`]+)`/g)) {
-      eventTypes.add(match[1]);
+    for (const cell of cells) {
+      for (const match of cell.matchAll(/`([^`]+)`/g)) {
+        if (EVENT_TYPE_PATTERN.test(match[1])) {
+          eventTypes.add(match[1]);
+        }
+      }
     }
   }
 

@@ -10,6 +10,12 @@
     "forceConsistentCasingInFileNames": true,
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
+    // Node's --experimental-strip-types can only strip types, not compile
+    // syntax like `enum`, `namespace` or parameter properties away. This
+    // setting makes tsc reject that syntax too, so a type error catches it
+    // instead of the server crashing at `npm start` with
+    // ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX.
+    "erasableSyntaxOnly": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

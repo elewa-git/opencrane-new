@@ -31,3 +31,28 @@ export const errorMessageSchema = z
   .strict();
 
 export type ErrorMessage = z.infer<typeof errorMessageSchema>;
+
+// A message carrying a raw event envelope to check against
+// @opencrane/events' registry. This is the cross-package path: the same
+// parse-by-type validation a real command handler, projection or reaction
+// would run before accepting an event, exercised here over the socket so
+// CI proves the two packages actually work together, not just that each
+// typechecks alone.
+export const validateEventMessageSchema = z
+  .object({
+    type: z.literal('validateEvent'),
+    event: z.unknown(),
+  })
+  .strict();
+
+export type ValidateEventMessage = z.infer<typeof validateEventMessageSchema>;
+
+export const eventValidationResultSchema = z
+  .object({
+    type: z.literal('eventValidationResult'),
+    valid: z.boolean(),
+    reason: z.string().optional(),
+  })
+  .strict();
+
+export type EventValidationResult = z.infer<typeof eventValidationResultSchema>;

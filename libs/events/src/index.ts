@@ -25,3 +25,5 @@ export {
   listEventTypes,
   type EventDefinition,
 } from './registry.ts';
+
+export { parseEventByType, type ParseEventByTypeResult } from './parse.ts';
