@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 // apps/ and libs/, so a new package needs no config of its own.
 export default defineConfig({
   test: {
-    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts'],
+    include: ['apps/**/*.test.ts', 'libs/**/*.test.ts', 'scripts/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     passWithNoTests: false,

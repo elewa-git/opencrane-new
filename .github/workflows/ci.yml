@@ -30,3 +30,6 @@ jobs:
 
       - name: Check the event catalogue matches the registry
         run: npm run check:events
+
+      - name: Check the generated AsyncAPI document is up to date
+        run: npm run check:asyncapi

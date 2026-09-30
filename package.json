@@ -14,7 +14,9 @@
     "lint": "eslint .",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "vitest run",
-    "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs"
+    "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
+    "gen:asyncapi": "node --experimental-strip-types scripts/gen-asyncapi.mjs",
+    "check:asyncapi": "node --experimental-strip-types scripts/gen-asyncapi.mjs --check"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -23,6 +25,7 @@
     "globals": "17.12.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
-    "vitest": "5.0.3"
+    "vitest": "5.0.3",
+    "yaml": "2.9.1"
   }
 }
