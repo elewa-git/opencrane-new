@@ -67,8 +67,8 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  browser ┘           │ • decision service (ext_authz):           │   │ may do what  │  │
  │  (via ingress)       │   budgets, Allow/Ask/Block, credentials   │   └──────────────┘  │
  │                      │ • live-view / takeover proxy              │   ┌──────────────┐  │
- │                      │ • jobs (Absurd): approvals, schedules,    │──▶│ Cognee brain │  │
- │                      │   settlement, dreaming per scope          │   │ 1 dataset per│  │
+ │                      │ • reactions + jobs (pg-boss): schedules,  │──▶│ Cognee brain │  │
+ │                      │   wake-ups, settlement, dreaming          │   │ 1 dataset per│  │
  │                      └──────▲─────────────▲──────────────┬───────┘   │ scope        │  │
  │                             │ext_authz    │live view     │claim      └──────────────┘  │
  │  acme-gateway               │             │              │                             │
@@ -88,9 +88,10 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  │ ├─ workspace disk · python/node/git │   ┌─────────────────┐  ┌──────────────────┐   │
  │  │ ├─ Chromium + Playwright MCP        │   │ acme-db         │  │ acme-secrets     │   │
  │  │ ├─ KasmVNC (live view, takeover)    │   │ CNPG Postgres:  │  │ company keys,    │   │
- │  │ └─ MarkItDown / poppler             │   │ app, OpenFGA,   │  │ per-user creds,  │   │
- │  │ warm pool · snapshots when idle     │   │ Absurd · backups│  │ signing key      │   │
+ │  │ └─ MarkItDown / poppler             │   │ content (replay-│  │ per-user creds,  │   │
+ │  │ warm pool · snapshots when idle     │   │ able), OpenFGA  │  │ signing key      │   │
  │  └─────────────────────────────────────┘   └─────────────────┘  └──────────────────┘   │
+ │    acme-events: KurrentDB — every event, the only source of truth → projections        │
  │    ClamAV scanner (uploads) · package mirror access (npm / PyPI) through the gateway   │
  └────────────────────────────────────────────────────────────────────────────────────────┘
         (next silo: "globex" — same layout, nothing shared except the platform layer)
@@ -99,12 +100,12 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 ```
 
 ### How one request flows
-1. Alice asks her assistant in the web app. **opencrane-server** saves the message and wakes Alice's computer (a warm Pod bound to her assistant, or resumed from its snapshot).
+1. Alice asks her assistant in the web app. **opencrane-server** appends `message.posted` to the event store; a reaction wakes Alice's computer (a warm Pod bound to her assistant, or resumed from its snapshot).
 2. **Codex** in the computer plans the work. Each model call, tool call or web request goes to **agentgateway** with the computer's short-lived token.
 3. agentgateway checks the token and its allowlist, then asks the **decision service**. The service consults OpenFGA ("Alice ∩ her assistant may use Odoo read?"), reserves the worst-case EUR cost, and applies the tool's Allow/Ask/Block mode.
 4. **Ask:** the call is refused with an approval id, Alice sees the approval card, and after she approves, the retry passes (single use, bound to those exact arguments).
 5. **Allowed:** the gateway adds Alice's Odoo credential for that one request, and the stateless **Odoo MCP** acts in Odoo as Alice.
-6. The result flows back. The server records history, audit and actual cost. Alice can open the **live view** of her assistant's computer at any time and take over.
+6. The result flows back as events (`agent.message_completed`, `effect.observed`); projections update the conversation, audit and usage, and the budget actor settles the actual cost. Alice can open the **live view** of her assistant's computer at any time and take over.
 
 ## Components
 
