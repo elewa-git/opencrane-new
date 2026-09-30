@@ -19,6 +19,22 @@ Reach the MVP defined in the [product contract](docs/product/product-contract.md
   - nothing merges red;
   - decisions are issues with a needed-by date, never prose in this file.
 
+## MCP: version 2026-07-28 only
+
+All network MCP traffic (remote and hosted servers, through the gateway) uses the stateless **2026-07-28** revision only:
+- There is no handshake and no session.
+- Every request carries its version and capabilities in `_meta`.
+- Every request carries method and tool-name headers, so the gateway can route it.
+
+Consequences:
+- Registration rejects servers that don't implement `server/discover` for 2026-07-28.
+- Codex pins `protocol_version = "2026-07-28"` for the gateway endpoint.
+- The gateway rejects other versions.
+- The tool-name header must match the tool in the body, or the call is refused.
+- Application state crosses calls only through explicit IDs returned by tools.
+
+Local stdio tools inside the computer (Playwright, document tools) are exempt until Codex supports 2026-07-28 over stdio; their network traffic still passes the gateway.
+
 ## Responsibility split: gateway vs server
 
 The gateway **enforces**; the OpenCrane server **decides** and owns the truth. The gateway holds nothing it can't lose: no business state, no per-user secrets at rest, and no decisions beyond static rules generated from server configuration.
@@ -44,7 +60,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | # | Spike | Pass condition | Decides |
 |---|---|---|---|
 | S0.1 | **Codex app-server in a GKE Agent Sandbox Pod** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
-| S0.2 | **agentgateway decision hook** | `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
+| S0.2 | **agentgateway decision hook** | Speaks MCP 2026-07-28 end to end; rejects other versions and header/body tool mismatches; `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
 | S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
 | S0.4 | **Company brain isolation** | Cognee with one dataset per scope, and memify run per scope, cannot read another scope; the same test on SurrealDB with row-level permissions | Brain store: Cognee or SurrealDB |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
