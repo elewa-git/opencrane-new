@@ -91,7 +91,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  │ └─ MarkItDown / poppler             │   │ content (replay-│  │ per-user creds,  │   │
  │  │ warm pool · snapshots when idle     │   │ able), OpenFGA  │  │ signing key      │   │
  │  └─────────────────────────────────────┘   └─────────────────┘  └──────────────────┘   │
- │    acme-events: Postgres event store — every event, the only source of truth → content │
+ │    acme-events: KurrentDB — every event, the only source of truth → projections        │
  │    ClamAV scanner (uploads) · package mirror access (npm / PyPI) through the gateway   │
  └────────────────────────────────────────────────────────────────────────────────────────┘
         (next silo: "globex" — same layout, nothing shared except the platform layer)
@@ -120,7 +120,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 | Budgets, approvals, credentials | — | The decision service behind `ext_authz` |
 | Tool servers | MCP 2026-07-28 servers; our Odoo MCP; hosted adapters | Install flow, tool review, per-user connections |
 | Company brain and dreaming | Cognee (SurrealDB evaluated as an alternative) | Scope mapping, provenance, promotion across scopes by approval |
-| Events (source of truth) | PostgreSQL event store (`events` database; KurrentDB as the alternative) | The event catalogue, command handlers, projections, reactions |
+| Events (source of truth) | KurrentDB (NATS JetStream if licence review fails) | The event catalogue, command handlers, projections, reactions |
 | Content and jobs | PostgreSQL (CNPG) projections, pg-boss (ordered per stream, cron) | Rebuildable content tables, no business rules in SQL |
 | Secrets | Kubernetes Secrets or GCP Secret Manager | Credential lifecycle: connect, refresh, revoke |
 | Upload scanning | ClamAV scanner (from OpenCrane 1) | — |

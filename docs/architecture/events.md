@@ -19,7 +19,7 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 
 ## How events are delivered
 
-The rules below were written for KurrentDB and apply equally to the PostgreSQL event store now recommended (plan decision 3). With Postgres, a catch-up subscription reads the event table in global-position order, and the store must ensure no event is skipped while an earlier transaction is still committing.
+The event store is KurrentDB (plan decision 3). With NATS JetStream instead, the same rules apply: subject per stream, expected last-subject sequence, and an ordered consumer feeding the dispatcher.
 
 - **Order comes from KurrentDB itself.** Each stream is strictly ordered by its revision (0, 1, 2…). The `$all` log gives every event one global position.
 - **Use catch-up subscriptions, never persistent subscriptions, for anything that depends on order.** KurrentDB's persistent subscriptions are competing consumers: even the "Pinned" strategy doesn't guarantee order, and retries can redeliver out of order. OpenCrane 1's activation queue on a persistent subscription also suffered head-of-line blocking and parked messages that needed an operator to replay.
