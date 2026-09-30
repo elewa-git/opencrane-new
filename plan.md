@@ -108,6 +108,36 @@ Hosted MCP servers never run inside the gateway.
 - **Permissions:** viewing is for conversation participants; control is for the requester or whoever they grant it to.
 - **Takeover pauses the agent** and is audited as a human action. Browser sessions made during a takeover stay in the computer's profile, so snapshots are sensitive data.
 
+## Event-driven core
+
+Everything that happens is recorded as a **domain event**, and everything that follows is a **reaction** to one. There is no second datastore: events live in PostgreSQL, next to the state they describe.
+
+- **Events are facts, named in the past tense:** `message.posted`, `approval.decided`, `effect.observed`, `member.removed`, `routine.due`, `memory.written`, `tool.list.changed`. Each has a typed schema in TypeScript and a CloudEvents-style envelope (id, type, source, time, subject, silo, principal, correlation ids: conversation, turn, permit, reservation, approval). The catalogue is documented with AsyncAPI.
+- **Transactional outbox:** a command writes its state change **and** its event rows in the same Postgres transaction. The event can't be lost, and it can't be published for a change that rolled back.
+- **Delivery:** the job queue (see decision 8) fans each event out to subscriber queues. Handlers are idempotent, keyed by event id, with retries and a dead-letter queue. `LISTEN/NOTIFY` wakes the browser streams.
+- **Three event sources, one log:**
+  1. server commands (decisions, approvals, admin changes);
+  2. computer reports (Codex events through the bridge);
+  3. gateway observations (external calls from its logs).
+
+  The audit view is a read over this log.
+- **Examples of reactions:**
+
+| Event | Reaction |
+|---|---|
+| `approval.decided` | Wake the computer and deliver the decision |
+| `effect.observed` | Settle the budget reservation |
+| `member.removed` | Remove OpenFGA relations, stop credential release, suspend their computers |
+| `routine.due` | Post the routine's message to its assistant |
+| `memory.written` | Queue dreaming for that scope |
+| `tool.list.changed` | Quarantine the MCP server until re-reviewed |
+
+- **Rules:**
+  - An **event never grants anything.** Each handler rechecks current permissions before acting.
+  - Events are append-only. "Forget" purges payloads, or deletes the per-conversation key, and leaves a tombstone.
+  - Handlers never call each other directly; they emit new events.
+- **Later, without changing the core:** Debezium change data capture publishes the outbox to NATS JetStream or Kafka for SIEM export, analytics across silos or external integrations. Postgres stays the source of truth.
+
 ## Data stores
 
 **One PostgreSQL per silo** (a CNPG cluster with several databases, point-in-time backups to GCS) holds almost everything. Other stores are added only where Postgres genuinely can't do the job.
@@ -207,6 +237,7 @@ Record the source commit in each copied file's header or README.
 5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
 7. **Computer per assistant, not per conversation** (recommended). A person's assistant keeps one computer across its conversations, with the same logins, workspace and browser profile, like one laptop per colleague. A team assistant has one computer with team scope. Delegated children run as sub-agents in the same computer unless they need a different scope, in which case they get their own.
+8. **Job queue: pg-boss (recommended) or Absurd.** The computer design removes turn orchestration, so what remains is cron, retries, one-job-per-key and event fan-out. pg-boss does that natively on Postgres; Absurd adds durable multi-step workflows the design no longer needs.
 
 ## Risks
 
