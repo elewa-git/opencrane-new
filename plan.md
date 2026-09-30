@@ -113,8 +113,10 @@ Hosted MCP servers never run inside the gateway.
 Everything that happens is recorded as a **domain event**, and everything that follows is a **reaction** to one. There is no second datastore: events live in PostgreSQL, next to the state they describe.
 
 - **Events are facts, named in the past tense:** `message.posted`, `approval.decided`, `effect.observed`, `member.removed`, `routine.due`, `memory.written`, `tool.list.changed`. Each has a typed schema in TypeScript and a CloudEvents-style envelope (id, type, source, time, subject, silo, principal, correlation ids: conversation, turn, permit, reservation, approval). The catalogue is documented with AsyncAPI.
-- **Transactional outbox:** a command writes its state change **and** its event rows in the same Postgres transaction. The event can't be lost, and it can't be published for a change that rolled back.
-- **Delivery:** the job queue (see decision 8) fans each event out to subscriber queues. Handlers are idempotent, keyed by event id, with retries and a dead-letter queue. `LISTEN/NOTIFY` wakes the browser streams.
+- **Commands write one event, nothing else ("listen to yourself").** A command validates, then does **one atomic append** to the event log. State tables (conversations, budgets, approvals, memberships) are **projections** kept up to date by listeners. There are no multi-table business transactions and no "write state, then publish".
+- **The only synchronous atomic step is a conditional append,** where a rule needs one consistent answer: an expected stream version, or a unique key, on the budget stream (reserve), the approval (use once) and state-guarded commands (only a *pending* approval can be decided). One stream per rule (for example one per budget) serialises concurrent writers without locks across tables.
+- **Consistency windows are explicit:** the UI may lag its own writes by milliseconds, and revocation takes effect within a documented bound (target under 2 seconds) as listeners update OpenFGA and the credential-release rules.
+- **Delivery:** the job queue (see decision 8) fans each event out to subscriber queues, **in order per stream** (per conversation, per budget). Delivery is at-least-once: handlers are idempotent (keyed by event id), retried with backoff, and failed events land in a monitored dead-letter queue that can be replayed. `LISTEN/NOTIFY` wakes the browser streams.
 - **Three event sources, one log:**
   1. server commands (decisions, approvals, admin changes);
   2. computer reports (Codex events through the bridge);
@@ -136,7 +138,7 @@ Everything that happens is recorded as a **domain event**, and everything that f
   - An **event never grants anything.** Each handler rechecks current permissions before acting.
   - Events are append-only. "Forget" purges payloads, or deletes the per-conversation key, and leaves a tombstone.
   - Handlers never call each other directly; they emit new events.
-- **Later, without changing the core:** Debezium change data capture publishes the outbox to NATS JetStream or Kafka for SIEM export, analytics across silos or external integrations. Postgres stays the source of truth.
+- **Later, without changing the core:** Debezium change data capture publishes the event log to NATS JetStream or Kafka for SIEM export, analytics across silos or external integrations. Postgres stays the source of truth.
 
 ## Data stores
 
@@ -232,7 +234,7 @@ Record the source commit in each copied file's header or README.
 
 1. Brain store: Cognee or SurrealDB. Decided by spike S0.4.
 2. Build on Kortix, or on Codex plus our own product layer. Decided by spike S0.6.
-3. History store: start with PostgreSQL only; add KurrentDB later if long histories or audit need it.
+3. **Event log store:** a PostgreSQL event table with (stream, version) uniqueness first, for one engine and one backup. KurrentDB is the upgrade if native streams, subscriptions and projections are wanted; it must then be the *only* place commands write.
 4. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
 5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
