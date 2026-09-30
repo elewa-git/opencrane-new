@@ -110,7 +110,7 @@ Hosted MCP servers never run inside the gateway.
 
 ## Event-driven core
 
-Everything that happens is recorded as a **domain event**, and everything that follows is a **reaction** to one. There is no second datastore: events live in PostgreSQL, next to the state they describe.
+**The event store is the only source of truth; PostgreSQL holds content that can be replayed from it.** Every state change is an event, and every piece of logic is a projection (event → content) or a reaction (event → action → new events). **Which event triggers which logic is defined in [docs/architecture/events.md](docs/architecture/events.md)**; CI keeps code and catalogue in step.
 
 - **Events are facts, named in the past tense:** `message.posted`, `approval.decided`, `effect.observed`, `member.removed`, `routine.due`, `memory.written`, `tool.list.changed`. Each has a typed schema in TypeScript and a CloudEvents-style envelope (id, type, source, time, subject, silo, principal, correlation ids: conversation, turn, permit, reservation, approval). The catalogue is documented with AsyncAPI.
 - **Commands write one event, nothing else ("listen to yourself").** A command validates, then does **one atomic append** to the event log. State tables (conversations, budgets, approvals, memberships) are **projections** kept up to date by listeners. There are no multi-table business transactions and no "write state, then publish".
@@ -147,7 +147,8 @@ Everything that happens is recorded as a **domain event**, and everything that f
 
 | Store | Holds | Why |
 |---|---|---|
-| **PostgreSQL (CNPG), database `opencrane`** | The **event log** (the source of truth; unique per stream and version), plus the projections built from it: members, assistants, computers, conversations, activity, approvals, budgets, MCP catalogue and connection metadata, and the audit view | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
+| **Event store (KurrentDB, decision 3)** | Every event, one stream per entity (see the [catalogue](docs/architecture/events.md)). The only source of truth | Native streams, expected-version appends, ordered subscriptions |
+| **PostgreSQL (CNPG), database `opencrane`** | **Content projections**, all replayable: members, teams, assistants and owners, computers, conversations, messages, activity, approvals, installed MCP servers and tool modes, connections (secret references only), grants, budgets, usage, routines, audit view, plus projection checkpoints | Queryable content; drop and rebuild by replay | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
 | same cluster, database `absurd` | Durable jobs: approvals waiting, schedules, settlement, dreaming runs | Absurd runs on Postgres; no extra queue |
 | same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
 | same cluster, database `cognee` (+ pgvector) | Cognee metadata and embeddings | Cognee supports pgvector and Postgres for relational data |
@@ -235,7 +236,7 @@ Record the source commit in each copied file's header or README.
 
 1. Brain store: Cognee or SurrealDB. Decided by spike S0.4.
 2. Build on Kortix, or on Codex plus our own product layer. Decided by spike S0.6.
-3. **Event log store:** a PostgreSQL event table with (stream, version) uniqueness first, for one engine and one backup. KurrentDB is the upgrade if native streams, subscriptions and projections are wanted; it must then be the *only* place commands write.
+3. **Event store: KurrentDB (recommended) or a separate PostgreSQL event database.** Since events are the only truth and Postgres holds replayable content, a native event store fits: per-stream expected versions, ordered catch-up subscriptions and stream-per-entity. OpenCrane 1's KurrentDB chart, TLS and backup scripts can be reused. Commands write **only** there. A Postgres event database is the fallback if one engine per silo matters more.
 4. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
 5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.

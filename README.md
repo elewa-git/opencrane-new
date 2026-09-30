@@ -35,7 +35,8 @@ A shared **company brain** learns over time and consolidates what it knows ("dre
 5. **MCP 2026-07-28 only.** All network tools use the stateless MCP revision: one request, one identity, no sessions.
 6. **Memory never grants anything.** Permissions live only in the permission system. Knowledge, and the dreaming that consolidates it, stays inside its permission scope.
 7. **Reuse before building, and keep it small.** Mature open-source components do the heavy lifting. OpenCrane's own code covers governance, identity binding, approvals, budgets and the product experience. Business rules live in typed TypeScript, not in SQL.
-8. **Evidence over claims.** A capability is done when it passes live on a fresh installation.
+8. **Event-driven.** Every change is an event in the event store, the only source of truth. PostgreSQL holds content (who owns what, installed MCP servers, conversations) as projections that can be rebuilt by replay. [The event catalogue](docs/architecture/events.md) states exactly which event triggers which logic.
+9. **Evidence over claims.** A capability is done when it passes live on a fresh installation.
 
 ## Architecture: the whole cluster
 
@@ -118,7 +119,8 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 | Budgets, approvals, credentials | — | The decision service behind `ext_authz` |
 | Tool servers | MCP 2026-07-28 servers; our Odoo MCP; hosted adapters | Install flow, tool review, per-user connections |
 | Company brain and dreaming | Cognee (SurrealDB evaluated as an alternative) | Scope mapping, provenance, promotion across scopes by approval |
-| Data and durable jobs | PostgreSQL (CNPG), Absurd | Plain tables, no business rules in SQL |
+| Events (source of truth) | KurrentDB (event store) | The event catalogue, command handlers, projections, reactions |
+| Content and jobs | PostgreSQL (CNPG) projections, pg-boss (ordered per stream, cron) | Rebuildable content tables, no business rules in SQL |
 | Secrets | Kubernetes Secrets or GCP Secret Manager | Credential lifecycle: connect, refresh, revoke |
 | Upload scanning | ClamAV scanner (from OpenCrane 1) | — |
 | Packages | Artifact Registry remote repositories (or Nexus) | — |
