@@ -91,6 +91,18 @@ Hosted MCP servers never run inside the gateway.
 - **Access path:** the brain is reached as an MCP server (`remember`, `recall`, `correct`, `forget`) through the gateway, so it follows the same decision path as any tool.
 - **Messy per-document sources** (mailboxes, CRM records) are queried live through MCP with the person's own credentials, not copied into the brain.
 
+### Conversation stream and audit
+- **Two channels, two trust levels.**
+  1. The **event channel**: the server opens a WebSocket *into* each active computer's bridge (inbound only; NetworkPolicy allows ingress from the server alone). Over it, the server sends messages, approvals and Stop, and receives Codex events. These events are **reported by the computer**: useful, but not proof.
+  2. **External effects** (model, tool and web calls) pass the gateway and are **observed by the gateway**: trusted evidence.
+- **What the bridge forwards** (from Codex app-server): turn start and end, streamed message text, reasoning *summaries* (raw chain-of-thought is not available from reasoning models and is not stored), tool-call and command start/end with exit status, file changes in the workspace, approval requests, and errors.
+  - Events carry a per-computer sequence number, so a reconnect resumes without loss or duplicates.
+- **Stored:** chat messages and activity items go to append-only Postgres tables, encrypted like messages. Reasoning summaries follow the same retention rules. Screenshots are conversation files.
+- **Audit record = server decisions + gateway observations + computer reports**, joined by shared ids: conversation, turn, step permit, reservation and approval. The gateway forwards the permit id upstream and logs it.
+  - The audit view marks each line's source.
+  - An effect in the gateway log without a matching permit or decision is an alert.
+- **Web app:** the server streams chat text and activity to the browser over SSE. The live view is a separate stream.
+
 ### Live view and takeover
 - **The stream never leaves the Pod directly.** The KasmVNC stream reaches people only through the OpenCrane server's authenticated proxy.
 - **Permissions:** viewing is for conversation participants; control is for the requester or whoever they grant it to.
