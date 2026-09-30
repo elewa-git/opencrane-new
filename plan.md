@@ -146,7 +146,7 @@ Everything that happens is recorded as a **domain event**, and everything that f
 
 | Store | Holds | Why |
 |---|---|---|
-| **PostgreSQL (CNPG), database `opencrane`** | Members, assistants, computers, conversations and messages (append-only), activity events, approvals, budgets (reservations, settlements, price table), MCP catalogue and connection metadata, audit | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
+| **PostgreSQL (CNPG), database `opencrane`** | The **event log** (the source of truth; unique per stream and version), plus the projections built from it: members, assistants, computers, conversations, activity, approvals, budgets, MCP catalogue and connection metadata, and the audit view | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
 | same cluster, database `absurd` | Durable jobs: approvals waiting, schedules, settlement, dreaming runs | Absurd runs on Postgres; no extra queue |
 | same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
 | same cluster, database `cognee` (+ pgvector) | Cognee metadata and embeddings | Cognee supports pgvector and Postgres for relational data |
