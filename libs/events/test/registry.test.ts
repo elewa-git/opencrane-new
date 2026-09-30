@@ -56,6 +56,7 @@ describe('eventRegistry', () => {
       'budget',
       'scope',
       'routine',
+      'delegation',
       'security',
     ];
     const actualStreams = new Set(eventRegistry.map((entry) => entry.stream));

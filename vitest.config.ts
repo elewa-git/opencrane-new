@@ -8,5 +8,7 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     passWithNoTests: false,
+    // apps/server now logs JSON via pino; keep test output readable.
+    env: { LOG_LEVEL: 'silent' },
   },
 });

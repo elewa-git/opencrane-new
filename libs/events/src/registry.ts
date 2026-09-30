@@ -103,6 +103,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   // MCP catalogue, grants and connections
   unknownEvent('mcp.server_registered', 'mcp', 'An admin registered a new MCP server in the catalogue (draft).'),
   unknownEvent('mcp.server_discovered', 'mcp', "Discovery read the server's tool list and schema digests."),
+  unknownEvent('mcp.server_rejected', 'mcp', 'Validation (SSRF guard or image scan) failed, so the server was rejected.'),
   unknownEvent('mcp.tool_mode_set', 'mcp', 'An admin set a tool to Allow automatically, Ask, or Block.'),
   unknownEvent('mcp.server_published', 'mcp', 'An admin published an MCP server, generating its gateway route.'),
   unknownEvent('mcp.server_unpublished', 'mcp', 'An admin unpublished an MCP server, removing its gateway route.'),
@@ -135,11 +136,8 @@ export const eventRegistry: readonly EventDefinition[] = [
   unknownEvent('routine.resumed', 'routine', 'A person resumed a paused routine.'),
   unknownEvent('routine.retired', 'routine', 'A person retired a scheduled routine.'),
   unknownEvent('routine.due', 'routine', "The scheduler fired a routine; exactly one firing is emitted."),
-  // Delegation is not one of the streams in the catalogue's "Streams" table;
-  // it is reported by the parent or child computer, so we file it under
-  // the computer stream until the catalogue gives it one of its own.
-  unknownEvent('delegation.started', 'computer', 'A parent computer delegated work to a child sub-agent.'),
-  unknownEvent('delegation.completed', 'computer', "A child computer's delegated work finished."),
+  unknownEvent('delegation.started', 'delegation', 'A parent computer delegated work to a child sub-agent.'),
+  unknownEvent('delegation.completed', 'delegation', "A child computer's delegated work finished."),
 
   // Security
   unknownEvent('security.alert_raised', 'security', 'A reaction raised a security alert for admins to review.'),
