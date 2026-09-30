@@ -53,13 +53,13 @@ describe('member.joined (the task\'s own example: subject must be member-<id>)',
 
 describe('connection.* (the one composite subject: connection-<user>-<server>-<profile>)', () => {
   it('accepts the three-part subject built from userId, serverId and profile', () => {
-    const data = { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret_1' };
+    const data = { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' };
     const result = parseEventByType(envelope('connection.created', 'connection-mem_1-mcp_1-default', data));
     expect(result.success).toBe(true);
   });
 
   it('rejects a subject missing one of the three parts', () => {
-    const data = { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret_1' };
+    const data = { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' };
     const result = parseEventByType(envelope('connection.created', 'connection-mem_1-mcp_1', data));
     expect(result.success).toBe(false);
     if (!result.success) {

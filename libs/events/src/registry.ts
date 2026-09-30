@@ -44,12 +44,20 @@ export interface EventDefinition<DataSchema extends z.ZodType = z.ZodType> {
   readonly example: z.infer<DataSchema>;
 }
 
+// Builds one registry entry. `subjectFields` here is typed against this
+// call's own `dataSchema` — a string key of the data it describes, not a
+// bare `string[]` — so a typo (e.g. "scopeld" instead of "scopeId") is a
+// compile error, not a bug that only a test can catch. (`EventDefinition`
+// itself still stores `readonly string[] | 'silo'`, since once entries sit
+// together in one array their individual schemas are no longer visible to
+// the type system; the check happens here, at the one call per event type
+// that actually knows which schema `subjectFields` has to match.)
 function event<DataSchema extends z.ZodType>(
   type: string,
   stream: string,
   description: string,
   dataSchema: DataSchema,
-  subjectFields: readonly string[] | 'silo',
+  subjectFields: readonly Extract<keyof z.infer<DataSchema>, string>[] | 'silo',
   example: z.infer<DataSchema>,
 ): EventDefinition<DataSchema> {
   return { type, stream, description, dataSchema, subjectFields, example };
@@ -239,6 +247,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       authorId: 'alice',
       authorKind: 'human',
       ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
+      keyId: 'key:1',
       contentType: 'text',
     },
   ),
@@ -277,7 +286,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       turnId: 'turn_1',
       messageId: 'msg_1',
       ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
-      keyId: 'key_1',
+      keyId: 'key:1',
       contentType: 'text',
     },
   ),
@@ -287,7 +296,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'The bridge reported a reasoning summary for a turn.',
     data.agentReasoningSummarisedDataSchema,
     ['conversationId'],
-    { conversationId: 'conv_1', turnId: 'turn_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key_1' },
+    { conversationId: 'conv_1', turnId: 'turn_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' },
   ),
   event(
     'agent.command_ran',
@@ -365,7 +374,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       computerId: 'computer_1',
       tool: 'odoo.read',
       destination: 'odoo-mcp',
-      costEur: 0.02,
+      costMinorUnits: 2,
       outcome: 'success',
     },
   ),
@@ -465,7 +474,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'A person completed a credential connection to an MCP server.',
     data.connectionCreatedDataSchema,
     ['userId', 'serverId', 'profile'],
-    { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret_1' },
+    { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:1' },
   ),
   event(
     'connection.refreshed',
@@ -473,7 +482,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     "A reaction refreshed a connection's OAuth token.",
     data.connectionRefreshedDataSchema,
     ['userId', 'serverId', 'profile'],
-    { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret_2' },
+    { userId: 'mem_1', serverId: 'mcp_1', profile: 'default', secretRef: 'secret:2' },
   ),
   event(
     'connection.revoked',
@@ -533,7 +542,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'The brain MCP wrote a memory into a permission scope.',
     data.memoryWrittenDataSchema,
     ['scopeId'],
-    { scopeId: 'scope_1', memoryId: 'memory_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key_1' },
+    { scopeId: 'scope_1', memoryId: 'memory_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' },
   ),
   event(
     'memory.corrected',
@@ -541,7 +550,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'The brain MCP corrected an existing memory.',
     data.memoryCorrectedDataSchema,
     ['scopeId'],
-    { scopeId: 'scope_1', memoryId: 'memory_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key_2' },
+    { scopeId: 'scope_1', memoryId: 'memory_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:2' },
   ),
   event(
     'memory.forgotten',

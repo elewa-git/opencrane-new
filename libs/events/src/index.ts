@@ -1,8 +1,10 @@
+// unknownEventEnvelopeSchema is deliberately not exported here: it is a
+// test-only building block (see envelope.ts), not part of this library's
+// public surface. Every real event type has its own strict schema.
 export {
   correlationIdsSchema,
   eventEnvelopeSchema,
   principalSchema,
-  unknownEventEnvelopeSchema,
   type CorrelationIds,
   type EventEnvelope,
   type Principal,

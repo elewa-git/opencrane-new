@@ -69,36 +69,30 @@ describe('parseEventByType', () => {
   });
 
   describe('message.posted', () => {
+    const validMessageData = {
+      conversationId: 'conv_1',
+      authorId: 'alice',
+      authorKind: 'human',
+      ciphertext: 'YmFzZTY0LWxvb2tpbmctdGV4dA==',
+      keyId: 'key:1',
+      contentType: 'text',
+    };
+
     it('accepts a message carrying encrypted ciphertext', () => {
-      const result = parseEventByType(
-        baseEnvelope(
-          'message.posted',
-          {
-            conversationId: 'conv_1',
-            authorId: 'alice',
-            authorKind: 'human',
-            ciphertext: 'YmFzZTY0LWxvb2tpbmctdGV4dA==',
-            contentType: 'text',
-          },
-          'conversation-conv_1',
-        ),
-      );
+      const result = parseEventByType(baseEnvelope('message.posted', validMessageData, 'conversation-conv_1'));
       expect(result.success).toBe(true);
     });
 
     // events.md rule 5: "no secrets and no plaintext history in events" —
-    // message text must never travel as a plain `text` field.
+    // message text must never travel as a plain `text` field, even
+    // alongside an otherwise-valid ciphertext (starting from a valid
+    // example and adding only the forbidden field means this can only
+    // pass for the right reason — see security-rules.test.ts).
     it('rejects plaintext text instead of ciphertext', () => {
       const result = parseEventByType(
         baseEnvelope(
           'message.posted',
-          {
-            conversationId: 'conv_1',
-            authorId: 'alice',
-            authorKind: 'human',
-            text: 'this should have been encrypted',
-            contentType: 'text',
-          },
+          { ...validMessageData, text: 'this should have been encrypted' },
           'conversation-conv_1',
         ),
       );
@@ -141,7 +135,14 @@ describe('parseEventByType', () => {
       const result = parseEventByType(
         baseEnvelope(
           'effect.observed',
-          { permitId: 'permit_1', computerId: 'computer_1', tool: 'odoo.read', destination: 'odoo-mcp', costEur: 0.02, outcome: 'success' },
+          {
+            permitId: 'permit_1',
+            computerId: 'computer_1',
+            tool: 'odoo.read',
+            destination: 'odoo-mcp',
+            costMinorUnits: 2,
+            outcome: 'success',
+          },
           'effect-permit_1',
         ),
       );
@@ -152,7 +153,38 @@ describe('parseEventByType', () => {
       const result = parseEventByType(
         baseEnvelope(
           'effect.observed',
-          { permitId: 'permit_1', computerId: 'computer_1', tool: 'odoo.read', destination: 'odoo-mcp', costEur: -1, outcome: 'success' },
+          {
+            permitId: 'permit_1',
+            computerId: 'computer_1',
+            tool: 'odoo.read',
+            destination: 'odoo-mcp',
+            costMinorUnits: -1,
+            outcome: 'success',
+          },
+          'effect-permit_1',
+        ),
+      );
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.reason).toBe('invalid_event');
+      }
+    });
+
+    // EUR minor units are whole cents (see examples.ts): a fractional
+    // value can't be a real number of cents, and float EUR is exactly the
+    // bug this field exists to avoid (0.1 + 0.2 !== 0.3).
+    it('rejects a non-integer cost', () => {
+      const result = parseEventByType(
+        baseEnvelope(
+          'effect.observed',
+          {
+            permitId: 'permit_1',
+            computerId: 'computer_1',
+            tool: 'odoo.read',
+            destination: 'odoo-mcp',
+            costMinorUnits: 2.5,
+            outcome: 'success',
+          },
           'effect-permit_1',
         ),
       );

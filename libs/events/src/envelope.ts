@@ -6,6 +6,7 @@
 // event store is the only source of truth, and this is the shape every
 // event takes on its way in.
 import { z } from 'zod';
+import { SUBJECT_ID_PATTERN } from './subject.ts';
 
 // The correlation ids that tie one call together across the event log:
 // a conversation, a turn inside it, a gateway permit, a budget reservation
@@ -53,8 +54,11 @@ export function eventEnvelopeSchema<DataSchema extends z.ZodType>(dataSchema: Da
       // The stream this event belongs to, e.g. "member-alice". This is the
       // CloudEvents "subject" field, and matches the catalogue's stream ids.
       subject: z.string().min(1),
-      // Which customer silo this event belongs to.
-      silo: z.string().min(1),
+      // Which customer silo this event belongs to. Restricted to the same
+      // safe character set as every other id that ends up in a subject
+      // (see subject.ts): the silo-wide streams (org, budget, security)
+      // key their subject on this field directly.
+      silo: z.string().regex(SUBJECT_ID_PATTERN, 'silo must contain only letters, digits and underscores'),
       principal: principalSchema.optional(),
       correlation: correlationIdsSchema.default({}),
       data: dataSchema,
@@ -62,9 +66,13 @@ export function eventEnvelopeSchema<DataSchema extends z.ZodType>(dataSchema: Da
     .strict();
 }
 
-// The envelope shape for an event type whose data we have not typed yet.
-// Most entries in the registry use this placeholder until someone gives
-// them a real schema.
+// A generic envelope schema with an untyped `data` field. Every real event
+// type in the registry has its own strict data schema (see registry.ts and
+// data.ts), so this is never used to parse a real event; it exists only so
+// envelope.test.ts can exercise the envelope's own shape (id, time,
+// subject, and so on) without pinning down one specific event type. Not
+// exported from index.ts for that reason — it is a test-only building
+// block, not part of the library's public surface.
 export const unknownEventEnvelopeSchema = eventEnvelopeSchema(z.unknown());
 
 export type EventEnvelope<DataSchema extends z.ZodType = z.ZodUnknown> = z.infer<

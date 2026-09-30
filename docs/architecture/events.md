@@ -28,6 +28,12 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 - **Reactions:** one durable consumer per silo feeds the dispatcher, which enqueues each event into pg-boss `key_strict_fifo`, keyed by subject and deduplicated by event id. That gives order per stream, parallelism across streams, retries and dead-letter.
 - **Reading one entity's history** (to validate a command): fetch the subject's messages, or better, read the entity's projection plus its last sequence and use that sequence as the expected value.
 
+There are two different "subject" strings in play here, and they are not interchangeable:
+- the **envelope subject** every event carries in its own `subject` field, hyphen-joined from the Streams table below, e.g. `member-mem_1` (see `libs/events/src/subject.ts`);
+- the **NATS subject** the event is actually published under, dot-joined as above, e.g. `ev.member.mem_1`.
+
+Both are built from the same entity id, so an id is restricted to letters, digits and underscores only (no `-`, `.`, `*`, `>` or whitespace): `-` is the envelope subject's own join character, so an id containing it could make two different entities collide on one envelope subject, and `.`/`*`/`>`/whitespace change what a NATS subject means. `libs/events/src/data.ts`'s `subjectId` schema enforces this on every field an event type keys its stream on.
+
 ## How a command works
 
 ```

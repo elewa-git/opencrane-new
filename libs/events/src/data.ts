@@ -8,12 +8,19 @@
 // Two security rules from events.md rule 5 and plan.md are schema rules
 // here, not just prose:
 // - message and agent text never travel as plain text: they carry
-//   `ciphertext` (base64) plus `keyId`, or are not stored as events at all
-//   (streamed deltas). See `encryptedText` below.
+//   `ciphertext` (base64, a real minimum length) plus `keyId` (an opaque
+//   "key:<id>" reference), or are not stored as events at all (streamed
+//   deltas). See `encryptedText` below. A plain sentence, which is what an
+//   accidental plaintext leak would actually look like, contains spaces
+//   and punctuation that are not valid base64, so it cannot pass as
+//   ciphertext, and a short word cannot pass either because it is shorter
+//   than real encrypted output.
 // - tool arguments are never stored raw, only as a digest (a sha-256 hex
 //   string). See `digestSchema` below. The same applies to credentials:
-//   they travel only as a `secretRef` id, never a token or password value.
+//   they travel only as a `secretRef` (an opaque "secret:<id>" reference),
+//   never a token or password value.
 import { z } from 'zod';
+import { SUBJECT_ID_PATTERN } from './subject.ts';
 
 // A sha-256 hex digest: 64 lower-case hex characters. Using a shape this
 // specific, rather than a plain string, means a raw argument list or a
@@ -26,9 +33,71 @@ const id = z.string().min(1);
 const minorUnits = z.int().nonnegative(); // EUR minor units (cents): 150 = €1.50
 const roleSchema = z.enum(['owner', 'admin', 'member']);
 const budgetScopeSchema = z.enum(['global', 'paying_group', 'assistant']);
+
+// An id that is used to build a stream's subject (see subject.ts): every
+// event type whose `subjectFields` names a field uses this narrower shape
+// for it, not the generic `id` above. Free-text fields that never feed a
+// subject (a display name, a file path, a cron schedule) keep using `id`.
+export const subjectId = z
+  .string()
+  .regex(SUBJECT_ID_PATTERN, 'must contain only letters, digits and underscores (subjects join ids with "-")');
+
+// Encrypted text is base64 (or base64url) output, never plaintext. A real
+// sentence like "wire EUR 10,000 today" has spaces and punctuation that
+// fail the base64 character class outright; the minimum length also rules
+// out a short plaintext word that happens to be made only of letters.
+const BASE64_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/;
+export const ciphertextSchema = z
+  .string()
+  .min(16, 'ciphertext must be real encrypted output (base64), not a placeholder or plaintext value')
+  .regex(BASE64_PATTERN, 'ciphertext must be base64 or base64url, with no whitespace');
+
+// A reference to the key that encrypted some ciphertext, or to a secret
+// held in the secret store — never the key or secret value itself. The
+// fixed prefix keeps a raw token or password from validating by accident:
+// a real OAuth token or a real password practically never happens to
+// start with "key:" or "secret:".
+export const keyIdSchema = z
+  .string()
+  .regex(/^key:[A-Za-z0-9_-]+$/, 'keyId must be an opaque reference, e.g. "key:<id>", never the key itself');
+export const secretRefSchema = z
+  .string()
+  .regex(
+    /^secret:[A-Za-z0-9_-]+$/,
+    'secretRef must be an opaque reference, e.g. "secret:<id>", never the credential value itself',
+  );
+
+// A URL's userinfo segment, e.g. the "admin:hunter2" in
+// "https://admin:hunter2@example.com": scheme, then "//", then anything up
+// to the next "/", "?" or "#" that itself ends in "@". Matching this with a
+// plain regex (rather than the `URL` class) keeps this file free of a
+// Node/DOM lib dependency for one narrow check.
+const URL_USERINFO_PATTERN = /^[a-z][a-z0-9+.-]*:\/\/[^/?#]*@/i;
+
+// A query parameter name that usually carries a credential, checked
+// case-insensitively against an MCP server locator below.
+const SECRET_LOOKING_QUERY_PARAMS = ['api_key', 'apikey', 'token', 'access_token', 'key', 'secret', 'password'];
+const SECRET_LOOKING_QUERY_PATTERN = new RegExp(`[?&](${SECRET_LOOKING_QUERY_PARAMS.join('|')})=`, 'i');
+
+// mcp.server_registered.locator is a URL, never a credential holder: no
+// `user:password@` in the authority, and no query parameter that looks
+// like it is carrying a secret (the credential belongs in the secret
+// store, referenced later by a connection's secretRef, not in the
+// catalogue event).
+export const locatorSchema = z
+  .url()
+  .refine(
+    (value) => !URL_USERINFO_PATTERN.test(value),
+    'locator must not carry credentials (no "user:password@" in the URL)',
+  )
+  .refine(
+    (value) => !SECRET_LOOKING_QUERY_PATTERN.test(value),
+    'locator must not carry a secret-looking query parameter (api_key, token, secret, ...)',
+  );
+
 // The encrypted-text pair: reused wherever conversation or memory text
 // would otherwise appear, per events.md rule 5.
-const encryptedText = { ciphertext: id, keyId: id };
+const encryptedText = { ciphertext: ciphertextSchema, keyId: keyIdSchema };
 
 // --- Organisation, members and teams ---------------------------------
 
@@ -36,7 +105,7 @@ export const orgCreatedDataSchema = z.object({ orgName: id }).strict();
 
 export const memberInvitedDataSchema = z
   .object({
-    memberId: id, // pre-allocated so later member.* events share one subject
+    memberId: subjectId, // pre-allocated so later member.* events share one subject
     email: z.email(),
     role: roleSchema,
     invitedBy: id,
@@ -45,21 +114,21 @@ export const memberInvitedDataSchema = z
   .strict();
 
 export const memberRoleChangedDataSchema = z
-  .object({ memberId: id, previousRole: roleSchema, newRole: roleSchema, changedBy: id })
+  .object({ memberId: subjectId, previousRole: roleSchema, newRole: roleSchema, changedBy: id })
   .strict();
 
 export const memberRemovedDataSchema = z
-  .object({ memberId: id, removedBy: id, reason: id.optional() })
+  .object({ memberId: subjectId, removedBy: id, reason: id.optional() })
   .strict();
 
-export const teamCreatedDataSchema = z.object({ teamId: id, name: id, createdBy: id }).strict();
+export const teamCreatedDataSchema = z.object({ teamId: subjectId, name: id, createdBy: id }).strict();
 
 export const teamMemberAddedDataSchema = z
-  .object({ teamId: id, memberId: id, addedBy: id })
+  .object({ teamId: subjectId, memberId: id, addedBy: id })
   .strict();
 
 export const teamMemberRemovedDataSchema = z
-  .object({ teamId: id, memberId: id, removedBy: id })
+  .object({ teamId: subjectId, memberId: id, removedBy: id })
   .strict();
 
 // --- Assistants and computers -----------------------------------------
@@ -69,65 +138,65 @@ export const teamMemberRemovedDataSchema = z
 // Pod/claim, but the stream subject is always the assistant's id.
 
 export const assistantCreatedDataSchema = z
-  .object({ assistantId: id, ownerId: id, kind: z.enum(['personal', 'team']) })
+  .object({ assistantId: subjectId, ownerId: id, kind: z.enum(['personal', 'team']) })
   .strict();
 
 export const assistantSettingsChangedDataSchema = z
   .object({
-    assistantId: id,
+    assistantId: subjectId,
     changedBy: id,
     changedFields: z.array(z.enum(['model', 'persona', 'tools'])).min(1),
   })
   .strict();
 
 export const computerClaimedDataSchema = z
-  .object({ assistantId: id, computerId: id, podUid: id, generation: z.int().nonnegative() })
+  .object({ assistantId: subjectId, computerId: id, podUid: id, generation: z.int().nonnegative() })
   .strict();
 
-export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id }).strict();
+export const computerReadyDataSchema = z.object({ assistantId: subjectId, computerId: id }).strict();
 
 export const computerSuspendedDataSchema = z
-  .object({ assistantId: id, computerId: id, snapshotId: id.optional() })
+  .object({ assistantId: subjectId, computerId: id, snapshotId: id.optional() })
   .strict();
 
 export const computerResumedDataSchema = z
-  .object({ assistantId: id, computerId: id, snapshotId: id.optional() })
+  .object({ assistantId: subjectId, computerId: id, snapshotId: id.optional() })
   .strict();
 
-export const computerLostDataSchema = z.object({ assistantId: id, computerId: id }).strict();
+export const computerLostDataSchema = z.object({ assistantId: subjectId, computerId: id }).strict();
 
-export const computerRetiredDataSchema = z.object({ assistantId: id, computerId: id }).strict();
+export const computerRetiredDataSchema = z.object({ assistantId: subjectId, computerId: id }).strict();
 
 export const takeoverStartedDataSchema = z
-  .object({ assistantId: id, computerId: id, requestedBy: id })
+  .object({ assistantId: subjectId, computerId: id, requestedBy: id })
   .strict();
 
 export const takeoverEndedDataSchema = z
-  .object({ assistantId: id, computerId: id, endedBy: id })
+  .object({ assistantId: subjectId, computerId: id, endedBy: id })
   .strict();
 
 // --- Conversations and agent activity ----------------------------------
 
 export const conversationCreatedDataSchema = z
-  .object({ conversationId: id, assistantId: id, createdBy: id })
+  .object({ conversationId: subjectId, assistantId: id, createdBy: id })
   .strict();
 
 export const participantAddedDataSchema = z
-  .object({ conversationId: id, participantId: id, addedBy: id })
+  .object({ conversationId: subjectId, participantId: id, addedBy: id })
   .strict();
 
 export const participantRemovedDataSchema = z
-  .object({ conversationId: id, participantId: id, removedBy: id })
+  .object({ conversationId: subjectId, participantId: id, removedBy: id })
   .strict();
 
 export const agentTurnStartedDataSchema = z
-  .object({ conversationId: id, turnId: id, assistantId: id })
+  .object({ conversationId: subjectId, turnId: id, assistantId: id })
   .strict();
 
-export const agentTurnCompletedDataSchema = z.object({ conversationId: id, turnId: id }).strict();
+export const agentTurnCompletedDataSchema = z.object({ conversationId: subjectId, turnId: id }).strict();
 
 export const agentTurnFailedDataSchema = z
-  .object({ conversationId: id, turnId: id, reason: id })
+  .object({ conversationId: subjectId, turnId: id, reason: id })
   .strict();
 
 // Risky type: the bridge reports a completed assistant message, but the
@@ -135,7 +204,7 @@ export const agentTurnFailedDataSchema = z
 // ciphertext, exactly like message.posted.
 export const agentMessageCompletedDataSchema = z
   .object({
-    conversationId: id,
+    conversationId: subjectId,
     turnId: id,
     messageId: id,
     ...encryptedText,
@@ -147,14 +216,14 @@ export const agentMessageCompletedDataSchema = z
 // encryption) rule as chat messages (plan.md, Conversation stream and
 // audit).
 export const agentReasoningSummarisedDataSchema = z
-  .object({ conversationId: id, turnId: id, ...encryptedText })
+  .object({ conversationId: subjectId, turnId: id, ...encryptedText })
   .strict();
 
 // Risky type: a command's arguments are never stored raw, only as a
 // digest (events.md: "tool arguments only as a digest").
 export const agentCommandRanDataSchema = z
   .object({
-    conversationId: id,
+    conversationId: subjectId,
     turnId: id,
     commandDigest: digestSchema,
     exitCode: z.int().min(0).max(255),
@@ -163,7 +232,7 @@ export const agentCommandRanDataSchema = z
 
 export const agentFileChangedDataSchema = z
   .object({
-    conversationId: id,
+    conversationId: subjectId,
     turnId: id,
     path: id,
     changeType: z.enum(['created', 'modified', 'deleted']),
@@ -171,7 +240,7 @@ export const agentFileChangedDataSchema = z
   .strict();
 
 export const conversationClosedDataSchema = z
-  .object({ conversationId: id, closedBy: id })
+  .object({ conversationId: subjectId, closedBy: id })
   .strict();
 
 // --- Tools, approvals and effects ---------------------------------------
@@ -180,7 +249,7 @@ export const conversationClosedDataSchema = z
 // so the approval card is built from the tool name and this digest.
 export const toolApprovalRequestedDataSchema = z
   .object({
-    approvalId: id,
+    approvalId: subjectId,
     conversationId: id,
     turnId: id,
     tool: id,
@@ -189,49 +258,49 @@ export const toolApprovalRequestedDataSchema = z
   })
   .strict();
 
-export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
+export const approvalExpiredDataSchema = z.object({ approvalId: subjectId }).strict();
 
-export const approvalUsedDataSchema = z.object({ approvalId: id, permitId: id }).strict();
+export const approvalUsedDataSchema = z.object({ approvalId: subjectId, permitId: id }).strict();
 
 export const effectUncertainDataSchema = z
-  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost']) })
+  .object({ permitId: subjectId, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost']) })
   .strict();
 
 export const effectResolvedDataSchema = z
-  .object({ permitId: id, resolvedBy: id, outcome: z.enum(['settled', 'released']) })
+  .object({ permitId: subjectId, resolvedBy: id, outcome: z.enum(['settled', 'released']) })
   .strict();
 
 // --- MCP catalogue, grants and connections ------------------------------
 
 export const mcpServerRegisteredDataSchema = z
-  .object({ serverId: id, kind: z.enum(['remote', 'hosted']), locator: id, registeredBy: id })
+  .object({ serverId: subjectId, kind: z.enum(['remote', 'hosted']), locator: locatorSchema, registeredBy: id })
   .strict();
 
 export const mcpServerDiscoveredDataSchema = z
-  .object({ serverId: id, toolCount: z.int().nonnegative(), schemaDigest: digestSchema })
+  .object({ serverId: subjectId, toolCount: z.int().nonnegative(), schemaDigest: digestSchema })
   .strict();
 
-export const mcpServerRejectedDataSchema = z.object({ serverId: id, reason: id }).strict();
+export const mcpServerRejectedDataSchema = z.object({ serverId: subjectId, reason: id }).strict();
 
 export const mcpToolModeSetDataSchema = z
-  .object({ serverId: id, toolName: id, mode: z.enum(['allow', 'ask', 'block']), setBy: id })
+  .object({ serverId: subjectId, toolName: id, mode: z.enum(['allow', 'ask', 'block']), setBy: id })
   .strict();
 
 export const mcpServerPublishedDataSchema = z
-  .object({ serverId: id, publishedBy: id })
+  .object({ serverId: subjectId, publishedBy: id })
   .strict();
 
 export const mcpServerUnpublishedDataSchema = z
-  .object({ serverId: id, unpublishedBy: id })
+  .object({ serverId: subjectId, unpublishedBy: id })
   .strict();
 
 export const mcpToolListChangedDataSchema = z
-  .object({ serverId: id, previousSchemaDigest: digestSchema, newSchemaDigest: digestSchema })
+  .object({ serverId: subjectId, previousSchemaDigest: digestSchema, newSchemaDigest: digestSchema })
   .strict();
 
 export const grantGivenDataSchema = z
   .object({
-    resourceId: id,
+    resourceId: subjectId,
     resourceType: id,
     granteeId: id,
     granteeKind: z.enum(['member', 'team', 'assistant']),
@@ -240,21 +309,23 @@ export const grantGivenDataSchema = z
   .strict();
 
 export const grantRevokedDataSchema = z
-  .object({ resourceId: id, granteeId: id, revokedBy: id })
+  .object({ resourceId: subjectId, granteeId: id, revokedBy: id })
   .strict();
 
 // Risky type: the secret itself never appears here, only a reference id
-// the secret store understands.
+// the secret store understands. userId, serverId and profile together
+// build this stream's composite subject (connection-<user>-<server>-
+// <profile>), so all three use the subject-safe id shape, not just one.
 export const connectionCreatedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, secretRef: id })
+  .object({ userId: subjectId, serverId: subjectId, profile: subjectId, secretRef: secretRefSchema })
   .strict();
 
 export const connectionRefreshedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, secretRef: id })
+  .object({ userId: subjectId, serverId: subjectId, profile: subjectId, secretRef: secretRefSchema })
   .strict();
 
 export const connectionRevokedDataSchema = z
-  .object({ userId: id, serverId: id, profile: id, revokedBy: id })
+  .object({ userId: subjectId, serverId: subjectId, profile: subjectId, revokedBy: id })
   .strict();
 
 // --- Budgets (single-writer actor per silo) -----------------------------
@@ -290,53 +361,53 @@ export const budgetExhaustedDataSchema = z
 // ciphertext and the key that encrypted it (so "forget" only has to
 // delete the key).
 export const memoryWrittenDataSchema = z
-  .object({ scopeId: id, memoryId: id, ...encryptedText })
+  .object({ scopeId: subjectId, memoryId: id, ...encryptedText })
   .strict();
 
 export const memoryCorrectedDataSchema = z
-  .object({ scopeId: id, memoryId: id, ...encryptedText })
+  .object({ scopeId: subjectId, memoryId: id, ...encryptedText })
   .strict();
 
-export const memoryForgottenDataSchema = z.object({ scopeId: id, memoryId: id }).strict();
+export const memoryForgottenDataSchema = z.object({ scopeId: subjectId, memoryId: id }).strict();
 
 export const memoryConsolidatedDataSchema = z
-  .object({ scopeId: id, consolidationId: id, memoryIds: z.array(id).min(1) })
+  .object({ scopeId: subjectId, consolidationId: id, memoryIds: z.array(id).min(1) })
   .strict();
 
 export const scopePromotionRequestedDataSchema = z
-  .object({ scopeId: id, targetScopeId: id, requestedBy: id })
+  .object({ scopeId: subjectId, targetScopeId: id, requestedBy: id })
   .strict();
 
 export const scopePromotedDataSchema = z
-  .object({ scopeId: id, targetScopeId: id, approvedBy: id })
+  .object({ scopeId: subjectId, targetScopeId: id, approvedBy: id })
   .strict();
 
 // --- Routines and delegation ----------------------------------------------
 
 export const routineCreatedDataSchema = z
-  .object({ routineId: id, assistantId: id, schedule: id, createdBy: id })
+  .object({ routineId: subjectId, assistantId: id, schedule: id, createdBy: id })
   .strict();
 
 export const routineUpdatedDataSchema = z
-  .object({ routineId: id, schedule: id, updatedBy: id })
+  .object({ routineId: subjectId, schedule: id, updatedBy: id })
   .strict();
 
-export const routinePausedDataSchema = z.object({ routineId: id, pausedBy: id }).strict();
+export const routinePausedDataSchema = z.object({ routineId: subjectId, pausedBy: id }).strict();
 
-export const routineResumedDataSchema = z.object({ routineId: id, resumedBy: id }).strict();
+export const routineResumedDataSchema = z.object({ routineId: subjectId, resumedBy: id }).strict();
 
-export const routineRetiredDataSchema = z.object({ routineId: id, retiredBy: id }).strict();
+export const routineRetiredDataSchema = z.object({ routineId: subjectId, retiredBy: id }).strict();
 
 export const routineDueDataSchema = z
-  .object({ routineId: id, firedAt: z.iso.datetime({ offset: true }) })
+  .object({ routineId: subjectId, firedAt: z.iso.datetime({ offset: true }) })
   .strict();
 
 export const delegationStartedDataSchema = z
-  .object({ delegationId: id, parentComputerId: id, childComputerId: id, rootBudgetId: id })
+  .object({ delegationId: subjectId, parentComputerId: id, childComputerId: id, rootBudgetId: id })
   .strict();
 
 export const delegationCompletedDataSchema = z
-  .object({ delegationId: id, outcome: z.enum(['success', 'failure']) })
+  .object({ delegationId: subjectId, outcome: z.enum(['success', 'failure']) })
   .strict();
 
 // --- Security --------------------------------------------------------------

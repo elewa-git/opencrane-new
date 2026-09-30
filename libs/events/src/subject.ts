@@ -9,7 +9,27 @@
 // `connection-<user>-<server>-<profile>`). The three silo-wide streams
 // (org, budget, security) key on the envelope's own `silo` field instead,
 // since there is exactly one of each per silo.
+//
+// This envelope `subject` (hyphen-joined, e.g. "member-mem_1") is a
+// different string from the NATS JetStream subject the "How events are
+// delivered" section of events.md describes (`ev.<stream-type>.<id>`,
+// dot-joined). They name the same stream, but one is a CloudEvents field
+// stored on every event and the other is the wire routing key JetStream
+// uses; this file only builds the former.
+//
+// Every id that goes into a subject (here, and the envelope's own `silo`
+// field in envelope.ts) is restricted to this character set. Two reasons:
+// - `-` is the join separator above, so an id containing `-` could make
+//   two different entities collide on the same subject string (e.g.
+//   serverId "x-odoo" + profile "work" would build the same subject as
+//   serverId "x" + profile "odoo-work"). Since no id may contain `-`,
+//   joining with `-` can never be ambiguous: the id boundaries are fixed.
+// - NATS subjects give `.`, `*`, `>` and whitespace special meaning
+//   (token separator and wildcards), so an id carrying any of those could
+//   silently change which JetStream subject an event lands on.
 import type { EventDefinition } from './registry.ts';
+
+export const SUBJECT_ID_PATTERN = /^[A-Za-z0-9_]+$/;
 
 /**
  * The subject an event of this type must carry, given its own `data` and

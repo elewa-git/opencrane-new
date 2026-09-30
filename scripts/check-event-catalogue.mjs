@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 // Checks that the event registry (libs/events/src/registry.ts) and the
-// event catalogue (docs/architecture/events.md) agree, in three ways:
+// event catalogue (docs/architecture/events.md) agree, in four ways:
 // - they name exactly the same event types, in both directions;
 // - every event's `stream` in the registry is one of the stream-type
 //   prefixes the catalogue's own "Streams" table lists (e.g. "member" for
 //   `member-<user>`), and every prefix the table lists is used by at
 //   least one event;
+// - that stream is the *right* one for the event, not just some real one:
+//   an event type's own prefix (the word before the first dot) has to be
+//   its stream's name too, except for the handful of types the Streams
+//   table's "Examples" column says belong to a different stream (see
+//   EVENT_PREFIX_STREAM_EXCEPTIONS below) — this is what catches, say,
+//   `approval.used` moved onto the `effect` stream, which the check above
+//   alone would wave through because `effect` is still a real stream;
 // - a backticked name in the "## Catalogue" section that looks like it
 //   was meant to be an event, but doesn't match the strict event-name
 //   shape (three dotted parts, a hyphen, camelCase), is flagged instead
@@ -40,6 +47,55 @@ const EVENT_TYPE_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 // eye, so this reports it rather than silently leaving it out of the
 // comparison the way the old, narrower regex did.
 const MALFORMED_CANDIDATE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+
+// Which stream an event type's own prefix (the word before the first dot,
+// e.g. "member" in "member.joined") belongs to, for the handful of event
+// types whose prefix is not the stream's name. Taken directly from the
+// Streams table's own "Examples" column in events.md:
+// - `conversation-<id>` | ... | "participants, messages, agent activity"
+//   -> participant.*, message.posted and agent.* all belong to the
+//   conversation stream, not their own prefix.
+// - `computer-<assistant>` | ... | "... takeover" -> takeover.* belongs to
+//   the computer stream.
+// - `approval-<id>` | ... | "requested, decided, used, expired" ->
+//   "requested" is tool.approval_requested, not approval.requested (there
+//   is no such event), so tool.* belongs to the approval stream.
+// - `scope-<id>` | ... | "memory written, corrected, forgotten,
+//   consolidated, promoted" -> memory.* belongs to the scope stream.
+// Every other event type's prefix is its stream's name directly (checked
+// below without needing an entry here).
+const EVENT_PREFIX_STREAM_EXCEPTIONS = {
+  participant: 'conversation',
+  message: 'conversation',
+  agent: 'conversation',
+  takeover: 'computer',
+  tool: 'approval',
+  memory: 'scope',
+};
+
+/**
+ * Checks every registry entry's own `stream` against the event type's
+ * prefix, using the catalogue's Streams table "Examples" column to decide
+ * which prefixes are exceptions (see EVENT_PREFIX_STREAM_EXCEPTIONS). This
+ * is a different, and stricter, check than "the stream is one of the
+ * table's known prefixes": it catches an event moved onto some *other*
+ * real stream, which parseStreamTypes alone can't, because that stream is
+ * still a perfectly valid prefix — just not this event's.
+ *
+ * @param {import('../libs/events/src/registry.ts').EventDefinition[]} registry
+ * @returns {string[]} one message per event whose stream doesn't match its prefix
+ */
+export function wrongStreamAssignments(registry) {
+  const problems = [];
+  for (const entry of registry) {
+    const prefix = entry.type.split('.')[0] ?? entry.type;
+    const expectedStream = EVENT_PREFIX_STREAM_EXCEPTIONS[prefix] ?? prefix;
+    if (entry.stream !== expectedStream) {
+      problems.push(`${entry.type} is on stream "${entry.stream}", but should be on stream "${expectedStream}"`);
+    }
+  }
+  return problems.sort();
+}
 
 /**
  * Extracts the stream-type word from one row of the "Streams" table, e.g.
@@ -167,11 +223,18 @@ async function main() {
   const streamTypesUsedByRegistry = new Set(eventRegistry.map((entry) => entry.stream));
   const unusedStreamTypes = [...streamTypes].filter((type) => !streamTypesUsedByRegistry.has(type)).sort();
 
+  // Beyond "is this a real stream", check *which* real stream: an event
+  // moved onto some other stream that's still in the table (e.g.
+  // approval.used onto "effect") would pass the checks above but is still
+  // wrong, and that's a mistake CI should catch, not just documentation.
+  const wrongStreams = wrongStreamAssignments(eventRegistry);
+
   const ok =
     missingFromRegistry.length === 0 &&
     missingFromCatalogue.length === 0 &&
     unknownStreams.length === 0 &&
-    unusedStreamTypes.length === 0;
+    unusedStreamTypes.length === 0 &&
+    wrongStreams.length === 0;
 
   if (malformedNames.size > 0) {
     console.warn(
@@ -212,6 +275,12 @@ async function main() {
     console.error('\nStream-type prefixes in the "Streams" table that no event in the registry uses:');
     for (const type of unusedStreamTypes) {
       console.error(`  - ${type}`);
+    }
+  }
+  if (wrongStreams.length > 0) {
+    console.error('\nEvents on the wrong stream (see EVENT_PREFIX_STREAM_EXCEPTIONS in this file):');
+    for (const line of wrongStreams) {
+      console.error(`  - ${line}`);
     }
   }
   process.exitCode = 1;
