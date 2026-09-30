@@ -96,6 +96,7 @@ Record the source commit in each copied file's header or README.
 4. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
 5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
+7. **Computer per assistant, not per conversation** (recommended). A person's assistant keeps one computer across its conversations, with the same logins, workspace and browser profile, like one laptop per colleague. A team assistant has one computer with team scope. Delegated children run as sub-agents in the same computer unless they need a different scope, in which case they get their own.
 
 ## Risks
 
