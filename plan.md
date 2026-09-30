@@ -116,7 +116,7 @@ Hosted MCP servers never run inside the gateway.
 - **Commands write one event, nothing else ("listen to yourself").** A command validates, then does **one atomic append** to the event log. State tables (conversations, budgets, approvals, memberships) are **projections** kept up to date by listeners. There are no multi-table business transactions and no "write state, then publish".
 - **The only synchronous atomic step is a conditional append,** where a rule needs one consistent answer: an expected stream version, or a unique key, on the budget stream (reserve), the approval (use once) and state-guarded commands (only a *pending* approval can be decided). One stream per rule serialises concurrent writers without locks across tables. Budgets use a **single-writer budget actor per silo**: one leader-elected process in the decision service handles reserve and settle requests **in order**, in memory, and appends each result. The expected stream version stays only as a fence, so a stale leader after failover can't write. There are no locks and, in normal operation, no conflicts. The budget stream holds every ceiling (global, paying group, optional assistant), so a single conditional append checks all of them and records the one charge; that is ample at silo scale. OpenFGA is a **projection** too: its tuples are rebuilt from membership and grant events, never edited directly.
 - **Consistency windows are explicit:** the UI may lag its own writes by milliseconds, and revocation takes effect within a documented bound (target under 2 seconds) as listeners update OpenFGA and the credential-release rules.
-- **Delivery:** KurrentDB **catch-up subscriptions** feed projections (checkpoint and row in one Postgres transaction) and a per-silo dispatcher. Persistent subscriptions are not used, because they don't guarantee order. The dispatcher hands each event to the job queue (see decision 8), which fans it out to subscriber queues, **in order per stream** (per conversation, per budget), using pg-boss `key_strict_fifo` queues keyed by stream id. There is one writer per stream at a time, so **projections need no locks**, and different streams run in parallel. A failing event holds back only its own stream (strict FIFO) and raises an alert; it is never skipped. Delivery is at-least-once: handlers are idempotent (keyed by event id), retried with backoff, and failed events land in a monitored dead-letter queue that can be replayed. `LISTEN/NOTIFY` wakes the browser streams.
+- **Delivery:** JetStream **ordered consumers** feed projections (consumer sequence and row in one Postgres transaction) and a per-silo dispatcher. The dispatcher hands each event to the job queue (see decision 8), which fans it out to subscriber queues, **in order per stream** (per conversation, per budget), using pg-boss `key_strict_fifo` queues keyed by stream id. There is one writer per stream at a time, so **projections need no locks**, and different streams run in parallel. A failing event holds back only its own stream (strict FIFO) and raises an alert; it is never skipped. Delivery is at-least-once: handlers are idempotent (keyed by event id), retried with backoff, and failed events land in a monitored dead-letter queue that can be replayed. `LISTEN/NOTIFY` wakes the browser streams.
 - **Three event sources, one log:**
   1. server commands (decisions, approvals, admin changes);
   2. computer reports (Codex events through the bridge);
@@ -172,7 +172,7 @@ Hosted MCP servers never run inside the gateway.
 
 | Store | Holds | Why |
 |---|---|---|
-| **Event store (KurrentDB, decision 3)** | Every event, one stream per entity (see the [catalogue](docs/architecture/events.md)). The only source of truth | Native streams, expected-version appends, ordered subscriptions |
+| **Event store (NATS JetStream, decision 3)** | Every event, one subject per entity (see the [catalogue](docs/architecture/events.md)). The only source of truth; R3 replicated, unlimited retention, backed up | Apache-2.0; per-subject conditional appends; ordered consumers; doubles as a bus |
 | **PostgreSQL (CNPG), database `opencrane`** | **Content projections**, all replayable: members, teams, assistants and owners, computers, conversations, messages, activity, approvals, installed MCP servers and tool modes, connections (secret references only), grants, budgets, usage, routines, audit view, plus projection checkpoints | Queryable content; drop and rebuild by replay | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
 | same cluster, database `jobs` | pg-boss queues: ordered per-stream delivery to reactions, retries, dead-letter, cron (routines, monthly budget period, dreaming, housekeeping) | pg-boss runs on Postgres; no extra queue service |
 | same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
@@ -182,8 +182,7 @@ Hosted MCP servers never run inside the gateway.
 | **Secret store** (Kubernetes Secrets or GCP Secret Manager) | Company model keys, per-user credentials, the token-signing key | Secrets never go in Postgres |
 
 **Not in the first version:**
-- **KurrentDB:** add it only if long histories or audit streams need it.
-- **SurrealDB:** it replaces the Cognee stores only if spike S0.4 chooses it.
+- **SurrealDB:** ruled out by the OSI-only licence rule (BSL).
 - **Redis:** only if the gateway runs several replicas and needs shared rate-limit counters. Budgets don't need it; they live in Postgres behind `ext_authz`.
 
 **Zitadel** keeps its own database, run by the platform or as Zitadel Cloud. It is shared across silos with one organisation per customer, as in OpenCrane 1.
@@ -197,9 +196,9 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | S0.1 | **Codex app-server in a GKE Agent Sandbox Pod** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
 | S0.2 | **agentgateway decision hook** | Speaks MCP 2026-07-28 end to end; rejects other versions and header/body tool mismatches; `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
 | S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
-| S0.4 | **Company brain isolation** | Cognee with one dataset per scope, and memify run per scope, cannot read another scope; the same test on SurrealDB with row-level permissions | Brain store: Cognee or SurrealDB |
+| S0.4 | **Company brain isolation** | Cognee with one dataset per scope, and memify run per scope as that scope's principal, cannot read another scope; deletion removes the data; the all-Postgres graph option is evaluated against Ladybug | Brain layout and graph backend |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
-| S0.7 | **Event store: KurrentDB vs NATS JetStream** | Expected-version append per stream; ordered catch-up delivery into projections (checkpoint in the Postgres transaction) and into the pg-boss dispatcher; replay rebuilds a projection; 3-node failover without lost or reordered events; licence review done | Event store (decision 3) |
+| S0.7 | **Event store: NATS JetStream (fallback: Postgres event store)** | Conditional append per entity subject (expected last-subject sequence); ordered replay into a projection with the consumer sequence checkpointed in the same Postgres transaction; dispatcher into pg-boss; replay rebuilds a projection; R3 failover without lost or reordered events; many-subject scale (at least 1M entity subjects); backup and restore of the stream | Event store (decision 3) |
 | S0.8 | **Handler runtime: pg-boss vs Restate vs Hatchet vs Temporal** | Per-key ordered handlers (one writer per stream); retries and dead-letter; **logs and history per handler in a UI**; the budget actor as a keyed single writer; licence review; ops cost per silo | Handler runtime (decision 8) |
 | S0.6 | **Kortix as a base?** | Self-hosted with our model gateway; check orgs/roles, change-request approvals, the sandbox layer and the licence | Whether to build the product layer on Kortix instead |
 
@@ -261,15 +260,17 @@ Record the source commit in each copied file's header or README.
 
 ## Open decisions (owner)
 
-1. Brain store: Cognee or SurrealDB. Decided by spike S0.4.
+1. Brain store: Cognee (SurrealDB's BSL licence conflicts with the OSI-only rule, so it stays only as a reference design). Spike S0.4 still proves scope isolation.
 2. Build on Kortix, or on Codex plus our own product layer. Decided by spike S0.6.
-3. **Event store: KurrentDB (recommended), NATS JetStream if its licence fails review.** Truth lives in a purpose-built event store, and PostgreSQL holds only replayable content. KurrentDB gives, out of the box:
-   - per-stream expected versions;
-   - one ordered global log with catch-up subscriptions, so no hand-built gap handling;
-   - stream-per-entity at any count;
-   - a UI to browse streams and events.
+3. **Event store: NATS JetStream (decided direction; confirm in S0.7).** KurrentDB is ruled out: its KLv1 licence is not acceptable for customer silos. JetStream is Apache-2.0 (CNCF) and provides:
+   - one subject per entity stream (e.g. `ev.conversation.<id>`);
+   - **conditional appends** with `Nats-Expected-Last-Subject-Sequence`;
+   - ordered consumers for projections;
+   - durable consumers for the dispatcher;
+   - R3 replication for high availability;
+   - unlimited retention for the source of truth.
 
-   Because content is rebuilt by replay, backing up the event store is enough to restore a silo; the old dual-store restore problem doesn't apply. **Open item: legal review of KurrentDB's KLv1 licence** (source-available; restricts offering KurrentDB itself as a hosted service) for use inside customer silos. If it fails, use NATS JetStream (Apache-2.0: per-subject expected sequence, durable consumers, and a real bus). Run a 3-node cluster in production. **Spike S0.7** compares the two.
+   It also serves as the message bus if one is needed later. Fallback if S0.7 fails: a PostgreSQL event store (Message DB, or Emmett once its licence is confirmed).
 4. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
 5. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 6. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
@@ -278,7 +279,7 @@ Record the source commit in each copied file's header or README.
 
 ## Risks
 
-- **Licences:** KurrentDB (KLv1) and SurrealDB (BSL) are not OSI open source. Prefer OSI components in customer silos, or get legal sign-off.
+- **Licences:** only OSI-approved open-source components run in customer silos. KurrentDB (KLv1) is ruled out. SurrealDB and Redpanda (BSL), EventSourcingDB (closed source) and Axon Server (commercial) fall under the same rule, and Restate's server licence must be checked in S0.8.
 - **Young components:** agentgateway had a high-severity MCP authorisation advisory in 2026, and Agent Substrate isn't ready. Pin versions, track advisories, and keep policy decisions in OpenCrane so the gateway can be swapped.
 - **Harness dependency:** keep the computer bridge thin, so Codex can be swapped for OpenCode or Goose.
 - **Dreaming and permission laundering:** consolidation runs per scope as a scoped principal, and memory never grants anything.

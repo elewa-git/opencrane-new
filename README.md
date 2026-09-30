@@ -91,7 +91,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  │ └─ MarkItDown / poppler             │   │ content (replay-│  │ per-user creds,  │   │
  │  │ warm pool · snapshots when idle     │   │ able), OpenFGA  │  │ signing key      │   │
  │  └─────────────────────────────────────┘   └─────────────────┘  └──────────────────┘   │
- │    acme-events: KurrentDB — every event, the only source of truth → projections        │
+ │    acme-events: NATS JetStream — every event, the only source of truth → projections   │
  │    ClamAV scanner (uploads) · package mirror access (npm / PyPI) through the gateway   │
  └────────────────────────────────────────────────────────────────────────────────────────┘
         (next silo: "globex" — same layout, nothing shared except the platform layer)
@@ -119,8 +119,8 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 | Egress, models, tools | agentgateway (one per silo) | Gateway config generated from admin settings |
 | Budgets, approvals, credentials | — | The decision service behind `ext_authz` |
 | Tool servers | MCP 2026-07-28 servers; our Odoo MCP; hosted adapters | Install flow, tool review, per-user connections |
-| Company brain and dreaming | Cognee (SurrealDB evaluated as an alternative) | Scope mapping, provenance, promotion across scopes by approval |
-| Events (source of truth) | KurrentDB (NATS JetStream if licence review fails) | The event catalogue, command handlers, projections, reactions |
+| Company brain and dreaming | Cognee | Scope mapping, provenance, promotion across scopes by approval |
+| Events (source of truth) | NATS JetStream (Apache-2.0) | The event catalogue, command handlers, projections, reactions |
 | Content and jobs | PostgreSQL (CNPG) projections, pg-boss (ordered per stream, cron) | Rebuildable content tables, no business rules in SQL |
 | Secrets | Kubernetes Secrets or GCP Secret Manager | Credential lifecycle: connect, refresh, revoke |
 | Upload scanning | ClamAV scanner (from OpenCrane 1) | — |
@@ -140,4 +140,4 @@ Carried over so far:
 
 ## Licence
 
-OpenCrane 2 is free software under the **GNU Affero General Public License v3.0 or later**, the same licence as OpenCrane. See [LICENSE](LICENSE). Third-party components keep their own licences. Check each one before bundling: Codex and agentgateway are Apache-2.0; Cognee and KasmVNC have their own terms.
+OpenCrane 2 is free software under the **GNU Affero General Public License v3.0 or later**, the same licence as OpenCrane. See [LICENSE](LICENSE). Only OSI-approved open-source components run inside customer silos. Third-party components keep their own licences: Codex, agentgateway and NATS are Apache-2.0; check Cognee, KasmVNC (GPL-2.0) and every new component before bundling.
