@@ -1,0 +1,16 @@
+{
+  "name": "s0-1-codex-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spike S0.1a: can Codex app-server be the agent harness inside a computer (local part, no Pod/gVisor)",
+  "scripts": {
+    "test": "vitest run --pool=forks --test-timeout=60000"
+  },
+  "devDependencies": {
+    "@openai/codex": "0.159.2",
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

@@ -1,0 +1,123 @@
+# agentgateway standalone config for spike S0.2.
+#
+# Plain-English summary: one gateway, two routes.
+#   /mcp                 -> the stub MCP server (2026-07-28, stateless)
+#   /v1/chat/completions  -> the stub model endpoint
+#
+# Both routes:
+#   - require a verified "computer token" (jwtAuth, checked against the
+#     token issuer's published JWKS) before anything else happens;
+#   - call the decision service as an ext_authz HTTP target, with the
+#     turn token and MCP headers forwarded, and the request body included
+#     (capped, not truncated) so the decision service can see MCP tool
+#     calls and model max_tokens;
+#   - fail closed if the decision service does not answer.
+#
+# Two backend types agentgateway ships natively -- `ai` (for real model
+# providers) and `mcp` (for MCP servers speaking a revision agentgateway
+# understands) -- are deliberately NOT used here. Our stub MCP server
+# speaks the plan's own 2026-07-28 convention, which is not a revision
+# this agentgateway release recognises, and our model stub is a minimal
+# custom shape. Routing both as plain HTTP backends keeps the spike
+# honest about what agentgateway verified natively (the computer token,
+# the fail-closed ext_authz call, body-size enforcement) versus what the
+# decision service verifies itself (the turn token, MCP protocol version,
+# tool-name agreement, OpenFGA, budget). See the ADR for the write-up.
+
+gateways:
+  default:
+    port: 3000
+
+routes:
+  - name: mcp-route
+    gateways: default
+    matches:
+      - path:
+          exact: /mcp
+    policies:
+      jwtAuth:
+        mode: strict
+        preserveToken: true
+        location:
+          header:
+            name: authorization
+            prefix: "Bearer "
+        issuer: https://token-issuer.opencrane.local/
+        audiences:
+          - agentgateway
+        jwks:
+          url: http://127.0.0.1:4101/jwks.json
+      extAuthz:
+        host: 127.0.0.1:4102
+        includeRequestHeaders:
+          - authorization
+          - x-turn-token
+          - mcp-protocol-version
+          - mcp-tool-name
+        includeRequestBody:
+          maxRequestBytes: 8192
+          allowPartialMessage: false
+        protocol:
+          http:
+            path: '"/authorize/mcp"'
+            includeResponseHeaders:
+              - x-opencrane-credential
+            metadata:
+              decisionOutcome: '"x-decision" in response.headers ? response.headers["x-decision"] : ""'
+        failureMode:
+          denyWithStatus: 503
+    backends:
+      - host: 127.0.0.1:4103
+
+  - name: model-route
+    gateways: default
+    matches:
+      - path:
+          exact: /v1/chat/completions
+    policies:
+      jwtAuth:
+        mode: strict
+        preserveToken: true
+        location:
+          header:
+            name: authorization
+            prefix: "Bearer "
+        issuer: https://token-issuer.opencrane.local/
+        audiences:
+          - agentgateway
+        jwks:
+          url: http://127.0.0.1:4101/jwks.json
+      extAuthz:
+        host: 127.0.0.1:4102
+        includeRequestHeaders:
+          - authorization
+          - x-turn-token
+        includeRequestBody:
+          maxRequestBytes: 8192
+          allowPartialMessage: false
+        protocol:
+          http:
+            path: '"/authorize/model"'
+            includeResponseHeaders:
+              - x-reservation-id
+            metadata:
+              reservationId: '"x-reservation-id" in response.headers ? response.headers["x-reservation-id"] : ""'
+              decisionOutcome: '"x-decision" in response.headers ? response.headers["x-decision"] : ""'
+        failureMode:
+          denyWithStatus: 503
+    backends:
+      - host: 127.0.0.1:4104
+
+# Note (see the ADR / README "findings" section): we also tried adding
+# frontendPolicies.accessLog.add fields that read the `extauthz.*` CEL
+# variable, so the gateway's own stdout access log would carry the
+# reservation id and the allow/deny outcome. agentgateway's CEL dialect
+# rejects `has()` on a dynamic map root var (`extauthz`, `response.headers`
+# indexed by a hyphenated key) with "invalid argument to has() macro", and
+# there is no hyphen-safe presence check we found that both validates and
+# survives a live reload. We dropped it rather than ship a config that
+# might silently fail validation. The decision service's own structured
+# log (one JSON line per decision, see src/decision-service/server.ts)
+# carries the same reservation id and outcome, so pass condition 8's
+# "logs usage with the reservation id" is still demonstrated -- just by
+# the decision service, not by agentgateway's own access log.

@@ -1,0 +1,24 @@
+{
+  "name": "s0-2-gateway-spike",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spike S0.2: agentgateway as the only way out of a computer, OpenCrane deciding every sensitive call through ext_authz with full IAM context.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "token-issuer": "tsx src/token-issuer/server.ts",
+    "decision-service": "tsx src/decision-service/server.ts",
+    "mcp-stub": "tsx src/mcp-stub/server.ts",
+    "model-stub": "tsx src/model-stub/server.ts",
+    "test": "vitest run --no-file-parallelism"
+  },
+  "dependencies": {
+    "jose": "^6.0.11"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "tsx": "^4.19.2",
+    "vitest": "^3.0.5",
+    "@types/node": "^22.10.7"
+  }
+}

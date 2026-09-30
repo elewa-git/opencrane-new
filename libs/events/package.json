@@ -1,0 +1,18 @@
+{
+  "name": "@opencrane/events",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The typed event envelope and event-type registry: the contract from docs/architecture/events.md, in code.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
+  }
+}
