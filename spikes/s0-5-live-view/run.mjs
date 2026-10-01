@@ -113,6 +113,43 @@ try {
   `);
   assert.equal(copied, 'requester clipboard survives');
   l.pass('requester clipboard', 'binary text/plain input read from actual X clipboard by desktop Chromium during takeover');
+  // Keep all three connections open: one stops reading while the desktop changes.
+  const normal = await rfb(g.url, g.tokens.participant);
+  const slow = await rfb(g.url, g.tokens.participant);
+  let slowClose;
+  slow.socket.on('close', (code, reason) => { slowClose = { code, reason: reason.toString() }; });
+  slow.socket.pause();
+  const update = Buffer.from([3, 0, 0, 0, 0, 0, 3, 32, 2, 88]); // Full 800x600 update.
+  const rssBefore = process.memoryUsage().rss;
+  let rssPeak = rssBefore, previousHash, frames = 0;
+  // Gateway and protocol clients share this process; its RSS is a conservative gateway bound.
+  const sample = setInterval(() => { rssPeak = Math.max(rssPeak, process.memoryUsage().rss); }, 10);
+  try {
+    for (let i = 0; i < 32; i++) {
+      await l.exec('desktop', `import {execFileSync} from 'node:child_process';process.setgroups([]);process.setgid(1002);process.setuid(1002);const env={...process.env,DISPLAY:':1'};const id=execFileSync('xdotool',['search','--name','Event Tester'],{env}).toString().trim().split(String.fromCharCode(10))[0];execFileSync('xdotool',['windowmove',id,'${i % 2 ? 0 : 400}','0'],{env});`);
+      if (i < 8) slow.socket.send(update);
+      const frame = await normal.refresh();
+      assert.equal(frame.pixels, 480000); assert.notEqual(frame.hash, previousHash); previousHash = frame.hash;
+      assert.equal((await writer.refresh()).pixels, 480000);
+      writer.pointer(150 + i, 150);
+      await until(async () => (await pointer()).includes(`x:${150 + i} y:150`), 'requester control during slow view', 10000);
+      assert.equal(normal.socket.readyState, 1); assert.equal(writer.socket.readyState, 1);
+      frames++;
+      if (i === 7) {
+        slow.socket.resume();
+        await until(() => slowClose, 'slow viewer closed by buffer limit', 10000);
+        assert.deepEqual(slowClose, { code: 1013, reason: 'Viewer buffer limit exceeded' });
+      }
+    }
+    assert.equal((await normal.refresh()).pixels, 480000);
+    assert.equal((await writer.refresh()).pixels, 480000);
+    rssPeak = Math.max(rssPeak, process.memoryUsage().rss);
+    assert.ok(rssPeak < 256 * 1024 * 1024, `RSS peak ${rssPeak} exceeds 256 MiB`);
+    assert.ok(rssPeak - rssBefore < 96 * 1024 * 1024, `RSS growth ${rssPeak - rssBefore} exceeds 96 MiB`);
+    l.pass('slow viewer isolation', `${frames} changing frames, reader paused for the first 8 then closed 1013: ${slowClose.reason}; normal viewer and requester received every frame and requester pointer worked throughout; combined gateway/client RSS baseline ${rssBefore}, peak ${rssPeak}, growth ${rssPeak - rssBefore} bytes (bounds: 256 MiB total, 96 MiB growth); 4 MiB send cap in each viewer direction`);
+  } finally {
+    clearInterval(sample); slow.socket.terminate(); normal.socket.terminate();
+  }
   assert.equal((await action('release', g.tokens.requester)).status, 200);
   await until(() => writer.socket.readyState === 3, 'writer disconnected on release');
   assert.ok((await l.records()).length > count); assert.equal(paused, false);

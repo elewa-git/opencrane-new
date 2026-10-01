@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import WebSocket from 'ws';
 import { once } from 'node:events';
+import { createHash } from 'node:crypto';
 import { until } from '../s0-3-warm-pool/lab.mjs';
 export async function rfb(url, token, origin = 'http://opencrane.local', fragmented = false) {
   const socket = new WebSocket(url.replace('http:', 'ws:') + '/computers/c1/view', 'binary', {
@@ -25,21 +26,26 @@ export async function rfb(url, token, origin = 'http://opencrane.local', fragmen
   socket.send(display.subarray(0, 3), { fin: !fragmented });
   socket.send(display.subarray(3, 22), { fin: true });
   socket.send(display.subarray(22));
-  let type = (await take(1))[0];
-  while (type === 253 || type === 254) { // Kasm session join/leave notifications.
-    await take((await take(4)).readUInt32BE());
-    type = (await take(1))[0];
-  }
-  assert.equal(type, 0); const update = await take(3); const rectangles = update.readUInt16BE(1); assert.ok(rectangles > 0);
-  let pixels = 0;
-  for (let i = 0; i < rectangles; i++) {
-    const rect = await take(12); assert.equal(rect.readInt32BE(8), 0);
-    const count = rect.readUInt16BE(4) * rect.readUInt16BE(6); await take(count * (init[4] / 8)); pixels += count;
-  }
+  const readUpdate = async () => {
+    const hash = createHash('sha256');
+    let type = (await take(1))[0];
+    while (type === 253 || type === 254) { // Kasm session join/leave notifications.
+      await take((await take(4)).readUInt32BE());
+      type = (await take(1))[0];
+    }
+    assert.equal(type, 0); const update = await take(3); const rectangles = update.readUInt16BE(1); assert.ok(rectangles > 0);
+    let pixels = 0;
+    for (let i = 0; i < rectangles; i++) {
+      const rect = await take(12); assert.equal(rect.readInt32BE(8), 0);
+      const count = rect.readUInt16BE(4) * rect.readUInt16BE(6); hash.update(await take(count * (init[4] / 8))); pixels += count;
+    }
+    return { pixels, hash: hash.digest('hex') };
+  };
+  const { pixels } = await readUpdate();
   const key = code => { for (const down of [1, 0]) { const b = Buffer.alloc(8); b[0] = 4; b[1] = down; b.writeUInt32BE(code, 4); socket.send(b); } };
   // Kasm extends pointer packets to 11 bytes (16-bit mask and scroll deltas).
   const pointer = (x, y) => { const b = Buffer.alloc(11); b[0] = 5; b.writeUInt16BE(x, 3); b.writeUInt16BE(y, 5); socket.send(b); };
-  return { socket, key, pointer, pixels };
+  return { socket, key, pointer, pixels, refresh: () => { socket.send(request); return readUpdate(); } };
 }
 
 export function clipboard(text, declaredLength = Buffer.byteLength(text)) {

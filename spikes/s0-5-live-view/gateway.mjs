@@ -80,19 +80,26 @@ export async function gateway(upstream, passwords, pause, resume) {
       });
       entry.remote = { destroy: () => remote.terminate() };
       const refuse = () => { client.destroy(); remote.terminate(); };
-      remote.on('error', refuse); remote.on('close', () => client.destroy());
+      let overloaded = false;
+      remote.on('error', refuse); remote.on('close', () => { if (!overloaded) client.destroy(); });
       remote.on('open', () => {
         if (client.destroyed) return remote.terminate();
         viewers.handleUpgrade(req, client, head, viewer => {
-          const accept = viewerStream(message => {
-            if (remote.bufferedAmount > 65536) return refuse();
-            remote.send(message);
-          }, refuse);
+          const send = (socket, bytes) => {
+            if (overloaded || socket.readyState !== WebSocket.OPEN) return;
+            // Include this message and its largest possible WebSocket header in the cap.
+            if (socket.bufferedAmount + bytes.length + 14 > 4 * 1024 * 1024) {
+              overloaded = true;
+              viewer.close(1013, 'Viewer buffer limit exceeded');
+              remote.terminate();
+              return;
+            }
+            socket.send(bytes);
+          };
+          const accept = viewerStream(message => send(remote, message), refuse);
           viewer.on('error', refuse);
           viewer.on('message', (bytes, binary) => binary ? accept(bytes) : refuse());
-          remote.on('message', bytes => {
-            if (viewer.readyState === WebSocket.OPEN) viewer.send(bytes);
-          });
+          remote.on('message', bytes => send(viewer, bytes));
         });
       });
       return;

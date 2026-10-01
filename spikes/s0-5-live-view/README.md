@@ -37,6 +37,7 @@ manual audit commands are in [LICENCES.md](LICENCES.md); the runner does not aud
 | Authenticated gateway only | PASS | An unrelated Pod's `fetch(http://<computer>:6901)` is blocked; invalid HTTP session gets 401, invalid WebSocket session and wrong Origin get 403. Authorised WebSockets receive a real 800×600 framebuffer. |
 | Participants can view, cannot control | PASS | `rfb.mjs` sends raw key and pointer packets (including Kasm’s 11-byte pointer format) even as viewer. The gateway disconnects each input sender; X `xev` records no viewer key and `xdotool getmouselocation` remains unchanged. The same session stays read-only during someone else's takeover. |
 | Viewer allocation boundary | PASS | A 160 MiB binary clipboard declaration plus data is disconnected. Standard/extended clipboard, file/unknown types, excessive encoding counts and oversized fragmented WebSockets are refused. Xvnc PID/start time and Pod UID remain unchanged, zero restarts; a fresh viewer receives 480,000 pixels. Container memory is limited to 512 MiB. |
+| Slow viewer isolation | PASS | Across 32 changing desktop frames, a viewer stops reading for the first eight and then receives close 1013, `Viewer buffer limit exceeded`. A second viewer and the requester receive every frame; requester pointer control works throughout. The combined gateway/client process must stay below 256 MiB RSS and 96 MiB growth, sampled every 10 ms. Exact measurements are in the evidence receipt. |
 | Requester-only control | PASS | Participant POST takeover gets 403. Requester before takeover is also read-only. During takeover requester key `c` reaches `xev` and pointer moves to 150,150; desktop Chromium reads the requester's binary text/plain clipboard from X; after release requester is read-only again. |
 | Agent pauses and resumes | PASS | A real Codex turn streams through the scripted provider; takeover calls `turn/interrupt` and waits for `interrupted`. New starts are refused and provider count stays fixed during control. Release closes the writer WebSocket before a new completed turn on the same thread. |
 | Desktop isolation | PASS | Xvnc UID 1002, `no_new_privs=1`; private Codex files EACCES; unauthenticated local model proxy 401, model gateway 403, direct provider connection blocked. UID 1001 tools retain S0.1b's socket-denying seccomp filter. |
@@ -50,7 +51,11 @@ RFB 3.8/None/shared handshake, SetPixelFormat (20 bytes), SetEncodings (at most
 extension is needed by this viewer. Everything else, including every clipboard,
 key, pointer and file-transfer message, closes the connection before any byte of
 that message reaches Kasm. WebSocket messages are limited to 4 KiB, including
-fragments; partial RFB messages and upstream write queues are bounded. The
+fragments; partial RFB messages are bounded. Both viewer send directions check
+`bufferedAmount` plus the next message and framing against a 4 MiB cap before
+writing. Exceeding the cap stops forwarding, terminates that viewer's upstream
+and sends close 1013 with a clear reason. The normal WebSocket close timeout
+reclaims the connection if the viewer never reads again. The
 requester's writer tunnel retains clipboard/control support during takeover.
 Kasm read-only permissions remain a second check. Local `.state/x-events.txt` and
 `.state/kasm.log` retain the X-event/server evidence without credentials.
