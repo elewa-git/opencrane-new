@@ -23,6 +23,8 @@ See [auth configuration and defaults](../../libs/auth/src/config.ts), including
 client-secret indirection, scopes, cookie settings and provider claim names.
 `HOST` defaults to `0.0.0.0`, `PORT` to `8080`, `LOG_LEVEL` to `info`.
 `OTEL_EXPORTER_OTLP_ENDPOINT` enables optional trace export when set.
+`SHUTDOWN_GRACE_MS` sets the graceful-shutdown deadline in milliseconds and
+defaults to `10000`; it must be a positive integer.
 Disabling secure cookies or allowing insecure OIDC HTTP is only for local testing.
 
 Set `NATS_URL`, `SILO_ID` and `OIDC_EXPECTED_ORG_ID` to enable membership acceptance.

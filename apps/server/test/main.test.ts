@@ -5,9 +5,14 @@ import { record as asRecord } from './record.ts';
 // on the real process's real stdout, that no secret in a request URL is printed.
 import { spawn } from 'node:child_process';
 import { connect, createServer } from 'node:net';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
+import { WebSocket } from 'ws';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { event, natsFixture } from '@opencrane/event-store/testing';
+
+const TEST_SHUTDOWN_GRACE_MS = 500;
 
 const TEST_OIDC_ENV = {
   OIDC_ISSUER_URL: 'https://issuer.example.test',
@@ -69,38 +74,84 @@ async function sendRaw(port: number, request: string): Promise<string> {
 interface RunningServer {
   port: number;
   stdout: () => string;
-  stop: () => Promise<void>;
+  stop: () => Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+}
+
+interface StartServerOptions {
+  injectNatsCloseFailure?: boolean;
+}
+
+/** Replace only the child process's event-store entrypoint so its real connection closer rejects. */
+function natsCloseFailurePreload(): string {
+  const target = pathToFileURL(resolve('libs/event-store/src/index.ts')).href;
+  const replacement = `
+    export * from ${JSON.stringify(target)};
+    import { connectEventStore as realConnect } from ${JSON.stringify(target)};
+    export async function connectEventStore(servers) {
+      const events = await realConnect(servers);
+      return { ...events, close: async () => { throw new Error('injected NATS close failure'); } };
+    }
+  `;
+  const preload = `
+    import { registerHooks } from 'node:module';
+    const replacement = ${JSON.stringify(replacement)};
+    registerHooks({
+      resolve(specifier, context, nextResolve) {
+        if (specifier === '@opencrane/event-store') {
+          return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(replacement) };
+        }
+        return nextResolve(specifier, context);
+      }
+    });
+  `;
+  return `data:text/javascript,${encodeURIComponent(preload)}`;
 }
 
 /** Launch main.ts as a child process and wait until /healthz answers. */
-async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<RunningServer> {
+async function startServer(extraEnv: NodeJS.ProcessEnv = {}, options: StartServerOptions = {}): Promise<RunningServer> {
   const port = await findFreePort();
   let stdout = '';
   let stderr = '';
-  const child = spawn(process.execPath, ['--experimental-strip-types', 'apps/server/src/main.ts'], {
+  const args = ['--experimental-strip-types'];
+  if (options.injectNatsCloseFailure === true) {
+    args.push('--import', natsCloseFailurePreload());
+  }
+  args.push('apps/server/src/main.ts');
+  const child = spawn(process.execPath, args, {
     cwd: process.cwd(),
     // OTEL_EXPORTER_OTLP_ENDPOINT is blanked so the result never depends on what the host shell exports.
     // The OIDC settings are made-up test values: main.ts will not start without them, but nothing here
     // signs anyone in, so the issuer is never contacted.
-    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', SILO_ID: '', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
+    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', SILO_ID: '', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', SHUTDOWN_GRACE_MS: String(TEST_SHUTDOWN_GRACE_MS), ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
   child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit) => {
+    child.once('exit', (code, signal) => resolveExit({ code, signal }));
+  });
 
-  /** Ask the child to stop, hard-kill it after 3 seconds, and resolve only once it has exited. */
-  const stop = async (): Promise<void> => {
+  /** Ask the child to stop and fail, with diagnostics, if its own deadline does not stop it. */
+  const stop = async (): Promise<{ code: number | null; signal: NodeJS.Signals | null }> => {
     if (child.exitCode !== null || child.signalCode !== null) {
-      return;
+      return { code: child.exitCode, signal: child.signalCode };
     }
-    await new Promise<void>((resolve) => {
-      const hardKill = setTimeout(() => child.kill('SIGKILL'), 3_000);
-      child.once('exit', () => {
-        clearTimeout(hardKill);
-        resolve();
-      });
-      child.kill('SIGTERM');
-    });
+    child.kill('SIGTERM');
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        exited,
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(() => reject(new Error('server did not exit after SIGTERM')), 3_000);
+        }),
+      ]);
+    } catch (error) {
+      child.kill('SIGKILL');
+      await exited;
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\nstdout:\n${stdout}\nstderr:\n${stderr}`, { cause: error });
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
   };
 
   // Poll rather than guess a delay: a cold type-stripping boot can take seconds on a loaded machine.
@@ -126,7 +177,7 @@ describe('main.ts under the real Node runtime', () => {
     server = undefined;
   });
 
-  it('starts the configured membership route, appends to real NATS, and closes NATS on SIGTERM', async () => {
+  it('exits 0 on idle SIGTERM and closes NATS exactly once', async () => {
     const nats = await natsFixture();
     try {
       const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme',
@@ -149,9 +200,81 @@ describe('main.ts under the real Node runtime', () => {
       expect(await response.json()).toEqual({ status: 'joined', memberId: 'alice', sequence: 2 });
       expect(await nats.store.head()).toBe(2);
       const running = server;
-      await running.stop();
+      const exit = await running.stop();
       server = undefined;
-      expect(parseJsonLines(running.stdout()).map((line) => line['msg'])).toContain('event store connection closed');
+      expect(exit).toEqual({ code: 0, signal: null });
+      expect(parseJsonLines(running.stdout()).filter((line) => line['msg'] === 'event store connection closed')).toHaveLength(1);
+    } finally {
+      await server?.stop();
+      await nats.close();
+    }
+  }, 40_000);
+
+  it('exits 0 within the grace period with an open authenticated WebSocket', async () => {
+    server = await startServer();
+    const config = loadAuthConfig(TEST_OIDC_ENV);
+    const cookie = encodeSession(config, { sub: 'alice', orgId: 'org-acme', roles: [],
+      authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 });
+    const socket = new WebSocket(`ws://127.0.0.1:${server.port}/ws`, {
+      headers: { cookie: `${config.cookieName}=${cookie}`, origin: new URL(config.redirectUri).origin },
+    });
+    await new Promise<void>((resolveOpen, reject) => {
+      socket.once('open', resolveOpen);
+      socket.once('error', reject);
+    });
+    const socketClosed = new Promise<number>((resolveClose, reject) => {
+      socket.once('close', resolveClose);
+      socket.once('error', reject);
+    });
+
+    const started = Date.now();
+    const running = server;
+    const exit = await running.stop();
+    server = undefined;
+
+    expect(exit).toEqual({ code: 0, signal: null });
+    expect(await socketClosed).toBe(1001);
+    expect(Date.now() - started).toBeLessThan(TEST_SHUTDOWN_GRACE_MS + 1_000);
+  }, 40_000);
+
+  it('exits 0 within the grace period with a stalled partial-body request', async () => {
+    server = await startServer();
+    const socket = connect(server.port, '127.0.0.1');
+    await new Promise<void>((resolveConnect, reject) => {
+      socket.once('connect', resolveConnect);
+      socket.once('error', reject);
+    });
+    socket.on('error', () => undefined);
+    socket.write('POST /members/join HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{');
+    for (let tries = 0; tries < 20 && !loggedUrls(server.stdout()).includes('/members/join'); tries += 1) {
+      await sleep(25);
+    }
+    expect(loggedUrls(server.stdout())).toContain('/members/join');
+
+    const started = Date.now();
+    const running = server;
+    const exit = await running.stop();
+    server = undefined;
+
+    expect(exit).toEqual({ code: 0, signal: null });
+    expect(Date.now() - started).toBeLessThan(TEST_SHUTDOWN_GRACE_MS + 1_000);
+  }, 40_000);
+
+  it('exits non-zero within the grace period when NATS close rejects', async () => {
+    const nats = await natsFixture();
+    try {
+      server = await startServer({ OIDC_EXPECTED_ORG_ID: 'org-acme', NATS_URL: nats.connection.getServer(), SILO_ID: 'acme' },
+        { injectNatsCloseFailure: true });
+      const started = Date.now();
+      const running = server;
+      const exit = await running.stop();
+      server = undefined;
+
+      expect(exit).toEqual({ code: 1, signal: null });
+      expect(Date.now() - started).toBeLessThan(TEST_SHUTDOWN_GRACE_MS + 1_000);
+      expect(parseJsonLines(running.stdout())).toContainEqual(expect.objectContaining({
+        msg: 'server shutdown failed', cleanup: 'event store',
+      }));
     } finally {
       await server?.stop();
       await nats.close();
