@@ -1,0 +1,25 @@
+{
+  "name": "s0-1c-real-model-smoke",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Spike S0.1c: one safe, capped, real-model smoke run through Codex -> local proxy -> agentgateway -> model, built and tested against a stub model first.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "list-models": "bash scripts/list-models.sh"
+  },
+  "dependencies": {
+    "jose": "6.2.12"
+  },
+  "devDependencies": {
+    "@openai/codex": "0.159.2",
+    "@types/node": "^22.20.4",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "engines": {
+    "node": "22.x"
+  }
+}

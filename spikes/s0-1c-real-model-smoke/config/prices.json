@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "usdToEurRate": "0.95",
+  "usdToEurRateNote": "Fixed planning assumption: 1 USD = 0.95 EUR. Not a live FX quote or a guarantee of the bank settlement rate. Owner must approve the rate and confirm the selected model price before a real run.",
+  "models": {
+    "stub-model": {
+      "inputUsdPerMillion": "1.00",
+      "outputUsdPerMillion": "2.00",
+      "confirmed": true,
+      "source": "Test fixture for the stub model. Not a real price."
+    },
+    "gpt-4.1-nano": {
+      "inputUsdPerMillion": "0.10",
+      "outputUsdPerMillion": "0.40",
+      "confirmed": false,
+      "source": "Written from memory of OpenAI's published list price. NOT yet checked. Check it on the provider's pricing page, then set confirmed to true."
+    },
+    "gpt-4.1-mini": {
+      "inputUsdPerMillion": "0.40",
+      "outputUsdPerMillion": "1.60",
+      "confirmed": false,
+      "source": "Written from memory of OpenAI's published list price. NOT yet checked. Check it on the provider's pricing page, then set confirmed to true."
+    },
+    "gpt-4o-mini": {
+      "inputUsdPerMillion": "0.15",
+      "outputUsdPerMillion": "0.60",
+      "confirmed": false,
+      "source": "Written from memory of OpenAI's published list price. NOT yet checked. Check it on the provider's pricing page, then set confirmed to true."
+    },
+    "gpt-5-nano": {
+      "inputUsdPerMillion": "0.05",
+      "outputUsdPerMillion": "0.40",
+      "confirmed": true,
+      "source": "Confirmed 2026-10-01 on https://developers.openai.com/api/docs/models/gpt-5-nano: $0.05 input and $0.40 output per 1M tokens; Responses API and streaming supported."
+    },
+    "gpt-5-mini": {
+      "inputUsdPerMillion": "0.25",
+      "outputUsdPerMillion": "2.00",
+      "confirmed": false,
+      "source": "Written from memory of OpenAI's published list price. NOT yet checked. Check it on the provider's pricing page, then set confirmed to true."
+    }
+  }
+}
