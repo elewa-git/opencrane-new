@@ -343,8 +343,7 @@ it("deletes the fresh OpenFGA store when replay fails", async () => {
   );
   const after = await client.listStores({ pageSize: 100 });
   expect(after.stores.map(({ id }) => id).sort()).toEqual(
-    before.stores.filter(({ name }) => !name.startsWith("members-test-rebuild-"))
-      .map(({ id }) => id).sort(),
+    before.stores.map(({ id }) => id).sort(),
   );
 });
 
@@ -427,26 +426,39 @@ it("deletes the fresh OpenFGA store when model creation fails", async () => {
 });
 
 it("cleans a rebuild store when the create response is lost at the HTTP boundary", async () => {
-  const client = new OpenFgaClient({ apiUrl: fga.apiUrl });
+  const service = await openfga(dbs.postgres);
+  const client = new OpenFgaClient({ apiUrl: service.apiUrl });
   const before = await client.listStores({ pageSize: 100 });
-  let dropCreateReply = true;
+  let releaseCreate: () => void = () => undefined;
+  const allowCreate = new Promise<void>((resolve) => {
+    releaseCreate = resolve;
+  });
+  let firstListCompleted = false;
+  let createCommittedAfterFirstList = false;
   const proxy = createServer((request, response) => {
     void (async () => {
       const chunks = [];
       for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      const upstream = await fetch(`${fga.apiUrl}${request.url ?? ""}`, {
+      if (request.method === "POST" && request.url === "/stores") {
+        await allowCreate;
+      }
+      const upstream = await fetch(`${service.apiUrl}${request.url ?? ""}`, {
         method: request.method ?? "POST",
         headers: { "content-type": "application/json" },
         ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
       });
       const body = await upstream.text();
-      if (request.method === "POST" && request.url === "/stores" && dropCreateReply) {
-        dropCreateReply = false;
+      if (request.method === "POST" && request.url === "/stores") {
+        createCommittedAfterFirstList = firstListCompleted;
         response.destroy();
         return;
       }
       response.writeHead(upstream.status, { "content-type": "application/json" });
       response.end(body);
+      if (request.method === "GET" && request.url?.startsWith("/stores")) {
+        firstListCompleted = true;
+        releaseCreate();
+      }
     })().catch(() => response.destroy());
   });
   proxy.listen(0, "127.0.0.1");
@@ -460,16 +472,18 @@ it("cleans a rebuild store when the create response is lost at the HTTP boundary
   try {
     await expect(rebuildMembers(`http://127.0.0.1:${address.port}`, "lost", empty)).rejects.toThrow();
     const after = await client.listStores({ pageSize: 100 });
+    expect(createCommittedAfterFirstList).toBe(true);
     expect(after.stores.map(({ id }) => id).sort()).toEqual(before.stores.map(({ id }) => id).sort());
   } finally {
     proxy.closeAllConnections();
     await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    await service.close();
   }
 });
 
-it("removes an interrupted rebuild store on the next run", async () => {
+it("preserves a rebuild store created by an earlier run", async () => {
   const client = new OpenFgaClient({ apiUrl: fga.apiUrl });
-  const stale = await client.createStore({ name: "members-recovery-rebuild-interrupted" });
+  const retained = await client.createStore({ name: "members-recovery-rebuild-retained" });
   const empty = { head: () => Promise.resolve(0), async *subscribe() {
     await Promise.resolve();
     yield { sequence: 1, event: member("unused") };
@@ -477,9 +491,10 @@ it("removes an interrupted rebuild store on the next run", async () => {
   const rebuilt = await rebuildMembers(fga.apiUrl, "recovery", empty);
   try {
     const stores = await client.listStores({ pageSize: 100 });
-    expect(stores.stores.some(({ id }) => id === stale.id)).toBe(false);
+    expect(stores.stores.some(({ id }) => id === retained.id)).toBe(true);
     expect(stores.stores.some(({ id }) => id === rebuilt.binding.storeId)).toBe(true);
   } finally {
+    await client.deleteStore({ storeId: retained.id });
     await new OpenFgaClient(rebuilt.binding).deleteStore();
   }
 });

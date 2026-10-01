@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { EventSource } from "@opencrane/projections";
 import { readEvents } from "@opencrane/projections";
-import { createStore, deleteRebuildStores, deleteStore, TupleClient, type Binding } from "./client.ts";
+import { createStore, deleteStore, TupleClient, type Binding } from "./client.ts";
 import { memberAuthorisation } from "./members.ts";
 
 async function snapshot(binding: Binding): Promise<string[]> {
@@ -15,14 +15,13 @@ export async function rebuildMembers(
   apiUrl: string,
   silo: string,
   source: EventSource,
-  { verifyAgainst, activeStoreId }: { verifyAgainst?: Binding; activeStoreId?: string } = {},
+  { verifyAgainst }: { verifyAgainst?: Binding } = {},
 ) {
   const prefix = `members-${silo}-rebuild-`;
-  await deleteRebuildStores(apiUrl, prefix, activeStoreId ?? verifyAgainst?.storeId);
   const head = await source.head();
   const binding = await createStore(apiUrl, silo, `${prefix}${randomUUID()}`);
-  const projection = memberAuthorisation(binding);
   try {
+    const projection = memberAuthorisation(binding);
     let sequence = 0;
     // The handler does not write SQL. Refuse any future implementation that does.
     const noSql = {

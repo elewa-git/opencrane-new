@@ -61,13 +61,23 @@ store and model, replays through the captured head and, with `--verify`, compare
 the complete tuple set with the stopped incremental store. A gap, different
 state or handler failure exits non-zero and deletes the new store. Each attempt uses
 a preselected unique name, so a lost create response can still be cleaned up. The
-next run also removes interrupted rebuild stores except the current store. If cleanup
-also fails, the combined error is reported instead of hiding the orphan risk.
+run checks that exact name again after a short wait if the first cleanup check finds
+nothing. If cleanup remains uncertain, the error prints the name and operator delete
+command. No run deletes a store created by an earlier run automatically.
 
 On success, install both printed ids in the server and worker configuration
 before restarting them. Keep the previous store for a tested rollback window;
-delete it through the OpenFGA administration path after the new binding is
-healthy. Do not resume any process with one old id and one new id.
+after the new binding is healthy, list retained rebuild stores and delete the selected
+old store explicitly:
+
+```sh
+npm run replay -- openfga --list-stores
+npm run replay -- openfga --delete-store <id>
+```
+
+Set `OPENFGA_API_URL`, `SILO_ID` and the active `OPENFGA_STORE_ID`. Listing prints each
+rebuild store's id, name, creation time and whether it is active. Deletion refuses the
+active store. Do not resume any process with one old id and one new id.
 
 Run `npm test -- apps/ops libs/projections/test libs/authz/test` for the replay
 contracts. Tests use real NATS, disposable PostgreSQL 17 databases and OpenFGA.

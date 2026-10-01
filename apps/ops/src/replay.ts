@@ -1,5 +1,10 @@
 import { parseArgs } from "node:util";
-import { rebuildMembers, type Binding } from "@opencrane/authz";
+import {
+  deleteStoreById,
+  listRebuildStores,
+  rebuildMembers,
+  type Binding,
+} from "@opencrane/authz";
 import { connectEventStore } from "@opencrane/event-store";
 import { createLogger } from "@opencrane/observability";
 import {
@@ -10,7 +15,14 @@ import {
 } from "@opencrane/projections";
 
 const usage =
-  "Usage: npm run replay -- <members|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped]";
+  "Usage: npm run replay -- <members|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
+const replayOptions = {
+  "dry-run": { type: "boolean", default: false },
+  verify: { type: "boolean", default: false },
+  "confirm-openfga-stopped": { type: "boolean", default: false },
+  "list-stores": { type: "boolean", default: false },
+  "delete-store": { type: "string" },
+} as const;
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name]?.trim();
@@ -43,6 +55,53 @@ function currentBinding(env: NodeJS.ProcessEnv, apiUrl: string, silo: string): B
   };
 }
 
+function storeActionRequested(listStores: boolean, deleteStoreId?: string): boolean {
+  return Boolean(listStores || deleteStoreId);
+}
+
+function validateStoreAction(
+  projection: string,
+  listStores: boolean,
+  deleteStoreId: string | undefined,
+  hasReplayOptions: boolean,
+): void {
+  if (
+    projection !== "openfga" ||
+    (listStores && deleteStoreId) ||
+    hasReplayOptions
+  ) {
+    throw new Error(usage);
+  }
+}
+
+async function manageOpenFgaStores(
+  listStores: boolean,
+  deleteStoreId: string | undefined,
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  const apiUrl = required(env, "OPENFGA_API_URL");
+  const activeStoreId = required(env, "OPENFGA_STORE_ID");
+  if (listStores) {
+    const silo = required(env, "SILO_ID");
+    const stores = await listRebuildStores(apiUrl, `members-${silo}-rebuild-`);
+    console.log("ID\tNAME\tCREATED\tACTIVE");
+    for (const store of stores) {
+      console.log(
+        `${store.id}\t${store.name}\t${store.createdAt}\t${store.id === activeStoreId ? "yes" : "no"}`,
+      );
+    }
+    return;
+  }
+  if (!deleteStoreId) {
+    throw new Error(usage);
+  }
+  if (deleteStoreId === activeStoreId) {
+    throw new Error(`Refusing to delete active OpenFGA store ${activeStoreId}`);
+  }
+  await deleteStoreById(apiUrl, deleteStoreId);
+  console.log(`PASS: deleted OpenFGA store ${deleteStoreId}.`);
+}
+
 export async function replay(
   argv: string[],
   env: NodeJS.ProcessEnv = process.env,
@@ -51,15 +110,25 @@ export async function replay(
     args: argv,
     allowPositionals: true,
     strict: true,
-    options: {
-      "dry-run": { type: "boolean", default: false },
-      verify: { type: "boolean", default: false },
-      "confirm-openfga-stopped": { type: "boolean", default: false },
-    },
+    options: replayOptions,
   });
   const projection = parsed.positionals[0];
   if (!projection || parsed.positionals.length !== 1 || !["members", "openfga"].includes(projection)) {
     throw new Error(usage);
+  }
+  const listStores = parsed.values["list-stores"];
+  const deleteStoreId = parsed.values["delete-store"];
+  if (storeActionRequested(listStores, deleteStoreId)) {
+    validateStoreAction(
+      projection,
+      listStores,
+      deleteStoreId,
+      parsed.values["dry-run"] ||
+        parsed.values.verify ||
+        parsed.values["confirm-openfga-stopped"],
+    );
+    await manageOpenFgaStores(listStores, deleteStoreId, env);
+    return;
   }
   const nats = await connectEventStore(env);
   try {
@@ -96,9 +165,8 @@ export async function replay(
     }
     const apiUrl = required(env, "OPENFGA_API_URL");
     const silo = required(env, "SILO_ID");
-    const activeStoreId = required(env, "OPENFGA_STORE_ID");
+    required(env, "OPENFGA_STORE_ID");
     const rebuilt = await rebuildMembers(apiUrl, silo, nats.store, {
-      activeStoreId,
       ...(parsed.values.verify
         ? { verifyAgainst: currentBinding(env, apiUrl, silo) }
         : {}),
