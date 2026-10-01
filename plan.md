@@ -12,7 +12,7 @@ Reach the MVP defined in the [product contract](docs/product/product-contract.md
 
 Follow the [engineering standard](docs/process/standards.md) for the full review and evidence contract.
 
-- **Night.** Take ready issues with acceptance criteria and decisions made. Up to three builders use separate worktrees and assigned files. Aim for at most about 1,500 non-generated added/deleted lines per coherent change. Each whole feature has a development branch and a well-described PR (Why / What / Evidence / Not in this PR). The orchestrator merges serially after gates, independent review by a different model and green CI. Small fixes belong inside their feature PR; never add co-author or AI attribution.
+- **Night.** Take ready issues with acceptance criteria and decisions made. Up to three builders use separate worktrees and assigned files. Aim for at most about 1,500 non-generated added/deleted lines per coherent change. Each whole feature has a development branch and a well-described PR (Why / Functional outcome / Architecture / Evidence / Not in this PR). The orchestrator merges serially after gates, independent review by a different model and green CI. Small fixes belong inside their feature PR; never add co-author or AI attribution.
 - **Review.** At most two passes: review the actual diff and evidence, then verify fixes and batched disputes. If blockers remain, hold the change for the owner's decision; never reset the count by renaming it.
 - **Morning (human, about 1–2 hours).** Review results, resolve held blockers and decisions, and ready new issues.
 - **Every day (agent).** Run smoke tests and most live journeys on a k3d test silo on the developer box; the results go in the deploy ledger.

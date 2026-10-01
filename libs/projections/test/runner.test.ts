@@ -1,4 +1,5 @@
 import { expect, it } from "vitest";
+import { Pool } from "pg";
 import { event, natsFixture } from "@opencrane/event-store/testing";
 import { createLogger } from "@opencrane/observability";
 import { parseEventByType } from "@opencrane/events";
@@ -222,5 +223,28 @@ it("records event ids independently of checkpoint and refuses an incomplete repl
     );
   } finally {
     await storage.close();
+  }
+}, 30_000);
+
+it.skipIf(!process.env["PG_TEST_URL"])("drops its PostgreSQL database while a stray connection is open", async () => {
+  const controlUrl = process.env["PG_TEST_URL"];
+  if (!controlUrl) throw new Error("PG_TEST_URL must allow disposable databases");
+  const storage = await database("pg");
+  const name = String((await storage.db.query("SELECT current_database() AS name")).rows[0]?.["name"]);
+  const childUrl = new URL(controlUrl);
+  childUrl.pathname = `/${name}`;
+  const stray = new Pool({ connectionString: childUrl.href });
+  const admin = new Pool({ connectionString: controlUrl });
+  const held = await stray.connect();
+  held.on("error", () => undefined);
+  await held.query("SELECT 1");
+  try {
+    await storage.close();
+    expect((await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [name])).rowCount).toBe(0);
+  } finally {
+    held.release();
+    await stray.end().catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await admin.end();
   }
 }, 30_000);

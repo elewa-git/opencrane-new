@@ -145,12 +145,13 @@ export function attachWebSocketServer(
       );
     });
 
-    socket.on('error', (err: Error) => {
-      logger.error({ err }, 'websocket connection error');
-    });
   };
 
   wss.on('connection', (socket: WebSocket, request) => {
+    socket.on('error', () => {
+      logger.error({ operation: 'websocket.connection' }, 'websocket connection error');
+      socket.terminate();
+    });
     try {
       connect(socket, request);
     } catch {

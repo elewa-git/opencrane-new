@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
+import { connect } from 'node:net';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
@@ -39,6 +40,38 @@ function attemptUpgrade(url: string, headers: Record<string, string> = {}): Prom
       // has already resolved the promise; only reject if nothing has.
       reject(err);
     });
+  });
+}
+
+function sendUnmaskedFrame(port: number, cookie: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, '127.0.0.1');
+    let upgraded = false;
+    const timeout = setTimeout(() => reject(new Error('socket did not close')), 3000);
+    socket.on('connect', () => socket.write([
+      'GET /ws HTTP/1.1',
+      `Host: 127.0.0.1:${port}`,
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      'Sec-WebSocket-Version: 13',
+      'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==',
+      `Origin: ${ALLOWED_ORIGIN}`,
+      `Cookie: ${authConfig.cookieName}=${cookie}`,
+      '',
+      '',
+    ].join('\r\n')));
+    socket.on('data', (chunk: Buffer) => {
+      if (!upgraded && chunk.toString('latin1').startsWith('HTTP/1.1 101')) {
+        upgraded = true;
+        socket.write(Buffer.from([0x81, 0x02, 0x7b, 0x7d]));
+      }
+    });
+    socket.on('close', () => {
+      clearTimeout(timeout);
+      if (upgraded) resolve();
+      else reject(new Error('upgrade did not complete'));
+    });
+    socket.on('error', reject);
   });
 }
 
@@ -122,6 +155,33 @@ describe('WebSocket upgrade requires a session', () => {
     const health = await fetch(`http://127.0.0.1:${address.port}/healthz`);
     expect(health.status).toBe(200);
     expect(await health.json()).toEqual({ status: 'ok' });
+  });
+
+  it('contains an unmasked frame while rejecting a session that expired after authentication', async () => {
+    const authenticatedAt = new Date('2026-10-01T12:00:00.000Z');
+    const expiredAtConnection = new Date('2026-10-01T12:00:01.000Z');
+    const session = { ...validSession, exp: expiredAtConnection.getTime() / 1000 };
+    const times = [authenticatedAt, expiredAtConnection];
+    app = buildServer(authConfig);
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    attachWebSocketServer(app.server, app.log, authConfig, undefined, () => times.shift() ?? expiredAtConnection);
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('expected a TCP address');
+
+    await sendUnmaskedFrame(address.port, encodeSession(authConfig, session));
+
+    expect(times).toEqual([]);
+    expect((await fetch(`http://127.0.0.1:${address.port}/healthz`)).status).toBe(200);
+  });
+
+  it('contains an unmasked frame on an active connection', async () => {
+    const started = await startServer();
+    app = started.app;
+    const port = Number(new URL(started.url).port);
+
+    await sendUnmaskedFrame(port, validSessionCookie());
+
+    expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
   });
 
   it('refuses an upgrade with a valid session cookie but no Origin header', async () => {

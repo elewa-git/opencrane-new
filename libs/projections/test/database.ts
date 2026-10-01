@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { PGlite } from "@electric-sql/pglite";
 import { Pool } from "pg";
 import { pgDb, pgliteDb } from "../src/index.ts";
@@ -30,19 +29,9 @@ export async function database(kind: "pg" | "pglite") {
       async close() {
         try {
           await pool.end();
-          const deadline = Date.now() + 15_000;
-          while ((await admin.query(
-            "SELECT pid FROM pg_stat_activity WHERE datname = $1",
-            [name],
-          )).rows.length > 0) {
-            if (Date.now() >= deadline) {
-              throw new Error(`Timed out waiting for ${name} to disconnect`);
-            }
-            await delay(25);
-          }
         } finally {
           try {
-            await admin.query(`DROP DATABASE IF EXISTS ${name}`);
+            await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
           } finally {
             await admin.end();
           }
