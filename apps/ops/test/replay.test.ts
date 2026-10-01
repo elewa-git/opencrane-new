@@ -107,6 +107,22 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       expect((await db.query("SELECT tool_name, mode FROM mcp_tool_modes")).rows)
         .toEqual([{ tool_name: "read", mode: "allow" }]);
       expect(await runner.checkpoint(mcpCatalogue)).toBe(2);
+      const generation = async () => (await db.query(
+        "SELECT generation FROM projection_generations WHERE name = $1", [mcpCatalogue.name],
+      )).rows[0]?.["generation"];
+      // An equal rebuild keeps the generation; a repair bumps it so readers reload.
+      expect(Number(await generation())).toBe(0);
+      await db.query("UPDATE mcp_tool_modes SET mode = 'block'");
+      await exec("npm", ["run", "replay", "--", "mcp-catalogue"], {
+        env: {
+          ...process.env,
+          ...nats.env("projection"),
+          DATABASE_URL: String(dbs.queue.options.connectionString),
+          LOG_LEVEL: "silent",
+        },
+      });
+      expect((await db.query("SELECT mode FROM mcp_tool_modes")).rows).toEqual([{ mode: "allow" }]);
+      expect(Number(await generation())).toBe(1);
     } finally {
       await nats.close();
       await dbs.close();

@@ -150,7 +150,7 @@ async function sameMcpState(db: Query): Promise<boolean> {
   );
 }
 
-async function switchMcpTables(db: Db): Promise<void> {
+async function switchMcpTables(db: Db, changed: boolean): Promise<void> {
   for (let attempt = 1; ; attempt++) {
     try {
       await db.transaction(async (tx) => {
@@ -173,6 +173,10 @@ async function switchMcpTables(db: Db): Promise<void> {
           replayMcpCatalogue.name,
         ]);
         await tx.query("DELETE FROM projection_generations WHERE name = $1", [replayMcpCatalogue.name]);
+        // Like members: a repair that changed state starts a new generation, so readers reload.
+        if (changed) {
+          await tx.query("UPDATE projection_generations SET generation = generation + 1 WHERE name = $1", [mcpCatalogue.name]);
+        }
       });
       return;
     } catch (error) {
@@ -207,7 +211,7 @@ export async function rebuildMcpCatalogueProjection(
       }
       const head = await source.head();
       await rebuilt.run(replayMcpCatalogue, { toSequence: head });
-      await switchMcpTables(locked);
+      await switchMcpTables(locked, !unchanged);
       return { previousSequence: liveCheckpoint, sequence: head, verified: verify, changed: !unchanged };
     } catch (error) {
       try {
