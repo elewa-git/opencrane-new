@@ -213,11 +213,28 @@ The chosen native executor seam keeps both users inside the gVisor computer
 without patching Codex or relying on a prompt-level restriction.
 
 Costs and limits: exec-server is experimental and pinned; the supervisor is
-trusted. This proof gives tools **no networking**; browsers/package tools need
-a separately authorised route and fresh refusal tests. The opaque test issuer
-is in-memory, not production IAM or event authority. A paid provider, MCP,
-approval pause/resume, sub-agent token inheritance and session-volume recovery
-are **NOT RUN** here. The README leaves a one-command owner-run real-model
-check. Missing external receipts still mean an ambiguous outcome, never proof
-that retry is safe. Production settlement must use durable external observations;
-an HTTP 200 for an interrupted SSE stream is not completion.
+trusted. Commands and file tools launched through the native exec-server run as
+a separate user under a seccomp filter with no networking. Codex itself runs as
+UID 1000 and can reach the proxy and gateway. Same-UID local MCP servers,
+Playwright or browser helpers, and package helpers are not allowed in the
+computer until they have a separate identity and an authenticated egress route
+through agentgateway. The opaque test issuer is in-memory, not production IAM
+or event authority. A paid provider, MCP, approval pause/resume, sub-agent
+token inheritance and session-volume recovery are **NOT RUN** here. The README
+leaves a one-command owner-run real-model check. Missing external receipts still
+mean an ambiguous outcome, never proof that retry is safe. Production
+settlement must use durable external observations; an HTTP 200 for an
+interrupted SSE stream is not completion.
+
+## Implications for Phase 2
+
+`npm install` currently fails: npm is deliberately removed, and an
+executor-launched replacement cannot perform DNS or connect. Network `git
+clone` fails: git is absent from the image, and adding it alone would not
+overcome seccomp. Playwright web browsing fails through the executor because
+Chromium cannot create network sockets. Local MCP servers stay outside the
+computer, as the existing `<silo>-mcp` design proposes. The route out needs an
+authenticated egress broker through agentgateway, with destination allowlists,
+SSRF controls and DNS controls. Access needs either a pre-opened or brokered
+channel, or a separately confined process allowed to connect only to the
+gateway.

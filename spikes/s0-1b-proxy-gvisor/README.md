@@ -147,9 +147,26 @@ Real mode checks one completed, streamed turn and runtime/network/caller checks;
 it does not label the stub-specific scripted shell/token/crash suite as passed.
 Provider inference, this optional key path, MCP, approval pause/resume, sub-agent
 inheritance, session-volume recovery and a fresh entire silo are **NOT RUN** by
-S0.1b. Tools have no network in this design; giving browsers or package tools
-network access needs a separately authenticated gateway route and new refusal
-proofs. Native exec-server is experimental and its version is pinned.
+S0.1b. Commands and file tools launched through the native exec-server run as a
+separate user under a seccomp filter with no networking. Codex itself runs as
+UID 1000 and can reach the proxy and gateway. Same-UID local MCP servers,
+Playwright or browser helpers, and package helpers are not allowed in the
+computer until they have a separate identity and an authenticated egress route
+through agentgateway. Native exec-server is experimental and its version is
+pinned.
+
+## Implications for Phase 2
+
+`npm install` currently fails: npm is deliberately removed, and an
+executor-launched replacement cannot perform DNS or connect. Network `git
+clone` fails: git is absent from the image, and adding it alone would not
+overcome seccomp. Playwright web browsing fails through the executor because
+Chromium cannot create network sockets. Local MCP servers stay outside the
+computer, as the existing `<silo>-mcp` design proposes. The route out needs an
+authenticated egress broker through agentgateway, with destination allowlists,
+SSRF controls and DNS controls. Access needs either a pre-opened or brokered
+channel, or a separately confined process allowed to connect only to the
+gateway.
 
 ## Pins, licences and gates
 

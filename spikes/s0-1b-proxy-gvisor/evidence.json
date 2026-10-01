@@ -133,7 +133,7 @@
     "Independent review (explicitly excluded by task)"
   ],
   "limitations": [
-    "Tools cannot use any network; separately authorised browser/package access needs another proof.",
+    "Commands and file tools launched through the native exec-server run as a separate user under a seccomp filter with no networking. Codex itself runs as UID 1000 and can reach the proxy and gateway; same-UID local MCP, browser and package helpers are not allowed in the computer until they have a separate identity and authenticated agentgateway egress.",
     "Gateway HTTP 200 during an interrupted SSE stream proves neither completion nor settled usage.",
     "Absent external receipt remains ambiguous; no exactly-once/replay guarantee.",
     "Opaque in-memory token issuer is spike-only, not production IAM."
