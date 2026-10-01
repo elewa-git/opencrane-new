@@ -8,7 +8,7 @@ cd "$(git rev-parse --show-toplevel)" || exit 2
 if [ $# -ge 1 ]; then DIFF=$(git log -p "$1"); else DIFF=$(git diff --cached); fi
 fail=0
 IFS=: read -r -a files <<< "${SECRET_FILES:-}"
-for f in "${files[@]}"; do
+for f in ${files[@]+"${files[@]}"}; do
   [ -s "$f" ] || continue
   if printf '%s' "$DIFF" | grep -qF -f <(tr -d '\n' < "$f"); then echo "SECRET: the contents of $f are in the diff"; fail=1; fi
 done
