@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { chromium } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -198,15 +198,15 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     const allTab = page.getByRole('tab', { name: /^All/ });
     await allTab.focus();
     await allTab.press('End');
-    expect(await page.locator(':focus').getAttribute('id')).toBe('integrations-tab-review');
+    await focused(page, 'integrations-tab-review');
     expect(await page.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('integrations-tab-review');
     await page.getByRole('tab', { name: /^Pending review/ }).press('Home');
-    expect(await page.locator(':focus').getAttribute('id')).toBe('integrations-tab-all');
+    await focused(page, 'integrations-tab-all');
     await page.getByRole('tab', { name: /^All/ }).press('ArrowRight');
-    expect(await page.locator(':focus').getAttribute('id')).toBe('integrations-tab-attention');
+    await focused(page, 'integrations-tab-attention');
     await page.getByRole('tab', { name: /^All/ }).click();
     await page.getByRole('tab', { name: /^All/ }).press('Tab');
-    expect(await page.locator(':focus').getAttribute('id')).toBe('integrations-panel');
+    await focused(page, 'integrations-panel');
 
     await page.getByRole('button', { name: 'Add MCP server' }).click();
     await page.getByText("Adding MCP servers isn't available yet").waitFor();
@@ -226,7 +226,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       await refresh.focus();
       await refresh.click();
       await page.getByRole('button', { name: 'Refreshing list…' }).waitFor();
-      expect(await page.locator(':focus').getAttribute('id')).toBe('refresh-integrations');
+      await focused(page, 'refresh-integrations');
       expect(await refresh.getAttribute('aria-disabled')).toBe('true');
       await page.getByText(/Showing what we loaded at 09:40/).waitFor({ timeout: 5_000 });
       expect(await page.locator('.register-row').count()).toBe(6);
@@ -282,3 +282,9 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await rm(directory, { recursive: true, force: true });
   }
 }, 120_000);
+
+/** Wait until the element with this id has focus; Angular renders after the key event. */
+async function focused(page: Page, id: string): Promise<void> {
+  // A string expression runs in the browser; this test file has no DOM types.
+  await page.waitForFunction(`document.activeElement?.id === ${JSON.stringify(id)}`, undefined, { timeout: 5_000 });
+}
