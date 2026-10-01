@@ -11,11 +11,12 @@ import {
   connectProjectionDb,
   readEvents,
   rebuildMemberProjection,
+  rebuildMcpCatalogueProjection,
   type EventSource,
 } from "@opencrane/projections";
 
 const usage =
-  "Usage: npm run replay -- <members|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
+  "Usage: npm run replay -- <members|mcp-catalogue|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
@@ -113,7 +114,7 @@ export async function replay(
     options: replayOptions,
   });
   const projection = parsed.positionals[0];
-  if (!projection || parsed.positionals.length !== 1 || !["members", "openfga"].includes(projection)) {
+  if (!projection || parsed.positionals.length !== 1 || !["members", "mcp-catalogue", "openfga"].includes(projection)) {
     throw new Error(usage);
   }
   const listStores = parsed.values["list-stores"];
@@ -137,20 +138,23 @@ export async function replay(
       console.log(`DRY RUN: ${projection} can replay ${head} events; nothing changed.`);
       return;
     }
-    if (projection === "members") {
+    if (projection !== "openfga") {
       const database = connectProjectionDb(
         required(env, "DATABASE_URL"),
         (error) => console.error(`PostgreSQL pool error: ${error.message}`),
       );
       try {
-        const result = await rebuildMemberProjection(
+        const rebuild = projection === "members"
+          ? rebuildMemberProjection
+          : rebuildMcpCatalogueProjection;
+        const result = await rebuild(
           database.db,
           nats.store,
-          createLogger("replay-members"),
+          createLogger(`replay-${projection}`),
           { verify: parsed.values.verify },
         );
         console.log(
-          `PASS: members switched atomically at event ${result.sequence}` +
+          `PASS: ${projection} switched atomically at event ${result.sequence}` +
             (result.verified ? "; rebuilt state matched the live projection." : "."),
         );
       } finally {

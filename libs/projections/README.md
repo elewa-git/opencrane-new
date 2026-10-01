@@ -42,9 +42,10 @@ values; the helper deliberately omits that field with a no-op tracer.
 
 The low-level `rebuild` method is destructive and remains for tests and offline
 maintenance: stop readers and runners before calling it. Operators use
-`npm run replay -- members`, which takes the same cross-process advisory lock as
-the normal PostgreSQL runner, builds shadow tables and replaces the live contents
-plus the checkpoint under one ordered table lock. The live tables keep their grants.
+`npm run replay -- members` or `npm run replay -- mcp-catalogue`, which takes the
+same cross-process advisory lock as the normal PostgreSQL runner, builds shadow
+tables and replaces the live contents plus the checkpoint under one ordered table
+lock. The live tables keep their grants.
 Changed history bumps a generation used to reset realtime cursors. See the
 [operator runbook](../../apps/ops/README.md). `initialise` must precede `run` or
 `rebuild`.
@@ -66,7 +67,8 @@ projection; invitation delivery is outside this package.
 tool modes and tool drift into `mcp_catalogue` and `mcp_tool_modes`. Tool drift leaves
 the server quarantined for review. `connectMcpCatalogue` maps those stored facts into
 typed register rows; it does not guess missing catalogue metadata. Both tables can be
-dropped and rebuilt with `ProjectionRunner.rebuild(mcpCatalogue)`.
+rebuilt online with `npm run replay -- mcp-catalogue --verify`; the destructive
+`ProjectionRunner.rebuild(mcpCatalogue)` remains available for offline maintenance.
 
 Run `sh scripts/fetch-nats.sh`, then `npx vitest run libs/projections/test`.
 PGlite tests use a real on-disk PostgreSQL engine, real NATS, a failed

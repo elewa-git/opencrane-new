@@ -14,4 +14,7 @@ export {
 } from "./runner.ts";
 export { members } from "./members.ts";
 export { mcpCatalogue } from "./mcp-catalogue.ts";
-export { rebuildMemberProjection } from "./rebuild.ts";
+export {
+  rebuildMemberProjection,
+  rebuildMcpCatalogueProjection,
+} from "./rebuild.ts";

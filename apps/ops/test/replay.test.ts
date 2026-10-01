@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { expect, it, vi } from "vitest";
 import {
   deleteStoreById,
@@ -6,7 +8,11 @@ import {
 } from "@opencrane/authz";
 import { databases, openfga } from "@opencrane/authz/testing";
 import { event, natsFixture } from "@opencrane/event-store/testing";
+import { createLogger } from "@opencrane/observability";
+import { mcpCatalogue, pgDb, ProjectionRunner } from "@opencrane/projections";
 import { replay } from "../src/replay.ts";
+
+const exec = promisify(execFile);
 
 it("replays with projection credentials and cannot publish events", async () => {
   const nats = await natsFixture();
@@ -50,6 +56,64 @@ it("refuses an online OpenFGA rebuild without the stop confirmation", async () =
     await nats.close();
   }
 });
+
+it.skipIf(!process.env["PG_TEST_URL"])(
+  "runs the MCP catalogue replay command with projection credentials and PostgreSQL",
+  async () => {
+    const dbs = await databases();
+    const nats = await natsFixture();
+    const db = pgDb(dbs.queue);
+    try {
+      const registered = event("registered", "mcp-odoo", "mcp.server_registered");
+      const registeredData = { ...registered.data };
+      Reflect.deleteProperty(registeredData, "memberId");
+      expect((await nats.store.append({
+        event: { ...registered, data: { ...registeredData, serverId: "odoo" } },
+        expectedSequence: 0,
+      })).status).toBe("appended");
+      const mode = event("mode", "mcp-odoo", "mcp.tool_mode_set");
+      const modeData = { ...mode.data };
+      Reflect.deleteProperty(modeData, "memberId");
+      expect((await nats.store.append({
+        event: { ...mode, data: { ...modeData, serverId: "odoo", toolName: "read", mode: "allow" } },
+        expectedSequence: 1,
+      })).status).toBe("appended");
+      const runner = new ProjectionRunner(
+        db,
+        nats.reader,
+        createLogger("mcp-replay-test", { level: "silent" }),
+      );
+      await runner.initialise(mcpCatalogue);
+      await runner.run(mcpCatalogue);
+
+      const { stdout } = await exec(
+        "npm",
+        ["run", "replay", "--", "mcp-catalogue", "--verify"],
+        {
+          env: {
+            ...process.env,
+            ...nats.env("projection"),
+            DATABASE_URL: String(dbs.queue.options.connectionString),
+            LOG_LEVEL: "silent",
+          },
+        },
+      );
+
+      expect(stdout).toContain(
+        "PASS: mcp-catalogue switched atomically at event 2; rebuilt state matched the live projection.",
+      );
+      expect((await db.query("SELECT server_id FROM mcp_catalogue")).rows)
+        .toEqual([{ server_id: "odoo" }]);
+      expect((await db.query("SELECT tool_name, mode FROM mcp_tool_modes")).rows)
+        .toEqual([{ tool_name: "read", mode: "allow" }]);
+      expect(await runner.checkpoint(mcpCatalogue)).toBe(2);
+    } finally {
+      await nats.close();
+      await dbs.close();
+    }
+  },
+  30_000,
+);
 
 it("retains completed OpenFGA rebuilds and lets the operator remove only a stale store", async () => {
   const dbs = await databases();

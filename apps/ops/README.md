@@ -1,8 +1,9 @@
 # Operator replay
 
-`@opencrane/ops` rebuilds the `members` PostgreSQL projection or the `openfga`
-authorisation projection from the silo's complete `EVENTS` stream. It never
-publishes events or runs reactions. Run it from the repository root on Node 22.
+`@opencrane/ops` rebuilds the `members` and `mcp-catalogue` PostgreSQL
+projections or the `openfga` authorisation projection from the silo's complete
+`EVENTS` stream. It never publishes events or runs reactions. Run it from the
+repository root on Node 22.
 
 ## Inspect without changing state
 
@@ -12,6 +13,7 @@ that every global sequence through the reported stream head can be read:
 
 ```sh
 npm run replay -- members --dry-run
+npm run replay -- mcp-catalogue --dry-run
 npm run replay -- openfga --dry-run
 ```
 
@@ -20,27 +22,28 @@ or an unavailable stream exits non-zero. The configured NATS identity needs read
 access to the `EVENTS` stream but never publish access. Missing history is refused
 after a one-second idle bound rather than waiting indefinitely.
 
-## Rebuild members online
+## Rebuild PostgreSQL projections online
 
 Set the same NATS reader settings and `DATABASE_URL`, then run:
 
 ```sh
 npm run replay -- members --verify
+npm run replay -- mcp-catalogue --verify
 ```
 
 The normal projection runner and the tool share a PostgreSQL advisory lock. The
-tool replays into shadow tables, compares them with the incremental tables at
-their checkpoint when `--verify` is present, catches up to a fresh stream head,
-then locks all members tables in reader order and replaces their contents and the
+tool replays the selected projection into shadow tables, compares them with the
+incremental tables at their checkpoint when `--verify` is present, catches up to a fresh stream head,
+then locks its tables in reader order and replaces their contents and the
 checkpoint in one transaction. Keeping the live table objects preserves their grants.
 Readers may wait briefly but cannot see partial state. A repair bumps the projection
-generation so WebSocket subscribers reload from position 0; an equal verified rebuild
-does not. Events appended after the captured head are
+generation for members so WebSocket subscribers reload from position 0; an equal
+verified members rebuild does not. Events appended after the captured head are
 processed by the normal runner after the switch. A replay error drops the shadow
 tables and leaves the live projection and checkpoint untouched.
 
 Use a PostgreSQL role allowed to create and drop shadow tables, replace the live
-members contents and take advisory locks. Run only the upgraded projection runner: an
+projection contents and take advisory locks. Run only the upgraded projection runner: an
 older writer does not take the lock and is unsafe during this operation.
 
 ## Rebuild OpenFGA offline
