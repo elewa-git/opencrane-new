@@ -1,7 +1,6 @@
 import {
   AckPolicy,
   DeliverPolicy,
-  JetStreamApiError,
   jetstream,
   jetstreamManager,
 } from "@nats-io/jetstream";
@@ -10,30 +9,32 @@ import { decodeEvent } from "@opencrane/event-store";
 import { checkHandlers } from "./registration.ts";
 import { HandlerRuntime, retainJob, transactionAdapter } from "./queue.ts";
 
+const configuration = {
+  durable_name: "handler-dispatcher",
+  ack_policy: AckPolicy.Explicit,
+  deliver_policy: DeliverPolicy.All,
+  filter_subject: "ev.>",
+  max_ack_pending: 1,
+  ack_wait: 5_000_000_000,
+  max_deliver: -1,
+};
+
+/** Installation job only; runtime dispatchers have no consumer administration rights. */
+export async function provisionDispatcher(connection: NatsConnection) {
+  const manager = await jetstreamManager(connection);
+  await manager.consumers.add("EVENTS", configuration);
+}
+
 async function durableConsumer(connection: NatsConnection) {
   const manager = await jetstreamManager(connection);
-  const configuration = {
-    durable_name: "handler-dispatcher",
-    ack_policy: AckPolicy.Explicit,
-    deliver_policy: DeliverPolicy.All,
-    filter_subject: "ev.>",
-    max_ack_pending: 1,
-    ack_wait: 5_000_000_000,
-    max_deliver: -1,
-  };
-  let info;
-  try {
-    info = await manager.consumers.info("EVENTS", configuration.durable_name);
-  } catch (error) {
-    if (!(error instanceof JetStreamApiError) || error.code !== 10014) {
-      throw error;
-    }
-    info = await manager.consumers.add("EVENTS", configuration);
-  }
+  const info = await manager.consumers.info("EVENTS", configuration.durable_name);
   for (const [key, value] of Object.entries(configuration)) {
     if (Reflect.get(info.config, key) !== value) {
       throw new Error(`Incompatible dispatcher consumer: ${key}`);
     }
+  }
+  if (info.config.deliver_subject || info.config.filter_subjects?.length) {
+    throw new Error("Incompatible dispatcher delivery or filters");
   }
   return jetstream(connection).consumers.get(
     "EVENTS",

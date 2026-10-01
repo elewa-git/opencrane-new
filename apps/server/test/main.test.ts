@@ -20,7 +20,7 @@ describe('main.ts under the real Node runtime', () => {
     const nats = await natsFixture();
     try {
       const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme',
-        NATS_URL: nats.connection.getServer(), SILO_ID: 'acme' };
+        ...nats.env(), SILO_ID: 'acme' };
       server = await startServer(env);
       const invited = event('invite-process', 'member-alice', 'member.invited');
       await nats.store.append({ expectedSequence: 0, event: { ...invited, silo: 'acme',
@@ -42,6 +42,11 @@ describe('main.ts under the real Node runtime', () => {
       await server?.stop();
       await nats.close();
     }
+  }, 40_000);
+
+  it('refuses startup when NATS is enabled without TLS credentials', async () => {
+    await expect(startServer({ NATS_URL: '127.0.0.1:4222', SILO_ID: 'acme',
+      OIDC_EXPECTED_ORG_ID: 'org-acme' })).rejects.toThrow('NATS_CA_FILE is required');
   }, 40_000);
 
   it('starts, serves /healthz, and never prints a secret from a request URL: known route, unknown route, plain GET to /ws, the sign-in callback, or a URL Node cannot parse', async () => {

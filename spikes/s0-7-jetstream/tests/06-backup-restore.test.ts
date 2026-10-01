@@ -19,6 +19,7 @@ import {
   startNatsServer,
   connectTo,
   NATS_CLI_BIN,
+  cliTlsArgs,
   type RunningNatsServer,
 } from "../src/nats-proc.ts";
 import { conditionalAppend, encode, ensureEventsStream, makeCtx, STREAM_NAME, STREAM_WRONG_LAST_SEQUENCE, type Ctx } from "../src/jetstream.ts";
@@ -147,7 +148,7 @@ describe("S0.7 pass condition 6: backup and restore", () => {
       originalServer.url,
       "--no-progress",
     ];
-    const backupResult = await execFileAsync(NATS_CLI_BIN, backupArgs);
+    const backupResult = await execFileAsync(NATS_CLI_BIN, [...cliTlsArgs(), ...backupArgs]);
     console.log(`[t6] nats backup stream stdout:\n${backupResult.stdout}${backupResult.stderr}`);
 
     // Restore into a brand-new server with its own empty store dir — not
@@ -165,7 +166,7 @@ describe("S0.7 pass condition 6: backup and restore", () => {
     await expect(restoredCtx.jsm.streams.info(STREAM_NAME)).rejects.toThrow();
 
     const restoreArgs = ["backup", "restore", "stream", backupTargetDir, "-s", restoredServer.url, "--no-progress"];
-    const restoreResult = await execFileAsync(NATS_CLI_BIN, restoreArgs);
+    const restoreResult = await execFileAsync(NATS_CLI_BIN, [...cliTlsArgs(), ...restoreArgs]);
     console.log(`[t6] nats backup restore stream stdout:\n${restoreResult.stdout}${restoreResult.stderr}`);
 
     const infoAfter = await restoredCtx.jsm.streams.info(STREAM_NAME);

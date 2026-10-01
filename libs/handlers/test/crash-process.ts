@@ -1,7 +1,7 @@
 // Real process barriers surround SQL commit, without replacing NATS or pg-boss.
 import { Pool } from "pg";
-import { connect } from "@nats-io/transport-node";
-import { pgDb, type Db } from "@opencrane/projections";
+import { connectEventStore, connectNats } from "@opencrane/event-store";
+import { members, ProjectionRunner, pgDb, type Db } from "@opencrane/projections";
 import { HandlerRuntime, registerHandler, dispatch } from "../src/index.ts";
 import { effect, logger } from "./helpers.ts";
 
@@ -20,12 +20,15 @@ const db: Db = {
     let target = false;
     const result = await base.transaction(async (tx) => {
       const result = await work({
-        query: (sql, values) => {
+        query: async (sql, values) => {
+          if (mode === "dispatcher-after-ack" && sql.startsWith("UPDATE handler_dispatcher") && values?.[0] === 2) {
+            await barrier();
+          }
           if (
             sql.startsWith(
               mode.startsWith("dispatcher")
                 ? "UPDATE handler_dispatcher"
-                : "INSERT INTO handler_receipts",
+                : mode.startsWith("projection") ? "UPDATE projection_checkpoints" : "INSERT INTO handler_receipts",
             )
           ) {
             target = true;
@@ -44,29 +47,35 @@ const db: Db = {
     return result;
   },
 };
-const runtime = new HandlerRuntime({
-  db,
-  logger,
-  silo: "test",
-  handlers: [
-    registerHandler("update-members", effect),
-    ...(mode.startsWith("dispatcher")
-      ? [
-          registerHandler("update-openfga", (event, tx) =>
-            effect(event, tx, "update-openfga"),
-          ),
-        ]
-      : []),
-  ],
-  retryLimit: 1,
-  expireInSeconds: 1,
-});
-await runtime.start();
-if (mode.startsWith("dispatcher")) {
-  const connection = await connect({
-    servers: process.env["NATS_TEST_URL"] ?? "",
-  });
-  await dispatch(connection, runtime, new AbortController().signal);
+if (mode.startsWith("projection")) {
+  const { store } = await connectEventStore();
+  const runner = new ProjectionRunner(db, store, logger);
+  await runner.initialise(members);
+  await runner.run(members);
 } else {
-  await runtime.work();
+  const runtime = new HandlerRuntime({
+    db,
+    logger,
+    silo: "test",
+    handlers: [
+      registerHandler("update-members", effect),
+      ...(mode.startsWith("dispatcher")
+        ? [
+            registerHandler("update-openfga", (event, tx) =>
+              effect(event, tx, "update-openfga"),
+            ),
+          ]
+        : []),
+    ],
+    retryLimit: 1,
+    expireInSeconds: 1,
+  });
+  await runtime.start();
+  if (mode.startsWith("dispatcher")) {
+    const connection = await connectNats();
+    await dispatch(connection, runtime, new AbortController().signal);
+  } else {
+    await runtime.work();
+  }
+
 }

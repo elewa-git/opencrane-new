@@ -405,3 +405,13 @@ All OSI-approved. Full dependency tree: 90 packages — Apache-2.0 (29), MIT
   any correctness claim, all of which held in every run.
 - No Docker, no Kubernetes, no cloud calls, no secrets — local processes
   only, as required
+
+## Phase 1 transport update
+
+The historical measurements above predate authentication. The fixture now generates
+one-day certificates with OpenSSL and loads the shared
+[NATS policy](../../infra/nats/nats.conf). Node clients and the CLI require CA,
+certificate and key file paths; projection subprocesses use the reader identity.
+The [Phase 1 receipt](../../docs/process/nats-auth-evidence.md) records which
+spike checks were rerun. Client TLS does not qualify the loopback cluster routes
+as production TLS or replace the original scale/failover measurements.

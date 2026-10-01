@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { event } from "@opencrane/event-store/testing";
-import { members } from "@opencrane/projections";
+import { jetstreamManager } from "@nats-io/jetstream";
+import { createEventStore } from "@opencrane/event-store";
+import { members, ProjectionRunner, type EventSource } from "@opencrane/projections";
 import { createLogger } from "@opencrane/observability";
 import { HandlerRuntime, registerHandler, dispatch } from "../src/index.ts";
 import { effect, fixture, until, deferred } from "./helpers.ts";
@@ -14,6 +16,79 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
         await f.close();
       }
     });
+
+    it("fresh production provisioning supports append, projection and durable dispatch", async () => {
+      f = await fixture(); // Runs the production provision command against an empty server.
+      expect(await f.nats.store.head()).toBe(0);
+      await f.append("fresh");
+      const runner = new ProjectionRunner(f.db, f.nats.reader, createLogger("test"));
+      await runner.initialise(members);
+      await runner.run(members);
+      expect(await runner.checkpoint(members)).toBe(1);
+      expect((await f.db.query("SELECT status FROM members")).rows).toEqual([{ status: "joined" }]);
+      const runtime = await f.runtime([registerHandler("update-members", effect)]);
+      void f.startDispatch(runtime);
+      await f.checkpoint(1);
+      await runtime.work();
+      await until(async () => (await f.effects()).length === 1);
+      expect((await f.effects()).map((row) => row.event_id)).toEqual(["fresh"]);
+    }, 30_000);
+
+    it("projection SIGKILL after delivery before SQL commit resumes from its durable checkpoint", async () => {
+      f = await fixture();
+      await f.append("first");
+      await f.append("second", "member-bob");
+      await f.crash("projection-before-commit");
+      expect((await f.db.query("SELECT sequence FROM projection_checkpoints")).rows).toEqual([{ sequence: "0" }]);
+      expect((await f.db.query("SELECT * FROM members")).rows).toEqual([]);
+      const reader = await createEventStore(await f.nats.client("projection"));
+      const runner = new ProjectionRunner(f.db, reader, createLogger("test"));
+      await runner.run(members, { signal: AbortSignal.timeout(5000) });
+      expect(await runner.checkpoint(members)).toBe(2);
+      expect((await f.db.query("SELECT event_id FROM projection_events ORDER BY event_id")).rows)
+        .toEqual([{ event_id: "first" }, { event_id: "second" }]);
+      expect((await f.db.query("SELECT member_id FROM members ORDER BY member_id")).rows)
+        .toEqual([{ member_id: "alice" }, { member_id: "bob" }]);
+    }, 30_000);
+
+    it("bounded projection drain discards prefetched events and resumes at the SQL checkpoint", async () => {
+      f = await fixture();
+      await f.append("first");
+      const prefetched: number[] = [];
+      const source: EventSource = {
+        head: () => f.nats.reader.head(),
+        async *subscribe(fromSequence, signal) {
+          const reader = f.nats.reader.subscribe(fromSequence, signal);
+          try {
+            const first = await reader.next();
+            // The runner captured head 1. Force delivery of event 2 into a local
+            // buffer before it commits event 1, then discard that buffer on return.
+            await f.append("second", "member-bob");
+            const ahead = await reader.next();
+            if (ahead.done || first.done) throw new Error("Missing test events");
+            prefetched.push(ahead.value.sequence);
+            yield first.value;
+            yield ahead.value;
+          } finally {
+            await reader.return(undefined);
+          }
+        },
+      };
+      const logger = createLogger("test");
+      let runner = new ProjectionRunner(f.db, source, logger);
+      await runner.initialise(members);
+      await runner.run(members, { signal: AbortSignal.timeout(5000) });
+      expect(prefetched).toEqual([2]);
+      expect(await runner.checkpoint(members)).toBe(1);
+      expect((await f.db.query("SELECT event_id FROM projection_events")).rows).toEqual([{ event_id: "first" }]);
+      await f.append("third", "member-carol");
+      const reader = await createEventStore(await f.nats.client("projection"));
+      runner = new ProjectionRunner(f.db, reader, logger);
+      await runner.run(members, { signal: AbortSignal.timeout(5000) });
+      expect(await runner.checkpoint(members)).toBe(3);
+      expect((await f.db.query("SELECT event_id FROM projection_events ORDER BY event_id")).rows)
+        .toEqual([{ event_id: "first" }, { event_id: "second" }, { event_id: "third" }]);
+    }, 30_000);
 
     it("fans out catalogue subscriptions and keeps each stream serial while other streams run in parallel", async () => {
       f = await fixture();
@@ -197,7 +272,7 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
       ]);
     }, 30_000);
 
-    it.each(["before-commit", "after-commit"])(
+    it.each(["before-commit", "after-commit", "after-ack"])(
       "recovers dispatcher SIGKILL %s without losing fan-out or duplicating effects",
       async (boundary) => {
         f = await fixture();
@@ -208,8 +283,12 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
           "SELECT sequence FROM handler_dispatcher",
         );
         expect(Number(rows.rows[0]?.sequence)).toBe(
-          boundary === "after-commit" ? 1 : 0,
+          boundary === "before-commit" ? 0 : 1,
         );
+        const manager = await jetstreamManager(f.nats.connection);
+        const info = await manager.consumers.info("EVENTS", "handler-dispatcher");
+        expect(info.ack_floor.stream_seq).toBe(boundary === "after-ack" ? 1 : 0);
+        expect(info.delivered.stream_seq).toBe(boundary === "after-ack" ? 2 : 1);
         const runtime = await f.runtime(
           [
             registerHandler("update-members", effect),
@@ -220,10 +299,10 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
           { expireInSeconds: 1 },
         );
         expect(await runtime.boss.findJobs("update-members")).toHaveLength(
-          boundary === "after-commit" ? 1 : 0,
+          boundary === "before-commit" ? 0 : 1,
         );
         expect(await runtime.boss.findJobs("update-openfga")).toHaveLength(
-          boundary === "after-commit" ? 1 : 0,
+          boundary === "before-commit" ? 0 : 1,
         );
         void f.startDispatch(runtime);
         await runtime.work();
@@ -394,7 +473,7 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
         ).status,
       ).toBe("appended");
       await expect(
-        dispatch(f.nats.connection, runtime, new AbortController().signal),
+        dispatch(f.nats.dispatcherConnection, runtime, new AbortController().signal),
       ).rejects.toThrow("silo mismatch");
       expect(await runtime.boss.findJobs("update-members")).toHaveLength(0);
       const rows = await f.db.query<{ sequence: string }>(

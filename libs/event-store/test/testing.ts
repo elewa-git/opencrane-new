@@ -1,11 +1,12 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { connect } from "@nats-io/transport-node";
+import type { NatsConnection } from "@nats-io/transport-node";
+import { certificates } from "./certificates.ts";
 import { getEventDefinition } from "@opencrane/events";
-import { createEventStore } from "../src/index.ts";
+import { createEventStore, connectNats } from "../src/index.ts";
 
 export async function freePort(): Promise<number> {
   const server = createServer();
@@ -47,20 +48,43 @@ export function event(
   };
 }
 
-export async function natsFixture() {
+export async function natsFixture({ provision = true } = {}) {
   const directory = await mkdtemp(resolve(".tools/nats-test-"));
+  await certificates(directory);
+  const publicKeys = Object.fromEntries(await Promise.all(
+    ["command", "projection", "dispatcher", "computer", "gateway"].map(async (role) =>
+      [`NATS_${role.toUpperCase()}_NKEY`, await readFile(`${directory}/${role}.pub`, "utf8")] as const),
+  ));
+  const config = await readFile(resolve("infra/nats/nats.conf"), "utf8");
+  await writeFile(`${directory}/nats.conf`, config);
+  await writeFile(`${directory}/no-js.conf`, config
+    .replace("jetstream { store_dir: $NATS_STORE_DIR }", "")
+    .replace("jetstream: enabled", "")
+    // Remove service routes too: dormant imports otherwise count as responders.
+    .replace(/^\s*\{ service:.*\n/gm, ""));
   const port = await freePort();
   const url = `127.0.0.1:${port}`;
+  function env(identity = "command") {
+    return {
+      NATS_URL: url,
+      NATS_NKEY_SEED_FILE: `${directory}/${identity}.seed`,
+      NATS_INBOX_PREFIX: `_INBOX.${identity}`,
+      NATS_CA_FILE: `${directory}/ca.crt`,
+      NATS_CERT_FILE: `${directory}/${identity}.crt`,
+      NATS_KEY_FILE: `${directory}/${identity}.key`,
+    };
+  }
+  const connections: NatsConnection[] = [];
+  async function client(identity: string) {
+    const connection = await connectNats(env(identity));
+    connections.push(connection);
+    return connection;
+  }
   function start(jetstream = true) {
     const process = spawn(resolve(".tools/nats-server"), [
-      ...(jetstream ? ["-js"] : []),
-      "-a",
-      "127.0.0.1",
-      "-p",
-      String(port),
-      "-sd",
-      directory,
-    ]);
+      "-c", `${directory}/${jetstream ? "nats" : "no-js"}.conf`,
+    ], { env: { ...globalThis.process.env, ...env("server"), ...publicKeys,
+      NATS_LISTEN: url, NATS_STORE_DIR: `${directory}/store` } });
     const exited = once(process, "exit");
     const ready = new Promise<void>((done, reject) => {
       let output = "";
@@ -79,17 +103,19 @@ export async function natsFixture() {
   }
   let running = start();
   await running.ready;
-  const connection = await connect({
-    servers: url,
-    reconnectTimeWait: 25,
-    reconnectJitter: 0,
-    maxReconnectAttempts: -1,
-  });
+  const connection = await client("command");
+  const readerConnection = await client("projection");
+  const dispatcherConnection = await client("dispatcher");
+  const readerStore = await createEventStore(readerConnection);
   const store = await createEventStore(connection);
-  await store.ensureStream({ replicas: 1 });
+  if (provision) await store.ensureStream({ replicas: 1 });
   return {
     store,
     connection,
+    reader: readerStore,
+    dispatcherConnection,
+    env,
+    client,
     async stop() {
       if (
         running.process.exitCode === null &&
@@ -110,7 +136,7 @@ export async function natsFixture() {
       }
     },
     async close() {
-      await connection.close();
+      await Promise.all(connections.map((connection) => connection.close()));
       if (
         running.process.exitCode === null &&
         running.process.signalCode === null

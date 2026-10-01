@@ -22,7 +22,8 @@ await runtime.stop();
 
 Use a dedicated silo database and its `pgboss` schema; jobs and handler SQL
 writes must share the supplied database. The role needs schema/table creation
-and DML rights. Initialise EVENTS with the event-store adapter first. Start
+and DML rights. Run `npm run provision` with command credentials first (R3 by
+default; `NATS_REPLICAS=1` for local tests). Start
 telemetry in the host for real trace ids; every valid handler attempt uses
 observability's `runHandler` (name, event id, stream, attempt). Queue errors
 are logged; dispatcher errors reject its promise and require host restart.
@@ -80,3 +81,11 @@ tagged-tag 1.0.0 are MIT; temporal-spec 1.0.1 is Apache-2.0; type-fest 5.10.0
 uses its MIT option. Existing NATS, events, projections and observability
 libraries retain their licences. Runtime image inventory is NOT RUN.
 See [ADR 0004](../../docs/adr/0004-handler-runtime.md) for the spike limits.
+
+Use the `dispatcher` NKey seed, TLS files and `connectNats()` from the event-store
+package (or `connectEventStore()` for a projection source). Required file paths
+and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.md).
+Never supply the command identity to a reader process.
+
+Consumer creation/reset belongs to the authorised provisioning job, following
+[ADR 0005](../../docs/adr/0005-nats-access.md); dispatchers bind the existing durable consumer; projections read exact sequences.

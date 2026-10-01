@@ -3,10 +3,11 @@
 // is the actual server the spike is testing.
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile, appendFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connect, type NodeConnectionOptions } from "@nats-io/transport-node";
+import { connect, nkeyAuthenticator, type NodeConnectionOptions } from "@nats-io/transport-node";
+import { certificates } from "../../../libs/event-store/test/certificates.ts";
 import type { NatsConnection } from "@nats-io/nats-core";
 
 const SPIKE_ROOT = join(import.meta.dirname, "..");
@@ -50,11 +51,12 @@ export interface RunningNatsServer {
 function confText(opts: NatsServerOptions): string {
   const lines: string[] = [
     `server_name: "${opts.name}"`,
-    `listen: "127.0.0.1:${opts.port}"`,
-    `jetstream {`,
-    `  store_dir: "${opts.storeDir}"`,
-    opts.maxFileStoreBytes ? `  max_file_store: ${opts.maxFileStoreBytes}` : `  max_file_store: -1`,
-    `}`,
+    readFileSync(join(SPIKE_ROOT, "../../infra/nats/nats.conf"), "utf8")
+      .replace("$NATS_LISTEN", JSON.stringify(`127.0.0.1:${opts.port}`))
+      .replace("$NATS_STORE_DIR", JSON.stringify(opts.storeDir))
+      .replace("$NATS_CERT_FILE", "$NATS_SERVER_CERT_FILE")
+      .replace("$NATS_KEY_FILE", "$NATS_SERVER_KEY_FILE")
+      .replace("jetstream { store_dir:", `jetstream { max_file_store: ${opts.maxFileStoreBytes ?? -1}, store_dir:`),
   ];
   if (opts.cluster) {
     const others = opts.cluster.peers.filter((p) => p.name !== opts.name);
@@ -106,7 +108,7 @@ export async function startNatsServer(opts: NatsServerOptions): Promise<RunningN
       );
     }
     try {
-      const probe = await connect({ servers: url, timeout: 500 });
+      const probe = await connectTo(url, { timeout: 500 });
       await probe.close();
       lastErr = undefined;
       break;
@@ -145,13 +147,41 @@ export async function connectTo(
   servers: string | string[],
   opts: Partial<NodeConnectionOptions> = {},
 ): Promise<NatsConnection> {
-  return await connect({ servers, reconnectTimeWait: 200, maxReconnectAttempts: -1, ...opts });
+  return await connect({ servers, reconnectTimeWait: 200, maxReconnectAttempts: -1, ...opts,
+    authenticator: nkeyAuthenticator(readFileSync(required("NATS_NKEY_SEED_FILE"))),
+    inboxPrefix: "_INBOX.command",
+    tls: { caFile: required("NATS_CA_FILE"), certFile: required("NATS_CERT_FILE"),
+      keyFile: required("NATS_KEY_FILE"), handshakeFirst: true, rejectUnauthorized: true } });
+}
+
+function required(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required for NATS`);
+  }
+  return value;
+}
+
+export function cliTlsArgs(): string[] {
+  return ["--nkey", required("NATS_NKEY_SEED_FILE"), "--tlsfirst", "--tlsca", required("NATS_CA_FILE"),
+    "--tlscert", required("NATS_CERT_FILE"), "--tlskey", required("NATS_KEY_FILE")];
 }
 
 export async function freshStateDir(label: string): Promise<string> {
   const dir = join(STATE_DIR, label);
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
+  const tls = join(dir, "tls");
+  await mkdir(tls, { mode: 0o700 });
+  await certificates(tls);
+  Object.assign(process.env, {
+    NATS_CA_FILE: join(tls, "ca.crt"),
+    NATS_NKEY_SEED_FILE: join(tls, "command.seed"),
+    ...Object.fromEntries(["command", "projection", "dispatcher", "computer", "gateway"].map(role =>
+      [`NATS_${role.toUpperCase()}_NKEY`, readFileSync(join(tls, `${role}.pub`), "utf8")])),
+    NATS_CERT_FILE: join(tls, "command.crt"), NATS_KEY_FILE: join(tls, "command.key"),
+    NATS_SERVER_CERT_FILE: join(tls, "server.crt"), NATS_SERVER_KEY_FILE: join(tls, "server.key"),
+  });
   return dir;
 }
 

@@ -1,15 +1,16 @@
+import { readFile } from "node:fs/promises";
 import { setTimeout as delay } from "node:timers/promises";
 import {
   jetstream,
   jetstreamManager,
   JetStreamApiError,
-  DeliverPolicy,
   type JetStreamClient,
   type JetStreamManager,
   type StreamConfig,
 } from "@nats-io/jetstream";
 import {
   connect,
+  nkeyAuthenticator,
   TimeoutError,
   RequestError,
   ConnectionError,
@@ -120,15 +121,43 @@ function transient(error: unknown): boolean {
   );
 }
 
-/** The caller owns the connection, credentials and reconnect policy. */
+/** The caller owns the authenticated TLS connection and its lifecycle. */
 export async function createEventStore(connection: NatsConnection) {
   const manager = await jetstreamManager(connection, { timeout: requestMs });
   return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
 }
 
+/** TLS is mandatory, including before the NATS protocol handshake. */
+export async function connectNats(env: NodeJS.ProcessEnv = process.env) {
+  function required(name: string): string {
+    const value = env[name]?.trim();
+    if (!value) {
+      throw new Error(`${name} is required for NATS`);
+    }
+    return value;
+  }
+  const servers = required("NATS_URL");
+  const address = new URL(servers.includes("://") ? servers : `tls://${servers}`);
+  if (address.username || address.password || !["tls:", "nats:"].includes(address.protocol)) {
+    throw new Error("NATS_URL must be a NATS address without credentials");
+  }
+  return connect({
+    servers,
+    tls: {
+      caFile: required("NATS_CA_FILE"),
+      certFile: required("NATS_CERT_FILE"),
+      keyFile: required("NATS_KEY_FILE"),
+      handshakeFirst: true,
+      rejectUnauthorized: true,
+    },
+    authenticator: nkeyAuthenticator(await readFile(required("NATS_NKEY_SEED_FILE"))),
+    inboxPrefix: required("NATS_INBOX_PREFIX"),
+  });
+}
+
 /** Process entrypoints use this adapter; the EVENTS stream is provisioned separately. */
-export async function connectEventStore(servers: string) {
-  const connection = await connect({ servers });
+export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
+  const connection = await connectNats(env);
   try {
     const store = await createEventStore(connection);
     return { store, close: () => connection.close() };
@@ -273,35 +302,31 @@ export class EventStore {
     }
   }
 
-  /** Live ordered consumer. Abort or break the loop to release its server resources. */
+  /** Read from the caller's SQL checkpoint; no server-side delivery cursor survives a restart. */
   async *subscribe(
     fromSequence = 1,
     signal?: AbortSignal,
   ): AsyncGenerator<StoredEvent> {
     signal?.throwIfAborted();
-    const consumer = await this.client.consumers.get(streamName, {
-      deliver_policy: DeliverPolicy.StartSequence,
-      opt_start_seq: Math.max(1, fromSequence),
-    });
-    const messages = await consumer.consume();
-    const stop = () => {
-      void messages.close();
-    };
-    signal?.addEventListener("abort", stop, { once: true });
-    if (signal?.aborted) {
-      stop();
-    }
-    try {
-      for await (const message of messages) {
-        yield {
-          sequence: message.seq,
-          event: decodeEvent(message.data, message.subject),
-        };
+    let sequence = Math.max(1, fromSequence);
+    let head = 0;
+    while (!signal?.aborted) {
+      if (sequence > head) head = await this.head();
+      if (sequence > head) {
+        // Poll only at the live tail. Historical reads have no delay or shared cursor.
+        await delay(100);
+        continue;
       }
-    } finally {
-      signal?.removeEventListener("abort", stop);
-      await messages.close();
-      await consumer.delete();
+      const message = await this.manager.streams.getMessage(streamName, { seq: sequence });
+      if (signal?.aborted) return;
+      if (!message) {
+        throw new Error("Event sequence gap");
+      }
+      yield {
+        sequence: message.seq,
+        event: decodeEvent(message.data, message.subject),
+      };
+      sequence = message.seq + 1;
     }
   }
 

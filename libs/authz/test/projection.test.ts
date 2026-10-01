@@ -8,7 +8,7 @@ import { event, natsFixture } from "@opencrane/event-store/testing";
 import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { createLogger } from "@opencrane/observability";
 import { pgDb } from "@opencrane/projections";
-import { dispatch, HandlerRuntime } from "@opencrane/handlers";
+import { dispatch, HandlerRuntime, provisionDispatcher } from "@opencrane/handlers";
 import {
   createStore,
   memberAuthorisation,
@@ -215,7 +215,8 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
   }
   try {
     await runtime.start();
-    task = dispatch(nats.connection, runtime, controller.signal);
+    await provisionDispatcher(nats.connection);
+    task = dispatch(nats.dispatcherConnection, runtime, controller.signal);
     void task.catch(() => undefined);
     await runtime.work();
     await append(member("j1"));
@@ -273,7 +274,7 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
     );
     const all = [];
     const last = await nats.store.head();
-    for await (const stored of nats.store.subscribe(1)) {
+    for await (const stored of nats.reader.subscribe(1)) {
       all.push(stored.event);
       if (stored.sequence === last) {
         break;
@@ -281,7 +282,7 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
     }
     await apply(p, all);
     expect(await snapshot(p.binding)).toEqual(before);
-    const rebuilt = await rebuildMembers(fga.apiUrl, "test", nats.store);
+    const rebuilt = await rebuildMembers(fga.apiUrl, "test", nats.reader);
     expect(rebuilt.sequence).toBe(last);
     expect(await snapshot(rebuilt.binding)).toEqual(before);
     expect(await rebuilt.check("alice", "member")).toMatchObject({

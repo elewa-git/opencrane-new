@@ -34,7 +34,7 @@ it.each(
     const source: EventSource = {
       head: () => Promise.resolve(capturedHead),
       subscribe(fromSequence, signal) {
-        return nats.store.subscribe(fromSequence, signal);
+        return nats.reader.subscribe(fromSequence, signal);
       },
     };
     async function append(

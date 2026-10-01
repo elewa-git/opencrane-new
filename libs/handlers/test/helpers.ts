@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { fork, type ChildProcess } from "node:child_process";
+import { execFile, fork, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { Pool } from "pg";
@@ -40,7 +41,10 @@ export async function fixture() {
   const db = pgDb(pool);
   await db.query(`CREATE TABLE handler_effects (
     ordinal SERIAL, handler TEXT, event_id TEXT, stream TEXT)`);
-  const nats = await natsFixture();
+  const nats = await natsFixture({ provision: false });
+  await promisify(execFile)(process.execPath,
+    ["--experimental-strip-types", "libs/handlers/src/provision.ts"],
+    { env: { ...process.env, ...nats.env(), NATS_REPLICAS: "1" } });
   const runtimes: HandlerRuntime[] = [];
   const children: ChildProcess[] = [];
   const dispatchers: { controller: AbortController; task: Promise<void> }[] =
@@ -68,7 +72,7 @@ export async function fixture() {
     },
     startDispatch(runtime: HandlerRuntime) {
       const controller = new AbortController();
-      const task = dispatch(nats.connection, runtime, controller.signal);
+      const task = dispatch(nats.dispatcherConnection, runtime, controller.signal);
       // Keep rejection observed while assertions run; close still reports it.
       void task.catch(() => undefined);
       dispatchers.push({ controller, task });
@@ -115,7 +119,7 @@ export async function fixture() {
         env: {
           ...process.env,
           PG_TEST_URL: connectionString,
-          NATS_TEST_URL: nats.connection.getServer(),
+          ...nats.env(mode.startsWith("projection") ? "projection" : "dispatcher"),
           CRASH_MODE: mode,
         },
         stdio: ["ignore", "pipe", "pipe", "ipc"],
