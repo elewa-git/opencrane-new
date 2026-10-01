@@ -6,11 +6,13 @@ import { shutdownTelemetry, type LogDestination } from '@opencrane/observability
 import { registerAuthRoutes } from './auth/routes.ts';
 import { createServerLogger } from './logging.ts';
 import { registerMemberRoutes, type MembershipOptions } from './members/routes.ts';
+import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
+  integrations?: IntegrationOptions;
   /** The process entrypoint owns bounded cleanup; embedded servers close telemetry here. */
   processOwnsTelemetry?: boolean;
 }
@@ -41,6 +43,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   // the callback URL's `code` and `state` are redacted like any other secret.
   registerAuthRoutes(app, authConfig);
   registerMemberRoutes(app, authConfig, options.membership);
+  registerIntegrationRoutes(app, authConfig, options.integrations);
 
   return app;
 }

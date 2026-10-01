@@ -1,3 +1,9 @@
+@import '@fontsource/dm-sans/400.css';
+@import '@fontsource/dm-sans/500.css';
+@import '@fontsource/dm-sans/600.css';
+@import '@fontsource/dm-sans/700.css';
+@import '@fontsource/dm-mono/500.css';
+
 /* Copied from OpenCrane 1 (10abd0ef6)
    libs/frontend/core/src/lib/theme/opencrane-theme.scss and
    libs/frontend/core/src/lib/theme/opencrane-preset.ts
@@ -49,6 +55,26 @@
 	--oc-brand-crane-body: #277f9b;
 	--oc-brand-crane-fold: #3aa8c2;
 	--oc-brand-crane-beak: #f2811f;
+	/* Organisation administration handoff values not present in the copied theme. */
+	--oc-ink-secondary: #4f575a;
+	--oc-ink-admin-muted: #6f7779;
+	--oc-ink-placeholder: #8a9294;
+	--oc-ink-faint: #a7aeaf;
+	--oc-border-row: #e1e6e7;
+	--oc-border-input: #c9d1d2;
+	--oc-surface-app: #f6f8f8;
+	--oc-surface-table-header: #f1f4f4;
+	--oc-accent-dark: #0a8497;
+	--oc-accent-tint: #e4f6f9;
+	--oc-accent-border: #cdeef3;
+	--oc-accent-hover: #22c3d8;
+	--oc-success-admin: #2a7d4f;
+	--oc-warning-text: #8a5d1f;
+	--oc-needs-input: #f47920;
+	--oc-danger-admin: #c1392b;
+	--oc-warning-notice: #fff8ef;
+	--oc-warning-border: #f1d8b8;
+	--oc-info-notice: #f2fbfc;
 
 	/* Primary palette and button mapping (opencrane-preset.ts) */
 	--oc-primary-50: #e9fbfe;
@@ -63,7 +89,7 @@
 	--oc-primary-900: #124f59;
 	--oc-primary-950: #052f37;
 	--oc-primary-contrast: #16191a;
-	--oc-primary-hover: var(--oc-primary-600);
+	--oc-primary-hover: var(--oc-accent-hover);
 	--oc-primary-active: var(--oc-primary-700);
 	--oc-radius-button: 7px;
 
@@ -76,20 +102,39 @@
 	--oc-text-xl: 20px;
 	--oc-text-2xl: 26px;
 	--oc-text-4xl: 38px;
+	--oc-type-page: 600 22px/1.25 var(--oc-font-sans);
+	--oc-type-section: 600 24px/1.25 var(--oc-font-sans);
+	--oc-type-card: 600 16px/1.35 var(--oc-font-sans);
+	--oc-type-row: 600 13.5px/1.35 var(--oc-font-sans);
+	--oc-type-body: 400 13px/1.5 var(--oc-font-sans);
+	--oc-type-secondary: 400 12px/1.45 var(--oc-font-sans);
+	--oc-type-column: 600 10.5px/1.35 var(--oc-font-sans);
+	--oc-tracking-page: -0.3px;
+	--oc-tracking-column: 0.08em;
 	--oc-tracking-label: 0.07em;
 	--oc-tracking-title: -0.025em;
 	--oc-space-1: 4px;
+	--oc-space-1-5: 6px;
 	--oc-space-2: 8px;
+	--oc-space-2-5: 10px;
 	--oc-space-3: 12px;
+	--oc-space-3-5: 14px;
 	--oc-space-4: 16px;
+	--oc-space-4-5: 18px;
 	--oc-space-5: 20px;
+	--oc-space-5-5: 22px;
 	--oc-space-6: 24px;
+	--oc-space-6-5: 26px;
+	--oc-space-7: 28px;
 	--oc-space-8: 32px;
 
 	/* Shape, depth, focus, and motion */
 	--oc-radius-chip: 5px;
+	--oc-radius-control: 8px;
 	--oc-radius-card: 9px;
+	--oc-radius-notice: 10px;
 	--oc-radius-panel: 11px;
+	--oc-radius-app: 12px;
 	--oc-radius-round: 999px;
 	--oc-chip-padding-block: 2px;
 	--oc-chip-padding-inline: 7px;
@@ -97,8 +142,10 @@
 	--oc-shadow-card: 0 1px 1px rgba(22, 25, 26, 0.04);
 	--oc-shadow-card-hover: 0 2px 5px rgba(22, 25, 26, 0.08);
 	--oc-shadow-selected: 0 0 0 1px var(--oc-accent-soft);
-	--oc-focus-ring: color-mix(in srgb, var(--oc-accent) 42%, transparent);
-	--oc-focus-width: 3px;
+	--oc-shadow-primary: 0 1px 0 #0a8497;
+	--oc-shadow-active-nav: inset 2px 0 0 #0db5cc, 0 1px 2px rgba(0, 0, 0, 0.04);
+	--oc-focus-ring: #0a8497;
+	--oc-focus-width: 2px;
 	--oc-focus-offset: 2px;
 	--oc-lift-card: -1px;
 	--oc-fold-size: 20px;

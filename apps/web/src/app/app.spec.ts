@@ -1,150 +1,115 @@
-import { computed, signal, type WritableSignal } from '@angular/core';
+import { computed, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import type { LogoutResponse } from '@opencrane/protocol';
+import type { IntegrationRow, IntegrationsResponse } from '@opencrane/protocol';
+import type { MockInstance } from 'vitest';
 import { App } from './app';
 import { NAVIGATE } from './core/navigate';
-import type { ConnectionState } from './core/websocket.service';
 import { WebSocketService } from './core/websocket.service';
 
-describe('App shell', () => {
-  let stateSignal: WritableSignal<ConnectionState>;
-  let connect: ReturnType<typeof vi.fn>;
-  let navigate: ReturnType<typeof vi.fn>;
+const row = (serverId: string, kind: IntegrationRow['status']['kind'], detail: string): IntegrationRow => ({
+  serverId, name: serverId[0]!.toUpperCase() + serverId.slice(1),
+  source: { kind: 'remote_url', label: 'Remote URL', detail: `${serverId}.example.test` },
+  version: 'Version not provided', accountModel: 'Not configured', toolsAllowed: 2, toolsTotal: 3,
+  status: { kind, label: kind === 'ready' ? 'Ready' : kind === 'needs_input' ? 'Needs input' : 'Failed', detail },
+});
+const loaded: IntegrationsResponse = { loadedAt: '2026-10-01T09:40:00.000Z', rows: [
+  row('odoo', 'ready', 'Published'), row('pricing', 'needs_input', 'Pending review · tools changed'), row('broken', 'failed', 'Validation failed'),
+] };
 
-  function configure(initialState: ConnectionState = 'idle') {
-    stateSignal = signal(initialState);
-    connect = vi.fn();
-    navigate = vi.fn();
-    const fakeWs = {
-      state: stateSignal.asReadonly(),
-      isConnected: computed(() => stateSignal() === 'open'),
-      messages: signal([]).asReadonly(),
-      lastMessage: signal(undefined).asReadonly(),
-      connect,
-      disconnect: vi.fn(),
-      send: vi.fn(() => false),
-    };
+function response(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
 
-    TestBed.configureTestingModule({
-      imports: [App],
-      providers: [
-        { provide: WebSocketService, useValue: fakeWs },
-        { provide: NAVIGATE, useValue: navigate },
-      ],
-    });
+describe('MCP register', () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
+  beforeEach(() => globalThis.history.replaceState({}, '', '/org/integrations'));
+  afterEach(() => { fetchSpy?.mockRestore(); globalThis.history.replaceState({}, '', '/'); });
+
+  function create(reply: Response = response(loaded)): ComponentFixture<App> {
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
+    const state = signal<'idle'>('idle');
+    TestBed.configureTestingModule({ imports: [App], providers: [{ provide: NAVIGATE, useValue: vi.fn() }, { provide: WebSocketService, useValue: {
+      state: state.asReadonly(), isConnected: computed(() => false), messages: signal([]).asReadonly(),
+      lastMessage: signal(undefined).asReadonly(), connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
+    } }] });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    return fixture;
   }
 
-  function rootOf(fixture: ComponentFixture<App>): HTMLElement {
+  function root(fixture: ComponentFixture<App>): HTMLElement {
     const element: unknown = fixture.nativeElement;
-    if (!(element instanceof HTMLElement)) throw new Error('expected an HTML root');
+    if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
     return element;
   }
-
-  function buttonLabelled(root: HTMLElement, label: string): HTMLButtonElement {
-    const button = Array.from(root.querySelectorAll('button')).find((el) => el.textContent?.trim() === label);
-    if (!button) {
-      throw new Error(`no button labelled "${label}"`);
-    }
-    return button;
+  function button(rootElement: HTMLElement, label: string): HTMLButtonElement {
+    const found = [...rootElement.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
+    if (!(found instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`);
+    return found;
   }
 
-  it('creates the shell and connects the socket once, on init', () => {
-    configure();
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-
-    expect(fixture.componentInstance).toBeTruthy();
-    expect(connect).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows the product name and the sign-in / sign-out buttons', () => {
-    configure();
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    const root = rootOf(fixture);
-
-    expect(root.querySelector('h1')?.textContent).toContain('OpenCrane');
-    expect(() => buttonLabelled(root, 'Sign in')).not.toThrow();
-    expect(() => buttonLabelled(root, 'Sign out')).not.toThrow();
-  });
-
-  it('reflects the websocket state in the connection indicator', () => {
-    configure('open');
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    const indicator = rootOf(fixture).querySelector('.connection-indicator');
-    if (!(indicator instanceof HTMLElement)) throw new Error('expected a connection indicator');
-
-    expect(indicator.textContent).toContain('Connected');
-    expect(indicator.getAttribute('data-state')).toBe('open');
-    expect(indicator.getAttribute('role')).toBe('status'); // so a screen reader announces changes
-
-    stateSignal.set('closed');
-    fixture.detectChanges();
-    expect(indicator.textContent).toContain('Disconnected');
-    expect(indicator.getAttribute('data-state')).toBe('closed');
-  });
-
-  it('updates from a signal change alone, with no zone.js to trigger change detection', async () => {
-    configure('open');
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-
-    stateSignal.set('reconnecting'); // no detectChanges(): the signal alone must update the page
+  it('loads typed rows and filters the counted tabs', async () => {
+    const fixture = create();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
+    expect(root(fixture).textContent).toContain('All · 3');
+    expect(root(fixture).textContent).toContain('Needs attention · 2');
+    expect(root(fixture).textContent).toContain('Pending review · 1');
+    button(root(fixture), 'Pending review · 1').click();
     await fixture.whenStable();
-
-    expect(rootOf(fixture).querySelector('.connection-indicator')?.textContent).toContain('Reconnecting');
-    expect(globalThis).not.toHaveProperty('Zone');
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1);
+    expect(root(fixture).textContent).toContain('Pricing');
   });
 
-  it('navigates to /auth/login when Sign in is clicked', () => {
-    configure();
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-
-    buttonLabelled(rootOf(fixture), 'Sign in').click();
-
-    expect(navigate).toHaveBeenCalledWith('/auth/login');
+  it('shows the specified empty state', async () => {
+    const fixture = create(response({ rows: [], loadedAt: loaded.loadedAt } satisfies IntegrationsResponse));
+    await vi.waitFor(() => expect(root(fixture).querySelector('.empty')).not.toBeNull());
+    expect(root(fixture).querySelector('.empty')?.textContent).toContain('Not configured');
+    expect(root(fixture).querySelector('.empty')?.textContent).toContain('Nothing set up yet');
   });
 
-  // The first two replies are built from the shared LogoutResponse type, the one the
-  // server's POST /auth/logout is checked against, so a change to that contract breaks this file too.
-  const withAddress: LogoutResponse = { endSessionUrl: 'https://idp.example/logout?id=1' };
-  const withoutAddress: LogoutResponse = { endSessionUrl: null };
+  it('keeps old rows after a read failure and names when they were loaded', async () => {
+    const fixture = create();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
+    fetchSpy.mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
+    fixture.componentInstance.refresh();
+    await vi.waitFor(() => expect(root(fixture).querySelector('.refresh-notice')).not.toBeNull());
+    const notice = root(fixture).querySelector('.refresh-notice');
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
+    expect(notice?.getAttribute('role')).toBe('status');
+    expect(notice?.textContent).toContain('Showing what we loaded at 09:40');
+    expect(button(root(fixture), 'Refresh list')).toBeTruthy();
+  });
 
-  it.each([
-    ['follows the identity provider logout address', JSON.stringify(withAddress), 'https://idp.example/logout?id=1'],
-    ['follows a local identity provider address (localhost is not a public domain name)', JSON.stringify({ endSessionUrl: 'http://localhost:8080/oidc/v1/end_session' } satisfies LogoutResponse), 'http://localhost:8080/oidc/v1/end_session'],
-    ['goes home when the reply has no address', JSON.stringify(withoutAddress), '/'],
-    ['goes home when the address is not http(s)', '{"endSessionUrl":"javascript:alert(1)"}', '/'],
-    ['goes home when the reply is not JSON', '', '/'],
-  ])('POSTs to /auth/logout when Sign out is clicked, then %s', async (_name, body, expected) => {
-    configure();
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(body, { status: 200 }));
-
-    buttonLabelled(rootOf(fixture), 'Sign out').click();
+  it('replaces failure with readable announced retry progress', async () => {
+    const fixture = create(response({ status: 'unavailable' }, 503));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Refresh list'));
+    let finish!: (value: Response) => void;
+    fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
+    button(root(fixture), 'Refresh list').click();
     await fixture.whenStable();
-
-    expect(fetchSpy).toHaveBeenCalledWith('/auth/logout', { method: 'POST' });
-    expect(navigate).toHaveBeenCalledExactlyOnceWith(expected);
-
-    fetchSpy.mockRestore();
+    const notice = root(fixture).querySelector('.refresh-notice');
+    const retry = button(root(fixture), 'Refreshing…');
+    expect(notice?.getAttribute('aria-live')).toBe('polite');
+    expect(notice?.textContent).toContain('Refreshing the integrations list…');
+    expect(retry.disabled).toBe(true);
+    finish(response(loaded));
+    await fixture.whenStable();
   });
 
-  it('shows an error message when sign-out fails, instead of navigating', async () => {
-    configure();
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 500 }));
+  it('names the role needed when the server refuses a non-admin', async () => {
+    const fixture = create(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
+    await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
+    expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Owner or Admin role');
+    expect(root(fixture).querySelector('.register')).toBeNull();
+  });
 
-    buttonLabelled(rootOf(fixture), 'Sign out').click();
-    await fixture.whenStable();
-
-    expect(navigate).not.toHaveBeenCalled();
-    expect(rootOf(fixture).querySelector('.error-message')?.textContent).toContain('500');
-
-    fetchSpy.mockRestore();
+  it('keeps the existing sign-in shell outside /org routes', () => {
+    globalThis.history.replaceState({}, '', '/');
+    const fixture = create();
+    expect(root(fixture).textContent).toContain('OpenCrane');
+    expect(button(root(fixture), 'Sign in')).toBeTruthy();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

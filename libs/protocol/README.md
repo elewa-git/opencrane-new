@@ -21,6 +21,8 @@ hello echoes, errors, validation results and versioned members updates. See
 The event-validation request carries `unknown` data: the server must validate it
 against the [event catalogue package](../events/README.md) before accepting it.
 `logoutResponseSchema` allows a nullable HTTP(S) provider logout URL.
+`integrationsResponseSchema` defines MCP register rows and their shared state kinds;
+`integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
 
 Use `safeParse` when rejected input is expected, or handle the Zod error from `parse`.
 Strict message schemas reject unknown fields, wrong discriminants and malformed values.

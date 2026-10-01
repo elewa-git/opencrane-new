@@ -11,7 +11,7 @@ export default tseslint.config(
   {
     // spikes and infra have separate qualification; they are not production workspaces.
     // The last two are apps/web's Angular build cache and its project-reference output.
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'spikes/**', 'infra/**', '**/.angular/**', '**/out-tsc/**'],
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'spikes/**', 'infra/**', 'docs/design/**/*.js', '**/.angular/**', '**/out-tsc/**'],
   },
   { linterOptions: { reportUnusedDisableDirectives: 'error' } },
   js.configs.recommended,

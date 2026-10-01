@@ -1,21 +1,87 @@
-<header class="shell-header">
-  <h1>{{ title() }}</h1>
-</header>
+@if (!orgPage) {
+  <header class="shell-header"><h1>OpenCrane</h1></header>
+  <main class="shell-main">
+    <p>Sign in to OpenCrane, or end the current identity-provider session.</p>
+    <div class="shell-actions"><button type="button" class="button primary" (click)="signIn()">Sign in</button><button type="button" class="button secondary" (click)="signOut()" [disabled]="signOutPending()">Sign out</button></div>
+    @if (signOutError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
+  </main>
+} @else { <div class="app-frame">
+  <header class="mobile-bar">
+    <button type="button" class="menu-button" aria-label="Open organisation navigation" (click)="menuOpen.set(!menuOpen())">☰</button>
+    <span>Organisation settings</span>
+  </header>
+  <nav class="sidebar" [class.mobile-open]="menuOpen()" aria-label="Organisation settings">
+    <a class="back" href="/">‹ Back to chats</a>
+    <div class="organisation"><strong>Organisation</strong><span>Organisation settings</span></div>
+    <a class="nav-item active" href="/org/integrations" aria-current="page">Integrations</a>
+    <span class="sidebar-spacer"></span>
+    <div class="viewer"><span class="avatar">OA</span><span><strong>Organisation admin</strong><small>Owner or Admin</small></span></div>
+  </nav>
 
-<main class="shell-main">
-  <p class="connection-indicator" role="status" [attr.data-state]="connectionState()">
-    <span class="connection-dot" aria-hidden="true"></span>
-    {{ statusLabel() }}
-  </p>
+  <main>
+    @if (statesPage) {
+      <div class="page-heading"><div><h1>Shared state vocabulary</h1><p>Every state uses a glyph and words, never colour alone.</p></div></div>
+      <div class="state-table" role="table" aria-label="Shared state vocabulary">
+        <div class="state-header" role="row"><span>State</span><span>How it reads</span><span>What the person needs</span><span>Interaction</span></div>
+        @for (example of examples; track example.kind) {
+          <div class="state-row" role="row">
+            <strong>{{ example.name }}</strong>
+            <oc-shared-state [kind]="example.kind" [message]="example.message" [showAction]="false" />
+            <span>{{ example.need }}</span>
+            <span class="interaction">{{ example.kind === 'checking' ? 'Wait — no duplicate submit' : (example.kind === 'unknown' ? 'Check status' : (example.kind === 'failed' ? 'Try the same change again' : example.action)) }}</span>
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="page-heading">
+        <div><h1>Integrations</h1><p>MCP servers your assistants can reach. Each server offers tools; you choose which ones, for whom.</p></div>
+        <button type="button" class="button primary" (click)="addUnavailable.set(true)">Add MCP server</button>
+      </div>
+      @if (addUnavailable()) {
+        <div class="unavailable" role="status">Adding MCP servers isn't available yet. You can review the servers already registered.</div>
+      }
+      @if (loadState() === 'access') {
+        <section class="access-state">
+          <h2>Access needed</h2>
+          <oc-shared-state kind="access_changed" message="You no longer have permission" detail="The Owner or Admin role is needed to view organisation integrations." />
+        </section>
+      } @else {
+        <div class="tabs" role="tablist" aria-label="Integration filters">
+          <button type="button" role="tab" [attr.aria-selected]="selectedTab() === 'all'" (click)="select('all')">All · {{ rows().length }}</button>
+          <button type="button" role="tab" [attr.aria-selected]="selectedTab() === 'attention'" (click)="select('attention')">Needs attention · {{ attention().length }}</button>
+          <button type="button" role="tab" [attr.aria-selected]="selectedTab() === 'review'" (click)="select('review')">Pending review · {{ reviews().length }}</button>
+        </div>
 
-  <div class="actions">
-    <button type="button" class="button button-primary" (click)="signIn()">Sign in</button>
-    <button type="button" class="button button-secondary" (click)="signOut()" [disabled]="signOutPending()">
-      Sign out
-    </button>
-  </div>
-
-  @if (signOutError(); as message) {
-    <p class="error-message" role="alert">{{ message }}</p>
-  }
-</main>
+        <section class="register">
+          @if (loadState() === 'failed' || loadState() === 'retrying') {
+            <div class="refresh-notice" role="status" aria-live="polite" [attr.data-retrying]="loadState() === 'retrying'">
+              @if (loadState() === 'retrying') {
+                <oc-shared-state kind="checking" message="Refreshing the integrations list…" detail="The list below stays usable." />
+                <button type="button" class="button secondary" disabled>Refreshing…</button>
+              } @else {
+                <oc-shared-state kind="failed" message="Couldn't refresh the integrations list." [detail]="loadedAt() ? 'Showing what we loaded at ' + loadedTime() + '.' : 'Nothing changed.'" />
+                <button type="button" class="button secondary" (click)="refresh()">Refresh list</button>
+              }
+            </div>
+          }
+          @if (loadState() === 'loading') {
+            <div class="loading"><oc-shared-state kind="checking" message="Loading integrations…" /></div>
+          } @else if (visibleRows().length === 0) {
+            <div class="empty"><strong>Not configured</strong><oc-shared-state kind="not_configured" message="Nothing set up yet" /></div>
+          } @else {
+            <div class="register-header" role="row"><span>Server</span><span>Account</span><span>Tools</span><span>Status</span><span></span></div>
+            @for (row of visibleRows(); track row.serverId) {
+              <div class="register-row" role="row">
+                <div class="server"><span class="tile">{{ row.name.slice(0, 2).toUpperCase() }}</span><span><strong>{{ row.name }}</strong><small>{{ row.source.label }} · {{ row.version }} · {{ row.source.detail }}</small></span></div>
+                <span class="account" data-label="Account">{{ row.accountModel }}</span>
+                <span class="tools" data-label="Tools">{{ tools(row) }}</span>
+                <oc-shared-state [kind]="row.status.kind" [message]="row.status.label" [detail]="row.status.detail" [safeToRetry]="row.status.safeToRetry ?? false" />
+                <span class="row-action">@if (rowAction(row); as action) { <button type="button" class="button secondary">{{ action }}</button> }</span>
+              </div>
+            }
+          }
+        </section>
+      }
+    }
+  </main>
+</div> }

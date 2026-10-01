@@ -16,3 +16,12 @@ export {
   type ValidateEventMessage,
 } from './messages.ts';
 export { subscribeSchema, memberStateSchema, realtimeMessageSchema, type RealtimeMessage } from './realtime.ts';
+export {
+  integrationRowSchema,
+  integrationsRefusalSchema,
+  integrationsResponseSchema,
+  sharedStateKindSchema,
+  type IntegrationRow,
+  type IntegrationsResponse,
+  type SharedStateKind,
+} from './integrations.ts';

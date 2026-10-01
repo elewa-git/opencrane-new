@@ -16,6 +16,7 @@
     "pretest": "sh scripts/fetch-nats.sh",
     "test": "vitest run",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
+    "visual:org-admin": "node scripts/capture-org-admin.mjs",
     "lint:code": "eslint .",
     "lint:deps": "depcruise apps/server/src apps/web/src libs --config .dependency-cruiser.cjs",
     "lint:unused": "knip",
@@ -31,6 +32,7 @@
     "globals": "17.12.0",
     "knip": "6.39.0",
     "markdownlint-cli2": "0.23.3",
+    "playwright": "1.63.0",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
     "vitest": "5.0.3"

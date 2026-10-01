@@ -1,6 +1,6 @@
 # Server
 
-The Node service exposes sign-in routes, invitation acceptance, a health check and an authenticated WebSocket
+The Node service exposes sign-in routes, invitation acceptance, the organisation MCP register, a health check and an authenticated WebSocket
 skeleton. It does not serve static files: `GET /` returns 404. The [web app](../web/README.md)
 is built and served separately; during development Angular's server runs on port 4200 and
 proxies `/auth` and `/ws` here on port 8080. The membership command writes only to
@@ -120,6 +120,27 @@ closed; restart the server to restore it. Reconnect always rereads durable histo
 Changes have no pruning in this skeleton. Stop readers before an offline rebuild;
 clients retaining positions can resume after the same log has been replayed.
 Multi-replica fan-out over NATS core is **not implemented**.
+
+## Organisation integrations
+
+`GET /org/integrations` requires the encrypted session cookie, the configured silo and
+organisation, a joined issuer/subject binding in the members projection, and current
+OpenFGA `admin` permission (which includes owners). Cookie roles are ignored. Missing or
+unavailable authority fails closed. The response follows `integrationsResponseSchema`:
+event-derived server/source/tool/status rows plus `loadedAt`. The current MCP events do
+not carry catalogue display metadata, semantic versions or account models, so the API
+returns derived server labels and explicit “Version not provided” / “Not configured”
+copy rather than invented facts.
+
+`DATABASE_URL` and the existing OpenFGA settings enable this route as well as members
+realtime. The `mcp catalogue` projection must run separately; the server remains a
+read-only projection client. The real-service test creates disposable PostgreSQL 17
+databases and uses real NATS and OpenFGA:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres \
+  npx vitest run apps/server/test/integrations.test.ts
+```
 
 Sockets allow 20 application messages per one-second window and 16 KiB inbound
 frames. Ping/pong runs every 15 seconds; a missing pong terminates the peer at the
