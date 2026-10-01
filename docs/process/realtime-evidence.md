@@ -4,7 +4,7 @@ Branch `work/realtime`, based on `2bf0c05`. Local source evidence on 1 October
 2026, Node 22.23.3, PostgreSQL 17.11, pinned NATS 2.15.0 and OpenFGA 1.21.0.
 No independent review was run by the builder. This is not a fresh silo deployment.
 Review fixes were tested at source commit
-`b7a91266b090d06d81a9a78242d84f02bd7bfd68`.
+`2bd1c6faebec01366cc32fb62b94360a528b4cbf`.
 
 ## Why
 
@@ -48,6 +48,8 @@ NATS, separate PostgreSQL databases, real OpenFGA and `main.ts` child processes:
 - A peer withholding pong is terminated after the heartbeat deadline.
 - A clock-injected session that expires between upgrade authentication and the
   connection event closes with 1008, and the server continues serving `/healthz`.
+- Raw TCP clients sending unmasked frames on active and newly expired sessions
+  are terminated without process failure, and `/healthz` continues returning 200.
 
 The [shutdown process tests](../../apps/server/test/shutdown.test.ts) prove:
 
@@ -64,6 +66,8 @@ no test environment switches. Tests assert process exit codes and fail if their
 SIGKILL watchdog fires. Timeout assertions allow 250 ms for process scheduling.
 Projection tests additionally prove rollback, restart and rebuild equality of
 member rows, change history and identity bindings on PostgreSQL and PGlite.
+They also hold a stray PostgreSQL connection open during fixture teardown and
+prove that the child database is removed.
 Seven shared-protocol tests cover versioned messages and cursor/topic validation.
 
 | Gate | Result |
@@ -72,9 +76,9 @@ Seven shared-protocol tests cover versioned messages and cursor/topic validation
 | `npm run lint` | PASS; all 5 stages, 140 modules / 351 dependencies, 0 errors; 1 advisory function-length warning |
 | `npm run typecheck` | PASS; all 10 workspaces |
 | `npm run check:events` | PASS; 70 event types agree |
-| `npm test`, fresh control database 1 | PASS; 42 files / 817 tests, no skips or errors; 70.53 s |
-| `npm test`, fresh control database 2 | PASS; 42 files / 817 tests, no skips or errors; 64.64 s |
-| `npm test`, fresh control database 3 | PASS; 42 files / 817 tests, no skips or errors; 63.43 s |
+| `npm test`, fresh control database 1 | PASS; 42 files / 820 tests, no skips or errors; 70.92 s |
+| `npm test`, fresh control database 2 | PASS; 42 files / 820 tests, no skips or errors; 69.42 s |
+| `npm test`, fresh control database 3 | PASS; 42 files / 820 tests, no skips or errors; 69.51 s |
 | `npm run build -w apps/web` | PASS |
 | `npm run test -w apps/web` | PASS; 2 files / 27 tests |
 | Staged secret scan | PASS; clean |
@@ -82,10 +86,10 @@ Seven shared-protocol tests cover versioned messages and cursor/topic validation
 Each final root run created a new control database and dropped it afterwards;
 test fixtures created their own child databases. An earlier full run passed all
 assertions but failed on database teardown errors, including one review-fix run
-with all 817 assertions passing. The database fixtures now wait for PostgreSQL to
-observe disconnection before dropping a database. All three final runs include
-that correction. Focused tests also caught and fixed deadline status and completed
-keep-alive connection races before these final runs. No failing gate was waived.
+with all 817 assertions passing. The database fixtures now force the child database
+drop in a `finally`, even when a connection remains open. All three final runs
+include that correction. Focused tests also caught and fixed deadline status and
+completed keep-alive connection races before these final runs. No failing gate was waived.
 
 ## Not in this PR
 
