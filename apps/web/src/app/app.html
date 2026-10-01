@@ -46,7 +46,7 @@
       @if (loadState() === 'access') {
         <section class="access-state">
           <h2>Access needed</h2>
-          <oc-shared-state kind="access_changed" message="You no longer have permission" detail="The Owner or Admin role is needed to view organisation integrations." actionLabel="Ask an admin" />
+          <oc-shared-state kind="access_changed" message="You no longer have permission" detail="The Owner or Admin role is needed to view organisation integrations. Ask an Owner or Admin in your organisation for access." [showAction]="false" />
         </section>
       } @else {
         <div class="tabs" role="tablist" aria-label="Integration filters">

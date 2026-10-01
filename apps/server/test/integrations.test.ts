@@ -258,7 +258,8 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('button', { name: 'Refresh list' }).click();
     expect((await refused).status()).toBe(403);
     await page.getByText('You no longer have permission').waitFor();
-    expect(await page.getByText('Ask an admin').count()).toBe(1);
+    expect(await page.getByText('Ask an Owner or Admin').count()).toBe(1);
+    expect(await page.locator('.access-state button').count()).toBe(0);
     expect(await page.locator('.register-row').count()).toBe(0);
 
     await fga.pause();

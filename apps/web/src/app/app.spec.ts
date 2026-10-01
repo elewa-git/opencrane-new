@@ -129,7 +129,9 @@ describe('MCP register', () => {
     const fixture = create(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
     await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
     expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Owner or Admin role');
-    expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Ask an admin');
+    expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Ask an Owner or Admin');
+    // Guidance only: there is no request-access flow yet, so no button.
+    expect(root(fixture).querySelector('.access-state button')).toBeNull();
     expect(root(fixture).querySelector('.register')).toBeNull();
   });
 
