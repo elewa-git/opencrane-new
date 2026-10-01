@@ -64,15 +64,28 @@ export class App implements OnInit {
     } finally { this.signOutPending.set(false); }
   }
   protected select(tab: Tab): void { this.selectedTab.set(tab); }
-  refresh(): void { this.loadState.set('retrying'); void this.load(); }
+  protected refresh(): void {
+    if (this.loadState() === 'loading' || this.loadState() === 'retrying') return;
+    this.loadState.set('retrying');
+    void this.load();
+  }
+  protected tabKeydown(event: KeyboardEvent): void {
+    const tabs: Tab[] = ['all', 'attention', 'review'];
+    const current = tabs.indexOf(this.selectedTab());
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+      : event.key === 'ArrowRight' ? (current + 1) % tabs.length
+        : event.key === 'ArrowLeft' ? (current + tabs.length - 1) % tabs.length : -1;
+    if (next < 0) return;
+    event.preventDefault();
+    const tab = tabs[next]!;
+    this.select(tab);
+    globalThis.document.getElementById(`integrations-tab-${tab}`)?.focus();
+  }
+  protected emptyFilterMessage(): string {
+    return this.selectedTab() === 'attention' ? 'No servers need attention' : 'No servers are pending review';
+  }
   protected tools(row: IntegrationRow): string {
     return row.toolsTotal === null ? '—' : `${row.toolsAllowed} of ${row.toolsTotal}`;
-  }
-  protected rowAction(row: IntegrationRow): string | undefined {
-    if (row.status.kind === 'ready') return 'Manage';
-    if (row.status.kind === 'needs_input') return 'Review';
-    if (row.status.kind === 'disabled') return 'Set up again';
-    return undefined;
   }
   protected loadedTime(): string {
     const value = this.loadedAt();
@@ -81,7 +94,7 @@ export class App implements OnInit {
 
   private async load(): Promise<void> {
     try {
-      const response = await fetch('/org/integrations', { headers: { accept: 'application/json' } });
+      const response = await fetch('/api/org/integrations', { headers: { accept: 'application/json' } });
       const raw: unknown = await response.json().catch(() => null);
       if (response.status === 403 && integrationsRefusalSchema.safeParse(raw).success) {
         this.loadState.set('access');

@@ -35,7 +35,10 @@
     } @else {
       <div class="page-heading">
         <div><h1>Integrations</h1><p>MCP servers your assistants can reach. Each server offers tools; you choose which ones, for whom.</p></div>
-        <button type="button" class="button primary" (click)="addUnavailable.set(true)">Add MCP server</button>
+        <div class="page-actions">
+          <button id="refresh-integrations" type="button" class="button secondary" (click)="refresh()" [attr.aria-disabled]="loadState() === 'loading' || loadState() === 'retrying'">{{ loadState() === 'retrying' ? 'Refreshing list…' : 'Refresh list' }}</button>
+          <button type="button" class="button primary" (click)="addUnavailable.set(true)">Add MCP server</button>
+        </div>
       </div>
       @if (addUnavailable()) {
         <div class="unavailable" role="status">Adding MCP servers isn't available yet. You can review the servers already registered.</div>
@@ -47,36 +50,36 @@
         </section>
       } @else {
         <div class="tabs" role="tablist" aria-label="Integration filters">
-          <button type="button" role="tab" [attr.aria-selected]="selectedTab() === 'all'" (click)="select('all')">All · {{ rows().length }}</button>
-          <button type="button" role="tab" [attr.aria-selected]="selectedTab() === 'attention'" (click)="select('attention')">Needs attention · {{ attention().length }}</button>
-          <button type="button" role="tab" [attr.aria-selected]="selectedTab() === 'review'" (click)="select('review')">Pending review · {{ reviews().length }}</button>
+          <button id="integrations-tab-all" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'all'" [attr.tabindex]="selectedTab() === 'all' ? 0 : -1" (click)="select('all')" (keydown)="tabKeydown($event)">All · {{ rows().length }}</button>
+          <button id="integrations-tab-attention" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'attention'" [attr.tabindex]="selectedTab() === 'attention' ? 0 : -1" (click)="select('attention')" (keydown)="tabKeydown($event)">Needs attention · {{ attention().length }}</button>
+          <button id="integrations-tab-review" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'review'" [attr.tabindex]="selectedTab() === 'review' ? 0 : -1" (click)="select('review')" (keydown)="tabKeydown($event)">Pending review · {{ reviews().length }}</button>
         </div>
 
-        <section class="register">
+        <section id="integrations-panel" class="register" role="tabpanel" [attr.aria-labelledby]="'integrations-tab-' + selectedTab()">
           @if (loadState() === 'failed' || loadState() === 'retrying') {
             <div class="refresh-notice" role="status" aria-live="polite" [attr.data-retrying]="loadState() === 'retrying'">
               @if (loadState() === 'retrying') {
                 <oc-shared-state kind="checking" message="Refreshing the integrations list…" detail="The list below stays usable." />
-                <button type="button" class="button secondary" disabled>Refreshing…</button>
               } @else {
-                <oc-shared-state kind="failed" message="Couldn't refresh the integrations list." [detail]="loadedAt() ? 'Showing what we loaded at ' + loadedTime() + '.' : 'Nothing changed.'" />
-                <button type="button" class="button secondary" (click)="refresh()">Refresh list</button>
+                <oc-shared-state kind="failed" [message]="loadedAt() ? 'Couldn\'t refresh the integrations list.' : 'Couldn\'t load the integrations list.'" [detail]="loadedAt() ? 'Showing what we loaded at ' + loadedTime() + '.' : 'The organisation register is unavailable.'" />
               }
             </div>
           }
           @if (loadState() === 'loading') {
             <div class="loading"><oc-shared-state kind="checking" message="Loading integrations…" /></div>
-          } @else if (visibleRows().length === 0) {
+          } @else if (loadState() === 'failed' && !loadedAt()) {
+          } @else if (rows().length === 0) {
             <div class="empty"><strong>Not configured</strong><oc-shared-state kind="not_configured" message="Nothing set up yet" /></div>
+          } @else if (visibleRows().length === 0) {
+            <div class="empty empty-filter"><strong>{{ emptyFilterMessage() }}</strong><span>Try another filter to see the configured servers.</span></div>
           } @else {
-            <div class="register-header" role="row"><span>Server</span><span>Account</span><span>Tools</span><span>Status</span><span></span></div>
+            <div class="register-header" role="row"><span>Server</span><span>Account</span><span>Tools</span><span>Status</span></div>
             @for (row of visibleRows(); track row.serverId) {
               <div class="register-row" role="row">
                 <div class="server"><span class="tile">{{ row.name.slice(0, 2).toUpperCase() }}</span><span><strong>{{ row.name }}</strong><small>{{ row.source.label }} · {{ row.version }} · {{ row.source.detail }}</small></span></div>
                 <span class="account" data-label="Account">{{ row.accountModel }}</span>
                 <span class="tools" data-label="Tools">{{ tools(row) }}</span>
                 <oc-shared-state [kind]="row.status.kind" [message]="row.status.label" [detail]="row.status.detail" [safeToRetry]="row.status.safeToRetry ?? false" />
-                <span class="row-action">@if (rowAction(row); as action) { <button type="button" class="button secondary">{{ action }}</button> }</span>
               </div>
             }
           }

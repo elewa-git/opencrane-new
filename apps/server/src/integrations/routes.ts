@@ -15,7 +15,7 @@ export interface IntegrationOptions {
 
 export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions): void {
   const authorisation = options && memberAuthorisation(options.binding);
-  app.get('/org/integrations', async (request, reply) => {
+  app.get('/api/org/integrations', async (request, reply) => {
     const now = options?.now ?? (() => new Date());
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });

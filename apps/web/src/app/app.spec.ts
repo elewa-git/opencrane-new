@@ -9,7 +9,7 @@ import { WebSocketService } from './core/websocket.service';
 const row = (serverId: string, kind: IntegrationRow['status']['kind'], detail: string): IntegrationRow => ({
   serverId, name: serverId[0]!.toUpperCase() + serverId.slice(1),
   source: { kind: 'remote_url', label: 'Remote URL', detail: `${serverId}.example.test` },
-  version: 'Version not provided', accountModel: 'Not configured', toolsAllowed: 2, toolsTotal: 3,
+  version: 'Version not provided', accountModel: 'Not provided', toolsAllowed: 2, toolsTotal: 3,
   status: { kind, label: kind === 'ready' ? 'Ready' : kind === 'needs_input' ? 'Needs input' : 'Failed', detail },
 });
 const loaded: IntegrationsResponse = { loadedAt: '2026-10-01T09:40:00.000Z', rows: [
@@ -69,12 +69,28 @@ describe('MCP register', () => {
     expect(root(fixture).querySelector('.empty')?.textContent).toContain('Nothing set up yet');
   });
 
+  it('distinguishes an empty filter from an empty register', async () => {
+    const fixture = create(response({ rows: [row('odoo', 'ready', 'Published')], loadedAt: loaded.loadedAt } satisfies IntegrationsResponse));
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1));
+    button(root(fixture), 'Pending review · 0').click();
+    await fixture.whenStable();
+    expect(root(fixture).querySelector('.empty-filter')?.textContent).toContain('No servers are pending review');
+    expect(root(fixture).textContent).not.toContain('Nothing set up yet');
+  });
+
+  it('shows a failure, not an empty-organisation claim, when the first read is unavailable', async () => {
+    const fixture = create(response({ status: 'unavailable' }, 503));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
+    expect(root(fixture).textContent).toContain('The organisation register is unavailable');
+    expect(root(fixture).textContent).not.toContain('Nothing set up yet');
+  });
+
   it('keeps old rows after a read failure and names when they were loaded', async () => {
     const fixture = create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     fetchSpy.mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
-    fixture.componentInstance.refresh();
-    await vi.waitFor(() => expect(root(fixture).querySelector('.refresh-notice')).not.toBeNull());
+    button(root(fixture), 'Refresh list').click();
+    await vi.waitFor(() => expect(root(fixture).querySelector('.refresh-notice')?.textContent).toContain('Showing what we loaded at 09:40'));
     const notice = root(fixture).querySelector('.refresh-notice');
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
     expect(notice?.getAttribute('role')).toBe('status');
@@ -84,18 +100,28 @@ describe('MCP register', () => {
 
   it('replaces failure with readable announced retry progress', async () => {
     const fixture = create(response({ status: 'unavailable' }, 503));
-    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Refresh list'));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
     let finish!: (value: Response) => void;
     fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
     button(root(fixture), 'Refresh list').click();
     await fixture.whenStable();
     const notice = root(fixture).querySelector('.refresh-notice');
-    const retry = button(root(fixture), 'Refreshing…');
+    const retry = button(root(fixture), 'Refreshing list…');
     expect(notice?.getAttribute('aria-live')).toBe('polite');
     expect(notice?.textContent).toContain('Refreshing the integrations list…');
-    expect(retry.disabled).toBe(true);
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
     finish(response(loaded));
     await fixture.whenStable();
+  });
+
+  it('labels unsupported actions instead of rendering inert row controls', async () => {
+    const fixture = create();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
+    expect(root(fixture).textContent).not.toContain('Manage');
+    expect(root(fixture).textContent).not.toContain('Set up again');
+    button(root(fixture), 'Add MCP server').click();
+    await fixture.whenStable();
+    expect(root(fixture).textContent).toContain("Adding MCP servers isn't available yet");
   });
 
   it('names the role needed when the server refuses a non-admin', async () => {

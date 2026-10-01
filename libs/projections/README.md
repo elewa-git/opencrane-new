@@ -14,8 +14,8 @@ import { ProjectionRunner, pgliteDb, members } from '@opencrane/projections';
 import { PGlite } from '@electric-sql/pglite';
 
 const engine = new PGlite();
-// store is an initialised EventStore for this silo.
-const runner = new ProjectionRunner(pgliteDb(engine), store, createLogger('members'));
+// reader is an initialised EventStore using the projection NATS identity.
+const runner = new ProjectionRunner(pgliteDb(engine), reader, createLogger('members'));
 await runner.initialise(members);
 await runner.run(members);
 await runner.rebuild(members);

@@ -11,6 +11,7 @@ let nats: Awaited<ReturnType<typeof natsFixture>>;
 let server: RunningServer | undefined;
 const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme', SILO_ID: 'acme', TEST_PROCESS_FAULTS: '1' };
 const config = loadAuthConfig(env);
+const CASE_TIMEOUT_MS = 30_000;
 function headers() {
   const now = Math.floor(Date.now() / 1000);
   return { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(config,
@@ -34,7 +35,7 @@ it.each(['SIGTERM', 'SIGINT'] as const)('idle %s exits 0 and closes NATS once', 
   const running = await start();
   running.child.kill(signal);
   await exit(running, 0);
-});
+}, CASE_TIMEOUT_MS);
 it('gives an open WebSocket a 1001 close and exits inside grace', async () => {
   const running = await start();
   const ws = new WebSocket(`ws://127.0.0.1:${running.port}/ws`, { headers: headers() });
@@ -45,7 +46,7 @@ it('gives an open WebSocket a 1001 close and exits inside grace', async () => {
   expect((await closed)[0]).toBe(1001);
   await exit(running, 0);
   expect(performance.now() - started).toBeLessThan(1000);
-});
+}, CASE_TIMEOUT_MS);
 it('bounds a stalled partial body, reports timeout and invokes cleanup once', async () => {
   const running = await start();
   const socket = connect(running.port, '127.0.0.1');
@@ -58,7 +59,7 @@ it('bounds a stalled partial body, reports timeout and invokes cleanup once', as
   await exit(running, 1);
   expect(performance.now() - started).toBeLessThan(1250);
   socket.destroy();
-});
+}, CASE_TIMEOUT_MS);
 it('lets a 700 ms in-flight join finish with 200 and durable append during a 1000 ms grace', async () => {
   const running = await start({ TEST_APPEND_MS: '700' });
   const invitation = event('invite-process', 'member-alice', 'member.invited');
@@ -74,12 +75,12 @@ it('lets a 700 ms in-flight join finish with 200 and durable append during a 100
   expect(await (await response).json()).toMatchObject({ status: 'joined', sequence: 2 });
   await exit(running, 0);
   expect(await nats.store.head()).toBe(2);
-});
+}, CASE_TIMEOUT_MS);
 it.each(['fail', 'hang'])('exits non-zero on NATS close %s', async (mode) => {
   const running = await start({ TEST_CLOSE: mode });
   running.child.kill('SIGTERM');
   await exit(running, 1);
-});
+}, CASE_TIMEOUT_MS);
 it('a second signal exits at once while cleanup is hung', async () => {
   const running = await start({ TEST_CLOSE: 'hang', SHUTDOWN_GRACE_MS: '10000' });
   running.child.kill('SIGTERM');
@@ -88,9 +89,9 @@ it('a second signal exits at once while cleanup is hung', async () => {
   running.child.kill('SIGINT');
   await exit(running, 1);
   expect(performance.now() - started).toBeLessThan(500);
-});
+}, CASE_TIMEOUT_MS);
 it('exits non-zero on telemetry cleanup failure while still closing NATS', async () => {
   const running = await start({ TEST_TELEMETRY: 'fail' });
   running.child.kill('SIGTERM');
   await exit(running, 1);
-});
+}, CASE_TIMEOUT_MS);

@@ -338,14 +338,19 @@ export const effectResolvedDataSchema = z
 
 // --- MCP catalogue, grants and connections ------------------------------
 
-const mcpServerRegisteredFields = { serverId: id, registeredBy: id };
+const mcpServerRegisteredFields = { serverId: id, registeredBy: id, catalogueRef: id.optional() };
 export const mcpServerRegisteredDataSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('remote'), locator: remoteLocatorSchema, ...mcpServerRegisteredFields }).strict(),
   z.object({ kind: z.literal('hosted'), locator: hostedLocatorSchema, ...mcpServerRegisteredFields }).strict(),
 ]);
 
 export const mcpServerDiscoveredDataSchema = z
-  .object({ serverId: id, toolCount: z.int().nonnegative(), schemaDigest: digestSchema })
+  .object({
+    serverId: id,
+    toolCount: z.int().nonnegative(),
+    schemaDigest: digestSchema,
+    serverInfo: z.object({ name: id, version: id }).strict().optional(),
+  })
   .strict();
 
 export const mcpServerRejectedDataSchema = z

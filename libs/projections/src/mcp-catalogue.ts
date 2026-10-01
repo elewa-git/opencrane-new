@@ -6,6 +6,7 @@ const eventTypes = new Set<string>([
   'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_rejected',
   'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
 ]);
+type ToolMode = 'allow' | 'ask' | 'block';
 
 function field(data: unknown, name: string): string {
   if (typeof data !== 'object' || data === null) throw new Error('Invalid MCP event data');
@@ -21,13 +22,29 @@ function numberField(data: unknown, name: string): number {
   return value;
 }
 
+function optionalField(data: unknown, name: string): string | null {
+  if (typeof data !== 'object' || data === null) throw new Error('Invalid MCP event data');
+  const value: unknown = Reflect.get(data, name);
+  if (value === undefined) return null;
+  if (typeof value !== 'string') throw new Error(`Invalid MCP ${name}`);
+  return value;
+}
+
+function serverInfo(data: unknown): { name: string; version: string } | undefined {
+  if (typeof data !== 'object' || data === null) throw new Error('Invalid MCP event data');
+  const value: unknown = Reflect.get(data, 'serverInfo');
+  if (value === undefined) return undefined;
+  return { name: field(value, 'name'), version: field(value, 'version') };
+}
+
 /** The register keeps event facts only. Labels and status wording are mapped below in TypeScript. */
 export const mcpCatalogue: Projection = {
   name: 'mcp catalogue',
   async create(db) {
     await db.query(`CREATE TABLE IF NOT EXISTS mcp_catalogue (
       silo TEXT NOT NULL, server_id TEXT NOT NULL, source_kind TEXT NOT NULL,
-      locator TEXT NOT NULL, tool_count INTEGER, lifecycle TEXT NOT NULL,
+      locator TEXT NOT NULL, catalogue_ref TEXT, server_name TEXT, server_version TEXT,
+      tool_count INTEGER, lifecycle TEXT NOT NULL,
       changed_at TEXT NOT NULL, position BIGINT NOT NULL,
       PRIMARY KEY (silo, server_id))`);
     await db.query(`CREATE TABLE IF NOT EXISTS mcp_tool_modes (
@@ -44,10 +61,12 @@ export const mcpCatalogue: Projection = {
     const serverId = field(data, 'serverId');
     if (event.subject !== `mcp-${serverId}`) throw new Error('MCP subject mismatch');
     if (event.type === 'mcp.server_registered') {
-      await db.query(`INSERT INTO mcp_catalogue VALUES ($1, $2, $3, $4, NULL, 'registered', $5, $6)
+      await db.query(`INSERT INTO mcp_catalogue VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, 'registered', $6, $7)
         ON CONFLICT (silo, server_id) DO UPDATE SET source_kind = $3, locator = $4,
-        tool_count = NULL, lifecycle = 'registered', changed_at = $5, position = $6`,
-      [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), event.time, position]);
+        catalogue_ref = $5, server_name = NULL, server_version = NULL,
+        tool_count = NULL, lifecycle = 'registered', changed_at = $6, position = $7`,
+      [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), optionalField(data, 'catalogueRef'),
+        event.time, position]);
       return;
     }
     const existing = await db.query('SELECT server_id FROM mcp_catalogue WHERE silo = $1 AND server_id = $2',
@@ -61,10 +80,12 @@ export const mcpCatalogue: Projection = {
     }
     const lifecycle = event.type.slice('mcp.'.length).replace('server_', '');
     const toolCount = event.type === 'mcp.server_discovered' ? numberField(data, 'toolCount') : null;
+    const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
     await db.query(`UPDATE mcp_catalogue SET lifecycle = $3,
-      tool_count = COALESCE($4, tool_count), changed_at = $5, position = $6
+      tool_count = COALESCE($4, tool_count), server_name = COALESCE($5, server_name),
+      server_version = COALESCE($6, server_version), changed_at = $7, position = $8
       WHERE silo = $1 AND server_id = $2`,
-    [event.silo, serverId, lifecycle, toolCount, event.time, position]);
+    [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position]);
   },
 };
 
@@ -72,10 +93,13 @@ export interface McpCatalogueRow extends Record<string, unknown> {
   server_id: string;
   source_kind: 'remote' | 'hosted';
   locator: string;
+  catalogue_ref: string | null;
+  server_name: string | null;
+  server_version: string | null;
   tool_count: number | null;
   lifecycle: string;
   changed_at: string;
-  allowed: string | number;
+  modes: ToolMode[] | null;
 }
 
 function words(serverId: string): string {
@@ -84,6 +108,9 @@ function words(serverId: string): string {
 }
 
 function source(row: McpCatalogueRow): IntegrationRow['source'] {
+  if (row.catalogue_ref !== null) {
+    return { kind: 'catalogue', label: 'Catalogue', detail: row.catalogue_ref };
+  }
   if (row.source_kind === 'remote') {
     return { kind: 'remote_url', label: 'Remote URL', detail: new URL(row.locator).host };
   }
@@ -108,13 +135,13 @@ function status(lifecycle: string, changedAt: string): IntegrationRow['status'] 
 export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
   return rows.map((row) => {
     const total = row.tool_count === null ? null : Number(row.tool_count);
-    const allowed = Number(row.allowed);
+    const allowed = (row.modes ?? []).filter((mode) => mode === 'allow' || mode === 'ask').length;
     return {
       serverId: row.server_id,
-      name: words(row.server_id),
+      name: row.server_name ?? words(row.server_id),
       source: source(row),
-      version: row.source_kind === 'hosted' ? `Digest ${row.locator.slice(-64, -52)}` : 'Version not provided',
-      accountModel: 'Not configured',
+      version: row.server_version ?? (row.source_kind === 'hosted' ? `Digest ${row.locator.slice(-64, -52)}` : 'Version not provided'),
+      accountModel: 'Not provided',
       toolsAllowed: total === null ? allowed : Math.min(allowed, total),
       toolsTotal: total,
       status: status(row.lifecycle, row.changed_at),

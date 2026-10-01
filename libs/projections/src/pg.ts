@@ -99,7 +99,7 @@ export function connectMcpCatalogue(connectionString: string) {
   return {
     async rows(silo: string) {
       const result = await pool.query<McpCatalogueRow>(`SELECT c.*,
-        COUNT(m.tool_name) FILTER (WHERE m.mode <> 'block') AS allowed
+        ARRAY_REMOVE(ARRAY_AGG(m.mode), NULL) AS modes
         FROM mcp_catalogue c LEFT JOIN mcp_tool_modes m USING (silo, server_id)
         WHERE c.silo = $1 GROUP BY c.silo, c.server_id ORDER BY c.position, c.server_id`, [silo]);
       return mapMcpCatalogueRows(result.rows);
