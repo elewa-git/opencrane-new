@@ -364,9 +364,9 @@ it("hands events appended during an OpenFGA rebuild to the rebuilt projection", 
     await apply(live, [first, second]);
     let appended = false;
     const arriving = {
-      head: () => nats.store.head(),
+      head: () => nats.reader.head(),
       async *subscribe(fromSequence: number, signal?: AbortSignal) {
-        for await (const stored of nats.store.subscribe(fromSequence, signal)) {
+        for await (const stored of nats.reader.subscribe(fromSequence, signal)) {
           yield stored;
           if (!appended) {
             appended = true;

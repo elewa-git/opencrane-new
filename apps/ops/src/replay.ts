@@ -61,7 +61,7 @@ export async function replay(
   if (!projection || parsed.positionals.length !== 1 || !["members", "openfga"].includes(projection)) {
     throw new Error(usage);
   }
-  const nats = await connectEventStore(required(env, "NATS_URL"));
+  const nats = await connectEventStore(env);
   try {
     if (parsed.values["dry-run"]) {
       const head = await inspect(nats.store);

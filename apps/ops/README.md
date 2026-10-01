@@ -6,8 +6,9 @@ publishes events or runs reactions. Run it from the repository root on Node 22.
 
 ## Inspect without changing state
 
-Set `NATS_URL`, then validate that every global sequence through the reported
-stream head can be read:
+Set the projection reader's `NATS_URL`, `NATS_CA_FILE`, `NATS_CERT_FILE`,
+`NATS_KEY_FILE`, `NATS_NKEY_SEED_FILE` and `NATS_INBOX_PREFIX`, then validate
+that every global sequence through the reported stream head can be read:
 
 ```sh
 npm run replay -- members --dry-run
@@ -21,7 +22,7 @@ after a one-second idle bound rather than waiting indefinitely.
 
 ## Rebuild members online
 
-Set `NATS_URL` and `DATABASE_URL`, then run:
+Set the same NATS reader settings and `DATABASE_URL`, then run:
 
 ```sh
 npm run replay -- members --verify
@@ -47,7 +48,8 @@ older writer does not take the lock and is unsafe during this operation.
 OpenFGA bindings are deployment configuration, so this switch has a clear
 stop-the-world rule. Stop the server decision path, dispatcher and OpenFGA
 workers and wait for in-flight handlers to finish. Leave NATS available; events
-may continue to append. Set `NATS_URL`, `SILO_ID`, `OPENFGA_API_URL`, the current
+may continue to append. Set the same NATS reader settings, `SILO_ID`,
+`OPENFGA_API_URL`, the current
 `OPENFGA_STORE_ID` and, for verification, `OPENFGA_MODEL_ID`. Then run:
 
 ```sh

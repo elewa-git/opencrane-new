@@ -22,14 +22,14 @@ it.skipIf(!process.env["PG_TEST_URL"])(
     try {
       const result = await nats.store.append({ event: event("join"), expectedSequence: 0 });
       expect(result.status).toBe("appended");
-      const runner = new ProjectionRunner(storage.db, nats.store, logger);
+      const runner = new ProjectionRunner(storage.db, nats.reader, logger);
       await runner.initialise(members);
       await runner.run(members);
       const before = (await storage.db.query("SELECT * FROM members")).rows;
       const broken: EventSource = {
         head: () => Promise.resolve(2),
         async *subscribe() {
-          for await (const stored of nats.store.subscribe(1)) {
+          for await (const stored of nats.reader.subscribe(1)) {
             yield stored;
             break;
           }
@@ -67,11 +67,11 @@ it.skipIf(!process.env["PG_TEST_URL"]).each([
     if (withFirst) {
       expect((await nats.store.append({ event: event("only"), expectedSequence: 0 })).status).toBe("appended");
     }
-    const runner = new ProjectionRunner(storage.db, nats.store, logger);
+    const runner = new ProjectionRunner(storage.db, nats.reader, logger);
     await runner.initialise(members);
     const incomplete: EventSource = {
-      head: () => nats.store.head().then((head) => head + 1),
-      subscribe: (fromSequence, signal) => nats.store.subscribe(fromSequence, signal),
+      head: () => nats.reader.head().then((head) => head + 1),
+      subscribe: (fromSequence, signal) => nats.reader.subscribe(fromSequence, signal),
     };
     const started = performance.now();
     await expect(rebuildMemberProjection(storage.db, incomplete, logger)).rejects.toThrow("incomplete");
@@ -108,7 +108,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
         principal: { id: "bob", kind: "human" },
         data: { ...joined.data, invitationId: "inv_1" },
       }, expectedSequence: 1 })).status).toBe("appended");
-      const initial = new ProjectionRunner(storage.db, nats.store, createLogger("roles", { level: "silent" }));
+      const initial = new ProjectionRunner(storage.db, nats.reader, createLogger("roles", { level: "silent" }));
       await initial.initialise(members);
       await initial.run(members);
       await admin.query(`CREATE ROLE ${operator}`);
@@ -124,7 +124,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       await readerPool.query("BEGIN");
       await readerPool.query("LOCK TABLE member_identities IN ACCESS SHARE MODE");
       const rebuilding = rebuildMemberProjection(
-        pgDb(operatorPool), nats.store, createLogger("roles-rebuild", { level: "silent" }), { verify: true },
+        pgDb(operatorPool), nats.reader, createLogger("roles-rebuild", { level: "silent" }), { verify: true },
       );
       await delay(100);
       expect((await readerPool.query(`SELECT i.member_id FROM member_identities i
@@ -157,12 +157,12 @@ it.skipIf(!process.env["PG_TEST_URL"])(
     try {
       const result = await nats.store.append({ event: event("join"), expectedSequence: 0 });
       expect(result.status).toBe("appended");
-      const runner = new ProjectionRunner(storage.db, nats.store, logger);
+      const runner = new ProjectionRunner(storage.db, nats.reader, logger);
       await runner.initialise(members);
       await runner.run(members);
       await storage.db.query("UPDATE members SET display_name = 'Wrong'");
       await expect(
-        rebuildMemberProjection(storage.db, nats.store, logger, { verify: true }),
+        rebuildMemberProjection(storage.db, nats.reader, logger, { verify: true }),
       ).rejects.toThrow("differs");
       expect((await storage.db.query<{ display_name: string }>("SELECT display_name FROM members")).rows)
         .toEqual([{ display_name: "Wrong" }]);

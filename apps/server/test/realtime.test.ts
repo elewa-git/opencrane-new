@@ -124,9 +124,9 @@ it('keeps a subscriber live while replay catches an arriving event and switches 
   await until(() => client.messages.some((message) => message.type === 'ready'));
   let appended = false;
   const arriving: EventSource = {
-    head: () => nats.store.head(),
+    head: () => nats.reader.head(),
     async *subscribe(fromSequence, signal) {
-      for await (const stored of nats.store.subscribe(fromSequence, signal)) {
+      for await (const stored of nats.reader.subscribe(fromSequence, signal)) {
         yield stored;
         if (!appended) {
           appended = true;
@@ -159,7 +159,7 @@ it('resets live and resumed clients after replay repairs delivered state', async
     .toMatchObject({ member: { displayName: 'Wrong' }, generation: 0 });
 
   const closed = once(client.ws, 'close');
-  const result = await rebuildMemberProjection(pgDb(dbs.queue), nats.store, createLogger('repair-rebuild'));
+  const result = await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('repair-rebuild'));
   expect(result).toMatchObject({ changed: true, previousSequence: 2, sequence: 2 });
   await until(() => client.messages.some((message) => message.type === 'resync'));
   expect(client.messages.at(-1)).toMatchObject({ type: 'resync', position: 0, generation: 1 });
