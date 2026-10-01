@@ -8,7 +8,11 @@ Only OSI-approved open-source components run inside a customer silo
 (Apache-2.0, MIT, BSD, MPL, ISC, and similar). Check a new dependency's
 licence before adding it. KurrentDB (KLv1), SurrealDB and Redpanda (BSL),
 EventSourcingDB (closed source) and Axon Server (commercial) are ruled out
-on this basis; do not reintroduce them.
+on this basis; do not reintroduce them. Build-time data packages pulled in by
+dev tooling (caniuse-lite, spdx data, mdn-data: CC-BY or CC0) are accepted,
+but never in a silo's runtime images.
+
+Money is always an integer number of euro cents (`…Cents`), never a float.
 
 ## The event store is the only source of truth
 
@@ -61,3 +65,9 @@ by id, never by value, in events or in code.
 - [docs/architecture/events.md](docs/architecture/events.md) — the event
   catalogue.
 - [docs/adr/](docs/adr/) — architecture decision records from the spikes.
+
+## Commits
+
+Commit messages are one emoji and a plain sentence, with an optional short
+body. Never add a co-author line or any AI attribution (no
+"Co-Authored-By", no "Generated with ...") to commits or PR descriptions.

@@ -16,7 +16,10 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 4. **Projections and reactions are separate.** A replay rebuilds projections only. Reactions (waking a computer, pushing gateway config, sending mail) keep their own checkpoints, are idempotent, and are switched off during a rebuild.
 5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message and memory text is encrypted with a per-conversation or per-scope key, so "forget" deletes the key (crypto-shredding) and appends a tombstone event.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
-7. **Idempotency is by event id, not by the event store's duplicate window.** Every projection and reaction records the event ids it has applied, and commands use expected-sequence appends. JetStream's `Nats-Msg-Id` de-duplication only lasts for its duplicate window and is lost on backup/restore (found in spike S0.7), so it is an optimisation, never the guarantee.
+7. **Idempotency is by event id, not by the event store's duplicate window.** Every projection and reaction records the event ids it has applied (in the same Postgres transaction as its checkpoint), and commands use expected-sequence appends. JetStream's `Nats-Msg-Id` de-duplication only lasts for its duplicate window, is lost on backup/restore, and is **stream-wide** (an id first used on another subject makes the append report a duplicate and store nothing), so it is an optimisation, never the guarantee (found in spike S0.7).
+   - A retried **command** is recognised from the stream itself: the event carries the command id, and the command checks the entity history it already loads before appending. There is no separate command ledger: a ledger written after the publish leaves a gap, and a ledger restored to a different point than the stream re-runs commands.
+   - Command ids are scoped to the principal and the entity's subject; a client-supplied idempotency key never becomes a global id.
+   - An append whose acknowledgement says `duplicate` is accepted only if it points at the expected subject.
 8. **Brief write pauses are normal.** When the JetStream stream leader fails, writes pause for roughly 5–8 seconds while a new leader is elected (measured in S0.7). Commands retry with backoff, and the UI shows the message as "saving" rather than failing.
 
 ## How events are delivered (NATS JetStream)
@@ -137,15 +140,21 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
 
-### Company brain
+### Memory
 | Event | Emitted by | Projections | Reactions |
 |---|---|---|---|
-| `memory.written` | brain MCP (remember) | Cognee dataset of that scope | schedule dreaming for that scope |
-| `memory.corrected` / `memory.forgotten` | brain MCP | Cognee | forget: delete the payload key, then tombstone |
-| `memory.consolidated` | dreaming job (per scope, as the scope's principal) | Cognee | — |
+| `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
+| `memory.corrected` / `memory.forgotten` | OpenCrane memory MCP (correct/forget); nightly per-scope dreaming job (corrected only) | Postgres memory projection for that scope | forget: delete the payload key, then tombstone |
+| `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
 | `scope.promotion_requested` / `scope.promoted` | person / approver | scopes | OpenFGA viewer tuples; copy to the target dataset |
 
-Cognee is a projection like any other, but rebuilding it re-runs extraction, which costs model calls. Treat a brain rebuild as an explicit, budgeted operation. `memory.consolidated` events preserve dreaming results, so they don't have to be recomputed.
+For the MVP, `memory.*` events in NATS JetStream are the truth; the Postgres memory projection holds facts per scope and uses full-text search. Replay applies recorded changes without model calls. Scopes are person, assistant notes and flat group only, with no organisation or department memory. Any group member may write group memory without approval. Each member works in their own thread or sub-agent of the group assistant, with personal memory plus group memory; preferences stay personal and shared knowledge goes to the group.
+
+Codex reaches the OpenCrane memory MCP through the local forwarding proxy and agentgateway. `ext_authz` passes allowed scopes from IAM context (assistant grants ∩ requester rights); per-thread turn tokens keep each member's personal memory out of other threads. Memory is never written to the shared computer's disk. Preferences and pinned facts enter the thread's instructions at turn start with a size cap; the rest is fetched with `recall`.
+
+Nightly dreaming runs per scope in the handler runtime, using a cheap model through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts through `memory.corrected`; it never crosses scopes. `memory.consolidated` and the existing scope-promotion rows are retained for contract compatibility, with no MVP emitters or promotion reactions enabled. The stream table's older scope description includes these deferred operations. Sharing data across groups is a later design topic.
+
+Cognee is deferred until after the MVP; it may become another projection fed by replaying the same memory events plus document ingestion, without changing the agent's tools.
 
 ### Routines and delegation
 | Event | Emitted by | Projections | Reactions |

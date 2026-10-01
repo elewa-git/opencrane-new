@@ -35,7 +35,10 @@ Consequences:
 
 Local stdio tools inside the computer (Playwright, document tools) are exempt until Codex supports 2026-07-28 over stdio; their network traffic still passes the gateway.
 
-**Found in spike S0.1a:** Codex 0.159 proposes 2025-06-18 at `initialize` and uses `Mcp-Session-Id` unless the server answers 2026-07-28. It sends the method and tool-name headers only in that case, and it accepts any version without checking. So OpenCrane's MCP servers and the gateway must **enforce** 2026-07-28 themselves. Whether Codex can run fully stateless (no `initialize`, no session) is being tested in round 2.
+**Found in spike S0.1a:**
+- **Codex speaks stateless 2026-07-28** when started with `features.mcp_2026_07_28 = true`. It calls `server/discover` first with `MCP-Protocol-Version: 2026-07-28`, then `tools/list` and `tools/call`. There is no `initialize`, no `Mcp-Session-Id` and no GET stream, and the method and tool-name headers are always present. Our MCP servers must return a full `DiscoverResult` (`resultType`, `supportedVersions`, `capabilities`, `serverInfo`, `ttlMs`, `cacheScope`).
+- The flag is still marked "under development" in Codex 0.159, so its maturity is the remaining risk. We pin the Codex version and keep a test that fails if the flag's behaviour changes.
+- Without the flag, Codex proposes 2025-06-18 and uses sessions. In either mode it accepts any version without checking, so OpenCrane's MCP servers and the gateway must **enforce** 2026-07-28 themselves.
 
 ## Responsibility split: gateway vs server
 
@@ -54,11 +57,12 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
 | Web egress | Forward proxy with allowlist and logging | Allowlist policy | NetworkPolicy makes the gateway the only way out |
 | Live view and takeover (human → computer) | — | Its own authenticated proxy | KasmVNC |
 | Audit | Emits OpenTelemetry logs | The authoritative record: decisions, approvals, reservations, reconciled with gateway logs | — |
+| Memory | Passes allowed scopes from `ext_authz` to the memory MCP | Resolves allowed scopes from IAM context; commands append `memory.*` events | OpenCrane memory MCP; Postgres memory projection |
 
 ## Design rules for the main building blocks
 
 ### Computers
-- **One computer per assistant** (recommended; confirm as decision 6). Conversations are threads on that computer. A team assistant has its own computer with team scope only; group chats always use the team computer, never a personal one.
+- **One computer per assistant** (owner decision 6). Conversations are threads on that computer. Group members always work as sub-agents of the group assistant, each in their own thread or sub-agent on its computer with their own personal memory plus the group memory. A team that wants separate desks creates more assistants.
 - **Binding:**
   - Warm Pods are tenant-neutral until claimed.
   - At claim, OpenCrane binds a Pod to one assistant and issues a short-lived token.
@@ -66,11 +70,13 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
   - Idle computers are suspended to per-silo encrypted Pod Snapshots.
 - **No lasting secrets in a computer.** Codex, Playwright and KasmVNC run inside it. All network traffic goes through the gateway, and the package mirror is reached through it as well.
 - **Local forwarding proxy in every computer** (found in spike S0.1a):
-  - Codex talks only to `127.0.0.1`. The bridge sets the current turn token on the proxy at each turn, and the proxy adds the computer and turn tokens as HTTP headers before forwarding to the gateway.
+  - Codex talks only to `127.0.0.1`. The proxy adds the computer and turn tokens as HTTP headers before forwarding to the gateway.
+  - **Turn tokens are kept per thread, never one per computer.** Several conversations, and several requesters on a team assistant, run as threads in the same computer at once. The proxy looks the token up from the thread id that Codex sends on every call (session and thread headers on model calls, `_meta` on MCP calls). Sub-agents inherit their parent's turn. A token is dropped when its turn ends, and a call with no live turn is refused. (Round 2 showed one global token sending Alice's request upstream as Bob's.)
+  - **Only Codex may use the proxy.** An approved shell command could read the proxy address and get the tokens stamped on its own calls. So the proxy must authenticate its caller (for example a Unix socket that only the Codex user can open). S0.1b proves this under gVisor. Either way, gateway policy is the only enforcement point.
   - Codex holds **no real provider key**: a key given to Codex is readable by the agent's own shell commands and is written to its shell snapshots.
   - Codex's own approval prompts are not policy. Policy lives at the gateway; inside the computer, Codex runs its sandbox with on-request approval.
-  - The bridge processes Codex notifications strictly in arrival order.
-- **Delegated children** run as Codex sub-agents in the same computer. They get their own computer only when they need a different scope.
+  - The bridge logs and dispatches Codex notifications strictly in arrival order, but never waits for a handler to finish (a handler waiting for a human approval would otherwise block every thread).
+- **Delegated children** run as Codex sub-agents in the same computer. A task needing a different computer uses another assistant; a member's personal memory stays in their own thread on the group assistant's computer.
 
 ### Installing an MCP server
 1. **Register:** the admin enters a URL or picks an image.
@@ -89,21 +95,28 @@ Hosted MCP servers never run inside the gateway.
 - Bearer tokens (computer and turn) and arbitrary client headers are never forwarded upstream; only a small header allowlist passes.
 - Credential headers are overwritten on every route.
 - Approvals are bound to requester, conversation, turn, assistant and the argument digest.
-- Requests without an output-token bound are refused or capped before budget reservation.
+- Requests without an output-token bound are refused or capped before budget reservation. The bound must be a positive integer; the reservation covers prompt tokens, the output bound times `n`, and rounds cost **up**.
+- The approval's argument digest is taken over a canonical JSON form (RFC 8785 style) that keeps number text exactly and refuses `__proto__`, `constructor` and duplicate keys. Lookups by tool name use maps, never plain objects. (Round 2 spent an approval with extra hidden arguments and gave `constructor` the Ask default.)
+- Streamed model replies carry usage only in their last chunk. Settlement reads it from the stream (or agentgateway's native LLM fields), not from `json(response.body)`, which only works for replies that aren't streamed.
+- agentgateway 1.5 drops leading zeros in fractional-second log timestamps; log ingestion must parse them carefully.
 
 ### Per-user MCP credentials (e.g. per-user Odoo)
 - **Default:** one stateless MCP deployment. Per call, the decision service releases *this user's* lease for the selected profile, and the gateway injects it. The MCP server trusts only the injected credential and ignores identity in arguments.
 - **Fallback, for servers that only take startup credentials:** one instance per user, scaled to zero when idle. Never inside the user's computer.
-- **Team assistants** use either a company connection (a bot user owned by an admin) or the requester's own profile; this is decided per connection.
+- **Team assistants** use the **requester's own profile by default**: the gateway injects the credential of whoever sent that turn, so Odoo applies that person's own rights and its audit shows the real person. A company connection (a bot user owned by an admin) is an opt-in, chosen per connection, mainly for routines with no person behind them. (Owner decision, 2026-10-01.)
 - **Audit:** every credential release is recorded (user, profile, computer, tool, request).
 
-### Company brain
-- **Scoped datasets:** one Cognee dataset per permission scope (person, team, space or channel).
-- **Reads:** a read covers only the scopes that OpenFGA allows for the human ∩ agent.
-- **Dreaming** (memify) runs per scope, as that scope's principal, and never across scopes. Every derived fact keeps provenance to its sources.
-- **Promotion across scopes** (personal → team → company) is an explicit, approved grant change.
-- **Access path:** the brain is reached as an MCP server (`remember`, `recall`, `correct`, `forget`) through the gateway, so it follows the same decision path as any tool.
-- **Messy per-document sources** (mailboxes, CRM records) are queried live through MCP with the person's own credentials, not copied into the brain.
+### Memory
+- **MVP store** (owner, 2026-10-01): `memory.*` events in NATS JetStream are the truth. Postgres projects memory facts per scope and searches them with full-text search; pgvector only if needed later.
+- **Scopes:** person (preferences and personal facts), assistant notes (the assistant's own working notes), and group. Groups are flat; there are no organisation or department memory levels.
+- **Group turns:** members always work as sub-agents of the group assistant. Each member's turn is their own thread or sub-agent in its computer, sees their personal memory plus the group's memory, writes preferences to personal memory and shared knowledge to the group. Any group member may write group memory, with no approval step.
+- **Isolation:** turn tokens stay per thread; one member's personal memory never reaches another member's thread. Memory is never written to the shared computer's disk.
+- **Access path:** Codex → local forwarding proxy → agentgateway (`ext_authz` passes allowed scopes from IAM context) → OpenCrane memory MCP (`remember`, `recall`, `correct`, `forget`). Effective rights on a turn = assistant grants ∩ requester rights; the MCP enforces those scopes on every read and write.
+- **Turn start:** preferences and pinned facts from allowed scopes go into that thread's instructions with a size cap; fetch the rest with `recall`.
+- **Dreaming:** a nightly per-scope job in the handler runtime uses a cheap model through the gateway with a budget. It merges duplicates, flags contradictions and expires stale facts, writing `memory.corrected` events with links to sources; it never crosses scopes. Replay rebuilds the projection without model calls.
+- **External sources:** query mailboxes and CRM records live through MCP with the requester's own login by default.
+- **No sharing between groups in the MVP;** sharing data across groups is a later design topic.
+- **After the MVP:** Cognee may return as another projection, fed by replaying the same memory events plus document ingestion, without changing the agent's tools.
 
 ### Conversation stream and audit
 - **Two channels, two trust levels.**
@@ -134,7 +147,7 @@ Hosted MCP servers never run inside the gateway.
 
 **The event store is the only source of truth; PostgreSQL holds content that can be replayed from it.** Every state change is an event, and every piece of logic is a projection (event → content) or a reaction (event → action → new events). **Which event triggers which logic is defined in [docs/architecture/events.md](docs/architecture/events.md)**; CI keeps code and catalogue in step.
 
-- **Events are facts, named in the past tense:** `message.posted`, `approval.decided`, `effect.observed`, `member.removed`, `routine.due`, `memory.written`, `tool.list.changed`. Each has a typed schema in TypeScript and a CloudEvents-style envelope (id, type, source, time, subject, silo, principal, correlation ids: conversation, turn, permit, reservation, approval). The catalogue is documented with AsyncAPI.
+- **Events are facts, named in the past tense:** `message.posted`, `approval.decided`, `effect.observed`, `member.removed`, `routine.due`, `memory.written`, `mcp.tools_changed`. Each has a typed schema in TypeScript and a CloudEvents-style envelope (id, type, source, time, subject, silo, principal, correlation ids: conversation, turn, permit, reservation, approval). The catalogue is documented with AsyncAPI.
 - **Commands write one event, nothing else ("listen to yourself").** A command validates, then does **one atomic append** to the event log. State tables (conversations, budgets, approvals, memberships) are **projections** kept up to date by listeners. There are no multi-table business transactions and no "write state, then publish".
 - **The only synchronous atomic step is a conditional append,** where a rule needs one consistent answer: an expected stream version, or a unique key, on the budget stream (reserve), the approval (use once) and state-guarded commands (only a *pending* approval can be decided). One stream per rule serialises concurrent writers without locks across tables. Budgets use a **single-writer budget actor per silo**: one leader-elected process in the decision service handles reserve and settle requests **in order**, in memory, and appends each result. The expected stream version stays only as a fence, so a stale leader after failover can't write. There are no locks and, in normal operation, no conflicts. The budget stream holds every ceiling (global, paying group, optional assistant), so a single conditional append checks all of them and records the one charge; that is ample at silo scale. OpenFGA is a **projection** too: its tuples are rebuilt from membership and grant events, never edited directly.
 - **Consistency windows are explicit:** the UI may lag its own writes by milliseconds, and revocation takes effect within a documented bound (target under 2 seconds) as listeners update OpenFGA and the credential-release rules.
@@ -153,14 +166,15 @@ Hosted MCP servers never run inside the gateway.
 | `effect.observed` | Settle the budget reservation |
 | `member.removed` | Remove OpenFGA relations, stop credential release, suspend their computers |
 | `routine.due` | Post the routine's message to its assistant |
-| `memory.written` | Queue dreaming for that scope |
-| `tool.list.changed` | Quarantine the MCP server until re-reviewed |
+| `memory.written` | Mark that scope for nightly dreaming |
+| `mcp.tools_changed` | Quarantine the MCP server until re-reviewed |
 
 - **Rules:**
   - Ordering holds **within** a stream, never **across** streams (for example `member.removed` against a conversation's `message.posted`). Handlers therefore always recheck current state.
   - An **event never grants anything.** Each handler rechecks current permissions before acting.
   - Events are append-only. "Forget" purges payloads, or deletes the per-conversation key, and leaves a tombstone.
   - Handlers never call each other directly; they emit new events.
+  - **Only OpenCrane's command handlers may publish to `ev.>`.** NATS runs with TLS and accounts; computers, the gateway and the browser never get publish rights (S0.7 ran without auth, so Phase 1 adds and tests this).
 - **Later, without changing the core:** a JetStream consumer (or NATS-to-Kafka bridge) exports the event log for SIEM, analytics across silos or external integrations. JetStream stays the source of truth.
 
 ## Runtime and operations
@@ -195,11 +209,9 @@ Hosted MCP servers never run inside the gateway.
 | Store | Holds | Why |
 |---|---|---|
 | **Event store (NATS JetStream, decision 2)** | Every event, one subject per entity (see the [catalogue](docs/architecture/events.md)). The only source of truth; R3 replicated, unlimited retention, backed up | Apache-2.0; per-subject conditional appends; ordered consumers; doubles as a bus |
-| **PostgreSQL (CNPG), database `opencrane`** | **Content projections**, all replayable: members, teams, assistants and owners, computers, conversations, messages, activity, approvals, installed MCP servers and tool modes, connections (secret references only), grants, budgets, usage, routines, audit view, plus projection checkpoints | Queryable content; drop and rebuild by replay | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
+| **PostgreSQL (CNPG), database `opencrane`** | **Content projections**, all replayable: members, teams, assistants and owners, computers, conversations, messages, activity, approvals, installed MCP servers and tool modes, connections (secret references only), grants, budgets, usage, routines, audit view, memory facts per scope (full-text search), plus projection checkpoints | Queryable content; drop and rebuild by replay | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
 | same cluster, database `jobs` | pg-boss queues: ordered per-stream delivery to reactions, retries, dead-letter, cron (routines, monthly budget period, dreaming, housekeeping) | pg-boss runs on Postgres; no extra queue service |
 | same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
-| same cluster, database `cognee` (+ pgvector) | Cognee metadata and embeddings | Cognee supports pgvector and Postgres for relational data |
-| **Cognee graph store** | The knowledge graph | Cognee's default embedded graph (Ladybug) on a per-silo volume with snapshots. Its all-Postgres graph option is attractive but documented as a demo; qualify it in S0.4 before relying on it |
 | **Object storage (GCS)** | Uploads and generated files, Pod Snapshots, database backups | Not a database; per-silo buckets, encrypted |
 | **Secret store** (Kubernetes Secrets or GCP Secret Manager) | Company model keys, per-user credentials, the token-signing key | Secrets never go in Postgres |
 
@@ -226,6 +238,7 @@ Both are short-lived and signed by OpenCrane. The gateway verifies them and forw
 | Who | Requester, assistant, computer and delegation chain (from the tokens) |
 | Live status | Membership and role, team memberships, whether the assistant and computer are active (projections) |
 | Permission | OpenFGA: requester ∩ assistant may use this tool, model, scope or destination |
+| Allowed memory scopes | IAM context: assistant grants ∩ requester rights for person, assistant notes and group scopes; passed through the gateway to the memory MCP, bound to this thread's turn |
 | Tool rules | Allow / Ask / Block mode, and the approval state for these exact arguments |
 | Credential | The connection and profile bound to the requester (or the company connection) |
 | Money | Budget actor: reserve the worst case for the paying group |
@@ -252,17 +265,18 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | S0.8 (handler runtime) | the reactions part of Phase 1's event core; pg-boss is the default if it hasn't reported yet |
 | S0.3 (warm pool + snapshots) | Phase 2 |
 | S0.5 (live view / takeover) | Phase 3 |
-| S0.4 (brain isolation delta) | Phase 4 |
 
 | # | Spike | Pass condition | Decides |
 |---|---|---|---|
 | S0.1 | **Codex app-server in a GKE Agent Sandbox Pod** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
 | S0.2 | **agentgateway decision hook** | Every call reaches `ext_authz` with verified computer and turn token claims, and the decision uses live OpenFGA, membership and budget context (a revoked member is denied within 2 seconds; missing context → deny); speaks MCP 2026-07-28 end to end; rejects other versions and header/body tool mismatches; `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
 | S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
-| S0.4 | **Company brain isolation (delta only)** | Reuse OpenCrane 1's Cognee 1.5.4 contract suite (`apps/_infra/cognee/tests`: ACL on/off negative control, dataset-owned membership and search, graph chunks per document, deletion and restart recovery), which already proves these. Add only what it never covered: **memify/dreaming per scope** never writes into or reads from another dataset; deletion still removes data after consolidation; the **deployed configuration** (real model and embedding dimensions, not the stub); access selected by the brain MCP from `ext_authz` IAM context; latency with many datasets; the all-Postgres graph option vs Ladybug | Brain layout and graph backend |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
 | S0.7 | **Event store: NATS JetStream (fallback: Postgres event store)** | Conditional append per entity subject (expected last-subject sequence); ordered replay into a projection with the consumer sequence checkpointed in the same Postgres transaction; dispatcher into pg-boss; replay rebuilds a projection; R3 failover without lost or reordered events; many-subject scale (at least 1M entity subjects); backup and restore of the stream | Event store (decision 2) |
 | S0.8 | **Handler runtime: pg-boss vs Restate vs Hatchet vs Temporal** | Per-key ordered handlers (one writer per stream); retries and dead-letter; **logs and history per handler in a UI**; the budget actor as a keyed single writer; licence review; ops cost per silo | Handler runtime (decision 7) |
+
+**After the MVP:**
+- **S0.4 — optional Cognee projection:** reuse OpenCrane 1's isolation contract suite; qualify replay plus document ingestion, deletion after consolidation, deployed model and embedding settings, scope isolation through the memory MCP, latency and graph backend. This is not an MVP start gate.
 
 ## Phases and acceptance
 
@@ -271,8 +285,8 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | **1. Foundation** | Repository scaffold (npm workspaces, four apps: `web`, `server`, `computer`, `deploy`); CI with required checks; Helm umbrella from OpenCrane 1 charts; CNPG with backups; NATS JetStream `EVENTS` stream (R3); **event core**: typed catalogue, command → conditional append, projection runner with checkpoints, dispatcher → handler runtime, replay tool, per-handler logs and traces; Zitadel sign-in (copied auth library); OpenFGA as a projection; WebSocket realtime skeleton | Sign in and out on the test silo; `member.joined` flows through to members and OpenFGA projections; a projection is dropped and rebuilt by replay; backup and restore drill passes | 14–18 |
 | **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); the bridge; claim and bind from the warm pool; chat UI from OpenCrane 1 components; file upload into the workspace; models through agentgateway with a simple cap | A person chats with their assistant, it reads an uploaded PDF, and the answer survives a reload and a Pod replacement | 15–20 |
 | **3. Governed work** | Decision service: EUR price table, reserve-before-call, settlement from gateway logs; Allow/Ask/Block with the approval card; the MCP install flow; per-user connections and credential injection; the Odoo MCP (our `odoo-mcp-server`, remote mode); screenshots; live view; takeover; audit | One Odoo read and one approved Odoo write pass live, with every refusal case; the budget stops the next call at its limit; takeover is audited | 25–35 |
-| **4. Company product** | Groups, shared team assistants and child chats; members, tools, models, budgets, usage and audit screens; company brain as an MCP server (remember/recall/correct/forget, dreaming per scope, provenance); scheduled routines (`routine.due` → `message.posted` to the assistant); delegation (Codex sub-agents under one root budget) | Each user story passes on the test silo, with cross-user, cross-scope and cross-silo denial | 35–50 |
-| **5. Qualification and hardening** | Weekly fresh installs; backup/restore of Postgres, Cognee and snapshots together; security review of the gateway and live-view exposure; negative tests; operator docs | A release candidate passes the full journey list on a fresh install; no open Critical/High finding | 15–20 |
+| **4. Company product** | Flat groups, shared group assistants, child chats and member threads/sub-agents; members, tools, models, budgets, usage and audit screens; OpenCrane memory MCP on Postgres (remember/recall/correct/forget, full-text search, capped preferences and pinned facts at turn start, nightly per-scope dreaming); scheduled routines (`routine.due` → `message.posted` to the assistant); delegation (Codex sub-agents under one root budget) | MVP user stories pass on the test silo; any member writes group memory without approval; personal preferences stay in that member's thread, shared facts reach group members, no memory reaches disk or another group; correction, forgetting, replay and dreaming pass; cross-user, unauthorised-scope and cross-silo calls are denied | 30–45 |
+| **5. Qualification and hardening** | Weekly fresh installs; backup/restore of NATS JetStream, Postgres and snapshots together; memory projection rebuilt by replay; security review of the gateway and live-view exposure; negative tests; operator docs | A release candidate passes the full journey list on a fresh install; no open Critical/High finding | 15–20 |
 
 ## Estimate
 
@@ -285,13 +299,15 @@ These are planning estimates, not measurements. Re-estimate after Phase 2 from t
 
 | Milestone | Nights of agent work | Calendar (5 nights/week, with rework) |
 |---|---|---|
-| Phase 0: start-gate spikes S0.1, S0.2, S0.7 (others run alongside later phases) | 3 (+4 alongside) | **Week 1** |
+| Phase 0: start-gate spikes S0.1, S0.2, S0.7 (others run alongside later phases) | 3 (+3 alongside) | **Week 1** |
 | Phase 1: foundation (incl. event core) | 5–7 | Week 2–4 |
 | **Phase 2: working prototype** | 5–7 | **About week 4–5** |
 | Phase 3: governed work | 9–12 | Week 6–9 (first live governed action around week 7) |
-| Phase 4: company product | 12–17 | Week 9–14 |
-| Phase 5: qualification | 5–7 plus human-run live tests | Week 14–17 |
-| **MVP** | **About 42–58 nights** | **About 12–17 weeks** |
+| Phase 4: company product | 10–15 | Week 9–13 |
+| Phase 5: qualification | 5–7 plus human-run live tests | Week 13–16 |
+| **MVP** | **About 40–56 nights** | **About 12–16 weeks** |
+
+Phase 4 saves about 5 PRs (2 nights): reusing Postgres removes Cognee deployment and graph work, while scope isolation and live memory tests still take time.
 
 **What moves the date:**
 - **Human bandwidth, the main limit.** Morning review, decisions, and human-only steps: identity-provider changes, approvals that need a real re-login, visual approval.
@@ -305,11 +321,14 @@ Record the source commit in each copied file's header or README.
 | Area | Copy | Change on copy |
 |---|---|---|
 | Product | Contract, user stories, 27 September decisions (done), admin design targets (`docs/design/administration-lifecycle/`, `tests/design-targets/`) | None |
-| Infrastructure | Prerequisite scripts (ingress, cert-manager, CNPG pins, CNI check, GKE storage and snapshots, DNS), `configure-oidc.sh`, the `apps/postgres` chart, the Agent Sandbox hardening chart, the Cognee chart and patches, the ClamAV scanner, suspend/teardown/verify scripts | Postgres backups on; warm pools allowed; Agent Sandbox v1.x; add the Cognee key creator; add the logout redirect in OIDC config |
+| Infrastructure | Prerequisite scripts (ingress, cert-manager, CNPG pins, CNI check, GKE storage and snapshots, DNS), `configure-oidc.sh`, the `apps/postgres` chart, the Agent Sandbox hardening chart, the ClamAV scanner, suspend/teardown/verify scripts | Postgres backups on; warm pools allowed; Agent Sandbox v1.x; add the logout redirect in OIDC config |
 | Libraries | `libs/backend/observability`; `infra/auth` (OIDC + encrypted sessions); `infra/workload-identity`; `infra/agent-sandbox` (claim adapter); `infra/mcp-remote-client` (SSRF guard); the MCP credential secret store; `infra/http`; members and invitations; BYOK and model registration | Logout follows `endSessionUrl`; step-up checks `auth_time`; grants become OpenFGA relations |
 | Authorisation vocabulary | `libs/models/authorization` catalogue | Rewritten as the OpenFGA model |
 | Frontend | Theme, UI elements, conversation components, **approval card**, A2UI rendering, onboarding, members; Storybook | About 5 libraries in total; Linux-only screenshots for about 30 key states |
 | Process | A short AGENTS.md, the `review`, `review-verifier` and `deploy` agents, the dependency-boundary lint, the deploy-ledger practice | ESLint instead of custom style scripts |
+
+**After the MVP, if Cognee returns:**
+- the Cognee chart and patches, plus its key creator, after S0.4 qualification.
 
 **Do not copy:**
 - the KurrentDB turn protocol, activation queue, receipts and sagas;
@@ -322,7 +341,7 @@ Record the source commit in each copied file's header or README.
 
 ## Open decisions (owner)
 
-1. Brain store: Cognee (SurrealDB's BSL licence conflicts with the OSI-only rule, so it stays only as a reference design). Spike S0.4 still proves scope isolation.
+1. **Memory store: OpenCrane memory on Postgres for the MVP; Cognee deferred** (owner, 2026-10-01). `memory.*` events remain the truth; only person, assistant notes and flat group scopes, with no sharing between groups.
 2. **Event store: NATS JetStream (decided direction; confirm in S0.7).** KurrentDB is ruled out: its KLv1 licence is not acceptable for customer silos. JetStream is Apache-2.0 (CNCF) and provides:
    - one subject per entity stream (e.g. `ev.conversation.<id>`);
    - **conditional appends** with `Nats-Expected-Last-Subject-Sequence`;
@@ -335,14 +354,25 @@ Record the source commit in each copied file's header or README.
 3. Cross-silo warm pools: per-silo pools for the MVP. Shared neutral pools only after a separate security ADR.
 4. OpenFGA or SpiceDB. OpenFGA is the default for its Postgres backend; revisit if revocation latency fails a test.
 5. The test silo and domain for weekly fresh installs, and the €5 live-provider envelope with a provider-side hard limit.
-6. **Computer per assistant, not per conversation** (recommended). A person's assistant keeps one computer across its conversations, with the same logins, workspace and browser profile, like one laptop per colleague. A team assistant has one computer with team scope. Delegated children run as sub-agents in the same computer unless they need a different scope, in which case they get their own.
+6. **Computer per assistant, not per conversation** (decided by the owner, 2026-10-01). A person's assistant keeps one computer across its conversations, with the same logins, workspace and browser profile, like one laptop per colleague. A team assistant has one computer with team scope, which its members share like a shared desk; a team that wants separate desks creates more assistants, each with its own computer. Members run as their own threads/sub-agents in that computer, with personal memory isolated per thread alongside group memory. Delegated children share the computer; a task needing a separate computer uses another assistant.
 7. **Handler runtime: pg-boss (recommended), unless S0.8 favours Restate, Hatchet or Temporal.** Temporal (MIT) is the most complete: entity workflows as single writers per key, Updates for synchronous answers, native schedules and timers, and a per-run history UI. Its costs are a cluster per silo (or shared namespaces), determinism and versioning rules on workflow code, and keeping its workflow history from becoming a second source of truth; it would run processes, while facts stay in the event store. Restate's Virtual Objects give one writer per key, durable handlers and a UI per invocation; Hatchet (MIT, on Postgres) gives key-based concurrency queues with monitoring and logs per run. Either could replace pg-boss plus our own dispatcher and handler dashboards. Absurd is no longer needed. The computer design removes turn orchestration, so what remains is cron, retries, event fan-out and **ordered per-stream processing**. pg-boss does all of that natively on Postgres, the last through `key_strict_fifo` queues; Absurd adds durable multi-step workflows the design no longer needs.
+
+8. **Money is integer EUR cents everywhere** (owner, 2026-10-01): every amount in events, projections and APIs is an integer number of euro cents (`…Cents`), never a float in euros.
+9. **Tool-change events** (owner, 2026-10-01; names proposed). There are two kinds of tools, so two events:
+   - `mcp.tools_changed`: a registered MCP server's tool list or schemas changed. The server is quarantined until re-reviewed.
+   - `toolset.changed`: the computer's own tools changed, through a new computer image (CLI programs, runtimes, local stdio MCP such as Playwright) or Codex built-in tool settings (shell, `apply_patch`, `web_search`, `view_image`, `spawn_agent`). Admins review it, and computers pick it up at their next claim or resume.
+
+   CLI programs are governed by what the image contains and by the gateway, which sees every network call they make; hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
+10. **Sign-in is pinned to the silo's organisation in production** (owner, 2026-10-01): `OIDC_EXPECTED_ORG_ID` is required when `NODE_ENV=production`, so no other organisation on a shared Zitadel can sign in to a silo.
+11. **Dev-only build data packages** (owner, 2026-10-01): transitive build-time data packages under CC-BY or CC0 (caniuse-lite, spdx data, mdn-data, from the Angular toolchain) are accepted. They never ship in a silo's runtime images, which stay OSI-only.
 
 ## Risks
 
 - **Licences:** only OSI-approved open-source components run in customer silos. KurrentDB (KLv1) is ruled out. SurrealDB and Redpanda (BSL), EventSourcingDB (closed source) and Axon Server (commercial) fall under the same rule, and Restate's server licence must be checked in S0.8.
 - **Young components:** agentgateway had a high-severity MCP authorisation advisory in 2026, and Agent Substrate isn't ready. Pin versions, track advisories, and keep policy decisions in OpenCrane so the gateway can be swapped.
 - **Harness dependency:** keep the computer bridge thin, so Codex can be swapped for OpenCode or Goose.
-- **Dreaming and permission laundering:** consolidation runs per scope as a scoped principal, and memory never grants anything.
-- **Snapshots hold memory:** use per-silo encrypted storage and short-lived tokens only.
+- **Memory isolation:** enforce allowed scopes on every MCP call and test simultaneous member threads; no personal memory may leak through assistant notes, shared instructions or disk. Memory never grants anything.
+- **Dreaming:** budget the nightly job, keep it within one scope, record changes as `memory.corrected`, and test correction, forgetting and replay.
+- **Recall quality:** qualify Postgres full-text search on real tasks before adding vector search or a later projection.
+- **Snapshots hold sensitive state:** use per-silo encrypted storage and short-lived tokens only; keep memory off the shared computer's disk and prevent snapshots from exposing personal memory to another thread.
 - **Scope creep:** a phase starts only when the previous phase's live PASS is in the ledger.

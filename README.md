@@ -15,7 +15,7 @@ The company decides:
 
 Humans and assistants live in **one identity and permission system**. An assistant never sees more than the person it works for, and never more than its own grants. People can watch their assistant work, take over its screen, and hand control back.
 
-A shared **company brain** learns over time and consolidates what it knows ("dreaming"), without ever letting knowledge cross a permission boundary.
+A **memory that learns and consolidates** ("dreaming") is scoped to people, assistants and groups, without ever letting knowledge cross a permission boundary.
 
 ## What you can do with it (target)
 
@@ -67,9 +67,9 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  browser ┘           │ • decision service (ext_authz):           │   │ may do what  │  │
  │  (via ingress)       │   budgets, Allow/Ask/Block, credentials   │   └──────────────┘  │
  │                      │ • live-view / takeover proxy              │   ┌──────────────┐  │
- │                      │ • reactions + jobs (pg-boss): schedules,  │──▶│ Cognee brain │  │
- │                      │   wake-ups, settlement, dreaming          │   │ 1 dataset per│  │
- │                      └──────▲─────────────▲──────────────┬───────┘   │ scope        │  │
+ │                      │ • reactions + jobs (pg-boss): schedules,  │──▶│ Memory facts │  │
+ │                      │   wake-ups, settlement, dreaming          │   │ Postgres     │  │
+ │                      └──────▲─────────────▲──────────────┬───────┘   │ projection   │  │
  │                             │ext_authz    │live view     │claim      └──────────────┘  │
  │  acme-gateway               │             │              │                             │
  │  ┌──────────────────────────┴───────────┐ │              │                             │
@@ -80,7 +80,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  │ • injects credentials, logs          │─┼──────▶ acme-mcp (hosted MCP servers)       │
  │  └──────────▲───────────────────────────┘ │         ┌────────────────────────────────┐ │
  │             │ all traffic,                │         │ Odoo MCP (stateless, per-call  │ │
- │             │ short-lived token           │         │ credential) · brain MCP        │ │
+ │             │ short-lived token           │         │ credential) · memory MCP       │ │
  │  acme-computers (gVisor)                  │         │ (remember/recall) · adapters   │ │
  │  ┌──────────┴──────────────────────────┐  │         │ ingress from the gateway only  │ │
  │  │ 💻 Alice's assistant   💻 Sales team │  │         └────────────────────────────────┘ │
@@ -119,7 +119,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 | Egress, models, tools | agentgateway (one per silo) | Gateway config generated from admin settings |
 | Budgets, approvals, credentials | — | The decision service behind `ext_authz` |
 | Tool servers | MCP 2026-07-28 servers; our Odoo MCP; hosted adapters | Install flow, tool review, per-user connections |
-| Company brain and dreaming | Cognee | Scope mapping, provenance, promotion across scopes by approval |
+| Memory | OpenCrane memory MCP on Postgres; Cognee later | Per-scope facts, full-text recall, correction, forgetting and nightly dreaming |
 | Events (source of truth) | NATS JetStream (Apache-2.0) | The event catalogue, command handlers, projections, reactions |
 | Content and jobs | PostgreSQL (CNPG) projections, pg-boss (ordered per stream, cron) | Rebuildable content tables, no business rules in SQL |
 | Secrets | Kubernetes Secrets or GCP Secret Manager | Credential lifecycle: connect, refresh, revoke |
@@ -130,7 +130,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 
 ## Status
 
-**Planning.** This repository starts OpenCrane 2. It succeeds the original OpenCrane platform (local folder `opencrane-2`, commit `10abd0ef6`) and reuses its product contract, decisions, hardened infrastructure and proven components. See [plan.md](plan.md) for the spikes, phases, rules and estimate: **a prototype in about 4–5 weeks and the MVP in about 12–17 weeks** of nightly agentic cycles.
+**Planning.** This repository starts OpenCrane 2. It succeeds the original OpenCrane platform (local folder `opencrane-2`, commit `10abd0ef6`) and reuses its product contract, decisions, hardened infrastructure and proven components. See [plan.md](plan.md) for the spikes, phases, rules and estimate: **a prototype in about 4–5 weeks and the MVP in about 12–16 weeks** of nightly agentic cycles.
 
 Carried over so far:
 - [Product contract](docs/product/product-contract.md)
@@ -140,4 +140,4 @@ Carried over so far:
 
 ## Licence
 
-OpenCrane 2 is free software under the **GNU Affero General Public License v3.0 or later**, the same licence as OpenCrane. See [LICENSE](LICENSE). Only OSI-approved open-source components run inside customer silos. Third-party components keep their own licences: Codex, agentgateway and NATS are Apache-2.0; check Cognee, KasmVNC (GPL-2.0) and every new component before bundling.
+OpenCrane 2 is free software under the **GNU Affero General Public License v3.0 or later**, the same licence as OpenCrane. See [LICENSE](LICENSE). Only OSI-approved open-source components run inside customer silos. Third-party components keep their own licences: Codex, agentgateway and NATS are Apache-2.0; check KasmVNC (GPL-2.0) and every new component before bundling.
