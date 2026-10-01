@@ -1,0 +1,61 @@
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+ × tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed 438ms
+   → the poison event must still be retrying when the good keys finish: expected { eventId: 'poison-key#0', …(2) } to be null
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 skipped (2)
+   Start at  10:04:53
+   Duration  3.28s (transform 41ms, setup 0ms, collect 413ms, tests 2.76s, environment 0ms, prepare 26ms)
+
+2026-10-01T08:04:55.236Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3ZS1iNDVlLTc3YTUtOWE4OC0yYWY1OThmZjU2MjgSCnBvaXNvbi1rZXkaJGIxNWNiYzA3LTlmYzMtNDkwNC1iMzMwLTczZjMwYzg1YzQ1ZiAGKAEyATFCCmFwcGx5RXZlbnRKCAgBEIyBQBgB',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-key',
+  workflowRunId: 'b15cbc07-9fc3-4904-b330-73f30c85c45f',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-key seq=0 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+AssertionError: the poison event must still be retrying when the good keys finish: expected { eventId: 'poison-key#0', …(2) } to be null
+
+- Expected: 
+null
+
++ Received: 
+Object {
+  "eventId": "poison-key#0",
+  "message": "deliberate failure: key=poison-key seq=0 attempt=1",
+  "seq": 0,
+}
+
+ ❯ tests/temporal/02-retry-poison.test.ts:60:113
+     58|     }, 30_000, 100);
+     59|     const poisonWhileGoodDone = await state(POISON);
+     60|     expect(poisonWhileGoodDone.deadLetter, 'the poison event must stil…
+       |                                                                                                                 ^
+     61| 
+     62|     // 2. The poison event uses all four attempts, then is dead-letter…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

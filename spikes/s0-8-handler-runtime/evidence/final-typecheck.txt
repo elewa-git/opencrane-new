@@ -1,0 +1,4 @@
+
+> s0-8-handler-runtime@0.0.1 typecheck
+> tsc --noEmit
+

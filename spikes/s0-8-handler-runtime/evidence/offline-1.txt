@@ -1,0 +1,22 @@
+
+> s0-8-handler-runtime@0.0.1 test:offline
+> vitest run tests/scenario-checkers.test.ts tests/process-stop.test.ts --pool=forks --reporter=verbose
+
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > accepts a clean run and sees cross-key parallelism
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports two handlers of one key running at the same time
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports events of one key running out of order
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a lost event and a duplicated event
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > rejects missing or reversed timestamps instead of silently accepting them
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a missing key
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > measures concurrency, treating back-to-back runs as not overlapping
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > gives the same handler delay for the same event every time, within 2 to 12 ms
+ ✓ tests/process-stop.test.ts > owned process cleanup > waits for exit even when the child ignores SIGTERM
+
+ Test Files  2 passed (2)
+      Tests  9 passed (9)
+   Start at  09:51:29
+   Duration  340ms (transform 29ms, setup 0ms, collect 62ms, tests 81ms, environment 0ms, prepare 66ms)
+

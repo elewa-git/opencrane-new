@@ -1,0 +1,37 @@
+{
+  "name": "s0-8-handler-runtime",
+  "private": true,
+  "type": "module",
+  "version": "0.0.1",
+  "description": "Spike S0.8: handler runtime comparison (pg-boss vs Temporal vs Hatchet vs Restate)",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "fetch-tools": "bash scripts/fetch-tools.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --pool=forks --reporter=verbose",
+    "test:pgboss": "vitest run tests/scenario-checkers.test.ts tests/pgboss tests/baseline --pool=forks --reporter=verbose",
+    "test:temporal": "vitest run tests/scenario-checkers.test.ts tests/temporal --pool=forks --reporter=verbose",
+    "test:offline": "vitest run tests/scenario-checkers.test.ts tests/process-stop.test.ts --pool=forks --reporter=verbose",
+    "test:temporal:dev": "S08_TEMPORAL_BACKEND=dev vitest run tests/temporal/01-ordering-parallelism.test.ts tests/temporal/02-retry-poison.test.ts tests/temporal/04-visibility.test.ts tests/temporal/04b-web-ui.test.ts tests/temporal/07-entity-lifecycle.test.ts --pool=forks --reporter=verbose",
+    "trim-tools": "node scripts/trim-tools.mjs",
+    "audit:licences": "node scripts/audit-licences.mjs",
+    "test:temporal:memory": "S08_TEMPORAL_BACKEND=dev vitest run tests/temporal/05-budget-actor.test.ts -t 'memory only' --pool=forks --reporter=verbose"
+  },
+  "devDependencies": {
+    "@pg-boss/dashboard": "1.10.0",
+    "@temporalio/activity": "1.24.0",
+    "@temporalio/client": "1.24.0",
+    "@temporalio/common": "1.24.0",
+    "@temporalio/worker": "1.24.0",
+    "@temporalio/workflow": "1.24.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.10",
+    "embedded-postgres": "18.4.0-beta.17",
+    "pg": "^8.13.1",
+    "pg-boss": "12.35.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

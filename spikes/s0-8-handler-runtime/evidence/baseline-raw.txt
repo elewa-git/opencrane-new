@@ -1,0 +1,315 @@
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > OBSERVATION, durable (local activity): what happens to the durable log when concurrent Updates are rejected
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > NEGATIVE CONTROL: without the workflow lock the same actor overspends
+ ↓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > polling configuration: 1,000 sequential and 100 concurrent reserves, then concurrent settles, with no overspend
+ ↓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NOTIFY configuration: same measurements; fast when sequential, slow when many wait on one key
+ ↓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NEGATIVE CONTROL: the same handler with no per-key ordering overspends
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash BEFORE the effect: the job is redelivered and the effect lands once
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > transactional worker: a crash rolls back the effect with the job, so it lands once with no extra guard
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > heartbeat: a long-running handler on a queue with heartbeats is recovered about 10 s after the crash
+ ↓ tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event
+ ↓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+ ↓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > redrive is the wrong operator tool for a strict FIFO queue: the copy goes to the back and the key stays held
+ ↓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash BEFORE the effect: the activity is redelivered and the effect lands once
+ ↓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one
+ ↓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice
+ ↓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a repeated delivery of the whole stream is enqueued once and still runs in order
+ ↓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > the de-duplication only lasts as long as the completed job is kept
+ ↓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a backlog on ONE key drains far faster with staggered workers than with workers started together
+ × tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process 1370ms
+   → Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:20.441 CEST [32560] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:20.441 CEST [32560] DETAIL:  Failed system call was shmget(key=144818777, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-ops-all-3s2P5k"
+
+ × tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes 1252ms
+   → Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:21.689 CEST [32656] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:21.689 CEST [32656] DETAIL:  Failed system call was shmget(key=144818843, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-ops-split-Gx8Ayh"
+
+stdout | tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison
+[ops-footprint] dev server (not a production topology): 1 process, 0 MiB RSS idle, SQLite file, Web UI included
+
+ × tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison 3620ms
+   → expected 0 to be greater than 0
+ ↓ tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+ ↓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > repeated deliveries of the whole stream (during and after processing) are handled once and still run in order
+ ↓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > continues as new every 50 events under a steady stream of signals: no event lost, repeated or reordered
+ ↓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+ ↓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > the operator can also skip the held event on purpose; the skip is recorded and the successors run
+ ↓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > answers 1,000 sequential and 100 concurrent reserves with no overspend, and only one process can lead
+ ↓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > NEGATIVE CONTROL: without the in-process queue the same handler overspends
+ ↓ tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint > measures the processes, memory, disk and idle load of 10 handler queues with 2 workers each
+ ↓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys
+ ↓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: the same load on a queue without per-key ordering breaks the rules
+2026-10-01T07:47:38.692Z [ERROR] asset workflow-bundle-31c51e56eaf3790e80a8.js 1.45 MiB [emitted] [immutable] (name: main)
+modules by path ./node_modules/@temporalio/ 361 KiB
+  modules by path ./node_modules/@temporalio/common/lib/ 165 KiB 36 modules
+  modules by path ./node_modules/@temporalio/workflow/ 196 KiB 23 modules
+modules by path ./node_modules/nexus-rpc/lib/ 22.3 KiB 13 modules
+modules by path ./src/temporal-workflows/ 596 bytes
+  ./src/temporal-workflows/workflows-autogenerated-entrypoint.cjs 557 bytes [built] [code generated]
+  ./src/temporal-workflows/workflows.ts 39 bytes [not cacheable: ./node_modules/swc-loader/src/index.js] [built] [code generated] [1 error]
+optional modules 30 bytes [optional]
+  __temporal_custom_payload_converter (ignored) 15 bytes [optional] [built] [code generated]
+  __temporal_custom_failure_converter (ignored) 15 bytes [optional] [built] [code generated]
+./node_modules/long/umd/index.js 49.8 KiB [built] [code generated]
+./node_modules/ms/dist/index.cjs 3.41 KiB [built] [code generated]
+
+ERROR in ./src/temporal-workflows/workflows.ts
+Module build failed (from ./node_modules/swc-loader/src/index.js):
+Error: Failed to load native binding
+    at Object.<anonymous> (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@swc/core/binding.js:345:11)
+    at Module._compile (node:internal/modules/cjs/loader:1730:14)
+    at Object..js (node:internal/modules/cjs/loader:1895:10)
+    at Module.load (node:internal/modules/cjs/loader:1465:32)
+    at Function._load (node:internal/modules/cjs/loader:1282:12)
+    at TracingChannel.traceSync (node:diagnostics_channel:322:14)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:235:24)
+    at Module.require (node:internal/modules/cjs/loader:1487:12)
+    at require (node:internal/modules/helpers:135:16)
+    at Object.<anonymous> (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@swc/core/index.js:66:17)
+ @ ./src/temporal-workflows/workflows-autogenerated-entrypoint.cjs 13:9-161
+
+webpack 5.111.1 compiled with 1 error in 439 ms { sdkComponent: 'worker', taskQueue: 'ui-tq' }
+ ↓ tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server) > serves the Web UI and shows the pending activity, its attempt and its last error
+ ↓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys
+ ↓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: one workflow per event (no single owner per key) breaks the rules
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > accepts a clean run and sees cross-key parallelism
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports two handlers of one key running at the same time
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports events of one key running out of order
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a lost event and a duplicated event
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a missing key
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > measures concurrency, treating back-to-back runs as not overlapping
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > gives the same handler delay for the same event every time, within 2 to 12 ms
+ ↓ tests/temporal/00-smoke.test.ts > smoke: production-shaped Temporal Server on PostgreSQL, a worker and a client > starts a keyed workflow with a signal and reads its state back
+ × tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it 1478ms
+   → Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:45.970 CEST [36993] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:45.970 CEST [36993] DETAIL:  Failed system call was shmget(key=144820374, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-smoke-yxzlYJ"
+
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 16 ⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime)
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:33.494 CEST [34502] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:33.494 CEST [34502] DETAIL:  Failed system call was shmget(key=144819490, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-budget-inproc-yqVnCd"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/20]⎯
+
+ FAIL  tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:36.969 CEST [35420] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:36.969 CEST [35420] DETAIL:  Failed system call was shmget(key=144819652, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-order-2NNCYo"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/20]⎯
+
+ FAIL  tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:15.711 CEST [32158] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:15.711 CEST [32158] DETAIL:  Failed system call was shmget(key=144818509, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-retry-bZzVF5"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/20]⎯
+
+ FAIL  tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:12.632 CEST [31913] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:12.632 CEST [31913] DETAIL:  Failed system call was shmget(key=144818356, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-crash-gUxoQO"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/20]⎯
+
+ FAIL  tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:14.217 CEST [32047] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:14.217 CEST [32047] DETAIL:  Failed system call was shmget(key=144818447, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-visibility-7vqJXs"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/20]⎯
+
+ FAIL  tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:10.979 CEST [31497] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:10.979 CEST [31497] DETAIL:  Failed system call was shmget(key=144817942, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-budget-Roeuz8"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/20]⎯
+
+ FAIL  tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:35.164 CEST [35131] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:35.164 CEST [35131] DETAIL:  Failed system call was shmget(key=144819571, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-ops-nlkdf1"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/20]⎯
+
+ FAIL  tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:18.856 CEST [32388] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:18.856 CEST [32388] DETAIL:  Failed system call was shmget(key=144818651, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-dispatcher-w1Auo9"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/20]⎯
+
+ FAIL  tests/temporal/00-smoke.test.ts > smoke: production-shaped Temporal Server on PostgreSQL, a worker and a client
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:44.299 CEST [36875] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:44.299 CEST [36875] DETAIL:  Failed system call was shmget(key=144820296, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-smoke-oDY4jg"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/20]⎯
+
+ FAIL  tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:42.013 CEST [36330] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:42.013 CEST [36330] DETAIL:  Failed system call was shmget(key=144820062, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-ordering-YYKHaW"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/20]⎯
+
+ FAIL  tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:31.759 CEST [34067] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:31.759 CEST [34067] DETAIL:  Failed system call was shmget(key=144819402, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-retry-poison-KLc3yc"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/20]⎯
+
+ FAIL  tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:17.324 CEST [32266] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:17.324 CEST [32266] DETAIL:  Failed system call was shmget(key=144818593, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-effects-yGOFZf"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/20]⎯
+
+ FAIL  tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:28.132 CEST [33619] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:28.132 CEST [33619] DETAIL:  Failed system call was shmget(key=144819227, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-visibility-OeMIay"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/20]⎯
+
+ FAIL  tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server)
+Error: Webpack finished with errors, if you're unsure what went wrong, visit our troubleshooting page at https://docs.temporal.io/develop/typescript/debugging#webpack-errors
+ ❯ node_modules/@temporalio/worker/src/workflow/bundler.ts:327:17
+ ❯ finalCallback node_modules/webpack/lib/Compiler.js:601:32
+ ❯ node_modules/webpack/lib/Compiler.js:681:17
+ ❯ node_modules/webpack/lib/errors/HookWebpackError.js:98:2
+ ❯ Hook.eval [as callAsync] node_modules/tapable/lib/HookCodeFactory.js:31:10
+ ❯ Hook.CALL_ASYNC_DELEGATE [as _callAsync] node_modules/tapable/lib/Hook.js:21:14
+ ❯ Cache.storeBuildDependencies node_modules/webpack/lib/Cache.js:150:37
+ ❯ node_modules/webpack/lib/Compiler.js:676:19
+ ❯ Hook.eval [as callAsync] node_modules/tapable/lib/HookCodeFactory.js:31:10
+ ❯ Hook.CALL_ASYNC_DELEGATE [as _callAsync] node_modules/tapable/lib/Hook.js:21:14
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/20]⎯
+
+ FAIL  tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:09.293 CEST [31419] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:09.293 CEST [31419] DETAIL:  Failed system call was shmget(key=144817858, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-budget-zRt3bJ"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/20]⎯
+
+ FAIL  tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:30.003 CEST [33736] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:30.003 CEST [33736] DETAIL:  Failed system call was shmget(key=144819331, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-lifecycle-XY73Ni"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[16/20]⎯
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 4 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:45.970 CEST [36993] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:45.970 CEST [36993] DETAIL:  Failed system call was shmget(key=144820374, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-smoke-yxzlYJ"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[17/20]⎯
+
+ FAIL  tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:20.441 CEST [32560] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:20.441 CEST [32560] DETAIL:  Failed system call was shmget(key=144818777, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-ops-all-3s2P5k"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[18/20]⎯
+
+ FAIL  tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 09:47:21.689 CEST [32656] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 09:47:21.689 CEST [32656] DETAIL:  Failed system call was shmget(key=144818843, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/var/folders/z1/y7szcwh950q9tvxf0q3c06zw0000gn/T/s08-pg-temporal-ops-split-Gx8Ayh"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[19/20]⎯
+
+ FAIL  tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison
+AssertionError: expected 0 to be greater than 0
+ ❯ tests/temporal/06-ops-footprint.test.ts:124:17
+    122|     const rss = MiB(rssKb(dev.child.pid as number));
+    123|     console.log(`[ops-footprint] dev server (not a production topology…
+    124|     expect(rss).toBeGreaterThan(0);
+       |                 ^
+    125|   }, 90_000);
+    126| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[20/20]⎯
+
+ Test Files  18 failed | 1 passed (19)
+      Tests  4 failed | 7 passed | 35 skipped (46)
+   Start at  09:47:07
+   Duration  38.53s (transform 175ms, setup 0ms, collect 2.81s, tests 33.16s, environment 2ms, prepare 718ms)
+

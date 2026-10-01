@@ -1,0 +1,107 @@
+run baseline started 2026-10-01T07:47:05Z
+machine load at start: 4.95 7.72 8.86
+leftover processes before the run: 0; leftover temp directories: 3
+node v22.15.0
+typecheck: OK
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > OBSERVATION, durable (local activity): what happens to the durable log when concurrent Updates are rejected
+ ↓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > NEGATIVE CONTROL: without the workflow lock the same actor overspends
+ ↓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > polling configuration: 1,000 sequential and 100 concurrent reserves, then concurrent settles, with no overspend
+ ↓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NOTIFY configuration: same measurements; fast when sequential, slow when many wait on one key
+ ↓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NEGATIVE CONTROL: the same handler with no per-key ordering overspends
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash BEFORE the effect: the job is redelivered and the effect lands once
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > transactional worker: a crash rolls back the effect with the job, so it lands once with no extra guard
+ ↓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > heartbeat: a long-running handler on a queue with heartbeats is recovered about 10 s after the crash
+ ↓ tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event
+ ↓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+ ↓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > redrive is the wrong operator tool for a strict FIFO queue: the copy goes to the back and the key stays held
+ ↓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash BEFORE the effect: the activity is redelivered and the effect lands once
+ ↓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one
+ ↓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice
+ ↓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a repeated delivery of the whole stream is enqueued once and still runs in order
+ ↓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > the de-duplication only lasts as long as the completed job is kept
+ ↓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a backlog on ONE key drains far faster with staggered workers than with workers started together
+ × tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process 1370ms
+ × tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes 1252ms
+[ops-footprint] dev server (not a production topology): 1 process, 0 MiB RSS idle, SQLite file, Web UI included
+ × tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison 3620ms
+ ↓ tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+ ↓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > repeated deliveries of the whole stream (during and after processing) are handled once and still run in order
+ ↓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > continues as new every 50 events under a steady stream of signals: no event lost, repeated or reordered
+ ↓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+ ↓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > the operator can also skip the held event on purpose; the skip is recorded and the successors run
+ ↓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > answers 1,000 sequential and 100 concurrent reserves with no overspend, and only one process can lead
+ ↓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > NEGATIVE CONTROL: without the in-process queue the same handler overspends
+ ↓ tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint > measures the processes, memory, disk and idle load of 10 handler queues with 2 workers each
+ ↓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys
+ ↓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: the same load on a queue without per-key ordering breaks the rules
+ ↓ tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server) > serves the Web UI and shows the pending activity, its attempt and its last error
+ ↓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys
+ ↓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: one workflow per event (no single owner per key) breaks the rules
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > accepts a clean run and sees cross-key parallelism
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports two handlers of one key running at the same time
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports events of one key running out of order
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a lost event and a duplicated event
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a missing key
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > measures concurrency, treating back-to-back runs as not overlapping
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > gives the same handler delay for the same event every time, within 2 to 12 ms
+ ↓ tests/temporal/00-smoke.test.ts > smoke: production-shaped Temporal Server on PostgreSQL, a worker and a client > starts a keyed workflow with a signal and reads its state back
+ × tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it 1478ms
+ FAIL  tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime)
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/00-smoke.test.ts > smoke: production-shaped Temporal Server on PostgreSQL, a worker and a client
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server)
+ ❯ node_modules/@temporalio/worker/src/workflow/bundler.ts:327:17
+ ❯ finalCallback node_modules/webpack/lib/Compiler.js:601:32
+ ❯ node_modules/webpack/lib/Compiler.js:681:17
+ ❯ node_modules/webpack/lib/errors/HookWebpackError.js:98:2
+ ❯ Hook.eval [as callAsync] node_modules/tapable/lib/HookCodeFactory.js:31:10
+ ❯ Hook.CALL_ASYNC_DELEGATE [as _callAsync] node_modules/tapable/lib/Hook.js:21:14
+ ❯ Cache.storeBuildDependencies node_modules/webpack/lib/Cache.js:150:37
+ ❯ node_modules/webpack/lib/Compiler.js:676:19
+ ❯ Hook.eval [as callAsync] node_modules/tapable/lib/HookCodeFactory.js:31:10
+ ❯ Hook.CALL_ASYNC_DELEGATE [as _callAsync] node_modules/tapable/lib/Hook.js:21:14
+ FAIL  tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+ FAIL  tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison
+AssertionError: expected 0 to be greater than 0
+ ❯ tests/temporal/06-ops-footprint.test.ts:124:17
+ Test Files  18 failed | 1 passed (19)
+      Tests  4 failed | 7 passed | 35 skipped (46)
+vitest exit code: 1; wall time 39 s
+leftover processes after the run: 0; leftover temp directories: 21
+machine load at end: 9.00 8.45 9.08

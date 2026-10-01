@@ -1,0 +1,192 @@
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+stdout | tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+[visibility] pending activity while retrying: {"attempt":2,"lastFailure":"deliberate failure: key=visibility-key seq=1 attempt=1","activityType":"applyEvent"}
+
+stdout | tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+[visibility] application attempt log (volatile): []
+
+ × tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs 10177ms
+   → expected [] to deeply equal [ '1:failed', '2:failed', '3:ok' ]
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:05:37
+   Duration  12.65s (transform 37ms, setup 0ms, collect 322ms, tests 12.23s, environment 0ms, prepare 24ms)
+
+2026-10-01T08:05:38.996Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3Zi02MDYzLTc1YjEtYjg3Mi0yNWZkOTVlOGQ5YjgSDnZpc2liaWxpdHkta2V5GiQ5OTkwZWM4Mi1kYTlkLTQwMTQtODVmZS1jYWExMDk1ZTA2ZWEgESgBMgEyQgphcHBseUV2ZW50SggIARCqgEAYAQ==',
+  activityId: '2',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '9990ec82-da9d-4014-85fe-caa1095e06ea',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=1 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:05:40.010Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 2,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3Zi02MDYzLTc1YjEtYjg3Mi0yNWZkOTVlOGQ5YjgSDnZpc2liaWxpdHkta2V5GiQ5OTkwZWM4Mi1kYTlkLTQwMTQtODVmZS1jYWExMDk1ZTA2ZWEgESgCMgEyQgphcHBseUV2ZW50SggIARCxgEAYAQ==',
+  activityId: '2',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '9990ec82-da9d-4014-85fe-caa1095e06ea',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=1 attempt=2
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:05:42.039Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3Zi02MDYzLTc1YjEtYjg3Mi0yNWZkOTVlOGQ5YjgSDnZpc2liaWxpdHkta2V5GiQ5OTkwZWM4Mi1kYTlkLTQwMTQtODVmZS1jYWExMDk1ZTA2ZWEgFygBMgEzQgphcHBseUV2ZW50SggIARDDgEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '9990ec82-da9d-4014-85fe-caa1095e06ea',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:05:43.050Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 2,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3Zi02MDYzLTc1YjEtYjg3Mi0yNWZkOTVlOGQ5YjgSDnZpc2liaWxpdHkta2V5GiQ5OTkwZWM4Mi1kYTlkLTQwMTQtODVmZS1jYWExMDk1ZTA2ZWEgFygCMgEzQgphcHBseUV2ZW50SggIARDKgEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '9990ec82-da9d-4014-85fe-caa1095e06ea',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=2
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:05:45.060Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 3,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3Zi02MDYzLTc1YjEtYjg3Mi0yNWZkOTVlOGQ5YjgSDnZpc2liaWxpdHkta2V5GiQ5OTkwZWM4Mi1kYTlkLTQwMTQtODVmZS1jYWExMDk1ZTA2ZWEgFygDMgEzQgphcHBseUV2ZW50SggIARDPgEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '9990ec82-da9d-4014-85fe-caa1095e06ea',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=3
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:05:49.070Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 4,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY3Zi02MDYzLTc1YjEtYjg3Mi0yNWZkOTVlOGQ5YjgSDnZpc2liaWxpdHkta2V5GiQ5OTkwZWM4Mi1kYTlkLTQwMTQtODVmZS1jYWExMDk1ZTA2ZWEgFygEMgEzQgphcHBseUV2ZW50SggIARDUgEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '9990ec82-da9d-4014-85fe-caa1095e06ea',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=4
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+AssertionError: expected [] to deeply equal [ '1:failed', '2:failed', '3:ok' ]
+
+- Expected
++ Received
+
+- Array [
+-   "1:failed",
+-   "2:failed",
+-   "3:ok",
+- ]
++ Array []
+
+ ❯ tests/temporal/04-visibility.test.ts:69:76
+     67|     const flaky = attemptLog.filter((a) => a.seq === 1);
+     68|     console.log(`[visibility] application attempt log (volatile): ${JS…
+     69|     expect(flaky.map((a) => `${a.attempt}:${a.failed ? 'failed' : 'ok'…
+       |                                                                            ^
+     70| 
+     71|     // ---- 3. Event history: what survives a retry ------------------…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

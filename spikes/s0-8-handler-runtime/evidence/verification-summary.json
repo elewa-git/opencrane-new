@@ -1,0 +1,138 @@
+{
+  "overall": "PARTIAL",
+  "pgBoss": "PARTIAL: one inherited full run; current PostgreSQL setup blocked",
+  "temporal": "PASS: dev ordering/retry primitive only; other full conditions PARTIAL",
+  "hatchet": "NOT_RUN",
+  "restate": "EXCLUDED: BSL-1.1",
+  "series": {
+    "final": [
+      {
+        "path": "evidence/verified-final-1.txt",
+        "assertionsOrTests": 8,
+        "measurements": [
+          "[retry] gaps between attempts (s): 1.02, 2.01, 4.00",
+          "[ordering] events=10000 keys=100 dispatch=48.4s total=82.9s throughput=121 events/s max concurrent handlers=7 (worker allows 100)"
+        ]
+      },
+      {
+        "path": "evidence/verified-final-2.txt",
+        "assertionsOrTests": 8,
+        "measurements": [
+          "[retry] gaps between attempts (s): 1.02, 2.02, 4.01",
+          "[ordering] events=10000 keys=100 dispatch=32.4s total=79.7s throughput=125 events/s max concurrent handlers=7 (worker allows 100)"
+        ]
+      },
+      {
+        "path": "evidence/verified-final-3.txt",
+        "assertionsOrTests": 8,
+        "measurements": [
+          "[retry] gaps between attempts (s): 1.05, 2.01, 4.00",
+          "[ordering] events=10000 keys=100 dispatch=18.5s total=46.4s throughput=216 events/s max concurrent handlers=7 (worker allows 100)"
+        ]
+      }
+    ],
+    "memory": [
+      {
+        "path": "evidence/verified-memory-1.txt",
+        "assertionsOrTests": 1,
+        "measurements": [
+          "[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)",
+          "[budget-actor:memory] 1000 sequential: p50=3.4ms p99=24.1ms | 100 concurrent on one key: wall=2572ms p50=664ms p99=2418ms accepted=50/100"
+        ]
+      },
+      {
+        "path": "evidence/verified-memory-2.txt",
+        "assertionsOrTests": 1,
+        "measurements": [
+          "[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)",
+          "[budget-actor:memory] 1000 sequential: p50=3.3ms p99=6.0ms | 100 concurrent on one key: wall=2342ms p50=423ms p99=2305ms accepted=50/100"
+        ]
+      },
+      {
+        "path": "evidence/verified-memory-3.txt",
+        "assertionsOrTests": 1,
+        "measurements": [
+          "[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)",
+          "[budget-actor:memory] 1000 sequential: p50=3.3ms p99=6.0ms | 100 concurrent on one key: wall=2531ms p50=495ms p99=2287ms accepted=50/100"
+        ]
+      }
+    ],
+    "offline": [
+      {
+        "path": "evidence/verified-offline-1.txt",
+        "assertionsOrTests": 10,
+        "measurements": []
+      },
+      {
+        "path": "evidence/verified-offline-2.txt",
+        "assertionsOrTests": 10,
+        "measurements": []
+      },
+      {
+        "path": "evidence/verified-offline-3.txt",
+        "assertionsOrTests": 10,
+        "measurements": []
+      }
+    ]
+  },
+  "mutationFindings": [
+    "integer-money: detected by expected failing assertion; source restored; state empty",
+    "ordering: detected by expected failing assertion; source restored; state empty",
+    "retries: detected by expected failing assertion; source restored; state empty",
+    "retry-backoff: detected by expected failing assertion; source restored; state empty",
+    "poison-hold: detected by expected failing assertion; source restored; state empty",
+    "attempt-logs: detected by expected failing assertion; source restored; state empty",
+    "budget-limit: detected by expected failing assertion; source restored; state empty"
+  ],
+  "finalSourceSha256": {
+    "src/budget-store.ts": "6e9c32fd4e98d9697a6d2a009313669f6afb6f9f0868a6f0f378c7f788ae9c75",
+    "src/crash-worker.ts": "69a33be5c5df8366fb71a1d236010e451ffe8d33f7b6c52b73b2d8ad01283601",
+    "src/money.ts": "1efa34f67558d6ec3b850307c2b9f661e6405ba24704b31f29a8beea6deaa3c7",
+    "src/pg.ts": "190c5dec9c0ae44d46c1ae9a32cc642577f6411776cc875ac94bf3562376450b",
+    "src/pgboss-app.ts": "7a2e600a8fdd34440e547865f0be99781f7dbd2a0f3b218d94d6c7ad3f8700d4",
+    "src/pgboss-query.ts": "2a6f387cc0c937d21e4d315addd81db62a72a5c45f360f7578651326e2e8e0a9",
+    "src/pgboss-util.ts": "8ea301cabe79de065276b56708397fe2dcb36e37bf5f79a2f29ff89051cc53bd",
+    "src/proc.ts": "fea69c1b14ef6ebddd744514b9b2024fcce114c7718cc0073c9c910e90b23401",
+    "src/process-stop.ts": "1364af604fd74715f21b52bb05f252362026b81ffd69750af193ec6d1d115fe5",
+    "src/scenario.ts": "5be3ed1e89055236046d6f040a03470f37032bc4d90ac2e875ab40d6280529cb",
+    "src/state-dir.ts": "f853c07875a9af59f81497c4efa09d877829d206e331a9985d9fe40289f4900f",
+    "src/temporal-server.ts": "8493c892f7e6734c450c8e65faf20d7f0c0fa15f53cf099a84ad188fd702b7ee",
+    "src/temporal-test-harness.ts": "5dd22a5d777d7590cd0352459c77d9147cf46bedc8a388dcc6b78a713417e14b",
+    "src/temporal-worker-process.ts": "57ab9842e647318cf268fb691a67c41625b6e40441abf7a06a392780b0357bc1",
+    "src/temporal-workflows/activities.ts": "4c0baa224884c58af102b8f4a340af4d3638c02147771e63b94a8f6627bfdf1a",
+    "src/temporal-workflows/workflows.ts": "91a838a4496d95c224264665b3f61f2fb95087228396716bd2f2625b7c5af659",
+    "src/temporal.ts": "d5ae73502cbdeed95bb1c33d9dea6050f3b70c4a521fdaf8f924312cf126c032",
+    "src/util.ts": "8106f052d70cdeae02d59c0f1f673cbcd04891b3d0c9b696b39571a7be662365",
+    "tests/baseline/budget-actor-in-process.test.ts": "94fc0cc41ab918445f1070db6cc7365a103bd57bc368e2d44bc58a7b8ce4dc23",
+    "tests/pgboss/00-smoke.test.ts": "b173647dd214fc256789af3fc97153fa5cd961a00c0d04849685877d9e0f7494",
+    "tests/pgboss/01-ordering-parallelism.test.ts": "2dd52a63a884c93655514ce8b881bafd024ccb39cb9302a96fed4bae5c261057",
+    "tests/pgboss/02-retry-deadletter.test.ts": "8c0771b281ffc3e4c8ec09f25aac0a80acab7f6f61f69805b7d4222fa62cdd60",
+    "tests/pgboss/03-crash-recovery.test.ts": "1abae20fba67b47406cb9c61a6be212eb417b5a3a57c2fd918a215ffb09ef8c2",
+    "tests/pgboss/04-visibility.test.ts": "56f5403510ce0fbdb7310fd1c40f1622d697c0d69156be728b87e3b429253a8e",
+    "tests/pgboss/05-budget-actor.test.ts": "856cd8b9c492d1af28a598b3b39f108965932fbcc15ce01a077c8ffa78bd79d1",
+    "tests/pgboss/06-ops-footprint.test.ts": "1565ea9e3ad27cce2f72d50824dbdd9126bdf21e0f369a5c4ea5fecbeb5f09cb",
+    "tests/pgboss/07-dispatcher-fit.test.ts": "2be34f1ee009f73d7efe7dd11e41881cc3dc4b25243f9a4976e94a38000556f5",
+    "tests/process-stop.test.ts": "2fe49218b5cb0eb5e7d863a0733ddc0a0f6f8362451af77ab93821d0a81e5f7c",
+    "tests/scenario-checkers.test.ts": "904205ad1f54f0f052b190a194c63d9696a21074f49d61d95e4d2088e4b6d8af",
+    "tests/temporal/00-smoke.test.ts": "ae6eecd7c142c0b30e5ad498274aab6a1a372e6ed2d037763e62979504fd4043",
+    "tests/temporal/01-ordering-parallelism.test.ts": "6ed8724a478dd25f65622cf059d7ecb4d81fea696a571be2a5b6d75a7479b33f",
+    "tests/temporal/02-retry-poison.test.ts": "b299c2fa3ec148d6cf6d78738cf7467e4ad45cf9424d77b7743c8e48153a56b6",
+    "tests/temporal/03-crash-recovery.test.ts": "7cc05af2c5d32f2f1ee37e0b414b8c971dd980ce518f19f00aa8362836f20d88",
+    "tests/temporal/04-visibility.test.ts": "3fcc75264f59000d698027f8665418c8f00c752fb4de30ed0dbb419fc7280f35",
+    "tests/temporal/04b-web-ui.test.ts": "dfaba4250bae0ca61da46bfa227aacf21adb63dee500f86b5ed0d1b70ebf3ac6",
+    "tests/temporal/05-budget-actor.test.ts": "aa796219564dbbda8df024f3a522f78ac6453fa38928439e3584668c255132ae",
+    "tests/temporal/06-ops-footprint.test.ts": "da18a4895e95af4a49cb0a42700f4c14338f1fb8f1e3fd386ca93a8226ed26a1",
+    "tests/temporal/07-entity-lifecycle.test.ts": "35f8e6232d0b7dbddc88637c482b5bb0f5e546086289623ba4b37d2a0bae8ebe",
+    "scripts/audit-licences.mjs": "858ac12ea71a0e12f65511ccf5b5b9932c722a98f60d20d48810845cdb2e3010",
+    "scripts/fetch-tools.sh": "0f0bbfef0349acf07951e6ae4e76914da94cb68de2543574f14c6fb0691ee327",
+    "scripts/run-all.sh": "89a3de898470feee0522bd64dbc8f35477209cb41c38c8a492998bc71cbcacac",
+    "scripts/summarise.mjs": "a882c773137a7bb64c9b32ab2a4421166d4550059b38b5ec076236127153e32c",
+    "scripts/trim-tools.mjs": "f1f9e74b0cdbfc896a9822cd85c6919b89fb6dbbf5b4206851d4e06faf5584f5",
+    "scripts/verify-mutations.mjs": "545a7e7a94441effa8feb1106a905d38b8ec2e4e2e7dfa8d47b7756151deb4cd",
+    "scripts/verify-offline.sh": "71f8a75d77a730c507c3c07f1128eec78027971babc0d06d18b1822648bcfdaa",
+    "package.json": "1aa6b9fad8d9bfea29e0894e22a690e031182d7d7d30e20755c831ed71d5f5b4",
+    "package-lock.json": "d3210f1f8be78ebaefbbf389193df863e017c86f116dabedf19eee4314509a12",
+    "tsconfig.json": "8c2084efd83549590c9e440bba8953dd310bb40382b5e0f8db7a9ba0470a79ca",
+    "vitest.config.ts": "dbae906778519f88f7a16c391174788f120a69fdd723103ce98255cf3d011349"
+  }
+}

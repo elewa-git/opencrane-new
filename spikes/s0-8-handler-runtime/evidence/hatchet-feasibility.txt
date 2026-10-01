@@ -1,0 +1,73 @@
+Hatchet (github.com/hatchet-dev/hatchet, MIT per the GitHub licence API: MIT)
+Retrieved 2026-10-01 with 'gh api'. Question: can the Hatchet server run locally WITHOUT Docker from an official release binary?
+
+== 1. What the latest release publishes (tag v0.107.2, 2026-09-18). Asset names, all of them:
+   checksums.txt  1068 bytes
+   hatchet_0.107.2_Darwin_arm64.tar.gz  12581775 bytes
+   hatchet_0.107.2_Darwin_arm64.tar.gz.sbom.json  188610 bytes
+   hatchet_0.107.2_Darwin_x86_64.tar.gz  13688321 bytes
+   hatchet_0.107.2_Darwin_x86_64.tar.gz.sbom.json  188733 bytes
+   hatchet_0.107.2_Linux_arm64.tar.gz  11995577 bytes
+   hatchet_0.107.2_Linux_arm64.tar.gz.sbom.json  188487 bytes
+   hatchet_0.107.2_Linux_x86_64.tar.gz  13075419 bytes
+   hatchet_0.107.2_Linux_x86_64.tar.gz.sbom.json  188610 bytes
+   hatchet_0.107.2_Windows_x86_64.zip  13443694 bytes
+   hatchet_0.107.2_Windows_x86_64.zip.sbom.json  196792 bytes
+
+== 2. What those assets are built from (cmd/hatchet-cli/.goreleaser.yml, the only release config in the repository):
+version: 2
+
+project_name: hatchet
+
+before:
+  hooks:
+    - bash ../../hack/build/embedded-ui.sh
+
+builds:
+  - id: hatchet
+    main: ./main.go
+    binary: hatchet
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    goamd64:
+   (one build only: ./main.go of cmd/hatchet-cli, binary name 'hatchet'. No engine, api, lite or migrate binary is released.)
+
+== 3. Server-side programs in the repository (cmd/):
+   hatchet-admin
+   hatchet-api
+   hatchet-cli
+   hatchet-engine
+   hatchet-lite
+   hatchet-loadtest
+   hatchet-migrate
+   hatchet-staticfileserver
+   They are packaged by Dockerfiles only: build/package/lite.dockerfile, build/package/servers.dockerfile
+
+== 4. What 'hatchet server start' (the CLI's local-server command) does, from cmd/hatchet-cli/cli/internal/drivers/docker/hatchet_lite.go:
+   14:	"github.com/docker/docker/api/types/container"
+   15:	"github.com/docker/docker/api/types/image"
+   16:	"github.com/docker/docker/api/types/mount"
+   17:	"github.com/docker/docker/api/types/network"
+   18:	"github.com/docker/docker/api/types/volume"
+   56:	defaultLiteImageRepo = "ghcr.io/hatchet-dev/hatchet/hatchet-lite"
+   57:	devLiteImageRepo     = "ghcr.io/hatchet-dev/hatchet/hatchet-lite-dev"
+   80:		imageRepo:    defaultLiteImageRepo,
+   89:		o.imageRepo = devLiteImageRepo
+   It drives the Docker engine API and pulls the image ghcr.io/hatchet-dev/hatchet/hatchet-lite.
+
+== 5. Recheck during completion, 2026-10-01:
+   command -v go: exit 1 (not installed).
+   Source builds are permitted by the user's instructions; the previous claim
+   that only official release binaries were allowed was incorrect.
+   With 789 MiB already installed and a <1 GiB total footprint, installing a Go
+   toolchain plus a 278-module server build was not attempted.
+
+Verdict: NOT_RUN in this environment. This is not proof that Hatchet cannot
+run without Docker. Its published CLI uses Docker; a source build is untested.

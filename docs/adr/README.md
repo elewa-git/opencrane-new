@@ -5,15 +5,10 @@ Each spike in [plan.md](../../plan.md)'s Phase 0 produces one ADR here.
 
 | # | Decision | Spike | Status |
 |---|---|---|---|
-| [0001](0001-event-store.md) | Event store: NATS JetStream vs a PostgreSQL event store | S0.7 | Draft, from spikes |
-| [0002](0002-gateway.md) | Gateway: agentgateway vs the Envoy stack | S0.2 | Draft, from spikes |
-| [0003](0003-harness.md) | Agent harness: Codex vs OpenCode vs Goose | S0.1 | Draft, from spikes |
-
-"Draft, from spikes" means the spike has run (or is running) in
-[`spikes/`](../../spikes/) but the ADR page itself has not been written up
-here yet, or is still being written up. This scaffold (Phase 1) does not
-depend on which way any of these three decisions goes; it only reserves
-their place in the record.
+| [0001](0001-event-store-nats-jetstream.md) | Event store: NATS JetStream vs a PostgreSQL event store | S0.7 | Draft, from spike evidence — ready for the morning decision |
+| [0002](0002-gateway-agentgateway.md) | Gateway: agentgateway vs the Envoy stack | S0.2 | Draft, from spike evidence — ready for the morning decision |
+| [0003](0003-harness-codex.md) | Agent harness: Codex vs OpenCode vs Goose | S0.1 | Draft, from spike evidence (local half only — S0.1b, inside a real GKE Agent Sandbox Pod, is still open) |
+| [0004](0004-handler-runtime.md) | Handler runtime: pg-boss vs Temporal vs Hatchet vs Restate (plan.md decision 7) | S0.8 | Proposed: pg-boss for reactions; qualification PARTIAL (visibility, production budget path and licence audit remain; Hatchet NOT_RUN, Restate excluded) |
 
 ## Format
 

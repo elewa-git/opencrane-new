@@ -1,0 +1,62 @@
+Collected 2026-10-01 from the npm registry, the npm download counts API and the GitHub API. Facts only, no judgement.
+
+== pg-boss
+   version = '12.35.1'
+   license = 'MIT'
+   repository.url = 'git+https://github.com/timgit/pg-boss.git'
+   time.created = '2016-03-18T21:37:26.499Z'
+   time.modified = '2026-09-30T19:22:58.564Z'
+   versions published: 299
+   downloads last week: 2449121
+   ships its own TypeScript types: ./dist/index.d.ts 
+
+== @temporalio/worker
+   version = '1.24.0'
+   license = 'MIT'
+   repository.url = 'git+https://github.com/temporalio/sdk-typescript.git'
+   time.created = '2021-03-02T13:54:54.707Z'
+   time.modified = '2026-09-15T02:18:15.938Z'
+   versions published: 134
+   downloads last week: 4442847
+   ships its own TypeScript types: ./lib/index.d.ts 
+
+== @temporalio/client
+   version = '1.24.0'
+   license = 'MIT'
+   repository.url = 'git+https://github.com/temporalio/sdk-typescript.git'
+   time.created = '2021-03-02T13:54:54.078Z'
+   time.modified = '2026-09-15T02:17:24.408Z'
+   versions published: 124
+   downloads last week: 5015703
+   ships its own TypeScript types: ./lib/index.d.ts 
+
+== @hatchet-dev/typescript-sdk
+   version = '1.33.2'
+   license = 'MIT'
+   repository.url = 'git+https://github.com/hatchet-dev/hatchet.git'
+   time.created = '2024-01-29T22:08:49.860Z'
+   time.modified = '2026-09-27T14:19:28.718Z'
+   versions published: 221
+   downloads last week: 686624
+   ships its own TypeScript types: index.d.ts 
+
+== @restatedev/restate-sdk
+   version = '1.17.2'
+   license = 'MIT'
+   repository.url = 'git+https://github.com/restatedev/sdk-typescript.git'
+   time.created = '2023-10-25T20:38:56.868Z'
+   time.modified = '2026-09-21T12:56:30.899Z'
+   versions published: 614
+   downloads last week: 291092
+   ships its own TypeScript types: ./dist/index.d.cts 
+
+== github.com/timgit/pg-boss
+   stars 4010, open issues 11, created 2016-02-27, last push 2026-10-01, licence per GitHub: MIT
+== github.com/temporalio/sdk-typescript
+   stars 933, open issues 202, created 2020-11-30, last push 2026-10-01, licence per GitHub: MIT
+== github.com/temporalio/temporal
+   stars 23397, open issues 1037, created 2019-10-16, last push 2026-10-01, licence per GitHub: MIT
+== github.com/hatchet-dev/hatchet
+   stars 8038, open issues 154, created 2023-12-15, last push 2026-09-30, licence per GitHub: MIT
+== github.com/restatedev/restate
+   stars 4496, open issues 432, created 2023-01-04, last push 2026-09-30, licence per GitHub: NOASSERTION

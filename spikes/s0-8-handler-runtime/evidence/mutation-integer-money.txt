@@ -1,0 +1,32 @@
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+ × tests/scenario-checkers.test.ts > integer money input > rejects fractions, negatives and unsafe numbers
+   → expected [Function] to throw an error
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 8 skipped (9)
+   Start at  10:03:53
+   Duration  296ms (transform 51ms, setup 0ms, collect 41ms, tests 6ms, environment 0ms, prepare 69ms)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/scenario-checkers.test.ts > integer money input > rejects fractions, negatives and unsafe numbers
+AssertionError: expected [Function] to throw an error
+
+- Expected: 
+null
+
++ Received: 
+undefined
+
+ ❯ tests/scenario-checkers.test.ts:92:42
+     90|   it('rejects fractions, negatives and unsafe numbers', () => {
+     91|     for (const invalid of [0.1, -1, NaN, Infinity, Number.MAX_SAFE_INT…
+     92|       expect(() => assertCents(invalid)).toThrow('integer euro cents');
+       |                                          ^
+     93|     }
+     94|     for (const valid of [0, 1, 500]) expect(() => assertCents(valid)).…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

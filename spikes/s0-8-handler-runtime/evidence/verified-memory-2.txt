@@ -1,0 +1,53 @@
+Run memory-2 mode=memory started 2026-10-01T08:03:16Z
+v22.15.0
+
+> s0-8-handler-runtime@0.0.1 typecheck
+> tsc --noEmit
+
+
+> s0-8-handler-runtime@0.0.1 test:temporal:memory
+> S08_TEMPORAL_BACKEND=dev vitest run tests/temporal/05-budget-actor.test.ts -t 'memory only' --pool=forks --reporter=verbose
+
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend
+[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)
+
+2026-10-01T08:03:22.698159Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.702312Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.740518Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.747051Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.750382Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.782673Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.788036Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.793667Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.828558Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.835967Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:22.841921Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:23.002899Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:23.018653Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:23.030759Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:23.042705Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:23.053757Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:23.065236Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend
+[budget-actor:memory] 1000 sequential: p50=3.3ms p99=6.0ms | 100 concurrent on one key: wall=2342ms p50=423ms p99=2305ms accepted=50/100
+
+2026-10-01T08:03:25.039165Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:25.097402Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:25.154559Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:25.204087Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:25.250143Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:27.233523Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:27.326274Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+2026-10-01T08:03:27.404935Z  WARN temporalio_sdk_core::worker::workflow: Task not found when completing error=code: 'Some requested entity was not found', message: "Workflow task not found." run_id="01a0f67d-4fb9-739d-b4e5-b44616d426a0"
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend 10173ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 3 skipped (4)
+   Start at  10:03:17
+   Duration  12.65s (transform 41ms, setup 0ms, collect 328ms, tests 12.23s, environment 0ms, prepare 24ms)
+
+Owned state directories after run: 0
+Completed 2026-10-01T08:03:30Z

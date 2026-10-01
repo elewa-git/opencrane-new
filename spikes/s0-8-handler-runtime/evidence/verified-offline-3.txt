@@ -1,0 +1,31 @@
+Run offline-3 mode=offline started 2026-10-01T08:03:50Z
+v22.15.0
+
+> s0-8-handler-runtime@0.0.1 typecheck
+> tsc --noEmit
+
+
+> s0-8-handler-runtime@0.0.1 test:offline
+> vitest run tests/scenario-checkers.test.ts tests/process-stop.test.ts --pool=forks --reporter=verbose
+
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > accepts a clean run and sees cross-key parallelism
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports two handlers of one key running at the same time
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports events of one key running out of order
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a lost event and a duplicated event
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > rejects missing or reversed timestamps instead of silently accepting them
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a missing key
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > measures concurrency, treating back-to-back runs as not overlapping
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > gives the same handler delay for the same event every time, within 2 to 12 ms
+ ✓ tests/scenario-checkers.test.ts > integer money input > rejects fractions, negatives and unsafe numbers
+ ✓ tests/process-stop.test.ts > owned process cleanup > waits for exit even when the child ignores SIGTERM
+
+ Test Files  2 passed (2)
+      Tests  10 passed (10)
+   Start at  10:03:52
+   Duration  602ms (transform 42ms, setup 0ms, collect 48ms, tests 101ms, environment 0ms, prepare 81ms)
+
+Owned state directories after run: 0
+Completed 2026-10-01T08:03:52Z

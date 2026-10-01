@@ -1,0 +1,90 @@
+run 1 started 2026-10-01T07:30:18Z
+machine load at start: 5.10 5.89 7.19
+leftover processes before the run: 0; leftover temp directories: 0
+node v22.15.0
+typecheck: OK
+[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)
+[budget-actor:memory] 1000 sequential: p50=5.0ms p99=26.4ms | 100 concurrent on one key: wall=2430ms p50=683ms p99=2357ms accepted=50/100
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend 8320ms
+[budget-actor:activity] history after 1000 Updates: 11001 events (11.0 per request; hard limit 51,200 per run)
+[budget-actor:activity] 1000 sequential: p50=49.9ms p99=79.3ms | 100 concurrent on one key: wall=2215ms p50=1796ms p99=2189ms accepted=50/100
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step 63010ms
+[budget-actor:local] 100 concurrent Updates, local-activity write: answered=100 (accepted 50) rejected=0 (none); highest running balance in the durable log=740 (ceiling 500); workflow balance=500
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > OBSERVATION, durable (local activity): what happens to the durable log when concurrent Updates are rejected 3734ms
+[budget-actor:control] without the lock: accepted=59 (limit 50), highest running balance in the log=590 (ceiling 500)
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > NEGATIVE CONTROL: without the workflow lock the same actor overspends 5551ms
+[budget-actor:poll] 1000 sequential: p50=21.1ms p99=256.8ms | 100 concurrent on one key: wall=5.6s p50=2910ms p99=5509ms accepted=50/100
+ ✓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > polling configuration: 1,000 sequential and 100 concurrent reserves, then concurrent settles, with no overspend 53159ms
+[budget-actor:notify] 1000 sequential: p50=3.1ms p99=7.9ms | 100 concurrent on one key: wall=48.6s p50=24062ms p99=48116ms accepted=50/100
+ ✓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NOTIFY configuration: same measurements; fast when sequential, slow when many wait on one key 51845ms
+[budget-actor:control] without per-key ordering: accepted=100 (limit 50), balance=90 (ceiling 500)
+ ✓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NEGATIVE CONTROL: the same handler with no per-key ordering overspends 2516ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash BEFORE the effect: the job is redelivered and the effect lands once 6503ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one 6127ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice 5888ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > transactional worker: a crash rolls back the effect with the job, so it lands once with no extra guard 6324ms
+[crash-recovery] heartbeat queue: killed worker recovered and finished after 10.4s
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > heartbeat: a long-running handler on a queue with heartbeats is recovered about 10 s after the crash 11121ms
+[visibility] event timeline: settle-budget=completed/retries=0 | update-openfga=failed/retries=1 | wake-computer=completed/retries=2
+[visibility] getQueue('update-openfga'): failed=1 total=1
+[visibility] dashboard job page excerpt: update-openfga / Job Detail Job in update-openfga acbab565-1a62-4309-9faa-950ecba213da failed Failed just now after 2 attempts · deleted Oct 8, 9:34 AM Retry job Delete Error openfga returned 503 (attempt 2) Attempt 2 of 2 . No retries left, so it stays failed until someone retries it. Show full out
+ ✓ tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event 1553ms
+[retry] gaps between attempts (s): 2.00, 2.50, 3.01
+ ✓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed 8621ms
+[retry] after redrive the queue holds ["0:failed","1:created","0:created"]; handlers ran []
+ ✓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > redrive is the wrong operator tool for a strict FIFO queue: the copy goes to the back and the key stays held 3625ms
+[crash-recovery] before-effect: the server handed the activity to the other worker 3.3s after the kill (heartbeat timeout 2s); attempt=2
+ ✓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash BEFORE the effect: the activity is redelivered and the effect lands once 18297ms
+ ✓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one 15359ms
+ ✓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice 5375ms
+[dispatcher] first delivery accepted=200 duplicates ignored=200 runs=200
+ ✓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a repeated delivery of the whole stream is enqueued once and still runs in order 11678ms
+[dispatcher] after the retention window the same event id ran a second time (handlers must be idempotent by event id)
+ ✓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > the de-duplication only lasts as long as the completed job is kept 3094ms
+[dispatcher] 30 events on one key: workers started together 9.6s (3.1 events/s), staggered 0.7s (44.9 events/s)
+ ✓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a backlog on ONE key drains far faster with staggered workers than with workers started together 10242ms
+[ops-footprint] {"mode":"all","processes":{"temporalServer":1,"worker":1,"postgresGroup":60},"rssMiB":{"temporalServerIdle":106.6,"temporalServerAfterLoad":299.7,"perServiceAfterLoad":{"all":299.7},"worker":254.6,"postgresGroup":878.2},"dbConnectionsIdle":41,"idleCommitsPerSecond":70.1,"load":{"events":5000,"workflows":500,"seconds":22.1,"eventsPerSecond":226},"historyEventsPerKeyWorkflow":75,"diskMiB":{"temporalDb":36.4,"visibilityDb":30.7,"dataDirectory":225.8}}
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process 39270ms
+[ops-footprint] {"mode":"split","processes":{"temporalServer":4,"worker":1,"postgresGroup":60},"rssMiB":{"temporalServerIdle":248.6,"temporalServerAfterLoad":348.8,"perServiceAfterLoad":{"frontend":88.1,"history":173.1,"matching":54.8,"worker":32.7},"worker":143.8,"postgresGroup":524.7},"dbConnectionsIdle":41,"idleCommitsPerSecond":55,"load":{"events":5000,"workflows":500,"seconds":39.5,"eventsPerSecond":127},"historyEventsPerKeyWorkflow":75,"diskMiB":{"temporalDb":37,"visibilityDb":30.6,"dataDirectory":226.2}}
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes 62128ms
+[ops-footprint] dev server (not a production topology): 1 process, 128.7 MiB RSS idle, SQLite file, Web UI included
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison 3924ms
+[visibility] history: 28 events; activity starts recorded with attempt numbers [1,3,5]
+[visibility] HTTP API list: "WORKFLOW_EXECUTION_STATUS_RUNNING" for visibility-key
+ ✓ tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs 10272ms
+ ✓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > repeated deliveries of the whole stream (during and after processing) are handled once and still run in order 10865ms
+[lifecycle] 400 events across 8 runs of workflow long-lived-key; longest history 654 events (limit 51,200); statuses COMPLETED,CONTINUED_AS_NEW
+ ✓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > continues as new every 50 events under a steady stream of signals: no event lost, repeated or reordered 18021ms
+[retry] gaps between attempts (s): 1.01, 1.01, 2.01, 4.01
+ ✓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed 8247ms
+ ✓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > the operator can also skip the held event on purpose; the skip is recorded and the successors run 3266ms
+[budget-actor:in-process] 1000 sequential: p50=1.7ms p99=2.7ms | 100 concurrent on one key: wall=163ms p50=89ms p99=161ms
+ ✓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > answers 1,000 sequential and 100 concurrent reserves with no overspend, and only one process can lead 2201ms
+[budget-actor:in-process-control] unserialised: accepted=100 (limit 50), balance=60
+ ✓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > NEGATIVE CONTROL: without the in-process queue the same handler overspends
+[ops-footprint] {"processes":{"nodeApp":1,"postgresGroup":19},"rssMiB":{"nodeAppIdle":62.7,"nodeAppAfterLoad":104.6,"postgresGroup":271.6},"dbConnectionsIdle":4,"idleCommitsPerSecond":42.6,"load":{"events":5000,"seconds":52.3,"eventsPerSecond":96},"diskMiB":{"pgbossSchema":2.8,"database":10.8,"dataDirectory":65.8}}
+ ✓ tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint > measures the processes, memory, disk and idle load of 10 handler queues with 2 workers each 65889ms
+[ordering] events=10000 keys=100 dispatch=1.7s total=75.2s throughput=133 events/s max concurrent handlers=28 (40 workers)
+ ✓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys 75797ms
+[ordering-control] standard queue: 20+ rule breaches, e.g. key-1: seq 11 started before seq 10 had finished (two writers at once)
+ ✓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: the same load on a queue without per-key ordering breaks the rules 25393ms
+[web-ui] Temporal Web UI version 2.54.1
+ ✓ tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server) > serves the Web UI and shows the pending activity, its attempt and its last error
+[ordering] events=10000 keys=100 dispatch=25.1s total=46.6s throughput=214 events/s max concurrent handlers=33 (worker allows 100)
+ ✓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys 46645ms
+[ordering-control] one workflow per event: 20+ rule breaches, e.g. key-1: run #0 (by start time) was seq 8, expected seq 0
+ ✓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: one workflow per event (no single owner per key) breaks the rules 6172ms
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > accepts a clean run and sees cross-key parallelism
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports two handlers of one key running at the same time
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports events of one key running out of order
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a lost event and a duplicated event
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a missing key
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > measures concurrency, treating back-to-back runs as not overlapping
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > gives the same handler delay for the same event every time, within 2 to 12 ms
+ ✓ tests/temporal/00-smoke.test.ts > smoke: production-shaped Temporal Server on PostgreSQL, a worker and a client > starts a keyed workflow with a signal and reads its state back
+ ✓ tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it 606ms
+ Test Files  19 passed (19)
+      Tests  46 passed (46)
+vitest exit code: 0; wall time 737 s
+leftover processes after the run: 0; leftover temp directories: 0
+machine load at end: 11.38 12.52 10.52

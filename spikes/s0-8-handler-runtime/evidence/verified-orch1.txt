@@ -1,0 +1,641 @@
+Run orch1 mode=all started 2026-10-01T08:11:48Z
+v22.15.0
+
+> s0-8-handler-runtime@0.0.1 typecheck
+> tsc --noEmit
+
+
+> s0-8-handler-runtime@0.0.1 test
+> vitest run --pool=forks --reporter=verbose
+
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend
+[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)
+
+[2m2026-10-01T08:11:58.316226Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.322247Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.355026Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.365589Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.404521Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.416585Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.446522Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.462410Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.621778Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.646448Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.669262Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.684417Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.699876Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.714746Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:11:58.729912Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend
+[budget-actor:memory] 1000 sequential: p50=4.0ms p99=7.1ms | 100 concurrent on one key: wall=2452ms p50=477ms p99=2371ms accepted=50/100
+
+[2m2026-10-01T08:12:00.759664Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:00.825695Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:00.874098Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:00.926635Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:00.974156Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:02.829760Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:02.921990Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:02.993990Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+[2m2026-10-01T08:12:03.065446Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f685-2dce-7163-ae24-7482472ec1af"
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend 10720ms
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step
+[budget-actor:activity] history after 1000 Updates: 11001 events (11.0 per request; hard limit 51,200 per run)
+
+[2m2026-10-01T08:12:53.937933Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:53.945315Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:53.949525Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:53.987121Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:54.033786Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:54.074495Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:54.102830Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step
+[budget-actor:activity] 1000 sequential: p50=50.0ms p99=60.5ms | 100 concurrent on one key: wall=2247ms p50=1633ms p99=2165ms accepted=50/100
+
+[2m2026-10-01T08:12:56.188499Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:56.202067Z[0m [31mERROR[0m [2mtemporalio_sdk_core::worker::workflow::history_update[0m[2m:[0m We expected to be able to fetch more events but server says there are none [3mcurrent_events[0m[2m=[0m[HistoryEvent { event_id: 1, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922631000 }), event_type: WorkflowExecutionStarted, version: 0, task_id: 1050115, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionStartedEventAttributes(WorkflowExecutionStartedEventAttributes { workflow_type: Some(WorkflowType { name: "budgetActorWorkflow" }), parent_workflow_namespace: "", parent_workflow_namespace_id: "", parent_workflow_execution: None, parent_initiated_event_id: 0, task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), input: Some(Payloads { payloads: [[eyJrZXkiOiJhY3Rpdml0eS1jb25jIiwiY2VpbGluZ0M=..bGUiOiJhY3Rpdml0eSIsInNlcmlhbGlzZSI6dHJ1ZX0=]] }), workflow_execution_timeout: None, workflow_run_timeout: None, workflow_task_timeout: Some(Duration { seconds: 10, nanos: 0 }), continued_execution_run_id: "", initiator: Unspecified, continued_failure: None, last_completion_result: None, original_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", identity: "75550@MacBook-Air-3.local", first_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", retry_policy: None, attempt: 1, workflow_execution_expiration_time: None, cron_schedule: "", first_workflow_task_backoff: Some(Duration { seconds: 0, nanos: 0 }), memo: None, search_attributes: None, prev_auto_reset_points: None, header: Some(Header { fields: {} }), parent_initiated_event_version: 0, workflow_id: "budget-activity-conc", source_version_stamp: None, completion_callbacks: [], root_workflow_execution: None, inherited_build_id: "", versioning_override: None, parent_pinned_worker_deployment_version: "", priority: None, inherited_pinned_version: None, inherited_auto_upgrade_info: None, eager_execution_accepted: false, declined_target_version_upgrade: None, time_skipping_config: None, time_skipping_state_propagation: None })) }, HistoryEvent { event_id: 2, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922655000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050116, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 3, event_time: Some(Timestamp { seconds: 1790842373, nanos: 926060000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050121, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 2, identity: "75550@MacBook-Air-3.local", request_id: "cfcabfd2-a873-4327-b7c4-cc5a9e367f4c", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 440, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 4, event_time: Some(Timestamp { seconds: 1790842373, nanos: 932075000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050125, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 2, started_event_id: 3, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [2, 3, 1], lang_used_flags: [], sdk_name: "temporal-typescript", sdk_version: "1.24.0" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 5, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972616000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050158, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 6, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972870000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050159, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 5, identity: "75550@MacBook-Air-3.local", request_id: "115c5382-a3fb-4699-9298-89ca46f17541", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 823, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 7, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975610000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050160, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 5, started_event_id: 6, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [], lang_used_flags: [], sdk_name: "", sdk_version: "" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 8, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975647000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050161, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExecutionUpdateAcceptedEventAttributes { protocol_instance_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", accepted_request_message_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b/request", accepted_request_sequencing_event_id: 5, accepted_request: Some(Request { meta: Some(Meta { update_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", identity: "75550@MacBook-Air-3.local" }), input: Some(Input { header: Some(Header { fields: {} }), name: "budget", args: Some(Payloads { payloads: [[eyJvcCI6InJlc2VydmUiLCJhbW91bnRDZW50cyI6MTA=..NTUtYjc4OS00ZGI0LTk3OGEtZTBhMDRiNWI2NjUyIn0=]] }) }), request_id: "", completion_callbacks: [], links: [] }) })) }, HistoryEvent { event_id: 9, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975656000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050162, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExec[2m2026-10-01T08:12:56.204920Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Failing workflow task [3mrun_id[0m[2m=[0m01a0f686-0722-799c-b1ba-7d3ebe1e4a20 [3mfailure[0m[2m=[0mFailure { failure: Some(Failure { message: "Fetching history failed: Status { code: Unknown, message: \"Fetched empty history page\", source: None }", source: "", stack_trace: "", encoded_attributes: None, cause: None, failure_info: Some(ApplicationFailureInfo(ApplicationFailureInfo { r#type: "", non_retryable: true, details: None, next_retry_delay: None, category: Unspecified })) }), force_cause: Unspecified }
+[2m2026-10-01T08:12:56.204951Z[0m [31mERROR[0m [2mtemporalio_sdk_core::worker::workflow::history_update[0m[2m:[0m We expected to be able to fetch more events but server says there are none [3mcurrent_events[0m[2m=[0m[HistoryEvent { event_id: 1, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922631000 }), event_type: WorkflowExecutionStarted, version: 0, task_id: 1050115, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionStartedEventAttributes(WorkflowExecutionStartedEventAttributes { workflow_type: Some(WorkflowType { name: "budgetActorWorkflow" }), parent_workflow_namespace: "", parent_workflow_namespace_id: "", parent_workflow_execution: None, parent_initiated_event_id: 0, task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), input: Some(Payloads { payloads: [[eyJrZXkiOiJhY3Rpdml0eS1jb25jIiwiY2VpbGluZ0M=..bGUiOiJhY3Rpdml0eSIsInNlcmlhbGlzZSI6dHJ1ZX0=]] }), workflow_execution_timeout: None, workflow_run_timeout: None, workflow_task_timeout: Some(Duration { seconds: 10, nanos: 0 }), continued_execution_run_id: "", initiator: Unspecified, continued_failure: None, last_completion_result: None, original_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", identity: "75550@MacBook-Air-3.local", first_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", retry_policy: None, attempt: 1, workflow_execution_expiration_time: None, cron_schedule: "", first_workflow_task_backoff: Some(Duration { seconds: 0, nanos: 0 }), memo: None, search_attributes: None, prev_auto_reset_points: None, header: Some(Header { fields: {} }), parent_initiated_event_version: 0, workflow_id: "budget-activity-conc", source_version_stamp: None, completion_callbacks: [], root_workflow_execution: None, inherited_build_id: "", versioning_override: None, parent_pinned_worker_deployment_version: "", priority: None, inherited_pinned_version: None, inherited_auto_upgrade_info: None, eager_execution_accepted: false, declined_target_version_upgrade: None, time_skipping_config: None, time_skipping_state_propagation: None })) }, HistoryEvent { event_id: 2, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922655000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050116, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 3, event_time: Some(Timestamp { seconds: 1790842373, nanos: 926060000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050121, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 2, identity: "75550@MacBook-Air-3.local", request_id: "cfcabfd2-a873-4327-b7c4-cc5a9e367f4c", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 440, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 4, event_time: Some(Timestamp { seconds: 1790842373, nanos: 932075000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050125, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 2, started_event_id: 3, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [2, 3, 1], lang_used_flags: [], sdk_name: "temporal-typescript", sdk_version: "1.24.0" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 5, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972616000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050158, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 6, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972870000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050159, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 5, identity: "75550@MacBook-Air-3.local", request_id: "115c5382-a3fb-4699-9298-89ca46f17541", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 823, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 7, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975610000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050160, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 5, started_event_id: 6, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [], lang_used_flags: [], sdk_name: "", sdk_version: "" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 8, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975647000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050161, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExecutionUpdateAcceptedEventAttributes { protocol_instance_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", accepted_request_message_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b/request", accepted_request_sequencing_event_id: 5, accepted_request: Some(Request { meta: Some(Meta { update_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", identity: "75550@MacBook-Air-3.local" }), input: Some(Input { header: Some(Header { fields: {} }), name: "budget", args: Some(Payloads { payloads: [[eyJvcCI6InJlc2VydmUiLCJhbW91bnRDZW50cyI6MTA=..NTUtYjc4OS00ZGI0LTk3OGEtZTBhMDRiNWI2NjUyIn0=]] }) }), request_id: "", completion_callbacks: [], links: [] }) })) }, HistoryEvent { event_id: 9, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975656000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050162, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExec[2m2026-10-01T08:12:56.206833Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:56.206843Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Failing workflow task [3mrun_id[0m[2m=[0m01a0f686-0722-799c-b1ba-7d3ebe1e4a20 [3mfailure[0m[2m=[0mFailure { failure: Some(Failure { message: "Fetching history failed: Status { code: Unknown, message: \"Fetched empty history page\", source: None }", source: "", stack_trace: "", encoded_attributes: None, cause: None, failure_info: Some(ApplicationFailureInfo(ApplicationFailureInfo { r#type: "", non_retryable: true, details: None, next_retry_delay: None, category: Unspecified })) }), force_cause: Unspecified }
+[2m2026-10-01T08:12:56.207141Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:56.235948Z[0m [31mERROR[0m [2mtemporalio_sdk_core::worker::workflow::history_update[0m[2m:[0m We expected to be able to fetch more events but server says there are none [3mcurrent_events[0m[2m=[0m[HistoryEvent { event_id: 1, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922631000 }), event_type: WorkflowExecutionStarted, version: 0, task_id: 1050115, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionStartedEventAttributes(WorkflowExecutionStartedEventAttributes { workflow_type: Some(WorkflowType { name: "budgetActorWorkflow" }), parent_workflow_namespace: "", parent_workflow_namespace_id: "", parent_workflow_execution: None, parent_initiated_event_id: 0, task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), input: Some(Payloads { payloads: [[eyJrZXkiOiJhY3Rpdml0eS1jb25jIiwiY2VpbGluZ0M=..bGUiOiJhY3Rpdml0eSIsInNlcmlhbGlzZSI6dHJ1ZX0=]] }), workflow_execution_timeout: None, workflow_run_timeout: None, workflow_task_timeout: Some(Duration { seconds: 10, nanos: 0 }), continued_execution_run_id: "", initiator: Unspecified, continued_failure: None, last_completion_result: None, original_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", identity: "75550@MacBook-Air-3.local", first_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", retry_policy: None, attempt: 1, workflow_execution_expiration_time: None, cron_schedule: "", first_workflow_task_backoff: Some(Duration { seconds: 0, nanos: 0 }), memo: None, search_attributes: None, prev_auto_reset_points: None, header: Some(Header { fields: {} }), parent_initiated_event_version: 0, workflow_id: "budget-activity-conc", source_version_stamp: None, completion_callbacks: [], root_workflow_execution: None, inherited_build_id: "", versioning_override: None, parent_pinned_worker_deployment_version: "", priority: None, inherited_pinned_version: None, inherited_auto_upgrade_info: None, eager_execution_accepted: false, declined_target_version_upgrade: None, time_skipping_config: None, time_skipping_state_propagation: None })) }, HistoryEvent { event_id: 2, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922655000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050116, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 3, event_time: Some(Timestamp { seconds: 1790842373, nanos: 926060000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050121, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 2, identity: "75550@MacBook-Air-3.local", request_id: "cfcabfd2-a873-4327-b7c4-cc5a9e367f4c", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 440, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 4, event_time: Some(Timestamp { seconds: 1790842373, nanos: 932075000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050125, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 2, started_event_id: 3, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [2, 3, 1], lang_used_flags: [], sdk_name: "temporal-typescript", sdk_version: "1.24.0" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 5, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972616000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050158, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 6, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972870000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050159, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 5, identity: "75550@MacBook-Air-3.local", request_id: "115c5382-a3fb-4699-9298-89ca46f17541", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 823, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 7, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975610000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050160, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 5, started_event_id: 6, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [], lang_used_flags: [], sdk_name: "", sdk_version: "" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 8, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975647000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050161, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExecutionUpdateAcceptedEventAttributes { protocol_instance_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", accepted_request_message_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b/request", accepted_request_sequencing_event_id: 5, accepted_request: Some(Request { meta: Some(Meta { update_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", identity: "75550@MacBook-Air-3.local" }), input: Some(Input { header: Some(Header { fields: {} }), name: "budget", args: Some(Payloads { payloads: [[eyJvcCI6InJlc2VydmUiLCJhbW91bnRDZW50cyI6MTA=..NTUtYjc4OS00ZGI0LTk3OGEtZTBhMDRiNWI2NjUyIn0=]] }) }), request_id: "", completion_callbacks: [], links: [] }) })) }, HistoryEvent { event_id: 9, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975656000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050162, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExec[2m2026-10-01T08:12:56.236788Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Failing workflow task [3mrun_id[0m[2m=[0m01a0f686-0722-799c-b1ba-7d3ebe1e4a20 [3mfailure[0m[2m=[0mFailure { failure: Some(Failure { message: "Fetching history failed: Status { code: Unknown, message: \"Fetched empty history page\", source: None }", source: "", stack_trace: "", encoded_attributes: None, cause: None, failure_info: Some(ApplicationFailureInfo(ApplicationFailureInfo { r#type: "", non_retryable: true, details: None, next_retry_delay: None, category: Unspecified })) }), force_cause: Unspecified }
+[2m2026-10-01T08:12:56.238519Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:56.316230Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:56.333890Z[0m [31mERROR[0m [2mtemporalio_sdk_core::worker::workflow::history_update[0m[2m:[0m We expected to be able to fetch more events but server says there are none [3mcurrent_events[0m[2m=[0m[HistoryEvent { event_id: 1, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922631000 }), event_type: WorkflowExecutionStarted, version: 0, task_id: 1050115, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionStartedEventAttributes(WorkflowExecutionStartedEventAttributes { workflow_type: Some(WorkflowType { name: "budgetActorWorkflow" }), parent_workflow_namespace: "", parent_workflow_namespace_id: "", parent_workflow_execution: None, parent_initiated_event_id: 0, task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), input: Some(Payloads { payloads: [[eyJrZXkiOiJhY3Rpdml0eS1jb25jIiwiY2VpbGluZ0M=..bGUiOiJhY3Rpdml0eSIsInNlcmlhbGlzZSI6dHJ1ZX0=]] }), workflow_execution_timeout: None, workflow_run_timeout: None, workflow_task_timeout: Some(Duration { seconds: 10, nanos: 0 }), continued_execution_run_id: "", initiator: Unspecified, continued_failure: None, last_completion_result: None, original_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", identity: "75550@MacBook-Air-3.local", first_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", retry_policy: None, attempt: 1, workflow_execution_expiration_time: None, cron_schedule: "", first_workflow_task_backoff: Some(Duration { seconds: 0, nanos: 0 }), memo: None, search_attributes: None, prev_auto_reset_points: None, header: Some(Header { fields: {} }), parent_initiated_event_version: 0, workflow_id: "budget-activity-conc", source_version_stamp: None, completion_callbacks: [], root_workflow_execution: None, inherited_build_id: "", versioning_override: None, parent_pinned_worker_deployment_version: "", priority: None, inherited_pinned_version: None, inherited_auto_upgrade_info: None, eager_execution_accepted: false, declined_target_version_upgrade: None, time_skipping_config: None, time_skipping_state_propagation: None })) }, HistoryEvent { event_id: 2, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922655000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050116, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 3, event_time: Some(Timestamp { seconds: 1790842373, nanos: 926060000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050121, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 2, identity: "75550@MacBook-Air-3.local", request_id: "cfcabfd2-a873-4327-b7c4-cc5a9e367f4c", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 440, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 4, event_time: Some(Timestamp { seconds: 1790842373, nanos: 932075000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050125, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 2, started_event_id: 3, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [2, 3, 1], lang_used_flags: [], sdk_name: "temporal-typescript", sdk_version: "1.24.0" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 5, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972616000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050158, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 6, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972870000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050159, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 5, identity: "75550@MacBook-Air-3.local", request_id: "115c5382-a3fb-4699-9298-89ca46f17541", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 823, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 7, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975610000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050160, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 5, started_event_id: 6, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [], lang_used_flags: [], sdk_name: "", sdk_version: "" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 8, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975647000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050161, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExecutionUpdateAcceptedEventAttributes { protocol_instance_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", accepted_request_message_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b/request", accepted_request_sequencing_event_id: 5, accepted_request: Some(Request { meta: Some(Meta { update_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", identity: "75550@MacBook-Air-3.local" }), input: Some(Input { header: Some(Header { fields: {} }), name: "budget", args: Some(Payloads { payloads: [[eyJvcCI6InJlc2VydmUiLCJhbW91bnRDZW50cyI6MTA=..NTUtYjc4OS00ZGI0LTk3OGEtZTBhMDRiNWI2NjUyIn0=]] }) }), request_id: "", completion_callbacks: [], links: [] }) })) }, HistoryEvent { event_id: 9, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975656000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050162, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExec[2m2026-10-01T08:12:56.393340Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:58.515445Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:58.534769Z[0m [31mERROR[0m [2mtemporalio_sdk_core::worker::workflow::history_update[0m[2m:[0m We expected to be able to fetch more events but server says there are none [3mcurrent_events[0m[2m=[0m[HistoryEvent { event_id: 1, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922631000 }), event_type: WorkflowExecutionStarted, version: 0, task_id: 1050115, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionStartedEventAttributes(WorkflowExecutionStartedEventAttributes { workflow_type: Some(WorkflowType { name: "budgetActorWorkflow" }), parent_workflow_namespace: "", parent_workflow_namespace_id: "", parent_workflow_execution: None, parent_initiated_event_id: 0, task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), input: Some(Payloads { payloads: [[eyJrZXkiOiJhY3Rpdml0eS1jb25jIiwiY2VpbGluZ0M=..bGUiOiJhY3Rpdml0eSIsInNlcmlhbGlzZSI6dHJ1ZX0=]] }), workflow_execution_timeout: None, workflow_run_timeout: None, workflow_task_timeout: Some(Duration { seconds: 10, nanos: 0 }), continued_execution_run_id: "", initiator: Unspecified, continued_failure: None, last_completion_result: None, original_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", identity: "75550@MacBook-Air-3.local", first_execution_run_id: "01a0f686-0722-799c-b1ba-7d3ebe1e4a20", retry_policy: None, attempt: 1, workflow_execution_expiration_time: None, cron_schedule: "", first_workflow_task_backoff: Some(Duration { seconds: 0, nanos: 0 }), memo: None, search_attributes: None, prev_auto_reset_points: None, header: Some(Header { fields: {} }), parent_initiated_event_version: 0, workflow_id: "budget-activity-conc", source_version_stamp: None, completion_callbacks: [], root_workflow_execution: None, inherited_build_id: "", versioning_override: None, parent_pinned_worker_deployment_version: "", priority: None, inherited_pinned_version: None, inherited_auto_upgrade_info: None, eager_execution_accepted: false, declined_target_version_upgrade: None, time_skipping_config: None, time_skipping_state_propagation: None })) }, HistoryEvent { event_id: 2, event_time: Some(Timestamp { seconds: 1790842373, nanos: 922655000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050116, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 3, event_time: Some(Timestamp { seconds: 1790842373, nanos: 926060000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050121, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 2, identity: "75550@MacBook-Air-3.local", request_id: "cfcabfd2-a873-4327-b7c4-cc5a9e367f4c", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 440, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 4, event_time: Some(Timestamp { seconds: 1790842373, nanos: 932075000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050125, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 2, started_event_id: 3, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [2, 3, 1], lang_used_flags: [], sdk_name: "temporal-typescript", sdk_version: "1.24.0" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 5, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972616000 }), event_type: WorkflowTaskScheduled, version: 0, task_id: 1050158, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskScheduledEventAttributes(WorkflowTaskScheduledEventAttributes { task_queue: Some(TaskQueue { name: "budget-tq", kind: Normal, normal_name: "" }), start_to_close_timeout: Some(Duration { seconds: 10, nanos: 0 }), attempt: 1 })) }, HistoryEvent { event_id: 6, event_time: Some(Timestamp { seconds: 1790842373, nanos: 972870000 }), event_type: WorkflowTaskStarted, version: 0, task_id: 1050159, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskStartedEventAttributes(WorkflowTaskStartedEventAttributes { scheduled_event_id: 5, identity: "75550@MacBook-Air-3.local", request_id: "115c5382-a3fb-4699-9298-89ca46f17541", suggest_continue_as_new: false, suggest_continue_as_new_reasons: [], target_worker_deployment_version_changed: false, history_size_bytes: 823, worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), build_id_redirect_counter: 0 })) }, HistoryEvent { event_id: 7, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975610000 }), event_type: WorkflowTaskCompleted, version: 0, task_id: 1050160, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowTaskCompletedEventAttributes(WorkflowTaskCompletedEventAttributes { scheduled_event_id: 5, started_event_id: 6, identity: "75550@MacBook-Air-3.local", binary_checksum: "", worker_version: Some(WorkerVersionStamp { build_id: "@temporalio/worker@1.24.0+0b628814e629aa81b3e9ff502675d3ed1a5199dbbea7d9eabd242d1a02997708", use_versioning: false }), sdk_metadata: Some(WorkflowTaskCompletedMetadata { core_used_flags: [], lang_used_flags: [], sdk_name: "", sdk_version: "" }), metering_metadata: Some(MeteringMetadata { nonfirst_local_activity_execution_attempts: 0 }), deployment: None, versioning_behavior: Unspecified, worker_deployment_version: "", worker_deployment_name: "", deployment_version: None })) }, HistoryEvent { event_id: 8, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975647000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050161, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExecutionUpdateAcceptedEventAttributes { protocol_instance_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", accepted_request_message_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b/request", accepted_request_sequencing_event_id: 5, accepted_request: Some(Request { meta: Some(Meta { update_id: "3055e4e7-3612-4ba9-8f02-98cae94f0d8b", identity: "75550@MacBook-Air-3.local" }), input: Some(Input { header: Some(Header { fields: {} }), name: "budget", args: Some(Payloads { payloads: [[eyJvcCI6InJlc2VydmUiLCJhbW91bnRDZW50cyI6MTA=..NTUtYjc4OS00ZGI0LTk3OGEtZTBhMDRiNWI2NjUyIn0=]] }) }), request_id: "", completion_callbacks: [], links: [] }) })) }, HistoryEvent { event_id: 9, event_time: Some(Timestamp { seconds: 1790842373, nanos: 975656000 }), event_type: WorkflowExecutionUpdateAccepted, version: 0, task_id: 1050162, worker_may_ignore: false, user_metadata: None, links: [], principal: None, event_group_markers: [], attributes: Some(WorkflowExecutionUpdateAcceptedEventAttributes(WorkflowExec[2m2026-10-01T08:12:58.536100Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Failing workflow task [3mrun_id[0m[2m=[0m01a0f686-0722-799c-b1ba-7d3ebe1e4a20 [3mfailure[0m[2m=[0mFailure { failure: Some(Failure { message: "Fetching history failed: Status { code: Unknown, message: \"Fetched empty history page\", source: None }", source: "", stack_trace: "", encoded_attributes: None, cause: None, failure_info: Some(ApplicationFailureInfo(ApplicationFailureInfo { r#type: "", non_retryable: true, details: None, next_retry_delay: None, category: Unspecified })) }), force_cause: Unspecified }
+[2m2026-10-01T08:12:58.536600Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:58.690100Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:58.803425Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:58.919925Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.042443Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.155139Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.264914Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.371825Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.492611Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.608177Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.719791Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+[2m2026-10-01T08:12:59.831998Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-0722-799c-b1ba-7d3ebe1e4a20"
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step 57956ms
+[2m2026-10-01T08:13:02.798797Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.807419Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.812550Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.842237Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.852553Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.858584Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.862258Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.883557Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.887215Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.892743Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.897055Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.904607Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.909075Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.931856Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.941729Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.950179Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:02.957617Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.105816Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.117005Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.125269Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.151544Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.164998Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.176170Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.199633Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.208310Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.223096Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.238372Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:03.261425Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:04.726614Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:04.817559Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+[2m2026-10-01T08:13:04.869999Z[0m [33m WARN[0m [2mtemporalio_sdk_core::worker::workflow[0m[2m:[0m Task not found when completing [3merror[0m[2m=[0mcode: 'Some requested entity was not found', message: "Workflow task not found." [3mrun_id[0m[2m=[0m"01a0f686-29ba-74f5-8268-72d7672bbae4"
+stdout | tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > NEGATIVE CONTROL: without the workflow lock the same actor overspends
+[budget-actor:control] without the lock: accepted=58 (limit 50), highest running balance in the log=580 (ceilingCents 500)
+
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > NEGATIVE CONTROL: without the workflow lock the same actor overspends 5543ms
+stdout | tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > polling configuration: 1,000 sequential and 100 concurrent reserves, then concurrent settles, with no overspend
+[budget-actor:poll] 1000 sequential: p50=26.0ms p99=308.9ms | 100 concurrent on one key: wall=7.3s p50=3502ms p99=7008ms accepted=50/100
+
+ ✓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > polling configuration: 1,000 sequential and 100 concurrent reserves, then concurrent settles, with no overspend 63224ms
+stdout | tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NOTIFY configuration: same measurements; fast when sequential, slow when many wait on one key
+[budget-actor:notify] 1000 sequential: p50=2.9ms p99=4.3ms | 100 concurrent on one key: wall=47.1s p50=23053ms p99=46589ms accepted=50/100
+
+ ✓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NOTIFY configuration: same measurements; fast when sequential, slow when many wait on one key 49998ms
+stdout | tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NEGATIVE CONTROL: the same handler with no per-key ordering overspends
+[budget-actor:control] without per-key ordering: accepted=100 (limit 50), balance=100 (ceilingCents 500)
+
+ ✓ tests/pgboss/05-budget-actor.test.ts > pg-boss: budget actor, one writer per key, synchronous answers > NEGATIVE CONTROL: the same handler with no per-key ordering overspends 2540ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash BEFORE the effect: the job is redelivered and the effect lands once 6558ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one 6073ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice 6003ms
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > transactional worker: a crash rolls back the effect with the job, so it lands once with no extra guard 5798ms
+stdout | tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > heartbeat: a long-running handler on a queue with heartbeats is recovered about 10 s after the crash
+[crash-recovery] heartbeat queue: killed worker recovered and finished after 10.4s
+
+ ✓ tests/pgboss/03-crash-recovery.test.ts > pg-boss: crash recovery and exactly-once effects > heartbeat: a long-running handler on a queue with heartbeats is recovered about 10 s after the crash 11080ms
+stdout | tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event
+[visibility] event timeline: settle-budget=completed/retries=0 | update-openfga=failed/retries=1 | wake-computer=completed/retries=2
+[visibility] application logs (volatile): [{"handler":"settle-budget","eventId":"evt-0001","attempt":1,"outcome":"ok"},{"handler":"wake-computer","eventId":"evt-0001","attempt":1,"outcome":"error","error":"computer not ready (attempt 1)"},{"handler":"wake-computer","eventId":"evt-0001","attempt":2,"outcome":"error","error":"computer not ready (attempt 2)"},{"handler":"update-openfga","eventId":"evt-0001","attempt":1,"outcome":"error","error":"openfga returned 503 (attempt 1)"},{"handler":"update-openfga","eventId":"evt-0001","attempt":2,"outcome":"error","error":"openfga returned 503 (attempt 2)"},{"handler":"wake-computer","eventId":"evt-0001","attempt":3,"outcome":"ok"}]
+
+stdout | tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event
+[visibility] getQueue('update-openfga'): failed=1 total=1
+
+stdout | tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event
+[visibility] dashboard job page excerpt: update-openfga / Job Detail Job in update-openfga 25b745af-fc12-4b42-98c5-8450b848fdac failed Failed just now after 2 attempts · deleted Oct 8, 10:15 AM Retry job Delete Error openfga returned 503 (attempt 2) Attempt 2 of 2 . No retries left, so it stays failed until someone retries it. Show full ou
+
+ ✓ tests/pgboss/04-visibility.test.ts > pg-boss: per-handler visibility without a screenshot > shows runs, attempts, errors and logs for each handler of one event 1595ms
+stdout | tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+[retry] gaps between attempts (s): 2.00, 3.00, 3.00
+
+ ✓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed 9050ms
+stdout | tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > redrive is the wrong operator tool for a strict FIFO queue: the copy goes to the back and the key stays held
+[retry] after redrive the queue holds ["0:failed","1:created","0:created"]; handlers ran []
+
+ ✓ tests/pgboss/02-retry-deadletter.test.ts > pg-boss: retry with backoff, dead letter, poison blocks only its own key > redrive is the wrong operator tool for a strict FIFO queue: the copy goes to the back and the key stays held 3782ms
+stdout | tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash BEFORE the effect: the activity is redelivered and the effect lands once
+[crash-recovery] before-effect: the server handed the activity to the other worker 4.0s after the kill including replacement startup (heartbeat timeout 2s); attempt=2
+
+ ✓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash BEFORE the effect: the activity is redelivered and the effect lands once 18296ms
+ ✓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > crash AFTER the effect, before the ack: the idempotency key keeps the effect to exactly one 15574ms
+ ✓ tests/temporal/03-crash-recovery.test.ts > temporal: crash recovery and exactly-once effects > CONTROL: crash after the effect with NO idempotency key: the effect happens twice 5242ms
+stdout | tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a repeated delivery of the whole stream is enqueued once and still runs in order
+[dispatcher] first delivery accepted=200 duplicates ignored=200 runs=200
+
+ ✓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a repeated delivery of the whole stream is enqueued once and still runs in order 11699ms
+stdout | tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > the de-duplication only lasts as long as the completed job is kept
+[dispatcher] after the retention window the same event id ran a second time (handlers must be idempotent by event id)
+
+ ✓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > the de-duplication only lasts as long as the completed job is kept 3024ms
+stdout | tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a backlog on ONE key drains far faster with staggered workers than with workers started together
+[dispatcher] 30 events on one key: workers started together 6.5s (4.6 events/s), staggered 0.7s (44.9 events/s)
+
+ ✓ tests/pgboss/07-dispatcher-fit.test.ts > pg-boss: fit with the events.md dispatcher > a backlog on ONE key drains far faster with staggered workers than with workers started together 7234ms
+stdout | tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process
+[ops-footprint] {"mode":"all","processes":{"temporalServer":1,"worker":1,"postgresGroup":60},"rssMiB":{"temporalServerIdle":125.2,"temporalServerAfterLoad":322.4,"perServiceAfterLoad":{"all":322.4},"worker":298,"postgresGroup":755.2},"dbConnectionsIdle":39,"idleCommitsPerSecond":66.3,"load":{"events":5000,"workflows":500,"seconds":18.4,"eventsPerSecond":271},"historyEventsPerKeyWorkflow":75,"diskMiB":{"temporalDb":38,"visibilityDb":31.4,"dataDirectory":228.1}}
+
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, all Temporal services in one process 36620ms
+stdout | tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes
+[ops-footprint] {"mode":"split","processes":{"temporalServer":4,"worker":1,"postgresGroup":60},"rssMiB":{"temporalServerIdle":293.9,"temporalServerAfterLoad":511.7,"perServiceAfterLoad":{"frontend":136.1,"history":209.8,"matching":106.9,"worker":58.8},"worker":294.5,"postgresGroup":882.5},"dbConnectionsIdle":41,"idleCommitsPerSecond":58.7,"load":{"events":5000,"workflows":500,"seconds":18.6,"eventsPerSecond":269},"historyEventsPerKeyWorkflow":75,"diskMiB":{"temporalDb":37.6,"visibilityDb":30.9,"dataDirectory":227.1}}
+
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > production-shaped, the four Temporal services as four processes 42563ms
+stdout | tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison
+[ops-footprint] dev server (not a production topology): 1 process, 148.9 MiB RSS idle, SQLite file, Web UI included
+
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison
+ ✓ tests/temporal/06-ops-footprint.test.ts > temporal: operations footprint > the dev server (SQLite, one process), for comparison 4863ms
+2026-10-01T08:18:34.279Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQzZWI2MzIwMy1lYTliLTQ5YTAtYTM1ZC1kMTQ3Nzk4NTViZjQSDnZpc2liaWxpdHkta2V5GiQ5NjVmODg5MC0xZGY4LTQ1ZTMtYTA3MC01NTk3NWFhMGFiZjkgESgBMgEyQgphcHBseUV2ZW50SggIARCfgEAYAQ==',
+  activityId: '2',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '965f8890-1df8-45e3-a070-55975aa0abf9',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=1 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+stdout | tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+[visibility] pending activity while retrying: {"attempt":2,"lastFailure":"deliberate failure: key=visibility-key seq=1 attempt=1","activityType":"applyEvent"}
+
+2026-10-01T08:18:35.292Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 2,
+  namespace: 'default',
+  taskToken: 'CiQzZWI2MzIwMy1lYTliLTQ5YTAtYTM1ZC1kMTQ3Nzk4NTViZjQSDnZpc2liaWxpdHkta2V5GiQ5NjVmODg5MC0xZGY4LTQ1ZTMtYTA3MC01NTk3NWFhMGFiZjkgESgCMgEyQgphcHBseUV2ZW50SggIARCmgEAYAQ==',
+  activityId: '2',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '965f8890-1df8-45e3-a070-55975aa0abf9',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=1 attempt=2
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:18:37.305Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQzZWI2MzIwMy1lYTliLTQ5YTAtYTM1ZC1kMTQ3Nzk4NTViZjQSDnZpc2liaWxpdHkta2V5GiQ5NjVmODg5MC0xZGY4LTQ1ZTMtYTA3MC01NTk3NWFhMGFiZjkgFygBMgEzQgphcHBseUV2ZW50SggIARC4gEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '965f8890-1df8-45e3-a070-55975aa0abf9',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:18:38.312Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 2,
+  namespace: 'default',
+  taskToken: 'CiQzZWI2MzIwMy1lYTliLTQ5YTAtYTM1ZC1kMTQ3Nzk4NTViZjQSDnZpc2liaWxpdHkta2V5GiQ5NjVmODg5MC0xZGY4LTQ1ZTMtYTA3MC01NTk3NWFhMGFiZjkgFygCMgEzQgphcHBseUV2ZW50SggIARC/gEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '965f8890-1df8-45e3-a070-55975aa0abf9',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=2
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:18:40.319Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 3,
+  namespace: 'default',
+  taskToken: 'CiQzZWI2MzIwMy1lYTliLTQ5YTAtYTM1ZC1kMTQ3Nzk4NTViZjQSDnZpc2liaWxpdHkta2V5GiQ5NjVmODg5MC0xZGY4LTQ1ZTMtYTA3MC01NTk3NWFhMGFiZjkgFygDMgEzQgphcHBseUV2ZW50SggIARDEgEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '965f8890-1df8-45e3-a070-55975aa0abf9',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=3
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:18:44.334Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'visibility-tq',
+  isLocal: false,
+  attempt: 4,
+  namespace: 'default',
+  taskToken: 'CiQzZWI2MzIwMy1lYTliLTQ5YTAtYTM1ZC1kMTQ3Nzk4NTViZjQSDnZpc2liaWxpdHkta2V5GiQ5NjVmODg5MC0xZGY4LTQ1ZTMtYTA3MC01NTk3NWFhMGFiZjkgFygEMgEzQgphcHBseUV2ZW50SggIARDJgEAYAQ==',
+  activityId: '3',
+  activityType: 'applyEvent',
+  workflowId: 'visibility-key',
+  workflowRunId: '965f8890-1df8-45e3-a070-55975aa0abf9',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=visibility-key seq=2 attempt=4
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+stdout | tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+[visibility] application attempt log (volatile): [{"key":"visibility-key","seq":0,"attempt":1,"at":3886.813875,"failed":false},{"key":"visibility-key","seq":1,"attempt":1,"at":3901.793917,"failed":true},{"key":"visibility-key","seq":1,"attempt":2,"at":4917.097542,"failed":true},{"key":"visibility-key","seq":1,"attempt":3,"at":6922.680125,"failed":false},{"key":"visibility-key","seq":2,"attempt":1,"at":6930.023,"failed":true},{"key":"visibility-key","seq":2,"attempt":2,"at":7937.105083,"failed":true},{"key":"visibility-key","seq":2,"attempt":3,"at":9944.414292,"failed":true},{"key":"visibility-key","seq":2,"attempt":4,"at":13958.538792,"failed":true}]
+
+stdout | tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+[visibility] history: 28 events; activity starts recorded with attempt numbers [1,3,4]
+
+stdout | tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs
+[visibility] HTTP API list: "WORKFLOW_EXECUTION_STATUS_RUNNING" for visibility-key
+
+ ✓ tests/temporal/04-visibility.test.ts > temporal: per-handler visibility without a screenshot > shows attempts, last error, history and listings for a handler through the APIs 10251ms
+ ✓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > repeated deliveries of the whole stream (during and after processing) are handled once and still run in order 3466ms
+stdout | tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > continues as new every 50 events under a steady stream of signals: no event lost, repeated or reordered
+[lifecycle] 400 events across 8 runs of workflow long-lived-key; longest history 884 events (limit 51,200); statuses COMPLETED,CONTINUED_AS_NEW
+
+ ✓ tests/temporal/07-entity-lifecycle.test.ts > temporal: one workflow per stream, over time > continues as new every 50 events under a steady stream of signals: no event lost, repeated or reordered 19134ms
+stdout | tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > answers 1,000 sequential and 100 concurrent reserves with no overspend, and only one process can lead
+[budget-actor:in-process] 1000 sequential: p50=1.9ms p99=4.2ms | 100 concurrent on one key: wall=201ms p50=91ms p99=198ms
+
+ ✓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > answers 1,000 sequential and 100 concurrent reserves with no overspend, and only one process can lead 2447ms
+stdout | tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > NEGATIVE CONTROL: without the in-process queue the same handler overspends
+[budget-actor:in-process-control] unserialised: accepted=100 (limit 50), balance=50
+
+ ✓ tests/baseline/budget-actor-in-process.test.ts > baseline: in-process single-writer budget actor (no handler runtime) > NEGATIVE CONTROL: without the in-process queue the same handler overspends
+stdout | tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint > measures the processes, memory, disk and idle load of 10 handler queues with 2 workers each
+[ops-footprint] {"processes":{"nodeApp":1,"postgresGroup":16},"rssMiB":{"nodeAppIdle":69.6,"nodeAppAfterLoad":102.3,"postgresGroup":184},"dbConnectionsIdle":3,"idleCommitsPerSecond":44.3,"load":{"events":5000,"seconds":48.6,"eventsPerSecond":103},"diskMiB":{"pgbossSchema":2.8,"database":10.8,"dataDirectory":65.8}}
+
+ ✓ tests/pgboss/06-ops-footprint.test.ts > pg-boss: operations footprint > measures the processes, memory, disk and idle load of 10 handler queues with 2 workers each 62209ms
+2026-10-01T08:20:22.339Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESCnBvaXNvbi1rZXkaJGIyNzQ5N2RjLTg3YjItNDEzZS1iNmJhLWU2ZDI4Njc4YTc3MiAHKAEyATFCCmFwcGx5RXZlbnRKCAgCEI2AQBgB',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-key',
+  workflowRunId: 'b27497dc-87b2-413e-b6ba-e6d28678a772',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-key seq=0 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:20:23.353Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 2,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESCnBvaXNvbi1rZXkaJGIyNzQ5N2RjLTg3YjItNDEzZS1iNmJhLWU2ZDI4Njc4YTc3MiAHKAIyATFCCmFwcGx5RXZlbnRKCAgCEJuAQBgB',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-key',
+  workflowRunId: 'b27497dc-87b2-413e-b6ba-e6d28678a772',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-key seq=0 attempt=2
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:20:25.363Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 3,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESCnBvaXNvbi1rZXkaJGIyNzQ5N2RjLTg3YjItNDEzZS1iNmJhLWU2ZDI4Njc4YTc3MiAHKAMyATFCCmFwcGx5RXZlbnRKCAgCEKCAQBgB',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-key',
+  workflowRunId: 'b27497dc-87b2-413e-b6ba-e6d28678a772',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-key seq=0 attempt=3
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:20:29.372Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 4,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESCnBvaXNvbi1rZXkaJGIyNzQ5N2RjLTg3YjItNDEzZS1iNmJhLWU2ZDI4Njc4YTc3MiAHKAQyATFCCmFwcGx5RXZlbnRKCAgCEKWAQBgB',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-key',
+  workflowRunId: 'b27497dc-87b2-413e-b6ba-e6d28678a772',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-key seq=0 attempt=4
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+stdout | tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed
+[retry] gaps between attempts (s): 1.02, 2.01, 4.01
+
+ ✓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > good keys flow while the poison key retries; it dead-letters, stays held, and resumes in order once fixed 7271ms
+2026-10-01T08:20:29.524Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESD3BvaXNvbi1za2lwLWtleRokYTc2NDU4YmMtY2I0OS00MDk1LTkyMGMtYTRiN2E4NTliMTVlIAcoATIBMUIKYXBwbHlFdmVudEoICAQQ2INAGAE=',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-skip-key',
+  workflowRunId: 'a76458bc-cb49-4095-920c-a4b7a859b15e',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-skip-key seq=0 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:20:30.528Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 2,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESD3BvaXNvbi1za2lwLWtleRokYTc2NDU4YmMtY2I0OS00MDk1LTkyMGMtYTRiN2E4NTliMTVlIAcoAjIBMUIKYXBwbHlFdmVudEoICAQQ4INAGAE=',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-skip-key',
+  workflowRunId: 'a76458bc-cb49-4095-920c-a4b7a859b15e',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-skip-key seq=0 attempt=2
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:20:31.531Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 3,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESD3BvaXNvbi1za2lwLWtleRokYTc2NDU4YmMtY2I0OS00MDk1LTkyMGMtYTRiN2E4NTliMTVlIAcoAzIBMUIKYXBwbHlFdmVudEoICAQQ5YNAGAE=',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-skip-key',
+  workflowRunId: 'a76458bc-cb49-4095-920c-a4b7a859b15e',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-skip-key seq=0 attempt=3
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+2026-10-01T08:20:32.539Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'retry-poison-tq',
+  isLocal: false,
+  attempt: 4,
+  namespace: 'default',
+  taskToken: 'CiQ1NTQzODE4Mi0yOGZiLTRhYzItYjc4Ny0xNjJjY2MzYjQ4ZmESD3BvaXNvbi1za2lwLWtleRokYTc2NDU4YmMtY2I0OS00MDk1LTkyMGMtYTRiN2E4NTliMTVlIAcoBDIBMUIKYXBwbHlFdmVudEoICAQQ6oNAGAE=',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'poison-skip-key',
+  workflowRunId: 'a76458bc-cb49-4095-920c-a4b7a859b15e',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=poison-skip-key seq=0 attempt=4
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+ ✓ tests/temporal/02-retry-poison.test.ts > temporal: retry with backoff, dead letter, poison blocks only its own key > the operator can also skip the held event on purpose; the skip is recorded and the successors run 3172ms
+stdout | tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys
+[ordering] events=10000 keys=100 dispatch=0.6s total=61.0s throughput=164 events/s max concurrent handlers=40 (40 workers)
+
+ ✓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys 61508ms
+stdout | tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: the same load on a queue without per-key ordering breaks the rules
+[ordering-control] standard queue: 20+ rule breaches, e.g. key-1: seq 34 started before seq 33 had finished (two writers at once)
+
+ ✓ tests/pgboss/01-ordering-parallelism.test.ts > pg-boss: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: the same load on a queue without per-key ordering breaks the rules 25349ms
+stdout | tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server) > serves the Web UI and shows the pending activity, its attempt and its last error
+[web-ui] Temporal Web UI version 2.54.1
+
+2026-10-01T08:22:03.457Z [WARN] Activity failed {
+  sdkComponent: 'worker',
+  taskQueue: 'ui-tq',
+  isLocal: false,
+  attempt: 1,
+  namespace: 'default',
+  taskToken: 'CiQwMWEwZjY4ZS02NTVhLTc4NWMtOTQwNC0xNTMwMWNmZDE4ZGMSBnVpLWtleRokOTA4M2M0NTAtMzM2ZS00NzRlLTlhODgtY2M4YTU3N2Y1MzFmIAYoATIBMUIKYXBwbHlFdmVudEoICAEQlYBAGAE=',
+  activityId: '1',
+  activityType: 'applyEvent',
+  workflowId: 'ui-key',
+  workflowRunId: '9083c450-336e-474e-9a88-cc8a577f531f',
+  workflowType: 'keyedEventProcessor',
+  error: Error: deliberate failure: key=ui-key seq=0 attempt=1
+      at applyEvent (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/src/temporal-workflows/activities.ts:48:11)
+      at executeNextHandler (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:143:53)
+      at Activity.execute (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:145:20)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:188:21
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14)
+      at NativeConnection.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/connection.ts:219:42)
+      at Client.withAbortSignal (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/client/src/base-client.ts:105:34)
+      at Activity.executeWithClient (/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:187:27)
+      at /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/node_modules/@temporalio/worker/src/activity.ts:199:35
+      at AsyncLocalStorage.run (node:internal/async_local_storage/async_hooks:91:14),
+  durationMs: 0
+}
+stdout | tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server) > serves the Web UI and shows the pending activity, its attempt and its last error
+[web-ui] UI API for workflow ui-key: attempt=2 lastFailure="deliberate failure: key=ui-key seq=0 attempt=1"
+
+ ✓ tests/temporal/04b-web-ui.test.ts > temporal: the Web UI and the API behind it (dev server) > serves the Web UI and shows the pending activity, its attempt and its last error
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > accepts a clean run and sees cross-key parallelism
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports two handlers of one key running at the same time
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports events of one key running out of order
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a lost event and a duplicated event
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > rejects missing or reversed timestamps instead of silently accepting them
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > reports a missing key
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > measures concurrency, treating back-to-back runs as not overlapping
+ ✓ tests/scenario-checkers.test.ts > scenario checkers > gives the same handler delay for the same event every time, within 2 to 12 ms
+ ✓ tests/scenario-checkers.test.ts > integer money input > rejects fractions, negatives and unsafe numbers
+stdout | tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys
+[ordering] events=10000 keys=100 dispatch=7.8s total=20.2s throughput=496 events/s max concurrent handlers=39 (worker allows 100)
+
+ ✓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > runs 100 keys x 100 events in strict per-key order, in parallel across keys 20172ms
+stdout | tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: one workflow per event (no single owner per key) breaks the rules
+[ordering-control] one workflow per event: 20+ rule breaches, e.g. key-0: run #0 (by start time) was seq 1, expected seq 0
+
+ ✓ tests/temporal/01-ordering-parallelism.test.ts > temporal: per-key FIFO order with real cross-key parallelism > NEGATIVE CONTROL: one workflow per event (no single owner per key) breaks the rules 4435ms
+ ✓ tests/temporal/00-smoke.test.ts > smoke: production-shaped Temporal Server on PostgreSQL, a worker and a client > starts a keyed workflow with a signal and reads its state back
+ ✓ tests/process-stop.test.ts > owned process cleanup > waits for exit even when the child ignores SIGTERM
+ ✓ tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it 551ms
+
+ Test Files  20 passed (20)
+      Tests  48 passed | 1 skipped (49)
+   Start at  10:11:50
+   Duration  649.09s (transform 165ms, setup 0ms, collect 2.93s, tests 644.04s, environment 1ms, prepare 539ms)
+
+Owned state directories after run: 0
+Completed 2026-10-01T08:22:39Z

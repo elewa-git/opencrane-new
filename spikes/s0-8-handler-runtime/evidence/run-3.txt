@@ -1,0 +1,9 @@
+run 3 started 2026-10-01T07:44:04Z
+machine load at start: 6.09 10.48 9.94
+leftover processes before the run: 1; leftover temp directories: 1
+node v22.15.0
+typecheck: OK
+[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)
+vitest exit code: 143; wall time 12 s
+leftover processes after the run: 2; leftover temp directories: 3
+machine load at end: 6.15 10.28 9.87

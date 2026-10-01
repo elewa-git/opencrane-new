@@ -1,0 +1,16 @@
+run 2 started 2026-10-01T07:42:37Z
+machine load at start: 11.38 12.52 10.52
+leftover processes before the run: 0; leftover temp directories: 0
+node v22.15.0
+typecheck: OK
+[budget-actor:memory] history after 1000 Updates: 5004 events (5.0 per request; hard limit 51,200 per run)
+[budget-actor:memory] 1000 sequential: p50=7.8ms p99=16.9ms | 100 concurrent on one key: wall=2346ms p50=679ms p99=2341ms accepted=50/100
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > memory only: 1,000 sequential and 100 concurrent reserves, no overspend 10614ms
+[budget-actor:activity] history after 1000 Updates: 11001 events (11.0 per request; hard limit 51,200 per run)
+[budget-actor:activity] 1000 sequential: p50=49.9ms p99=82.6ms | 100 concurrent on one key: wall=2480ms p50=1724ms p99=2375ms accepted=50/100
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > durable (activity): same measurements, then concurrent settles, with the log checked at every step 63703ms
+[budget-actor:local] 100 concurrent Updates, local-activity write: answered=100 (accepted 50) rejected=0 (none); highest running balance in the durable log=700 (ceiling 500); workflow balance=500
+ ✓ tests/temporal/05-budget-actor.test.ts > temporal: budget actor, one workflow per key, synchronous Update answers > OBSERVATION, durable (local activity): what happens to the durable log when concurrent Updates are rejected 3395ms
+vitest exit code: 143; wall time 83 s
+leftover processes after the run: 2; leftover temp directories: 2
+machine load at end: 6.09 10.48 9.94

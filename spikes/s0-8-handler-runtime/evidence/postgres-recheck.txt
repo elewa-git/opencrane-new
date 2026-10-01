@@ -1,0 +1,29 @@
+
+ RUN  v2.1.9 /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime
+
+ × tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it 1241ms
+   → Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 10:09:53.444 CEST [74279] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 10:09:53.444 CEST [74279] DETAIL:  Failed system call was shmget(key=145588742, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/.state/s08-pg-smoke-A3Jalv"
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  10:09:52
+   Duration  1.40s (transform 22ms, setup 0ms, collect 58ms, tests 1.24s, environment 0ms, prepare 25ms)
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/pgboss/00-smoke.test.ts > smoke: embedded PostgreSQL and pg-boss start without Docker > starts a real local PostgreSQL and a pg-boss instance, and moves one job through it
+Error: Postgres init script failed (code: 1, signal: null). ERROR OUTPUT: 2026-10-01 10:09:53.444 CEST [74279] FATAL:  could not create shared memory segment: Operation not permitted
+2026-10-01 10:09:53.444 CEST [74279] DETAIL:  Failed system call was shmget(key=145588742, size=56, 03600).
+child process exited with exit code 1
+initdb: removing contents of data directory "/Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/s0-8-handler-runtime/.state/s08-pg-smoke-A3Jalv"
+
+ ❯ ChildProcess.<anonymous> node_modules/embedded-postgres/dist/index.js:176:36
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+Exit: 1; owned state directories remaining: 0
