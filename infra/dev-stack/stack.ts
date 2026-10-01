@@ -58,7 +58,28 @@ async function start(name: string, args: string[], env: Record<string, string>) 
     child.unref();
   } finally { await log.close(); }
 }
+type ServeStatus = { TCP?: Record<string, unknown>, Web?: Record<string, { Handlers?: Record<string, unknown> }> };
+async function serveOwnership(settings: Record<string, string>) {
+  const status = JSON.parse(await run('tailscale', ['serve', 'status', '--json'])) as ServeStatus;
+  const web = Object.entries(status.Web ?? {}).filter(([address]) => address.endsWith(':443'));
+  if (status.TCP?.['443'] === undefined && !web.length) return 'absent';
+  const expected = `http://127.0.0.1:${settings['WEB_PORT']}`;
+  const tcp = status.TCP?.['443'] as { HTTPS?: boolean } | undefined;
+  const handlers = web[0]?.[1].Handlers;
+  const handler = handlers?.['/'] as { Proxy?: string } | undefined;
+  return tcp?.HTTPS === true && Object.keys(tcp).length === 1
+    && web.length === 1 && web[0]?.[0] === `${new URL(settings['ORIGIN']!).hostname}:443`
+    && handlers && Object.keys(handlers).length === 1
+    && handler?.Proxy === expected && Object.keys(handler).length === 1 ? 'owned' : 'foreign';
+}
 async function stop() {
+  if (await exists(`${directory}/settings.env`)) {
+    const settings = await readEnv('settings');
+    const ownership = await serveOwnership(settings);
+    if (ownership === 'foreign') throw new Error(`Refusing to remove HTTPS :443 Serve handler: expected ${settings['ORIGIN']} to map to 127.0.0.1:${settings['WEB_PORT']}`);
+    if (ownership === 'owned') await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
+  }
+  await rm(`${directory}/serve-owned`, { force: true });
   for (const name of [...names].reverse()) {
     const pid = await processId(name);
     if (pid) {
@@ -66,10 +87,6 @@ async function stop() {
       await wait(async () => !(await processId(name)), name);
     }
     await rm(`${directory}/${name}.pid`, { force: true });
-  }
-  if (await exists(`${directory}/serve-owned`)) {
-    await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
-    await rm(`${directory}/serve-owned`);
   }
   if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
 }
@@ -102,8 +119,7 @@ async function initialiseDatabase() {
   await save('database-ready', 'ready');
 }
 async function up(fresh: boolean) {
-  const before = await run('ss', ['-ltnp']);
-  const tail = JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string } };
+  const tail = JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
   await generate(origin);
   if (fresh) {
@@ -114,7 +130,6 @@ async function up(fresh: boolean) {
     for (const file of files) if (file !== 'stack-owner') await rm(`${directory}/${file}`);
     await generate(origin);
   }
-  await save('listeners-before.txt', before);
   const settings = await readEnv('settings');
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
   await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio');
@@ -140,22 +155,30 @@ async function up(fresh: boolean) {
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
     '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname });
   await wait(() => healthy(`http://127.0.0.1:${settings['WEB_PORT']}/org/integrations`), 'web');
-  const serve = JSON.parse(await run('tailscale', ['serve', 'status', '--json'])) as Record<string, unknown>;
-  if (Object.keys(serve).length && !(await exists(`${directory}/serve-owned`))) {
-    throw new Error('Existing tailscale serve configuration is not owned by this stack');
+  const ownership = await serveOwnership(settings);
+  if (ownership === 'foreign') throw new Error(`Refusing to replace HTTPS :443 Serve handler: expected ${origin} to map to 127.0.0.1:${settings['WEB_PORT']}`);
+  if (ownership === 'absent') {
+    await run('sudo', ['-n', 'tailscale', 'serve', '--bg', '--https=443', `http://127.0.0.1:${settings['WEB_PORT']}`]);
   }
-  await save('serve-owned', '443');
-  await run('sudo', ['-n', 'tailscale', 'serve', '--bg', '--https=443', `http://127.0.0.1:${settings['WEB_PORT']}`]);
   await wait(() => healthy(`${origin}/org/integrations`), 'tailnet HTTPS');
   await journey();
-  const after = await run('ss', ['-ltnp']);
+  const after = await run('ss', ['-H', '-ltnp']);
   await save('listeners-after.txt', after);
-  const publicListeners = (snapshot: string) => snapshot.split('\n').map((line) => line.trim().split(/\s+/u)[3])
-    .filter((address): address is string => !!address && /^(0\.0\.0\.0:|\[::\]:|\*:)/u.test(address));
-  const previous = new Set(publicListeners(before));
-  if (publicListeners(after).some((address) => !previous.has(address))) throw new Error('New public listener detected');
-  for (const name of names) if (!(await processId(name))) throw new Error(`${name} stopped`);
-  console.log('PASS listener check: no new wildcard listeners');
+  const pids = await Promise.all(names.map(processId));
+  for (let i = 0; i < names.length; i++) if (!pids[i]) throw new Error(`${names[i]} stopped`);
+  const ports = new Set(['443', ...['PG_PORT', 'NATS_PORT', 'FGA_PORT', 'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'SERVER_PORT', 'WEB_PORT']
+    .map((name) => settings[name]!)]);
+  const allowed = new Set(['127.0.0.1', '::1', ...tail.Self.TailscaleIPs]);
+  for (const line of after.trim().split('\n')) {
+    const address = line.trim().split(/\s+/u)[3]!;
+    const match = /^(?:\[(.*)\]|([^:]*)):(\d+)$/u.exec(address);
+    const ownedProcess = pids.some((pid) => line.includes(`pid=${pid},`));
+    if (ownedProcess && !match) throw new Error(`Cannot verify stack listener address: ${address}`);
+    if ((ownedProcess || ports.has(match?.[3] ?? '')) && !allowed.has(match?.[1] ?? match?.[2] ?? '')) {
+      throw new Error(`Stack listener is not on loopback or Tailscale: ${address}`);
+    }
+  }
+  console.log('PASS listener check: every stack listener is on loopback or Tailscale');
   console.log(`Stack ready: ${origin}/org/integrations (dev-only test sessions; OIDC pending #11)`);
 }
 async function journey() {
