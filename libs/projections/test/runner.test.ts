@@ -219,7 +219,7 @@ it("records event ids independently of checkpoint and refuses an incomplete repl
       logger,
     );
     await expect(incomplete.run(projection)).rejects.toThrow(
-      "before the captured head",
+      "EVENTS stream is incomplete",
     );
   } finally {
     await storage.close();

@@ -8,7 +8,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { parseEventByType } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { members, pgDb, ProjectionRunner, rebuildMemberProjection, type EventSource } from '@opencrane/projections';
 import { realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
@@ -66,7 +66,9 @@ async function connect(sub = 'oidc-alice', org = 'org-acme', autoPong = true) {
   const messages: RealtimeMessage[] = [];
   ws.on('message', (raw: Buffer) => messages.push(realtimeMessageSchema.parse(JSON.parse(raw.toString()))));
   await once(ws, 'open');
-  return { ws, messages, subscribe(since = 0) { ws.send(JSON.stringify({ type: 'subscribe', topic: 'members', since })); } };
+  return { ws, messages, subscribe(since = 0, generation = since > 0 ? 0 : undefined) {
+    ws.send(JSON.stringify({ type: 'subscribe', topic: 'members', since, ...(generation === undefined ? {} : { generation }) }));
+  } };
 }
 it.each(['cookie', 'origin', 'missing-origin'])('refuses an upgrade with bad %s in the real process', async (kind) => {
   const h: Record<string, string> = headers();
@@ -116,6 +118,65 @@ it('replays, streams committed changes, and reconnects without gaps or duplicate
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.position)).toEqual([4, 5]);
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.member.memberId)).toEqual(['carol', 'dan']);
 });
+it('keeps a subscriber live while replay catches an arriving event and switches tables', async () => {
+  const client = await connect();
+  client.subscribe(2);
+  await until(() => client.messages.some((message) => message.type === 'ready'));
+  let appended = false;
+  const arriving: EventSource = {
+    head: () => nats.reader.head(),
+    async *subscribe(fromSequence, signal) {
+      for await (const stored of nats.reader.subscribe(fromSequence, signal)) {
+        yield stored;
+        if (!appended) {
+          appended = true;
+          await append('carol', 'member.joined', {}, false);
+        }
+      }
+    },
+  };
+  const result = await rebuildMemberProjection(
+    pgDb(dbs.queue),
+    arriving,
+    createLogger('realtime-rebuild'),
+    { verify: true },
+  );
+  expect(result).toMatchObject({ previousSequence: 2, sequence: 3, verified: true, changed: false });
+  await until(() => client.messages.some((message) => message.position === 3));
+  await append('dan');
+  await until(() => client.messages.some((message) => message.position === 4));
+  expect(client.ws.readyState).toBe(WebSocket.OPEN);
+  expect(client.messages.filter((message) => message.type === 'member').map((message) => message.member.memberId))
+    .toEqual(['carol', 'dan']);
+});
+it('resets live and resumed clients after replay repairs delivered state', async () => {
+  await dbs.queue.query("UPDATE members SET display_name = 'Wrong' WHERE member_id = 'alice'");
+  await dbs.queue.query("UPDATE member_changes SET member = jsonb_set(member, '{displayName}', '\"Wrong\"') WHERE position = 2");
+  const client = await connect();
+  client.subscribe();
+  await until(() => client.messages.some((message) => message.type === 'ready'));
+  expect(client.messages.find((message) => message.type === 'member' && message.position === 2))
+    .toMatchObject({ member: { displayName: 'Wrong' }, generation: 0 });
+
+  const closed = once(client.ws, 'close');
+  const result = await rebuildMemberProjection(pgDb(dbs.queue), nats.reader, createLogger('repair-rebuild'));
+  expect(result).toMatchObject({ changed: true, previousSequence: 2, sequence: 2 });
+  await until(() => client.messages.some((message) => message.type === 'resync'));
+  expect(client.messages.at(-1)).toMatchObject({ type: 'resync', position: 0, generation: 1 });
+  expect((await closed)[0]).toBe(1013);
+
+  const corrected = await connect();
+  corrected.subscribe(0, 1);
+  await until(() => corrected.messages.some((message) => message.type === 'ready'));
+  expect(corrected.messages.find((message) => message.type === 'member' && message.position === 2))
+    .toMatchObject({ member: { displayName: 'Alice' }, generation: 1 });
+
+  const stale = await connect();
+  const staleClosed = once(stale.ws, 'close');
+  stale.subscribe(2, 0);
+  expect((await staleClosed)[0]).toBe(1013);
+  expect(stale.messages).toEqual([expect.objectContaining({ type: 'resync', position: 0, generation: 1 })]);
+}, 15_000);
 it('keeps uncommitted and rolled-back rows off the socket', async () => {
   const client = await connect();
   client.subscribe(2);

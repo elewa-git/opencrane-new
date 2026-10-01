@@ -13,16 +13,11 @@ export interface RealtimeOptions {
 
 // ponytail: one topic per socket. Add multiplexing when a second topic exists.
 export function memberSubscription(socket: WebSocket, session: SessionData, config: AuthConfig, logger: FastifyBaseLogger, options?: RealtimeOptions) {
-  let position = 0;
-  let active = false;
-  let running = false;
-  let dirty = false;
-  let subscribed = false;
-  let ready = false;
+  let position = 0, generation = 0;
+  let active = false, running = false, dirty = false, subscribed = false, ready = false;
   const send = (message: RealtimeMessage) => socket.send(JSON.stringify(message));
-  const envelope = () => ({ version: 1 as const, topic: 'members' as const, position });
+  const envelope = () => ({ version: 1 as const, topic: 'members' as const, position, generation });
   const authz = options && memberAuthorisation(options.binding);
-
   async function allowed() {
     if (!options || !authz || !config.expectedOrgId || session.orgId !== config.expectedOrgId
       || session.exp * 1000 <= Date.now()) return false;
@@ -41,6 +36,13 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
     send({ ...envelope(), type: 'resync' });
     socket.close(1013, 'resume from last received position');
   }
+  function reload(nextGeneration: number) {
+    active = false;
+    generation = nextGeneration;
+    position = 0;
+    send({ ...envelope(), type: 'resync' });
+    socket.close(1013, 'restart from position 0');
+  }
   const connected = () => active && socket.readyState === socket.OPEN;
   async function drain() {
     if (!options || running || !active) return;
@@ -48,6 +50,8 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
     try {
       do {
         dirty = false;
+        const currentGeneration = await options.feed.generation();
+        if (currentGeneration !== generation) { reload(currentGeneration); return; }
         if (!await allowed()) { refuse(); return; }
         const rows = await options.feed.read(options.binding.silo, position);
         if (!connected()) return;
@@ -76,11 +80,15 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
   const permissions = setInterval(wake, 1000);
   permissions.unref();
   socket.once('close', () => { active = false; unlisten?.(); clearInterval(permissions); });
-  return async (since: number) => {
+  return async (since: number, requestedGeneration?: number) => {
     if (subscribed) { refuse(); return; }
     subscribed = true;
     position = since;
-    if (!await allowed() || !options || since > await options.feed.head(options.binding.silo)) { refuse(); return; }
+    if (!options) { refuse(); return; }
+    generation = await options.feed.generation();
+    if (!await allowed()) { refuse(); return; }
+    if (since > 0 && requestedGeneration !== generation) { reload(generation); return; }
+    if (since > await options.feed.head(options.binding.silo)) { refuse(); return; }
     if (socket.readyState !== socket.OPEN) return;
     active = true;
     wake();

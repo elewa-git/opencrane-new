@@ -3,6 +3,32 @@ import { memberStateSchema } from "@opencrane/protocol";
 import type { Db } from "./db.ts";
 import { mapMcpCatalogueRows, type McpCatalogueRow } from './mcp-catalogue.ts';
 
+function clientDb(client: import("pg").PoolClient): Db {
+  return {
+    query: (sql, parameters) => client.query(sql, parameters),
+    async transaction(work) {
+      try {
+        await client.query("BEGIN");
+        const result = await work({
+          query: (sql, parameters) => client.query(sql, parameters),
+        });
+        await client.query("COMMIT");
+        return result;
+      } catch (error) {
+        await client.query("ROLLBACK").catch((rollbackError: unknown) => {
+          throw new AggregateError(
+            [error, rollbackError],
+            "Projection transaction and rollback failed",
+            { cause: rollbackError },
+          );
+        });
+        throw error;
+      }
+    },
+    lock: (_name, work) => work(clientDb(client)),
+  };
+}
+
 /** The caller owns the pool, TLS settings and pool error listener. */
 export function pgDb(pool: Pool): Db {
   return {
@@ -37,7 +63,35 @@ export function pgDb(pool: Pool): Db {
         }
       }
     },
+    async lock(name, work) {
+      const client = await pool.connect();
+      try {
+        await client.query(
+          "SELECT pg_advisory_lock(hashtextextended($1, 0))",
+          [`opencrane:projection:${name}`],
+        );
+        return await work(clientDb(client));
+      } finally {
+        try {
+          await client.query(
+            "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
+            [`opencrane:projection:${name}`],
+          );
+        } finally {
+          client.release();
+        }
+      }
+    },
   };
+}
+
+export function connectProjectionDb(
+  connectionString: string,
+  onError: (error: Error) => void,
+) {
+  const pool = new PgPool({ connectionString });
+  pool.on("error", onError);
+  return { db: pgDb(pool), close: () => pool.end() };
 }
 
 /** LISTEN is ready before callers read, so a commit during catch-up cannot be missed. */
@@ -77,6 +131,15 @@ export async function connectMemberFeed(connectionString: string) {
       const result = await pool.query<{ position: string }>(
         'SELECT COALESCE(MAX(position), 0) AS position FROM member_changes WHERE silo = $1', [silo]);
       return Number(result.rows[0]?.position);
+    },
+    async generation() {
+      check();
+      const result = await pool.query<{ generation: string }>(
+        "SELECT generation FROM projection_generations WHERE name = 'members'",
+      );
+      const generation = Number(result.rows[0]?.generation);
+      if (!Number.isSafeInteger(generation)) throw new Error('Members generation unavailable');
+      return generation;
     },
     async read(silo: string, since: number) {
       check();

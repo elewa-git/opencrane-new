@@ -1,4 +1,5 @@
-import { OpenFgaClient, ConsistencyPreference } from "@openfga/sdk";
+import { setTimeout as delay } from "node:timers/promises";
+import { OpenFgaClient, ConsistencyPreference, type Store } from "@openfga/sdk";
 import model from "../model/v1.json" with { type: "json" };
 
 export interface Binding {
@@ -13,6 +14,7 @@ export interface Tuple {
   object: string;
 }
 const consistent = { consistency: ConsistencyPreference.HigherConsistency };
+const lostCreateCleanupDelayMs = 250;
 
 export function objectId(type: string, ...ids: string[]): string {
   return `${type}:${Buffer.from(JSON.stringify(ids)).toString("base64url")}`;
@@ -35,23 +37,98 @@ function sdk(apiUrl: string, binding?: Binding) {
 export async function createStore(
   apiUrl: string,
   silo: string,
+  storeName = `members-${silo}`,
 ): Promise<Binding> {
   const client = sdk(apiUrl);
-  const store = await client.createStore({ name: `members-${silo}` });
-  client.storeId = store.id;
-  const written = await client.writeAuthorizationModel({
-    ...model,
-    type_definitions: model.type_definitions.map(({ metadata, ...type }) => ({
-      ...type,
-      ...(metadata && { metadata }),
-    })),
-  });
-  return {
-    apiUrl,
-    silo,
-    storeId: store.id,
-    authorizationModelId: written.authorization_model_id,
-  };
+  let storeId: string | undefined;
+  try {
+    const store = await client.createStore({ name: storeName });
+    storeId = store.id;
+    client.storeId = storeId;
+    const written = await client.writeAuthorizationModel({
+      ...model,
+      type_definitions: model.type_definitions.map(({ metadata, ...type }) => ({
+        ...type,
+        ...(metadata && { metadata }),
+      })),
+    });
+    return {
+      apiUrl,
+      silo,
+      storeId,
+      authorizationModelId: written.authorization_model_id,
+    };
+  } catch (error) {
+    let deleted = false;
+    try {
+      if (storeId) {
+        await client.deleteStore();
+        deleted = true;
+      } else if (storeName !== `members-${silo}`) {
+        deleted = (await deleteStoresNamed(apiUrl, storeName)) > 0;
+        if (!deleted) {
+          await delay(lostCreateCleanupDelayMs);
+          deleted = (await deleteStoresNamed(apiUrl, storeName)) > 0;
+        }
+      }
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        `OpenFGA model creation and store cleanup failed. ${manualCleanup(storeName, storeId)}`,
+        { cause: cleanupError },
+      );
+    }
+    if (!storeId && storeName !== `members-${silo}` && !deleted) {
+      throw new Error(
+        `OpenFGA store creation failed before returning an id. ${manualCleanup(storeName)}`,
+        { cause: error },
+      );
+    }
+    throw error;
+  }
+}
+
+function manualCleanup(name: string, id = "<id>"): string {
+  return `If rebuild store "${name}" appears later, delete it with: npm run replay -- openfga --delete-store ${id}`;
+}
+
+async function stores(apiUrl: string): Promise<Store[]> {
+  const client = sdk(apiUrl);
+  const listed: Store[] = [];
+  let token = "";
+  do {
+    const response = await client.listStores({ pageSize: 100, continuationToken: token });
+    listed.push(...response.stores);
+    token = response.continuation_token;
+  } while (token);
+  return listed;
+}
+
+async function deleteStoresNamed(
+  apiUrl: string,
+  name: string,
+): Promise<number> {
+  const client = sdk(apiUrl);
+  const matches = (await stores(apiUrl)).filter((candidate) => candidate.name === name).map(({ id }) => id);
+  for (const storeId of matches) await client.deleteStore({ storeId });
+  return matches.length;
+}
+
+export async function listRebuildStores(
+  apiUrl: string,
+  prefix: string,
+): Promise<Array<{ id: string; name: string; createdAt: string }>> {
+  return (await stores(apiUrl))
+    .filter(({ name }) => name.startsWith(prefix))
+    .map(({ id, name, created_at: createdAt }) => ({ id, name, createdAt }));
+}
+
+export async function deleteStoreById(apiUrl: string, storeId: string): Promise<void> {
+  await sdk(apiUrl).deleteStore({ storeId });
+}
+
+export async function deleteStore(binding: Binding): Promise<void> {
+  await sdk(binding.apiUrl, binding).deleteStore();
 }
 
 export class TupleClient {

@@ -40,12 +40,15 @@ Every handler attempt uses observability's `runHandler`, including the
 transaction commit. Start telemetry in the host to obtain real `trace_id`
 values; the helper deliberately omits that field with a no-op tracer.
 
-`rebuild` drops/recreates only the supplied projection's tables and resets
-its event ids/checkpoint in one transaction, then replays from the start.
-Stop readers and runners before this destructive operation. For an online
-rebuild, provide shadow tables and a separate projection name, catch up and
-switch readers in the host. An interrupted replay resumes from its committed
-checkpoint. `initialise` must precede `run` or `rebuild`.
+The low-level `rebuild` method is destructive and remains for tests and offline
+maintenance: stop readers and runners before calling it. Operators use
+`npm run replay -- members` or `npm run replay -- mcp-catalogue`, which takes the
+same cross-process advisory lock as the normal PostgreSQL runner, builds shadow
+tables and replaces the live contents plus the checkpoint under one ordered table
+lock. The live tables keep their grants.
+Changed history bumps a generation used to reset realtime cursors. See the
+[operator runbook](../../apps/ops/README.md). `initialise` must precede `run` or
+`rebuild`.
 
 The members table uses `(silo, member_id)` as its key. Invitations are
 `invited`, acceptance replaces details and marks `joined`, removal marks
@@ -64,7 +67,8 @@ projection; invitation delivery is outside this package.
 tool modes and tool drift into `mcp_catalogue` and `mcp_tool_modes`. Tool drift leaves
 the server quarantined for review. `connectMcpCatalogue` maps those stored facts into
 typed register rows; it does not guess missing catalogue metadata. Both tables can be
-dropped and rebuilt with `ProjectionRunner.rebuild(mcpCatalogue)`.
+rebuilt online with `npm run replay -- mcp-catalogue --verify`; the destructive
+`ProjectionRunner.rebuild(mcpCatalogue)` remains available for offline maintenance.
 
 Run `sh scripts/fetch-nats.sh`, then `npx vitest run libs/projections/test`.
 PGlite tests use a real on-disk PostgreSQL engine, real NATS, a failed
@@ -87,5 +91,6 @@ package (or `connectEventStore()` for a projection source). Required file paths
 and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.md).
 Never supply the command identity to a reader process.
 
-Consumer creation/reset belongs to the authorised provisioning job, following
-[ADR 0005](../../docs/adr/0005-nats-access.md); reader connections only bind existing consumers.
+Projection readers do not create, reset or bind consumers. They read exact
+sequences from their SQL checkpoints as defined in
+[ADR 0005](../../docs/adr/0005-nats-access.md).

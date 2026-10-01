@@ -8,6 +8,17 @@ const eventTypes = new Set<string>([
 ]);
 type ToolMode = 'allow' | 'ask' | 'block';
 
+interface McpCatalogueTables {
+  catalogue: string;
+  toolModes: string;
+}
+
+const live = { catalogue: 'mcp_catalogue', toolModes: 'mcp_tool_modes' } satisfies McpCatalogueTables;
+export const replayMcpCatalogueTables = {
+  catalogue: 'mcp_catalogue_replay',
+  toolModes: 'mcp_tool_modes_replay',
+} satisfies McpCatalogueTables;
+
 function field(data: unknown, name: string): string {
   if (typeof data !== 'object' || data === null) throw new Error('Invalid MCP event data');
   const value: unknown = Reflect.get(data, name);
@@ -38,56 +49,61 @@ function serverInfo(data: unknown): { name: string; version: string } | undefine
 }
 
 /** The register keeps event facts only. Labels and status wording are mapped below in TypeScript. */
-export const mcpCatalogue: Projection = {
-  name: 'mcp catalogue',
-  async create(db) {
-    await db.query(`CREATE TABLE IF NOT EXISTS mcp_catalogue (
+function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Projection {
+  return {
+    name,
+    async create(db) {
+      await db.query(`CREATE TABLE IF NOT EXISTS ${tables.catalogue} (
       silo TEXT NOT NULL, server_id TEXT NOT NULL, source_kind TEXT NOT NULL,
       locator TEXT NOT NULL, catalogue_ref TEXT, server_name TEXT, server_version TEXT,
       tool_count INTEGER, lifecycle TEXT NOT NULL,
       changed_at TEXT NOT NULL, position BIGINT NOT NULL,
       PRIMARY KEY (silo, server_id))`);
-    await db.query(`CREATE TABLE IF NOT EXISTS mcp_tool_modes (
+      await db.query(`CREATE TABLE IF NOT EXISTS ${tables.toolModes} (
       silo TEXT NOT NULL, server_id TEXT NOT NULL, tool_name TEXT NOT NULL, mode TEXT NOT NULL,
       PRIMARY KEY (silo, server_id, tool_name))`);
-  },
-  async drop(db) {
-    await db.query('DROP TABLE IF EXISTS mcp_tool_modes');
-    await db.query('DROP TABLE IF EXISTS mcp_catalogue');
-  },
-  async apply(db, event, position) {
-    if (!eventTypes.has(event.type)) return;
-    const data: unknown = getEventDefinition(event.type)?.dataSchema.parse(event.data);
-    const serverId = field(data, 'serverId');
-    if (event.subject !== `mcp-${serverId}`) throw new Error('MCP subject mismatch');
-    if (event.type === 'mcp.server_registered') {
-      await db.query(`INSERT INTO mcp_catalogue VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, 'registered', $6, $7)
+    },
+    async drop(db) {
+      await db.query(`DROP TABLE IF EXISTS ${tables.toolModes}`);
+      await db.query(`DROP TABLE IF EXISTS ${tables.catalogue}`);
+    },
+    async apply(db, event, position) {
+      if (!eventTypes.has(event.type)) return;
+      const data: unknown = getEventDefinition(event.type)?.dataSchema.parse(event.data);
+      const serverId = field(data, 'serverId');
+      if (event.subject !== `mcp-${serverId}`) throw new Error('MCP subject mismatch');
+      if (event.type === 'mcp.server_registered') {
+        await db.query(`INSERT INTO ${tables.catalogue} VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, 'registered', $6, $7)
         ON CONFLICT (silo, server_id) DO UPDATE SET source_kind = $3, locator = $4,
         catalogue_ref = $5, server_name = NULL, server_version = NULL,
         tool_count = NULL, lifecycle = 'registered', changed_at = $6, position = $7`,
-      [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), optionalField(data, 'catalogueRef'),
-        event.time, position]);
-      return;
-    }
-    const existing = await db.query('SELECT server_id FROM mcp_catalogue WHERE silo = $1 AND server_id = $2',
-      [event.silo, serverId]);
-    if (!existing.rows.length) throw new Error('MCP event requires a registered server');
-    if (event.type === 'mcp.tool_mode_set') {
-      await db.query(`INSERT INTO mcp_tool_modes VALUES ($1, $2, $3, $4)
+        [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), optionalField(data, 'catalogueRef'),
+          event.time, position]);
+        return;
+      }
+      const existing = await db.query(`SELECT server_id FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
+        [event.silo, serverId]);
+      if (!existing.rows.length) throw new Error('MCP event requires a registered server');
+      if (event.type === 'mcp.tool_mode_set') {
+        await db.query(`INSERT INTO ${tables.toolModes} VALUES ($1, $2, $3, $4)
         ON CONFLICT (silo, server_id, tool_name) DO UPDATE SET mode = $4`,
-      [event.silo, serverId, field(data, 'toolName'), field(data, 'mode')]);
-      return;
-    }
-    const lifecycle = event.type.slice('mcp.'.length).replace('server_', '');
-    const toolCount = event.type === 'mcp.server_discovered' ? numberField(data, 'toolCount') : null;
-    const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
-    await db.query(`UPDATE mcp_catalogue SET lifecycle = $3,
+        [event.silo, serverId, field(data, 'toolName'), field(data, 'mode')]);
+        return;
+      }
+      const lifecycle = event.type.slice('mcp.'.length).replace('server_', '');
+      const toolCount = event.type === 'mcp.server_discovered' ? numberField(data, 'toolCount') : null;
+      const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
+      await db.query(`UPDATE ${tables.catalogue} SET lifecycle = $3,
       tool_count = COALESCE($4, tool_count), server_name = COALESCE($5, server_name),
       server_version = COALESCE($6, server_version), changed_at = $7, position = $8
       WHERE silo = $1 AND server_id = $2`,
-    [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position]);
-  },
-};
+      [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position]);
+    },
+  };
+}
+
+export const mcpCatalogue = mcpCatalogueProjection('mcp catalogue', live);
+export const replayMcpCatalogue = mcpCatalogueProjection('mcp catalogue-replay', replayMcpCatalogueTables);
 
 export interface McpCatalogueRow extends Record<string, unknown> {
   server_id: string;
