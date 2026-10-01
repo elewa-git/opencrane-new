@@ -2,7 +2,10 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { trace } from '@opentelemetry/api';
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import type { Logger } from 'pino';
+import { runWithContext } from '../src/context.ts';
 import { runHandler } from '../src/handler-log.ts';
+import { createLogger } from '../src/logger.ts';
+import { memorySink } from './memory-sink.ts';
 
 /** Minimal stand-in for a pino Logger that records what it was called with, so a test can inspect the fields without parsing JSON. */
 function fakeLogger(): { logger: Logger; calls: { level: 'info' | 'error'; fields: Record<string, unknown>; msg: string }[] } {
@@ -61,14 +64,15 @@ describe('runHandler', () => {
     }
   });
 
-  it('runs the handler inside exactly one span, named after the handler, and marks it OK', async () => {
+  it('runs the handler inside exactly one span, named after the handler, marked OK, carrying all five fixed fields and the trace id', async () => {
     await runHandler(fakeLogger().logger, run, () => Promise.resolve('ok'));
 
     const spans = exporter.getFinishedSpans();
     expect(spans).toHaveLength(1);
     expect(spans[0]?.name).toBe('settle-budget');
     expect(spans[0]?.status.code).toBe(1); // SpanStatusCode.OK
-    expect(spans[0]?.attributes['event_id']).toBe('evt_1');
+    expect(spans[0]?.attributes).toMatchObject({ handler: 'settle-budget', event_id: 'evt_1', event_type: 'effect.observed', stream: 'budget-acme', attempt: 1 });
+    expect(spans[0]?.attributes['trace_id']).toMatch(/^[0-9a-f]{32}$/u);
   });
 
   it('logs handler.failed, marks the span as an error, and re-throws, when the handler throws', async () => {
@@ -97,5 +101,41 @@ describe('runHandler', () => {
     await runHandler(second.logger, { ...run, attempt: 2 }, () => Promise.resolve(undefined));
 
     expect(first.calls[0]?.fields['trace_id']).not.toBe(second.calls[0]?.fields['trace_id']);
+  });
+
+  it('gives any log line written inside the handler the handler fields, and keeps the request id and extra fields an outer scope set (checked with a real logger)', async () => {
+    const { stream, lines } = memorySink();
+    const logger = createLogger('test', { destination: stream, level: 'info' });
+
+    await runWithContext({ requestId: 'req_7', extra: { silo: 'acme' } }, () =>
+      runHandler(logger, run, () => {
+        logger.info('inside the handler');
+        return Promise.resolve();
+      }),
+    );
+
+    expect(lines().find((line) => line['msg'] === 'inside the handler')).toMatchObject({
+      handler: 'settle-budget',
+      event_id: 'evt_1',
+      event_type: 'effect.observed',
+      stream: 'budget-acme',
+      attempt: 1,
+      request_id: 'req_7',
+      silo: 'acme',
+    });
+  });
+
+  it('writes no secret from a thrown error into the handler.failed line (found leaking an Error property)', async () => {
+    const { stream, text } = memorySink();
+    const logger = createLogger('test', { destination: stream, level: 'info' });
+    const secretError = Object.assign(new Error('openfga write failed'), {
+      config: { headers: { authorization: 'Bearer SECRET_RUNHANDLER' } },
+      apiKey: 'SECRET_RH_APIKEY',
+    });
+
+    await expect(runHandler(logger, run, () => Promise.reject(secretError))).rejects.toBe(secretError);
+
+    expect(text()).toContain('handler.failed');
+    expect(text()).not.toMatch(/SECRET_/u);
   });
 });

@@ -1,48 +1,39 @@
 // Copied from OpenCrane 1 (10abd0ef6) libs/backend/observability/src/http-trace.ts;
-// changed: that file stripped a URL's whole query string for OpenTelemetry
-// span attributes. This one is for log lines instead, and only blanks out
-// the query-string parameters that are known to carry a secret, so the rest
-// of the query string (which is often useful for debugging) stays visible.
-//
-// A previous review found that the server logged a request URL with its
-// token verbatim, e.g. `?token=SECRET123`. redactUrl() is the fix: every
-// place that logs a request URL should pass it through this first.
+// changed: that file stripped a URL's whole query string for tracing. This one
+// is for log lines and blanks only the parameters that carry a secret. It works
+// on plain text and never calls `new URL()`, so a URL the parser cannot read
+// (a stray `[`) is redacted like any other. OpenCrane 1 failed closed on those;
+// the first version here had failed open.
+import { isSensitiveQueryName } from './names.ts';
 
-/** Query-string parameter names (case-insensitive) whose value must never reach a log line. */
-const SENSITIVE_QUERY_PARAMS = new Set(['token', 'code', 'state', 'access_token', 'id_token']);
-
-/** Value written in place of a redacted query-string parameter. */
+/** Value written in place of a redacted value. */
 export const REDACTED_VALUE = '[Redacted]';
 
-/**
- * Return `url` with any query-string parameter named in {@link SENSITIVE_QUERY_PARAMS}
- * replaced by `[Redacted]`. The path, other parameters and (for an absolute
- * URL) the origin are left untouched.
- *
- * Works on both relative paths (e.g. `/callback?token=abc`, what Fastify
- * puts on `request.url`) and absolute URLs. A value that cannot be parsed as
- * a URL at all is returned unchanged, since it is not the shape this guards
- * against.
- */
-export function redactUrl(url: string): string {
-  const isAbsolute = /^[a-z][a-z\d+.-]*:\/\//iu.test(url);
-  let parsed: URL;
+/** One `?name=value`, `&name=value`, `;name=value` or `#name=value` pair. Name and value stop at the characters that end a pair or a string (`& ; # ?`, whitespace, quotes, backslash), so a pair inside a sentence matches on its own. */
+const QUERY_PAIR = /([?&;#])([^=&;#?\s"'\\]+)=([^&;#?\s"'\\]*)/gu;
+
+/** Decode `%74oken` to `token` so an encoded name cannot dodge the check; an invalid escape is compared as written. */
+function decodeName(name: string): string {
   try {
-    parsed = new URL(url, isAbsolute ? undefined : 'http://redact.invalid');
+    return decodeURIComponent(name);
   } catch {
-    return url;
+    return name;
   }
+}
 
-  let redactedAny = false;
-  for (const name of [...parsed.searchParams.keys()]) {
-    if (SENSITIVE_QUERY_PARAMS.has(name.toLowerCase())) {
-      parsed.searchParams.set(name, REDACTED_VALUE);
-      redactedAny = true;
-    }
-  }
-  if (!redactedAny) {
-    return url;
-  }
-
-  return isAbsolute ? parsed.toString() : `${parsed.pathname}${parsed.search}${parsed.hash}`;
+/**
+ * Return `text` with the value of every sensitive query-string parameter
+ * (`token`, `code`, `state`, `access_token`, `refresh_token`, `client_secret`,
+ * `password`, `api_key`, and anything else {@link isSensitiveQueryName}
+ * matches) replaced by `[Redacted]`. Nothing else is touched or tidied.
+ *
+ * `text` can be a relative path (what Fastify puts on `request.url`), an
+ * absolute URL, a string that is not a valid URL, or a sentence that contains
+ * one, such as Fastify's `Route GET:/x?token=abc not found`. The logger runs
+ * it over every string it writes (see sanitize.ts).
+ */
+export function redactUrl(text: string): string {
+  return text.replace(QUERY_PAIR, (pair, separator: string, name: string) =>
+    isSensitiveQueryName(decodeName(name)) ? `${separator}${name}=${REDACTED_VALUE}` : pair,
+  );
 }

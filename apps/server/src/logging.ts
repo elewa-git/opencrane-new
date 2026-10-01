@@ -1,27 +1,24 @@
-// Builds the server's logger: @opencrane/observability's pino factory
-// (JSON to stdout, sensitive fields redacted, request/trace id on every
-// line), plus a request serializer that redacts the URL Fastify logs for
-// every incoming request. A previous review found the server logging a
-// request URL's token verbatim (e.g. `?token=SECRET123`); this closes that
-// gap. See apps/server/test/server.test.ts and
-// apps/server/test/main.test.ts for the tests that check it.
-import { createLogger, redactUrl, type Logger } from '@opencrane/observability';
+// Builds the server's logger: @opencrane/observability's pino factory (JSON to
+// stdout, secrets and URL tokens redacted on every line) plus a request
+// serializer that keeps a request line to the method, a redacted URL, the host
+// and the port. server.test.ts and main.test.ts check the server's own lines.
+import { createLogger, redactUrl, type LogDestination, type Logger } from '@opencrane/observability';
 import type { FastifyRequest } from 'fastify';
 
-/** Fastify's own default `req` serializer shape, but with the URL's query string redacted before it ever reaches a log line. */
-function redactedRequestSerializer(req: FastifyRequest): Record<string, unknown> {
+/** Fastify's own default `req` serializer shape, but with the URL's secrets redacted. `socket` can be missing (a request made without a real connection), and a serializer that throws would take the process down, so it is read defensively. */
+export function redactedRequestSerializer(req: FastifyRequest): Record<string, unknown> {
   return {
     method: req.method,
     url: redactUrl(req.url),
     host: req.host,
-    remotePort: req.socket.remotePort,
+    remotePort: req.socket?.remotePort,
   };
 }
 
-/** Build the logger apps/server passes to Fastify as `loggerInstance`. */
-export function createServerLogger(): Logger {
+/** Build the logger apps/server passes to Fastify as `loggerInstance`. The level comes from `LOG_LEVEL` (default `info`); a test passes `destination` to capture the lines. */
+export function createServerLogger(destination?: LogDestination): Logger {
   return createLogger('opencrane-server', {
-    level: process.env['LOG_LEVEL'] ?? 'info',
     serializers: { req: redactedRequestSerializer },
+    ...(destination !== undefined ? { destination } : {}),
   });
 }

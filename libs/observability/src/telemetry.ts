@@ -4,6 +4,10 @@
 // Spans are opened by hand (see handler-log.ts) rather than patched in.
 // The enabled/disabled decision is pulled out into resolveTelemetryEnabled()
 // so it can be unit tested without starting a real SDK or touching the network.
+// Also: an empty OTEL_EXPORTER_OTLP_ENDPOINT counts as unset (a blank Helm
+// value renders as ""), and shutdownTelemetry() reports a failed flush through
+// a callback instead of rejecting, so an unreachable collector cannot make a
+// server's shutdown fail.
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 
@@ -22,7 +26,7 @@ export interface TelemetryOptions {
 
 /** Decide whether telemetry should start, without touching the network or any global state. Exported so tests can check the decision directly. */
 export function resolveTelemetryEnabled(opts: TelemetryOptions, env: NodeJS.ProcessEnv = process.env): boolean {
-  return opts.enabled ?? env['OTEL_EXPORTER_OTLP_ENDPOINT'] !== undefined;
+  return opts.enabled ?? Boolean(env['OTEL_EXPORTER_OTLP_ENDPOINT']);
 }
 
 /** The running SDK, so shutdownTelemetry() can flush it. Null when telemetry was never started. */
@@ -52,14 +56,20 @@ export function startTelemetry(opts: TelemetryOptions): void {
 /**
  * Flush and stop the OpenTelemetry SDK. Call this during graceful shutdown.
  * A no-op when telemetry was never started.
+ *
+ * Never rejects: if the flush fails (for example the collector cannot be
+ * reached) the error goes to `onError` and shutdown carries on. Without an
+ * `onError` the failure is dropped, so pass one that logs.
  */
-export async function shutdownTelemetry(): Promise<void> {
+export async function shutdownTelemetry(onError?: (err: unknown) => void): Promise<void> {
   if (sdk === null) {
     return;
   }
+  const running = sdk;
+  sdk = null;
   try {
-    await sdk.shutdown();
-  } finally {
-    sdk = null;
+    await running.shutdown();
+  } catch (err) {
+    onError?.(err);
   }
 }

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
 import { buildServer } from '../src/server.ts';
@@ -168,5 +168,59 @@ describe('server skeleton', () => {
 
     expect(reply.valid).toBe(false);
     expect(reply.reason).toBe('unknown_event_type');
+  });
+});
+
+describe('server logging', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    await app?.close();
+    app = undefined;
+    vi.unstubAllEnvs();
+  });
+
+  /** Build a server that logs to memory at info level (vitest.config.ts turns logging off by default). */
+  function loggingServer(): { app: FastifyInstance; text: () => string; lines: () => Record<string, unknown>[] } {
+    vi.stubEnv('LOG_LEVEL', 'info');
+    const chunks: string[] = [];
+    app = buildServer({ logDestination: { write: (msg: string) => void chunks.push(msg) } });
+    const text = (): string => chunks.join('');
+    return { app, text, lines: () => text().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>) };
+  }
+
+  it('redacts a token in the url of a request to a route that exists, and names the request id request_id', async () => {
+    const logs = loggingServer();
+
+    await logs.app.inject({ method: 'GET', url: '/healthz?token=SECRET_INJECT&keep=1' });
+
+    expect(logs.text()).not.toContain('SECRET_INJECT');
+    const incoming = logs.lines().find((line) => line['msg'] === 'incoming request');
+    expect((incoming?.['req'] as { url?: string } | undefined)?.url).toBe('/healthz?token=[Redacted]&keep=1');
+    expect(incoming?.['request_id']).toBe('req-1');
+    expect(incoming?.['reqId']).toBeUndefined();
+  });
+
+  it("redacts the token in Fastify's own 'Route ... not found' line for a route that does not exist (found logged verbatim)", async () => {
+    const logs = loggingServer();
+
+    const response = await logs.app.inject({ method: 'GET', url: '/nope?token=SECRET_B404&code=SECRET_CODE' });
+
+    expect(response.statusCode).toBe(404);
+    expect(logs.text()).not.toMatch(/SECRET_/u);
+    expect(logs.lines().some((line) => line['msg'] === 'Route GET:/nope?token=[Redacted]&code=[Redacted] not found')).toBe(true);
+  });
+
+  it('redacts a secret carried on an error a route throws', async () => {
+    const logs = loggingServer();
+    logs.app.get('/boom', () => {
+      throw Object.assign(new Error('upstream failed'), { apiKey: 'SECRET_ROUTE_KEY', config: { headers: { authorization: 'Bearer SECRET_ROUTE_AUTH' } } });
+    });
+
+    const response = await logs.app.inject({ method: 'GET', url: '/boom?access_token=SECRET_ROUTE_URL' });
+
+    expect(response.statusCode).toBe(500);
+    expect(logs.text()).toContain('upstream failed');
+    expect(logs.text()).not.toMatch(/SECRET_/u);
   });
 });

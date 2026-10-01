@@ -3,12 +3,15 @@
 // any operation. This is narrowed to plan.md's "logs and traces per handler"
 // shape - a projection or reaction handler run - so the log and span fields
 // are fixed (handler, event_id, event_type, stream, attempt, trace_id)
-// instead of left to each call site to decide and possibly get wrong.
-import { SpanStatusCode, trace } from '@opentelemetry/api';
+// instead of left to each call site to decide and possibly get wrong. Also:
+// trace_id is left out when no real span is running (a no-op tracer hands out
+// an all-zero id), and the handler's fields are merged into any context
+// already active instead of replacing it.
+import { SpanStatusCode, isSpanContextValid, trace } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { Logger } from 'pino';
 
-import { runWithContext } from './context.ts';
+import { getContext, runWithContext } from './context.ts';
 
 const tracer = trace.getTracer('@opencrane/observability');
 
@@ -26,24 +29,27 @@ export interface HandlerRun {
   attempt: number;
 }
 
-/** The fixed fields a handler run logs and puts on its span - see plan.md's "Logs and traces per handler". */
-function runFields(run: HandlerRun, traceId: string): Attributes {
-  return {
+/** The fixed fields a handler run logs and puts on its span - see plan.md's "Logs and traces per handler". `traceId` is left out when no real span is active, rather than logging the all-zero id a no-op tracer returns. */
+function runFields(run: HandlerRun, traceId: string | undefined): Attributes {
+  const fields: Attributes = {
     handler: run.handler,
     event_id: run.eventId,
     event_type: run.eventType,
     stream: run.stream,
     attempt: run.attempt,
-    trace_id: traceId,
   };
+  if (traceId !== undefined) {
+    fields['trace_id'] = traceId;
+  }
+  return fields;
 }
 
 /**
  * Run `fn` as one handler run: opens one OpenTelemetry span named after the
  * handler, logs `handler.started` then `handler.completed` (or
  * `handler.failed`) with the fixed fields from {@link HandlerRun} plus
- * `trace_id`, and seeds the async context so any logging `fn` does inherits
- * those same fields.
+ * `trace_id`, and adds those fields to the async context so any logging `fn`
+ * does inherits them.
  *
  * The span is always ended and any error `fn` throws is always re-thrown
  * after being recorded on the span, so wrapping a handler in this never
@@ -51,11 +57,14 @@ function runFields(run: HandlerRun, traceId: string): Attributes {
  */
 export async function runHandler<T>(logger: Logger, run: HandlerRun, fn: () => Promise<T>): Promise<T> {
   return tracer.startActiveSpan(run.handler, async (span) => {
-    const traceId = span.spanContext().traceId;
-    const fields = runFields(run, traceId);
+    const spanContext = span.spanContext();
+    const fields = runFields(run, isSpanContextValid(spanContext) ? spanContext.traceId : undefined);
     span.setAttributes(fields);
 
-    return runWithContext({ extra: fields }, async () => {
+    // Keep a request id or extra fields an outer scope already set; the
+    // handler's own fields win where the names clash.
+    const outer = getContext();
+    return runWithContext({ ...outer, extra: { ...outer?.extra, ...fields } }, async () => {
       const startedAt = performance.now();
       logger.info(fields, 'handler.started');
       try {
