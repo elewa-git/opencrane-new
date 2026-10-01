@@ -219,7 +219,9 @@ it("retries through a real restart, then reports unavailable at the ten-second b
   }
   expect(performance.now() - unavailableAt).toBeGreaterThanOrEqual(9_900);
   expect(performance.now() - unavailableAt).toBeLessThan(10_750);
-}, 20_000);
+  // The checks above bound the retry window. This limit only stops a hung test; it also
+  // covers fixture setup (a CA and seven certificates) and NATS restarts on a busy machine.
+}, 45_000);
 
 it("subscribes in global order from the requested sequence and stops on abort", async () => {
   fixture = await natsFixture();
