@@ -199,12 +199,18 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await allTab.focus();
     await allTab.press('End');
     await focused(page, 'integrations-tab-review');
-    expect(await page.getByRole('tabpanel').getAttribute('aria-labelledby')).toBe('integrations-tab-review');
+    await page.waitForFunction(
+      `document.getElementById('integrations-panel')?.getAttribute('aria-labelledby') === 'integrations-tab-review'`,
+      undefined, { timeout: 5_000 });
     await page.getByRole('tab', { name: /^Pending review/ }).press('Home');
     await focused(page, 'integrations-tab-all');
     await page.getByRole('tab', { name: /^All/ }).press('ArrowRight');
     await focused(page, 'integrations-tab-attention');
     await page.getByRole('tab', { name: /^All/ }).click();
+    // Angular renders after the click; wait until All owns the tab stop before pressing Tab.
+    await page.waitForFunction(
+      `document.getElementById('integrations-tab-all')?.getAttribute('tabindex') === '0'`,
+      undefined, { timeout: 5_000 });
     await page.getByRole('tab', { name: /^All/ }).press('Tab');
     await focused(page, 'integrations-panel');
 
