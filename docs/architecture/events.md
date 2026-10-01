@@ -56,8 +56,8 @@ If a stale read slips past validation, the expected-version check rejects the ap
 
 | Stream | One per | Examples |
 | --- | --- | --- |
-| `org-<silo>` | silo | settings, invitations |
-| `member-<user>` | person | joined, role changed, removed |
+| `org-<silo>` | silo | settings |
+| `member-<user>` | person | invited, joined, role changed, removed |
 | `team-<team>` | team | created, members |
 | `assistant-<id>` | personal or team assistant | created, settings |
 | `computer-<assistant>` | assistant's computer | claimed, ready, suspended, lost, takeover |
@@ -86,6 +86,26 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `member.role_changed` | admin command | members | OpenFGA role tuples |
 | `member.removed` | admin command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
 | `team.created` / `team.member_added` / `team.member_removed` | admin command | teams | OpenFGA team tuples |
+
+`member.invited` pre-allocates `memberId`; invitation and acceptance share
+`member-<memberId>` so one conditional append settles concurrent acceptance.
+New invitations for the server acceptance path carry `invitedIdentity` (OIDC
+`issuer` and `sub`) and `expiresAt` (an ISO timestamp with offset). These fields
+are optional only for replay of older events; the command refuses invitations
+without either field. Email is contact data, never proof of identity. The server
+also checks the session organisation against its configured organisation and
+every event's silo against its configured silo. It accepts only the latest,
+still-pending invitation, before its expiry, using its email and role.
+
+`member.joined` from this command always carries `invitationId`. The command id
+is scoped to the accepting principal and member subject. An exact retry returns
+the earlier sequence without appending, even after invitation expiry or later
+removal; it reports the earlier command's success and does not restore membership.
+Changed invitation/display-name arguments with the same key are refused. A race
+with another command reloads history and returns a refusal without a second
+append; the caller can retry after reconsidering the result. `plan.md` defines no
+first-member bootstrap policy, so the server provides no bootstrap or automatic
+SSO membership path. Invitation creation and identity binding are separate work.
 
 ### Assistants and computers
 

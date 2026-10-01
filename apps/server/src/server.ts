@@ -5,10 +5,12 @@ import type { AuthConfig } from '@opencrane/auth';
 import { shutdownTelemetry, type LogDestination } from '@opencrane/observability';
 import { registerAuthRoutes } from './auth/routes.ts';
 import { createServerLogger } from './logging.ts';
+import { registerMemberRoutes, type MembershipOptions } from './members/routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
+  membership?: MembershipOptions;
 }
 
 export function buildServer(authConfig: AuthConfig, options: BuildServerOptions = {}): FastifyInstance {
@@ -36,6 +38,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   // The auth routes log through app.log, the observability logger above, so
   // the callback URL's `code` and `state` are redacted like any other secret.
   registerAuthRoutes(app, authConfig);
+  registerMemberRoutes(app, authConfig, options.membership);
 
   return app;
 }
