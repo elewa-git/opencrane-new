@@ -66,10 +66,11 @@ external reactions disabled. Keep receipts while preserving external state.
 Changing the enabled handler set requires a controlled rebuild/backfill;
 do not reset just the checkpoint or switch subscriptions on a live consumer.
 
-Run `PG_TEST_URL=<disposable PostgreSQL URL> npm test -- libs/handlers/test`.
-The test role also needs CREATEDB: each test creates and drops an isolated
-fresh database. `pretest` fetches real NATS; PostgreSQL tests skip without the
-URL and are then NOT RUN. See [evidence](evidence.md) for results and limits.
+Run `PG_TEST_URL=<PostgreSQL admin URL> npm test -- libs/handlers/test`.
+The selected database is only a control database and the role needs `CREATEDB`:
+each test creates and drops an isolated, randomly named database, so test files
+can run in parallel. `pretest` fetches real NATS; PostgreSQL tests skip without
+the URL and are then NOT RUN. See [evidence](evidence.md) for results and limits.
 Fresh Kubernetes/R3 failover, PostgreSQL failover, external effects, OpenFGA,
 operator UI/alert routing and durable log export remain NOT RUN.
 

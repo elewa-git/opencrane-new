@@ -188,8 +188,9 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 
 These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
-wrap the members projection; `update-openfga` reserves the catalogue mapping
-for its later implementation (scope promotion remains deferred).
+wrap the members projection; [authz](../../libs/authz/README.md) implements
+`update-openfga` for the three member events. Other subscribed events fail
+explicitly until implemented (scope promotion remains deferred).
 
 | Handler | Subscribed events |
 | --- | --- |

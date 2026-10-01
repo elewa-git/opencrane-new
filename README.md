@@ -141,6 +141,10 @@ Carried over so far:
 - [Accepted product decisions of 27 September 2026](docs/product/accepted-decisions-2026-09-27.md)
 - [Architecture review brief that led to this version](docs/background/2026-09-30-architecture-thread-brief.md)
 
+The Phase 1 [member authorisation projection](libs/authz/README.md) includes
+real-service evidence for membership, revocation, retry and rebuild. Server wiring
+and fresh-silo qualification are **NOT RUN**; see its [receipt](libs/authz/evidence.md).
+
 ## Licence
 
 OpenCrane 2 is free software under the **GNU Affero General Public License v3.0 or later**, the same licence as OpenCrane. See [LICENSE](LICENSE). Only OSI-approved open-source components run inside customer silos. Third-party components keep their own licences: Codex, agentgateway and NATS are Apache-2.0; check KasmVNC (GPL-2.0) and every new component before bundling.

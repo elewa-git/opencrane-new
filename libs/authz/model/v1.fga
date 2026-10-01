@@ -1,0 +1,17 @@
+model
+  schema 1.1
+
+type person
+
+type silo
+  relations
+    define member: [person]
+    define owner_role: [person]
+    define admin_role: [person]
+    define owner: owner_role and member
+    define admin: (admin_role or owner_role) and member
+
+# Internal receipt, written atomically with the event's member tuples.
+type projection_event
+  relations
+    define applied: [silo]

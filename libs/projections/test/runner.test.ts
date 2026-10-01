@@ -29,6 +29,26 @@ it.each(
       },
     });
     let crash = true;
+    let capturedHead = 0;
+    const source: EventSource = {
+      head: () => Promise.resolve(capturedHead),
+      subscribe(fromSequence, signal) {
+        return nats.store.subscribe(fromSequence, signal);
+      },
+    };
+    async function append(
+      fixture: ReturnType<typeof event>,
+      expectedSequence: number,
+    ) {
+      const result = await nats.store.append({
+        event: fixture,
+        expectedSequence,
+      });
+      if (result.status !== "appended") {
+        throw new Error(`Fixture append failed: ${result.status}`);
+      }
+      capturedHead = result.sequence;
+    }
     const projection: Projection = {
       ...members,
       async create(tx) {
@@ -50,12 +70,9 @@ it.each(
       },
     };
     try {
-      await nats.store.append({
-        event: event("invite", "member-alice", "member.invited"),
-        expectedSequence: 0,
-      });
-      await nats.store.append({ event: event("join"), expectedSequence: 1 });
-      let runner = new ProjectionRunner(storage.db, nats.store, logger);
+      await append(event("invite", "member-alice", "member.invited"), 0);
+      await append(event("join"), 1);
+      let runner = new ProjectionRunner(storage.db, source, logger);
       await runner.initialise(projection);
       await expect(runner.run(projection)).rejects.toThrow(
         "simulated mid-batch crash",
@@ -73,7 +90,7 @@ it.each(
       ).toEqual([{ event_id: "invite" }]);
       await storage.reopen();
       crash = false;
-      runner = new ProjectionRunner(storage.db, nats.store, logger);
+      runner = new ProjectionRunner(storage.db, source, logger);
       await runner.run(projection, { attempt: 2 });
       expect(
         (
@@ -89,14 +106,8 @@ it.each(
           role: "member",
         },
       ]);
-      await nats.store.append({
-        event: event("remove", "member-alice", "member.removed"),
-        expectedSequence: 2,
-      });
-      await nats.store.append({
-        event: event("bob", "member-bob", "member.invited"),
-        expectedSequence: 0,
-      });
+      await append(event("remove", "member-alice", "member.removed"), 2);
+      await append(event("bob", "member-bob", "member.invited"), 0);
       await runner.run(projection);
       const incremental = (
         await storage.db.query("SELECT * FROM members ORDER BY member_id")
@@ -151,8 +162,11 @@ it.each(
         }),
       );
     } finally {
-      await storage.close();
-      await nats.close();
+      try {
+        await storage.close();
+      } finally {
+        await nats.close();
+      }
     }
   },
   30_000,
@@ -205,4 +219,4 @@ it("records event ids independently of checkpoint and refuses an incomplete repl
   } finally {
     await storage.close();
   }
-});
+}, 30_000);

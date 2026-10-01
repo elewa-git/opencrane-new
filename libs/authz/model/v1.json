@@ -1,0 +1,117 @@
+{
+  "schema_version": "1.1",
+  "type_definitions": [
+    {
+      "type": "person",
+      "relations": {},
+      "metadata": null
+    },
+    {
+      "type": "silo",
+      "relations": {
+        "member": {
+          "this": {}
+        },
+        "owner_role": {
+          "this": {}
+        },
+        "admin_role": {
+          "this": {}
+        },
+        "owner": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "owner_role"
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              }
+            ]
+          }
+        },
+        "admin": {
+          "intersection": {
+            "child": [
+              {
+                "union": {
+                  "child": [
+                    {
+                      "computedUserset": {
+                        "relation": "admin_role"
+                      }
+                    },
+                    {
+                      "computedUserset": {
+                        "relation": "owner_role"
+                      }
+                    }
+                  ]
+                }
+              },
+              {
+                "computedUserset": {
+                  "relation": "member"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
+          },
+          "owner_role": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
+          },
+          "admin_role": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
+          },
+          "owner": {
+            "directly_related_user_types": []
+          },
+          "admin": {
+            "directly_related_user_types": []
+          }
+        }
+      }
+    },
+    {
+      "type": "projection_event",
+      "relations": {
+        "applied": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "applied": {
+            "directly_related_user_types": [
+              {
+                "type": "silo"
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

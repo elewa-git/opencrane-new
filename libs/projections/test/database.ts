@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
@@ -6,10 +7,16 @@ import { pgDb, pgliteDb } from "../src/index.ts";
 
 export async function database(kind: "pg" | "pglite") {
   if (kind === "pg") {
-    const connectionString = process.env["PG_TEST_URL"];
-    if (!connectionString) {
-      throw new Error("PG_TEST_URL must point at a disposable database");
+    const adminConnectionString = process.env["PG_TEST_URL"];
+    if (!adminConnectionString) {
+      throw new Error("PG_TEST_URL must allow disposable databases");
     }
+    const admin = new Pool({ connectionString: adminConnectionString });
+    const name = `projections_${randomUUID().replaceAll("-", "")}`;
+    await admin.query(`CREATE DATABASE ${name}`);
+    const url = new URL(adminConnectionString);
+    url.pathname = `/${name}`;
+    const connectionString = url.href;
     let pool = new Pool({ connectionString });
     return {
       get db() {
@@ -20,7 +27,17 @@ export async function database(kind: "pg" | "pglite") {
         pool = new Pool({ connectionString });
       },
       async close() {
-        await pool.end();
+        // Always drop the database, even if a connection was left open:
+        // FORCE ends any remaining sessions first (PostgreSQL 13 and later).
+        try {
+          await pool.end();
+        } finally {
+          try {
+            await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+          } finally {
+            await admin.end();
+          }
+        }
       },
     };
   }

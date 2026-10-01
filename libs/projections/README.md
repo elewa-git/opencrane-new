@@ -56,8 +56,10 @@ projection; invitation delivery is outside this package.
 Run `sh scripts/fetch-nats.sh`, then `npx vitest run libs/projections/test`.
 PGlite tests use a real on-disk PostgreSQL engine, real NATS, a failed
 transaction after handler writes, reopen/resume, duplicate ids and rebuild
-equality. Set `PG_TEST_URL` to a **fresh disposable PostgreSQL database** to
-run the same suite through node-postgres; CI supplies one. Without that
+equality. Set `PG_TEST_URL` to a PostgreSQL admin URL whose role has `CREATEDB`
+to run the same suite through node-postgres; CI supplies one. The selected
+database is only a control database: each test creates and drops its own
+randomly named database, so test files can run in parallel. Without that
 variable PostgreSQL integration is NOT RUN. This suite does not simulate a
 SIGKILL during commit. Fresh-install live qualification remains outstanding.
 

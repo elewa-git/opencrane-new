@@ -43,6 +43,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # Authz tests start/stop loopback-only OpenFGA containers and migrate a
+      # disposable database on the PostgreSQL service above. Linux host networking
+      # lets OpenFGA reach that service without exposing its API beyond localhost.
+      - name: Verify Docker for real OpenFGA tests
+        run: docker info
+
       - name: Test
         run: npm test
 

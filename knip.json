@@ -90,6 +90,15 @@
         "src/**/*.ts",
         "test/**/*.ts"
       ]
+    },
+    "libs/authz": {
+      "entry": [
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ]
     }
   }
 }
