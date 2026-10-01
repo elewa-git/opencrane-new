@@ -40,7 +40,7 @@ A **memory that learns and consolidates** ("dreaming") is scoped to people, assi
 
 ## Architecture: the whole cluster
 
-One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully isolated, with its own namespaces, database, gateway, computers and secrets.
+A conformant Kubernetes cluster hosts one **silo** per customer. It must provide a gVisor RuntimeClass and a CSI storage class with volume snapshots. k3d on a developer box, such as a DigitalOcean droplet, DigitalOcean Kubernetes, Hetzner and GKE are supported targets; GKE is not the platform. Each silo is fully isolated, with its own namespaces, database, gateway, computers and secrets.
 
 ```
                     EXTERNAL
@@ -50,11 +50,11 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
    └────▲─────┘  └─────▲─────┘  └───────▲────────┘  └──────▲────────┘  └──────▲───────┘
         │              │                │                  │                  │
  ═══════╪══════════════╪════════════════╪══════════════════╪══════════════════╪═════════════
-        │   GKE CLUSTER│                │                  │                  │
+        │  KUBERNETES  │                │                  │                  │
         │              │                │                  │                  │
  ┌──────┴────── PLATFORM (shared, operator-managed) ───────────────────────────────────────┐
- │ ingress-nginx · cert-manager · CNPG operator · GKE Agent Sandbox (gVisor node pool,     │
- │ warm pools, Pod Snapshots) · network-policy dataplane · OpenTelemetry collector         │
+ │ ingress-nginx · cert-manager · CNPG operator · Agent Sandbox + gVisor RuntimeClass      │
+ │ warm pools · CSI volume storage · network-policy dataplane · OpenTelemetry collector    │
  └─────────────────────────────────────────────────────────────────────────────────────────┘
         │              │                │                  │                  │
  ┌──────┴──────────────┴──── SILO "acme" (one per customer) ┴──────────────────┴──────────┐
@@ -89,18 +89,18 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
  │  │ ├─ Chromium + Playwright MCP        │   │ acme-db         │  │ acme-secrets     │   │
  │  │ ├─ KasmVNC (live view, takeover)    │   │ CNPG Postgres:  │  │ company keys,    │   │
  │  │ └─ MarkItDown / poppler             │   │ content (replay-│  │ per-user creds,  │   │
- │  │ warm pool · snapshots when idle     │   │ able), OpenFGA  │  │ signing key      │   │
+ │  │ warm pool · volume kept on suspend  │   │ able), OpenFGA  │  │ signing key      │   │
  │  └─────────────────────────────────────┘   └─────────────────┘  └──────────────────┘   │
  │    acme-events: NATS JetStream — every event, the only source of truth → projections   │
  │    ClamAV scanner (uploads) · package mirror access (npm / PyPI) through the gateway   │
  └────────────────────────────────────────────────────────────────────────────────────────┘
         (next silo: "globex" — same layout, nothing shared except the platform layer)
 
- Storage outside the cluster: GCS (backups, Pod Snapshots per silo, encrypted) · Artifact Registry (images, package mirror)
+ Storage outside: S3-compatible per-silo buckets (encrypted files and backups) · any OCI registry (images & package mirror)
 ```
 
 ### How one request flows
-1. Alice asks her assistant in the web app. **opencrane-server** appends `message.posted` to the event store; a reaction wakes Alice's computer (a warm Pod bound to her assistant, or resumed from its snapshot).
+1. Alice asks her assistant in the web app. **opencrane-server** appends `message.posted` to the event store; a reaction wakes Alice's computer. OpenCrane claims a warm Pod, mounts her computer's encrypted volume, and refreshes its computer and turn tokens. Codex resumes the thread from its session files.
 2. **Codex** in the computer plans the work. Each model call, tool call or web request goes to **agentgateway** with the computer's short-lived token.
 3. agentgateway checks the token and its allowlist, then asks the **decision service**. The service consults OpenFGA ("Alice ∩ her assistant may use Odoo read?"), reserves the worst-case EUR cost, and applies the tool's Allow/Ask/Block mode.
 4. **Ask:** the call is refused with an approval id, Alice sees the approval card, and after she approves, the retry passes (single use, bound to those exact arguments).
@@ -114,7 +114,7 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 | Sign-in | Zitadel | Map identities to members and agents |
 | Permissions for humans and agents | OpenFGA (Postgres backend) | The authorisation model and the "human ∩ agent" rule |
 | Agent loop, tools, sub-agents | Codex app-server | The bridge: messages in, events out, approvals relayed |
-| Computers | GKE Agent Sandbox + gVisor (open-source Agent Sandbox off GKE) | Claim and bind a warm Pod to an assistant; snapshots |
+| Computers | `kubernetes-sigs/agent-sandbox` controller (`SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim`) + gVisor RuntimeClass | Claim a warm Pod, bind it to an assistant, and mount its persistent volume |
 | Browser, live view, takeover | Chromium, Playwright MCP, KasmVNC | View and control permissions, takeover audit |
 | Egress, models, tools | agentgateway (one per silo) | Gateway config generated from admin settings |
 | Budgets, approvals, credentials | — | The decision service behind `ext_authz` |
@@ -122,9 +122,9 @@ One Kubernetes cluster (GKE) hosts one **silo** per customer. Each silo is fully
 | Memory | OpenCrane memory MCP on Postgres; Cognee later | Per-scope facts, full-text recall, correction, forgetting and nightly dreaming |
 | Events (source of truth) | NATS JetStream (Apache-2.0) | The event catalogue, command handlers, projections, reactions |
 | Content and jobs | PostgreSQL (CNPG) projections, pg-boss (ordered per stream, cron) | Rebuildable content tables, no business rules in SQL |
-| Secrets | Kubernetes Secrets or GCP Secret Manager | Credential lifecycle: connect, refresh, revoke |
+| Secrets | Kubernetes Secrets or an external secret store | Credential lifecycle: connect, refresh, revoke |
 | Upload scanning | ClamAV scanner (from OpenCrane 1) | — |
-| Packages | Artifact Registry remote repositories (or Nexus) | — |
+| Packages | Any OCI registry; Nexus or another package mirror | — |
 | Web app | Angular + PrimeNG, reusing OpenCrane 1 components | Chat, approvals, live view, admin |
 | Deployment | Helm, one silo per customer, charts from OpenCrane 1 | Install and qualification scripts |
 

@@ -12,7 +12,8 @@ Reach the MVP defined in the [product contract](docs/product/product-contract.md
 
 - **Night.** An orchestrator agent takes items from the **ready queue**: GitHub issues with acceptance criteria and all decisions made. It runs up to three implementation agents in parallel on independent items. Each produces **one PR of at most about 1,500 non-generated lines**, with tests, passing required checks, and a short evidence note. A separate review agent checks each PR.
 - **Morning (human, about 1–2 hours).** Review and merge, or send back. Answer the decisions the night raised, and move new items into the ready queue.
-- **Weekly (human + agent).** One fresh install on the test silo with the scripted journeys; the results go in the deploy ledger. A capability is done only on a ledger PASS.
+- **Every day (agent).** Run smoke tests and most live journeys on a k3d test silo on the developer box; the results go in the deploy ledger.
+- **Occasionally (human + agent).** Run a fresh production-like qualification install on a managed cluster. A capability is done only on a ledger PASS.
 - **Rules:**
   - no stacked PRs deeper than two, and no consolidation PRs;
   - required checks on `main` from day one;
@@ -65,15 +66,18 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
 - **One computer per assistant** (owner decision 6). Conversations are threads on that computer. Group members always work as sub-agents of the group assistant, each in their own thread or sub-agent on its computer with their own personal memory plus the group memory. A team that wants separate desks creates more assistants.
 - **Binding:**
   - Warm Pods are tenant-neutral until claimed.
-  - At claim, OpenCrane binds a Pod to one assistant and issues a short-lived token.
+  - At claim, OpenCrane binds a Pod to one computer identity, mounts its encrypted persistent volume at `/home/agent`, and issues short-lived computer and turn tokens.
   - A Pod never returns to the pool after a binding ends; it is destroyed.
-  - Idle computers are suspended to per-silo encrypted Pod Snapshots.
+  - Suspending stops the Pod but keeps the volume. Files, the Chromium profile and its logins, and Codex session files survive.
+  - Resuming claims another warm Pod, mounts the volume, refreshes both tokens, and asks Codex to resume the thread from its session files. Open tabs, unsaved form text and running processes do not survive.
+  - Pod Snapshots or gVisor checkpoint and restore may later provide faster resume behind the same interface; neither is required.
+- **Portable Kubernetes:** a silo runs on any conformant cluster with a gVisor RuntimeClass and a CSI storage class with volume snapshots. Computers use the open-source `kubernetes-sigs/agent-sandbox` controller (`SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim`), not a managed cloud variant.
 - **No lasting secrets in a computer.** Codex, Playwright and KasmVNC run inside it. All network traffic goes through the gateway, and the package mirror is reached through it as well.
 - **Local forwarding proxy in every computer** (found in spike S0.1a):
   - Codex talks only to `127.0.0.1`. The proxy adds the computer and turn tokens as HTTP headers before forwarding to the gateway.
   - **Turn tokens are kept per thread, never one per computer.** Several conversations, and several requesters on a team assistant, run as threads in the same computer at once. The proxy looks the token up from the thread id that Codex sends on every call (session and thread headers on model calls, `_meta` on MCP calls). Sub-agents inherit their parent's turn. A token is dropped when its turn ends, and a call with no live turn is refused. (Round 2 showed one global token sending Alice's request upstream as Bob's.)
   - **Only Codex may use the proxy.** An approved shell command could read the proxy address and get the tokens stamped on its own calls. So the proxy must authenticate its caller (for example a Unix socket that only the Codex user can open). S0.1b proves this under gVisor. Either way, gateway policy is the only enforcement point.
-  - Codex holds **no real provider key**: a key given to Codex is readable by the agent's own shell commands and is written to its shell snapshots.
+  - Codex holds **no real provider key**: a key given to Codex is readable by the agent's own shell commands and can be written to its session files.
   - Codex's own approval prompts are not policy. Policy lives at the gateway; inside the computer, Codex runs its sandbox with on-request approval.
   - The bridge logs and dispatches Codex notifications strictly in arrival order, but never waits for a handler to finish (a handler waiting for a human approval would otherwise block every thread).
 - **Delegated children** run as Codex sub-agents in the same computer. A task needing a different computer uses another assistant; a member's personal memory stays in their own thread on the group assistant's computer.
@@ -141,7 +145,7 @@ Hosted MCP servers never run inside the gateway.
 ### Live view and takeover
 - **The stream never leaves the Pod directly.** The KasmVNC stream reaches people only through the OpenCrane server's authenticated proxy.
 - **Permissions:** viewing is for conversation participants; control is for the requester or whoever they grant it to.
-- **Takeover pauses the agent** and is audited as a human action. Browser sessions made during a takeover stay in the computer's profile, so snapshots are sensitive data.
+- **Takeover pauses the agent** and is audited as a human action. Browser sessions made during a takeover stay in the computer's profile on its encrypted volume, so the volume is sensitive data.
 
 ## Event-driven core
 
@@ -188,11 +192,11 @@ Hosted MCP servers never run inside the gateway.
 - **Logs and traces per handler:** every projection and reaction is a named handler with its own pg-boss queue (e.g. `settle-budget`, `wake-computer`, `update-openfga`).
   - Each run logs structured JSON with `handler`, `event_id`, `event_type`, `stream`, `attempt` and `trace_id`, and is one OpenTelemetry span.
   - A trace follows command → event → reactions → follow-up events.
-  - Filter logs by `handler` in Cloud Logging or Loki; each handler gets a dashboard (runs, failures, latency, dead-letter).
+  - Filter logs by `handler` in the chosen log store, such as Loki; each handler gets a dashboard (runs, failures, latency, dead-letter).
   - pg-boss keeps each job's state, attempts and last error in Postgres.
   - An admin "event timeline" view shows, for any event, which handlers ran, their status and a link to their logs.
   - Noisy or risky handlers can run as their own Deployment (label `handler=`) without changing code.
-- **Watching the system:** OpenTelemetry from every component, to Cloud Monitoring or a Grafana stack (Prometheus, Loki, Tempo). Required metrics and alerts:
+- **Watching the system:** OpenTelemetry from every component, to any compatible backend such as a Grafana stack (Prometheus, Loki, Tempo). Required metrics and alerts:
   - **projection lag:** checkpoint behind the `$all` head;
   - **dispatcher lag;**
   - **dead-letter size**, and **streams held** by a failing event;
@@ -204,7 +208,7 @@ Hosted MCP servers never run inside the gateway.
 
 ## Data stores
 
-**One PostgreSQL per silo** (a CNPG cluster with several databases, point-in-time backups to GCS) holds almost everything. Other stores are added only where Postgres genuinely can't do the job.
+**One PostgreSQL per silo** (a CNPG cluster with several databases, point-in-time backups to S3-compatible object storage) holds almost everything. Other stores are added only where Postgres genuinely can't do the job.
 
 | Store | Holds | Why |
 |---|---|---|
@@ -212,8 +216,8 @@ Hosted MCP servers never run inside the gateway.
 | **PostgreSQL (CNPG), database `opencrane`** | **Content projections**, all replayable: members, teams, assistants and owners, computers, conversations, messages, activity, approvals, installed MCP servers and tool modes, connections (secret references only), grants, budgets, usage, routines, audit view, memory facts per scope (full-text search), plus projection checkpoints | Queryable content; drop and rebuild by replay | One engine, transactions, point-in-time restore, well known; business rules in TypeScript |
 | same cluster, database `jobs` | pg-boss queues: ordered per-stream delivery to reactions, retries, dead-letter, cron (routines, monthly budget period, dreaming, housekeeping) | pg-boss runs on Postgres; no extra queue service |
 | same cluster, database `openfga` | OpenFGA relationships (humans, agents, scopes) | OpenFGA's Postgres backend; one backup with the rest |
-| **Object storage (GCS)** | Uploads and generated files, Pod Snapshots, database backups | Not a database; per-silo buckets, encrypted |
-| **Secret store** (Kubernetes Secrets or GCP Secret Manager) | Company model keys, per-user credentials, the token-signing key | Secrets never go in Postgres |
+| **S3-compatible object storage** | Uploads and generated files, database backups | Not a database; per-silo buckets, encrypted; GCS, DigitalOcean Spaces or MinIO for local tests |
+| **Secret store** (Kubernetes Secrets or an external secret store) | Company model keys, per-user credentials, the token-signing key | Secrets never go in Postgres |
 
 **Not in the first version:**
 - **SurrealDB:** ruled out by the OSI-only licence rule (BSL).
@@ -263,14 +267,14 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | Spike | Must pass before |
 |---|---|
 | S0.8 (handler runtime) | the reactions part of Phase 1's event core; pg-boss is the default if it hasn't reported yet |
-| S0.3 (warm pool + snapshots) | Phase 2 |
+| S0.3 (warm pool + suspend by disk) | Phase 2 |
 | S0.5 (live view / takeover) | Phase 3 |
 
 | # | Spike | Pass condition | Decides |
 |---|---|---|---|
-| S0.1 | **Codex app-server in a GKE Agent Sandbox Pod** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
+| S0.1 | **Codex app-server in an Agent Sandbox Pod under gVisor** | Streams a reply through agentgateway to a model; pauses for an approval and resumes; a sub-agent runs; after a Pod kill we can tell whether the call was sent | Harness choice (fallback: OpenCode, then Goose) |
 | S0.2 | **agentgateway decision hook** | Every call reaches `ext_authz` with verified computer and turn token claims, and the decision uses live OpenFGA, membership and budget context (a revoked member is denied within 2 seconds; missing context → deny); speaks MCP 2026-07-28 end to end; rejects other versions and header/body tool mismatches; `ext_authz` fails closed when OpenCrane is down; oversized bodies are rejected; client headers are stripped; an injected credential reaches the MCP server and is not logged; the deny-until-approved flow works | Gateway choice (fallback: the Envoy stack) |
-| S0.3 | **Warm pool + Pod Snapshots** | A warm Pod is bound to a computer identity at claim; suspend and resume with Codex and Chromium running; the token is refreshed on resume | Computer lifecycle |
+| S0.3 | **Warm pool + suspend by disk** | On k3d and GKE, a warm Pod is bound to a computer identity at claim; suspend keeps its volume; resume claims a warm Pod and mounts it; files, browser logins and the Codex thread survive; computer and turn tokens are refreshed; claim and resume latency are measured | Computer lifecycle |
 | S0.5 | **Live view and takeover** | KasmVNC through the OpenCrane gateway: view-only for participants, control for the requester only; the agent pauses while a human is in control | Streaming component |
 | S0.7 | **Event store: NATS JetStream (fallback: Postgres event store)** | Conditional append per entity subject (expected last-subject sequence); ordered replay into a projection with the consumer sequence checkpointed in the same Postgres transaction; dispatcher into pg-boss; replay rebuilds a projection; R3 failover without lost or reordered events; many-subject scale (at least 1M entity subjects); backup and restore of the stream | Event store (decision 2) |
 | S0.8 | **Handler runtime: pg-boss vs Restate vs Hatchet vs Temporal** | Per-key ordered handlers (one writer per stream); retries and dead-letter; **logs and history per handler in a UI**; the budget actor as a keyed single writer; licence review; ops cost per silo | Handler runtime (decision 7) |
@@ -286,7 +290,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 | **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); the bridge; claim and bind from the warm pool; chat UI from OpenCrane 1 components; file upload into the workspace; models through agentgateway with a simple cap | A person chats with their assistant, it reads an uploaded PDF, and the answer survives a reload and a Pod replacement | 15–20 |
 | **3. Governed work** | Decision service: EUR price table, reserve-before-call, settlement from gateway logs; Allow/Ask/Block with the approval card; the MCP install flow; per-user connections and credential injection; the Odoo MCP (our `odoo-mcp-server`, remote mode); screenshots; live view; takeover; audit | One Odoo read and one approved Odoo write pass live, with every refusal case; the budget stops the next call at its limit; takeover is audited | 25–35 |
 | **4. Company product** | Flat groups, shared group assistants, child chats and member threads/sub-agents; members, tools, models, budgets, usage and audit screens; OpenCrane memory MCP on Postgres (remember/recall/correct/forget, full-text search, capped preferences and pinned facts at turn start, nightly per-scope dreaming); scheduled routines (`routine.due` → `message.posted` to the assistant); delegation (Codex sub-agents under one root budget) | MVP user stories pass on the test silo; any member writes group memory without approval; personal preferences stay in that member's thread, shared facts reach group members, no memory reaches disk or another group; correction, forgetting, replay and dreaming pass; cross-user, unauthorised-scope and cross-silo calls are denied | 30–45 |
-| **5. Qualification and hardening** | Weekly fresh installs; backup/restore of NATS JetStream, Postgres and snapshots together; memory projection rebuilt by replay; security review of the gateway and live-view exposure; negative tests; operator docs | A release candidate passes the full journey list on a fresh install; no open Critical/High finding | 15–20 |
+| **5. Qualification and hardening** | Daily smoke tests and most live journeys on a k3d test silo; occasional fresh production-like installs on a managed cluster; backup/restore of NATS JetStream, Postgres and persistent volumes together; memory projection rebuilt by replay; security review of the gateway and live-view exposure; negative tests; operator docs | A release candidate passes the full journey list on a fresh managed-cluster install; no open Critical/High finding | 15–20 |
 
 ## Estimate
 
@@ -294,6 +298,7 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 - About **3 mergeable PRs per night** (three parallel agents, one PR each), **5 nights a week**.
 - About 1–2 hours of human review each morning.
 - A rework factor of **1.3–1.5×** for rejected PRs and fixes found during live runs.
+- No work for optional Pod Snapshots or gVisor checkpoint and restore; suspend and resume use the persistent volume.
 
 These are planning estimates, not measurements. Re-estimate after Phase 2 from the real throughput.
 
@@ -312,7 +317,7 @@ Phase 4 saves about 5 PRs (2 nights): reusing Postgres removes Cognee deployment
 **What moves the date:**
 - **Human bandwidth, the main limit.** Morning review, decisions, and human-only steps: identity-provider changes, approvals that need a real re-login, visual approval.
 - **Spike outcomes.** A failed harness, gateway or event-store spike adds about 1–2 weeks before the start gate (the event store falls back to Postgres).
-- **Live bring-up.** OpenCrane 1 needed 20–30 ledger entries per fresh install. Scripted, weekly installs from Phase 1 onwards are meant to bring that down.
+- **Live bring-up.** OpenCrane 1 needed 20–30 ledger entries per fresh install. Daily k3d runs from Phase 1 onwards, backed by occasional managed-cluster qualification, are meant to bring that down.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
 
@@ -321,7 +326,7 @@ Record the source commit in each copied file's header or README.
 | Area | Copy | Change on copy |
 |---|---|---|
 | Product | Contract, user stories, 27 September decisions (done), admin design targets (`docs/design/administration-lifecycle/`, `tests/design-targets/`) | None |
-| Infrastructure | Prerequisite scripts (ingress, cert-manager, CNPG pins, CNI check, GKE storage and snapshots, DNS), `configure-oidc.sh`, the `apps/postgres` chart, the Agent Sandbox hardening chart, the ClamAV scanner, suspend/teardown/verify scripts | Postgres backups on; warm pools allowed; Agent Sandbox v1.x; add the logout redirect in OIDC config |
+| Infrastructure | Prerequisite scripts (ingress, cert-manager, CNPG pins, CNI check, storage classes, DNS), `configure-oidc.sh`, the `apps/postgres` chart, the Agent Sandbox hardening chart, the ClamAV scanner, suspend/teardown/verify scripts | Target conformant Kubernetes; require gVisor and CSI volume snapshots; use the open-source Agent Sandbox controller; keep volumes on suspend; Postgres backups on; add the logout redirect in OIDC config |
 | Libraries | `libs/backend/observability`; `infra/auth` (OIDC + encrypted sessions); `infra/workload-identity`; `infra/agent-sandbox` (claim adapter); `infra/mcp-remote-client` (SSRF guard); the MCP credential secret store; `infra/http`; members and invitations; BYOK and model registration | Logout follows `endSessionUrl`; step-up checks `auth_time`; grants become OpenFGA relations |
 | Authorisation vocabulary | `libs/models/authorization` catalogue | Rewritten as the OpenFGA model |
 | Frontend | Theme, UI elements, conversation components, **approval card**, A2UI rendering, onboarding, members; Storybook | About 5 libraries in total; Linux-only screenshots for about 30 key states |
@@ -365,6 +370,7 @@ Record the source commit in each copied file's header or README.
    CLI programs are governed by what the image contains and by the gateway, which sees every network call they make; hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
 10. **Sign-in is pinned to the silo's organisation in production** (owner, 2026-10-01): `OIDC_EXPECTED_ORG_ID` is required when `NODE_ENV=production`, so no other organisation on a shared Zitadel can sign in to a silo.
 11. **Dev-only build data packages** (owner, 2026-10-01): transitive build-time data packages under CC-BY or CC0 (caniuse-lite, spdx data, mdn-data, from the Angular toolchain) are accepted. They never ship in a silo's runtime images, which stay OSI-only.
+12. **Kubernetes-native computers** (owner, 2026-10-01): no cloud-specific feature or Pod Snapshot is required; suspend keeps the encrypted volume and resume mounts it in a warm Agent Sandbox Pod.
 
 ## Risks
 
@@ -374,5 +380,5 @@ Record the source commit in each copied file's header or README.
 - **Memory isolation:** enforce allowed scopes on every MCP call and test simultaneous member threads; no personal memory may leak through assistant notes, shared instructions or disk. Memory never grants anything.
 - **Dreaming:** budget the nightly job, keep it within one scope, record changes as `memory.corrected`, and test correction, forgetting and replay.
 - **Recall quality:** qualify Postgres full-text search on real tasks before adding vector search or a later projection.
-- **Snapshots hold sensitive state:** use per-silo encrypted storage and short-lived tokens only; keep memory off the shared computer's disk and prevent snapshots from exposing personal memory to another thread.
+- **Persistent volumes hold sensitive state:** use per-silo encrypted storage and short-lived tokens only; keep memory off the shared computer's disk and prevent a volume from being mounted by another computer identity.
 - **Scope creep:** a phase starts only when the previous phase's live PASS is in the ledger.
