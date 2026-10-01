@@ -1,0 +1,141 @@
+{
+  "date": "2026-10-01T17:10:08.248743+00:00",
+  "sourceBase": "cf3bfc2eea3f085b7e93b647fba5336b643f0db3",
+  "sourceDescription": "Base plus the source files hashed below; final commit includes this receipt.",
+  "sourceSha256": {
+    "Dockerfile": "876fcc4c4e5c1cbb05e5cf36b2e948cb0099d62e0f6eb891675b0684cdbcab54",
+    "package.json": "e98e282e223d84bd067f09582053bbb3dcb7b7f1f58a614fa376470b150dfe42",
+    "package-lock.json": "8b00070e9930ef7cbe96ec2bbe1c64ccba94a357034ad4e1959d2dc212c33ec2",
+    "tool-user.c": "07dc9f862749089eb70f4b16a4ee764dde46302c23e74906c911eafe157445ac",
+    "gateway.yaml": "d09648ce03d87be46979e4cfda397703ec14a829cd2f985a4f86adc1a7e7cbc4",
+    "common.mjs": "76a31c8f0998ed950cd4136974807e394d7887673d26b247ecb20df79132972a",
+    "computer.mjs": "4e886db3e7f91b52df670a3491d7c7cd0ed68e8d252184fc209583909c9907f7",
+    "driver.mjs": "c2011cdfb4dab3f7967623d7a3b52c7b9797bd66562eccdb637f5e43a421bdc6",
+    "probe.mjs": "15921698c8003bf0265cf6cf89fb4e6c53dbfc6ef1abe6db6aa7aabb2dad6049",
+    "run.mjs": "fee70b39c6466bb5e6a243d0369f90747da051a7fd1da17b0de860cdab791e43",
+    "services.mjs": "8cefbbc6b6083b3950d10832cbce6c5f3b95dc6e12183ba5a4c2fa27be105ecc"
+  },
+  "environment": {
+    "cluster": "existing k3d-ocn, fresh spike namespace and Pods on each run",
+    "runtime": "io.containerd.runsc.v1",
+    "runtimeHandler": "runsc",
+    "agentSandbox": "1.0.4, agents.x-k8s.io/v1beta1",
+    "codex": "0.159.2",
+    "agentgateway": "1.5.0",
+    "containerNode": "22.23.1",
+    "hostNode": "22.23.3",
+    "compiler": "GCC 13.3.0 Ubuntu 24.04 x86-64, static glibc"
+  },
+  "runs": [
+    {
+      "command": "node spikes/s0-1b-proxy-gvisor/run.mjs",
+      "receipts": [
+        {
+          "name": "runtime",
+          "result": "PASS",
+          "detail": "Sandbox-owned Pod 04f38732-4a0a-425d-a95a-8cc041ad66be, runtimeClassName=gvisor, image=k3d-ocn-registry:5000/opencrane/s01b@sha256:f9379d298e9e48398f15ba24aa098e69065b6186d3ebca7486870b7014c26afd"
+        },
+        {
+          "name": "NetworkPolicy",
+          "result": "PASS",
+          "detail": "{\"gateway\":\"connected\",\"model\":\"ECONNREFUSED\"}"
+        },
+        {
+          "name": "caller authentication",
+          "result": "PASS",
+          "detail": "missing caller capability returns HTTP 401"
+        },
+        {
+          "name": "1 streaming",
+          "result": "PASS",
+          "detail": "two concurrent threads, >=3 deltas each, completed; 3 provider requests recorded without credentials"
+        },
+        {
+          "name": "2 tool isolation",
+          "result": "PASS",
+          "detail": "ISOLATION_PASS {\"uid\":1001,\"noNewPrivs\":true,\"cannotBecomeCodex\":true,\"callerAbsentFromEnvironment\":true,\"/home/codex/private\":\"EACCES\",\"/home/codex/caller\":\"EACCES\",\"/home/codex/tokens.json\":\"EACCES\",\"/home/codex/.codex/config.toml\":\"EACCES\",\"protectedProcesses\":5,\"proxy\":\"EPERM\",\"gateway\":\"EPERM\",\"model\":\"EPERM\",\"issuer\":\"EPERM\",\"ipv6\":\"EPERM\",\"control\":\"EPERM\",\"executor\":\"EPERM\"}"
+        },
+        {
+          "name": "3 thread tokens",
+          "result": "PASS",
+          "detail": "distinct token hashes 86f5fb5480bdc114/72431dea0ce14e4d; cross-thread, expiry, forged and revoked tokens denied at real gateway"
+        },
+        {
+          "name": "4 killed mid-turn",
+          "result": "PASS",
+          "detail": "Pod 04f38732-4a0a-425d-a95a-8cc041ad66be force-deleted after provider receipt and delta; external model and gateway logs retain thread 01a0f870-4a4a-7ca0-a47c-b3cf36ed04ac; no completion before kill"
+        },
+        {
+          "name": "cleanup",
+          "result": "PASS",
+          "detail": "namespace s01b-proxy deleted"
+        }
+      ]
+    },
+    {
+      "command": "node spikes/s0-1b-proxy-gvisor/run.mjs",
+      "receipts": [
+        {
+          "name": "runtime",
+          "result": "PASS",
+          "detail": "Sandbox-owned Pod 2ecf6c2a-94ac-4173-88bf-2ff33932317a, runtimeClassName=gvisor, image=k3d-ocn-registry:5000/opencrane/s01b@sha256:c36b7a47c8de004ed3193a7dfbbe182b771c3288cecd49802f202a3762663688"
+        },
+        {
+          "name": "NetworkPolicy",
+          "result": "PASS",
+          "detail": "{\"gateway\":\"connected\",\"model\":\"ECONNREFUSED\"}"
+        },
+        {
+          "name": "caller authentication",
+          "result": "PASS",
+          "detail": "missing caller capability returns HTTP 401"
+        },
+        {
+          "name": "1 streaming",
+          "result": "PASS",
+          "detail": "two concurrent threads, >=3 deltas each, completed; 3 provider requests recorded without credentials"
+        },
+        {
+          "name": "2 tool isolation",
+          "result": "PASS",
+          "detail": "ISOLATION_PASS {\"uid\":1001,\"noNewPrivs\":true,\"cannotBecomeCodex\":true,\"callerAbsentFromEnvironment\":true,\"/home/codex/private\":\"EACCES\",\"/home/codex/caller\":\"EACCES\",\"/home/codex/tokens.json\":\"EACCES\",\"/home/codex/.codex/config.toml\":\"EACCES\",\"protectedProcesses\":5,\"proxy\":\"EPERM\",\"gateway\":\"EPERM\",\"model\":\"EPERM\",\"issuer\":\"EPERM\",\"ipv6\":\"EPERM\",\"control\":\"EPERM\",\"executor\":\"EPERM\"}"
+        },
+        {
+          "name": "3 thread tokens",
+          "result": "PASS",
+          "detail": "distinct token hashes a7688dcbb716d06c/cbf30553113d78b7; cross-thread, expiry, forged and revoked tokens denied at real gateway"
+        },
+        {
+          "name": "4 killed mid-turn",
+          "result": "PASS",
+          "detail": "Pod 2ecf6c2a-94ac-4173-88bf-2ff33932317a force-deleted after provider receipt and delta; external model and gateway logs retain thread 01a0f871-1fe9-7bb0-a720-47fef52f3389; no completion before kill"
+        },
+        {
+          "name": "cleanup",
+          "result": "PASS",
+          "detail": "namespace s01b-proxy deleted"
+        }
+      ]
+    }
+  ],
+  "gates": {
+    "lint": "PASS, code/dependencies/unused/Markdown/offline links; one existing max-lines-per-function warning in apps/server/src/websocket.ts",
+    "typecheck": "PASS, all workspaces",
+    "check:events": "PASS, 70 types",
+    "test": "PASS, PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres; 42 files, 821 tests, 77.49 seconds",
+    "spike": "PASS twice, fresh resources; syntax checks PASS; C compiler -Wall -Werror PASS",
+    "spikeDocs": "PASS, markdownlint and offline fragment/link check on both spike Markdown files"
+  },
+  "notRun": [
+    "Paid real-model mode (no key; no spend)",
+    "MCP compatibility, approval pause/resume and sub-agents under this Pod boundary",
+    "Session-volume recovery and fresh entire cluster/silo",
+    "Independent review (explicitly excluded by task)"
+  ],
+  "limitations": [
+    "Tools cannot use any network; separately authorised browser/package access needs another proof.",
+    "Gateway HTTP 200 during an interrupted SSE stream proves neither completion nor settled usage.",
+    "Absent external receipt remains ambiguous; no exactly-once/replay guarantee.",
+    "Opaque in-memory token issuer is spike-only, not production IAM."
+  ]
+}

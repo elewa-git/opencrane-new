@@ -1,0 +1,26 @@
+gateways:
+  default:
+    port: 3000
+frontendPolicies:
+  accessLog:
+    add:
+      thread: 'request.headers["session-id"]'
+routes:
+  - name: model
+    matches:
+      - path:
+          exact: /v1/responses
+    policies:
+      extAuthz:
+        host: 127.0.0.1:9002
+        includeRequestHeaders: [authorization, x-turn-token, session-id]
+        protocol:
+          http:
+            path: '"/authorize"'
+        failureMode:
+          denyWithStatus: 503
+      transformations:
+        request:
+          replace: '{"content-type": "application/json", "session-id": request.headers["session-id"]}'
+    backends:
+      - host: 127.0.0.1:9003

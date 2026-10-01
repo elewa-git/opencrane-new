@@ -1,9 +1,9 @@
-# ADR 0003: agent harness — Codex app-server (local spike, S0.1a)
+# ADR 0003: agent harness — Codex app-server (S0.1a and S0.1b)
 
-**Status:** Draft, from spike S0.1a, round 2. Ready for the morning
-decision, but **not the full S0.1 decision** — this is only the *local*
-half (no Pod, no gVisor, no cluster). S0.1b (this same harness inside a
-real GKE Agent Sandbox Pod) is still open; plan.md's start gate needs both.
+**Status:** Draft. S0.1a local evidence and S0.1b's four scoped computer
+proofs pass; this is **not the full S0.1 start-gate decision**. S0.1b ran on
+k3d under gVisor on 1 October 2026; the real-model check, Pod approval/sub-agent
+journeys and the MCP compatibility gap remain explicit below.
 **Spike evidence:** [`spikes/s0-1-codex/`](../../spikes/s0-1-codex/), all 7
 pass conditions re-run on 2026-09-30 (darwin/arm64, `@openai/codex`
 0.159.2, Node 22.15.0) — 8 test files, 16 tests passing, verified 3+ clean
@@ -27,7 +27,7 @@ computer** (README "Key ideas" #2: "the agent (Codex) runs *inside* its
 computer"), driven by a thin bridge that turns its JSON-RPC events into
 OpenCrane's own event catalogue (plan.md "Conversation stream and
 audit")? Decide before the Phase 0 start gate (S0.1, S0.2, S0.7 must all
-pass) — with the caveat above that S0.1b still needs to run.
+pass) — with the remaining qualification limits above.
 
 ## Options considered
 
@@ -157,7 +157,8 @@ decision specifically:
    it is confirmed true this round). Does the gateway design (ADR 0002)
    need to plan around tolerating a `2025-06-18` + session-carrying MCP
    client indefinitely, or is this a hard prerequisite on an upstream
-   Codex release before S0.1b can proceed?
+   Codex release before the full MCP journey can proceed? S0.1b qualifies
+   the model path independently of this MCP gap.
 2. **The local forwarding proxy now works end-to-end — should it become
    the ONLY turn-token mechanism**, with `responsesapiClientMetadata`
    dropped from the design entirely rather than kept as a redundant,
@@ -172,9 +173,51 @@ decision specifically:
    Allow/Ask/Block per-tool design (plan.md "Installing an MCP server")
    still map cleanly onto this, or does OpenCrane need its own
    always-intercept layer in front of Codex's own approval decision?
-5. **S0.1b is still required** before the Phase 0 start gate is fully met:
-   this spike used plain local processes (though this round's crash test
-   now uses a genuine hard kill of the real binary, closer to what Pod
-   eviction will need to reproduce); gVisor sandboxing and
-   gateway-enforced egress (including settling the chatgpt.com/github.com
-   question above) are all still untested here.
+5. **Full S0.1 qualification remains open.** The scoped S0.1b evidence below
+   closes the model/proxy/user-isolation/Pod-kill questions. Approval pause and
+   resume, sub-agents and session-volume recovery were not rerun in this Pod.
+
+## S0.1b computer proof — 1 October 2026
+
+**Decision:** retain Codex app-server, using its native exec-server environment
+for tool execution under a separate Unix user. Keep the local model forwarding
+proxy and per-thread tokens. [S0.1b](../../spikes/s0-1b-proxy-gvisor/README.md)
+contains the runnable proof and [receipt](../../spikes/s0-1b-proxy-gvisor/evidence.json).
+
+The real Agent Sandbox 1.0.4 Pod used RuntimeClass `gvisor`; CRI inspection
+confirmed `io.containerd.runsc.v1`. Codex 0.159.2 ran as UID 1000; its actual
+model-requested shell ran as UID 1001. A supervisor applies a seccomp filter
+and `no_new_privs` before starting exec-server over stdio. The filter and UID
+boundary survive arbitrary shell selection and descendants. A private 0600
+Unix socket carries executor control; local model HTTP requires a random,
+short-lived caller capability readable only by the Codex user. There is no
+provider key in the computer. Codex's own approvals are not this boundary.
+
+| S0.1b question | Live result |
+| --- | --- |
+| Stream through proxy and agentgateway | **PASS**: overlapping threads, token deltas, completed turns and recorded provider requests. |
+| Caller and tool isolation | **PASS**: unauthenticated proxy request 401; model-requested shell UID 1001 cannot become Codex, read its files/process environment, or connect to proxy, control sockets, gateway or model. |
+| Per-thread expiring tokens | **PASS**: distinct tokens, cross-thread/expired/forged/revoked token 403s at agentgateway's ext_authz; no denied call reaches the provider; proxy drops completed turns. |
+| Pod killed mid-stream | **PASS**: external provider receipt and gateway log survive original Pod deletion. Sent is known; completion/usage is not. |
+
+k3s NetworkPolicy was positively tested by removing and restoring the policy:
+model access succeeds only while absent. It limits computer egress to the
+gateway. Because Pod policy cannot distinguish local processes, an inherited
+seccomp filter separately denies every tool socket, including loopback and
+IPv6. This replaces S0.1a's unqualified egress uncertainty for this tested setup.
+
+Alternatives: same-user Unix sockets do not separate Codex from its shell;
+a configurable shell wrapper can be bypassed by another executable. A separate
+tool Pod would allow separate Pod policy but changes the single-computer shape.
+The chosen native executor seam keeps both users inside the gVisor computer
+without patching Codex or relying on a prompt-level restriction.
+
+Costs and limits: exec-server is experimental and pinned; the supervisor is
+trusted. This proof gives tools **no networking**; browsers/package tools need
+a separately authorised route and fresh refusal tests. The opaque test issuer
+is in-memory, not production IAM or event authority. A paid provider, MCP,
+approval pause/resume, sub-agent token inheritance and session-volume recovery
+are **NOT RUN** here. The README leaves a one-command owner-run real-model
+check. Missing external receipts still mean an ambiguous outcome, never proof
+that retry is safe. Production settlement must use durable external observations;
+an HTTP 200 for an interrupted SSE stream is not completion.
