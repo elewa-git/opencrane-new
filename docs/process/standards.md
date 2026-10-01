@@ -6,12 +6,12 @@ Keep the four required checks, one independent adversarial review and fresh-inst
 
 ## Work and review
 
-Until the Phase 2 prototype is testable, land coherent, squashed changes directly on `main`, after checks and adversarial review. Codex agents build; a different model reviews; the owner reviews the result each morning. This follows the owner's 1 October instruction and is reflected in `plan.md`.
+Build each whole feature on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. The orchestrator merges after gates, independent review and green CI. Small fixes go inside the feature PR they belong to. A different model reviews; the owner reviews the result each morning.
 
 - Take ready issues with an outcome, acceptance criteria and decisions already made. Read the relevant plan section, not the whole historical record.
 - Parallel builders have separate worktrees, installed dependencies and assigned files. One integrator lands their changes serially and checks the combined result. Never borrow another worktree's generated dependencies.
 - Aim for at most about 1,500 non-generated added/deleted lines per coherent change. Explain an exception before starting; do not split one responsibility into dependent slivers to satisfy the number.
-- After the prototype, return to one PR per outcome, with at most two PRs in a stack and no consolidation PRs. No global stack service.
+- One PR per whole feature, with at most two PRs in a stack and no consolidation PRs. No global stack service.
 - Use emoji plus a plain sentence for commits; no co-author or AI attribution. No per-package version ceremony before releases need it.
 
 The review loop has **at most two independent passes per change**:

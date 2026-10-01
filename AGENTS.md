@@ -38,10 +38,12 @@ type to one without the other.
 
 Follow the [engineering standard](docs/process/standards.md).
 
-- Until the Phase 2 prototype is testable, land coherent squashed changes
-  directly on `main`, after checks and independent adversarial review.
+- Build each whole feature on a development branch with a well-described PR:
+  Why / Functional outcome / Architecture / Evidence / Not in this PR. The
+  orchestrator merges after gates, independent review and green CI. Small fixes
+  belong inside their feature PR.
 - Aim for at most about 1,500 non-generated added/deleted lines per change.
-  After the prototype: one PR per outcome, stacks at most two, no consolidation PRs.
+  One PR per whole feature, stacks at most two, no consolidation PRs.
 - At most two independent review passes: a different model reviews the diff,
   then verifies fixes and batched disputed findings. Remaining blockers go
   to the owner; the pass limit never turns failure into success.

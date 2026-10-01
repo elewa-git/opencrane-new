@@ -7,7 +7,7 @@ export interface Projection {
   name: string;
   create(db: Query): Promise<void>;
   drop(db: Query): Promise<void>;
-  apply(db: Query, event: EventEnvelope): Promise<void>;
+  apply(db: Query, event: EventEnvelope, position: number): Promise<void>;
 }
 export interface EventSource {
   head(): Promise<number>;
@@ -75,7 +75,7 @@ export class ProjectionRunner {
             [projection.name, event.id],
           );
           if (!seen.rows.length) {
-            await projection.apply(tx, event);
+            await projection.apply(tx, event, stored.sequence);
             await tx.query("INSERT INTO projection_events VALUES ($1, $2)", [
               projection.name,
               event.id,

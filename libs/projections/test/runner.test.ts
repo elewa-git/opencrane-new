@@ -1,4 +1,5 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { Pool } from "pg";
 import { event, natsFixture } from "@opencrane/event-store/testing";
 import { createLogger } from "@opencrane/observability";
 import { parseEventByType } from "@opencrane/events";
@@ -61,8 +62,8 @@ it.each(
         await members.drop(tx);
         await tx.query("DROP TABLE counts");
       },
-      async apply(tx, envelope) {
-        await members.apply(tx, envelope);
+      async apply(tx, envelope, position) {
+        await members.apply(tx, envelope, position);
         await tx.query("INSERT INTO counts VALUES ($1)", [envelope.id]);
         if (crash && envelope.id === "join") {
           throw new Error("simulated mid-batch crash");
@@ -134,7 +135,11 @@ it.each(
       expect(
         (await storage.db.query("SELECT * FROM counts")).rows,
       ).toHaveLength(4);
+      const changes = (await storage.db.query("SELECT * FROM member_changes ORDER BY position")).rows;
+      const identities = (await storage.db.query("SELECT * FROM member_identities ORDER BY member_id")).rows;
       await runner.rebuild(projection);
+      expect((await storage.db.query("SELECT * FROM member_changes ORDER BY position")).rows).toEqual(changes);
+      expect((await storage.db.query("SELECT * FROM member_identities ORDER BY member_id")).rows).toEqual(identities);
       expect(
         (await storage.db.query("SELECT * FROM members ORDER BY member_id"))
           .rows,
@@ -218,5 +223,48 @@ it("records event ids independently of checkpoint and refuses an incomplete repl
     );
   } finally {
     await storage.close();
+  }
+}, 30_000);
+
+it.skipIf(!process.env["PG_TEST_URL"])("drops its PostgreSQL database while a stray connection is open", async () => {
+  const controlUrl = process.env["PG_TEST_URL"];
+  if (!controlUrl) throw new Error("PG_TEST_URL must allow disposable databases");
+  const storage = await database("pg");
+  const name = String((await storage.db.query("SELECT current_database() AS name")).rows[0]?.["name"]);
+  const childUrl = new URL(controlUrl);
+  childUrl.pathname = `/${name}`;
+  const stray = new Pool({ connectionString: childUrl.href });
+  const admin = new Pool({ connectionString: controlUrl });
+  const held = await stray.connect();
+  held.on("error", () => undefined);
+  await held.query("SELECT 1");
+  try {
+    await storage.close();
+    expect((await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [name])).rowCount).toBe(0);
+  } finally {
+    held.release();
+    await stray.end().catch(() => undefined);
+    await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await admin.end();
+  }
+}, 30_000);
+
+it.skipIf(!process.env["PG_TEST_URL"])("drops its database and stays up when pool.end fails with an idle connection", async () => {
+  const controlUrl = process.env["PG_TEST_URL"];
+  if (!controlUrl) throw new Error("PG_TEST_URL must allow disposable databases");
+  const storage = await database("pg");
+  const name = String((await storage.db.query("SELECT current_database() AS name")).rows[0]?.["name"]);
+  // Fail the first pool.end() so an idle connection is still open when the forced drop ends it.
+  const end = vi.spyOn(Pool.prototype, "end").mockRejectedValueOnce(new Error("injected pool.end failure"));
+  const admin = new Pool({ connectionString: controlUrl });
+  try {
+    await expect(storage.close()).rejects.toThrow("injected pool.end failure");
+  } finally {
+    end.mockRestore();
+  }
+  try {
+    expect((await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [name])).rowCount).toBe(0);
+  } finally {
+    await admin.end();
   }
 }, 30_000);

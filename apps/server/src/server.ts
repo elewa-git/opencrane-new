@@ -11,6 +11,8 @@ export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
+  /** The process entrypoint owns bounded cleanup; embedded servers close telemetry here. */
+  processOwnsTelemetry?: boolean;
 }
 
 export function buildServer(authConfig: AuthConfig, options: BuildServerOptions = {}): FastifyInstance {
@@ -25,7 +27,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
 
   // Flush telemetry when the server closes. A collector that cannot be
   // reached must not make closing the server fail, so the error is logged.
-  app.addHook('onClose', async () => {
+  if (!options.processOwnsTelemetry) app.addHook('onClose', async () => {
     await shutdownTelemetry((err) => {
       app.log.error({ err }, 'telemetry shutdown failed');
     });

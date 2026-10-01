@@ -14,8 +14,10 @@ From the repository root:
 node --experimental-strip-types --input-type=module -e "import { clientMessageSchema } from '@opencrane/protocol'; console.log(clientMessageSchema.parse({type: 'hello', text: 'Hello'}))"
 ```
 
-Client messages are `hello` or `validateEvent`; server messages are hello echoes,
-errors or event-validation results. See [messages.ts](src/messages.ts).
+Client messages are `hello`, `validateEvent` or `subscribe`; server messages include
+hello echoes, errors, validation results and versioned members updates. See
+[messages.ts](src/messages.ts), [realtime.ts](src/realtime.ts) and the
+[subscription contract](../../apps/server/README.md#members-realtime-and-shutdown).
 The event-validation request carries `unknown` data: the server must validate it
 against the [event catalogue package](../events/README.md) before accepting it.
 `logoutResponseSchema` allows a nullable HTTP(S) provider logout URL.

@@ -1,122 +1,12 @@
-import { record as asRecord } from './record.ts';
 // Starts the server the way it runs in production: its own Node process, launched
 // with `node --experimental-strip-types`. Nothing else in the suite runs
 // `main.ts` itself, so a bad import there could ship unnoticed. It also checks,
 // on the real process's real stdout, that no secret in a request URL is printed.
-import { spawn } from 'node:child_process';
-import { connect, createServer } from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { startServer, TEST_OIDC_ENV, parseJsonLines, loggedUrls, sendRaw, type RunningServer } from './support/process.ts';
 import { afterEach, describe, expect, it } from 'vitest';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-
-const TEST_OIDC_ENV = {
-  OIDC_ISSUER_URL: 'https://issuer.example.test',
-  OIDC_CLIENT_ID: 'opencrane-test',
-  OIDC_REDIRECT_URI: 'https://app.example.test/auth/callback',
-  OIDC_COOKIE_SECRET: 'test-only-cookie-secret-test-only-cookie-secret',
-  // Blanked so a value exported by the host shell cannot change the result.
-  OIDC_CLIENT_SECRET_ENV_VAR: '',
-  OIDC_COOKIE_SECURE: '',
-  OIDC_ALLOW_INSECURE_REQUESTS: '',
-  OIDC_EXPECTED_ORG_ID: '',
-};
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Ask the OS for a free TCP port by briefly binding to port 0, then releasing it. */
-async function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.on('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => (address === null || typeof address === 'string' ? reject(new Error('expected a network address')) : resolve(address.port)));
-    });
-  });
-}
-
-/** Parse every complete JSON line on `text`; a partial trailing line (still being written) is skipped. */
-function parseJsonLines(text: string): Record<string, unknown>[] {
-  return text.split('\n').flatMap((line) => {
-    try {
-      return [asRecord(JSON.parse(line))];
-    } catch {
-      return [];
-    }
-  });
-}
-
-/** The `req.url` of every line that has one. */
-function loggedUrls(text: string): string[] {
-  return parseJsonLines(text).flatMap((line) => {
-    const url = asRecord(line['req'] ?? {})['url'];
-    return typeof url === 'string' ? [url] : [];
-  });
-}
-
-/** Send raw bytes and return the reply, so a request line `fetch` would refuse to build can be tested. */
-async function sendRaw(port: number, request: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let received = '';
-    const socket = connect(port, '127.0.0.1');
-    socket.on('data', (chunk: Buffer) => (received += chunk.toString('utf8')));
-    socket.on('close', () => resolve(received));
-    socket.on('error', reject);
-    socket.write(request);
-  });
-}
-
-interface RunningServer {
-  port: number;
-  stdout: () => string;
-  stop: () => Promise<void>;
-}
-
-/** Launch main.ts as a child process and wait until /healthz answers. */
-async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<RunningServer> {
-  const port = await findFreePort();
-  let stdout = '';
-  let stderr = '';
-  const child = spawn(process.execPath, ['--experimental-strip-types', 'apps/server/src/main.ts'], {
-    cwd: process.cwd(),
-    // OTEL_EXPORTER_OTLP_ENDPOINT is blanked so the result never depends on what the host shell exports.
-    // The OIDC settings are made-up test values: main.ts will not start without them, but nothing here
-    // signs anyone in, so the issuer is never contacted.
-    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', SILO_ID: '', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
-  child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
-
-  /** Ask the child to stop, hard-kill it after 3 seconds, and resolve only once it has exited. */
-  const stop = async (): Promise<void> => {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      return;
-    }
-    await new Promise<void>((resolve) => {
-      const hardKill = setTimeout(() => child.kill('SIGKILL'), 3_000);
-      child.once('exit', () => {
-        clearTimeout(hardKill);
-        resolve();
-      });
-      child.kill('SIGTERM');
-    });
-  };
-
-  // Poll rather than guess a delay: a cold type-stripping boot can take seconds on a loaded machine.
-  const deadline = Date.now() + 25_000;
-  for (;;) {
-    const failure = child.exitCode !== null ? `server exited early with code ${String(child.exitCode)}` : Date.now() >= deadline ? 'server never became healthy' : undefined;
-    if (failure !== undefined) {
-      await stop();
-      throw new Error(`${failure}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
-    }
-    if (await fetch(`http://127.0.0.1:${port}/healthz`).then((response) => response.ok, () => false)) {
-      return { port, stdout: () => stdout, stop };
-    }
-    await sleep(100);
-  }
-}
 
 describe('main.ts under the real Node runtime', () => {
   let server: RunningServer | undefined;

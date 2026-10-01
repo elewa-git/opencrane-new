@@ -6,8 +6,9 @@ import { URL } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
 import { parseEventByType } from '@opencrane/events';
-import { decodeSession, parseCookieHeader, type AuthConfig } from '@opencrane/auth';
+import { decodeSession, parseCookieHeader, type AuthConfig, type SessionData } from '@opencrane/auth';
 import {
+  subscribeSchema,
   errorMessageSchema,
   eventValidationResultSchema,
   helloMessageSchema,
@@ -15,24 +16,9 @@ import {
   type HelloEcho,
 } from '@opencrane/protocol';
 
-export const WEBSOCKET_PATH = '/ws';
+import { memberSubscription, type RealtimeOptions } from './realtime.ts';
 
-// Checked during the HTTP upgrade, before the WebSocket handshake
-// completes: a request with no valid session cookie gets a plain 401 and
-// the socket never opens. `ws`'s `verifyClient` runs synchronously here
-// (decodeSession does no I/O), which is what lets it answer before upgrading.
-function hasValidSession(authConfig: AuthConfig, req: IncomingMessage): boolean {
-  const cookieValue = parseCookieHeader(req.headers.cookie)[authConfig.cookieName];
-  if (!cookieValue) {
-    return false;
-  }
-  try {
-    decodeSession(authConfig, cookieValue);
-    return true;
-  } catch {
-    return false;
-  }
-}
+export const WEBSOCKET_PATH = '/ws';
 
 // `ws` hands message payloads back as a Buffer, an ArrayBuffer, or an array
 // of Buffers (for a fragmented message); none of those stringify safely
@@ -47,7 +33,25 @@ function toUtf8(raw: Buffer | ArrayBuffer | Buffer[]): string {
   return Buffer.from(raw).toString('utf8');
 }
 
-export function attachWebSocketServer(httpServer: HttpServer, logger: FastifyBaseLogger, authConfig: AuthConfig): WebSocketServer {
+function heartbeat(socket: WebSocket) {
+  let alive = true;
+  socket.on('pong', () => { alive = true; });
+  const timer = setInterval(() => {
+    if (!alive || socket.readyState !== socket.OPEN) { socket.terminate(); return; }
+    alive = false;
+    socket.ping();
+  }, 15_000);
+  timer.unref();
+  socket.once('close', () => clearInterval(timer));
+}
+
+export function attachWebSocketServer(
+  httpServer: HttpServer,
+  logger: FastifyBaseLogger,
+  authConfig: AuthConfig,
+  realtime?: RealtimeOptions,
+  sessionNow: () => Date = () => new Date(),
+): WebSocketServer {
   // The session cookie alone is not enough. SameSite=Lax keeps the cookie off
   // requests from other sites, but a sibling subdomain is the same site, so a
   // page there could still open a socket with the person's cookie. plan.md asks
@@ -56,24 +60,47 @@ export function attachWebSocketServer(httpServer: HttpServer, logger: FastifyBas
   // A browser always sends Origin on a WebSocket handshake, so a missing
   // Origin is refused too.
   const allowedOrigin = new URL(authConfig.redirectUri).origin;
+  const sessions = new WeakMap<IncomingMessage, SessionData>();
   const wss = new WebSocketServer({
     server: httpServer,
     path: WEBSOCKET_PATH,
+    maxPayload: 16 * 1024,
     verifyClient: (info, callback) => {
       if (info.req.headers.origin !== allowedOrigin) {
         callback(false, 403, 'Forbidden');
         return;
       }
-      if (hasValidSession(authConfig, info.req)) {
+      try {
+        const cookie = parseCookieHeader(info.req.headers.cookie)[authConfig.cookieName];
+        if (!cookie) {
+          callback(false, 401, 'Unauthorized');
+          return;
+        }
+        sessions.set(info.req, decodeSession(authConfig, cookie, sessionNow()));
         callback(true);
-      } else {
+      } catch {
         callback(false, 401, 'Unauthorized');
       }
     },
   });
 
-  wss.on('connection', (socket: WebSocket) => {
+  const connect = (socket: WebSocket, request: IncomingMessage) => {
+    const session = sessions.get(request);
+    sessions.delete(request);
+    if (!session || session.exp * 1000 <= sessionNow().getTime()) {
+      logger.warn({ operation: 'websocket.connect' }, 'websocket session unavailable');
+      socket.close(1008, 'session unavailable');
+      return;
+    }
+    const subscribe = memberSubscription(socket, session, authConfig, logger, realtime);
+    heartbeat(socket);
+    let windowStart = Date.now();
+    let messages = 0;
     socket.on('message', (raw: Buffer | ArrayBuffer | Buffer[]) => {
+      if (socket.readyState !== socket.OPEN) return;
+      if (Date.now() - windowStart >= 1000) { windowStart = Date.now(); messages = 0; }
+      if (++messages > 20) { socket.close(1008, 'rate limit'); return; }
+      if (socket.bufferedAmount > 64 * 1024) { socket.close(1013, 'slow consumer'); return; }
       let parsed: unknown;
       try {
         parsed = JSON.parse(toUtf8(raw));
@@ -82,6 +109,11 @@ export function attachWebSocketServer(httpServer: HttpServer, logger: FastifyBas
         return;
       }
 
+      const subscription = subscribeSchema.safeParse(parsed);
+      if (subscription.success) {
+        void subscribe(subscription.data.since).catch(() => socket.close(1011, 'members unavailable'));
+        return;
+      }
       const hello = helloMessageSchema.safeParse(parsed);
       if (hello.success) {
         const echo: HelloEcho = {
@@ -113,9 +145,19 @@ export function attachWebSocketServer(httpServer: HttpServer, logger: FastifyBas
       );
     });
 
-    socket.on('error', (err: Error) => {
-      logger.error({ err }, 'websocket connection error');
+  };
+
+  wss.on('connection', (socket: WebSocket, request) => {
+    socket.on('error', () => {
+      logger.error({ operation: 'websocket.connection' }, 'websocket connection error');
+      socket.terminate();
     });
+    try {
+      connect(socket, request);
+    } catch {
+      logger.error({ operation: 'websocket.connect' }, 'websocket connection failed');
+      socket.close(1011, 'connection failed');
+    }
   });
 
   return wss;

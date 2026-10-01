@@ -167,7 +167,7 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
       await members.create(f.db);
       const runtime = await f.runtime([
         registerHandler("update-members", async (event, tx) => {
-          await members.apply(tx, event);
+          await members.apply(tx, event, 1);
           await effect(event, tx);
         }),
       ]);

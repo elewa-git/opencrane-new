@@ -11,7 +11,7 @@ const image =
 async function docker(...args: string[]) {
   return (await exec("docker", args, { timeout: 120_000 })).stdout.trim();
 }
-export async function until(check: () => Promise<boolean>, timeout = 15_000) {
+export async function until(check: () => boolean | Promise<boolean>, timeout = 15_000) {
   const deadline = performance.now() + timeout;
   while (!(await check())) {
     if (performance.now() >= deadline) {
@@ -137,7 +137,11 @@ export async function databases() {
     async close() {
       await queue.end();
       for (const name of names) {
-        await admin.query(`DROP DATABASE ${name} WITH (FORCE)`);
+        // pool.end() can resolve before PostgreSQL has observed the final disconnect.
+        await until(async () => (await admin.query(
+          "SELECT pid FROM pg_stat_activity WHERE datname = $1", [name],
+        )).rows.length === 0);
+        await admin.query(`DROP DATABASE ${name}`);
       }
       await admin.end();
       if (container) {
