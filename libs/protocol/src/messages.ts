@@ -8,6 +8,7 @@
 // Moved out of apps/server/src/protocol.ts so apps/web can import the same
 // types without depending on the server's Node-only package.
 import { z } from 'zod';
+import { subscribeSchema, realtimeMessageSchema } from './realtime.ts';
 
 export const helloMessageSchema = z
   .object({
@@ -63,11 +64,11 @@ export const eventValidationResultSchema = z
 export type EventValidationResult = z.infer<typeof eventValidationResultSchema>;
 
 // Every message the server can send down the socket.
-export const serverMessageSchema = z.union([helloEchoSchema, errorMessageSchema, eventValidationResultSchema]);
+export const serverMessageSchema = z.union([helloEchoSchema, errorMessageSchema, eventValidationResultSchema, realtimeMessageSchema]);
 
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
 // Every message the browser can send up the socket.
-export const clientMessageSchema = z.union([helloMessageSchema, validateEventMessageSchema]);
+export const clientMessageSchema = z.union([helloMessageSchema, validateEventMessageSchema, subscribeSchema]);
 
 export type ClientMessage = z.infer<typeof clientMessageSchema>;

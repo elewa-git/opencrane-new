@@ -13,7 +13,7 @@ module.exports = {
       severity: 'error',
       from: { pathNot: `^${path}/` },
       // auth/testing is an explicit package export used by server contract tests.
-      to: { path: `^${path}/`, pathNot: path === 'libs/event-store' ? '^libs/event-store/(src/index|test/testing)\\.ts$' : path === 'libs/auth' ? '^libs/auth/(src/index|test/testing)\\.ts$' : `^${path}/src/index\\.ts$` },
+      to: { path: `^${path}/`, pathNot: path === 'libs/event-store' ? '^libs/event-store/(src/index|test/testing)\\.ts$' : path === 'libs/authz' ? '^libs/authz/(src/index|test/services)\\.ts$' : path === 'libs/auth' ? '^libs/auth/(src/index|test/testing)\\.ts$' : `^${path}/src/index\\.ts$` },
     })),
     { name: 'nats-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/(event-store/src/jetstream|handlers/src/dispatcher)\\.ts$' }, to: { path: 'node_modules/@nats-io/' } },
     { name: 'openfga-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/authz/src/client\\.ts$' }, to: { path: 'node_modules/@openfga/sdk/' } },

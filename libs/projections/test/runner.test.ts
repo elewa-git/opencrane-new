@@ -61,8 +61,8 @@ it.each(
         await members.drop(tx);
         await tx.query("DROP TABLE counts");
       },
-      async apply(tx, envelope) {
-        await members.apply(tx, envelope);
+      async apply(tx, envelope, position) {
+        await members.apply(tx, envelope, position);
         await tx.query("INSERT INTO counts VALUES ($1)", [envelope.id]);
         if (crash && envelope.id === "join") {
           throw new Error("simulated mid-batch crash");
@@ -134,7 +134,11 @@ it.each(
       expect(
         (await storage.db.query("SELECT * FROM counts")).rows,
       ).toHaveLength(4);
+      const changes = (await storage.db.query("SELECT * FROM member_changes ORDER BY position")).rows;
+      const identities = (await storage.db.query("SELECT * FROM member_identities ORDER BY member_id")).rows;
       await runner.rebuild(projection);
+      expect((await storage.db.query("SELECT * FROM member_changes ORDER BY position")).rows).toEqual(changes);
+      expect((await storage.db.query("SELECT * FROM member_identities ORDER BY member_id")).rows).toEqual(identities);
       expect(
         (await storage.db.query("SELECT * FROM members ORDER BY member_id"))
           .rows,

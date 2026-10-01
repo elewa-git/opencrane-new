@@ -38,7 +38,7 @@ live qualification; never put long-lived credentials in a URL or event.
 `GET /auth/login` redirects to the provider; `GET /auth/me` reports the session.
 `POST /auth/logout` clears the local cookie and returns a validated provider logout URL or `null`.
 Invalid callbacks return 400; `/ws` upgrades require a valid cookie and matching Origin.
-The socket echoes `hello` and validates events; it never appends them.
+The socket supports resumable members subscriptions, plus the existing hello and event-validation demos; it never appends events.
 See [protocol schemas](../../libs/protocol/README.md) for real request examples.
 
 `POST /members/join` requires the encrypted session cookie, JSON and an `Origin`
@@ -74,12 +74,63 @@ real read/append outages. Tests also cover Node startup, OIDC, upgrades and reda
 The [acceptance evidence](../../docs/process/member-joined-evidence.md) records gate counts and untested conditions.
 A deployed fresh-install sign-in journey remains unqualified by these local tests.
 The process needs a listening port and outbound access to its OIDC provider and optional
-collector and NATS; it needs no database permissions. Restart discards connections; clients reconnect.
+collector, NATS, PostgreSQL and OpenFGA. Restart discards connections; clients reconnect.
 Cookies survive only while their signing/encryption configuration and expiry remain valid.
 Business recovery and replay use the event-store and projection libraries.
 
 Dependencies: Fastify, ws, and the [auth](../../libs/auth/README.md),
 [events](../../libs/events/README.md), [observability](../../libs/observability/README.md)
 and protocol packages, plus event-store and Zod (MIT, existing pin). PostgreSQL
-(`pg`, MIT) and projections are test dependencies only; no new external component
+(`pg`, MIT), projections and authz now serve realtime reads; no new external component
 was introduced. See the [architecture and plan](../../plan.md).
+
+## Members realtime and shutdown
+
+Set `DATABASE_URL`, `OPENFGA_API_URL`, `OPENFGA_STORE_ID` and `OPENFGA_MODEL_ID`,
+plus `SILO_ID` and `OIDC_EXPECTED_ORG_ID`, to enable the members topic. The server
+needs read access to the members projection and a LISTEN connection. Provision
+and run the existing projection runner and OpenFGA handler separately; the HTTP
+server does not become another projection writer. Existing projections must be
+stopped and rebuilt once to populate the new change history and identity bindings.
+Without configuration or permission, subscriptions fail closed.
+
+Send `{"type":"subscribe","topic":"members","since":0}` on the tab's existing
+`/ws` connection. Only one subscription per connection is supported. The server
+resolves the session's issuer/subject to a joined member through the projection,
+then checks the silo's `member` permission through OpenFGA. Cookie roles are ignored.
+Ambiguous or absent identity bindings are refused. Old unbound joins need a bound
+invitation before they can subscribe. Permissions are checked on reads and at
+one-second intervals (plus dependency latency); failures stop delivery. Session
+expiry is checked there too. This is bounded revocation, not instantaneous logout.
+
+Version 1 replies are `member`, `ready`, `resync` or `refused`; every reply has
+`topic`, `version` and a safe integer `position`. A `member` contains the full row
+at that position. Positions are global event-log sequences filtered to this silo's
+members changes, so numeric gaps are normal. Apply rows in order, remember the
+last applied position and reconnect with it. `ready` marks initial catch-up.
+Positions ahead of the projection are refused. The original demo messages remain
+separate from this versioned subscription protocol.
+
+PostgreSQL delivers `members_changed` NOTIFY only after the projection transaction
+commits. Its payload is a wake-up, never data or permission: the server rereads
+ordered changes in pages of 100. A failed LISTEN connection fails subscriptions
+closed; restart the server to restore it. Reconnect always rereads durable history.
+Changes have no pruning in this skeleton. Stop readers before an offline rebuild;
+clients retaining positions can resume after the same log has been replayed.
+Multi-replica fan-out over NATS core is **not implemented**.
+
+Sockets allow 20 application messages per one-second window and 16 KiB inbound
+frames. Ping/pong runs every 15 seconds; a missing pong terminates the peer at the
+next tick. Above 64 KiB queued output, the server drops further live deltas,
+sends `resync` and closes with 1013. The queue can also contain one row being sent.
+The projection retains every state: resume from the last position actually applied
+by the client, not the last position the server attempted to send.
+
+`SHUTDOWN_GRACE_MS` defaults to **10000**, a positive integer up to 2147483647.
+The first SIGTERM/SIGINT closes the listener, sends WebSocket close code 1001 and
+lets HTTP requests use the full grace period. No part is reserved by cutting off
+requests early. After HTTP and sockets close, NATS, the feed and telemetry close
+once. A clean shutdown exits 0; cleanup failure or expiry exits 1. At expiry,
+remaining sockets are destroyed and cleanup is invoked if it has not started;
+the next event-loop turn exits 1 even if a closer is still hung. Thus a timeout
+reports incomplete cleanup, never success. A second signal exits 1 immediately.

@@ -23,7 +23,7 @@ This is how OpenCrane 2 gets built day to day. The [standards](standards.md) say
 4. **Review.** A different model reviews the diff using [`agents/review.md`](agents/review.md). At most two passes; if blockers remain after the second, hold the change and ask the owner.
 5. **Gates.** `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run check:events`, plus the web build and tests.
 6. **Secret scan.** `tools/fleet/secret-scan.sh` on the staged diff; the push happens only if it exits 0.
-7. **Land.** Until the Phase 2 prototype is testable, squash straight onto `main` (one emoji plus a plain sentence, short bullet body, never a co-author or AI attribution line) and push.
+7. **Land.** Each whole feature stays on a development branch with a well-described PR: **Why / What / Evidence / Not in this PR**. Small fixes go inside their feature PR. The orchestrator merges after gates, independent review and green CI. Commits use one emoji plus a plain sentence and a short bullet body; never a co-author or AI attribution in commits or PR descriptions.
 8. **Report.** A few lines to the owner: what landed, what is running, what needs a decision.
 
 ## What needs the owner first

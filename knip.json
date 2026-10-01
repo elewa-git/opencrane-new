@@ -10,7 +10,8 @@
     },
     "apps/server": {
       "entry": [
-        "test/**/*.test.ts"
+        "test/**/*.test.ts",
+        "test/support/process-faults.ts"
       ],
       "project": [
         "src/**/*.ts",
