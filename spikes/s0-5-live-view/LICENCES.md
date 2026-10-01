@@ -13,7 +13,7 @@ uses only the pushed digest, never the mutable build tag.
 | Chromium | Debian `154.0.8037.92-1~deb12u1`, BSD with bundled BSD/MIT/Apache/LGPL components; full notices at `/usr/share/doc/chromium/copyright`. Debian main build. |
 | X11 utilities / xdotool | Debian main `x11-utils` (X11/MIT) and `xdotool` (BSD); runtime notices under `/usr/share/doc/`. Used to observe the actual X server. |
 | Supporting libraries | Debian main Xorg (MIT), libc (LGPL), GNU tools (GPL), OpenSSL (Apache-2.0), Perl (Artistic/GPL), standard BSD/MIT libraries; installed notices retained. `packages.tsv` in local `.state/` records exact versions. |
-| WebSocket test client | Existing repository `ws` package, MIT. Host test dependency only; no new npm package, no `ws` inside the computer image. |
+| WebSocket client and gateway | Existing repository `ws` package, MIT. Host spike dependency only; no new npm package, no `ws` inside the computer image. |
 
 The Kasm package recommends **`intel-media-va-driver-non-free`**. The build uses
 `--no-install-recommends` and the image audit confirms that driver is absent.

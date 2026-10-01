@@ -1,7 +1,39 @@
 // Spike OpenCrane live-view path. Opaque short-lived sessions replace production IAM.
 import { createServer, request } from 'node:http';
 import { randomBytes } from 'node:crypto';
+import WebSocket, { WebSocketServer } from 'ws';
+
+// Only complete, bounded display messages cross the viewer trust boundary.
+// RFB is a byte stream: WebSocket frames/messages need not match RFB messages.
+function viewerStream(forward, refuse) {
+  let pending = Buffer.alloc(0), stage = 0, refused = false;
+  return bytes => {
+    if (refused) return;
+    pending = Buffer.concat([pending, bytes]);
+    const reject = () => { refused = true; pending = Buffer.alloc(0); refuse(); };
+    while (pending.length) {
+      let size;
+      if (stage < 3) size = stage === 0 ? 12 : 1;
+      else if (pending[0] === 0) size = 20; // SetPixelFormat
+      else if (pending[0] === 3) size = 10; // FramebufferUpdateRequest
+      else if (pending[0] === 2) { // SetEncodings, at most 256 entries
+        if (pending.length < 4) return;
+        const count = pending.readUInt16BE(2);
+        if (count > 256) return reject();
+        size = 4 + count * 4;
+      } else return reject(); // Includes all clipboard, input, file and extension messages.
+      if (pending.length < size) return;
+      const message = pending.subarray(0, size);
+      if ((stage === 0 && message.toString() !== 'RFB 003.008\n') ||
+          (stage === 1 && message[0] !== 1) || (stage === 2 && message[0] !== 1)) return reject();
+      forward(message);
+      pending = pending.subarray(size);
+      if (stage < 3) stage++;
+    }
+  };
+}
 export async function gateway(upstream, passwords, pause, resume) {
+  const viewers = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false });
   const sessions = new Map();
   const tokens = Object.fromEntries(['participant', 'requester'].map(role => {
     const token = randomBytes(32).toString('hex'); sessions.set(token, { role, expires: Date.now() + 120000 }); return [role, token];
@@ -41,6 +73,30 @@ export async function gateway(upstream, passwords, pause, resume) {
     const timer = setTimeout(() => { client.destroy(); entry.remote?.destroy(); }, session.expires - Date.now());
     client.on('close', () => { clearTimeout(timer); sockets.delete(entry); entry.remote?.destroy(); });
     client.on('error', () => entry.remote?.destroy());
+    if (!writer) {
+      const remote = new WebSocket(upstream.replace('http:', 'ws:') + '/websockify', 'binary', {
+        origin: 'http://opencrane.local', perMessageDeflate: false,
+        headers: { authorization: 'Basic ' + Buffer.from(`${user}:${passwords[user]}`).toString('base64') },
+      });
+      entry.remote = { destroy: () => remote.terminate() };
+      const refuse = () => { client.destroy(); remote.terminate(); };
+      remote.on('error', refuse); remote.on('close', () => client.destroy());
+      remote.on('open', () => {
+        if (client.destroyed) return remote.terminate();
+        viewers.handleUpgrade(req, client, head, viewer => {
+          const accept = viewerStream(message => {
+            if (remote.bufferedAmount > 65536) return refuse();
+            remote.send(message);
+          }, refuse);
+          viewer.on('error', refuse);
+          viewer.on('message', (bytes, binary) => binary ? accept(bytes) : refuse());
+          remote.on('message', bytes => {
+            if (viewer.readyState === WebSocket.OPEN) viewer.send(bytes);
+          });
+        });
+      });
+      return;
+    }
     const outgoing = request(`${upstream}/websockify`, { headers: {
       origin: 'http://opencrane.local', host: new URL(upstream).host, connection: 'Upgrade', upgrade: 'websocket',
       'sec-websocket-key': req.headers['sec-websocket-key'], 'sec-websocket-version': '13',

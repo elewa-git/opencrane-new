@@ -65,8 +65,10 @@ export async function lab(ns, state) {
       }], volumes: [{ name: 'home', ...(persistent ? { persistentVolumeClaim: { claimName: 'disk' } } : { emptyDir: {} }) }],
     });
     await apply({ apiVersion: 'v1', kind: 'PersistentVolumeClaim', metadata: { name: 'disk' }, spec: { accessModes: ['ReadWriteOnce'], resources: { requests: { storage: '1Gi' } } } });
-    const computer = async name => {
-      await apply({ apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox', metadata: { name }, spec: { podTemplate: { metadata: { labels: { app: 'computer' } }, spec: podSpec(true) } } });
+    const computer = async (name, memory) => {
+      const spec = podSpec(true);
+      if (memory) spec.containers[0].resources = { limits: { memory } };
+      await apply({ apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox', metadata: { name }, spec: { podTemplate: { metadata: { labels: { app: 'computer' } }, spec } } });
       await until(async () => (await k('get', `pod/${name}`, '--ignore-not-found')).length, 'Pod exists');
       await k('wait', '--for=condition=Ready', `pod/${name}`, '--timeout=120s');
       return JSON.parse(await k('get', `pod/${name}`, '-o', 'json'));

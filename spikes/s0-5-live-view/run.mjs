@@ -3,12 +3,12 @@ import { spawn } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { lab, driver, until, command, sleep } from '../s0-3-warm-pool/lab.mjs';
 import { gateway } from './gateway.mjs';
-import { rfb } from './rfb.mjs';
+import { rfb, clipboard } from './rfb.mjs';
 process.chdir(new URL('../..', import.meta.url).pathname);
 const l = await lab('s05-view', 'spikes/s0-5-live-view/.state');
 let d, g, forward;
 try {
-  const pod = await l.computer('desktop');
+  const pod = await l.computer('desktop', '512Mi');
   await l.exec('desktop', `import {spawn} from 'node:child_process';import {openSync} from 'node:fs';const fd=openSync('/tmp/desktop.log','a');const c=spawn('setpriv',['--no-new-privs','node','/desktop/desktop.mjs'],{detached:true,stdio:['ignore',fd,fd]});c.unref();`);
   await until(async () => l.exec('desktop', `console.log(await fetch('http://127.0.0.1:6901').then(r=>r.status).catch(()=>0))`).then(x => x === '401'), 'Kasm Basic auth ready');
   const passwords = JSON.parse(await l.exec('desktop', `import {readFileSync} from 'node:fs';console.log(readFileSync('/home/desktop/credentials.json','utf8'));`));
@@ -48,9 +48,36 @@ try {
   await sleep(400);
   await l.exec('desktop', `import {execFileSync} from 'node:child_process';process.setgroups([]);process.setgid(1002);process.setuid(1002);const env={...process.env,DISPLAY:':1'};const id=execFileSync('xdotool',['search','--name','Event Tester'],{env}).toString().trim().split(String.fromCharCode(10))[0];execFileSync('xdotool',['windowfocus',id],{env});execFileSync('xdotool',['mousemove','20','20'],{env});`);
   const events = () => l.exec('desktop', `import {readFileSync} from 'node:fs';console.log(readFileSync('/home/desktop/events','utf8'));`);
-  const viewer = await rfb(g.url, g.tokens.participant);
+  const viewer = await rfb(g.url, g.tokens.participant, 'http://opencrane.local', true);
   assert.ok(viewer.pixels > 0);
-  viewer.key(0x61); viewer.pointer(100, 100); await sleep(400);
+  const xvnc = () => l.exec('desktop', `import {readFileSync,readdirSync} from 'node:fs';for(const p of readdirSync('/proc').filter(x=>/^\\d+$/.test(x))){try{const s=readFileSync('/proc/'+p+'/stat','utf8');if(s.includes('(Xvnc)'))console.log(s.split(' ').slice(0,22).filter((_,i)=>i===0||i===21).join(':'));}catch{}}`);
+  const originalXvnc = await xvnc(); assert.ok(originalXvnc);
+  const refuse = async (send, token = g.tokens.participant) => {
+    const attack = await rfb(g.url, token);
+    send(attack);
+    await until(() => attack.socket.readyState === 3, 'viewer input disconnected', 10000);
+  };
+  await refuse(c => c.key(0x61));
+  await refuse(c => c.pointer(100, 100));
+  const huge = clipboard('x'.repeat(1024), 160 * 1024 * 1024);
+  await refuse(c => { c.socket.send(huge); for (let i = 0; i < 16; i++) c.socket.send(Buffer.alloc(4096)); });
+  // Reject the type alone, without waiting for a declared payload, even across messages.
+  await refuse(c => c.socket.send(huge.subarray(0, 1)));
+  for (const packet of [Buffer.from([6, 0, 0, 0, 0, 0, 0, 1, 120]),
+    Buffer.from([6, 0, 0, 0, 255, 255, 255, 252, 0, 0, 0, 0]),
+    clipboard('file'), Buffer.from([7]), Buffer.from([255]), Buffer.from([2, 0, 1, 1])]) {
+    await refuse(c => c.socket.send(packet));
+  }
+  await refuse(c => { c.socket.send(Buffer.alloc(3000), { fin: false }); c.socket.send(Buffer.alloc(3000), { fin: true }); });
+  await refuse(c => c.socket.send('text is not RFB'));
+  const alive = JSON.parse(await l.k('get', 'pod/desktop', '-o', 'json'));
+  assert.equal(alive.metadata.uid, pod.metadata.uid);
+  assert.equal(alive.status.containerStatuses[0].restartCount, 0);
+  assert.equal(alive.status.containerStatuses[0].state.running !== undefined, true);
+  assert.equal(alive.spec.containers[0].resources.limits.memory, '512Mi');
+  assert.equal(await xvnc(), originalXvnc, 'same Xvnc PID and start time after attacks');
+  const healthy = await rfb(g.url, g.tokens.participant); assert.equal(healthy.pixels, 480000); healthy.socket.close();
+  l.pass('viewer allocation boundary', '160 MiB binary clipboard declaration plus data disconnected; standard/extended clipboard, file/unknown input, oversized encodings and fragmented WebSocket rejected; same Xvnc PID/start time, same Pod UID, zero restarts, 512Mi limit, fresh 480000-pixel view');
   assert.doesNotMatch(await events(), /KeyPress event/);
   const pointer = () => l.exec('desktop', `import {execFileSync} from 'node:child_process';console.log(execFileSync('xdotool',['getmouselocation'],{env:{...process.env,DISPLAY:':1'}}).toString())`);
   assert.match(await pointer(), /x:20 y:20/);
@@ -64,14 +91,34 @@ try {
   writer.key(0x63); writer.pointer(150, 150); await sleep(400);
   await until(async () => /keysym 0x63/.test(await events()), 'requester key reaches X server', 15000); await until(async () => /x:150 y:150/.test(await pointer()), 'requester pointer reaches X server', 15000);
   // Viewer stays read-only even while another session controls the same X server.
-  viewer.key(0x64); viewer.pointer(200, 200); await sleep(300);
+  await refuse(c => c.key(0x64)); await refuse(c => c.pointer(200, 200));
   assert.equal((await events()).match(/KeyPress event/g)?.length, 1); assert.match(await pointer(), /x:150 y:150/);
+  writer.socket.send(clipboard('requester clipboard survives'));
+  const copied = await l.exec('desktop', `
+    import {spawn} from 'node:child_process';import {once} from 'node:events';
+    process.setgroups([]);process.setgid(1002);process.setuid(1002);
+    const browser=spawn('chromium',['--no-sandbox','--disable-dev-shm-usage','--disable-background-networking','--user-data-dir=/home/desktop/clipboard-profile','--remote-debugging-port=9223','about:blank'],{env:{PATH:process.env.PATH,HOME:'/home/desktop',DISPLAY:':1'},stdio:'ignore'});
+    let ws;
+    try {
+      let pages;for(let i=0;i<150;i++){pages=await fetch('http://127.0.0.1:9223/json').then(r=>r.json()).catch(()=>null);if(pages?.length)break;await new Promise(r=>setTimeout(r,100));}
+      ws=new WebSocket(pages[0].webSocketDebuggerUrl);await once(ws,'open');
+      let id=0;const pending=new Map();ws.addEventListener('message',e=>{const m=JSON.parse(e.data);if(m.id){const p=pending.get(m.id);pending.delete(m.id);m.error?p.reject(new Error(JSON.stringify(m.error))):p.resolve(m.result);}});
+      const rpc=(method,params={})=>new Promise((resolve,reject)=>{pending.set(++id,{resolve,reject});ws.send(JSON.stringify({id,method,params}));});
+      await rpc('Browser.grantPermissions',{origin:'http://127.0.0.1:9223',permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
+      await rpc('Page.navigate',{url:'http://127.0.0.1:9223/json/version'});await rpc('Page.bringToFront');
+      let result;for(let i=0;i<100;i++){result=await rpc('Runtime.evaluate',{expression:'navigator.clipboard.readText()',awaitPromise:true,returnByValue:true});if(typeof result.result?.value==='string')break;await new Promise(r=>setTimeout(r,100));}
+      if(typeof result.result?.value!=='string')throw new Error(JSON.stringify(result));
+      console.log(result.result.value);await rpc('Browser.close');await once(browser,'exit');
+    } finally {ws?.close();browser.kill();}
+  `);
+  assert.equal(copied, 'requester clipboard survives');
+  l.pass('requester clipboard', 'binary text/plain input read from actual X clipboard by desktop Chromium during takeover');
   assert.equal((await action('release', g.tokens.requester)).status, 200);
   await until(() => writer.socket.readyState === 3, 'writer disconnected on release');
   assert.ok((await l.records()).length > count); assert.equal(paused, false);
   const after = await rfb(g.url, g.tokens.requester); after.key(0x65); await sleep(300);
   assert.equal((await events()).match(/KeyPress event/g)?.length, 1); after.socket.close(); viewer.socket.close();
-  l.pass('server-side view-only', `${viewer.pixels} framebuffer pixels received; raw viewer key/pointer packets dropped, requester key c and pointer accepted only during takeover`);
+  l.pass('server-side view-only', `${viewer.pixels} framebuffer pixels received; raw viewer key/pointer connections closed, requester key c and pointer accepted only during takeover`);
   l.pass('pause/release', 'active Codex turn interrupted before control; no calls during hold; writer socket closed before new Codex turn completes after release');
   const desktopStatus = await l.exec('desktop', `import {readFileSync,readdirSync} from 'node:fs';for(const p of readdirSync('/proc').filter(x=>/^\\d+$/.test(x))){try{const s=readFileSync('/proc/'+p+'/status','utf8');if(s.startsWith('Name:\\tXvnc'))console.log(s);}catch{}}`);
   assert.match(desktopStatus, /Uid:\s+1002/); assert.match(desktopStatus, /NoNewPrivs:\s+1/); assert.match(desktopStatus, /CapEff:\s+0+/);
