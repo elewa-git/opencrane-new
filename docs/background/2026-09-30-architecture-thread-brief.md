@@ -3,13 +3,15 @@
 Date: 30 September 2026. Source baseline: `origin/develop` at `10abd0ef6182f36bec13d8f1358e43b15ead7cd5` unless stated. Routines head: `fadaf5c2f`.
 
 This brief consolidates one review thread (28–30 September), in this order:
+
 1. Claude Code's multi-agent architecture and MVP review.
-2. The [Codex counter-report](2026-09-30-mvp-counter-report.md).
-3. [Claude's follow-up brief](2026-09-30-architecture-brief-for-codex.md).
+2. The Codex counter-report (OpenCrane 1 source: `2026-09-30-mvp-counter-report.md`).
+3. Claude's follow-up brief (OpenCrane 1 source: `2026-09-30-architecture-brief-for-codex.md`).
 4. Codex's follow-up review.
 5. The owner's decisions and clarifications.
 
 It is for review by the main implementation agent. Nothing here has been implemented, committed, merged or deployed. Evidence labels:
+
 - **Verified** — checked in source, git, CI or render.
 - **Codex-verified** — confirmed by the Codex follow-up.
 - **Reasoned** — derived from code, not executed.
@@ -19,7 +21,7 @@ It is for review by the main implementation agent. Nothing here has been impleme
 ## 1. Owner decisions and positions from this thread
 
 | # | Decision or position | Status |
-|---|---|---|
+| --- | --- | --- |
 | D1 | **The computer is the actor.** Runs execute inside the ConversationComputer so it acts as a logical actor on a secure corporate network (who acts, what it can reach, what a compromise exposes). | **Owner decision: option A** |
 | D2 | **Agent Sandbox provides scalability:** warm Pods ready for use, ideally even across siloed tenants. | Owner intent; cross-silo design open (§7) |
 | D3 | **As little hand-written SQL as possible.** Business rules belong in TypeScript. | Owner position; Codex refinement in §5 |
@@ -28,6 +30,7 @@ It is for review by the main implementation agent. Nothing here has been impleme
 | D6 | **October is the MVP target**, with the accepted scope preserved unless the owner changes it. | Owner target |
 
 Accepted decisions that still bind (routines-head `plan.md` lines 17–59, and the develop delivery plan):
+
 - recursive delegation with no fixed caps;
 - hard monthly EUR budgets with reserve-before-dispatch;
 - per-tool Allow automatically / Ask / Block;
@@ -53,7 +56,7 @@ Accepted decisions that still bind (routines-head `plan.md` lines 17–59, and t
 ## 3. Confirmed defects to fix now
 
 | Defect | Evidence | Status |
-|---|---|---|
+| --- | --- | --- |
 | **Stop blocks the conversation.** The active-run query excludes Completed and Failed but not Cancelled. | `libs/backend/agents/execution/inputs/main/src/sources/prisma-conversation-context-repository.ts:56` | Verified by both reviews |
 | **Uploaded-file removal violates `artifacts_deletion_check`.** It sets `DeletionPending` together with `deletedAt`. | `prisma-conversation-asset-repository.ts:102` vs `target-baseline.sql:7681` | Codex-verified by source; database run was blocked by the host |
 | **Clock mismatch.** App `command.now` is checked against `clock_timestamp()` on elicitation create and expiry. | `prisma-elicitation-unit-of-work.ts:70-128` vs `target-baseline.sql:7839-7875` | Conditional defect; skew not measured |
@@ -63,7 +66,9 @@ Accepted decisions that still bind (routines-head `plan.md` lines 17–59, and t
 ## 4. Architecture findings
 
 ### 4.1 The architecture tax (Reasoned)
+
 These fixed costs attach to every capability:
+
 1. **Workflow state in three stores:** AgentRun in Postgres, Absurd checkpoints, and KurrentDB turn streams and receipts. They cannot commit together.
 2. **Business rules duplicated** in TypeScript and plpgsql.
 3. **A compute gate** that acquires a Pod the turn doesn't use.
@@ -71,6 +76,7 @@ These fixed costs attach to every capability:
 5. **Heavy per-change tooling.**
 
 Size of #916, **Verified / Codex-verified**:
+
 - #916 alone: +34,094 / −970 lines, 571 files.
 - The stack against develop: +40,754 / −1,226 lines, 710 files.
 - Production TypeScript: **14,891 incremental** (#916) and 17,403 cumulative.
@@ -83,7 +89,7 @@ Size of #916, **Verified / Codex-verified**:
 **Timeline (Codex-corrected):**
 
 | Commit | Change |
-|---|---|
+| --- | --- |
 | `5068fd93f` (5 Sep) | Added a health/readiness Pod shell |
 | `4ac41c212` | Model execution in the Pod |
 | `378a755b6` (9 Sep) | Model call moved back to the server; the Pod polled `/bootstrap` and requested `/model-step` |
@@ -92,6 +98,7 @@ Size of #916, **Verified / Codex-verified**:
 Server-owned execution is recorded in `docs/agents/architecture.md:29-35`. ADR 0016 and ADR 0010 are stale.
 
 **The server's privileges (Codex-verified):**
+
 - Database owner credential (not proven superuser).
 - The LiteLLM master key.
 - MCP material and conversation-payload encryption keys, artifact-lease and invitation signing keys, history and identity credentials.
@@ -99,7 +106,7 @@ Server-owned execution is recorded in `docs/agents/architecture.md:29-35`. ADR 0
 Kubernetes RBAC:
 
 | Scope | Permission |
-|---|---|
+| --- | --- |
 | Cluster | TokenReview create; `clustertenants` get/list/watch |
 | Release namespace | get/update on six named provider Secrets |
 | Sandbox namespace | SandboxClaim create/get/patch/delete; Sandbox get; Pod get |
@@ -110,13 +117,16 @@ Kubernetes RBAC:
 **Audit:** record both dimensions, the business actor (principal and computer) and the executing workload. Whether today's stored fields misattribute is a hypothesis until the fields are traced. **Codex correction.**
 
 ### 4.3 Warm capacity (Verified by render)
+
 - The agent-sandbox values schema and template reject `warmReplicas ≠ 0` (`apps/_infra/agent-sandbox/helm/templates/_resources.tpl:23-24`).
 - Profiles are silo-scoped.
 - ADR 0014 (claimed warm pool) is superseded.
 - Plain NetworkPolicies give workload-class isolation (DNS, release server, review path). They have no per-computer destination rules, and no CiliumNetworkPolicy is rendered.
 
 ### 4.4 KurrentDB (Owner: keep)
+
 Keep KurrentDB for participant history. Its extra roles should move to Absurd and AgentRun:
+
 - the activation queue (a persistent subscription: sequential, up to about 9 minutes of retries, then an operator replay);
 - the turn protocol and active-turn pointer;
 - Stop arbitration and receipts.
@@ -126,6 +136,7 @@ The message post is already correct: a Postgres commit, then an idempotent appen
 Replace full-history rereads with "freeze input once, then check `readHead == expectedRevision` plus current-authority fences". Those fences are membership, grants, model/tool revisions, budget and lease, which can change without the stream advancing. Measure read counts and transaction time rather than assuming a multiplier.
 
 Running-cost items:
+
 - snapshot backups, or turn off the unused secondary index;
 - a joint Postgres/KurrentDB restore;
 - a licence record;
@@ -135,6 +146,7 @@ Running-cost items:
 Postgres and KurrentDB still cannot commit together, so history publication keeps idempotent recovery under any executor design.
 
 ### 4.5 MCP and memory (Verified)
+
 - Remote MCP supports only protocol 2026-07-28, a static bearer token and public HTTPS.
 - An unauthenticated registration probe rejects servers that answer 401.
 - No OAuth; no end-to-end remote harness.
@@ -147,13 +159,14 @@ Postgres and KurrentDB still cannot commit together, so history publication keep
 **Inventory (Codex-scoped):**
 
 | Scope | Functions | plpgsql | Triggers | RAISE | ERRCODE |
-|---|---:|---:|---:|---:|---:|
+| --- | ---: | ---: | ---: | ---: | ---: |
 | Entire baseline | 134 | 128 | 104 | 552 | 5 |
 | Outside the embedded Absurd copy | 95 | 95 | 104 | 472 | 4 |
 
 The 94 product-rule functions exclude the `fail_absurd_task_terminal` adapter.
 
 **Claude's classification:**
+
 - **Why each exists:** 62 defence in depth only, 14 guard write-dead tables, 12 close a race, 4 guard against a non-app writer, 2 unclear.
 - **Against the TypeScript:** 27 same rule, 26 no TypeScript check, 18 stricter than TypeScript, 10 weaker, 13 different.
 - The named per-function inventory still needs publishing for review.
@@ -163,13 +176,14 @@ The 94 product-rule functions exclude the `fail_absurd_task_terminal` adapter.
 **Rule (owner D3, with Codex refinement):**
 
 | Layer | Allowed |
-|---|---|
+| --- | --- |
 | TypeScript | Business rules, transitions, validation, with a named owner |
 | Prisma schema | Tables, relations, foreign keys, unique keys |
 | Declarative SQL | CHECKs and partial unique indexes that Prisma 6 cannot express |
 | plpgsql (allowlisted) | Guarantees TypeScript cannot give |
 
 **Keep until a proven replacement exists (Codex list):**
+
 - database-clock leases and fencing;
 - `protect_org_membership_last_owner` and `enforce_group_hierarchy`;
 - append-only guards, until a non-owner runtime role actually denies UPDATE, DELETE and TRUNCATE;
@@ -181,6 +195,7 @@ The 94 product-rule functions exclude the `fail_absurd_task_terminal` adapter.
 **How to move a rule to TypeScript:** only with a named owner, a complete writer inventory and concurrent-writer tests. Retained triggers get stable SQLSTATE codes mapped to typed errors.
 
 **A non-owner runtime role is feasible,** but needs:
+
 - separate owner and runtime credentials;
 - explicit CONNECT, schema, table, sequence and function grants;
 - no owner membership and no schema CREATE;
@@ -196,7 +211,7 @@ Validate it with a fresh CNPG bootstrap and restore. Prisma TypedSQL types raw q
 **Minimal step contract:**
 
 | Part | Binding |
-|---|---|
+| --- | --- |
 | Identity | Silo, computer, run/attempt, lease/generation and exact Pod UID, derived authoritatively |
 | Work | Versioned step id, immutable input digest, model/tool revision, allowed destination and operation, argument digest |
 | Admission | Current permission and approval evidence, cancellation fence, shared budget reservation, absolute deadline, output and size bounds |
@@ -208,7 +223,7 @@ The server authorises and reserves atomically before a step is executable. Repea
 **Failure handling:**
 
 | Pod dies… | Response |
-|---|---|
+| --- | --- |
 | Before forwarding, with durable proof | Reassign under the same logical effect and allowance |
 | After possible forwarding, no durable outcome | **Uncertain:** keep the reservation; reconcile or use provider idempotency |
 | After a durable result, before acknowledgement | Return the saved result; no repeat call |
@@ -219,7 +234,7 @@ The server authorises and reserves atomically before a step is executable. Repea
 **Code size:** "much less code" is **not established**. Transport moves rather than disappears; admission, approvals, budgets, custody, cancellation, uncertainty and history remain. Removing KurrentDB turn-state ownership is a separate change with its own gains. Codex's measured examples:
 
 | Module | Lines | Under A |
-|---|---:|---|
+| --- | ---: | --- |
 | `conversation-model.ts`, validator, parser | 376 | Moves |
 | `conversation-computer-model-flow.ts` | 324 | Splits |
 | Candidate resolver | 112 | Simplifies |
@@ -227,6 +242,7 @@ The server authorises and reserves atomically before a step is executable. Repea
 **Estimate:** 3–5 weeks. Unvalidated.
 
 **Accepted decisions must survive:**
+
 - Allow/Ask/Block, including explicitly selected automatic first writes;
 - current revocation;
 - paying-group attribution;
@@ -254,7 +270,8 @@ A Pod replacement must never mint another allowance or detach descendants from t
 **Why LiteLLM alone is insufficient:** its `max_budget` is a spent-so-far check, and spend is recorded after the response, so parallel calls (delegated children) overshoot. It has no worst-case reservation, uses USD, and resets by duration. Some team/organisation budget features may be enterprise-licensed; verify before relying on them. Today OpenCrane mints one key per attempt with `max_budget` and no `budget_duration` (`attempt-litellm-key.ts:125-126`). **Verified.**
 
 **Proposed gate (Reasoned):**
-```
+
+```text
 Pod ── single-use step permit ──▶ model gate
    1. verify + consume the permit
    2. worst case = (input tokens + max_tokens) × reviewed EUR price
@@ -264,6 +281,7 @@ Pod ── single-use step permit ──▶ model gate
 ```
 
 **What it gives:**
+
 - The Pod never holds a LiteLLM key or master key; a compromised Pod can spend at most its current step's reservation.
 - Parallel children cannot overshoot.
 - A hard stop can refuse new permits and cut off live streams.
@@ -271,6 +289,7 @@ Pod ── single-use step permit ──▶ model gate
 - It is the "proxy consumes a permit" that Codex required for option A.
 
 **What it may replace, once proven:**
+
 - per-attempt key minting, custody and revocation (about 1.7k lines, estimate);
 - the $0.10 per-turn key and the 300-second lifetime problem;
 - the disabled pre-forward retry machinery (about 3k lines, estimate);
@@ -279,6 +298,7 @@ Pod ── single-use step permit ──▶ model gate
 **Placement:** a separate typed TypeScript gate is recommended over extending the existing custom LiteLLM pre-forward hook image. That image pins hashes of LiteLLM internal files, so upgrades are fragile.
 
 **Not covered:**
+
 - paid tool/provider calls, which need the same permit pattern at a tool gate;
 - a reviewed EUR price table with an exchange-rate policy; unpriced models are refused;
 - counting input tokens before dispatch.
@@ -288,12 +308,14 @@ Pod ── single-use step permit ──▶ model gate
 ## 9. Dead and stale code
 
 **First retirement batch** (Codex-narrowed; remove exclusive tests, exports, Nx config, aliases and docs too):
+
 1. `libs/frontend/state/conversation/render/.upstream/`: a 1,973-line vendored OpenClaw v2026.6.11 reference with no importers, producing 8 of the 25 style errors. Also add the missing `THIRD_PARTY_NOTICES.md`, which the adapted files reference.
 2. `libs/backend/server/infra/workflows/scheduler/`: respawn-chain helpers with no callers. Scheduling continues through Absurd `sleepUntil`/`awaitEvent` and #916's own `agents/scheduling`. Edit ADR 0013's respawn-chain mention.
 3. `libs/backend/server/infra/workflows/oauth-refresh/`: an unregistered scaffold.
 4. The unused model-routing savings estimator (`_EstimateSavings` and its types).
 
 **Not approved for deletion yet:**
+
 - **knowledge/retrieval and ResourceShare** are mounted APIs; removing them retires a capability.
 - **Personal configuration, memory consent, D1 accounting and budgets** intersect the MVP.
 - **McpTask** depends on replacement-consumer checks.
@@ -327,6 +349,7 @@ Most dead code is "built ahead of its workstream, which later took another route
   - agent mirrors are not byte-identical.
 
 Cheap fixes:
+
 - an evidence ladder: a track is done only with a linked develop CI run or testv6 ledger PASS;
 - nightly that runs or reports skipped;
 - relabel usage/budget screens until they are real;

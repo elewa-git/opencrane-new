@@ -36,13 +36,20 @@ type to one without the other.
 
 ## Size and process
 
-- One PR is at most about 1,500 non-generated lines.
-- No stacked PRs deeper than two, and no consolidation PRs.
+Follow the [engineering standard](docs/process/standards.md).
+
+- Until the Phase 2 prototype is testable, land coherent squashed changes
+  directly on `main`, after checks and independent adversarial review.
+- Aim for at most about 1,500 non-generated added/deleted lines per change.
+  After the prototype: one PR per outcome, stacks at most two, no consolidation PRs.
+- At most two independent review passes: a different model reviews the diff,
+  then verifies fixes and batched disputed findings. Remaining blockers go
+  to the owner; the pass limit never turns failure into success.
 - Required checks (`lint`, `typecheck`, `test`, `check:events`) must pass
-  on `main` from day one; nothing merges red.
-- A capability is done only when it passes live on a fresh install —
-  evidence over claims. Report PASS/FAIL/PARTIAL/NOT RUN honestly; a
-  condition you could not truly test is never PASS.
+  before landing and on `main`; repair or revert failures before landing more.
+- Source ready means green checks with remaining live qualification explicit.
+  A capability is done only after its journey passes live on a fresh install.
+  Report PASS/FAIL/PARTIAL/NOT RUN honestly; untested conditions never pass.
 
 ## Style
 

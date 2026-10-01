@@ -35,7 +35,9 @@ describe('App shell', () => {
   }
 
   function rootOf(fixture: ComponentFixture<App>): HTMLElement {
-    return fixture.nativeElement as HTMLElement;
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) throw new Error('expected an HTML root');
+    return element;
   }
 
   function buttonLabelled(root: HTMLElement, label: string): HTMLButtonElement {
@@ -70,7 +72,8 @@ describe('App shell', () => {
     configure('open');
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
-    const indicator = rootOf(fixture).querySelector('.connection-indicator') as HTMLElement;
+    const indicator = rootOf(fixture).querySelector('.connection-indicator');
+    if (!(indicator instanceof HTMLElement)) throw new Error('expected a connection indicator');
 
     expect(indicator.textContent).toContain('Connected');
     expect(indicator.getAttribute('data-state')).toBe('open');
@@ -91,7 +94,7 @@ describe('App shell', () => {
     await fixture.whenStable();
 
     expect(rootOf(fixture).querySelector('.connection-indicator')?.textContent).toContain('Reconnecting');
-    expect((globalThis as { Zone?: unknown }).Zone).toBeUndefined();
+    expect(globalThis).not.toHaveProperty('Zone');
   });
 
   it('navigates to /auth/login when Sign in is clicked', () => {

@@ -42,8 +42,11 @@ function readCookie(request: FastifyRequest, name: string): string | undefined {
 
 export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): void {
   app.get('/auth/login', async (request, reply) => {
-    const query = request.query as Record<string, unknown>;
-    const returnTo = sanitizeReturnTo(typeof query['returnTo'] === 'string' ? query['returnTo'] : undefined);
+    const query = request.query;
+    const returnTo = sanitizeReturnTo(
+      query !== null && typeof query === 'object' && 'returnTo' in query && typeof query.returnTo === 'string'
+        ? query.returnTo : undefined,
+    );
 
     const redirect = await buildLoginRedirect(config);
     const flowCookie = encodeFlow(config, {

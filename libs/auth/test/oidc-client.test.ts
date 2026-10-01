@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 // These tests run the real openid-client against a small local OIDC
 // provider, so a change to the login code shows up as a failing test.
 import { createHash } from 'node:crypto';
@@ -36,8 +37,8 @@ async function signIn(config: AuthConfig) {
 
 async function expectLoginRejected(attempt: Promise<unknown>, message: string) {
   const error = await attempt.then(() => undefined, (err: unknown) => err);
-  expect(error).toBeInstanceOf(OidcLoginError);
-  expect((error as OidcLoginError).message).toContain(message);
+  assert(error instanceof OidcLoginError);
+  expect(error.message).toContain(message);
 }
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -121,10 +122,10 @@ describe('completeLogin: sign-in pinned to the silo organisation', () => {
 
     const error = await completeLogin(config, callback, flow).then(() => undefined, (err: unknown) => err);
 
-    expect(error).toBeInstanceOf(OidcLoginError);
+    assert(error instanceof OidcLoginError);
     // The reason never names either organisation, so it is safe to show or log.
-    expect((error as OidcLoginError).message).toBe('this account belongs to a different organisation');
-    expect((error as OidcLoginError).cause).toBeUndefined();
+    expect(error.message).toBe('this account belongs to a different organisation');
+    expect(error.cause).toBeUndefined();
   });
 
   it('lets in a person from the pinned organisation', async () => {

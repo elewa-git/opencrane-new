@@ -1,0 +1,8 @@
+{
+  "globs": ["*.md", "docs/**/*.md", "apps/*/README.md", "libs/*/README.md"],
+  "config": {
+    "default": true,
+    "MD013": false,
+    "MD060": { "style": "compact" }
+  }
+}

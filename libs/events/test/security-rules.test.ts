@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 // Security rules from docs/architecture/events.md rule 5 and plan.md,
 // checked as schema rules:
 // - no plaintext conversation content in any event (message and agent
@@ -33,7 +34,7 @@ function rejectedFields(type: string, patch: Record<string, unknown>): string[] 
   const { dataSchema, example } = definitionFor(type);
   // The unpatched example must be valid, so any failure below is the patch's.
   expect(dataSchema.safeParse(example).success).toBe(true);
-  const result = dataSchema.safeParse({ ...(example as Record<string, unknown>), ...patch });
+  const result = dataSchema.safeParse({ ...asRecord(example), ...patch });
   if (result.success) {
     return [];
   }
@@ -48,7 +49,7 @@ function propertyNames(node: unknown, found: Set<string> = new Set()): Set<strin
   if (Array.isArray(node)) {
     for (const item of node) propertyNames(item, found);
   } else if (typeof node === 'object' && node !== null) {
-    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(asRecord(node))) {
       if (key === 'properties' && typeof value === 'object' && value !== null) {
         for (const name of Object.keys(value)) found.add(name);
       }
@@ -127,7 +128,7 @@ describe('no plaintext conversation content', () => {
   it('message.posted carries a keyId, so a key change or a "forget" can find its messages', () => {
     const { example } = definitionFor('message.posted');
     expect(example).toHaveProperty('keyId');
-    const { keyId: _removed, ...withoutKey } = example as Record<string, unknown>;
+    const { keyId: _removed, ...withoutKey } = asRecord(example);
     expect(definitionFor('message.posted').dataSchema.safeParse(withoutKey).success).toBe(false);
   });
 });
@@ -271,7 +272,7 @@ describe('tool arguments only as a digest', () => {
 
   it('tool.approval_requested names the assistant (approvals are bound to requester, conversation, turn, assistant and digest)', () => {
     const { example, dataSchema } = definitionFor('tool.approval_requested');
-    const { assistantId: _removed, ...withoutAssistant } = example as Record<string, unknown>;
+    const { assistantId: _removed, ...withoutAssistant } = asRecord(example);
     expect(dataSchema.safeParse(withoutAssistant).success).toBe(false);
   });
 });
@@ -365,7 +366,7 @@ function looseSpots(jsonSchema: unknown): string[] {
       spots.push(`${at}: accepts anything`); // a bare `true`
       return;
     }
-    const schema = node as Record<string, unknown>;
+    const schema = asRecord(node);
     if (!CONSTRAINING.some((key) => key in schema)) spots.push(`${at}: says nothing about what it accepts`);
     if ((schema['type'] === 'object' || 'properties' in schema) && schema['additionalProperties'] !== false) {
       spots.push(`${at}: object is open to extra fields`);

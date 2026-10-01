@@ -1,6 +1,6 @@
-> Copied from OpenCrane `docs/design/personal-agent-platform-product-contract.md` at commit `10abd0ef6`. User outcomes carry over; transport, storage and runtime clauses are superseded by OpenCrane 2's README and plan.
-
 # Personal-agent platform product contract
+
+> Copied from OpenCrane `docs/design/personal-agent-platform-product-contract.md` at commit `10abd0ef6`. User outcomes carry over; transport, storage and runtime clauses are superseded by OpenCrane 2's README and plan.
 
 Status: **accepted**
 
@@ -11,7 +11,7 @@ status belongs in the code, tests, and release notes.
 ## Product capabilities
 
 | Capability | Contract |
-|------------|----------|
+| ------------ | ---------- |
 | Organisation identity and membership | Bind OIDC subjects to signed, revisioned organisation membership evidence. Unknown, expired, or unverifiable membership fails closed. |
 | Agents and revisions | Keep agent definitions stable and configuration immutable per revision. A run binds one exact revision. |
 | Conversations and runs | Provide immutable `agent_session`, `direct`, and `group` modes with a canonical timeline. Agent sessions add governed serial runs; ordinary direct and group messages create no runs. |
@@ -66,9 +66,9 @@ request, with recoverable first-turn activation. The first implementation select
 assistant explicitly on an own group message, freezes the shared audience, and requires a person
 to review text before sharing it back. The assistant has its own authority; both the parent and
 child require current access. Autonomous delegation and other typed delivery kinds remain future work.
-[ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the mode,
+ADR 0012 (OpenCrane 1 source: `../adr/0012-conversation-modes-and-agent-thread-authority.md`) records the mode,
 parent/child, delivery, and non-disclosure requirements.
-[ADR 0016](../adr/0016-conversation-history-and-computers.md) supersedes its immediate atomic
+ADR 0016 (OpenCrane 1 source: `../adr/0016-conversation-history-and-computers.md`) supersedes its immediate atomic
 first-run and old runtime/storage mechanisms: it does not promise one transaction across
 PostgreSQL, KurrentDB and Kubernetes.
 
@@ -118,7 +118,7 @@ An implemented capability must demonstrate:
 Live qualification validates behaviour against real dependencies and infrastructure. It is not an
 authority boundary and does not determine which product paths remain supported.
 
-> See also: [platform architecture](personal-agent-platform-architecture.md),
-> [ADR 0008](../adr/0008-target-agent-contracts-and-workload-identity.md), and
-> [ADR 0011](../adr/0011-single-run-input-and-artifact-read-authorities.md), and
-> [ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md).
+> See also: platform architecture (OpenCrane 1 source: `personal-agent-platform-architecture.md`),
+> ADR 0008 (OpenCrane 1 source: `../adr/0008-target-agent-contracts-and-workload-identity.md`), and
+> ADR 0011 (OpenCrane 1 source: `../adr/0011-single-run-input-and-artifact-read-authorities.md`), and
+> ADR 0012 (OpenCrane 1 source: `../adr/0012-conversation-modes-and-agent-thread-authority.md`).

@@ -6,7 +6,7 @@ import { createLogger, redactUrl, type LogDestination, type Logger } from '@open
 import type { FastifyRequest } from 'fastify';
 
 /** Fastify's own default `req` serializer shape, but with the URL's secrets redacted. `socket` can be missing (a request made without a real connection), and a serializer that throws would take the process down, so it is read defensively. */
-export function redactedRequestSerializer(req: FastifyRequest): Record<string, unknown> {
+export function redactedRequestSerializer(req: Pick<FastifyRequest, 'method' | 'url' | 'host'> & { socket?: { remotePort?: number } }): Record<string, unknown> {
   return {
     method: req.method,
     url: redactUrl(req.url),

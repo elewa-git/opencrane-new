@@ -1,1 +1,3 @@
+# Working instructions
+
 See [AGENTS.md](AGENTS.md) for this repository's working rules.

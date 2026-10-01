@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 // POST /auth/logout answers with the LogoutResponse shape from
 // @opencrane/protocol, the one the web app reads it with. @opencrane/auth is
 // stubbed here so the test can hand the route any address, including the ones
@@ -30,7 +31,7 @@ describe('POST /auth/logout reply', () => {
     vi.stubEnv('LOG_LEVEL', 'info');
     const chunks: string[] = [];
     app = buildServer(testAuthConfig(), { logDestination: { write: (msg: string) => void chunks.push(msg) } });
-    return { app, lines: () => chunks.join('').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>) };
+    return { app, lines: () => chunks.join('').split('\n').filter(Boolean).map((line) => asRecord(JSON.parse(line))) };
   }
 
   it.each([

@@ -11,16 +11,24 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links",
+    "typecheck": "npm run typecheck --workspaces",
     "test": "vitest run",
-    "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs"
+    "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
+    "lint:code": "eslint .",
+    "lint:deps": "depcruise apps/server/src apps/web/src libs --config .dependency-cruiser.cjs",
+    "lint:unused": "knip",
+    "lint:docs": "markdownlint-cli2",
+    "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "22.20.4",
+    "dependency-cruiser": "18.5.0",
     "eslint": "10.11.0",
     "globals": "17.12.0",
+    "knip": "6.39.0",
+    "markdownlint-cli2": "0.23.3",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
     "vitest": "5.0.3"

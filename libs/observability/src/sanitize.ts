@@ -46,7 +46,11 @@ function sanitizeValue(value: unknown, depth: number): unknown {
  */
 export function sanitizeLogFields(fields: Record<string, unknown>): Record<string, unknown> {
   try {
-    return sanitizeValue(fields, 0) as Record<string, unknown>;
+    const value = sanitizeValue(fields, 0);
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      return { logFields: REDACTED_VALUE };
+    }
+    return Object.fromEntries(Object.entries(value));
   } catch {
     return { logFields: REDACTED_VALUE };
   }

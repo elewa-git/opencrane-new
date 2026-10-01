@@ -1,12 +1,12 @@
-# Proposed OpenCrane 2 standards
+# OpenCrane 2 standards
 
-Proposal, 1 October 2026. These checks and prompts are not installed by this document. The [review](standards-review.md) records the evidence behind the choices.
+Standard, 1 October 2026. The first tooling and prompt change is installed; the final section records its scope and evidence. The [review](standards-review.md) records the evidence behind the choices.
 
 Keep the four required checks, one independent adversarial review and fresh-install evidence. Put repeatable rules in tools. Keep instructions about judgement short, and give each rule one home.
 
 ## Work and review
 
-Until the Phase 2 prototype is testable, land coherent, squashed changes directly on `main`, after checks and adversarial review. Codex agents build; a different model reviews; the owner reviews the result each morning. This follows the owner's 1 October instruction, superseding the PR wording currently in `plan.md:13–14`. Correct that wording in the implementation task below.
+Until the Phase 2 prototype is testable, land coherent, squashed changes directly on `main`, after checks and adversarial review. Codex agents build; a different model reviews; the owner reviews the result each morning. This follows the owner's 1 October instruction and is reflected in `plan.md`.
 
 - Take ready issues with an outcome, acceptance criteria and decisions already made. Read the relevant plan section, not the whole historical record.
 - Parallel builders have separate worktrees, installed dependencies and assigned files. One integrator lands their changes serially and checks the combined result. Never borrow another worktree's generated dependencies.
@@ -28,7 +28,7 @@ Review is read-only. It may run isolated tests. It does not deploy, grant permis
 ## Code: strict where behaviour depends on it
 
 | Concern | Rule and mechanical check |
-|---|---|
+| --- | --- |
 | Types and modules | Keep Node 22, ESM and NodeNext. Keep `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noImplicitOverride`, `noFallthroughCasesInSwitch`, `verbatimModuleSyntax` and `erasableSyntaxOnly`. Add `noImplicitReturns` and `noEmitOnError` for emitting projects. Every production workspace must participate in typecheck. |
 | Runtime imports | Use explicit relative extensions matching the execution model: `.ts` for the current stripped-TypeScript setup; `.js` for emitted JavaScript where appropriate. Let `tsc` and a real startup test verify resolution. Do not copy OC1's extension-stripping script. |
 | Typed lint | Keep type-aware recommended ESLint rules; explicitly enforce `no-floating-promises`, `no-misused-promises`, the `no-unsafe-*` rules, `no-explicit-any`, `only-throw-error` and `switch-exhaustiveness-check`. Unknown external data starts as `unknown` and is validated once at entry. |
@@ -84,7 +84,7 @@ Comments explain a caller obligation, invariant, state meaning, unusual failure,
 Examples from OpenCrane 1, snapshot `468742b97`:
 
 | Example | Lesson |
-|---|---|
+| --- | --- |
 | Good: `libs/backend/server/conversations/history/README.md:20`: “A history conflict requires the caller to reload and recheck authority.” | Names the failure and the caller's next action. |
 | Bad: `libs/contracts/README.md:17–18` says a call that would 404 fails to compile. | Types check declared paths and static request shapes; the server can still return runtime errors. State that narrower guarantee. |
 | Good: `libs/backend/server/iam/membership/main/src/ed25519-fleet-membership-signature-verifier.ts:12–15` explains why the signed digest is recomputed. | Preserve the security reason; it is not obvious from the signature. |
@@ -97,7 +97,7 @@ Use [markdownlint](https://github.com/DavidAnson/markdownlint) for headings, lis
 Store one harness-neutral copy under `docs/process/agents/`; harness configuration points to it. Do not maintain separate Claude, Codex and skill copies. Budgets below apply to the instruction text, excluding the supplied task/diff; meet both limits. No automatic recursive specialist fleet.
 
 | Role and destination | OC1 source to copy and slim | Budget | When |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `builder.md` | `.claude/commands/execute-plan.md` | 70 lines / 800 words | Each ready outcome; includes coordinator duties when several builders work. |
 | `review.md` | `.claude/agents/review.md`, relevant trust-boundary points from `architecture.md` and `gateway-sentinel.md` | 90 lines / 1,100 words | One adversarial review by a separate model. |
 | `review-verifier.md` | `.claude/agents/review-verifier.md` | 25 lines / 300 words | Optional batched disputed claims, within the two-pass limit. |
@@ -116,12 +116,12 @@ Dropped from OpenCrane 1:
 - Pre-MVP release trains, version-to-version migration machinery and mandatory semantic-search setup: no demonstrated need in the present build loop.
 - Standing reaper/observability/specialist passes: use tools and targeted questions inside the one review.
 
-## First implementation change — later task
+## First implementation change
 
-One coherent tooling-and-prompts change, within about 1,500 non-generated lines. No application refactor and no copying the old gate framework. These are the exact proposed files:
+One coherent tooling-and-prompts change, within about 1,500 non-generated lines. No application refactor and no copying the old gate framework. The implementation scope is:
 
 | Files | Change |
-|---|---|
+| --- | --- |
 | `AGENTS.md`, `plan.md` | State main-until-prototype, two review passes, source-ready versus live-done; link this standard. Keep the short event/licence/secret invariants. |
 | `eslint.config.mjs`, `tsconfig.base.json` | Add the typed correctness/size rules and compiler options above; explain existing exclusions. Keep spike isolation explicit. |
 | `package.json`, `package-lock.json` | Pin compatible dev tools after checking licences; add `lint:code`, `lint:deps`, `lint:unused`, `lint:docs`, `lint:links`; make `lint` invoke them. Keep the other three required commands. |
@@ -132,6 +132,108 @@ One coherent tooling-and-prompts change, within about 1,500 non-generated lines.
 | `docs/process/agents/builder.md`, `docs/process/agents/review.md`, `docs/process/agents/review-verifier.md`, `docs/process/agents/deploy.md`, `docs/process/agents/docs.md` | Create the five slim prompts within the budgets above; each has one source. |
 | `docs/process/standards.md` | Record what was actually enabled and evidence; keep deferred items labelled. |
 
-Validate with clean `npm ci` on Node 22, the same pinned Lychee binary on the local PATH as in CI, all four required commands plus the web build/tests, and deliberate temporary violations in a disposable checkout: an unsafe promise, forbidden dependency, unused export and broken Markdown link must fail their owning command. Document that binary's version and local installation instructions here when selected. Restore those probes; do not commit fixture bureaucracy for standard linters. Confirm existing package tests are discovered and exceptions are narrow. Check prompt budgets mechanically. Report command durations as a baseline, not a promised speed-up.
+Validate with clean `npm ci` on Node 22, the same pinned Lychee binary locally and in CI, all four required commands plus the web build/tests, and deliberate temporary violations in a disposable checkout: an unsafe promise, forbidden dependency, unused export and broken Markdown link must fail their owning command. Document that binary's version and local installation instructions here when selected. Restore those probes; do not commit fixture bureaucracy for standard linters. Confirm existing package tests are discovered and exceptions are narrow. Check prompt budgets mechanically. Report command durations as a baseline, not a promised speed-up.
 
 Defer Prettier's formatting rollout (`.prettierrc.json`, `.prettierignore`, pinned dev dependency and `format`/`lint:format` commands), Vale, external-link scheduling, site publication, deployment qualification automation and generated config tables to their owning work. This avoids mixing a repository-wide reformat with the first tooling change. Do not pretend deferred checks are enabled. Before returning to PRs, configure required CI status checks in repository protection; that hosted setting is separate from these files.
+
+## Enabled checks and local setup — 1 October 2026
+
+The first implementation is installed. `lint` now runs code, dependency direction,
+unused code, Markdown and offline local-link checks in that order. Spikes and infra
+remain separately qualified. Markdown inputs are root documents, `docs/**/*.md` and
+package READMEs; generated builds, dependency trees and vendored material are outside
+those inputs. ESLint explicitly excludes dependency/build/cache output, spikes and infra.
+
+Typed lint enforces every `no-unsafe-*` rule plus the named promise, `any`, error and
+exhaustiveness rules. Production modules have complexity 15, depth 4 and 500 code lines;
+function length warns at 80. Tests are outside size limits, but retain typed correctness.
+Services and Node libraries reject console logging. Unused disables are errors; two
+partial pino test doubles explain their assertion exceptions beside the affected code.
+All six packages typecheck. The root command runs every workspace without `--if-present`,
+so a missing workspace script fails the check. `noImplicitReturns` and `noEmitOnError`
+are set; Angular keeps its existing bundler module model and now also refuses emission
+on type errors.
+
+Dependency-cruiser covers the six existing packages, public entrypoints, cycles,
+library-to-app direction, event independence and the OIDC/telemetry SDK adapters.
+Knip discovers runtime entrypoints from package exports/scripts and its Angular plugin;
+explicit test globs cover root Vitest and Angular specs. Public package exports remain
+intentional API entrypoints; unused internal exports, files and dependencies are checked.
+No command/projection adapter paths are invented before those implementations exist.
+
+Licences checked before installation via npm metadata, then against installed LICENSE
+files: dependency-cruiser **18.5.0 MIT**, Knip **6.39.0 ISC**, markdownlint-cli2
+**0.23.3 MIT**. All are exact dev-only pins compatible with Node 22. The lockfile was
+regenerated by npm, never edited manually. The graph, strict lint, six READMEs and five
+prompts are installed; README completeness still needs review against the actual contract.
+
+The link check runs [Lychee 0.23.0](https://github.com/lycheeverse/lychee/releases/tag/lychee-v0.23.0).
+Before running it, `scripts/fetch-lychee.sh` downloads the matching macOS arm64 or Linux
+x86-64 release into the ignored `.tools/` directory and verifies its pinned SHA-256.
+CI calls the same script, so the version and both checksums have one source. From a clean
+clone, install dependencies and run lint normally:
+
+```sh
+npm ci
+npm run lint
+```
+
+The script reuses `.tools/lychee` when it is already the pinned version. Other operating
+system and architecture combinations are rejected rather than using an unverified asset.
+Required link checks are offline, including local fragments. External URLs are excluded
+by offline mode, not claimed valid. Old OC1-only references are labelled as historical
+source paths; stale local ADR filenames and Markdown layout were corrected.
+
+### Implementation evidence
+
+Receipt: 2026-10-01, base `2ae76139684b4e48c6ff01e488bb6dadfc1725f0` plus this
+uncommitted working tree; Darwin arm64, Node **22.15.0**, clean `npm ci`, verified
+Lychee **0.23.0** macOS asset. This is local source evidence, not a fresh silo.
+Safe command logs and JSON timings are in `/private/tmp/oc2-standards-evidence/`
+on the builder host; the integrator should retain them with the eventual source SHA.
+
+| Command | Result | Baseline seconds |
+| --- | --- | --- |
+| `npm ci` | PASS, clean install | 7.27 |
+| `npm run lint` | PASS, all five checks | 7.00 |
+| `npm run typecheck` | PASS, all six workspaces | 4.72 |
+| `npm test` | PASS, 33 files / 718 tests | 1.82 |
+| `npm run check:events` | PASS, 70 event types agree | 0.16 |
+| `npm run build -w apps/web` | PASS | 3.32 |
+| `npm run test -w apps/web` | PASS, 2 files / 27 tests | 1.95 |
+
+The four library README examples also ran successfully under Node type stripping.
+These are measured local timings, not a speed guarantee. Final lint and root tests
+were rerun after the last rule/assertion cleanup; documentation checks cover this receipt.
+
+Failure probes ran in an independently installed disposable copy. Each owning command
+first passed there, then failed with the expected diagnostic after its single mutation:
+
+| Mutation | Owning command / observed proof | Seconds |
+| --- | --- | --- |
+| Unhandled `Promise.resolve` | `lint:code`, exit 1, `no-floating-promises` | 11.27 |
+| `any` value used as a callable | `lint:code`, exit 1, `no-unsafe-call` | 5.59 |
+| Library imports server | `lint:deps`, exit 3, `libraries-do-not-import-apps` | 0.59 |
+| Private auth import | `lint:deps`, exit 1, `public-entry-only-libs-auth` | 0.50 |
+| OIDC SDK outside adapter | `lint:deps`, exit 1, `oidc-sdk-in-adapter` | 0.58 |
+| Telemetry SDK outside adapter | `lint:deps`, exit 1, `telemetry-sdk-in-adapter` | 0.49 |
+| Unused internal export | `lint:unused`, exit 1, `standardsUnused` | 0.44 |
+| Duplicate Markdown heading | `lint:docs`, exit 1, `MD024` | 0.39 |
+| Missing relative Markdown target | `lint:links`, exit 2, `Cannot find file` | 0.10 |
+| 503 code lines in a production file | `lint:code`, exit 1, `max-lines` | 5.41 |
+| Console call in server | `lint:code`, exit 1, `no-console` | 4.42 |
+| Missing return branch | `typecheck`, exit 2, `Not all code paths return a value` | 4.54 |
+
+All twelve rejection proofs: PASS. Each mutation was restored, and the entire disposable
+copy was deleted. No probe fixtures are part of the change. An initial copy omitted
+spike link targets; it was discarded and recreated with those targets before probing.
+
+Mechanical prompt budgets (lines / whitespace-separated words): builder **35 / 326**,
+review **46 / 452**, verifier **22 / 182**, deploy **33 / 305**, docs **31 / 300**:
+all PASS against both limits. The six READMEs are 39–51 lines each.
+
+Independent adversarial review, Linux hosted CI execution and live fresh-silo journeys:
+**NOT RUN** by this implementation task; this receipt makes no capability-done claim.
+Deferred: Prettier enforcement, Vale, scheduled external links, site publication,
+deployment qualification automation, generated configuration tables and hosted branch
+protection. None is silently included in these passing gates.

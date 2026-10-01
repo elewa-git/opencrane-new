@@ -31,7 +31,7 @@ export const centsSchema = z.int().nonnegative();
 // case words joined by underscores. Used wherever an event needs a reason.
 // A code has no spaces, so a sentence (which could carry conversation
 // content or a person's name) cannot be put in a reason field.
-export const reasonCodeSchema = z
+const reasonCodeSchema = z
   .string()
   .regex(/^[a-z][a-z0-9_]{1,63}$/, 'reason must be a short snake_case code such as "model_error", not free text');
 
@@ -54,7 +54,7 @@ export const ciphertextSchema = z
 export const keyIdSchema = z
   .string()
   .regex(/^key:[A-Za-z0-9_-]+$/, 'keyId must be an opaque reference, e.g. "key:<id>", never the key itself');
-export const secretRefSchema = z
+const secretRefSchema = z
   .string()
   .regex(
     /^secret:[A-Za-z0-9_-]+$/,
@@ -83,7 +83,7 @@ declare const URL: {
   new (input: string): { readonly username: string; readonly password: string };
 };
 const PLAIN_URL_TEXT_PATTERN = /^[^\s\\?#\p{Cc}]+$/u;
-export const remoteLocatorSchema = z
+const remoteLocatorSchema = z
   .string()
   .regex(PLAIN_URL_TEXT_PATTERN, 'locator must be a plain URL: no query string, no fragment, no whitespace')
   .pipe(
@@ -107,7 +107,7 @@ export const remoteLocatorSchema = z
 const IMAGE_COMPONENT = '[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*';
 const IMAGE_REGISTRY = '(?:localhost|(?:[a-z0-9-]+\\.)+[a-z0-9-]+)(?::[0-9]{1,5})?';
 const HOSTED_IMAGE_PATTERN = new RegExp(`^${IMAGE_REGISTRY}(?:/${IMAGE_COMPONENT})+@sha256:[0-9a-f]{64}$`);
-export const hostedLocatorSchema = z
+const hostedLocatorSchema = z
   .string()
   .regex(HOSTED_IMAGE_PATTERN, 'locator must be an image pinned by digest, "<registry>/<repository>@sha256:<hex>"');
 

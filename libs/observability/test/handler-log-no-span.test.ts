@@ -12,7 +12,9 @@ describe('runHandler with no tracer provider registered', () => {
   it('omits trace_id from the logged fields rather than logging the all-zero no-op span id', async () => {
     const calls: Record<string, unknown>[] = [];
     const record = (fields: Record<string, unknown>): void => void calls.push(fields);
-    const logger = { info: record, error: record } as unknown as Logger;
+    // This spy implements only the two pino methods runHandler calls; overloads require a full Logger.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+  const logger = { info: record, error: record } as unknown as Logger;
     const run = { handler: 'settle-budget', eventId: 'evt_1', eventType: 'effect.observed', stream: 'budget-acme', attempt: 1 };
 
     await runHandler(logger, run, () => Promise.resolve('ok'));

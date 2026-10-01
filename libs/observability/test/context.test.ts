@@ -41,7 +41,7 @@ describe('context', () => {
       tracer.startActiveSpan('unit-test-span', (span) => {
         const fields = contextMixin();
         expect(typeof fields['trace_id']).toBe('string');
-        expect((fields['trace_id'] as string).length).toBe(32);
+        expect(fields['trace_id']).toMatch(/^[a-f0-9]{32}$/u);
         expect(typeof fields['span_id']).toBe('string');
         span.end();
       });

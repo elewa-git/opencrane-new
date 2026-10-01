@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 import { describe, expect, it } from 'vitest';
 import { sanitizeLogFields, sanitizeLogLine } from '../src/sanitize.ts';
 
@@ -54,7 +55,7 @@ describe('sanitizeLogFields', () => {
   });
 
   it('keeps a field literally named __proto__ as a field, and still redacts inside it', () => {
-    const out = sanitizeLogFields(JSON.parse('{"__proto__":{"token":"SECRET_PROTO","ok":1}}') as Record<string, unknown>);
+    const out = sanitizeLogFields(asRecord(JSON.parse('{"__proto__":{"token":"SECRET_PROTO","ok":1}}')));
     expect(Object.getPrototypeOf(out)).toBe(Object.prototype);
     expect(JSON.stringify(out)).toBe('{"__proto__":{"token":"[Redacted]","ok":1}}');
   });

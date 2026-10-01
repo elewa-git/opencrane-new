@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 // Starts the server the way it runs in production: its own Node process, launched
 // with `node --experimental-strip-types`. Nothing else in the suite runs
 // `main.ts` itself, so a bad import there could ship unnoticed. It also checks,
@@ -36,7 +37,7 @@ async function findFreePort(): Promise<number> {
 function parseJsonLines(text: string): Record<string, unknown>[] {
   return text.split('\n').flatMap((line) => {
     try {
-      return [JSON.parse(line) as Record<string, unknown>];
+      return [asRecord(JSON.parse(line))];
     } catch {
       return [];
     }
@@ -46,7 +47,7 @@ function parseJsonLines(text: string): Record<string, unknown>[] {
 /** The `req.url` of every line that has one. */
 function loggedUrls(text: string): string[] {
   return parseJsonLines(text).flatMap((line) => {
-    const url = (line['req'] as { url?: unknown } | undefined)?.url;
+    const url = asRecord(line['req'] ?? {})['url'];
     return typeof url === 'string' ? [url] : [];
   });
 }

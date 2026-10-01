@@ -40,7 +40,7 @@ class FakeSocket implements SocketLike {
   }
 
   triggerMessage(data: string): void {
-    this.onmessage?.({ data } as MessageEvent);
+    this.onmessage?.(new MessageEvent('message', { data }));
   }
 
   triggerClose(): void {
@@ -272,14 +272,16 @@ describe('WebSocketService', () => {
       vi.useFakeTimers();
       const service = setup(() => 0.5, AsyncCloseFakeSocket);
       service.connect('/ws');
-      const first = sockets[0] as AsyncCloseFakeSocket;
+      const first = sockets[0];
+      if (!(first instanceof AsyncCloseFakeSocket)) throw new Error('expected an async-close socket');
       first.triggerOpen();
 
       service.disconnect();
       expect(service.state()).toBe('closed');
 
       service.connect('/ws');
-      const second = sockets[1] as AsyncCloseFakeSocket;
+      const second = sockets[1];
+      if (!(second instanceof AsyncCloseFakeSocket)) throw new Error('expected an async-close socket');
       second.triggerOpen();
       expect(service.state()).toBe('open');
 

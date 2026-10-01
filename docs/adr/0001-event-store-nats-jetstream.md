@@ -14,7 +14,7 @@ Phase 0 start gate (S0.1, S0.2, S0.7 must all pass).
 ## Options considered
 
 | Option | Licence | Verdict |
-|---|---|---|
+| --- | --- | --- |
 | **NATS JetStream** | Apache-2.0 (CNCF) | **Chosen** — see evidence below |
 | KurrentDB | KLv1 | Ruled out before this spike: licence not acceptable for customer silos |
 | PostgreSQL event store (Message DB / Emmett) | PostgreSQL / check Emmett | Fallback only, not spiked here; would need its own conditional-append, ordered-replay and dispatcher story built from scratch on top of CNPG |
@@ -30,7 +30,7 @@ mocked, not Dockerised — a local process), with `@nats-io/transport-node` +
 proven with a real transactional SQL engine, not a fake.
 
 | # | Pass condition | Result | Key numbers |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 | Conditional append: concurrent writers, exactly one wins per sequence; reload-and-retry converges; `Nats-Msg-Id` de-duplication | **PASS** | 20 concurrent writers converged to 20 ordered, gap-free, duplicate-free messages; de-dup confirmed (`duplicate: true`, same seq returned); found that de-dup does **not** override a stale expected-sequence — the seq check runs first |
 | 2 | Ordered replay into a projection, checkpoint in the same Postgres transaction, crash-safe | **PASS** | 500 conversation events, interleaved with correctly-sequenced noise on 3 other subjects (proving the subject filter genuinely filters). The projection loop runs as its **own OS process**, SIGKILLed **10 separate times at random points** (not a simulated crash inside the test): every kill, restart and resume from the stored checkpoint, with **zero double-apply, zero skip** (enforced by a `processed_events` primary key, not just asserted) |
 | 3 | Rebuild by replay: drop projection, replay from scratch, identical result | **PASS** | 300 events, built in 5 uneven CHUNKS interleaved with more publishing and a PGlite restart between each chunk (a genuinely incremental build, not one full drain relabelled) — SHA-256 hash of the rebuilt projection == hash of the chunked incremental one, byte for byte |

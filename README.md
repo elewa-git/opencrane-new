@@ -7,6 +7,7 @@
 OpenCrane gives each person, and each team, an assistant that does real work: it reads documents, uses company tools, browses the web, runs code and remembers what matters. Each assistant has its own isolated computer, which you can think of as a managed laptop the company hands to a new colleague. That gives every assistant an identity, a network position and a workspace, and makes three questions easy to answer: **who is acting, what can it reach, and what would a mistake expose?**
 
 The company decides:
+
 - where OpenCrane runs;
 - which models it uses;
 - what each assistant may see and do;
@@ -42,7 +43,7 @@ A **memory that learns and consolidates** ("dreaming") is scoped to people, assi
 
 A conformant Kubernetes cluster hosts one **silo** per customer. It must provide a gVisor RuntimeClass and a CSI storage class with volume snapshots. k3d on a developer box, such as a DigitalOcean droplet, DigitalOcean Kubernetes, Hetzner and GKE are supported targets; GKE is not the platform. Each silo is fully isolated, with its own namespaces, database, gateway, computers and secrets.
 
-```
+```text
                     EXTERNAL
    ┌──────────┐  ┌───────────┐  ┌────────────────┐  ┌───────────────┐  ┌──────────────┐
    │ Zitadel  │  │ Model     │  │ Remote MCP     │  │ Company       │  │ Web          │
@@ -100,6 +101,7 @@ A conformant Kubernetes cluster hosts one **silo** per customer. It must provide
 ```
 
 ### How one request flows
+
 1. Alice asks her assistant in the web app. **opencrane-server** appends `message.posted` to the event store; a reaction wakes Alice's computer. OpenCrane claims a warm Pod, mounts her computer's encrypted volume, and refreshes its computer and turn tokens. Codex resumes the thread from its session files.
 2. **Codex** in the computer plans the work. Each model call, tool call or web request goes to **agentgateway** with the computer's short-lived token.
 3. agentgateway checks the token and its allowlist, then asks the **decision service**. The service consults OpenFGA ("Alice ∩ her assistant may use Odoo read?"), reserves the worst-case EUR cost, and applies the tool's Allow/Ask/Block mode.
@@ -110,7 +112,7 @@ A conformant Kubernetes cluster hosts one **silo** per customer. It must provide
 ## Components
 
 | Need | Component (open source unless noted) | OpenCrane's own part |
-|---|---|---|
+| --- | --- | --- |
 | Sign-in | Zitadel | Map identities to members and agents |
 | Permissions for humans and agents | OpenFGA (Postgres backend) | The authorisation model and the "human ∩ agent" rule |
 | Agent loop, tools, sub-agents | Codex app-server | The bridge: messages in, events out, approvals relayed |
@@ -133,6 +135,7 @@ A conformant Kubernetes cluster hosts one **silo** per customer. It must provide
 **Planning.** This repository starts OpenCrane 2. It succeeds the original OpenCrane platform (local folder `opencrane-2`, commit `10abd0ef6`) and reuses its product contract, decisions, hardened infrastructure and proven components. See [plan.md](plan.md) for the spikes, phases, rules and estimate: **a prototype in about 4–5 weeks and the MVP in about 12–16 weeks** of nightly agentic cycles.
 
 Carried over so far:
+
 - [Product contract](docs/product/product-contract.md)
 - [Workspace and conversation user stories](docs/product/user-stories-workspace-and-conversations.md)
 - [Accepted product decisions of 27 September 2026](docs/product/accepted-decisions-2026-09-27.md)

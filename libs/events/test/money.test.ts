@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 // Money is integer euro cents everywhere (owner decision 8): every amount in an
 // event is a whole, non-negative number of cents, and its name ends in `Cents`
 // (costCents, ceilingCents), never a float in euros and never "MinorUnits".
@@ -27,7 +28,7 @@ function definitionFor(type: string) {
 function rejectedFields(type: string, field: string, value: unknown): string[] {
   const { dataSchema, example } = definitionFor(type);
   expect(dataSchema.safeParse(example).success).toBe(true); // so any failure below is the patch's
-  const result = dataSchema.safeParse({ ...(example as Record<string, unknown>), [field]: value });
+  const result = dataSchema.safeParse({ ...asRecord(example), [field]: value });
   return result.success ? [] : [...new Set(result.error.issues.map((issue) => String(issue.path[0])))].sort();
 }
 
@@ -56,7 +57,7 @@ function declaredProperties(node: unknown, found: Array<[string, unknown]> = [])
   if (Array.isArray(node)) {
     for (const item of node) declaredProperties(item, found);
   } else if (typeof node === 'object' && node !== null) {
-    for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(asRecord(node))) {
       if (key === 'properties' && typeof value === 'object' && value !== null) {
         found.push(...Object.entries(value));
       }
@@ -94,8 +95,8 @@ function centsFieldsWithWrongShape(jsonSchema: unknown): string[] {
   return declaredProperties(jsonSchema)
     .filter(([name]) => name.endsWith('Cents'))
     .filter(([, schema]) => {
-      const shape = schema as { type?: unknown; minimum?: unknown };
-      return !(shape.type === 'integer' && shape.minimum === 0);
+      const shape = asRecord(schema);
+      return !(shape['type'] === 'integer' && shape['minimum'] === 0);
     })
     .map(([name]) => name);
 }

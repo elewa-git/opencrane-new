@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // The telemetry SDK is replaced by one whose flush fails, as it does when the
@@ -30,9 +31,9 @@ describe('closing the server when the telemetry flush fails', () => {
 
     await expect(app.close()).resolves.toBeUndefined();
 
-    const lines = chunks.join('').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+    const lines = chunks.join('').split('\n').filter(Boolean).map((line) => asRecord(JSON.parse(line)));
     const failure = lines.find((line) => line['msg'] === 'telemetry shutdown failed');
     expect(failure?.['level']).toBe(50);
-    expect((failure?.['err'] as { message?: string } | undefined)?.message).toContain('ECONNREFUSED');
+    expect(asRecord(failure?.['err'])['message']).toContain('ECONNREFUSED');
   });
 });

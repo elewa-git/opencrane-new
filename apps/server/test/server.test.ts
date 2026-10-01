@@ -1,10 +1,11 @@
+import { record as asRecord } from './record.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from '../src/websocket.ts';
-import type { HelloEcho } from '@opencrane/protocol';
+import { helloEchoSchema, errorMessageSchema, eventValidationResultSchema, type HelloEcho } from '@opencrane/protocol';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 // The WebSocket endpoint now requires a session and a matching Origin (see
@@ -47,7 +48,7 @@ describe('server skeleton', () => {
         socket.send(JSON.stringify({ type: 'hello', text: 'hello, opencrane' }));
       });
       socket.on('message', (data: Buffer) => {
-        resolve(JSON.parse(data.toString()) as HelloEcho);
+        resolve(helloEchoSchema.parse(JSON.parse(data.toString())));
         socket.close();
       });
       socket.on('error', reject);
@@ -74,7 +75,7 @@ describe('server skeleton', () => {
         socket.send(JSON.stringify({ type: 'not-hello' }));
       });
       socket.on('message', (data: Buffer) => {
-        resolve(JSON.parse(data.toString()) as { type: string; message: string });
+        resolve(errorMessageSchema.parse(JSON.parse(data.toString())));
         socket.close();
       });
       socket.on('error', reject);
@@ -100,7 +101,7 @@ describe('server skeleton', () => {
         socket.send('{not json');
       });
       socket.on('message', (data: Buffer) => {
-        resolve(JSON.parse(data.toString()) as { type: string; message: string });
+        resolve(errorMessageSchema.parse(JSON.parse(data.toString())));
         socket.close();
       });
       socket.on('error', reject);
@@ -139,7 +140,7 @@ describe('server skeleton', () => {
         );
       });
       socket.on('message', (data: Buffer) => {
-        resolve(JSON.parse(data.toString()) as { type: string; valid: boolean });
+        resolve(eventValidationResultSchema.parse(JSON.parse(data.toString())));
         socket.close();
       });
       socket.on('error', reject);
@@ -159,7 +160,7 @@ describe('server skeleton', () => {
       throw new Error('expected a network address');
     }
 
-    const reply = await new Promise<{ type: string; valid: boolean; reason?: string }>((resolve, reject) => {
+    const reply = await new Promise<{ type: string; valid: boolean; reason?: string | undefined }>((resolve, reject) => {
       const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, { headers: wsHeaders });
       socket.on('open', () => {
         socket.send(
@@ -170,7 +171,7 @@ describe('server skeleton', () => {
         );
       });
       socket.on('message', (data: Buffer) => {
-        resolve(JSON.parse(data.toString()) as { type: string; valid: boolean; reason?: string });
+        resolve(eventValidationResultSchema.parse(JSON.parse(data.toString())));
         socket.close();
       });
       socket.on('error', reject);
@@ -196,7 +197,7 @@ describe('server logging', () => {
     const chunks: string[] = [];
     app = buildServer(authConfig, { logDestination: { write: (msg: string) => void chunks.push(msg) } });
     const text = (): string => chunks.join('');
-    return { app, text, lines: () => text().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>) };
+    return { app, text, lines: () => text().split('\n').filter(Boolean).map((line) => asRecord(JSON.parse(line))) };
   }
 
   it('redacts a token in the url of a request to a route that exists, and names the request id request_id', async () => {
@@ -206,7 +207,7 @@ describe('server logging', () => {
 
     expect(logs.text()).not.toContain('SECRET_INJECT');
     const incoming = logs.lines().find((line) => line['msg'] === 'incoming request');
-    expect((incoming?.['req'] as { url?: string } | undefined)?.url).toBe('/healthz?token=[Redacted]&keep=1');
+    expect(asRecord(incoming?.['req'])['url']).toBe('/healthz?token=[Redacted]&keep=1');
     expect(incoming?.['request_id']).toBe('req-1');
     expect(incoming?.['reqId']).toBeUndefined();
   });

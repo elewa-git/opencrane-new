@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { encodeSession, type AuthConfig } from '@opencrane/auth';
@@ -72,7 +73,8 @@ async function startLogin(stack: Stack, returnTo?: string) {
   const flowCookie = cookieValue(login, stack.config.flowCookieName);
   // The provider is a real loopback server that app.inject cannot reach, so
   // the test makes this one request itself, as the browser would.
-  const authorize = await fetch(login.headers.location as string, { redirect: 'manual' });
+  assert(typeof login.headers.location === 'string');
+  const authorize = await fetch(login.headers.location, { redirect: 'manual' });
   const callbackUrl = new URL(authorize.headers.get('location')!);
   return { login, flowCookie, callbackQuery: `${callbackUrl.pathname}${callbackUrl.search}` };
 }

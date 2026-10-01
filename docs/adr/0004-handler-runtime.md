@@ -12,7 +12,7 @@ Facts must remain in the event store; workflow histories and queue rows are
 execution state, not a second source of business truth.
 
 | Candidate | Evidence / limitation |
-|---|---|
+| --- | --- |
 | pg-boss 12.35.0, MIT | Three host runs passed ordering, retry-in-place, guarded crash effects and operations assertions against embedded PostgreSQL. Visibility is partial; the budget benchmark is not the event-store path. |
 | Temporal Server 1.32.0 / TS SDK 1.24.0, MIT | Three host runs passed ordering, poison/retry, guarded crash effects and operations assertions with PostgreSQL-backed Temporal. Visibility is partial; the budget benchmark is not the event-store path. The local-activity variant exceeded its ceiling and remains skipped. |
 | Hatchet, MIT | NOT_RUN: CLI starts Docker; Go source build was not attempted within the disk allowance. No claim that Docker-free execution is impossible. |

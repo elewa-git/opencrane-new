@@ -1,10 +1,12 @@
 # Event catalogue: which event triggers which logic
 
 This file is the **contract** between the parts of OpenCrane 2. Every state change is an event. Every piece of logic is either:
+
 - a **projection**, which turns events into content in PostgreSQL; or
 - a **reaction**, which does something and may emit new events.
 
 If it isn't in this catalogue, it doesn't happen. CI checks two things:
+
 - every event type in code appears here, with at least one consumer or the label "audit only";
 - every handler in code subscribes only to events listed here.
 
@@ -34,7 +36,7 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 
 ## How a command works
 
-```
+```text
  API / gateway decision / computer report
         │
         ▼
@@ -53,7 +55,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 ## Streams
 
 | Stream | One per | Examples |
-|---|---|---|
+| --- | --- | --- |
 | `org-<silo>` | silo | settings, invitations |
 | `member-<user>` | person | joined, role changed, removed |
 | `team-<team>` | team | created, members |
@@ -75,8 +77,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 ## Catalogue
 
 ### Organisation, members and teams
+
 | Event | Emitted by | Projections (content) | Reactions (logic) |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
 | `member.invited` | admin command | invitations | send the invitation |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal) |
@@ -85,8 +88,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `team.created` / `team.member_added` / `team.member_removed` | admin command | teams | OpenFGA team tuples |
 
 ### Assistants and computers
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `assistant.created` | reaction or admin | assistants (owner, kind, scope) | OpenFGA `acts_for`; request a computer on first use |
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim & bind) | computers (Pod UID, generation) | — (the token is issued inside the claim command) |
@@ -100,8 +104,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 There are two kinds of tools, so two events. `mcp.tools_changed` is for a registered MCP server's tools. `toolset.changed` is for the computer's own tools: a new computer image (CLI programs, runtimes, local stdio MCP such as Playwright) or Codex built-in tool settings (`shell`, `apply_patch`, `web_search`, `view_image`, `spawn_agent`). It goes on the profile's own stream rather than on each computer's, because one admin command changes every computer that uses the profile and a command appends to one stream only. Hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
 
 ### Conversations and agent activity
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `conversation.created` | command | conversations | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
 | `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
@@ -112,8 +117,9 @@ There are two kinds of tools, so two events. `mcp.tools_changed` is for a regist
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
 
 ### Tools, approvals and effects
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `tool.approval_requested` | decision service (mode Ask) | approvals | notify the requester; approval card |
 | `approval.decided` | requester | approvals | deliver the decision to the computer (wake it) |
 | `approval.expired` | timer | approvals | tell the computer |
@@ -123,8 +129,9 @@ There are two kinds of tools, so two events. `mcp.tools_changed` is for a regist
 | `effect.resolved` | person | audit, effects | settle or release the reservation |
 
 ### MCP catalogue, grants and connections
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `mcp.server_registered` | admin | catalogue (draft) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
 | `mcp.server_discovered` | reaction | catalogue (tools, schema digests) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
@@ -137,8 +144,9 @@ There are two kinds of tools, so two events. `mcp.tools_changed` is for a regist
 | `connection.revoked` | person, admin or reaction | connections | delete the secret |
 
 ### Budgets (single-writer actor per silo)
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `budget.ceiling_set` | admin | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
 | `budget.settled` | budget actor (on `effect.observed`) | budgets, usage | — |
@@ -146,8 +154,9 @@ There are two kinds of tools, so two events. `mcp.tools_changed` is for a regist
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
 
 ### Memory
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `memory.written` | OpenCrane memory MCP (remember) | Postgres memory projection for that scope | mark that scope for nightly dreaming |
 | `memory.corrected` / `memory.forgotten` | OpenCrane memory MCP (correct/forget); nightly per-scope dreaming job (corrected only) | Postgres memory projection for that scope | forget: delete the payload key, then tombstone |
 | `memory.consolidated` | Reserved for later use; not emitted by MVP dreaming | Postgres memory projection for that scope | — |
@@ -162,15 +171,17 @@ Nightly dreaming runs per scope in the handler runtime, using a cheap model thro
 Cognee is deferred until after the MVP; it may become another projection fed by replaying the same memory events plus document ingestion, without changing the agent's tools.
 
 ### Routines and delegation
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `routine.created` / `routine.updated` / `routine.paused` / `routine.resumed` / `routine.retired` | person | routines | schedule the next firing |
 | `routine.due` | scheduler | routines (last firing) | emit `message.posted` to the routine's assistant; one firing only |
 | `delegation.started` / `delegation.completed` | parent or child computer | delegations | deliver the child's result to the parent |
 
 ### Security
+
 | Event | Emitted by | Projections | Reactions |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `security.alert_raised` | any reaction | alerts | notify admins |
 
 ## Rebuilding content

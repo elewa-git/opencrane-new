@@ -3,10 +3,10 @@
 > Copied verbatim from OpenCrane `plan.md` on branch `feat/conversational-routines` (commit `fadaf5c2f`, lines 3–59). These decisions carry into OpenCrane 2. "Historical evidence" refers to the original OpenCrane plan.
 
 The user requested preservation of the administration design package during cleanup of the older
-checkout. The [design brief](docs/design/administration-lifecycle/README.md),
-[screenshot guide](docs/design/administration-lifecycle/screenshots.md),
-[component handoff](docs/design/administration-lifecycle/components.md), and
-[36 supplied wireframes](tests/design-targets/organisation-administration/README.md) are retained
+checkout. The design brief (OpenCrane 1 source: `docs/design/administration-lifecycle/README.md`),
+screenshot guide (OpenCrane 1 source: `docs/design/administration-lifecycle/screenshots.md`),
+component handoff (OpenCrane 1 source: `docs/design/administration-lifecycle/components.md`), and
+36 supplied wireframes (OpenCrane 1 source: `tests/design-targets/organisation-administration/README.md`) are retained
 with their original bytes and provenance. All 47 image checksums match their manifests. These
 remain design references, not accepted visual baselines or proof of implemented functionality.
 Their source assessment is pinned to `967f7c0b6`; reconcile current implementation and the later
@@ -14,7 +14,7 @@ accepted product decisions before building from the brief. Developer-tooling fil
 from this preservation commit. The latest database-boundary decision below is retained separately
 from implementation and test claims.
 
-## Accepted product decisions — 27 September 2026
+## Decisions
 
 The user has accepted the following decisions for the remaining MVP work. They are product
 contracts, not claims that implementation or qualification is complete; the owning waves below

@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 // Two generated tests per event type in the registry: its own example must
 // pass its own schema, and the same example with one extra field must
 // fail, because every data schema in the registry is `.strict()`. This is
@@ -16,7 +17,7 @@ describe('every event data schema, generated from the registry', () => {
       });
 
       it('rejects that example with one extra field added', () => {
-        const withExtraField = { ...(entry.example as Record<string, unknown>), unexpectedField: 'nope' };
+        const withExtraField = { ...(asRecord(entry.example)), unexpectedField: 'nope' };
         const result = entry.dataSchema.safeParse(withExtraField);
         expect(result.success).toBe(false);
       });

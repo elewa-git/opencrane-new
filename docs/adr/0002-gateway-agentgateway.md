@@ -28,7 +28,7 @@ before the Phase 0 start gate (S0.1, S0.2, S0.7 must all pass).
 ## Options considered
 
 | Option | Licence | Verdict |
-|---|---|---|
+| --- | --- | --- |
 | **agentgateway** | Apache-2.0 | **Chosen** — see evidence below |
 | The Envoy stack (Envoy + a hand-written `ext_authz` gRPC/HTTP filter chain) | Apache-2.0 | Fallback, not spiked. agentgateway already ships the pieces this spike needed (`jwtAuth`, `extAuthz` with HTTP protocol and body-size limits, CEL); Envoy would need the same policy surface hand-assembled from lower-level primitives |
 
@@ -42,7 +42,7 @@ for JWT, no web framework) — see the spike's README for the full write-up,
 findings, and every log line behind each number below.
 
 | # | Pass condition | Result |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Every call reaches `ext_authz` with verified computer + turn claims; no turn token or a bad signature → deny | **PASS** — bad computer-token signature denied by agentgateway's own `jwtAuth`, before `ext_authz` is ever called; bad/missing turn token denied by the decision service; a computer token just past expiry is inside the gateway's own leeway but still caught by the decision service's strict re-check (see "Consequences") |
 | 2 | Live OpenFGA; revoking the requester's tuple denies the next call (< 2 s); OpenFGA down → deny | **PASS** — measured revoke-to-deny latency **3–4 ms**; OpenFGA down → fast-failing 503, not a hang |
 | 3 | Fail closed: decision service stopped → denied, never forwarded | **PASS** — 503, and the backend's request-log line count is asserted unchanged |

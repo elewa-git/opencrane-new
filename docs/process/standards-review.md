@@ -13,7 +13,7 @@ Read-only `gh` queries worked. PR sample: latest 200 PRs as retrieved on 1 Octob
 ## What slowed development
 
 | Measure | Observed result | Meaning and limitation |
-|---|---:|---|
+| --- | ---: | --- |
 | PR outcomes | 72 merged, 108 closed unmerged, 20 open | **60% of terminal PRs** were closed unmerged (108/180); 54% of the whole sample. Absorbed PRs are not necessarily discarded work. |
 | Time from creation to merge | Median **10.1 hours**; nearest-rank p90 **251.1 hours**; maximum **279.4 hours** | 72 merged PRs only. Includes overnight waiting; does not isolate review time, earlier branch work or open PRs. |
 | PR size, additions + deletions | Median **587** lines; merged median **666.5**; **63/200** over 1,500; **17/200** over 10,000 | GitHub totals include generated files and cumulative stacked diffs; not directly comparable to OC2's non-generated budget. |
@@ -47,7 +47,7 @@ The principal validation/publication workflow had **140 runs: 77 failed (55%), 4
 Failed-job categories below are distinct runs within each category; rows overlap because one run can fail several jobs. They account for the 77 failed primary-workflow runs, not causal shares of elapsed time.
 
 | Failed step/job family | Runs | Evidence |
-|---|---:|---|
+| --- | ---: | --- |
 | Mechanical style, including embedded Prisma guard | 31 | Latest [run 36121150081](https://github.com/elewa-git/opencrane/actions/runs/36121150081): 25 errors across six files; old Prisma ownership rules plus house style applied to vendored UI source. |
 | k3d smoke/setup | 20 | Same latest run stops because rendered server support for the reviewed outbound CA bundle is absent; [#913](https://github.com/elewa-git/opencrane/pull/913) remains an explicitly unapproved trust change. One of these 20 failed during runner setup. |
 | Storybook contracts/screenshots | 17 | Latest run reports **58 failures**; missing Linux reference images and screenshot differences, not evidence that all 58 are product bugs. |
@@ -68,7 +68,7 @@ Repository protection read on 1 October required one approving review but **no r
 ## What actually protected quality
 
 | Evidence | Defect or invalid claim corrected | Keep |
-|---|---|---|
+| --- | --- | --- |
 | [#745](https://github.com/elewa-git/opencrane/pull/745), CodeQL review comments dated 30 August; fixes `c13976855`, `775befdaa`; merged 31 August | Workload skill routes lacked rate limiting. The final fix puts rate limiting on the controller/worker routers. The same first fix replaces a backtracking image-reference expression and adds an adversarial-path regression. | Security analysis plus concrete negative tests. The timestamped route findings establish a pre-merge catch. |
 | [#826](https://github.com/elewa-git/opencrane/pull/826), `232d55d5a` on 8 September; merged 9 September | Live qualification exposed the aggregate run budget being used as a single oversized response limit. A separate response cap repaired the real model path before merge. | Fresh-install/user-journey qualification and exact source evidence. |
 | [#873](https://github.com/elewa-git/opencrane/pull/873), validation section; absorbed by #888 before its merge | Independent review corrected the delivery invariant for gateway refusal before dispatch, while keeping provider NotFound delivery ambiguous. PR report is the evidence of review causality; it is not an independently replayed test here. | One reviewer tracing failure semantics, rather than just checking happy paths. |
@@ -82,7 +82,7 @@ The process also let defects escape. Owner memory records roughly six Cognee dep
 There are **193 READMEs under apps/libs, including grouping indexes**. A purposeful sample of ten packages across applications, infrastructure, IAM, history, memory, observability, storage, frontend and contracts totals **1,430 lines**, median **104.5**, range **52–327**. Five of nine samples with an applicable length profile exceed that profile; the contracts package has no matching profile. This is a qualitative sample, not a repository-wide failure rate.
 
 | Ten README samples | Lines | Finding |
-|---|---:|---|
+| --- | ---: | --- |
 | `apps/opencrane/README.md:188` | 327 | Clearly distinguishes SQL evidence from deployed proof; operator detail at :262 could be linked out. |
 | `apps/opencrane-ui/README.md:69` | 98 | Explains server authority and usage-data limits; repeated links at :95. |
 | `apps/_infra/cognee/README.md:51` | 111 | Useful isolation and unsupported-scaling limits. |
@@ -97,7 +97,7 @@ There are **193 READMEs under apps/libs, including grouping indexes**. A purpose
 Source sample: for each root represented below, take the lexicographically first non-index `.ts` under `src`, excluding generated and test files. This reproducible selection includes implementations and declarations; it does not choose only good or bad prose.
 
 | Ten source files | Comment assessment |
-|---|---|
+| --- | --- |
 | `apps/opencrane/src/bootstrap/configuration/config.ts:181` | Explains lease-renewal timing and why a floor exists; more useful than the obvious constant labels. |
 | `apps/opencrane-ui/src/app/app.component.ts:4` | Proportionate one-line description of a small application shell. |
 | `libs/backend/server/iam/authorization/main/src/approvals/deferred-tool-approval-batch.ts:5` | Says when the last approval resumes work. |
@@ -118,7 +118,7 @@ Skimmed all 12 ADRs for decisions, evidence and supersession. ADR0017 usefully r
 “Keep” preserves the purpose, not an unchanged copy. “Simplify” keeps a smaller role or contract. “Replace with a tool” removes routine model/prose enforcement. “Drop” means do not transplant into OC2. Each named skill is assessed separately even when it duplicates an agent.
 
 | Agent in `.claude/agents/` | Lines | Decision | Evidence |
-|---|---:|---|---|
+| --- | ---: | --- | --- |
 | `architecture.md` | 201 | Simplify | :11–14 scopes changed boundaries; :66 asks for mechanical dependency enforcement. Fold into reviewer. |
 | `changelog.md` | 70 | Simplify | :15–27, :44 preserve user outcomes and honest qualification; merge into one docs helper. |
 | `comments.md` | 202 | Simplify | :21–51 grounds explanations; :201 manufactures ASK pressure. |
@@ -135,7 +135,7 @@ Skimmed all 12 ADRs for decisions, evidence and supersession. ADR0017 usefully r
 | `website.md` | 85 | Simplify | :55–79 grounds claims and links; merge with docs helper. |
 
 | Skill in `.agents/skills/` | Decision | Evidence |
-|---|---|---|
+| --- | --- | --- |
 | `architecture/SKILL.md` | Drop duplicate | Byte-identical 201-line agent copy; :66 repeats boundary policy. |
 | `changelog/SKILL.md` | Drop duplicate | Byte-identical 70-line copy; retain :15 once. |
 | `comments/SKILL.md` | Drop duplicate | Byte-identical 202-line copy; correction `e353e48e1` had to update three harness copies. |
@@ -150,7 +150,7 @@ Skimmed all 12 ADRs for decisions, evidence and supersession. ADR0017 usefully r
 ## Commands, controls and rule documents
 
 | File or control | Decision | One-line evidence |
-|---|---|---|
+| --- | --- | --- |
 | `.claude/commands/review-loop.md` | Simplify | :21–41 already avoids repeated checks; add a two-pass ceiling and main scope. |
 | `.claude/commands/execute-plan.md` | Simplify | Keep acceptance/file ownership (:149); remove stack checkpoints (:126) and OC1 branch restrictions. |
 | `.claude/commands/deploy-loop.md` | Simplify | Keep preflight/evidence; :39–65 requires another PR/issue destination per failure. |
@@ -194,7 +194,7 @@ Skimmed all 12 ADRs for decisions, evidence and supersession. ADR0017 usefully r
 Rows include their corresponding `scripts/__tests__` tests/fixtures and all named helper modules. Keeping an invariant does not mean copying its OC1 implementation. Negative tests transfer only with a retained custom invariant.
 
 | Gate, helper family or workflow | Decision | One-line evidence |
-|---|---|---|
+| --- | --- | --- |
 | `scripts/agent-style-check.sh` | Replace with a tool | :60–66 launches per-file work; :170 duplicates Prisma checking also in CI. Use typed ESLint and formatter. |
 | `scripts/if-body-newline-check.mjs` | Replace with a tool | Tests :39–121 implement changed-line/rename exceptions for brace layout; use formatter/braces. |
 | `scripts/inline-conditional-check.mjs` | Replace with a tool | :8–25 counts ternaries on a physical line; use complexity and nested-ternary rules. |
@@ -230,7 +230,7 @@ Rows include their corresponding `scripts/__tests__` tests/fixtures and all name
 The style script contains separate rules; none is hidden inside the family decision:
 
 | Rule in `scripts/agent-style-check.sh` | Decision and evidence |
-|---|---|
+| --- | --- |
 | `ARROW-FN` | Drop; :180–184 bans ordinary arrows without a correctness requirement. |
 | `MULTILINE-IMPORT` | Drop; :186–189 forces long single-line imports. |
 | `MIDFILE-IMPORT` | Replace with import-order tooling; :203–210. |

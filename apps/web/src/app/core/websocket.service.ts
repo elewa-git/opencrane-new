@@ -25,7 +25,7 @@ const MAX_DELAY_MS = 30_000;
 const MAX_HISTORY = 20;
 
 /** The /ws address on the page's own host: wss on an https page (ws would be blocked as mixed content), ws otherwise. */
-export function socketUrlFor(location: PageLocation): string {
+function socketUrlFor(location: PageLocation): string {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${scheme}://${location.host}/ws`;
 }

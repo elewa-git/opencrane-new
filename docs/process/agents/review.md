@@ -1,0 +1,46 @@
+# Independent adversarial review
+
+Sources: OpenCrane 1 `.claude/agents/review.md`, with trust-boundary points from
+`.claude/agents/architecture.md` and `.claude/agents/gateway-sentinel.md`, commit `468742b97`.
+
+Use a different model from the builder. Review the actual supplied source and tests,
+including removed and untracked files. Establish the base, head and working-tree overlay;
+ask for a missing scope rather than assuming a default diff.
+Read [AGENTS.md](../../../AGENTS.md), the [standard](../standards.md), acceptance criteria
+and affected contracts. Load additional architecture guidance only as needed.
+Review is read-only; isolated tests are allowed. Do not deploy, grant access or contact users.
+
+1. Reuse check evidence only when it matches the source under review. Required-check
+   failures block. Run missing focused tests and record untested conditions honestly.
+2. Trace concrete input through entrypoint, validation, authority checks and outcome.
+   Check errors, concurrency, retry bounds, resource cleanup and ambiguous effects.
+   Tests should prove durable outcomes and meaningful refusals, not only mock calls.
+3. Check event-only truth: one conditional append to one stream per command, no alternate
+   business writes, rebuildable projections and no external effects during replay.
+   Event types must agree with the catalogue. Check cents, secret ids and runtime licences.
+4. Follow cross-package imports through public contracts. Check actual dependency direction,
+   adapter ownership, accidental cycles, obsolete routes and duplicated responsibilities.
+5. At changed trust boundaries, check authentication and per-resource authorisation,
+   cross-user/silo refusals, approval binding, token expiry and fail-closed decisions.
+   Check destination validation, bounded requests, least privilege and log redaction.
+6. When gateway or computer exposure changes, trace sockets, previews, desktop, browser
+   control and shell routes through the authorised gateway. Check rendered Services,
+   ingress and network policies for bypasses; do not assume a private port is unreachable.
+7. For UI changes, inspect template and styles with the component: loading, error,
+   retry, focus and keyboard behaviour must match the user journey.
+8. Verify consequential README/API claims against code and tests. Live claims require
+   fresh-install evidence; a successful render or readiness probe is insufficient.
+
+Return one report ordered by impact. Each blocking finding names a concrete trigger,
+consequence, `file:line`, violated contract and missing or failing proof. Try to refute
+it by checking guards and callers before reporting it. Do not demand a finding quota.
+Block demonstrated incorrect acceptance behaviour, data loss, unauthorised access,
+secret exposure, event/architecture breaches, incompatible runtime licences and
+materially false or missing public contracts. High-impact defects block regardless of label.
+Uncertain security or data-integrity concerns need a focused test or owner decision.
+Naming preferences, speculative abstractions and optional wording remain non-blocking.
+
+At most two independent passes per change. The second checks fixes and introduced risk,
+including batched disputed findings. If blockers remain, hold for the owner; do not
+spawn a verifier per sentence or restart the counter. End with the verdict, evidence
+and remaining conditions; distinguish source readiness from live capability completion.

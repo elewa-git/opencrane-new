@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogDestination } from '@opencrane/observability';
-import type { FastifyRequest } from 'fastify';
 import { createServerLogger, redactedRequestSerializer } from '../src/logging.ts';
 
 afterEach(() => {
@@ -15,7 +14,7 @@ describe('redactedRequestSerializer', () => {
       host: 'localhost:8080',
       socket: { remotePort: 51234 },
       headers: { authorization: 'Bearer SECRET_HEADER' },
-    } as unknown as FastifyRequest;
+    };
 
     expect(redactedRequestSerializer(request)).toEqual({
       method: 'GET',
@@ -26,7 +25,7 @@ describe('redactedRequestSerializer', () => {
   });
 
   it('does not throw for a request with no socket (a throwing serializer takes the process down)', () => {
-    expect(redactedRequestSerializer({ method: 'GET', url: '/x', host: 'h' } as unknown as FastifyRequest)).toMatchObject({ method: 'GET', url: '/x' });
+    expect(redactedRequestSerializer({ method: 'GET', url: '/x', host: 'h' })).toMatchObject({ method: 'GET', url: '/x' });
   });
 });
 

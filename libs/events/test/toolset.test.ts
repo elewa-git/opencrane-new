@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 // toolset.changed (owner decision 9): an admin published a computer profile
 // whose tools differ, either a new computer image or changed Codex built-in tool
 // settings. It is about the computer's own tools; a registered MCP server's tools
@@ -12,7 +13,7 @@ if (!found) {
   throw new Error('toolset.changed is not in the registry');
 }
 const { dataSchema, stream } = found;
-const example = found.example as Record<string, unknown>;
+const example = asRecord(found.example);
 const hex = '0123456789abcdef'.repeat(4);
 const settings = (...tools: Array<[tool: string, enabled: boolean]>) => tools.map(([tool, enabled]) => ({ tool, enabled }));
 

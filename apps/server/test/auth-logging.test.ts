@@ -1,3 +1,5 @@
+import assert from 'node:assert/strict';
+import { record as asRecord } from './record.ts';
 // The auth routes sit on top of the observability logger. These tests read the
 // log lines the server writes while people sign in, fail to sign in and sign
 // out, and check that no code, state, cookie, token or session value is in any
@@ -54,7 +56,7 @@ async function startLoggedStack(): Promise<LoggedStack> {
     flowCookieName: config.flowCookieName,
     sessionCookieName: config.cookieName,
     text,
-    lines: () => text().split('\n').filter(Boolean).map((line) => JSON.parse(line) as LogLine),
+    lines: () => text().split('\n').filter(Boolean).map((line) => asRecord(JSON.parse(line))),
   };
   stacks.push(stack);
   return stack;
@@ -71,7 +73,7 @@ function cookieValue(response: Response, name: string): string {
 /** The logged `req.url` of every "incoming request" line. */
 function loggedRequestUrls(stack: LoggedStack): string[] {
   return stack.lines().flatMap((line) => {
-    const url = (line['req'] as { url?: unknown } | undefined)?.url;
+    const url = asRecord(line['req'] ?? {})['url'];
     return line['msg'] === 'incoming request' && typeof url === 'string' ? [url] : [];
   });
 }
@@ -83,7 +85,8 @@ async function startLogin(stack: LoggedStack) {
   const flowCookie = cookieValue(login, stack.flowCookieName);
   // The provider is a real loopback server that app.inject cannot reach, so
   // the test makes this one request itself, as the browser would.
-  const authorize = await fetch(login.headers.location as string, { redirect: 'manual' });
+  assert(typeof login.headers.location === 'string');
+  const authorize = await fetch(login.headers.location, { redirect: 'manual' });
   const callbackUrl = new URL(authorize.headers.get('location')!);
   return {
     flowCookie,

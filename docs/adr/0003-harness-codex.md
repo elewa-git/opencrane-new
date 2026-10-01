@@ -32,7 +32,7 @@ pass) — with the caveat above that S0.1b still needs to run.
 ## Options considered
 
 | Option | Licence | Verdict |
-|---|---|---|
+| --- | --- | --- |
 | **Codex app-server** | Apache-2.0 (binary bundles OSI-approved LGPL-2.1/MIT/BSD components too — see the spike README's licence note) | **Passes this spike's 7 conditions** (6 PASS, 1 PARTIAL) — see evidence below |
 | OpenCode | — | Fallback per plan.md, not spiked |
 | Goose | — | Second fallback per plan.md, not spiked |
@@ -48,7 +48,7 @@ learned the wire framing" source trail are in the spike's README;
 condensed here:
 
 | # | Pass condition | Result |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Thread + turn over JSON-RPC; streamed agent-message events; turn-completed | **PASS** — item-level streaming confirmed; token-level delta streaming (`item/agentMessage/delta`) is now genuinely exercised (round 2: 40 chunks per run, asserted in exact arrival order — needed the bridge ordering fix, below) |
 | 2 | Shell approval request; approve continues, deny handled cleanly; do MCP calls approve too? | **PASS**, with a deviation — `approval_policy = "untrusted"` is a removed value in 0.159.2; approval is forced instead the way a real model would (`sandbox_permissions: "require_escalated"`). MCP tool calls approve through a **separate** mechanism (`mcpServer/elicitation/request`), on by default |
 | 3 | MCP call via streamable HTTP pinned to 2026-07-28; result reaches the model; exact headers | **PARTIAL** — the call and result both work. The method/tool-name headers are **conditional**, not "sent regardless" (round 1's claim, now refuted): they appear only when the server's `initialize` answer is exactly `2026-07-28`, and Codex does not validate that answer at all (accepts `"1999-01-01"` without complaint). A genuinely STRICT server (2026-07-28 only, built and run this round) **cannot complete a handshake with Codex 0.159.x at all** — proven, not assumed. The per-server `protocol_version` config key the task brief named does not exist in this Codex version (`--strict-config` rejects it by name) |

@@ -62,9 +62,9 @@ const PRODUCTION_ONLY_VARS = ['OIDC_EXPECTED_ORG_ID'] as const;
 export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig {
   // Case and spaces are ignored on purpose: " Production " must not quietly
   // count as "not production" and skip the pin.
-  const inProduction = env['NODE_ENV']?.trim().toLowerCase() === 'production';
+  const inProduction = text(env, 'NODE_ENV').toLowerCase() === 'production';
   const required: readonly string[] = inProduction ? [...REQUIRED_VARS, ...PRODUCTION_ONLY_VARS] : REQUIRED_VARS;
-  const missing = required.filter((name) => !env[name]?.trim());
+  const missing = required.filter((name) => !text(env, name));
   if (missing.length > 0) {
     const why = missing.includes('OIDC_EXPECTED_ORG_ID')
       ? '; OIDC_EXPECTED_ORG_ID is required when NODE_ENV=production so that only the organisation of this silo can sign in'
@@ -77,32 +77,24 @@ export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
     throw new Error('OIDC_COOKIE_SECRET must be at least 32 bytes');
   }
 
-  const clientSecretEnvVar = env['OIDC_CLIENT_SECRET_ENV_VAR']?.trim();
-  const clientSecret = clientSecretEnvVar ? env[clientSecretEnvVar]?.trim() : undefined;
+  const clientSecretEnvVar = text(env, 'OIDC_CLIENT_SECRET_ENV_VAR');
+  const clientSecret = clientSecretEnvVar ? text(env, clientSecretEnvVar) : undefined;
   if (clientSecretEnvVar && !clientSecret) {
     throw new Error(`OIDC_CLIENT_SECRET_ENV_VAR names ${clientSecretEnvVar}, which is not set`);
   }
 
-  const postLogoutRedirectUri = env['OIDC_POST_LOGOUT_REDIRECT_URI']?.trim();
-  const expectedOrgId = env['OIDC_EXPECTED_ORG_ID']?.trim();
+  const postLogoutRedirectUri = text(env, 'OIDC_POST_LOGOUT_REDIRECT_URI');
+  const expectedOrgId = text(env, 'OIDC_EXPECTED_ORG_ID');
 
   return configSchema.parse({
+    ...readDefaults(env),
     issuerUrl: env['OIDC_ISSUER_URL']!.trim(),
     clientId: env['OIDC_CLIENT_ID']!.trim(),
     ...(clientSecret ? { clientSecret } : {}),
     redirectUri: env['OIDC_REDIRECT_URI']!.trim(),
     ...(postLogoutRedirectUri ? { postLogoutRedirectUri } : {}),
-    scopes: env['OIDC_SCOPES']?.trim() || 'openid profile email',
     cookieSecret,
-    cookieName: env['OIDC_COOKIE_NAME']?.trim() || 'oc_session',
-    flowCookieName: env['OIDC_FLOW_COOKIE_NAME']?.trim() || 'oc_auth_flow',
-    cookieSecure: readBoolean(env['OIDC_COOKIE_SECURE'], true, 'OIDC_COOKIE_SECURE'),
-    sessionMaxAgeSeconds: readNumber(env['OIDC_SESSION_MAX_AGE_SECONDS'], 12 * 60 * 60),
-    orgClaim: env['OIDC_ORG_CLAIM']?.trim() || 'org_id',
-    rolesClaim: env['OIDC_ROLES_CLAIM']?.trim() || 'roles',
     ...(expectedOrgId ? { expectedOrgId } : {}),
-    stepUpMaxAgeSeconds: readNumber(env['OIDC_STEP_UP_MAX_AGE_SECONDS'], 5 * 60),
-    allowInsecureRequests: readBoolean(env['OIDC_ALLOW_INSECURE_REQUESTS'], false, 'OIDC_ALLOW_INSECURE_REQUESTS'),
   });
 }
 
@@ -126,4 +118,22 @@ function readNumber(raw: string | undefined, fallback: number): number {
   if (!raw) return fallback;
   const parsed = Number(raw);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function text(env: NodeJS.ProcessEnv, name: string): string {
+  return env[name]?.trim() ?? '';
+}
+
+function readDefaults(env: NodeJS.ProcessEnv) {
+  return {
+    scopes: text(env, 'OIDC_SCOPES') || 'openid profile email',
+    cookieName: text(env, 'OIDC_COOKIE_NAME') || 'oc_session',
+    flowCookieName: text(env, 'OIDC_FLOW_COOKIE_NAME') || 'oc_auth_flow',
+    cookieSecure: readBoolean(env['OIDC_COOKIE_SECURE'], true, 'OIDC_COOKIE_SECURE'),
+    sessionMaxAgeSeconds: readNumber(env['OIDC_SESSION_MAX_AGE_SECONDS'], 12 * 60 * 60),
+    orgClaim: text(env, 'OIDC_ORG_CLAIM') || 'org_id',
+    rolesClaim: text(env, 'OIDC_ROLES_CLAIM') || 'roles',
+    stepUpMaxAgeSeconds: readNumber(env['OIDC_STEP_UP_MAX_AGE_SECONDS'], 5 * 60),
+    allowInsecureRequests: readBoolean(env['OIDC_ALLOW_INSECURE_REQUESTS'], false, 'OIDC_ALLOW_INSECURE_REQUESTS'),
+  };
 }

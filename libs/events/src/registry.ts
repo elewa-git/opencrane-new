@@ -9,99 +9,20 @@
 // - a strict zod schema for its `data`;
 // - `example`: one valid `data` value, used by the generated tests in
 //   test/generated-examples.test.ts.
-import { z } from 'zod';
+import { event, type EventDefinition } from './definition.ts';
+import { identityEvents } from './identity-events.ts';
+export type { EventDefinition } from './definition.ts';
 import {
   approvalDecidedDataSchema,
   effectObservedDataSchema,
-  memberJoinedDataSchema,
   messagePostedDataSchema,
 } from './examples.ts';
 import * as data from './data.ts';
 
-export interface EventDefinition<DataSchema extends z.ZodType = z.ZodType> {
-  /** The event type, in past tense, e.g. "member.joined". */
-  readonly type: string;
-  /** The stream-type prefix this event is appended to, e.g. "member" for `member-<user>`. */
-  readonly stream: string;
-  /** One line describing what the event means. */
-  readonly description: string;
-  /** The zod schema for this event's `data` field. */
-  readonly dataSchema: DataSchema;
-  /** One valid `data` value for this event type. */
-  readonly example: z.infer<DataSchema>;
-}
-
-// Builds one registry entry. `example` is typed against this call's own
-// `dataSchema`, so an example that does not fit its schema is a compile
-// error, not only a test failure.
-function event<DataSchema extends z.ZodType>(
-  type: string,
-  stream: string,
-  description: string,
-  dataSchema: DataSchema,
-  example: z.infer<DataSchema>,
-): EventDefinition<DataSchema> {
-  return { type, stream, description, dataSchema, example };
-}
-
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 export const eventRegistry: readonly EventDefinition[] = [
-  // Organisation, members and teams
-  event(
-    'org.created',
-    'org',
-    'A new silo (customer organisation) was installed.',
-    data.orgCreatedDataSchema,
-    { orgName: 'Acme Ltd' },
-  ),
-  event(
-    'member.invited',
-    'member',
-    'An admin invited someone to join.',
-    data.memberInvitedDataSchema,
-    { memberId: 'mem_2', email: 'bob@example.com', role: 'member', invitedBy: 'mem_1', invitationId: 'inv_1' },
-  ),
-  event(
-    'member.joined',
-    'member',
-    'An invitation was accepted and the person became a member.',
-    memberJoinedDataSchema,
-    { memberId: 'mem_1', email: 'alice@example.com', displayName: 'Alice', role: 'member' },
-  ),
-  event(
-    'member.role_changed',
-    'member',
-    "An admin changed a member's role.",
-    data.memberRoleChangedDataSchema,
-    { memberId: 'mem_1', previousRole: 'member', newRole: 'admin', changedBy: 'mem_2' },
-  ),
-  event(
-    'member.removed',
-    'member',
-    'An admin removed a member from the silo.',
-    data.memberRemovedDataSchema,
-    { memberId: 'mem_1', removedBy: 'mem_2' },
-  ),
-  event('team.created', 'team', 'An admin created a team.', data.teamCreatedDataSchema, {
-    teamId: 'team_1',
-    name: 'Sales',
-    createdBy: 'mem_1',
-  }),
-  event(
-    'team.member_added',
-    'team',
-    'An admin added a member to a team.',
-    data.teamMemberAddedDataSchema,
-    { teamId: 'team_1', memberId: 'mem_1', addedBy: 'mem_2' },
-  ),
-  event(
-    'team.member_removed',
-    'team',
-    'An admin removed a member from a team.',
-    data.teamMemberRemovedDataSchema,
-    { teamId: 'team_1', memberId: 'mem_1', removedBy: 'mem_2' },
-  ),
+  ...identityEvents,
 
   // Assistants and computers
   event(

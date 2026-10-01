@@ -1,3 +1,4 @@
+import { record as asRecord } from './record.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLogger } from '../src/logger.ts';
 import { runWithContext } from '../src/context.ts';
@@ -22,9 +23,9 @@ describe('createLogger', () => {
 
     const [first, second] = lines();
     expect(first).toMatchObject({ name: 'test', level: 30, msg: 'hello', example: 1 });
-    const err = second?.['err'] as { type?: string; message?: string; stack?: string };
+    const err = asRecord(second?.['err']);
     expect(err).toMatchObject({ type: 'TypeError', message: 'boom' });
-    expect(err.stack).toContain('boom');
+    expect(err['stack']).toContain('boom');
   });
 
   describe('redaction on the finished line', () => {

@@ -1,0 +1,4 @@
+# Input globs in lint:links cover maintained source docs only, excluding
+# spikes, infra, dependency trees, Angular caches and generated build output.
+offline = true
+include_fragments = true

@@ -60,9 +60,9 @@ export async function startMockOidcProvider(
 
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_request, body, done) => {
     try {
-      done(null, Object.fromEntries(new URLSearchParams(body as string)));
+      done(null, Object.fromEntries(new URLSearchParams(typeof body === 'string' ? body : body.toString())));
     } catch (err) {
-      done(err as Error, undefined);
+      done(err instanceof Error ? err : new Error('form parsing failed', { cause: err }), undefined);
     }
   });
 
@@ -84,8 +84,8 @@ export async function startMockOidcProvider(
 
   // No login form: this provider always signs the request in as `user`.
   // Tests that need a different identity pass one to startMockOidcProvider.
-  app.get('/authorize', (request, reply) => {
-    const query = request.query as Record<string, string | undefined>;
+  app.get<{ Querystring: Record<string, string | undefined> }>('/authorize', (request, reply) => {
+    const query = request.query;
     const redirectUri = query['redirect_uri'];
     const codeChallenge = query['code_challenge'];
     if (!redirectUri || !codeChallenge) {
@@ -103,8 +103,8 @@ export async function startMockOidcProvider(
     reply.redirect(target.href, 302);
   });
 
-  app.post('/token', async (request, reply) => {
-    const body = request.body as Record<string, string | undefined>;
+  app.post<{ Body: Record<string, string | undefined> }>('/token', async (request, reply) => {
+    const body = request.body;
     tokenRequests.push(body);
     const code = body['code'];
     const codeVerifier = body['code_verifier'];
@@ -147,8 +147,8 @@ export async function startMockOidcProvider(
     reply.send({ access_token: randomBytes(16).toString('hex'), id_token: idToken, token_type: 'Bearer', expires_in: 300 });
   });
 
-  app.get('/endsession', (request, reply) => {
-    const query = request.query as Record<string, string | undefined>;
+  app.get<{ Querystring: Record<string, string | undefined> }>('/endsession', (request, reply) => {
+    const query = request.query;
     reply.redirect(query['post_logout_redirect_uri'] ?? '/', 302);
   });
 

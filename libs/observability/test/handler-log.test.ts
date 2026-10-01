@@ -10,6 +10,8 @@ import { memorySink } from './memory-sink.ts';
 /** Minimal stand-in for a pino Logger that records what it was called with, so a test can inspect the fields without parsing JSON. */
 function fakeLogger(): { logger: Logger; calls: { level: 'info' | 'error'; fields: Record<string, unknown>; msg: string }[] } {
   const calls: { level: 'info' | 'error'; fields: Record<string, unknown>; msg: string }[] = [];
+  // This spy implements only the two pino methods runHandler calls; overloads require a full Logger.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
   const logger = {
     info: (fields: Record<string, unknown>, msg: string) => {
       calls.push({ level: 'info', fields, msg });
@@ -60,7 +62,7 @@ describe('runHandler', () => {
       expect(call.fields['stream']).toBe('budget-acme');
       expect(call.fields['attempt']).toBe(1);
       expect(typeof call.fields['trace_id']).toBe('string');
-      expect((call.fields['trace_id'] as string).length).toBe(32);
+      expect(call.fields['trace_id']).toMatch(/^[a-f0-9]{32}$/u);
     }
   });
 

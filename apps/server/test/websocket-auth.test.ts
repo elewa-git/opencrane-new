@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
@@ -19,7 +18,8 @@ async function startServer(): Promise<{ app: FastifyInstance; url: string }> {
   const app = buildServer(authConfig);
   await app.listen({ port: 0, host: '127.0.0.1' });
   attachWebSocketServer(app.server, app.log, authConfig);
-  const address = app.server.address() as AddressInfo;
+  const address = app.server.address();
+  if (!address || typeof address === 'string') throw new Error('expected a TCP address');
   return { app, url: `ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}` };
 }
 

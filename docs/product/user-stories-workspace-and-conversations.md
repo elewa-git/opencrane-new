@@ -1,6 +1,6 @@
-> Copied from OpenCrane `docs/user-stories/workspace-and-conversations.md` at commit `10abd0ef6`. The user outcomes are the acceptance targets for OpenCrane 2.
-
 # Workspace and conversation user stories
+
+> Copied from OpenCrane `docs/user-stories/workspace-and-conversations.md` at commit `10abd0ef6`. The user outcomes are the acceptance targets for OpenCrane 2.
 
 ## Feature intent
 
@@ -13,7 +13,7 @@ submission and KurrentDB history reads. The workspace reads initial history thro
 resumable browser events implemented under #827. Group child chats and reviewed text sharing are implemented; attachments remain pending.
 These are implementation states; complete live journeys are not yet qualified. The
 [active plan](../../plan.md) records current progress, and
-[ADR 0016](../adr/0016-conversation-history-and-computers.md) owns storage and computer lifecycle.
+ADR 0016 (OpenCrane 1 source: `../adr/0016-conversation-history-and-computers.md`) owns storage and computer lifecycle.
 
 ## Onboarding-chat boundary
 
@@ -24,7 +24,7 @@ records ordered owner answers without minting AgentService, workspace, run, mode
 memory authority. Its conclusion advances `UserOnboarding`; ordinary conversation events cannot
 mark onboarding complete by themselves. The future model-driven form still requires those general
 workspace authorities. The canonical workflow and routing states live in
-[identity-and-onboarding.md](identity-and-onboarding.md).
+identity-and-onboarding.md (OpenCrane 1 source: `identity-and-onboarding.md`).
 
 ## CON-01 — See my conversations
 
