@@ -36,9 +36,9 @@ tool replays the selected projection into shadow tables, compares them with the
 incremental tables at their checkpoint when `--verify` is present, catches up to a fresh stream head,
 then locks its tables in reader order and replaces their contents and the
 checkpoint in one transaction. Keeping the live table objects preserves their grants.
-Readers may wait briefly but cannot see partial state. A repair bumps the projection
-generation for members so WebSocket subscribers reload from position 0; an equal
-verified members rebuild does not. Events appended after the captured head are
+Readers may wait briefly but cannot see partial state. A repair that changes state bumps
+the projection's generation (members and mcp-catalogue), so readers reload; members
+WebSocket subscribers restart from position 0. An equal verified rebuild does not. Events appended after the captured head are
 processed by the normal runner after the switch. A replay error drops the shadow
 tables and leaves the live projection and checkpoint untouched.
 
