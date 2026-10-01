@@ -2,7 +2,7 @@
 
 `@opencrane/projections` turns ordered events into disposable PostgreSQL
 content. It owns the query/transaction port, node-postgres and PGlite
-adapters, the checkpoint runner and the first members read model.
+adapters, the checkpoint runner, the members read model and the MCP catalogue.
 Authorisation and reactions belong elsewhere; replay never sends mail,
 changes OpenFGA or performs other external effects.
 
@@ -14,8 +14,8 @@ import { ProjectionRunner, pgliteDb, members } from '@opencrane/projections';
 import { PGlite } from '@electric-sql/pglite';
 
 const engine = new PGlite();
-// store is an initialised EventStore for this silo.
-const runner = new ProjectionRunner(pgliteDb(engine), store, createLogger('members'));
+// reader is an initialised EventStore using the projection NATS identity.
+const runner = new ProjectionRunner(pgliteDb(engine), reader, createLogger('members'));
 await runner.initialise(members);
 await runner.run(members);
 await runner.rebuild(members);
@@ -59,6 +59,12 @@ close the feed on shutdown. See the [server contract](../../apps/server/README.m
 An existing projection needs an offline rebuild to fill these new tables.
 This invitation view accompanies the catalogue's invitations
 projection; invitation delivery is outside this package.
+
+`mcpCatalogue` projects registration, discovery, rejection, publication, removal,
+tool modes and tool drift into `mcp_catalogue` and `mcp_tool_modes`. Tool drift leaves
+the server quarantined for review. `connectMcpCatalogue` maps those stored facts into
+typed register rows; it does not guess missing catalogue metadata. Both tables can be
+dropped and rebuilt with `ProjectionRunner.rebuild(mcpCatalogue)`.
 
 Run `sh scripts/fetch-nats.sh`, then `npx vitest run libs/projections/test`.
 PGlite tests use a real on-disk PostgreSQL engine, real NATS, a failed

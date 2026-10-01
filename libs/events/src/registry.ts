@@ -288,14 +288,16 @@ export const eventRegistry: readonly EventDefinition[] = [
     'mcp',
     'An admin registered a new MCP server in the catalogue (draft).',
     data.mcpServerRegisteredDataSchema,
-    { serverId: 'mcp_1', kind: 'remote', locator: 'https://mcp.example.com', registeredBy: 'mem_1' },
+    { serverId: 'mcp_1', kind: 'remote', locator: 'https://mcp.example.com', registeredBy: 'mem_1',
+      catalogueRef: 'catalogue:odoo' },
   ),
   event(
     'mcp.server_discovered',
     'mcp',
     "Discovery read the server's tool list and schema digests.",
     data.mcpServerDiscoveredDataSchema,
-    { serverId: 'mcp_1', toolCount: 3, schemaDigest: DIGEST_EXAMPLE },
+    { serverId: 'mcp_1', toolCount: 3, schemaDigest: DIGEST_EXAMPLE,
+      serverInfo: { name: 'Odoo', version: '1.4.2' } },
   ),
   event(
     'mcp.server_rejected',

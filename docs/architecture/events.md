@@ -152,8 +152,8 @@ There are two kinds of tools, so two events. `mcp.tools_changed` is for a regist
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `mcp.server_registered` | admin | catalogue (draft) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
-| `mcp.server_discovered` | reaction | catalogue (tools, schema digests) | — |
+| `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
+| `mcp.server_discovered` | reaction | catalogue (tools, schema digests, optional server name and version) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | admin | tool modes (Allow / Ask / Block) | regenerate gateway config |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |

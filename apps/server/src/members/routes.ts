@@ -8,7 +8,7 @@ export interface MembershipOptions {
   now?: () => Date;
 }
 
-function sessionFor(request: FastifyRequest, config: AuthConfig, now: Date) {
+export function sessionFor(request: FastifyRequest, config: AuthConfig, now: Date) {
   const cookie = parseCookieHeader(request.headers.cookie)[config.cookieName];
   if (!cookie) return undefined;
   try {

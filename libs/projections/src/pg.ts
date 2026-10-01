@@ -1,6 +1,7 @@
 import { Pool as PgPool, type Pool } from "pg";
 import { memberStateSchema } from "@opencrane/protocol";
 import type { Db } from "./db.ts";
+import { mapMcpCatalogueRows, type McpCatalogueRow } from './mcp-catalogue.ts';
 
 /** The caller owns the pool, TLS settings and pool error listener. */
 export function pgDb(pool: Pool): Db {
@@ -89,5 +90,20 @@ export async function connectMemberFeed(connectionString: string) {
       client.release(true);
       await pool.end();
     },
+  };
+}
+
+export function connectMcpCatalogue(connectionString: string) {
+  const pool = new PgPool({ connectionString, connectionTimeoutMillis: 1000, query_timeout: 1000 });
+  pool.on('error', () => undefined);
+  return {
+    async rows(silo: string) {
+      const result = await pool.query<McpCatalogueRow>(`SELECT c.*,
+        ARRAY_REMOVE(ARRAY_AGG(m.mode), NULL) AS modes
+        FROM mcp_catalogue c LEFT JOIN mcp_tool_modes m USING (silo, server_id)
+        WHERE c.silo = $1 GROUP BY c.silo, c.server_id ORDER BY c.position, c.server_id`, [silo]);
+      return mapMcpCatalogueRows(result.rows);
+    },
+    close: () => pool.end(),
   };
 }

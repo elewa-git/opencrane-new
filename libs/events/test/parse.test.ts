@@ -190,6 +190,16 @@ describe('parseEventByType', () => {
       expect(register('hosted', `ghcr.io/elewa-git/odoo-mcp-server@sha256:${'ab'.repeat(32)}`).success).toBe(true);
     });
 
+    it('accepts old events and optional catalogue and discovery metadata', () => {
+      expect(register('remote', 'https://odoo.example.com/mcp').success).toBe(true);
+      expect(parseEventByType(baseEnvelope('mcp.server_registered', { serverId: 'mcp_1', kind: 'remote',
+        locator: 'https://odoo.example.com/mcp', registeredBy: 'mem_1', catalogueRef: 'catalogue:odoo' })).success).toBe(true);
+      expect(parseEventByType(baseEnvelope('mcp.server_discovered', { serverId: 'mcp_1', toolCount: 3,
+        schemaDigest: 'a'.repeat(64) })).success).toBe(true);
+      expect(parseEventByType(baseEnvelope('mcp.server_discovered', { serverId: 'mcp_1', toolCount: 3,
+        schemaDigest: 'a'.repeat(64), serverInfo: { name: 'Odoo', version: '1.4.2' } })).success).toBe(true);
+    });
+
     it.each([
       ['hosted', 'ghcr.io/elewa-git/odoo-mcp-server:latest'],
       ['remote', 'https:admin:pass@odoo.example.com/mcp'],

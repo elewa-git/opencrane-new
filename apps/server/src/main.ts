@@ -3,7 +3,7 @@
 //   node --experimental-strip-types src/main.ts
 import { loadAuthConfig } from '@opencrane/auth';
 import { connectEventStore } from '@opencrane/event-store';
-import { connectMemberFeed } from '@opencrane/projections';
+import { connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
 import { installShutdown } from './shutdown.ts';
 import type { RealtimeOptions } from './realtime.ts';
 import { startTelemetry } from '@opencrane/observability';
@@ -28,6 +28,7 @@ if (natsUrl && (!silo || !authConfig.expectedOrgId)) {
 }
 const events = natsUrl ? await connectEventStore() : undefined;
 let realtime: RealtimeOptions | undefined;
+let catalogue: ReturnType<typeof connectMcpCatalogue> | undefined;
 const databaseUrl = process.env['DATABASE_URL'];
 if (databaseUrl) {
   const apiUrl = process.env['OPENFGA_API_URL'];
@@ -37,10 +38,13 @@ if (databaseUrl) {
     throw new Error('DATABASE_URL requires silo, organisation and OpenFGA binding');
   }
   realtime = { feed: await connectMemberFeed(databaseUrl), binding: { apiUrl, storeId, authorizationModelId, silo } };
+  catalogue = connectMcpCatalogue(databaseUrl);
 }
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
+  ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
+    catalogue, binding: realtime.binding } } : {}),
 });
 
 await app.listen({ port, host });
@@ -49,6 +53,7 @@ installShutdown(app, sockets, graceMs, async () => {
   const results = await Promise.allSettled([
     events?.close().then(() => app.log.info('event store connection closed')),
     realtime?.feed.close(),
+    catalogue?.close(),
   ]);
   if (results.some((result) => result.status === 'rejected')) throw new Error('Resource cleanup failed');
 });

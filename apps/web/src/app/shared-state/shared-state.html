@@ -1,0 +1,21 @@
+<span class="state" [attr.data-state]="kind()" aria-live="polite">
+  <span class="glyph" data-glyph aria-hidden="true">
+    @switch (kind()) {
+      @case ('not_configured') { <span class="empty"></span> }
+      @case ('draft') { <span class="dot"></span> }
+      @case ('checking') { <span class="spinner"></span> }
+      @case ('needs_input') { <span class="dot"></span> }
+      @case ('ready') { <svg viewBox="0 0 12 12"><path d="M2.5 6.3l2.3 2.3L9.5 3.6"/></svg> }
+      @case ('failed') { <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg> }
+      @case ('unknown') { <span class="question">?</span> }
+      @case ('access_changed') {
+        <svg viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+      }
+      @case ('disabled') { <span class="dash"></span> }
+    }
+  </span>
+  <span class="copy"><span class="message">{{ message() }}</span>@if (detail()) { <span class="detail">{{ detail() }}</span> }</span>
+  @if (shownAction(); as label) {
+    <button type="button" class="state-action" (click)="action.emit()">{{ label }}</button>
+  }
+</span>

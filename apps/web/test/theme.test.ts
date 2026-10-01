@@ -32,7 +32,7 @@ describe('theme tokens', () => {
     const steps = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
     expect(palette).toEqual(Object.fromEntries(steps.map((step, i) => [`--oc-primary-${step}`, `#${shades[i]}`])));
     expect(tokens.get('--oc-primary-contrast')).toBe('#16191a');
-    expect(tokens.get('--oc-primary-hover')).toBe('var(--oc-primary-600)');
+    expect(tokens.get('--oc-primary-hover')).toBe('var(--oc-accent-hover)');
     expect(tokens.get('--oc-primary-active')).toBe('var(--oc-primary-700)');
     expect(tokens.get('--oc-radius-button')).toBe('7px');
   });
@@ -45,11 +45,11 @@ describe('theme tokens', () => {
 
 describe('shell buttons', () => {
   it('use the preset radius and a hover colour that keeps the dark text readable', () => {
-    expect(shellCss).toMatch(/\.button\s*\{[^}]*border-radius:\s*var\(--oc-radius-button\)/);
-    expect(shellCss).toMatch(/\.button-primary:hover\s*\{[^}]*background:\s*var\(--oc-primary-hover\)/);
+    expect(shellCss).toMatch(/\.button\s*\{[^}]*border-radius:\s*var\(--oc-radius-control\)/);
+    expect(shellCss).toMatch(/\.button\.primary:hover\s*\{[^}]*background:\s*var\(--oc-accent-hover\)/);
 
     const ink = luminance(tokens.get('--oc-primary-contrast')!);
-    const hover = luminance(tokens.get('--oc-primary-600')!);
+    const hover = luminance(tokens.get('--oc-accent-hover')!);
     expect((hover + 0.05) / (ink + 0.05)).toBeGreaterThanOrEqual(4.5);
   });
 });

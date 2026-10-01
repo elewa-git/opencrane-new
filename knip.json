@@ -26,6 +26,10 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ],
+      "ignoreDependencies": [
+        "@fontsource/dm-mono",
+        "@fontsource/dm-sans"
       ]
     },
     "libs/auth": {
