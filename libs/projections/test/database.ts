@@ -17,14 +17,17 @@ export async function database(kind: "pg" | "pglite") {
     const url = new URL(adminConnectionString);
     url.pathname = `/${name}`;
     const connectionString = url.href;
-    let pool = new Pool({ connectionString });
+    // The forced drop ends idle connections, and the pool reports that as an
+    // "error" event. Ignore it: query errors still reject their own promise.
+    const open = () => new Pool({ connectionString }).on("error", () => undefined);
+    let pool = open();
     return {
       get db() {
         return pgDb(pool);
       },
       async reopen() {
         await pool.end();
-        pool = new Pool({ connectionString });
+        pool = open();
       },
       async close() {
         try {

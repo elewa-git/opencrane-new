@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { Pool } from "pg";
 import { event, natsFixture } from "@opencrane/event-store/testing";
 import { createLogger } from "@opencrane/observability";
@@ -245,6 +245,26 @@ it.skipIf(!process.env["PG_TEST_URL"])("drops its PostgreSQL database while a st
     held.release();
     await stray.end().catch(() => undefined);
     await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    await admin.end();
+  }
+}, 30_000);
+
+it.skipIf(!process.env["PG_TEST_URL"])("drops its database and stays up when pool.end fails with an idle connection", async () => {
+  const controlUrl = process.env["PG_TEST_URL"];
+  if (!controlUrl) throw new Error("PG_TEST_URL must allow disposable databases");
+  const storage = await database("pg");
+  const name = String((await storage.db.query("SELECT current_database() AS name")).rows[0]?.["name"]);
+  // Fail the first pool.end() so an idle connection is still open when the forced drop ends it.
+  const end = vi.spyOn(Pool.prototype, "end").mockRejectedValueOnce(new Error("injected pool.end failure"));
+  const admin = new Pool({ connectionString: controlUrl });
+  try {
+    await expect(storage.close()).rejects.toThrow("injected pool.end failure");
+  } finally {
+    end.mockRestore();
+  }
+  try {
+    expect((await admin.query("SELECT 1 FROM pg_database WHERE datname = $1", [name])).rowCount).toBe(0);
+  } finally {
     await admin.end();
   }
 }, 30_000);
