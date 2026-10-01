@@ -1,0 +1,168 @@
+{
+  "date": "2026-10-01T18:11:39.081Z",
+  "base": "36b1ca5281b20b62aa91884576f7a116c6000c67",
+  "image": "k3d-ocn-registry:5000/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47",
+  "receipts": [
+    {
+      "name": "warm PVC attachment",
+      "result": "PARTIAL",
+      "detail": "API refuses changing running Pod volumes; claim volume templates force cold creation in 1.0.4"
+    },
+    {
+      "name": "volume claim cold start",
+      "result": "PASS",
+      "detail": "claim with volumeClaimTemplates creates another Pod while ready neutral Pod remains unclaimed"
+    },
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "CRI confirms io.containerd.runsc.v1"
+    },
+    {
+      "name": "S0.1b isolation",
+      "result": "PASS",
+      "detail": "real model-requested tool returns ISOLATION_PASS in extended image"
+    },
+    {
+      "name": "warm claims",
+      "result": "PASS",
+      "detail": "10 pre-existing Pod UIDs adopted, computer label assigned at claim, all destroyed after binding"
+    },
+    {
+      "name": "disk suspend/resume",
+      "result": "PASS",
+      "detail": "10 new gVisor Pods reattach same PVC UID; file, actual Chromium login and same Codex thread survive"
+    },
+    {
+      "name": "token refresh",
+      "result": "PASS",
+      "detail": "10 rotations; old computer + new turn and new computer + old turn each return 403; resumed Codex turns complete"
+    },
+    {
+      "name": "latency",
+      "result": "PASS",
+      "detail": "{\"unit\":\"ms\",\"claim\":{\"runs\":[387,385,453,421,488,371,530,340,299,344],\"p50\":385,\"p95\":530},\"coldPvcResume\":{\"runs\":[9737,9628,9578,8560,10685,13516,11343,10711,9029,13426],\"p50\":9737,\"p95\":13516}}"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "s03-warm deleted"
+    }
+  ],
+  "command": "node spikes/s0-3-warm-pool/run.mjs",
+  "environment": {
+    "cluster": "k3d-ocn",
+    "runtime": "gvisor",
+    "fresh": "namespace, Pods, PVC and issuer; existing cluster",
+    "model": "scripted S0.1b, no provider key"
+  },
+  "sourceSha256": {
+    "spikes/s0-3-warm-pool/boot.mjs": "0edaecc0ce57790dd17ded54903fb6850be3decf33ce047f39b88699524385f3",
+    "spikes/s0-3-warm-pool/browser.mjs": "13523004ac0c55f82495867c54caa4e5d1972bbe7de055f5edf0d69022484572",
+    "spikes/s0-3-warm-pool/lab.mjs": "6c53523b1367a69e291f3e68171263ea1399932fa07f9c36efbe4ad76513cb90",
+    "spikes/s0-3-warm-pool/run.mjs": "a755b7ab6088bcead34b1cdf0494d00da075c79f6b0c5aa3e9dbb1e22e7e9b2d",
+    "spikes/s0-3-warm-pool/site.mjs": "b41dc7f2680e68ecf2c90c7113e9cd80c551c0a72e8345693db7bbb864e03fd9",
+    "spikes/s0-5-live-view/Dockerfile": "2c0981d618e2a8c28617de968c794eae6e2561258d17ca20e3923c67cd10c458",
+    "spikes/s0-5-live-view/build.sh": "56010c561dbb0619a213fee553d74b2185eec4fb27cf44e1d22c4158b80a5173",
+    "spikes/s0-5-live-view/desktop.mjs": "2aba3d61717b853e9741fa2e884c3cd58b63d7adcfef6967e8cec7bd195274e2",
+    "spikes/s0-5-live-view/gateway.mjs": "c2a51048b9852ca9c14efb0cfe63f58e10d5e1537b4bb8962981647f0ce46b75",
+    "spikes/s0-5-live-view/rfb.mjs": "faeccc39a142784b342a1f9fd4aaf65a9d522261d864cf8de69779bddef4c7aa",
+    "spikes/s0-5-live-view/run.mjs": "847c88cff4746a270cf740d54ad98f1f613fafa4f73ed5af3c153c086ea5d4b4",
+    "spikes/s0-1b-proxy-gvisor/computer.mjs": "4e886db3e7f91b52df670a3491d7c7cd0ed68e8d252184fc209583909c9907f7",
+    "spikes/s0-1b-proxy-gvisor/driver.mjs": "c2011cdfb4dab3f7967623d7a3b52c7b9797bd66562eccdb637f5e43a421bdc6",
+    "spikes/s0-1b-proxy-gvisor/services.mjs": "9d684d1cd415c4c8c5629a23b1bd0974172059dc92a039b8002cc4ac2b3519c7",
+    "spikes/s0-1b-proxy-gvisor/tool-user.c": "07dc9f862749089eb70f4b16a4ee764dde46302c23e74906c911eafe157445ac",
+    "spikes/s0-1b-proxy-gvisor/probe.mjs": "15921698c8003bf0265cf6cf89fb4e6c53dbfc6ef1abe6db6aa7aabb2dad6049",
+    "spikes/s0-1b-proxy-gvisor/common.mjs": "76a31c8f0998ed950cd4136974807e394d7887673d26b247ecb20df79132972a",
+    "spikes/s0-1b-proxy-gvisor/gateway.yaml": "d09648ce03d87be46979e4cfda397703ec14a829cd2f985a4f86adc1a7e7cbc4"
+  },
+  "latency": {
+    "unit": "ms",
+    "claim": {
+      "runs": [
+        387,
+        385,
+        453,
+        421,
+        488,
+        371,
+        530,
+        340,
+        299,
+        344
+      ],
+      "p50": 385,
+      "p95": 530
+    },
+    "coldPvcResume": {
+      "runs": [
+        9737,
+        9628,
+        9578,
+        8560,
+        10685,
+        13516,
+        11343,
+        10711,
+        9029,
+        13426
+      ],
+      "p50": 9737,
+      "p95": 13516
+    }
+  },
+  "baseline": [
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "Sandbox-owned Pod aee941ec-f935-4fb4-a754-f13fe2c10e5a, runtimeClassName=gvisor, image=k3d-ocn-registry:5000/opencrane/s01b@sha256:7bb3ec8a8313e746621287e3ca8b3ab43e91e2b981510cf2b3fdc17724f97a83"
+    },
+    {
+      "name": "NetworkPolicy",
+      "result": "PASS",
+      "detail": "{\"gateway\":\"connected\",\"model\":\"ECONNREFUSED\"}"
+    },
+    {
+      "name": "caller authentication",
+      "result": "PASS",
+      "detail": "missing caller capability returns HTTP 401"
+    },
+    {
+      "name": "1 streaming",
+      "result": "PASS",
+      "detail": "two concurrent threads, >=3 deltas each, completed; 3 provider requests recorded without credentials"
+    },
+    {
+      "name": "2 tool isolation",
+      "result": "PASS",
+      "detail": "ISOLATION_PASS {\"uid\":1001,\"noNewPrivs\":true,\"cannotBecomeCodex\":true,\"callerAbsentFromEnvironment\":true,\"/home/codex/private\":\"EACCES\",\"/home/codex/caller\":\"EACCES\",\"/home/codex/tokens.json\":\"EACCES\",\"/home/codex/.codex/config.toml\":\"EACCES\",\"protectedProcesses\":5,\"proxy\":\"EPERM\",\"gateway\":\"EPERM\",\"model\":\"EPERM\",\"issuer\":\"EPERM\",\"ipv6\":\"EPERM\",\"control\":\"EPERM\",\"executor\":\"EPERM\"}"
+    },
+    {
+      "name": "3 thread tokens",
+      "result": "PASS",
+      "detail": "distinct token hashes efbcd4165bfcb3c1/d7bed66fc4c9697e; cross-thread, expiry, forged and revoked tokens denied at real gateway"
+    },
+    {
+      "name": "4 killed mid-turn",
+      "result": "PASS",
+      "detail": "Pod aee941ec-f935-4fb4-a754-f13fe2c10e5a force-deleted after provider receipt and delta; external model and gateway logs retain thread 01a0f8a7-493c-7530-938c-1ec8b0f1294a; no completion before kill"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "namespace s01b-proxy deleted"
+    }
+  ],
+  "gates": {
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "checkEvents": "PASS: 70 event types",
+    "test": "PASS: 43 files, 853 tests; PG_TEST_URL control database on 127.0.0.1:55432",
+    "webBuild": "PASS",
+    "webTest": "PASS: 2 files, 27 tests",
+    "spikeMarkdown": "PASS",
+    "independentReview": "NOT RUN, as requested",
+    "earlierTestAttempts": "4 timing failures in initial parallel run; 1 realtime timeout with one worker; final normal full run passed without application/test changes"
+  },
+  "cleanup": "PASS: s01b-proxy, s03-warm and s05-view absent; no PVs with spike claim namespaces"
+}
