@@ -66,7 +66,7 @@ it.skipIf(!process.env['PG_TEST_URL'])('accepts through real NATS to PostgreSQL 
     await admin.query(`CREATE SCHEMA ${schema}`);
     const open = () => new Pool({ connectionString: process.env['PG_TEST_URL'], options: `-c search_path=${schema}` });
     pool = open();
-    let runner = new ProjectionRunner(pgDb(pool), nats.store, createLogger('test'));
+    let runner = new ProjectionRunner(pgDb(pool), nats.reader, createLogger('test'));
     await runner.initialise(members);
     await invite();
     await runner.run(members);
@@ -85,7 +85,7 @@ it.skipIf(!process.env['PG_TEST_URL'])('accepts through real NATS to PostgreSQL 
     expect((await pool.query('SELECT * FROM members')).rows).toEqual(expected);
     await pool.end();
     pool = open();
-    runner = new ProjectionRunner(pgDb(pool), nats.store, createLogger('test'));
+    runner = new ProjectionRunner(pgDb(pool), nats.reader, createLogger('test'));
     expect(await runner.checkpoint(members)).toBe(2);
     await runner.rebuild(members);
     expect((await pool.query('SELECT * FROM members')).rows).toEqual(expected);
@@ -267,7 +267,7 @@ it('reports unavailable if NATS stops after validation and before append, with n
 }, 20_000);
 
 it('uses the process connection adapter against real NATS', async () => {
-  const connected = await connectEventStore(nats.connection.getServer());
+  const connected = await connectEventStore(nats.env());
   try {
     await app.close();
     app = server(connected.store);

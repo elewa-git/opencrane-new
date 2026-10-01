@@ -3,6 +3,9 @@
 **Status:** Draft, from spike S0.7. Ready for the morning decision.
 **Spike evidence:** [`spikes/s0-7-jetstream/`](../../spikes/s0-7-jetstream/), all 6 pass conditions run and passing, plus one follow-up finding (pass condition 7, below), on 2026-09-30 (darwin/arm64, nats-server v2.15.0, natscli v0.5.0, Node 22.15.0). Conditions 4 and 5 were each re-measured over 5 consecutive full-suite runs from a clean state; the ranges below are the real min–max across those 5 runs, not a single run's numbers.
 
+Phase 1 transport and permission policy: [ADR 0005](0005-nats-access.md).
+The original spike measurements below predate that policy.
+
 ## Question
 
 Can NATS JetStream be OpenCrane 2's event store — the single, only source of

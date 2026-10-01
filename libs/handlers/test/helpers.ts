@@ -68,7 +68,7 @@ export async function fixture() {
     },
     startDispatch(runtime: HandlerRuntime) {
       const controller = new AbortController();
-      const task = dispatch(nats.connection, runtime, controller.signal);
+      const task = dispatch(nats.dispatcherConnection, runtime, controller.signal);
       // Keep rejection observed while assertions run; close still reports it.
       void task.catch(() => undefined);
       dispatchers.push({ controller, task });
@@ -115,7 +115,7 @@ export async function fixture() {
         env: {
           ...process.env,
           PG_TEST_URL: connectionString,
-          NATS_TEST_URL: nats.connection.getServer(),
+          ...nats.env("dispatcher"),
           CRASH_MODE: mode,
         },
         stdio: ["ignore", "pipe", "pipe", "ipc"],

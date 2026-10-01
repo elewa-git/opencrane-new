@@ -76,7 +76,7 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
     // OTEL_EXPORTER_OTLP_ENDPOINT is blanked so the result never depends on what the host shell exports.
     // The OIDC settings are made-up test values: main.ts will not start without them, but nothing here
     // signs anyone in, so the issuer is never contacted.
-    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', SILO_ID: '', DATABASE_URL: '', SHUTDOWN_GRACE_MS: '1000', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
+    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', NATS_CA_FILE: '', NATS_CERT_FILE: '', NATS_KEY_FILE: '', SILO_ID: '', DATABASE_URL: '', SHUTDOWN_GRACE_MS: '1000', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));

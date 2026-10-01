@@ -28,14 +28,14 @@ beforeEach(async () => {
   dbs = await databases();
   nats = await natsFixture();
   sequence = 0;
-  runner = new ProjectionRunner(pgDb(dbs.queue), nats.store, createLogger('realtime-test'));
+  runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('realtime-test'));
   await runner.initialise(members);
   authz = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
   await append('alice', 'member.invited', { invitationId: 'invite-alice',
     invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } });
   await append('alice', 'member.joined', { invitationId: 'invite-alice' });
   const binding = authz.binding;
-  server = await startServer({ ...env, NATS_URL: nats.connection.getServer(), DATABASE_URL: dbs.queue.options.connectionString,
+  server = await startServer({ ...env, ...nats.env(), DATABASE_URL: dbs.queue.options.connectionString,
     OPENFGA_API_URL: binding.apiUrl, OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
 }, 30_000);
 afterEach(async () => {

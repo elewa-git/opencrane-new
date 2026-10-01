@@ -29,6 +29,7 @@ import {
   startNatsServer,
   connectTo,
   NATS_CLI_BIN,
+  cliTlsArgs,
   type RunningNatsServer,
 } from "../src/nats-proc.ts";
 import { conditionalAppend, encode, ensureEventsStream, makeCtx, STREAM_NAME, type Ctx } from "../src/jetstream.ts";
@@ -79,13 +80,13 @@ async function backupAndRestoreInto(targetStoreDir: string, name: string): Promi
   // Each call gets its own snapshot directory — `nats backup stream`
   // refuses to write into one that already exists.
   const backupTargetDir = join(backupDir, `snapshot-${name}`);
-  await execFileAsync(NATS_CLI_BIN, ["backup", "stream", STREAM_NAME, backupTargetDir, "-s", originalServer.url, "--no-progress"]);
+  await execFileAsync(NATS_CLI_BIN, [...cliTlsArgs(), "backup", "stream", STREAM_NAME, backupTargetDir, "-s", originalServer.url, "--no-progress"]);
 
   const [port] = await freePorts(1);
   const server = await startNatsServer({ name, port, storeDir: targetStoreDir });
   const nc = await connectTo(server.url);
   const ctx = await makeCtx(nc);
-  await execFileAsync(NATS_CLI_BIN, ["backup", "restore", "stream", backupTargetDir, "-s", server.url, "--no-progress"]);
+  await execFileAsync(NATS_CLI_BIN, [...cliTlsArgs(), "backup", "restore", "stream", backupTargetDir, "-s", server.url, "--no-progress"]);
   return { server, ctx };
 }
 

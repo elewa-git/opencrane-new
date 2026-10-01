@@ -394,7 +394,7 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
         ).status,
       ).toBe("appended");
       await expect(
-        dispatch(f.nats.connection, runtime, new AbortController().signal),
+        dispatch(f.nats.dispatcherConnection, runtime, new AbortController().signal),
       ).rejects.toThrow("silo mismatch");
       expect(await runtime.boss.findJobs("update-members")).toHaveLength(0);
       const rows = await f.db.query<{ sequence: string }>(

@@ -19,7 +19,7 @@ function headers() {
 beforeEach(async () => { nats = await natsFixture(); });
 afterEach(async () => { await server?.stop(); await nats.close(); });
 async function start(extra = {}) {
-  server = await startServer({ ...env, NATS_URL: nats.connection.getServer(), ...extra });
+  server = await startServer({ ...env, ...nats.env(), ...extra });
   return server;
 }
 async function exit(running: RunningServer, code: number) {

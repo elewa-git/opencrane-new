@@ -26,7 +26,7 @@ const silo = process.env['SILO_ID']?.trim();
 if (natsUrl && (!silo || !authConfig.expectedOrgId)) {
   throw new Error('NATS_URL requires SILO_ID and OIDC_EXPECTED_ORG_ID');
 }
-const events = natsUrl ? await connectEventStore(natsUrl) : undefined;
+const events = natsUrl ? await connectEventStore() : undefined;
 let realtime: RealtimeOptions | undefined;
 const databaseUrl = process.env['DATABASE_URL'];
 if (databaseUrl) {

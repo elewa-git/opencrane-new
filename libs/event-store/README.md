@@ -8,20 +8,22 @@ not authorise people or write projection state.
 The public entrypoint is `src/index.ts`:
 
 ```ts
-import { connect } from '@nats-io/transport-node';
-import { createEventStore } from '@opencrane/event-store';
+import { connectEventStore } from '@opencrane/event-store';
 
-const connection = await connect({ servers: 'localhost:4222' });
-const store = await createEventStore(connection);
+// NATS_URL plus NATS_CA_FILE, NATS_CERT_FILE and NATS_KEY_FILE are required.
+const { store, close } = await connectEventStore();
 await store.ensureStream({ replicas: 1 }); // Local tests; production defaults to R3.
 const history = await Array.fromAsync(store.readStream('member-alice'));
 // Decide a command from history, then append({ event, expectedSequence }).
-await connection.close();
+await close();
 ```
 
-Process entrypoints can instead call `connectEventStore(servers)`, which returns
+Process entrypoints call `connectEventStore(env = process.env)`, which returns
 `{ store, close }` and keeps the NATS SDK inside this adapter. It does not create
 or alter `EVENTS`; provision the stream separately. Call `close()` on shutdown.
+`connectNats(env)` supplies the same authenticated TLS connection to the dispatcher.
+Use the role-specific certificate described in [ADR 0005](../../docs/adr/0005-nats-access.md);
+missing file paths fail closed and credentials in URLs are rejected.
 
 Envelope subjects retain the catalogue's `member-alice` format. The adapter
 maps the first hyphen to `ev.member.alice`; ids may contain further hyphens,
@@ -52,8 +54,8 @@ observed on entry; `fromSequence` is an inclusive global position.
 break or abort to release it. `head()` supports bounded projection drains.
 `ensureStream` verifies file storage, replicas and unlimited retention and
 refuses incompatible configuration. Deletion/purge are disabled; payload
-forgetting needs a separate qualified design. Callers own TLS, credentials,
-connection shutdown and reconnect policy; one connection serves one silo.
+forgetting needs a separate qualified design. Callers supply credential file paths
+and own connection shutdown; one connection serves one silo.
 
 ## Stream configuration
 
@@ -87,15 +89,17 @@ omitted server defaults where stated and never repairs an existing stream.
 ## Tests and dependencies
 
 Root `npm test` fetches the pinned test server automatically after `npm ci`.
+OpenSSL must be on PATH to generate a fresh test CA and one-day certificates.
 For focused tests, run `sh scripts/fetch-nats.sh`, then
 `npx vitest run libs/event-store/test`. Tests launch random-port NATS servers
 and prove conditional races, scoped retries, ordered reads, restart/outage
 bounds and native snapshot/restore idempotency. `@opencrane/event-store/testing`
-is test infrastructure only. The pinned NATS server is 2.15.0; both downloaded
+is test infrastructure only. Security tests prove command/reader/excluded roles,
+unknown and missing credentials, plaintext and wrong-CA refusals. The pinned NATS server is 2.15.0; both downloaded
 platform archives have fixed SHA-256 checksums.
 
 Dependencies: `@opencrane/events`; NATS JavaScript packages 3.4.0 and
 nats-server 2.15.0 are Apache-2.0. Licences were checked at introduction.
 See the [event catalogue](../../docs/architecture/events.md) and
-[plan](../../plan.md#event-driven-core). Live R3 elections, TLS/account
-isolation and a fresh silo installation remain unqualified in this slice.
+[plan](../../plan.md#event-driven-core). TLS/account isolation passes against real R1 servers. Live R3 elections with this
+configuration and a fresh silo installation remain unqualified.

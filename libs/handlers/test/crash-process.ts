@@ -1,6 +1,6 @@
 // Real process barriers surround SQL commit, without replacing NATS or pg-boss.
 import { Pool } from "pg";
-import { connect } from "@nats-io/transport-node";
+import { connectNats } from "@opencrane/event-store";
 import { pgDb, type Db } from "@opencrane/projections";
 import { HandlerRuntime, registerHandler, dispatch } from "../src/index.ts";
 import { effect, logger } from "./helpers.ts";
@@ -63,9 +63,7 @@ const runtime = new HandlerRuntime({
 });
 await runtime.start();
 if (mode.startsWith("dispatcher")) {
-  const connection = await connect({
-    servers: process.env["NATS_TEST_URL"] ?? "",
-  });
+  const connection = await connectNats();
   await dispatch(connection, runtime, new AbortController().signal);
 } else {
   await runtime.work();

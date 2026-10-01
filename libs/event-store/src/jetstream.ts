@@ -120,15 +120,41 @@ function transient(error: unknown): boolean {
   );
 }
 
-/** The caller owns the connection, credentials and reconnect policy. */
+/** The caller owns the authenticated TLS connection and its lifecycle. */
 export async function createEventStore(connection: NatsConnection) {
   const manager = await jetstreamManager(connection, { timeout: requestMs });
   return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
 }
 
+/** TLS is mandatory, including before the NATS protocol handshake. */
+export async function connectNats(env: NodeJS.ProcessEnv = process.env) {
+  function required(name: string): string {
+    const value = env[name]?.trim();
+    if (!value) {
+      throw new Error(`${name} is required for NATS`);
+    }
+    return value;
+  }
+  const servers = required("NATS_URL");
+  const address = new URL(servers.includes("://") ? servers : `tls://${servers}`);
+  if (address.username || address.password || !["tls:", "nats:"].includes(address.protocol)) {
+    throw new Error("NATS_URL must be a NATS address without credentials");
+  }
+  return connect({
+    servers,
+    tls: {
+      caFile: required("NATS_CA_FILE"),
+      certFile: required("NATS_CERT_FILE"),
+      keyFile: required("NATS_KEY_FILE"),
+      handshakeFirst: true,
+      rejectUnauthorized: true,
+    },
+  });
+}
+
 /** Process entrypoints use this adapter; the EVENTS stream is provisioned separately. */
-export async function connectEventStore(servers: string) {
-  const connection = await connect({ servers });
+export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
+  const connection = await connectNats(env);
   try {
     const store = await createEventStore(connection);
     return { store, close: () => connection.close() };
