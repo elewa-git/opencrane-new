@@ -6,7 +6,7 @@ import { mkdtemp, mkdir, rm, writeFile, appendFile } from "node:fs/promises";
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { connect, type NodeConnectionOptions } from "@nats-io/transport-node";
+import { connect, nkeyAuthenticator, type NodeConnectionOptions } from "@nats-io/transport-node";
 import { certificates } from "../../../libs/event-store/test/certificates.ts";
 import type { NatsConnection } from "@nats-io/nats-core";
 
@@ -148,6 +148,8 @@ export async function connectTo(
   opts: Partial<NodeConnectionOptions> = {},
 ): Promise<NatsConnection> {
   return await connect({ servers, reconnectTimeWait: 200, maxReconnectAttempts: -1, ...opts,
+    authenticator: nkeyAuthenticator(readFileSync(required("NATS_NKEY_SEED_FILE"))),
+    inboxPrefix: "_INBOX.command",
     tls: { caFile: required("NATS_CA_FILE"), certFile: required("NATS_CERT_FILE"),
       keyFile: required("NATS_KEY_FILE"), handshakeFirst: true, rejectUnauthorized: true } });
 }
@@ -161,7 +163,7 @@ function required(name: string): string {
 }
 
 export function cliTlsArgs(): string[] {
-  return ["--tlsfirst", "--tlsca", required("NATS_CA_FILE"),
+  return ["--nkey", required("NATS_NKEY_SEED_FILE"), "--tlsfirst", "--tlsca", required("NATS_CA_FILE"),
     "--tlscert", required("NATS_CERT_FILE"), "--tlskey", required("NATS_KEY_FILE")];
 }
 
@@ -174,9 +176,11 @@ export async function freshStateDir(label: string): Promise<string> {
   await certificates(tls);
   Object.assign(process.env, {
     NATS_CA_FILE: join(tls, "ca.crt"),
+    NATS_NKEY_SEED_FILE: join(tls, "command.seed"),
+    ...Object.fromEntries(["command", "projection", "dispatcher", "computer", "gateway"].map(role =>
+      [`NATS_${role.toUpperCase()}_NKEY`, readFileSync(join(tls, `${role}.pub`), "utf8")])),
     NATS_CERT_FILE: join(tls, "command.crt"), NATS_KEY_FILE: join(tls, "command.key"),
     NATS_SERVER_CERT_FILE: join(tls, "server.crt"), NATS_SERVER_KEY_FILE: join(tls, "server.key"),
-    NATS_PROJECTION_CERT_FILE: join(tls, "projection.crt"), NATS_PROJECTION_KEY_FILE: join(tls, "projection.key"),
   });
   return dir;
 }

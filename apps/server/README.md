@@ -30,9 +30,9 @@ Set `NATS_URL`, `SILO_ID` and `OIDC_EXPECTED_ORG_ID` to enable membership accept
 refuses a NATS configuration missing either pin. Provision the silo's `EVENTS`
 stream separately with the [event-store adapter](../../libs/event-store/README.md).
 Without NATS configuration, authenticated membership requests return unavailable.
-The process owns and closes its NATS connection. Set `NATS_CA_FILE`, `NATS_CERT_FILE`
-and `NATS_KEY_FILE` to mounted files for the `CN=command` identity; enabled NATS
-without these paths fails startup. TLS and permissions use [ADR 0005](../../docs/adr/0005-nats-access.md).
+The process owns and closes its NATS connection. Set `NATS_NKEY_SEED_FILE`, `NATS_CA_FILE`, `NATS_CERT_FILE`
+and `NATS_KEY_FILE` to mounted files for the command role, and set
+`NATS_INBOX_PREFIX=_INBOX.command`; missing credentials fail startup. TLS and permissions use [ADR 0005](../../docs/adr/0005-nats-access.md).
 Never put credentials in a URL or event. Fresh-silo qualification remains pending.
 
 ## Contract and verification

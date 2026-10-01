@@ -76,7 +76,10 @@ contracts, event store and observability. See the
 [event catalogue](../../docs/architecture/events.md) and
 [engineering standard](../../docs/process/standards.md).
 
-Use the `CN=projection` client certificate and `connectNats()` from the event-store
+Use the `projection` NKey seed, TLS files and `connectNats()` from the event-store
 package (or `connectEventStore()` for a projection source). Required file paths
 and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.md).
 Never supply the command identity to a reader process.
+
+Consumer creation/reset belongs to the authorised provisioning job, following
+[ADR 0005](../../docs/adr/0005-nats-access.md); reader connections only bind existing consumers.

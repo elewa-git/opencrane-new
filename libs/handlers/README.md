@@ -81,7 +81,10 @@ uses its MIT option. Existing NATS, events, projections and observability
 libraries retain their licences. Runtime image inventory is NOT RUN.
 See [ADR 0004](../../docs/adr/0004-handler-runtime.md) for the spike limits.
 
-Use the `CN=dispatcher` client certificate and `connectNats()` from the event-store
+Use the `dispatcher` NKey seed, TLS files and `connectNats()` from the event-store
 package (or `connectEventStore()` for a projection source). Required file paths
 and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.md).
 Never supply the command identity to a reader process.
+
+Consumer creation/reset belongs to the authorised provisioning job, following
+[ADR 0005](../../docs/adr/0005-nats-access.md); reader connections only bind existing consumers.

@@ -10,7 +10,8 @@ The public entrypoint is `src/index.ts`:
 ```ts
 import { connectEventStore } from '@opencrane/event-store';
 
-// NATS_URL plus NATS_CA_FILE, NATS_CERT_FILE and NATS_KEY_FILE are required.
+// NATS_URL, NATS_CA_FILE, NATS_CERT_FILE, NATS_KEY_FILE,
+// NATS_NKEY_SEED_FILE and NATS_INBOX_PREFIX are required.
 const { store, close } = await connectEventStore();
 await store.ensureStream({ replicas: 1 }); // Local tests; production defaults to R3.
 const history = await Array.fromAsync(store.readStream('member-alice'));
@@ -50,7 +51,9 @@ read optimisation that preserves this guarantee.
 
 `readStream(subject, fromSequence)` is a finite snapshot through the head
 observed on entry; `fromSequence` is an inclusive global position.
-`subscribe(fromSequence, signal)` is a live ordered consumer over all events;
+`subscribe(fromSequence, signal, consumerName)` binds a provisioned pull consumer;
+readers use the enumerated names and provisioning steps in [ADR 0005](../../docs/adr/0005-nats-access.md).
+Without a name, command/operator connections create a temporary ordered consumer;
 break or abort to release it. `head()` supports bounded projection drains.
 `ensureStream` verifies file storage, replicas and unlimited retention and
 refuses incompatible configuration. Deletion/purge are disabled; payload

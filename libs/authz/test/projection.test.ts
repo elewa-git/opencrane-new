@@ -8,7 +8,7 @@ import { event, natsFixture } from "@opencrane/event-store/testing";
 import { parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { createLogger } from "@opencrane/observability";
 import { pgDb } from "@opencrane/projections";
-import { dispatch, HandlerRuntime } from "@opencrane/handlers";
+import { dispatch, HandlerRuntime, provisionDispatcher } from "@opencrane/handlers";
 import {
   createStore,
   memberAuthorisation,
@@ -215,6 +215,7 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
   }
   try {
     await runtime.start();
+    await provisionDispatcher(nats.connection);
     task = dispatch(nats.dispatcherConnection, runtime, controller.signal);
     void task.catch(() => undefined);
     await runtime.work();

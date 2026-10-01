@@ -125,8 +125,6 @@ function expectedProjection(published: Published[]) {
 function workerEnv(pgliteDir: string, extra: Record<string, string> = {}): Record<string, string> {
   return {
     WORKER_NATS_URL: server.url,
-    NATS_CERT_FILE: process.env.NATS_PROJECTION_CERT_FILE!,
-    NATS_KEY_FILE: process.env.NATS_PROJECTION_KEY_FILE!,
     WORKER_PGLITE_DIR: pgliteDir,
     WORKER_FILTER_SUBJECT: "ev.conversation.>",
     WORKER_CONSUMER_NAME: CONSUMER_NAME,

@@ -7,7 +7,7 @@ import { createLogger } from "@opencrane/observability";
 import { pgDb, type Query } from "@opencrane/projections";
 import type { EventEnvelope } from "@opencrane/events";
 import { event, natsFixture } from "@opencrane/event-store/testing";
-import { HandlerRuntime, dispatch, type Handler } from "../src/index.ts";
+import { HandlerRuntime, dispatch, provisionDispatcher, type Handler } from "../src/index.ts";
 
 export const logger = createLogger("handler-tests", { level: "silent" });
 export async function effect(
@@ -41,6 +41,7 @@ export async function fixture() {
   await db.query(`CREATE TABLE handler_effects (
     ordinal SERIAL, handler TEXT, event_id TEXT, stream TEXT)`);
   const nats = await natsFixture();
+  await provisionDispatcher(nats.connection);
   const runtimes: HandlerRuntime[] = [];
   const children: ChildProcess[] = [];
   const dispatchers: { controller: AbortController; task: Promise<void> }[] =

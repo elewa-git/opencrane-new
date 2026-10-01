@@ -3,6 +3,7 @@ import { once } from "node:events";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
+import { jetstreamManager } from "@nats-io/jetstream";
 import type { NatsConnection } from "@nats-io/transport-node";
 import { certificates } from "./certificates.ts";
 import { getEventDefinition } from "@opencrane/events";
@@ -51,16 +52,24 @@ export function event(
 export async function natsFixture() {
   const directory = await mkdtemp(resolve(".tools/nats-test-"));
   await certificates(directory);
+  const publicKeys = Object.fromEntries(await Promise.all(
+    ["command", "projection", "dispatcher", "computer", "gateway"].map(async (role) =>
+      [`NATS_${role.toUpperCase()}_NKEY`, await readFile(`${directory}/${role}.pub`, "utf8")] as const),
+  ));
   const config = await readFile(resolve("infra/nats/nats.conf"), "utf8");
   await writeFile(`${directory}/nats.conf`, config);
   await writeFile(`${directory}/no-js.conf`, config
     .replace("jetstream { store_dir: $NATS_STORE_DIR }", "")
-    .replace("jetstream: enabled", ""));
+    .replace("jetstream: enabled", "")
+    // Remove service routes too: dormant imports otherwise count as responders.
+    .replace(/^\s*\{ service:.*\n/gm, ""));
   const port = await freePort();
   const url = `127.0.0.1:${port}`;
   function env(identity = "command") {
     return {
       NATS_URL: url,
+      NATS_NKEY_SEED_FILE: `${directory}/${identity}.seed`,
+      NATS_INBOX_PREFIX: `_INBOX.${identity}`,
       NATS_CA_FILE: `${directory}/ca.crt`,
       NATS_CERT_FILE: `${directory}/${identity}.crt`,
       NATS_KEY_FILE: `${directory}/${identity}.key`,
@@ -75,7 +84,7 @@ export async function natsFixture() {
   function start(jetstream = true) {
     const process = spawn(resolve(".tools/nats-server"), [
       "-c", `${directory}/${jetstream ? "nats" : "no-js"}.conf`,
-    ], { env: { ...globalThis.process.env, ...env("server"),
+    ], { env: { ...globalThis.process.env, ...env("server"), ...publicKeys,
       NATS_LISTEN: url, NATS_STORE_DIR: `${directory}/store` } });
     const exited = once(process, "exit");
     const ready = new Promise<void>((done, reject) => {
@@ -98,9 +107,21 @@ export async function natsFixture() {
   const connection = await client("command");
   const readerConnection = await client("projection");
   const dispatcherConnection = await client("dispatcher");
-  const reader = await createEventStore(readerConnection);
+  const readerStore = await createEventStore(readerConnection, "projection-replay");
   const store = await createEventStore(connection);
   await store.ensureStream({ replicas: 1 });
+  // Simulate the installation/replay job separately from the unprivileged reader.
+  const reader = {
+    head: () => readerStore.head(),
+    async *subscribe(fromSequence = 1, signal?: AbortSignal) {
+      await store.provisionProjection("projection-replay", fromSequence);
+      try { yield* readerStore.subscribe(fromSequence, signal); }
+      finally {
+        const manager = await jetstreamManager(connection);
+        await manager.consumers.delete("EVENTS", "projection-replay");
+      }
+    },
+  };
   return {
     store,
     connection,
