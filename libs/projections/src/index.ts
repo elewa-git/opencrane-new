@@ -8,6 +8,7 @@ export {
 export { pgliteDb } from "./pglite.ts";
 export {
   ProjectionRunner,
+  readEvents,
   type Projection,
   type EventSource,
 } from "./runner.ts";

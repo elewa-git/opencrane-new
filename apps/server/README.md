@@ -106,19 +106,21 @@ one-second intervals (plus dependency latency); failures stop delivery. Session
 expiry is checked there too. This is bounded revocation, not instantaneous logout.
 
 Version 1 replies are `member`, `ready`, `resync` or `refused`; every reply has
-`topic`, `version` and a safe integer `position`. A `member` contains the full row
+`topic`, `version`, `generation` and a safe integer `position`. A `member` contains the full row
 at that position. Positions are global event-log sequences filtered to this silo's
 members changes, so numeric gaps are normal. Apply rows in order, remember the
 last applied position and reconnect with it. `ready` marks initial catch-up.
-Positions ahead of the projection are refused. The original demo messages remain
+Positions ahead of the projection are refused. A resumed cursor includes the
+generation from its last reply. A repaired replay bumps the generation, sends
+`resync` at position 0 and closes with 1013; reconnect from 0. The original demo messages remain
 separate from this versioned subscription protocol.
 
 PostgreSQL delivers `members_changed` NOTIFY only after the projection transaction
 commits. Its payload is a wake-up, never data or permission: the server rereads
 ordered changes in pages of 100. A failed LISTEN connection fails subscriptions
 closed; restart the server to restore it. Reconnect always rereads durable history.
-Changes have no pruning in this skeleton. Stop readers before an offline rebuild;
-clients retaining positions can resume after the same log has been replayed.
+Changes have no pruning in this skeleton. An equal online rebuild keeps its generation,
+so clients retaining positions can resume without reloading.
 Multi-replica fan-out over NATS core is **not implemented**.
 
 ## Organisation integrations

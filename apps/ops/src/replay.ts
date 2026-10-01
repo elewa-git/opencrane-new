@@ -4,6 +4,7 @@ import { connectEventStore } from "@opencrane/event-store";
 import { createLogger } from "@opencrane/observability";
 import {
   connectProjectionDb,
+  readEvents,
   rebuildMemberProjection,
   type EventSource,
 } from "@opencrane/projections";
@@ -23,14 +24,8 @@ async function inspect(source: EventSource): Promise<number> {
   const head = await source.head();
   let sequence = 0;
   if (head > 0) {
-    for await (const stored of source.subscribe(1)) {
-      if (stored.sequence !== sequence + 1) {
-        throw new Error("EVENTS stream is incomplete");
-      }
+    for await (const stored of readEvents(source, 1, head)) {
       sequence = stored.sequence;
-      if (sequence === head) {
-        break;
-      }
     }
   }
   if (sequence !== head) {
@@ -101,7 +96,9 @@ export async function replay(
     }
     const apiUrl = required(env, "OPENFGA_API_URL");
     const silo = required(env, "SILO_ID");
+    const activeStoreId = required(env, "OPENFGA_STORE_ID");
     const rebuilt = await rebuildMembers(apiUrl, silo, nats.store, {
+      activeStoreId,
       ...(parsed.values.verify
         ? { verifyAgainst: currentBinding(env, apiUrl, silo) }
         : {}),

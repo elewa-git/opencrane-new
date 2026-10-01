@@ -17,6 +17,48 @@ export interface EventSource {
   ): AsyncIterable<StoredEvent>;
 }
 
+const replayIdleMs = 1_000;
+
+/** Read finite history without waiting forever when the source reports events it cannot return. */
+export async function* readEvents(
+  source: EventSource,
+  fromSequence: number,
+  toSequence: number,
+  signal?: AbortSignal,
+): AsyncGenerator<StoredEvent> {
+  if (fromSequence > toSequence) return;
+  const stop = new AbortController();
+  const combined = signal
+    ? AbortSignal.any([signal, stop.signal])
+    : stop.signal;
+  const iterator = source.subscribe(fromSequence, combined)[Symbol.asyncIterator]();
+  let sequence = fromSequence - 1;
+  try {
+    while (sequence < toSequence) {
+      const timeout = AbortSignal.timeout(replayIdleMs);
+      const next = await Promise.race([
+        iterator.next(),
+        new Promise<never>((_resolve, reject) => {
+          timeout.addEventListener(
+            "abort",
+            () => reject(new Error("EVENTS stream is incomplete")),
+            { once: true },
+          );
+        }),
+      ]);
+      signal?.throwIfAborted();
+      if (next.done || next.value.sequence !== sequence + 1) {
+        throw new Error("EVENTS stream is incomplete");
+      }
+      sequence = next.value.sequence;
+      yield next.value;
+    }
+  } finally {
+    stop.abort();
+    await iterator.return?.();
+  }
+}
+
 /** One active runner per projection. Handlers must only write through the supplied transaction. */
 export class ProjectionRunner {
   private readonly db: Db;
@@ -34,8 +76,14 @@ export class ProjectionRunner {
         name TEXT PRIMARY KEY, sequence BIGINT NOT NULL CHECK (sequence >= 0))`);
       await tx.query(`CREATE TABLE IF NOT EXISTS projection_events (
         projection TEXT NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY (projection, event_id))`);
+      await tx.query(`CREATE TABLE IF NOT EXISTS projection_generations (
+        name TEXT PRIMARY KEY, generation BIGINT NOT NULL CHECK (generation >= 0))`);
       await tx.query(
         "INSERT INTO projection_checkpoints VALUES ($1, 0) ON CONFLICT DO NOTHING",
+        [projection.name],
+      );
+      await tx.query(
+        "INSERT INTO projection_generations VALUES ($1, 0) ON CONFLICT DO NOTHING",
         [projection.name],
       );
       await projection.create(tx);
@@ -123,25 +171,15 @@ export class ProjectionRunner {
     if (checkpoint >= head) {
       return;
     }
-    for await (const stored of this.source.subscribe(checkpoint + 1, signal)) {
+    for await (const stored of readEvents(this.source, checkpoint + 1, head, signal)) {
       signal?.throwIfAborted();
-      if (stored.sequence <= checkpoint) {
-        continue;
-      }
-      if (stored.sequence !== checkpoint + 1) {
-        throw new Error("Event sequence gap");
-      }
       checkpoint = this.db.lock
         ? await this.db.lock(projection.name, (db) =>
             this.apply(db, projection, stored, attempt),
           )
         : await this.apply(this.db, projection, stored, attempt);
-      if (checkpoint >= head) {
-        return;
-      }
+      if (checkpoint >= head) return;
     }
-    signal?.throwIfAborted();
-    throw new Error("Event subscription ended before the captured head");
   }
 
   /** Stop readers and other runners first. Use a separate projection name/tables for an online rebuild. */

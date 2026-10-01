@@ -132,6 +132,15 @@ export async function connectMemberFeed(connectionString: string) {
         'SELECT COALESCE(MAX(position), 0) AS position FROM member_changes WHERE silo = $1', [silo]);
       return Number(result.rows[0]?.position);
     },
+    async generation() {
+      check();
+      const result = await pool.query<{ generation: string }>(
+        "SELECT generation FROM projection_generations WHERE name = 'members'",
+      );
+      const generation = Number(result.rows[0]?.generation);
+      if (!Number.isSafeInteger(generation)) throw new Error('Members generation unavailable');
+      return generation;
+    },
     async read(silo: string, since: number) {
       check();
       const result = await pool.query<{ position: string; member: unknown }>(

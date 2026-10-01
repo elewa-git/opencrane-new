@@ -14,8 +14,9 @@ From the repository root:
 node --experimental-strip-types --input-type=module -e "import { clientMessageSchema } from '@opencrane/protocol'; console.log(clientMessageSchema.parse({type: 'hello', text: 'Hello'}))"
 ```
 
-Client messages are `hello`, `validateEvent` or `subscribe`; server messages include
-hello echoes, errors, validation results and versioned members updates. See
+Client messages are `hello`, `validateEvent` or `subscribe`; resumed subscriptions
+carry a projection generation, and every members reply carries that generation.
+Server messages include hello echoes, errors, validation results and versioned members updates. See
 [messages.ts](src/messages.ts), [realtime.ts](src/realtime.ts) and the
 [subscription contract](../../apps/server/README.md#members-realtime-and-shutdown).
 The event-validation request carries `unknown` data: the server must validate it

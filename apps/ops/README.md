@@ -16,7 +16,8 @@ npm run replay -- openfga --dry-run
 
 Dry-run prints the event count and changes nothing. A sequence gap, an early end
 or an unavailable stream exits non-zero. The configured NATS identity needs read
-access to the `EVENTS` stream but never publish access.
+access to the `EVENTS` stream but never publish access. Missing history is refused
+after a one-second idle bound rather than waiting indefinitely.
 
 ## Rebuild members online
 
@@ -29,14 +30,16 @@ npm run replay -- members --verify
 The normal projection runner and the tool share a PostgreSQL advisory lock. The
 tool replays into shadow tables, compares them with the incremental tables at
 their checkpoint when `--verify` is present, catches up to a fresh stream head,
-then renames the tables and replaces the checkpoint in one transaction. Readers
-and WebSocket subscribers stay connected; a query may wait briefly for the final
-rename but cannot see partial state. Events appended after the captured head are
+then locks all members tables in reader order and replaces their contents and the
+checkpoint in one transaction. Keeping the live table objects preserves their grants.
+Readers may wait briefly but cannot see partial state. A repair bumps the projection
+generation so WebSocket subscribers reload from position 0; an equal verified rebuild
+does not. Events appended after the captured head are
 processed by the normal runner after the switch. A replay error drops the shadow
 tables and leaves the live projection and checkpoint untouched.
 
-Use a PostgreSQL role allowed to create, alter and drop the members projection
-tables and to take advisory locks. Run only the upgraded projection runner: an
+Use a PostgreSQL role allowed to create and drop shadow tables, replace the live
+members contents and take advisory locks. Run only the upgraded projection runner: an
 older writer does not take the lock and is unsafe during this operation.
 
 ## Rebuild OpenFGA offline
@@ -44,8 +47,8 @@ older writer does not take the lock and is unsafe during this operation.
 OpenFGA bindings are deployment configuration, so this switch has a clear
 stop-the-world rule. Stop the server decision path, dispatcher and OpenFGA
 workers and wait for in-flight handlers to finish. Leave NATS available; events
-may continue to append. Set `NATS_URL`, `SILO_ID`, `OPENFGA_API_URL` and, for
-verification, the current `OPENFGA_STORE_ID` and `OPENFGA_MODEL_ID`. Then run:
+may continue to append. Set `NATS_URL`, `SILO_ID`, `OPENFGA_API_URL`, the current
+`OPENFGA_STORE_ID` and, for verification, `OPENFGA_MODEL_ID`. Then run:
 
 ```sh
 npm run replay -- openfga --verify --confirm-openfga-stopped
@@ -54,7 +57,9 @@ npm run replay -- openfga --verify --confirm-openfga-stopped
 Without the confirmation flag the tool refuses to run. It creates an isolated
 store and model, replays through the captured head and, with `--verify`, compares
 the complete tuple set with the stopped incremental store. A gap, different
-state or handler failure exits non-zero and deletes the new store. If cleanup
+state or handler failure exits non-zero and deletes the new store. Each attempt uses
+a preselected unique name, so a lost create response can still be cleaned up. The
+next run also removes interrupted rebuild stores except the current store. If cleanup
 also fails, the combined error is reported instead of hiding the orphan risk.
 
 On success, install both printed ids in the server and worker configuration

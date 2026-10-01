@@ -51,8 +51,9 @@ For an offline rebuild, follow the
 [operator runbook](../../apps/ops/README.md#rebuild-openfga-offline). The tool
 creates a fresh store/model and replays to the captured global head through the
 same handler, checking sequence gaps and silo identity. It returns the new binding
-and sequence only on success. A failed model creation or replay deletes the fresh
-store; a cleanup failure is reported with the original error. Switch both readers
+and sequence only on success. Rebuild stores have unique names; failures, ambiguous
+create replies and stale stores from an interrupted prior run are cleaned by name.
+A cleanup failure is reported with the original error. Switch both readers
 and workers to the returned binding before resuming; retain dispatcher/queue state
 so later events are processed normally. Already queued events deduplicate using
 OpenFGA receipts. Do not clear SQL receipts against an empty store and resume

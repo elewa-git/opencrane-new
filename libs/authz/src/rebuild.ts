@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import type { EventSource } from "@opencrane/projections";
-import { createStore, deleteStore, TupleClient, type Binding } from "./client.ts";
+import { readEvents } from "@opencrane/projections";
+import { createStore, deleteRebuildStores, deleteStore, TupleClient, type Binding } from "./client.ts";
 import { memberAuthorisation } from "./members.ts";
 
 async function snapshot(binding: Binding): Promise<string[]> {
@@ -13,10 +15,12 @@ export async function rebuildMembers(
   apiUrl: string,
   silo: string,
   source: EventSource,
-  { verifyAgainst }: { verifyAgainst?: Binding } = {},
+  { verifyAgainst, activeStoreId }: { verifyAgainst?: Binding; activeStoreId?: string } = {},
 ) {
+  const prefix = `members-${silo}-rebuild-`;
+  await deleteRebuildStores(apiUrl, prefix, activeStoreId ?? verifyAgainst?.storeId);
   const head = await source.head();
-  const binding = await createStore(apiUrl, silo);
+  const binding = await createStore(apiUrl, silo, `${prefix}${randomUUID()}`);
   const projection = memberAuthorisation(binding);
   try {
     let sequence = 0;
@@ -25,17 +29,14 @@ export async function rebuildMembers(
       query: () => Promise.reject(new Error("Rebuild cannot write SQL")),
     };
     if (head > 0) {
-      for await (const stored of source.subscribe(1)) {
-        if (stored.sequence !== sequence + 1 || stored.event.silo !== silo) {
+      for await (const stored of readEvents(source, 1, head)) {
+        if (stored.event.silo !== silo) {
           throw new Error("Rebuild event gap or silo mismatch");
         }
         if (projection.handler.eventTypes.includes(stored.event.type)) {
           await projection.handler.handle(stored.event, noSql);
         }
         sequence = stored.sequence;
-        if (sequence === head) {
-          break;
-        }
       }
     }
     if (sequence !== head) {

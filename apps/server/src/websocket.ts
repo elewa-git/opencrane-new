@@ -111,7 +111,7 @@ export function attachWebSocketServer(
 
       const subscription = subscribeSchema.safeParse(parsed);
       if (subscription.success) {
-        void subscribe(subscription.data.since).catch(() => socket.close(1011, 'members unavailable'));
+        void subscribe(subscription.data.since, subscription.data.generation).catch(() => socket.close(1011, 'members unavailable'));
         return;
       }
       const hello = helloMessageSchema.safeParse(parsed);

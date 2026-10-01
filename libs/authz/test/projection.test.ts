@@ -343,7 +343,8 @@ it("deletes the fresh OpenFGA store when replay fails", async () => {
   );
   const after = await client.listStores({ pageSize: 100 });
   expect(after.stores.map(({ id }) => id).sort()).toEqual(
-    before.stores.map(({ id }) => id).sort(),
+    before.stores.filter(({ name }) => !name.startsWith("members-test-rebuild-"))
+      .map(({ id }) => id).sort(),
   );
 });
 
@@ -422,5 +423,63 @@ it("deletes the fresh OpenFGA store when model creation fails", async () => {
   } finally {
     proxy.closeAllConnections();
     await new Promise<void>((resolve) => proxy.close(() => resolve()));
+  }
+});
+
+it("cleans a rebuild store when the create response is lost at the HTTP boundary", async () => {
+  const client = new OpenFgaClient({ apiUrl: fga.apiUrl });
+  const before = await client.listStores({ pageSize: 100 });
+  let dropCreateReply = true;
+  const proxy = createServer((request, response) => {
+    void (async () => {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const upstream = await fetch(`${fga.apiUrl}${request.url ?? ""}`, {
+        method: request.method ?? "POST",
+        headers: { "content-type": "application/json" },
+        ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+      });
+      const body = await upstream.text();
+      if (request.method === "POST" && request.url === "/stores" && dropCreateReply) {
+        dropCreateReply = false;
+        response.destroy();
+        return;
+      }
+      response.writeHead(upstream.status, { "content-type": "application/json" });
+      response.end(body);
+    })().catch(() => response.destroy());
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  const address = proxy.address();
+  if (!address || typeof address === "string") throw new Error("No proxy port");
+  const empty = { head: () => Promise.resolve(0), async *subscribe() {
+    await Promise.resolve();
+    yield { sequence: 1, event: member("unused") };
+  } };
+  try {
+    await expect(rebuildMembers(`http://127.0.0.1:${address.port}`, "lost", empty)).rejects.toThrow();
+    const after = await client.listStores({ pageSize: 100 });
+    expect(after.stores.map(({ id }) => id).sort()).toEqual(before.stores.map(({ id }) => id).sort());
+  } finally {
+    proxy.closeAllConnections();
+    await new Promise<void>((resolve) => proxy.close(() => resolve()));
+  }
+});
+
+it("removes an interrupted rebuild store on the next run", async () => {
+  const client = new OpenFgaClient({ apiUrl: fga.apiUrl });
+  const stale = await client.createStore({ name: "members-recovery-rebuild-interrupted" });
+  const empty = { head: () => Promise.resolve(0), async *subscribe() {
+    await Promise.resolve();
+    yield { sequence: 1, event: member("unused") };
+  } };
+  const rebuilt = await rebuildMembers(fga.apiUrl, "recovery", empty);
+  try {
+    const stores = await client.listStores({ pageSize: 100 });
+    expect(stores.stores.some(({ id }) => id === stale.id)).toBe(false);
+    expect(stores.stores.some(({ id }) => id === rebuilt.binding.storeId)).toBe(true);
+  } finally {
+    await new OpenFgaClient(rebuilt.binding).deleteStore();
   }
 });

@@ -43,8 +43,9 @@ values; the helper deliberately omits that field with a no-op tracer.
 The low-level `rebuild` method is destructive and remains for tests and offline
 maintenance: stop readers and runners before calling it. Operators use
 `npm run replay -- members`, which takes the same cross-process advisory lock as
-the normal PostgreSQL runner, builds shadow tables and switches all members
-tables plus the checkpoint in one transaction. See the
+the normal PostgreSQL runner, builds shadow tables and replaces the live contents
+plus the checkpoint under one ordered table lock. The live tables keep their grants.
+Changed history bumps a generation used to reset realtime cursors. See the
 [operator runbook](../../apps/ops/README.md). `initialise` must precede `run` or
 `rebuild`.
 

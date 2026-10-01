@@ -35,11 +35,14 @@ function sdk(apiUrl: string, binding?: Binding) {
 export async function createStore(
   apiUrl: string,
   silo: string,
+  storeName = `members-${silo}`,
 ): Promise<Binding> {
   const client = sdk(apiUrl);
-  const store = await client.createStore({ name: `members-${silo}` });
-  client.storeId = store.id;
+  let storeId: string | undefined;
   try {
+    const store = await client.createStore({ name: storeName });
+    storeId = store.id;
+    client.storeId = storeId;
     const written = await client.writeAuthorizationModel({
       ...model,
       type_definitions: model.type_definitions.map(({ metadata, ...type }) => ({
@@ -50,12 +53,16 @@ export async function createStore(
     return {
       apiUrl,
       silo,
-      storeId: store.id,
+      storeId,
       authorizationModelId: written.authorization_model_id,
     };
   } catch (error) {
     try {
-      await client.deleteStore();
+      if (storeId) {
+        await client.deleteStore();
+      } else if (storeName !== `members-${silo}`) {
+        await deleteStoresNamed(apiUrl, storeName);
+      }
     } catch (cleanupError) {
       throw new AggregateError(
         [error, cleanupError],
@@ -65,6 +72,38 @@ export async function createStore(
     }
     throw error;
   }
+}
+
+async function deleteStoresNamed(
+  apiUrl: string,
+  name: string,
+  exceptId?: string,
+): Promise<void> {
+  const client = sdk(apiUrl);
+  const matches: string[] = [];
+  let token = "";
+  do {
+    const response = await client.listStores({ pageSize: 100, continuationToken: token });
+    matches.push(...response.stores.filter((candidate) => candidate.name === name && candidate.id !== exceptId).map(({ id }) => id));
+    token = response.continuation_token;
+  } while (token);
+  for (const storeId of matches) await client.deleteStore({ storeId });
+}
+
+export async function deleteRebuildStores(
+  apiUrl: string,
+  prefix: string,
+  exceptId?: string,
+): Promise<void> {
+  const client = sdk(apiUrl);
+  const matches: string[] = [];
+  let token = "";
+  do {
+    const response = await client.listStores({ pageSize: 100, continuationToken: token });
+    matches.push(...response.stores.filter((candidate) => candidate.name.startsWith(prefix) && candidate.id !== exceptId).map(({ id }) => id));
+    token = response.continuation_token;
+  } while (token);
+  for (const storeId of matches) await client.deleteStore({ storeId });
 }
 
 export async function deleteStore(binding: Binding): Promise<void> {
