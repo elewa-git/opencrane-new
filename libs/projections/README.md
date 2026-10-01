@@ -40,12 +40,13 @@ Every handler attempt uses observability's `runHandler`, including the
 transaction commit. Start telemetry in the host to obtain real `trace_id`
 values; the helper deliberately omits that field with a no-op tracer.
 
-`rebuild` drops/recreates only the supplied projection's tables and resets
-its event ids/checkpoint in one transaction, then replays from the start.
-Stop readers and runners before this destructive operation. For an online
-rebuild, provide shadow tables and a separate projection name, catch up and
-switch readers in the host. An interrupted replay resumes from its committed
-checkpoint. `initialise` must precede `run` or `rebuild`.
+The low-level `rebuild` method is destructive and remains for tests and offline
+maintenance: stop readers and runners before calling it. Operators use
+`npm run replay -- members`, which takes the same cross-process advisory lock as
+the normal PostgreSQL runner, builds shadow tables and switches all members
+tables plus the checkpoint in one transaction. See the
+[operator runbook](../../apps/ops/README.md). `initialise` must precede `run` or
+`rebuild`.
 
 The members table uses `(silo, member_id)` as its key. Invitations are
 `invited`, acceptance replaces details and marks `joined`, removal marks

@@ -47,13 +47,14 @@ replay that head through `HandlerRuntime.replay`. HTTP writes throw on failure.
 
 Production OpenFGA uses the silo PostgreSQL cluster's **`openfga` database**, with
 OpenFGA migrations run before startup. This library does not deploy that service.
-For an offline rebuild, stop decisions, dispatcher and workers, wait for attempts
-to finish, then call `rebuildMembers(apiUrl, silo, eventStore)`. It creates a fresh
-store/model and replays to the captured global head through the same handler,
-checking sequence gaps and silo identity. It returns the new binding and sequence
-only on success. Keep the old store if it fails. Switch both readers and workers
-to the returned binding before resuming; retain dispatcher/queue state so events
-after that head are processed normally. Already queued events deduplicate using
+For an offline rebuild, follow the
+[operator runbook](../../apps/ops/README.md#rebuild-openfga-offline). The tool
+creates a fresh store/model and replays to the captured global head through the
+same handler, checking sequence gaps and silo identity. It returns the new binding
+and sequence only on success. A failed model creation or replay deletes the fresh
+store; a cleanup failure is reported with the original error. Switch both readers
+and workers to the returned binding before resuming; retain dispatcher/queue state
+so later events are processed normally. Already queued events deduplicate using
 OpenFGA receipts. Do not clear SQL receipts against an empty store and resume
 mid-stream. Rebuild does not run other reactions or mutate the old store.
 

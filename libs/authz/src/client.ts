@@ -39,19 +39,36 @@ export async function createStore(
   const client = sdk(apiUrl);
   const store = await client.createStore({ name: `members-${silo}` });
   client.storeId = store.id;
-  const written = await client.writeAuthorizationModel({
-    ...model,
-    type_definitions: model.type_definitions.map(({ metadata, ...type }) => ({
-      ...type,
-      ...(metadata && { metadata }),
-    })),
-  });
-  return {
-    apiUrl,
-    silo,
-    storeId: store.id,
-    authorizationModelId: written.authorization_model_id,
-  };
+  try {
+    const written = await client.writeAuthorizationModel({
+      ...model,
+      type_definitions: model.type_definitions.map(({ metadata, ...type }) => ({
+        ...type,
+        ...(metadata && { metadata }),
+      })),
+    });
+    return {
+      apiUrl,
+      silo,
+      storeId: store.id,
+      authorizationModelId: written.authorization_model_id,
+    };
+  } catch (error) {
+    try {
+      await client.deleteStore();
+    } catch (cleanupError) {
+      throw new AggregateError(
+        [error, cleanupError],
+        "OpenFGA model creation and store cleanup failed",
+        { cause: cleanupError },
+      );
+    }
+    throw error;
+  }
+}
+
+export async function deleteStore(binding: Binding): Promise<void> {
+  await sdk(binding.apiUrl, binding).deleteStore();
 }
 
 export class TupleClient {

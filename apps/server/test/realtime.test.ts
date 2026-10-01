@@ -8,7 +8,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { parseEventByType } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { members, pgDb, ProjectionRunner, rebuildMemberProjection, type EventSource } from '@opencrane/projections';
 import { realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
@@ -115,6 +115,37 @@ it('replays, streams committed changes, and reconnects without gaps or duplicate
   await until(() => resumed.messages.some((message) => message.position === 5));
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.position)).toEqual([4, 5]);
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.member.memberId)).toEqual(['carol', 'dan']);
+});
+it('keeps a subscriber live while replay catches an arriving event and switches tables', async () => {
+  const client = await connect();
+  client.subscribe(2);
+  await until(() => client.messages.some((message) => message.type === 'ready'));
+  let appended = false;
+  const arriving: EventSource = {
+    head: () => nats.store.head(),
+    async *subscribe(fromSequence, signal) {
+      for await (const stored of nats.store.subscribe(fromSequence, signal)) {
+        yield stored;
+        if (!appended) {
+          appended = true;
+          await append('carol', 'member.joined', {}, false);
+        }
+      }
+    },
+  };
+  const result = await rebuildMemberProjection(
+    pgDb(dbs.queue),
+    arriving,
+    createLogger('realtime-rebuild'),
+    { verify: true },
+  );
+  expect(result).toMatchObject({ previousSequence: 2, sequence: 3, verified: true });
+  await until(() => client.messages.some((message) => message.position === 3));
+  await append('dan');
+  await until(() => client.messages.some((message) => message.position === 4));
+  expect(client.ws.readyState).toBe(WebSocket.OPEN);
+  expect(client.messages.filter((message) => message.type === 'member').map((message) => message.member.memberId))
+    .toEqual(['carol', 'dan']);
 });
 it('keeps uncommitted and rolled-back rows off the socket', async () => {
   const client = await connect();

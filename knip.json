@@ -18,6 +18,15 @@
         "test/**/*.ts"
       ]
     },
+    "apps/ops": {
+      "entry": [
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ]
+    },
     "apps/web": {
       "entry": [
         "src/**/*.spec.ts",

@@ -54,12 +54,13 @@ export class ProjectionRunner {
   }
 
   private async apply(
+    db: Db,
     projection: Projection,
     stored: StoredEvent,
     attempt: number,
-  ): Promise<void> {
+  ): Promise<number> {
     const event = stored.event;
-    await runHandler(
+    return runHandler(
       this.logger,
       {
         handler: projection.name,
@@ -69,7 +70,21 @@ export class ProjectionRunner {
         attempt,
       },
       () =>
-        this.db.transaction(async (tx) => {
+        db.transaction(async (tx) => {
+          const checkpoint = await tx.query<{ sequence: string | number }>(
+            "SELECT sequence FROM projection_checkpoints WHERE name = $1",
+            [projection.name],
+          );
+          const sequence = Number(checkpoint.rows[0]?.sequence);
+          if (!Number.isSafeInteger(sequence)) {
+            throw new Error("Projection is not initialised");
+          }
+          if (stored.sequence <= sequence) {
+            return sequence;
+          }
+          if (stored.sequence !== sequence + 1) {
+            throw new Error("Event sequence gap");
+          }
           const seen = await tx.query(
             "SELECT event_id FROM projection_events WHERE projection = $1 AND event_id = $2",
             [projection.name, event.id],
@@ -85,6 +100,7 @@ export class ProjectionRunner {
             "UPDATE projection_checkpoints SET sequence = $2 WHERE name = $1",
             [projection.name, stored.sequence],
           );
+          return stored.sequence;
         }),
     );
   }
@@ -92,10 +108,18 @@ export class ProjectionRunner {
   /** Drain to the head captured on entry. A failure stops immediately; call again with a higher attempt. */
   async run(
     projection: Projection,
-    { signal, attempt = 1 }: { signal?: AbortSignal; attempt?: number } = {},
+    {
+      signal,
+      attempt = 1,
+      toSequence,
+    }: { signal?: AbortSignal; attempt?: number; toSequence?: number } = {},
   ): Promise<void> {
     let checkpoint = await this.checkpoint(projection);
-    const head = await this.source.head();
+    const sourceHead = await this.source.head();
+    const head = toSequence ?? sourceHead;
+    if (!Number.isSafeInteger(head) || head < 0 || head > sourceHead) {
+      throw new Error("Invalid replay head");
+    }
     if (checkpoint >= head) {
       return;
     }
@@ -107,8 +131,11 @@ export class ProjectionRunner {
       if (stored.sequence !== checkpoint + 1) {
         throw new Error("Event sequence gap");
       }
-      await this.apply(projection, stored, attempt);
-      checkpoint = stored.sequence;
+      checkpoint = this.db.lock
+        ? await this.db.lock(projection.name, (db) =>
+            this.apply(db, projection, stored, attempt),
+          )
+        : await this.apply(this.db, projection, stored, attempt);
       if (checkpoint >= head) {
         return;
       }

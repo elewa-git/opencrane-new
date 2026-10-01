@@ -282,8 +282,11 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
     }
     await apply(p, all);
     expect(await snapshot(p.binding)).toEqual(before);
-    const rebuilt = await rebuildMembers(fga.apiUrl, "test", nats.reader);
+    const rebuilt = await rebuildMembers(fga.apiUrl, "test", nats.reader, {
+      verifyAgainst: p.binding,
+    });
     expect(rebuilt.sequence).toBe(last);
+    expect(rebuilt.verified).toBe(true);
     expect(await snapshot(rebuilt.binding)).toEqual(before);
     expect(await rebuilt.check("alice", "member")).toMatchObject({
       allowed: false,
@@ -323,3 +326,101 @@ it("persists model, tuples and event receipts in PostgreSQL across an OpenFGA re
     await service.close();
   }
 }, 45_000);
+
+it("deletes the fresh OpenFGA store when replay fails", async () => {
+  const client = new OpenFgaClient({ apiUrl: fga.apiUrl });
+  const before = await client.listStores({ pageSize: 100 });
+  const source = {
+    head: () => Promise.resolve(2),
+    async *subscribe() {
+      await Promise.resolve();
+      yield { sequence: 1, event: member("only") };
+      throw new Error("injected replay failure");
+    },
+  };
+  await expect(rebuildMembers(fga.apiUrl, "test", source)).rejects.toThrow(
+    "injected replay failure",
+  );
+  const after = await client.listStores({ pageSize: 100 });
+  expect(after.stores.map(({ id }) => id).sort()).toEqual(
+    before.stores.map(({ id }) => id).sort(),
+  );
+});
+
+it("hands events appended during an OpenFGA rebuild to the rebuilt projection", async () => {
+  const nats = await natsFixture();
+  const live = memberAuthorisation(await createStore(fga.apiUrl, "test"));
+  const first = member("arrive-a");
+  const second = member("arrive-b", "member.joined", "bob");
+  const later = member("arrive-c", "member.joined", "carol");
+  async function appendFixture(event: EventEnvelope) {
+    const result = await nats.store.append({ event, expectedSequence: 0 });
+    if (result.status !== "appended") throw new Error("Fixture append failed");
+  }
+  try {
+    await appendFixture(first);
+    await appendFixture(second);
+    await apply(live, [first, second]);
+    let appended = false;
+    const arriving = {
+      head: () => nats.store.head(),
+      async *subscribe(fromSequence: number, signal?: AbortSignal) {
+        for await (const stored of nats.store.subscribe(fromSequence, signal)) {
+          yield stored;
+          if (!appended) {
+            appended = true;
+            await appendFixture(later);
+          }
+        }
+      },
+    };
+    const rebuilt = await rebuildMembers(fga.apiUrl, "test", arriving, {
+      verifyAgainst: live.binding,
+    });
+    expect(rebuilt.sequence).toBe(2);
+    expect(await nats.store.head()).toBe(3);
+    await apply(rebuilt, [later]);
+    await apply(live, [later]);
+    expect(await snapshot(rebuilt.binding)).toEqual(await snapshot(live.binding));
+  } finally {
+    await nats.close();
+  }
+});
+
+it("deletes the fresh OpenFGA store when model creation fails", async () => {
+  const client = new OpenFgaClient({ apiUrl: fga.apiUrl });
+  const before = await client.listStores({ pageSize: 100 });
+  const proxy = createServer((request, response) => {
+    void (async () => {
+      const chunks = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      if (request.url?.endsWith("/authorization-models")) {
+        response.writeHead(500, { "content-type": "application/json" });
+        response.end('{"message":"injected model failure"}');
+        return;
+      }
+      const upstream = await fetch(`${fga.apiUrl}${request.url ?? ""}`, {
+        method: request.method ?? "POST",
+        headers: { "content-type": "application/json" },
+        ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+      });
+      response.writeHead(upstream.status, { "content-type": "application/json" });
+      response.end(await upstream.text());
+    })().catch(() => response.destroy());
+  });
+  proxy.listen(0, "127.0.0.1");
+  await once(proxy, "listening");
+  const address = proxy.address();
+  if (!address || typeof address === "string") throw new Error("No proxy port");
+  try {
+    await expect(createStore(`http://127.0.0.1:${address.port}`, "test"))
+      .rejects.toThrow();
+    const after = await client.listStores({ pageSize: 100 });
+    expect(after.stores.map(({ id }) => id).sort()).toEqual(
+      before.stores.map(({ id }) => id).sort(),
+    );
+  } finally {
+    proxy.closeAllConnections();
+    await new Promise<void>((resolve) => proxy.close(() => resolve()));
+  }
+});

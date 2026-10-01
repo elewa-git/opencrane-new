@@ -1,0 +1,16 @@
+{
+  "name": "@opencrane/ops",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/replay.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@opencrane/authz": "0.1.0",
+    "@opencrane/event-store": "0.1.0",
+    "@opencrane/observability": "0.1.0",
+    "@opencrane/projections": "0.1.0"
+  }
+}
