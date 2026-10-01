@@ -1,0 +1,420 @@
+{
+  "date": "2026-10-01T18:36:31.185Z",
+  "base": "0d93a388ae6b2439b3a2eeb38b3aaa2dd0026999",
+  "image": "k3d-ocn-registry:5000/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47",
+  "receipts": [
+    {
+      "name": "warm PVC attachment",
+      "result": "PARTIAL",
+      "detail": "API refuses changing running Pod volumes; claim volume templates force cold creation in 1.0.4"
+    },
+    {
+      "name": "volume claim cold start",
+      "result": "PASS",
+      "detail": "claim with volumeClaimTemplates creates another Pod while ready neutral Pod remains unclaimed"
+    },
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "CRI confirms io.containerd.runsc.v1"
+    },
+    {
+      "name": "S0.1b isolation",
+      "result": "PASS",
+      "detail": "real model-requested tool returns ISOLATION_PASS in extended image"
+    },
+    {
+      "name": "warm claims",
+      "result": "PASS",
+      "detail": "10 pre-existing Pod UIDs adopted, computer label assigned at claim, all destroyed after binding"
+    },
+    {
+      "name": "disk suspend/resume",
+      "result": "PASS",
+      "detail": "10 Suspended/Running transitions retain Sandbox and PVC UIDs, free the Pod and create new gVisor Pods; file, actual Chromium login and same Codex thread survive"
+    },
+    {
+      "name": "token refresh",
+      "result": "PASS",
+      "detail": "10 rotations; old computer + new turn and new computer + old turn each return 403; resumed Codex turns complete"
+    },
+    {
+      "name": "latency",
+      "result": "PASS",
+      "detail": "{\"unit\":\"ms\",\"claim\":{\"runs\":[495,339,390,348,395,363,397,378,415,384],\"p50\":384,\"p95\":495},\"suspend\":{\"runs\":[2044,2786,1075,1509,1298,2227,2024,1149,1381,1372],\"p50\":1381,\"p95\":2786},\"coldPvcResume\":{\"runs\":[10490,10242,11005,10756,9611,13994,10337,9151,8484,10120],\"p50\":10242,\"p95\":13994},\"milestones\":[{\"podReady\":1625,\"codexReady\":2661,\"threadReady\":4087,\"checksReady\":6889,\"browserReady\":10490},{\"podReady\":2542,\"codexReady\":3654,\"threadReady\":4460,\"checksReady\":6956,\"browserReady\":10242},{\"podReady\":2450,\"codexReady\":3770,\"threadReady\":4575,\"checksReady\":6937,\"browserReady\":11005},{\"podReady\":2450,\"codexReady\":3566,\"threadReady\":4371,\"checksReady\":6790,\"browserReady\":10756},{\"podReady\":2475,\"codexReady\":3342,\"threadReady\":4145,\"checksReady\":6474,\"browserReady\":9611},{\"podReady\":2426,\"codexReady\":4135,\"threadReady\":5348,\"checksReady\":8741,\"browserReady\":13994},{\"podReady\":2455,\"codexReady\":3576,\"threadReady\":4378,\"checksReady\":6717,\"browserReady\":10337},{\"podReady\":2173,\"codexReady\":3066,\"threadReady\":3669,\"checksReady\":5970,\"browserReady\":9151},{\"podReady\":1989,\"codexReady\":2895,\"threadReady\":3699,\"checksReady\":5861,\"browserReady\":8484},{\"podReady\":2458,\"codexReady\":3348,\"threadReady\":4051,\"checksReady\":6620,\"browserReady\":10120}],\"cumulative\":{\"podReady\":{\"runs\":[1625,2542,2450,2450,2475,2426,2455,2173,1989,2458],\"p50\":2450,\"p95\":2542},\"codexReady\":{\"runs\":[2661,3654,3770,3566,3342,4135,3576,3066,2895,3348],\"p50\":3348,\"p95\":4135},\"threadReady\":{\"runs\":[4087,4460,4575,4371,4145,5348,4378,3669,3699,4051],\"p50\":4145,\"p95\":5348},\"checksReady\":{\"runs\":[6889,6956,6937,6790,6474,8741,6717,5970,5861,6620],\"p50\":6717,\"p95\":8741},\"browserReady\":{\"runs\":[10490,10242,11005,10756,9611,13994,10337,9151,8484,10120],\"p50\":10242,\"p95\":13994}},\"stages\":{\"podReady\":{\"runs\":[1625,2542,2450,2450,2475,2426,2455,2173,1989,2458],\"p50\":2450,\"p95\":2542},\"codexReady\":{\"runs\":[1036,1112,1320,1116,867,1709,1121,893,906,890],\"p50\":1036,\"p95\":1709},\"threadReady\":{\"runs\":[1426,806,805,805,803,1213,802,603,804,703],\"p50\":804,\"p95\":1426},\"checksReady\":{\"runs\":[2802,2496,2362,2419,2329,3393,2339,2301,2162,2569],\"p50\":2362,\"p95\":3393},\"browserReady\":{\"runs\":[3601,3286,4068,3966,3137,5253,3620,3181,2623,3500],\"p50\":3500,\"p95\":5253}}}"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "s03-warm deleted"
+    }
+  ],
+  "command": "node spikes/s0-3-warm-pool/run.mjs",
+  "environment": {
+    "cluster": "k3d-ocn",
+    "runtime": "gvisor",
+    "fresh": "namespace, Pods, PVC and issuer; existing cluster",
+    "model": "scripted S0.1b, no provider key"
+  },
+  "sourceSha256": {
+    "spikes/s0-3-warm-pool/boot.mjs": "0edaecc0ce57790dd17ded54903fb6850be3decf33ce047f39b88699524385f3",
+    "spikes/s0-3-warm-pool/browser.mjs": "13523004ac0c55f82495867c54caa4e5d1972bbe7de055f5edf0d69022484572",
+    "spikes/s0-3-warm-pool/lab.mjs": "5eb713078cbc2377302b1bcab288c337ff1cca9a52c0664b6cfc07aa860abe83",
+    "spikes/s0-3-warm-pool/run.mjs": "29961e0ed25e97282a9b079e3570960b3244fbbad7c66493a35e4d0253563885",
+    "spikes/s0-3-warm-pool/site.mjs": "b41dc7f2680e68ecf2c90c7113e9cd80c551c0a72e8345693db7bbb864e03fd9",
+    "spikes/s0-5-live-view/Dockerfile": "2c0981d618e2a8c28617de968c794eae6e2561258d17ca20e3923c67cd10c458",
+    "spikes/s0-5-live-view/build.sh": "56010c561dbb0619a213fee553d74b2185eec4fb27cf44e1d22c4158b80a5173",
+    "spikes/s0-5-live-view/desktop.mjs": "2aba3d61717b853e9741fa2e884c3cd58b63d7adcfef6967e8cec7bd195274e2",
+    "spikes/s0-5-live-view/gateway.mjs": "1d0f687a30167518e99b7af01dd84a213102ff1accd1f47c254450a5f86757f5",
+    "spikes/s0-5-live-view/rfb.mjs": "161292e9f53bac64f378df9809e65191cd28559fe5bec23f974baeb8790f2f83",
+    "spikes/s0-5-live-view/run.mjs": "f64e59135bb4f2a457a78e0cd77f6d688ce409151226e34c5b905cc7613ae76b",
+    "spikes/s0-1b-proxy-gvisor/computer.mjs": "4e886db3e7f91b52df670a3491d7c7cd0ed68e8d252184fc209583909c9907f7",
+    "spikes/s0-1b-proxy-gvisor/driver.mjs": "c2011cdfb4dab3f7967623d7a3b52c7b9797bd66562eccdb637f5e43a421bdc6",
+    "spikes/s0-1b-proxy-gvisor/services.mjs": "9d684d1cd415c4c8c5629a23b1bd0974172059dc92a039b8002cc4ac2b3519c7",
+    "spikes/s0-1b-proxy-gvisor/tool-user.c": "07dc9f862749089eb70f4b16a4ee764dde46302c23e74906c911eafe157445ac",
+    "spikes/s0-1b-proxy-gvisor/probe.mjs": "15921698c8003bf0265cf6cf89fb4e6c53dbfc6ef1abe6db6aa7aabb2dad6049",
+    "spikes/s0-1b-proxy-gvisor/common.mjs": "76a31c8f0998ed950cd4136974807e394d7887673d26b247ecb20df79132972a",
+    "spikes/s0-1b-proxy-gvisor/gateway.yaml": "d09648ce03d87be46979e4cfda397703ec14a829cd2f985a4f86adc1a7e7cbc4"
+  },
+  "latency": {
+    "unit": "ms",
+    "claim": {
+      "runs": [
+        495,
+        339,
+        390,
+        348,
+        395,
+        363,
+        397,
+        378,
+        415,
+        384
+      ],
+      "p50": 384,
+      "p95": 495
+    },
+    "suspend": {
+      "runs": [
+        2044,
+        2786,
+        1075,
+        1509,
+        1298,
+        2227,
+        2024,
+        1149,
+        1381,
+        1372
+      ],
+      "p50": 1381,
+      "p95": 2786
+    },
+    "coldPvcResume": {
+      "runs": [
+        10490,
+        10242,
+        11005,
+        10756,
+        9611,
+        13994,
+        10337,
+        9151,
+        8484,
+        10120
+      ],
+      "p50": 10242,
+      "p95": 13994
+    },
+    "milestones": [
+      {
+        "podReady": 1625,
+        "codexReady": 2661,
+        "threadReady": 4087,
+        "checksReady": 6889,
+        "browserReady": 10490
+      },
+      {
+        "podReady": 2542,
+        "codexReady": 3654,
+        "threadReady": 4460,
+        "checksReady": 6956,
+        "browserReady": 10242
+      },
+      {
+        "podReady": 2450,
+        "codexReady": 3770,
+        "threadReady": 4575,
+        "checksReady": 6937,
+        "browserReady": 11005
+      },
+      {
+        "podReady": 2450,
+        "codexReady": 3566,
+        "threadReady": 4371,
+        "checksReady": 6790,
+        "browserReady": 10756
+      },
+      {
+        "podReady": 2475,
+        "codexReady": 3342,
+        "threadReady": 4145,
+        "checksReady": 6474,
+        "browserReady": 9611
+      },
+      {
+        "podReady": 2426,
+        "codexReady": 4135,
+        "threadReady": 5348,
+        "checksReady": 8741,
+        "browserReady": 13994
+      },
+      {
+        "podReady": 2455,
+        "codexReady": 3576,
+        "threadReady": 4378,
+        "checksReady": 6717,
+        "browserReady": 10337
+      },
+      {
+        "podReady": 2173,
+        "codexReady": 3066,
+        "threadReady": 3669,
+        "checksReady": 5970,
+        "browserReady": 9151
+      },
+      {
+        "podReady": 1989,
+        "codexReady": 2895,
+        "threadReady": 3699,
+        "checksReady": 5861,
+        "browserReady": 8484
+      },
+      {
+        "podReady": 2458,
+        "codexReady": 3348,
+        "threadReady": 4051,
+        "checksReady": 6620,
+        "browserReady": 10120
+      }
+    ],
+    "cumulative": {
+      "podReady": {
+        "runs": [
+          1625,
+          2542,
+          2450,
+          2450,
+          2475,
+          2426,
+          2455,
+          2173,
+          1989,
+          2458
+        ],
+        "p50": 2450,
+        "p95": 2542
+      },
+      "codexReady": {
+        "runs": [
+          2661,
+          3654,
+          3770,
+          3566,
+          3342,
+          4135,
+          3576,
+          3066,
+          2895,
+          3348
+        ],
+        "p50": 3348,
+        "p95": 4135
+      },
+      "threadReady": {
+        "runs": [
+          4087,
+          4460,
+          4575,
+          4371,
+          4145,
+          5348,
+          4378,
+          3669,
+          3699,
+          4051
+        ],
+        "p50": 4145,
+        "p95": 5348
+      },
+      "checksReady": {
+        "runs": [
+          6889,
+          6956,
+          6937,
+          6790,
+          6474,
+          8741,
+          6717,
+          5970,
+          5861,
+          6620
+        ],
+        "p50": 6717,
+        "p95": 8741
+      },
+      "browserReady": {
+        "runs": [
+          10490,
+          10242,
+          11005,
+          10756,
+          9611,
+          13994,
+          10337,
+          9151,
+          8484,
+          10120
+        ],
+        "p50": 10242,
+        "p95": 13994
+      }
+    },
+    "stages": {
+      "podReady": {
+        "runs": [
+          1625,
+          2542,
+          2450,
+          2450,
+          2475,
+          2426,
+          2455,
+          2173,
+          1989,
+          2458
+        ],
+        "p50": 2450,
+        "p95": 2542
+      },
+      "codexReady": {
+        "runs": [
+          1036,
+          1112,
+          1320,
+          1116,
+          867,
+          1709,
+          1121,
+          893,
+          906,
+          890
+        ],
+        "p50": 1036,
+        "p95": 1709
+      },
+      "threadReady": {
+        "runs": [
+          1426,
+          806,
+          805,
+          805,
+          803,
+          1213,
+          802,
+          603,
+          804,
+          703
+        ],
+        "p50": 804,
+        "p95": 1426
+      },
+      "checksReady": {
+        "runs": [
+          2802,
+          2496,
+          2362,
+          2419,
+          2329,
+          3393,
+          2339,
+          2301,
+          2162,
+          2569
+        ],
+        "p50": 2362,
+        "p95": 3393
+      },
+      "browserReady": {
+        "runs": [
+          3601,
+          3286,
+          4068,
+          3966,
+          3137,
+          5253,
+          3620,
+          3181,
+          2623,
+          3500
+        ],
+        "p50": 3500,
+        "p95": 5253
+      }
+    }
+  },
+  "baseline": [
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "Sandbox-owned Pod aee941ec-f935-4fb4-a754-f13fe2c10e5a, runtimeClassName=gvisor, image=k3d-ocn-registry:5000/opencrane/s01b@sha256:7bb3ec8a8313e746621287e3ca8b3ab43e91e2b981510cf2b3fdc17724f97a83"
+    },
+    {
+      "name": "NetworkPolicy",
+      "result": "PASS",
+      "detail": "{\"gateway\":\"connected\",\"model\":\"ECONNREFUSED\"}"
+    },
+    {
+      "name": "caller authentication",
+      "result": "PASS",
+      "detail": "missing caller capability returns HTTP 401"
+    },
+    {
+      "name": "1 streaming",
+      "result": "PASS",
+      "detail": "two concurrent threads, >=3 deltas each, completed; 3 provider requests recorded without credentials"
+    },
+    {
+      "name": "2 tool isolation",
+      "result": "PASS",
+      "detail": "ISOLATION_PASS {\"uid\":1001,\"noNewPrivs\":true,\"cannotBecomeCodex\":true,\"callerAbsentFromEnvironment\":true,\"/home/codex/private\":\"EACCES\",\"/home/codex/caller\":\"EACCES\",\"/home/codex/tokens.json\":\"EACCES\",\"/home/codex/.codex/config.toml\":\"EACCES\",\"protectedProcesses\":5,\"proxy\":\"EPERM\",\"gateway\":\"EPERM\",\"model\":\"EPERM\",\"issuer\":\"EPERM\",\"ipv6\":\"EPERM\",\"control\":\"EPERM\",\"executor\":\"EPERM\"}"
+    },
+    {
+      "name": "3 thread tokens",
+      "result": "PASS",
+      "detail": "distinct token hashes efbcd4165bfcb3c1/d7bed66fc4c9697e; cross-thread, expiry, forged and revoked tokens denied at real gateway"
+    },
+    {
+      "name": "4 killed mid-turn",
+      "result": "PASS",
+      "detail": "Pod aee941ec-f935-4fb4-a754-f13fe2c10e5a force-deleted after provider receipt and delta; external model and gateway logs retain thread 01a0f8a7-493c-7530-938c-1ec8b0f1294a; no completion before kill"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "namespace s01b-proxy deleted"
+    }
+  ],
+  "cleanup": "PASS: s03-warm and s05-view namespaces absent; no PVs with either claim namespace",
+  "lifecycleDecision": "Adopt native v1beta1 Suspended/Running; retain Sandbox and PVC, replace Pod. Literal warm-Pod resume remains PARTIAL.",
+  "gates": {
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "checkEvents": "PASS: 70 event types",
+    "test": "PASS: 43 files, 853 tests, 101.70 s; PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres control database",
+    "s03Runner": "PASS implemented checks; PARTIAL literal warm-Pod criterion",
+    "s05Runner": "PASS including allocation regression and actual requester clipboard",
+    "spikeMarkdown": "PASS",
+    "independentReview": "NOT RUN, as requested"
+  }
+}

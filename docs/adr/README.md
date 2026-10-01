@@ -9,6 +9,7 @@ Each spike in [plan.md](../../plan.md)'s Phase 0 produces one ADR here.
 | [0002](0002-gateway-agentgateway.md) | Gateway: agentgateway vs the Envoy stack | S0.2 | Draft, from spike evidence — ready for the morning decision |
 | [0003](0003-harness-codex.md) | Agent harness: Codex vs OpenCode vs Goose | S0.1 | Draft, from spike evidence — S0.1b's scoped proof passed; full S0.1 (paid model, approval pause/resume, sub-agents, session recovery) remains incomplete |
 | [0004](0004-handler-runtime.md) | Handler runtime: pg-boss vs Temporal vs Hatchet vs Restate (plan.md decision 7) | S0.8 | Proposed: pg-boss for reactions; qualification PARTIAL (visibility, production budget path and licence audit remain; Hatchet NOT_RUN, Restate excluded) |
+| [0006](0006-computer-disk-and-live-view.md) | Computer disk recovery and KasmVNC permissions | S0.3 / S0.5 | Proposed; warm PVC attachment unsupported, local evidence and limits in spike READMEs |
 
 ## Format
 

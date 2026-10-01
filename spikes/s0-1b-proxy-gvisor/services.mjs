@@ -4,8 +4,8 @@ import { randomBytes, createHash } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { body, json, sleep } from './common.mjs';
 const grants = new Map();
-const computer = randomBytes(32).toString('hex');
-const computerExpires = Date.now() + 600_000;
+let computer = randomBytes(32).toString('hex');
+let computerExpires = Date.now() + 600_000;
 const log = (file, entry) => appendFileSync(`/tmp/${file}.jsonl`, JSON.stringify({ at: Date.now(), ...entry }) + '\n');
 const fingerprint = value => createHash('sha256').update(value).digest('hex').slice(0, 16);
 createServer(async (req, res) => {
@@ -15,6 +15,9 @@ createServer(async (req, res) => {
       const token = randomBytes(32).toString('hex');
       const grant = { thread: input.thread, token, expires: Date.now() + input.ttl, computer };
       grants.set(token, grant); json(res, grant);
+    } else if (req.url === '/rotate') {
+      computer = randomBytes(32).toString('hex'); computerExpires = Date.now() + 600_000;
+      grants.clear(); json(res, {});
     } else if (req.url === '/revoke') { grants.delete(input.token); json(res, {}); }
     else json(res, {}, 400);
   } catch { json(res, {}, 400); }
@@ -67,7 +70,7 @@ createServer(async (req, res) => {
       for (const delta of ['gVisor ', 'proxy ', 'stream.']) {
         emit({ type: 'response.output_text.delta', delta }); await sleep(80);
       }
-      if (text.includes('KILL_ME')) { log('held', { thread, id }); return; }
+      if (text.includes('KILL_ME') && !text.includes('AFTER_RELEASE')) { log('held', { thread, id }); return; }
       emit({ type: 'response.output_item.done', item: { id: msg, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'gVisor proxy stream.' }] } });
     }
     emit({ type: 'response.completed', response: { id, status: 'completed', usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 } } });
