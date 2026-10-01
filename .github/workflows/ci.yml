@@ -30,3 +30,10 @@ jobs:
 
       - name: Check the event catalogue matches the registry
         run: npm run check:events
+
+      # apps/web builds and tests through the Angular CLI, so it needs its own steps.
+      - name: Build apps/web
+        run: npm run build -w apps/web
+
+      - name: Test apps/web
+        run: npm run test -w apps/web

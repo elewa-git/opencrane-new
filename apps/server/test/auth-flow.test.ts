@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { encodeSession, type AuthConfig } from '@opencrane/auth';
+import { logoutResponseSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { DEFAULT_MOCK_USER, startMockOidcProvider, type MockOidcProvider } from './support/mock-oidc-provider.ts';
 import { replaceInCiphertext, tamperCookie, testAuthConfig, truncateAuthTag } from './support/test-auth-config.ts';
@@ -112,7 +113,8 @@ describe('OIDC login flow (against a local mock provider)', () => {
     expect(me.user?.authTime).toBe(DEFAULT_MOCK_USER.authTime);
 
     const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.config.cookieName]: sessionCookie } });
-    expect(logout.json<{ endSessionUrl: string }>().endSessionUrl).toContain(`${stack.provider.url}/endsession`);
+    // The reply is checked with the schema the web app reads it with.
+    expect(logoutResponseSchema.parse(logout.json()).endSessionUrl).toContain(`${stack.provider.url}/endsession`);
     expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
     expect((await stack.app.inject({ method: 'GET', url: '/auth/me' })).json()).toEqual(NOT_SIGNED_IN);
   });
@@ -275,7 +277,7 @@ describe('OIDC login flow (against a local mock provider)', () => {
     it('asks the provider to send the person back to postLogoutRedirectUri, naming the client', async () => {
       const stack = await startStack({}, { postLogoutRedirectUri: 'http://app.example.test/signed-out' });
       const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout' });
-      const endSession = new URL(logout.json<{ endSessionUrl: string }>().endSessionUrl);
+      const endSession = new URL(logoutResponseSchema.parse(logout.json()).endSessionUrl!);
       expect(endSession.origin + endSession.pathname).toBe(`${stack.provider.url}/endsession`);
       expect(endSession.searchParams.get('post_logout_redirect_uri')).toBe('http://app.example.test/signed-out');
       expect(endSession.searchParams.get('client_id')).toBe(stack.provider.clientId);
@@ -290,6 +292,29 @@ describe('OIDC login flow (against a local mock provider)', () => {
       const sessionCookie = encodeSession(stack.config, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
 
       const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.config.cookieName]: sessionCookie } });
+      expect(logout.statusCode).toBe(200);
+      expect(logoutResponseSchema.parse(logout.json())).toEqual({ endSessionUrl: null });
+      expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
+    });
+
+    it('sends no address when the provider has no logout page', async () => {
+      const stack = await startStack({ endSessionEndpoint: null });
+      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout' });
+      expect(logout.statusCode).toBe(200);
+      expect(logoutResponseSchema.parse(logout.json())).toEqual({ endSessionUrl: null });
+    });
+
+    // The browser follows whatever address it is given, so one that is not http(s) must never reach it.
+    it.each([
+      ['a javascript: address', 'javascript:alert(1)'],
+      ['a data: address', 'data:text/html,hi'],
+    ])('sends no address when the provider advertises %s as its logout page, and still clears the session', async (_name, endSessionEndpoint) => {
+      const stack = await startStack({ endSessionEndpoint });
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      const sessionCookie = encodeSession(stack.config, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
+
+      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.config.cookieName]: sessionCookie } });
+
       expect(logout.statusCode).toBe(200);
       expect(logout.json()).toEqual({ endSessionUrl: null });
       expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });

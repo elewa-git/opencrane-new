@@ -1,0 +1,99 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.shell-header {
+  display: flex;
+  align-items: center;
+  padding: var(--oc-space-4) var(--oc-space-6);
+  border-bottom: 1px solid var(--oc-border-subtle);
+}
+
+.shell-header h1 {
+  margin: 0;
+  font-size: var(--oc-text-xl);
+  font-weight: var(--oc-font-weight-medium);
+  letter-spacing: var(--oc-tracking-title);
+}
+
+.shell-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--oc-space-5);
+  padding: var(--oc-space-8) var(--oc-space-6);
+}
+
+.connection-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--oc-space-2);
+  margin: 0;
+  font-size: var(--oc-text-sm);
+  color: var(--oc-ink-muted);
+}
+
+.connection-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: var(--oc-radius-round);
+  background: var(--oc-border-strong);
+}
+
+.connection-indicator[data-state='open'] .connection-dot {
+  background: var(--oc-success);
+}
+
+.connection-indicator[data-state='connecting'] .connection-dot,
+.connection-indicator[data-state='reconnecting'] .connection-dot {
+  background: var(--oc-warning);
+}
+
+.connection-indicator[data-state='closed'] .connection-dot {
+  background: var(--oc-danger);
+}
+
+.actions {
+  display: flex;
+  gap: var(--oc-space-3);
+}
+
+.button {
+  font-family: inherit;
+  font-size: var(--oc-text-md);
+  font-weight: var(--oc-font-weight-medium);
+  padding: var(--oc-space-2) var(--oc-space-5);
+  border-radius: var(--oc-radius-button);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.button-primary {
+  background: var(--oc-accent);
+  color: var(--oc-primary-contrast);
+}
+
+/* The hover colour must keep the dark text readable (4.5:1 or better). */
+.button-primary:hover {
+  background: var(--oc-primary-hover);
+}
+
+.button-secondary {
+  background: var(--oc-surface-raised);
+  color: var(--oc-ink-default);
+  border-color: var(--oc-border-default);
+}
+
+.button-secondary:disabled {
+  opacity: var(--oc-opacity-disabled);
+  cursor: default;
+}
+
+.error-message {
+  margin: 0;
+  color: var(--oc-danger);
+  font-size: var(--oc-text-sm);
+}

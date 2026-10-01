@@ -1,7 +1,12 @@
-// The one WebSocket message this skeleton understands: a typed "hello".
-// There is no business logic here yet (see plan.md Phase 1) — this only
-// proves the socket is wired up and validates what comes over it, the way
-// every later WebSocket message in the real protocol will.
+// The WebSocket messages both sides speak: the server (apps/server) and the
+// browser (apps/web) import these schemas and types instead of each
+// defining their own copy. There is no business logic here yet (see
+// plan.md Phase 1) — this only proves the socket is wired up end to end and
+// validates what comes over it, the way every later WebSocket message in
+// the real protocol will.
+//
+// Moved out of apps/server/src/protocol.ts so apps/web can import the same
+// types without depending on the server's Node-only package.
 import { z } from 'zod';
 
 export const helloMessageSchema = z
@@ -56,3 +61,13 @@ export const eventValidationResultSchema = z
   .strict();
 
 export type EventValidationResult = z.infer<typeof eventValidationResultSchema>;
+
+// Every message the server can send down the socket.
+export const serverMessageSchema = z.union([helloEchoSchema, errorMessageSchema, eventValidationResultSchema]);
+
+export type ServerMessage = z.infer<typeof serverMessageSchema>;
+
+// Every message the browser can send up the socket.
+export const clientMessageSchema = z.union([helloMessageSchema, validateEventMessageSchema]);
+
+export type ClientMessage = z.infer<typeof clientMessageSchema>;

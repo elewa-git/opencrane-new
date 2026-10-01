@@ -1,0 +1,166 @@
+/* Copied from OpenCrane 1 (10abd0ef6)
+   libs/frontend/core/src/lib/theme/opencrane-theme.scss and
+   libs/frontend/core/src/lib/theme/opencrane-preset.ts
+   changed: plain CSS (no Sass). Dropped the two @import lines for the DM
+   fonts and PrimeNG's icon font (not installed yet, so the font variables
+   fall back to the system font). Dropped the token groups no screen here
+   uses (archetype and scope colours, avatars, the conversation layout and
+   paper texture, the sidebar rail, ledger cards); copy them back with the
+   components that need them. From the preset, only the plain values are
+   kept: the primary palette, contrast colour, hover and active mapping and
+   the 7px button radius, as --oc-primary-* and --oc-radius-button. Every
+   other token, the resets and the utility classes are unchanged. */
+
+:root {
+	/* Typography */
+	--oc-font-size-root: 15px;
+	--oc-font-sans: "DM Sans", system-ui, sans-serif;
+	--oc-font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--oc-font-weight-medium: 500;
+
+	/* Primitive product colours */
+	--oc-surface-canvas: #eceff0;
+	--oc-surface-paper: #fbfcfc;
+	--oc-surface-raised: #ffffff;
+	--oc-surface-subtle: #f1f4f5;
+	--oc-ink-strong: #16191a;
+	--oc-ink-default: #42494b;
+	--oc-ink-muted: #5f6769;
+	--oc-border-subtle: #e6eaeb;
+	--oc-border-default: #d9dfe0;
+	--oc-border-strong: #b8c0c1;
+	--oc-accent: #0db5cc;
+	--oc-accent-active: #0b7787;
+	--oc-accent-soft: #e9f8fb;
+	--oc-on-accent: var(--oc-ink-strong);
+	--oc-on-strong: #ffffff;
+	--oc-danger: #b73f43;
+	--oc-danger-soft: #fbecee;
+	--oc-warning: #8a6426;
+	--oc-warning-soft: #f8f0df;
+	--oc-success: #277448;
+	--oc-success-soft: #e7f3ec;
+	--oc-info: #2a5c9a;
+	--oc-info-soft: #e8eef7;
+	--oc-neutral-soft: #eef1f2;
+	--oc-brand-crane-deep: #1e5c7a;
+	--oc-brand-crane-light: #56c6d6;
+	--oc-brand-crane-front: #2e9db8;
+	--oc-brand-crane-body: #277f9b;
+	--oc-brand-crane-fold: #3aa8c2;
+	--oc-brand-crane-beak: #f2811f;
+
+	/* Primary palette and button mapping (opencrane-preset.ts) */
+	--oc-primary-50: #e9fbfe;
+	--oc-primary-100: #cff6fb;
+	--oc-primary-200: #9eeaf4;
+	--oc-primary-300: #65d9e9;
+	--oc-primary-400: #2bc5d8;
+	--oc-primary-500: #0db5cc;
+	--oc-primary-600: #0a94a7;
+	--oc-primary-700: #0b7787;
+	--oc-primary-800: #105f6c;
+	--oc-primary-900: #124f59;
+	--oc-primary-950: #052f37;
+	--oc-primary-contrast: #16191a;
+	--oc-primary-hover: var(--oc-primary-600);
+	--oc-primary-active: var(--oc-primary-700);
+	--oc-radius-button: 7px;
+
+	/* Type scale and spacing */
+	--oc-text-2xs: 10px;
+	--oc-text-xs: 11px;
+	--oc-text-sm: 12.5px;
+	--oc-text-md: 14.5px;
+	--oc-text-lg: 17px;
+	--oc-text-xl: 20px;
+	--oc-text-2xl: 26px;
+	--oc-text-4xl: 38px;
+	--oc-tracking-label: 0.07em;
+	--oc-tracking-title: -0.025em;
+	--oc-space-1: 4px;
+	--oc-space-2: 8px;
+	--oc-space-3: 12px;
+	--oc-space-4: 16px;
+	--oc-space-5: 20px;
+	--oc-space-6: 24px;
+	--oc-space-8: 32px;
+
+	/* Shape, depth, focus, and motion */
+	--oc-radius-chip: 5px;
+	--oc-radius-card: 9px;
+	--oc-radius-panel: 11px;
+	--oc-radius-round: 999px;
+	--oc-chip-padding-block: 2px;
+	--oc-chip-padding-inline: 7px;
+	--oc-shadow-paper: 0 10px 32px rgba(22, 25, 26, 0.08);
+	--oc-shadow-card: 0 1px 1px rgba(22, 25, 26, 0.04);
+	--oc-shadow-card-hover: 0 2px 5px rgba(22, 25, 26, 0.08);
+	--oc-shadow-selected: 0 0 0 1px var(--oc-accent-soft);
+	--oc-focus-ring: color-mix(in srgb, var(--oc-accent) 42%, transparent);
+	--oc-focus-width: 3px;
+	--oc-focus-offset: 2px;
+	--oc-lift-card: -1px;
+	--oc-fold-size: 20px;
+	--oc-layer-sticky: 2;
+	--oc-opacity-disabled: 0.52;
+	--oc-motion-fast: 140ms;
+	--oc-motion-standard: 220ms;
+	--oc-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+	--oc-ease-fold: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+	font-family: var(--oc-font-sans);
+	font-size: var(--oc-font-size-root);
+	background: var(--oc-surface-paper);
+	color: var(--oc-ink-strong);
+}
+
+:focus-visible {
+	outline: var(--oc-focus-width) solid var(--oc-focus-ring);
+	outline-offset: var(--oc-focus-offset);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+button {
+	font-family: inherit;
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+}
+
+input,
+textarea,
+select {
+	font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+/* Shared typography and overflow utilities. */
+.wo-mono {
+	font-family: var(--oc-font-mono);
+}
+
+.wo-scrollable {
+	overflow-y: auto;
+	scrollbar-width: none;
+}

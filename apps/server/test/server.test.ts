@@ -4,7 +4,7 @@ import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from '../src/websocket.ts';
-import type { HelloEcho } from '../src/protocol.ts';
+import type { HelloEcho } from '@opencrane/protocol';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 // The WebSocket endpoint now requires a session and a matching Origin (see

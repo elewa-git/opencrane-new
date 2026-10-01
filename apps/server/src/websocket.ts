@@ -13,7 +13,7 @@ import {
   helloMessageSchema,
   validateEventMessageSchema,
   type HelloEcho,
-} from './protocol.ts';
+} from '@opencrane/protocol';
 
 export const WEBSOCKET_PATH = '/ws';
 

@@ -9,7 +9,8 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'spikes/**'],
+    // The last two are apps/web's Angular build cache and its project-reference output.
+    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'spikes/**', '**/.angular/**', '**/out-tsc/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,

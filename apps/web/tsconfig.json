@@ -1,0 +1,47 @@
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "strict": true,
+    // Same rules as tsconfig.base.json. erasableSyntaxOnly keeps out enums,
+    // namespaces and parameter properties, so shared TypeScript stays
+    // usable under Node's type stripping.
+    "erasableSyntaxOnly": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve",
+    // libs/protocol (and every other @opencrane/* workspace package) is
+    // consumed as raw TypeScript, with its own internal imports written
+    // the Node NodeNext way (an explicit ".ts"). Without this, checking
+    // through to that source from here fails with TS5097. Angular's own
+    // build always emits, so plain allowImportingTsExtensions (which
+    // needs noEmit) cannot be used here — this is the emit-safe option.
+    "rewriteRelativeImportExtensions": true
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
+    }
+  ]
+}

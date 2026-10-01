@@ -42,7 +42,11 @@ export interface MockOidcProvider {
 const KEY_ID = 'test-key';
 
 // When `clientSecret` is given, the token endpoint demands it (client_secret_post).
-export async function startMockOidcProvider(options: { clientId?: string; clientSecret?: string; user?: MockUser } = {}): Promise<MockOidcProvider> {
+// `endSessionEndpoint` sets the logout address the discovery document advertises:
+// leave it out for the mock's own /endsession, or pass null for a provider that has none.
+export async function startMockOidcProvider(
+  options: { clientId?: string; clientSecret?: string; user?: MockUser; endSessionEndpoint?: string | null } = {},
+): Promise<MockOidcProvider> {
   const clientId = options.clientId ?? 'test-client';
   const user = options.user ?? DEFAULT_MOCK_USER;
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
@@ -67,7 +71,7 @@ export async function startMockOidcProvider(options: { clientId?: string; client
     authorization_endpoint: `${baseUrl}/authorize`,
     token_endpoint: `${baseUrl}/token`,
     jwks_uri: `${baseUrl}/jwks`,
-    end_session_endpoint: `${baseUrl}/endsession`,
+    ...(options.endSessionEndpoint === null ? {} : { end_session_endpoint: options.endSessionEndpoint ?? `${baseUrl}/endsession` }),
     response_types_supported: ['code'],
     subject_types_supported: ['public'],
     id_token_signing_alg_values_supported: ['ES256'],

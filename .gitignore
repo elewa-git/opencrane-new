@@ -11,3 +11,8 @@ node_modules/
 spikes/**/.state/
 spikes/**/data/
 infra/spike-cluster/.state/
+
+# Angular CLI build cache and TypeScript project-reference output
+# (apps/web); never committed, rebuilt on every install.
+.angular/
+out-tsc/

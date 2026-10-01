@@ -1,0 +1,21 @@
+<header class="shell-header">
+  <h1>{{ title() }}</h1>
+</header>
+
+<main class="shell-main">
+  <p class="connection-indicator" role="status" [attr.data-state]="connectionState()">
+    <span class="connection-dot" aria-hidden="true"></span>
+    {{ statusLabel() }}
+  </p>
+
+  <div class="actions">
+    <button type="button" class="button button-primary" (click)="signIn()">Sign in</button>
+    <button type="button" class="button button-secondary" (click)="signOut()" [disabled]="signOutPending()">
+      Sign out
+    </button>
+  </div>
+
+  @if (signOutError(); as message) {
+    <p class="error-message" role="alert">{{ message }}</p>
+  }
+</main>

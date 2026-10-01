@@ -30,6 +30,7 @@ import {
   type AuthConfig,
   type CookieAttributes,
 } from '@opencrane/auth';
+import { logoutResponseSchema, type LogoutResponse } from '@opencrane/protocol';
 
 function cookieAttrs(config: AuthConfig): Pick<CookieAttributes, 'httpOnly' | 'secure' | 'path'> {
   return { httpOnly: true, secure: config.cookieSecure, path: '/' };
@@ -101,10 +102,18 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
   app.post('/auth/logout', async (request, reply) => {
     // The local session is cleared even if the provider cannot be reached;
     // the endSessionUrl is just what the browser is asked to go to next.
-    const endSessionUrl = await buildLogoutUrl(config);
+    // The reply uses the schema from @opencrane/protocol, the one the web app
+    // reads it with. That schema accepts only an http(s) address, so a
+    // provider address of any other kind is dropped here, not sent to the
+    // browser to be rejected (or, worse, followed).
+    const providerAddress = logoutResponseSchema.safeParse({ endSessionUrl: await buildLogoutUrl(config) });
+    const body: LogoutResponse = providerAddress.success ? providerAddress.data : { endSessionUrl: null };
+    if (!providerAddress.success) {
+      request.log.warn('the identity provider logout address is not an http(s) address, so none was sent');
+    }
     reply.header('set-cookie', clearCookie(config.cookieName, cookieAttrs(config)));
-    request.log.info({ providerLogout: endSessionUrl !== null }, 'signed out');
-    reply.send({ endSessionUrl });
+    request.log.info({ providerLogout: body.endSessionUrl !== null }, 'signed out');
+    reply.send(body);
   });
 
   app.get('/auth/me', async (request, reply) => {
