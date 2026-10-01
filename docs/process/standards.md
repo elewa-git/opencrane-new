@@ -6,7 +6,7 @@ Keep the four required checks, one independent adversarial review and fresh-inst
 
 ## Work and review
 
-Build each whole feature on a development branch with a well-described PR: **Why / What / Evidence / Not in this PR**. The orchestrator merges after gates, independent review and green CI. Small fixes go inside the feature PR they belong to. A different model reviews; the owner reviews the result each morning.
+Build each whole feature on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. The orchestrator merges after gates, independent review and green CI. Small fixes go inside the feature PR they belong to. A different model reviews; the owner reviews the result each morning.
 
 - Take ready issues with an outcome, acceptance criteria and decisions already made. Read the relevant plan section, not the whole historical record.
 - Parallel builders have separate worktrees, installed dependencies and assigned files. One integrator lands their changes serially and checks the combined result. Never borrow another worktree's generated dependencies.

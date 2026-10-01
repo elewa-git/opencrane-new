@@ -94,6 +94,36 @@ describe('WebSocket upgrade requires a session', () => {
     expect(result).toBe('open');
   });
 
+  it('closes a session that expires between authentication and connection while the server stays healthy', async () => {
+    const authenticatedAt = new Date('2026-10-01T12:00:00.000Z');
+    const expiredAtConnection = new Date('2026-10-01T12:00:01.000Z');
+    const session = { ...validSession, exp: expiredAtConnection.getTime() / 1000 };
+    const times = [authenticatedAt, expiredAtConnection];
+    const now = () => times.shift() ?? expiredAtConnection;
+    app = buildServer(authConfig);
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    attachWebSocketServer(app.server, app.log, authConfig, undefined, now);
+    const address = app.server.address();
+    if (!address || typeof address === 'string') throw new Error('expected a TCP address');
+    const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, {
+      headers: {
+        Origin: ALLOWED_ORIGIN,
+        Cookie: `${authConfig.cookieName}=${encodeSession(authConfig, session)}`,
+      },
+    });
+
+    const closed = await new Promise<{ code: number; reason: string }>((resolve, reject) => {
+      socket.on('close', (code, reason) => resolve({ code, reason: reason.toString() }));
+      socket.on('error', reject);
+    });
+
+    expect(closed).toEqual({ code: 1008, reason: 'session unavailable' });
+    expect(times).toEqual([]);
+    const health = await fetch(`http://127.0.0.1:${address.port}/healthz`);
+    expect(health.status).toBe(200);
+    expect(await health.json()).toEqual({ status: 'ok' });
+  });
+
   it('refuses an upgrade with a valid session cookie but no Origin header', async () => {
     const started = await startServer();
     app = started.app;

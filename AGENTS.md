@@ -39,8 +39,9 @@ type to one without the other.
 Follow the [engineering standard](docs/process/standards.md).
 
 - Build each whole feature on a development branch with a well-described PR:
-  Why / What / Evidence / Not in this PR. The orchestrator merges after gates,
-  independent review and green CI. Small fixes belong inside their feature PR.
+  Why / Functional outcome / Architecture / Evidence / Not in this PR. The
+  orchestrator merges after gates, independent review and green CI. Small fixes
+  belong inside their feature PR.
 - Aim for at most about 1,500 non-generated added/deleted lines per change.
   One PR per whole feature, stacks at most two, no consolidation PRs.
 - At most two independent review passes: a different model reviews the diff,

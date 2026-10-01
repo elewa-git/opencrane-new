@@ -1,5 +1,9 @@
 <!-- One PR per whole feature. Small fixes go into the feature they belong to. -->
 
+## Why
+
+The motivation for this change.
+
 ## Functional outcome
 
 What a person or operator can now do, in plain words.
