@@ -1,4 +1,4 @@
-// One generated test per event type (69 of them): its own example must
+// Two generated tests per event type in the registry: its own example must
 // pass its own schema, and the same example with one extra field must
 // fail, because every data schema in the registry is `.strict()`. This is
 // the blanket version of the security rule "extra fields are rejected

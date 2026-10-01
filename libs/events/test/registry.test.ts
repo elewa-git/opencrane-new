@@ -27,6 +27,14 @@ describe('eventRegistry', () => {
     expect(getEventDefinition('no.such.event')).toBeUndefined();
   });
 
+  // Owner decision 9: two kinds of tools, two events. The first name was
+  // mcp.tool_list_changed; it is a clean rename, with no alias left behind.
+  it('names the MCP tool-change event mcp.tools_changed, and the computer one toolset.changed', () => {
+    expect(getEventDefinition('mcp.tool_list_changed')).toBeUndefined();
+    expect(getEventDefinition('mcp.tools_changed')?.stream).toBe('mcp');
+    expect(getEventDefinition('toolset.changed')?.stream).toBe('toolset');
+  });
+
   it('reuses the same four schema instances for their events', () => {
     expect(getEventDefinition('member.joined')?.dataSchema).toBe(memberJoinedDataSchema);
     expect(getEventDefinition('message.posted')?.dataSchema).toBe(messagePostedDataSchema);
@@ -49,6 +57,7 @@ describe('eventRegistry', () => {
       'team',
       'assistant',
       'computer',
+      'toolset',
       'conversation',
       'approval',
       'effect',

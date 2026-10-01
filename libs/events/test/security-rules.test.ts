@@ -294,7 +294,7 @@ describe('reasons are short codes, not free text', () => {
 });
 
 describe('budget scopes say what they apply to', () => {
-  const ceiling = { ceilingMinorUnits: 1000, setBy: 'mem_1' };
+  const ceiling = { ceilingCents: 1000, setBy: 'mem_1' };
   const parse = (type: string, data: unknown) => definitionFor(type).dataSchema.safeParse(data).success;
 
   it.each(['budget.ceiling_set', 'budget.exhausted'])('%s needs a scopeId for a group or assistant, and refuses one for global', (type) => {
@@ -309,16 +309,6 @@ describe('budget scopes say what they apply to', () => {
 
   it('budget.reserved names the assistant, so a per-assistant ceiling can be checked', () => {
     expect(rejectedFields('budget.reserved', { assistantId: undefined })).toEqual(['assistantId']);
-  });
-
-  it.each([
-    ['budget.reserved', 'amountMinorUnits'],
-    ['budget.settled', 'settledMinorUnits'],
-    ['effect.observed', 'costMinorUnits'],
-  ])('%s counts %s in whole cents', (type, field) => {
-    expect(rejectedFields(type, { [field]: 0.1 + 0.2 })).toEqual([field]);
-    expect(rejectedFields(type, { [field]: -1 })).toEqual([field]);
-    expect(rejectedFields(type, { [field]: 30 })).toEqual([]);
   });
 });
 

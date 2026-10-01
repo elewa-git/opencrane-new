@@ -5,7 +5,7 @@
 // shared field shapes (ciphertext, keyId) from data.ts so they
 // follow the same rules as everything else.
 import { z } from 'zod';
-import { ciphertextSchema, keyIdSchema } from './data.ts';
+import { centsSchema, ciphertextSchema, keyIdSchema } from './data.ts';
 
 // member.joined — an invitation was accepted and someone became a member.
 // docs/architecture/events.md: "OpenFGA `member`; emit `assistant.created`".
@@ -64,11 +64,10 @@ export const effectObservedDataSchema = z
     tool: z.string().min(1),
     // What the call reached: a model, an MCP server, or a web domain.
     destination: z.string().min(1),
-    // EUR minor units (cents), matching budget.reserved/.settled: this is
-    // the event the budget actor turns into budget.settled.
-    // settledMinorUnits, so it has to be the same integer-cents shape, not
-    // a float that can't add up exactly (0.1 + 0.2 !== 0.3 in float EUR).
-    costMinorUnits: z.int().nonnegative(),
+    // Integer euro cents, like budget.reserved and budget.settled: this is the
+    // event the budget actor turns into budget.settled (settledCents), so it
+    // has to be the same whole-cents shape, not a float in euros.
+    costCents: centsSchema,
     outcome: z.enum(['success', 'error']),
   })
   .strict();

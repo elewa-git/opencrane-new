@@ -19,8 +19,13 @@ const digestSchema = z.string().regex(HEX64, 'expected a sha-256 hex digest, not
 
 // Shared field shapes, reused across schemas that need the same thing.
 const id = z.string().min(1);
-const minorUnits = z.int().nonnegative(); // EUR minor units (cents): 150 = €1.50
 const roleSchema = z.enum(['owner', 'admin', 'member']);
+
+// Money is integer euro cents everywhere (owner decision 8): 150 = €1.50. Every
+// amount in an event is a whole, non-negative number of cents and its name ends
+// in `Cents`, never a float in euros (0.1 + 0.2 !== 0.3), so sums stay exact.
+// `z.int()` also refuses anything beyond the safe integer range.
+export const centsSchema = z.int().nonnegative();
 
 // A short machine code such as "model_error" or "ssrf_guard_failed": lower
 // case words joined by underscores. Used wherever an event needs a reason.
@@ -186,6 +191,52 @@ export const takeoverEndedDataSchema = z
   .object({ assistantId: id, computerId: id, endedBy: id })
   .strict();
 
+// A computer profile is one computer image plus the Codex built-in tool
+// settings that go with it (owner decision 9). Publishing a profile whose tools
+// differ is `toolset.changed`; it is about the computer's own tools, not about a
+// registered MCP server (that is mcp.tools_changed). It goes on the profile's own
+// stream, `toolset-<profile>`, not on a computer's stream: one admin command
+// changes every computer that uses the profile, and a command appends to one
+// stream only. The event holds the whole profile as it now stands, not a
+// difference, so replay rebuilds the `toolsets` projection from events alone.
+// Nothing free-form travels in it: the image is named by its digest, the
+// programs and runtimes inside it (CLI programs, local stdio MCP such as
+// Playwright) by one digest of their inventory, and each built-in tool by a
+// fixed name.
+const imageDigestSchema = z
+  .string()
+  .regex(/^sha256:[0-9a-f]{64}$/, 'expected an image digest such as "sha256:<64 hex>", not a tag');
+
+// A plain version number such as "0.46.0", with an optional pre-release part.
+const codexVersionSchema = z
+  .string()
+  .max(64)
+  .regex(/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$/, 'expected a version such as "0.46.0"');
+
+// The Codex built-in tools an admin can switch on or off. A tool not named here
+// is refused until someone has decided how the gateway treats it (a hosted tool
+// such as web_search is allowed or stripped by the gateway on the model request).
+const builtInToolSchema = z.enum(['shell', 'apply_patch', 'web_search', 'view_image', 'spawn_agent']);
+const builtInToolSettingSchema = z.object({ tool: builtInToolSchema, enabled: z.boolean() }).strict();
+
+export const toolsetChangedDataSchema = z
+  .object({
+    profileId: id,
+    imageDigest: imageDigestSchema,
+    codexVersion: codexVersionSchema,
+    // One entry per tool at most, so the same tool cannot be both on and off.
+    builtInTools: z
+      .array(builtInToolSettingSchema)
+      .min(1)
+      .refine(
+        (settings) => new Set(settings.map((setting) => setting.tool)).size === settings.length,
+        'each built-in tool may be listed once',
+      ),
+    inventoryDigest: digestSchema,
+    publishedBy: id,
+  })
+  .strict();
+
 // --- Conversations and agent activity ----------------------------------
 
 export const conversationCreatedDataSchema = z
@@ -310,7 +361,9 @@ export const mcpServerUnpublishedDataSchema = z
   .object({ serverId: id, unpublishedBy: id })
   .strict();
 
-export const mcpToolListChangedDataSchema = z
+// A registered MCP server's tool list or schemas changed (found by a drift
+// check). The computer's own tools are a different event: toolset.changed.
+export const mcpToolsChangedDataSchema = z
   .object({ serverId: id, previousSchemaDigest: digestSchema, newSchemaDigest: digestSchema })
   .strict();
 
@@ -349,7 +402,7 @@ export const connectionRevokedDataSchema = z
 // no scopeId), one paying group, or one assistant (those two must name
 // which one). Three strict shapes keyed on `scope` make "assistant with no
 // scopeId" and "global with a scopeId" invalid instead of silently legal.
-const ceilingFields = { ceilingMinorUnits: minorUnits, setBy: id };
+const ceilingFields = { ceilingCents: centsSchema, setBy: id };
 export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
   z.object({ scope: z.literal('global'), ...ceilingFields }).strict(),
   z.object({ scope: z.literal('paying_group'), scopeId: id, ...ceilingFields }).strict(),
@@ -360,11 +413,11 @@ export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
 // the budget actor checks every ceiling (global, group, optional
 // per-assistant) in the one append that records the charge.
 export const budgetReservedDataSchema = z
-  .object({ reservationId: id, permitId: id, amountMinorUnits: minorUnits, payingGroupId: id, assistantId: id })
+  .object({ reservationId: id, permitId: id, amountCents: centsSchema, payingGroupId: id, assistantId: id })
   .strict();
 
 export const budgetSettledDataSchema = z
-  .object({ reservationId: id, permitId: id, settledMinorUnits: minorUnits })
+  .object({ reservationId: id, permitId: id, settledCents: centsSchema })
   .strict();
 
 export const budgetPeriodStartedDataSchema = z

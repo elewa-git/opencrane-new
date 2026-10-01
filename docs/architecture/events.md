@@ -21,6 +21,7 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
    - Command ids are scoped to the principal and the entity's subject; a client-supplied idempotency key never becomes a global id.
    - An append whose acknowledgement says `duplicate` is accepted only if it points at the expected subject.
 8. **Brief write pauses are normal.** When the JetStream stream leader fails, writes pause for roughly 5–8 seconds while a new leader is elected (measured in S0.7). Commands retry with backoff, and the UI shows the message as "saving" rather than failing.
+9. **Money is integer euro cents.** Every amount in an event is a whole, non-negative number of euro cents, in a field whose name ends in `Cents` (`costCents`, `ceilingCents`), never a float in euros, so sums stay exact.
 
 ## How events are delivered (NATS JetStream)
 
@@ -58,10 +59,11 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `team-<team>` | team | created, members |
 | `assistant-<id>` | personal or team assistant | created, settings |
 | `computer-<assistant>` | assistant's computer | claimed, ready, suspended, lost, takeover |
+| `toolset-<profile>` | computer profile (an image plus Codex built-in tool settings) | changed |
 | `conversation-<id>` | conversation | participants, messages, agent activity |
 | `approval-<id>` | approval request | requested, decided, used, expired |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
-| `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published |
+| `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
 | `grant-<resource>` | shared resource | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
@@ -93,6 +95,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
 | `takeover.started` / `takeover.ended` | live-view proxy | computers, audit | pause / resume the agent |
+| `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
+
+There are two kinds of tools, so two events. `mcp.tools_changed` is for a registered MCP server's tools. `toolset.changed` is for the computer's own tools: a new computer image (CLI programs, runtimes, local stdio MCP such as Playwright) or Codex built-in tool settings (`shell`, `apply_patch`, `web_search`, `view_image`, `spawn_agent`). It goes on the profile's own stream rather than on each computer's, because one admin command changes every computer that uses the profile and a command appends to one stream only. Hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
 
 ### Conversations and agent activity
 | Event | Emitted by | Projections | Reactions |
@@ -125,7 +130,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | admin | tool modes (Allow / Ask / Block) | regenerate gateway config |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
-| `mcp.tool_list_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
+| `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
 | `grant.given` / `grant.revoked` | admin or owner | grants | OpenFGA tuples |
 | `connection.created` | person | connections (secret *reference* only) | — (the credential is written to the secret store inside the command, before the append; a clean-up job removes orphaned secrets) |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |

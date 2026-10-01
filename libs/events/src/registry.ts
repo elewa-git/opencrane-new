@@ -174,6 +174,26 @@ export const eventRegistry: readonly EventDefinition[] = [
     data.takeoverEndedDataSchema,
     { assistantId: 'asst_1', computerId: 'computer_1', endedBy: 'mem_1' },
   ),
+  event(
+    'toolset.changed',
+    'toolset',
+    'An admin published a computer profile whose tools differ: a new image or changed Codex built-in tool settings.',
+    data.toolsetChangedDataSchema,
+    {
+      profileId: 'profile_default',
+      imageDigest: `sha256:${DIGEST_EXAMPLE}`,
+      codexVersion: '0.46.0',
+      builtInTools: [
+        { tool: 'shell', enabled: true },
+        { tool: 'apply_patch', enabled: true },
+        { tool: 'web_search', enabled: false },
+        { tool: 'view_image', enabled: true },
+        { tool: 'spawn_agent', enabled: true },
+      ],
+      inventoryDigest: DIGEST_EXAMPLE.split('').reverse().join(''),
+      publishedBy: 'mem_1',
+    },
+  ),
 
   // Conversations and agent activity
   event(
@@ -322,7 +342,7 @@ export const eventRegistry: readonly EventDefinition[] = [
       computerId: 'computer_1',
       tool: 'odoo.read',
       destination: 'odoo-mcp',
-      costMinorUnits: 2,
+      costCents: 2,
       outcome: 'success',
     },
   ),
@@ -385,10 +405,10 @@ export const eventRegistry: readonly EventDefinition[] = [
     { serverId: 'mcp_1', unpublishedBy: 'mem_1' },
   ),
   event(
-    'mcp.tool_list_changed',
+    'mcp.tools_changed',
     'mcp',
-    "A drift check found the server's tool list or schema changed.",
-    data.mcpToolListChangedDataSchema,
+    "A drift check found a registered MCP server's tool list or schemas changed.",
+    data.mcpToolsChangedDataSchema,
     { serverId: 'mcp_1', previousSchemaDigest: DIGEST_EXAMPLE, newSchemaDigest: DIGEST_EXAMPLE.split('').reverse().join('') },
   ),
   event(
@@ -431,23 +451,23 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'budget.ceiling_set',
     'budget',
-    'An admin set a EUR ceiling (global, paying group, or assistant).',
+    'An admin set a EUR ceiling in cents (global, paying group, or assistant).',
     data.budgetCeilingSetDataSchema,
-    { scope: 'global', ceilingMinorUnits: 500000, setBy: 'mem_1' },
+    { scope: 'global', ceilingCents: 500000, setBy: 'mem_1' },
   ),
   event(
     'budget.reserved',
     'budget',
     'The budget actor reserved the worst-case cost of a call.',
     data.budgetReservedDataSchema,
-    { reservationId: 'res_1', permitId: 'permit_1', amountMinorUnits: 200, payingGroupId: 'team_1', assistantId: 'asst_1' },
+    { reservationId: 'res_1', permitId: 'permit_1', amountCents: 200, payingGroupId: 'team_1', assistantId: 'asst_1' },
   ),
   event(
     'budget.settled',
     'budget',
     'The budget actor settled a reservation against its observed effect.',
     data.budgetSettledDataSchema,
-    { reservationId: 'res_1', permitId: 'permit_1', settledMinorUnits: 180 },
+    { reservationId: 'res_1', permitId: 'permit_1', settledCents: 180 },
   ),
   event(
     'budget.period_started',

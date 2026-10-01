@@ -15,7 +15,7 @@ const repoRoot = path.resolve(here, '..');
 const cataloguePath = path.join(repoRoot, 'docs/architecture/events.md');
 
 // An event type is always written `<stream-word>.<past-tense-words>`, all
-// lower case, e.g. `member.joined` or `mcp.tool_list_changed`. Other things
+// lower case, e.g. `member.joined` or `mcp.tools_changed`. Other things
 // the catalogue writes in backticks — an OpenFGA relation like `member` or
 // `acts_for`, or `ext_authz` — never contain a dot, so this pattern is
 // enough to tell an event name apart from everything else in backticks.

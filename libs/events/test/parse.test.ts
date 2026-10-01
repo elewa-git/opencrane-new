@@ -133,7 +133,7 @@ describe('parseEventByType', () => {
           computerId: 'computer_1',
           tool: 'odoo.read',
           destination: 'odoo-mcp',
-          costMinorUnits: 2,
+          costCents: 2,
           outcome: 'success',
         }),
       );
@@ -147,7 +147,7 @@ describe('parseEventByType', () => {
           computerId: 'computer_1',
           tool: 'odoo.read',
           destination: 'odoo-mcp',
-          costMinorUnits: -1,
+          costCents: -1,
           outcome: 'success',
         }),
       );
@@ -157,8 +157,8 @@ describe('parseEventByType', () => {
       }
     });
 
-    // EUR minor units are whole cents: a fractional value can't be a real
-    // number of cents, and float EUR is exactly the bug this avoids
+    // Money is integer euro cents: a fractional value can't be a real
+    // number of cents, and float euros are exactly the bug this avoids
     // (0.1 + 0.2 !== 0.3). This is the event the budget actor turns into
     // budget.settled, so it has to be the same integer shape.
     it('rejects a non-integer cost', () => {
@@ -168,7 +168,7 @@ describe('parseEventByType', () => {
           computerId: 'computer_1',
           tool: 'odoo.read',
           destination: 'odoo-mcp',
-          costMinorUnits: 0.1 + 0.2,
+          costCents: 0.1 + 0.2,
           outcome: 'success',
         }),
       );
