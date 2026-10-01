@@ -1,0 +1,6 @@
+PASS cluster version, zone, labels, Workload Identity and NetworkPolicy dataplane
+PASS managed Agent Sandbox and Pod Snapshots enabled
+PASS two Spot pools, maximum 3 each, no upgrade surge; 1 running node VMs
+PASS Agent Sandbox and Pod Snapshot CRDs installed
+PASS no LoadBalancer, NodePort or Ingress
+PASS opencrane-dev configuration unchanged in before/after read-only describes

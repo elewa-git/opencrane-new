@@ -1,0 +1,11 @@
+{
+  "name": "opencrane-computer-image",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Pinned npm packages for the OpenCrane 2 computer image (spike). Installed with npm ci.",
+  "license": "AGPL-3.0-or-later",
+  "dependencies": {
+    "@openai/codex": "0.159.3",
+    "@playwright/mcp": "0.0.83"
+  }
+}

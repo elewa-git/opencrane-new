@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ocn-spike-computer-smoke
+  namespace: ocn-spike
+  labels: {owner: opencrane-new, purpose: spike}
+spec:
+  podSelector:
+    matchLabels: {app: ocn-spike-computer-smoke}
+  policyTypes: [Ingress, Egress]
+  egress: []
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels: {app: ocn-spike-relay}
+      ports:
+        - {protocol: TCP, port: 8080}
+        - {protocol: TCP, port: 6901}

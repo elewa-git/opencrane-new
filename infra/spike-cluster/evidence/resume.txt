@@ -1,0 +1,21 @@
+[08:17:23Z] estimated 328 cents spent; next-day worst-case projection 1254 cents (stop at 2000)
+[08:17:32Z] resizing ocn-spike-default to 1 node(s), then autoscaling 1..3
+Resizing ocn-spike...
+.........................done.
+Updated [https://container.googleapis.com/v1/projects/weownai-proto/zones/europe-west1-b/clusters/ocn-spike].
+Updating node pool ocn-spike-default...
+.........................done.
+Updated [https://container.googleapis.com/v1/projects/weownai-proto/zones/europe-west1-b/clusters/ocn-spike/nodePools/ocn-spike-default].
+[08:17:46Z] resizing ocn-spike-sandbox to 1 node(s), then autoscaling 0..3
+Resizing ocn-spike...
+.........................done.
+Updated [https://container.googleapis.com/v1/projects/weownai-proto/zones/europe-west1-b/clusters/ocn-spike].
+Updating node pool ocn-spike-sandbox...
+.................................................done.
+Updated [https://container.googleapis.com/v1/projects/weownai-proto/zones/europe-west1-b/clusters/ocn-spike/nodePools/ocn-spike-sandbox].
+Fetching cluster endpoint and auth data.
+kubeconfig entry generated for ocn-spike.
+[08:18:07Z] waiting for nodes to be Ready
+NAME                                            STATUS   ROLES    AGE     VERSION
+gke-ocn-spike-ocn-spike-default-162e1200-klcv   Ready    <none>   20m     v1.36.4-gke.1247000
+gke-ocn-spike-ocn-spike-sandbox-c95d9bab-pnpm   Ready    <none>   7m56s   v1.36.4-gke.1247000

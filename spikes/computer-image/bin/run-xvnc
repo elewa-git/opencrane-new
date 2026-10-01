@@ -1,0 +1,16 @@
+#!/bin/sh
+# KasmVNC's X server on display :1. Web client and websocket on port 6901 (plain HTTP).
+#  -disableBasicAuth -SecurityTypes None : no login here. Who may watch or control is decided by OpenCrane's
+#      own authenticated proxy in front of this port, and by network policy. Never expose this port directly.
+#  Websocket mode does not open the classic VNC TCP port. Disable IPv6 to avoid duplicate binds.
+#  PublicIP prevents external IP discovery; this desktop is reached only through port-forward.
+#  -ac : no X access control (the only user in this container is the agent).
+set -eu
+rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
+exec /usr/bin/Xvnc :1 \
+  -geometry 1280x800 -depth 24 \
+  -UseIPv6 0 -PublicIP 127.0.0.1 \
+  -websocketPort 6901 \
+  -httpd /usr/share/kasmvnc/www \
+  -disableBasicAuth -SecurityTypes None \
+  -ac -AlwaysShared

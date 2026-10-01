@@ -1,0 +1,6 @@
+#!/bin/sh
+# Codex app-server, idle, on 127.0.0.1:4500 over WebSocket. No config file, no model provider, no key.
+# Spike S0.1b starts its own app-server through the bridge (over stdio) when it needs one.
+set -eu
+mkdir -p "$CODEX_HOME"
+exec /opt/computer/node_modules/.bin/codex app-server --listen ws://127.0.0.1:4500

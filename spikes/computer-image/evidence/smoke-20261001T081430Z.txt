@@ -1,0 +1,176 @@
+[08:14:31Z] estimated 325 cents spent; next-day worst-case projection 1251 cents (stop at 2000)
+[08:14:31Z] image: europe-west1-docker.pkg.dev/weownai-proto/ocn-spike/computer:ocn-spike-20261001-05@sha256:68f51b46813e69c144579205f16ac845f92a872e037fd419cb6bf4312a68e3e8
+
+=== Start
+Thu Oct  1 08:14:31 UTC 2026
+networkpolicy.networking.k8s.io/ocn-spike-computer-smoke configured
+
+=== Create the computer Pod on the gVisor pool
+pod/ocn-spike-computer-smoke created
+Pod Ready after 22 seconds (includes any node scale-up and the image pull)
+NAME                       READY   STATUS    RESTARTS   AGE   IP          NODE                                            NOMINATED NODE   READINESS GATES
+ocn-spike-computer-smoke   1/1     Running   0          22s   10.12.1.6   gke-ocn-spike-ocn-spike-sandbox-c95d9bab-pnpm   <none>           <none>
+
+=== C1 gVisor placement
+runtimeClassName=gvisor node=gke-ocn-spike-ocn-spike-sandbox-c95d9bab-pnpm pool=ocn-spike-sandbox node-runtime-label=gvisor runtimeclass-handler=gvisor
+kernel inside the Pod: Linux version 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016
+RESULT PASS  C1 gVisor placement :: runtimeClassName=gvisor on gke-ocn-spike-ocn-spike-sandbox-c95d9bab-pnpm (pool ocn-spike-sandbox); kernel inside Pod is gVisor's: Linux version 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016
+
+=== Information: kubectl port-forward straight to the sandboxed Pod
+Pod IP 10.12.1.6
+curl http://127.0.0.1:18080/health -> HTTP 000
+--- port-forward output:
+Forwarding from 127.0.0.1:18080 -> 8080
+Forwarding from [::1]:18080 -> 8080
+Handling connection for 18080
+E1001 10:15:01.521086   76459 portforward.go:522] "Unhandled Error" err="an error occurred forwarding 18080 -> 8080: error forwarding port 8080 to pod 0ecc611f644b31ae38f67383059ab8cf62143a11b550a58595dd0a8724253ffe, uid : failed to execute portforward in network namespace \"/var/run/netns/cni-b4689470-29d4-b3f1-2d34-4b4cdbd8e3b2\": failed to connect to localhost:8080 inside namespace \"0ecc611f644b31ae38f67383059ab8cf62143a11b550a58595dd0a8724253ffe\", IPv4: dial tcp4 127.0.0.1:8080: connect: connection refused IPv6 dial tcp6 [::1]:8080: connect: connection refused "
+error: lost connection to pod
+RESULT FAIL  INFO direct port-forward to gVisor Pod :: does not work (HTTP 000); see output above. Using a relay Pod on a normal node instead
+
+=== Relay Pod on the default pool, then port-forward to the relay
+pod/ocn-spike-relay created
+relay Ready
+HTTP 200
+--- health JSON as seen from this laptop through kubectl port-forward (relay -> sandboxed Pod):
+{
+  "status": "ok",
+  "service": "opencrane-computer",
+  "time": "2026-10-01T08:15:07.198Z",
+  "supervisor": {
+    "pid": 1
+  },
+  "problems": [],
+  "processes": [
+    {
+      "name": "chromium",
+      "state": "RUNNING",
+      "pid": 15,
+      "uptimeSeconds": 32,
+      "exitStatus": 0,
+      "probe": {
+        "ok": true,
+        "detail": "CDP answers: Chrome/155.0.8059.12"
+      }
+    },
+    {
+      "name": "codex-app-server",
+      "state": "RUNNING",
+      "pid": 17,
+      "uptimeSeconds": 32,
+      "exitStatus": 0,
+      "probe": {
+        "ok": true,
+        "detail": "readyz 200"
+      }
+    },
+    {
+      "name": "health",
+      "state": "RUNNING",
+      "pid": 19,
+      "uptimeSeconds": 32,
+      "exitStatus": 0,
+      "probe": {
+        "ok": true,
+        "detail": "listening on :8080"
+      }
+    },
+    {
+      "name": "openbox",
+      "state": "RUNNING",
+      "pid": 14,
+      "uptimeSeconds": 32,
+      "exitStatus": 0,
+      "probe": {
+        "ok": true,
+        "detail": "_NET_SUPPORTING_WM_CHECK(WINDOW): window id # 0x20000e"
+      }
+    },
+    {
+      "name": "xvnc",
+      "state": "RUNNING",
+      "pid": 13,
+      "uptimeSeconds": 32,
+      "exitStatus": 0,
+      "probe": {
+        "ok": true,
+        "detail": "tcp 127.0.0.1:6901 accepts connections"
+      }
+    }
+  ],
+  "desktop": {
+    "display": ":1",
+    "reachable": true,
+    "chromiumWindows": 1,
+    "windows": [
+      {
+        "id": "0x400002",
+        "title": "about:blank - Google Chrome for Testing",
+        "class": "chromium-browser (/home/agent/.config/chromium-profile)/Chromium-browser",
+        "size": "1279x799"
+      }
+    ]
+  },
+  "listening": [
+    "all:6901",
+    "all:8080",
+    "loopback:4500",
+    "loopback:9222"
+  ],
+  "scratch": {
+    "path": "/home/agent",
+    "firstStart": "2026-10-01T08:14:34Z"
+  },
+  "kernel": "Linux version 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016",
+  "versions": {
+    "node": "v22.23.3",
+    "codex": "0.159.3",
+    "kasmvnc": "1.5.0",
+    "markitdown": "0.1.8"
+  }
+}
+--- KasmVNC web client through the same path: HTTP 200
+RESULT PASS  C2 health endpoint via port-forward :: HTTP 200, status ok, all 5 processes RUNNING with a passing probe: chromium pid=15 up=32s; codex-app-server pid=17 up=32s; health pid=19 up=32s; openbox pid=14 up=32s; xvnc pid=13 up=32s; KasmVNC web client HTTP 200
+
+=== C3 self-test inside the Pod (gVisor)
+PASS health endpoint says ok and lists every process with PID and uptime (91 ms) chromium:pid=15,up=33s codex-app-server:pid=17,up=33s health:pid=19,up=33s openbox:pid=14,up=33s xvnc:pid=13,up=33s
+PASS runs as a non-root user (0 ms) uid=1000 gid=1000
+PASS kernel string is readable (placement is checked separately by smoke.sh) (0 ms) Linux version 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016
+PASS Chromium renders a page through its debugging port and a screenshot is a real PNG (1100 ms) Chrome/155.0.0.0; screenshot 8676 bytes
+PASS Chromium has a real window on the KasmVNC desktop (31 ms) 1 Chromium window(s): 0x400002 "about:blank - Google Chrome for Testing": ("chromium-browser (/home/agent/.config/chromium
+PASS KasmVNC serves its web client on :6901 (11 ms) HTTP 200, 70631 bytes, mentions KasmVNC: true
+PASS KasmVNC websocket answers a browser with the VNC (RFB) banner (1618 ms) RFB 003.008
+PASS Codex app-server (idle) answers the initialize request (69 ms) selftest/0.159.3 (Debian 12.0.0; x86_64) unknown (selftest; 0)
+PASS only the expected ports listen outside the container's loopback (6901 and 8080) (1 ms) open to the network: 6901,8080; loopback only: 4500,9222
+PASS /home/agent is a separate volume and a marker file can be written and read back (5 ms) mount: none /home/agent tmpfs rw 0 0; first start 2026-10-01T08:14:34Z
+PASS Codex CLI is the pinned version and runs without a key (613 ms) codex-cli 0.159.3; Playwright MCP Version 0.0.83
+PASS MarkItDown converts HTML to Markdown and poppler is installed (1261 ms) markitdown ok; pdftotext -v exited successfully
+PASS the bridge and local forwarding proxy are present and import cleanly, but are not running (30 ms) bridge.js and local-proxy.js import; not started
+{"host":"ocn-spike-computer-smoke","at":"2026-10-01T08:15:13.096Z","passed":13,"failed":0,"results":[{"name":"health endpoint says ok and lists every process with PID and uptime","pass":true,"detail":"chromium:pid=15,up=33s codex-app-server:pid=17,up=33s health:pid=19,up=33s openbox:pid=14,up=33s xvnc:pid=13,up=33s","ms":91},{"name":"runs as a non-root user","pass":true,"detail":"uid=1000 gid=1000","ms":0},{"name":"kernel string is readable (placement is checked separately by smoke.sh)","pass":true,"detail":"Linux version 4.19.0-gvisor #1 SMP Sun Jan 10 15:06:54 PST 2016","ms":0},{"name":"Chromium renders a page through its debugging port and a screenshot is a real PNG","pass":true,"detail":"Chrome/155.0.0.0; screenshot 8676 bytes","ms":1100},{"name":"Chromium has a real window on the KasmVNC desktop","pass":true,"detail":"1 Chromium window(s): 0x400002 \"about:blank - Google Chrome for Testing\": (\"chromium-browser (/home/agent/.config/chromium","ms":31},{"name":"KasmVNC serves its web client on :6901","pass":true,"detail":"HTTP 200, 70631 bytes, mentions KasmVNC: true","ms":11},{"name":"KasmVNC websocket answers a browser with the VNC (RFB) banner","pass":true,"detail":"RFB 003.008","ms":1618},{"name":"Codex app-server (idle) answers the initialize request","pass":true,"detail":"selftest/0.159.3 (Debian 12.0.0; x86_64) unknown (selftest; 0)","ms":69},{"name":"only the expected ports listen outside the container's loopback (6901 and 8080)","pass":true,"detail":"open to the network: 6901,8080; loopback only: 4500,9222","ms":1},{"name":"/home/agent is a separate volume and a marker file can be written and read back","pass":true,"detail":"mount: none /home/agent tmpfs rw 0 0; first start 2026-10-01T08:14:34Z","ms":5},{"name":"Codex CLI is the pinned version and runs without a key","pass":true,"detail":"codex-cli 0.159.3; Playwright MCP Version 0.0.83","ms":613},{"name":"MarkItDown converts HTML to Markdown and poppler is installed","pass":true,"detail":"markitdown ok; pdftotext -v exited successfully","ms":1261},{"name":"the bridge and local forwarding proxy are present and import cleanly, but are not running","pass":true,"detail":"bridge.js and local-proxy.js import; not started","ms":30}]}
+RESULT PASS  C3 self-test inside gVisor :: 13 of 13 checks passed
+
+=== C4 file in /home/agent survives restarting processes
+written /home/agent/work/persist-5533c88c20c7cef4.txt (and the control /var/tmp/rootfs-control-5533c88c20c7cef4.txt on the container layer)
+PIDs before: chromium=15 codex-app-server=17 health=19 openbox=14 xvnc=13 
+chromium: stopped
+codex-app-server: stopped
+chromium: started
+codex-app-server: started
+PIDs after:  chromium=371 codex-app-server=485 health=19 openbox=14 xvnc=13 
+RESULT PASS  C4 file survives process restart :: chromium chromium=15 -> chromium=371, codex codex-app-server=17 -> codex-app-server=485; /home/agent/work/persist-5533c88c20c7cef4.txt still holds 5533c88c20c7cef4; health HTTP 200 again
+
+=== C5 file in /home/agent survives restarting the whole container
+sent SIGTERM to the supervisor (PID 1); restartCount before: 0
+Pod Ready again
+restartCount 0 -> 1; persist file='5533c88c20c7cef4'; rootfs control file='<gone>'
+first-start marker before='2026-10-01T08:14:34Z' after='2026-10-01T08:14:34Z'; health=ok; longest process uptime 23s
+PIDs after container restart: chromium=14 codex-app-server=17 health=19 openbox=13 xvnc=12 
+RESULT PASS  C5 file survives container restart :: restartCount 0->1; /home/agent/work/persist-5533c88c20c7cef4.txt intact; negative control on the container layer is gone; every process up again (health ok)
+
+=== Summary
+PASS  C1 gVisor placement
+FAIL  INFO direct port-forward to gVisor Pod
+PASS  C2 health endpoint via port-forward
+PASS  C3 self-test inside gVisor
+PASS  C4 file survives process restart
+PASS  C5 file survives container restart
+evidence saved to /Users/jenterosseel/Documents/GitHub/opencrane-new/spikes/computer-image/scripts/../evidence/smoke-20261001T081430Z.txt

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Playwright MCP attached to this computer's own Chromium (the one on the live-view desktop), over its
+# debugging port, so a person watching sees exactly what the agent drives. Speaks MCP on stdio.
+exec node /opt/computer/node_modules/@playwright/mcp/cli.js --cdp-endpoint http://127.0.0.1:9222 "$@"

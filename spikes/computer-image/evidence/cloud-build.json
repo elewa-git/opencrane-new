@@ -1,0 +1,24 @@
+{
+  "createTime": "2026-10-01T08:04:49.182931199Z",
+  "finishTime": "2026-10-01T08:08:12.877067Z",
+  "id": "7d2951ee-afba-4dfc-9ce6-64a42bb22e0a",
+  "results": {
+    "images": [
+      {
+        "artifactRegistryPackage": "projects/weownai-proto/locations/europe-west1/repositories/ocn-spike/packages/computer/versions/sha256:68f51b46813e69c144579205f16ac845f92a872e037fd419cb6bf4312a68e3e8",
+        "digest": "sha256:68f51b46813e69c144579205f16ac845f92a872e037fd419cb6bf4312a68e3e8",
+        "name": "europe-west1-docker.pkg.dev/weownai-proto/ocn-spike/computer:ocn-spike-20261001-05",
+        "pushTiming": {
+          "endTime": "2026-10-01T08:08:12.687152457Z",
+          "startTime": "2026-10-01T08:07:40.992876830Z"
+        }
+      }
+    ]
+  },
+  "startTime": "2026-10-01T08:05:57.922181498Z",
+  "status": "SUCCESS",
+  "substitutions": {
+    "_IMAGE": "europe-west1-docker.pkg.dev/weownai-proto/ocn-spike/computer",
+    "_TAG": "ocn-spike-20261001-05"
+  }
+}

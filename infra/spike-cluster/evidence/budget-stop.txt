@@ -1,0 +1,2 @@
+[08:02:32Z] estimated 1074 cents spent; next-day worst-case projection 2000 cents (stop at 2000)
+[08:02:32Z] ERROR: cost projection reaches EUR 20; pause and report

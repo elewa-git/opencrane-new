@@ -1,0 +1,10 @@
+[08:18:22Z] scaling node pool ocn-spike-sandbox to 0 (autoscaling off)
+Updating node pool ocn-spike-sandbox...
+..................................................done.
+Updated [https://container.googleapis.com/v1/projects/weownai-proto/zones/europe-west1-b/clusters/ocn-spike/nodePools/ocn-spike-sandbox].
+ERROR: (gcloud.container.clusters.resize) FAILED_PRECONDITION: Cluster is running incompatible operation operation-1790842716498-c27ca0c7-27c4-4a2f-8571-aa425de7d859.
+- '@type': type.googleapis.com/google.rpc.RequestInfo
+  requestId: '0x68eafd17cbbe5cfa'
+- '@type': type.googleapis.com/google.rpc.ErrorInfo
+  domain: container.googleapis.com
+  reason: CLUSTER_ALREADY_HAS_OPERATION

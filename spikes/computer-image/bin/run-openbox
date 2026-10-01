@@ -1,0 +1,7 @@
+#!/bin/sh
+# Waits for the X display, then runs the window manager.
+set -eu
+i=0
+while [ ! -S /tmp/.X11-unix/X1 ] && [ "$i" -lt 60 ]; do i=$((i + 1)); sleep 0.5; done
+[ -S /tmp/.X11-unix/X1 ] || { echo "X display :1 did not appear"; exit 1; }
+exec /usr/bin/openbox --sm-disable

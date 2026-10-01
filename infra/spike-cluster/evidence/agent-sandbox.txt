@@ -1,0 +1,19 @@
+[08:07:46Z] estimated 322 cents spent; next-day worst-case projection 1248 cents (stop at 2000)
+[08:07:48Z] managed Agent Sandbox is enabled
+[08:07:51Z] installed CRDs and the API versions they serve:
+sandboxes.agents.x-k8s.io  versions=v1alpha1(served=true,storage=false) v1beta1(served=true,storage=true) 
+sandboxtemplates.extensions.agents.x-k8s.io  versions=v1alpha1(served=true,storage=false) v1beta1(served=true,storage=true) 
+sandboxwarmpools.extensions.agents.x-k8s.io  versions=v1alpha1(served=true,storage=false) v1beta1(served=true,storage=true) 
+sandboxclaims.extensions.agents.x-k8s.io  versions=v1alpha1(served=true,storage=false) v1beta1(served=true,storage=true) 
+[08:07:52Z] Agent Sandbox controller pods (any namespace):
+NAMESPACE         NAME                                                       READY   STATUS    RESTARTS   AGE
+[08:07:52Z] admission policies that mention sandbox:
+NAME                                               VALIDATIONS   PARAMKIND   AGE
+sandbox-core-policy                                13            <unset>     2m55s
+sandbox-hardening-policy                           4             <unset>     2m55s
+[08:07:52Z] RuntimeClasses:
+NAME                         HANDLER                      AGE
+confidential-linked-runner   confidential-linked-runner   11m
+gvisor                       gvisor                       11m
+linked-runner                linked-runner                11m
+microvm                      kata-clh                     9m57s

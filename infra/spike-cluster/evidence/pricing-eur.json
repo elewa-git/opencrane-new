@@ -1,0 +1,848 @@
+[
+  {
+    "name": "services/6F81-5844-456A/skus/03DE-4308-9D32",
+    "skuId": "03DE-4308-9D32",
+    "description": "Balanced PD Instant Snapshot data storage in Belgium",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Storage",
+      "resourceGroup": "Storage",
+      "usageType": "OnDemand"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.mo",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 85820000
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte month",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 2783138807808000.0
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/052B-A569-574F",
+    "skuId": "052B-A569-574F",
+    "description": "Spot Preemptible N2 Custom Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 1003235
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/0FE3-CAB9-E7E3",
+    "skuId": "0FE3-CAB9-E7E3",
+    "description": "Regional Balanced PD Capacity",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Storage",
+      "resourceGroup": "SSD",
+      "usageType": "OnDemand"
+    },
+    "serviceRegions": [
+      "us-central1",
+      "us-central2",
+      "us-east1",
+      "us-west1",
+      "asia-east1",
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.mo",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 171640000
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte month",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 2783138807808000.0
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "MULTI_REGIONAL",
+      "regions": [
+        "asia-east1",
+        "europe-west1",
+        "us-central1",
+        "us-east1",
+        "us-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/1BF1-596A-3028",
+    "skuId": "1BF1-596A-3028",
+    "description": "Spot Preemptible N2D AMD Custom Instance Core running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "CPU",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 15739388
+              }
+            }
+          ],
+          "usageUnitDescription": "hour",
+          "baseUnit": "s",
+          "baseUnitDescription": "second",
+          "baseUnitConversionFactor": 3600
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/1F58-9664-EE67",
+    "skuId": "1F58-9664-EE67",
+    "description": "Spot Preemptible N2D AMD Instance Core running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "CPU",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 14984172
+              }
+            }
+          ],
+          "usageUnitDescription": "hour",
+          "baseUnit": "s",
+          "baseUnitDescription": "second",
+          "baseUnitConversionFactor": 3600
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/3A30-24A2-2E3A",
+    "skuId": "3A30-24A2-2E3A",
+    "description": "Spot Preemptible E2 Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 1652893
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/457C-B609-B4AA",
+    "skuId": "457C-B609-B4AA",
+    "description": "Spot Preemptible E2 Custom Instance Core running in Belgium",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "CPU",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 12933074
+              }
+            }
+          ],
+          "usageUnitDescription": "hour",
+          "baseUnit": "s",
+          "baseUnitDescription": "second",
+          "baseUnitConversionFactor": 3600
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/5FAA-2D1B-B96D",
+    "skuId": "5FAA-2D1B-B96D",
+    "description": "Spot Preemptible E2 Instance Core running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "CPU",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 12315170
+              }
+            }
+          ],
+          "usageUnitDescription": "hour",
+          "baseUnit": "s",
+          "baseUnitDescription": "second",
+          "baseUnitConversionFactor": 3600
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/6462-90BF-DCBB",
+    "skuId": "6462-90BF-DCBB",
+    "description": "Spot Preemptible N2 Instance Core running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "CPU",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 7131642
+              }
+            }
+          ],
+          "usageUnitDescription": "hour",
+          "baseUnit": "s",
+          "baseUnitDescription": "second",
+          "baseUnitConversionFactor": 3600
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/6AE1-525F-8B80",
+    "skuId": "6AE1-525F-8B80",
+    "description": "Balanced PD Capacity",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Storage",
+      "resourceGroup": "SSD",
+      "usageType": "OnDemand"
+    },
+    "serviceRegions": [
+      "us-central1",
+      "us-central2",
+      "us-east1",
+      "us-west1",
+      "asia-east1",
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.mo",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 85820000
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte month",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 2783138807808000.0
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "MULTI_REGIONAL",
+      "regions": [
+        "asia-east1",
+        "europe-west1",
+        "us-central1",
+        "us-east1",
+        "us-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/6BEB-D8D9-EFC4",
+    "skuId": "6BEB-D8D9-EFC4",
+    "description": "Spot Preemptible N2 Custom Extended Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 2257066
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/6C56-AA83-58E2",
+    "skuId": "6C56-AA83-58E2",
+    "description": "Spot Preemptible N2D AMD Custom Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 2108597
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/A5A6-F3B0-4706",
+    "skuId": "A5A6-F3B0-4706",
+    "description": "Spot Preemptible N2D AMD Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 2008188
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/C702-28A4-2E92",
+    "skuId": "C702-28A4-2E92",
+    "description": "Spot Preemptible N2 Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 955176
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/CDC5-098F-D0F0",
+    "skuId": "CDC5-098F-D0F0",
+    "description": "Spot Preemptible E2 Custom Instance Ram running in Belgium",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 1734422
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/D278-8B4A-23E9",
+    "skuId": "D278-8B4A-23E9",
+    "description": "Regional Balanced PD Instant Snapshot data storage in Belgium",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Storage",
+      "resourceGroup": "Storage",
+      "usageType": "OnDemand"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.mo",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 171640000
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte month",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 2783138807808000.0
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/D7CC-99F9-9B2C",
+    "skuId": "D7CC-99F9-9B2C",
+    "description": "Spot Preemptible N2D AMD Custom Extended Instance Ram running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "RAM",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "GiBy.h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 4706368
+              }
+            }
+          ],
+          "usageUnitDescription": "gibibyte hour",
+          "baseUnit": "By.s",
+          "baseUnitDescription": "byte second",
+          "baseUnitConversionFactor": 3865470566400
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  },
+  {
+    "name": "services/6F81-5844-456A/skus/EB45-91A7-F2E5",
+    "skuId": "EB45-91A7-F2E5",
+    "description": "Spot Preemptible N2 Custom Instance Core running in EMEA",
+    "category": {
+      "serviceDisplayName": "Compute Engine",
+      "resourceFamily": "Compute",
+      "resourceGroup": "CPU",
+      "usageType": "Preemptible"
+    },
+    "serviceRegions": [
+      "europe-west1"
+    ],
+    "pricingInfo": [
+      {
+        "summary": "",
+        "pricingExpression": {
+          "usageUnit": "h",
+          "displayQuantity": 1,
+          "tieredRates": [
+            {
+              "startUsageAmount": 0,
+              "unitPrice": {
+                "currencyCode": "EUR",
+                "units": "0",
+                "nanos": 7492086
+              }
+            }
+          ],
+          "usageUnitDescription": "hour",
+          "baseUnit": "s",
+          "baseUnitDescription": "second",
+          "baseUnitConversionFactor": 3600
+        },
+        "currencyConversionRate": 0.85820000000029,
+        "effectiveTime": "2026-09-30T07:00:00Z"
+      }
+    ],
+    "serviceProviderName": "Google",
+    "geoTaxonomy": {
+      "type": "REGIONAL",
+      "regions": [
+        "europe-west1"
+      ]
+    }
+  }
+]

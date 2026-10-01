@@ -1,0 +1,63 @@
+# One computer Pod on the gVisor node pool, for the smoke test (scripts/smoke.sh fills in the image).
+# The spec follows the rules GKE's managed Agent Sandbox enforces, so the same spec can later go into a
+# SandboxTemplate unchanged: gVisor runtime class, node selector and toleration for the sandbox pool, no
+# service-account token, non-root, all capabilities dropped, memory limit set.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ocn-spike-computer-smoke
+  namespace: ocn-spike
+  labels:
+    app: ocn-spike-computer-smoke
+    owner: opencrane-new
+    purpose: spike
+spec:
+  runtimeClassName: gvisor
+  automountServiceAccountToken: false
+  restartPolicy: Always
+  terminationGracePeriodSeconds: 20
+  nodeSelector:
+    sandbox.gke.io/runtime: gvisor
+  tolerations:
+    - key: sandbox.gke.io/runtime
+      operator: Equal
+      value: gvisor
+      effect: NoSchedule
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  containers:
+    - name: computer
+      image: IMAGE_PLACEHOLDER
+      imagePullPolicy: IfNotPresent
+      ports:
+        - { name: health, containerPort: 8080 }
+        - { name: liveview, containerPort: 6901 }
+      resources:
+        requests: { cpu: 500m, memory: 1536Mi }
+        limits: { cpu: 1500m, memory: 3Gi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      readinessProbe:
+        httpGet: { path: /health, port: 8080 }
+        initialDelaySeconds: 15
+        periodSeconds: 10
+        failureThreshold: 6
+      livenessProbe:
+        httpGet: { path: /healthz, port: 8080 }
+        initialDelaySeconds: 30
+        periodSeconds: 20
+        failureThreshold: 6
+      volumeMounts:
+        # /home/agent is the scratch disk: a volume that outlives container restarts.
+        - { name: home, mountPath: /home/agent }
+        - { name: tmp, mountPath: /tmp }
+  volumes:
+    - name: home
+      emptyDir: { sizeLimit: 2Gi }
+    - name: tmp
+      emptyDir: { sizeLimit: 512Mi }

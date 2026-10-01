@@ -1,0 +1,1672 @@
+[
+  {
+    "name": "adduser",
+    "version": "3.134",
+    "licence": "GPL-2+"
+  },
+  {
+    "name": "apt",
+    "version": "2.6.1",
+    "licence": "BSD-3-clause | Expat | GPL-2 | GPL-2+"
+  },
+  {
+    "name": "at-spi2-common",
+    "version": "2.46.0-5",
+    "licence": "AFL-2.1 | AFL-2.1 or GPL-2+ | GPL-2 | GPL-2+ | LGPL-2+ | LGPL-2.1+ | public-domain"
+  },
+  {
+    "name": "base-files",
+    "version": "12.4+deb12u15",
+    "licence": "See debian-copyright/base-files"
+  },
+  {
+    "name": "base-passwd",
+    "version": "3.6.1",
+    "licence": "GPL-2 | public-domain"
+  },
+  {
+    "name": "bash",
+    "version": "5.2.15-2+b13",
+    "licence": "BSD-4-clause-UC | BSD-4-clause-UC and MIT-like | GFDL-NIV-1.3 | GPL-2+ | GPL-3+ | GPL-3+ with Bison exception | Latex2e | MIT-like | permissive"
+  },
+  {
+    "name": "bsdutils",
+    "version": "1:2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "ca-certificates",
+    "version": "20250419~deb12u1",
+    "licence": "GPL-2+ | MPL-2.0"
+  },
+  {
+    "name": "coreutils",
+    "version": "9.1-1",
+    "licence": "BSD-4-clause-UC | FSFULLR | GFDL-NIV-1.3 | GPL-3+ | GPL-3+ and BSD-4-clause-UC | GPL-3+ and ISC | ISC"
+  },
+  {
+    "name": "curl",
+    "version": "7.88.1-10+deb12u15",
+    "licence": "BSD-3-Clause | BSD-3-clause | BSD-4-Clause-UC | FSFULLR | GPL-2+ with Autoconf-data exception | GPL-2+ with Libtool exception | GPL-3+ with Autoconf-data exception | ISC | OLDAP-2.8 | X11 | curl"
+  },
+  {
+    "name": "dash",
+    "version": "0.5.12-2",
+    "licence": "BSD-3-Clause | BSD-3-clause | GPL-2+ | public-domain"
+  },
+  {
+    "name": "debconf",
+    "version": "1.5.82",
+    "licence": "BSD-2-clause"
+  },
+  {
+    "name": "debian-archive-keyring",
+    "version": "2023.3+deb12u2",
+    "licence": "See debian-copyright/debian-archive-keyring"
+  },
+  {
+    "name": "debianutils",
+    "version": "5.7-0.5~deb12u1",
+    "licence": "GPL-2+ | SMAIL-GPL | public-domain"
+  },
+  {
+    "name": "diffutils",
+    "version": "1:3.8-4",
+    "licence": "FSFAP | FSFULLR | GFDL-NIV-1.3 | GPL-2+ | GPL-3+ | GPL-3+ and FSFULLR | GPL-3+ with autoconf exception | GPL-3+ with texinfo exception | LGPL-2.0+ | LGPL-2.1+ | LGPL-3.0+ | LGPL-3.0+ or GPL-2+ | X11 | public-domain"
+  },
+  {
+    "name": "dpkg",
+    "version": "1.21.23",
+    "licence": "BSD-2-clause | GPL-2 | GPL-2+ | public-domain-s-s-d"
+  },
+  {
+    "name": "e2fsprogs",
+    "version": "1.47.0-2+b2",
+    "licence": "Apache-2 | BSD-3-Clause | GPL or MIT-US-export | GPL-2 | GPL-2+ with Texinfo exception | ISC | Kazlib | LGPL-2 | Latex2e"
+  },
+  {
+    "name": "findutils",
+    "version": "4.9.0-4",
+    "licence": "BSD-3-clause | BSD-3-clause and/or GPL-3+ | FSFAP | FSFULLR | GFDL-NIV-1.3+ | GPL with automake exception | GPL-2+ | GPL-2+ with Autoconf-data exception | GPL-3+ | GPL-3+ with Autoconf-data exception | GPL-3+ with Bison-2.2 exception | ISC | ISC and/or LGPL-2.1+ | LGPL-2+ | LGPL-2.1+ | LGPL-3 | LGPL-3+ | X11 | public-domain"
+  },
+  {
+    "name": "fontconfig",
+    "version": "2.14.1-4",
+    "licence": "See debian-copyright/fontconfig"
+  },
+  {
+    "name": "fontconfig-config",
+    "version": "2.14.1-4",
+    "licence": "See debian-copyright/fontconfig-config"
+  },
+  {
+    "name": "fonts-freefont-ttf",
+    "version": "20120503-10",
+    "licence": "GPL-3+ | GPL-3+ with Special Font Exception"
+  },
+  {
+    "name": "fonts-ipafont-gothic",
+    "version": "00303-23",
+    "licence": "GPL-3+ | IPA-1"
+  },
+  {
+    "name": "fonts-liberation",
+    "version": "1:1.07.4-11",
+    "licence": "This agreement governs the use of the Software and any updates to the Software,"
+  },
+  {
+    "name": "fonts-noto-color-emoji",
+    "version": "2.042-0+deb12u1",
+    "licence": "Apache-2.0 | SIL-1.1"
+  },
+  {
+    "name": "fonts-tlwg-loma-otf",
+    "version": "1:0.7.3-1",
+    "licence": "GPL-2+ | GPL-2+ with Font exception | LPPL | other"
+  },
+  {
+    "name": "fonts-unifont",
+    "version": "1:15.0.01-2",
+    "licence": "GFDL-NIV | GPL-2+"
+  },
+  {
+    "name": "fonts-urw-base35",
+    "version": "20200910-7",
+    "licence": "AGPL-3 | AGPL-3 with Font exception | CC-BY-4.0 | GPL-2+"
+  },
+  {
+    "name": "fonts-wqy-zenhei",
+    "version": "0.9.45-8",
+    "licence": "GPL-2 with Font embedding exception | GPL-2 with Font embedding exception and M+ FONTS License | M+ FONTS License"
+  },
+  {
+    "name": "gcc-12-base",
+    "version": "12.2.0-14+deb12u1",
+    "licence": "See debian-copyright/gcc-12-base"
+  },
+  {
+    "name": "gpgv",
+    "version": "2.2.40-1.1+deb12u2",
+    "licence": "BSD-3-clause | CC0-1.0 | Expat | GPL-3+ | GPL-3+ or BSD-3-clause | LGPL-2.1+ | LGPL-3+ | RFC-Reference | TinySCHEME | permissive"
+  },
+  {
+    "name": "grep",
+    "version": "3.8-5",
+    "licence": "GPL-3+"
+  },
+  {
+    "name": "gzip",
+    "version": "1.12-1",
+    "licence": "FSF-manpages | GFDL-1.3+-no-invariant | GPL-3+"
+  },
+  {
+    "name": "hostname",
+    "version": "3.23+nmu1",
+    "licence": "GPL-2"
+  },
+  {
+    "name": "init-system-helpers",
+    "version": "1.65.2+deb12u1",
+    "licence": "BSD-3-clause | GPL-2+"
+  },
+  {
+    "name": "kasmvncserver",
+    "version": "1.5.0-1",
+    "licence": "GPL-2+ | Redistribution and use in source and binary forms, with or without"
+  },
+  {
+    "name": "libacl1",
+    "version": "2.3.1-3",
+    "licence": "GPL-2+ | LGPL-2+"
+  },
+  {
+    "name": "libalgorithm-c3-perl",
+    "version": "0.11-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libaom3",
+    "version": "3.6.0-1+deb12u3",
+    "licence": "BSD-2-Clause | BSD-2-clause | BSD-3-clause | Expat | ISC | public-domain-md5"
+  },
+  {
+    "name": "libapt-pkg6.0",
+    "version": "2.6.1",
+    "licence": "BSD-3-clause | Expat | GPL-2 | GPL-2+"
+  },
+  {
+    "name": "libasound2",
+    "version": "1.2.8-1+b1",
+    "licence": "LPGL-2.1+"
+  },
+  {
+    "name": "libasound2-data",
+    "version": "1.2.8-1",
+    "licence": "LPGL-2.1+"
+  },
+  {
+    "name": "libatk-bridge2.0-0",
+    "version": "2.46.0-5",
+    "licence": "AFL-2.1 | AFL-2.1 or GPL-2+ | GPL-2 | GPL-2+ | LGPL-2+ | LGPL-2.1+ | public-domain"
+  },
+  {
+    "name": "libatk1.0-0",
+    "version": "2.46.0-5",
+    "licence": "AFL-2.1 | AFL-2.1 or GPL-2+ | GPL-2 | GPL-2+ | LGPL-2+ | LGPL-2.1+ | public-domain"
+  },
+  {
+    "name": "libatspi2.0-0",
+    "version": "2.46.0-5",
+    "licence": "AFL-2.1 | AFL-2.1 or GPL-2+ | GPL-2 | GPL-2+ | LGPL-2+ | LGPL-2.1+ | public-domain"
+  },
+  {
+    "name": "libattr1",
+    "version": "1:2.5.1-4",
+    "licence": "GPL-2+ | LGPL-2+"
+  },
+  {
+    "name": "libaudit-common",
+    "version": "1:3.0.9-1",
+    "licence": "GPL-2 | LGPL-2.1"
+  },
+  {
+    "name": "libaudit1",
+    "version": "1:3.0.9-1",
+    "licence": "GPL-2 | LGPL-2.1"
+  },
+  {
+    "name": "libavahi-client3",
+    "version": "0.8-10+deb12u1",
+    "licence": "See debian-copyright/libavahi-client3"
+  },
+  {
+    "name": "libavahi-common-data",
+    "version": "0.8-10+deb12u1",
+    "licence": "See debian-copyright/libavahi-common-data"
+  },
+  {
+    "name": "libavahi-common3",
+    "version": "0.8-10+deb12u1",
+    "licence": "See debian-copyright/libavahi-common3"
+  },
+  {
+    "name": "libb-hooks-endofscope-perl",
+    "version": "0.26-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libb-hooks-op-check-perl",
+    "version": "0.22-2+b1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libblkid1",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libbrotli1",
+    "version": "1.0.9-2+b6",
+    "licence": "MIT"
+  },
+  {
+    "name": "libbsd0",
+    "version": "0.11.7-2",
+    "licence": "BSD-2-clause | BSD-2-clause-NetBSD | BSD-2-clause-author | BSD-2-clause-verbatim | BSD-3-clause | BSD-3-clause-John-Birrell | BSD-3-clause-Regents | BSD-3-clause-Regents and BSD-2-clause-NetBSD | BSD-3-clause-author | BSD-4-clause-Niels-Provos | Beerware | Expat | ISC | ISC-Original | libutil-David-Nugent | public-domain"
+  },
+  {
+    "name": "libbz2-1.0",
+    "version": "1.0.8-5+b1",
+    "licence": "BSD-variant | GPL-2"
+  },
+  {
+    "name": "libc-bin",
+    "version": "2.36-9+deb12u14",
+    "licence": "See debian-copyright/libc-bin"
+  },
+  {
+    "name": "libc6",
+    "version": "2.36-9+deb12u14",
+    "licence": "See debian-copyright/libc6"
+  },
+  {
+    "name": "libcairo-gobject2",
+    "version": "1.16.0-7",
+    "licence": "See debian-copyright/libcairo-gobject2"
+  },
+  {
+    "name": "libcairo2",
+    "version": "1.16.0-7",
+    "licence": "See debian-copyright/libcairo2"
+  },
+  {
+    "name": "libcap-ng0",
+    "version": "0.8.3-1+b3",
+    "licence": "GPL-2+ | GPL-3 | LGPL-2.1+"
+  },
+  {
+    "name": "libcap2",
+    "version": "1:2.66-4+deb12u3+b1",
+    "licence": "BSD-3-clause | BSD-3-clause or GPL-2 | BSD-3-clause or GPL-2+ | GPL-2 | GPL-2+"
+  },
+  {
+    "name": "libclass-c3-perl",
+    "version": "0.35-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libclass-data-inheritable-perl",
+    "version": "0.08-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libclass-inspector-perl",
+    "version": "1.36-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libclass-method-modifiers-perl",
+    "version": "2.14-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libclass-singleton-perl",
+    "version": "1.6-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libcom-err2",
+    "version": "1.47.0-2+b2",
+    "licence": "Apache-2 | BSD-3-Clause | GPL or MIT-US-export | GPL-2 | GPL-2+ with Texinfo exception | ISC | Kazlib | LGPL-2 | Latex2e"
+  },
+  {
+    "name": "libcrypt1",
+    "version": "1:4.4.33-2",
+    "licence": "See debian-copyright/libcrypt1"
+  },
+  {
+    "name": "libcups2",
+    "version": "2.4.2-3+deb12u9",
+    "licence": "Apache-2.0 | Apache-2.0-with-GPL2-LGPL2-Exception | Apache-2.0-with-GPL2-LGPL2-Exception or BSD-2-clause | BSD-2-Clause | FSFUL | Zlib"
+  },
+  {
+    "name": "libcurl4",
+    "version": "7.88.1-10+deb12u15",
+    "licence": "BSD-3-Clause | BSD-3-clause | BSD-4-Clause-UC | FSFULLR | GPL-2+ with Autoconf-data exception | GPL-2+ with Libtool exception | GPL-3+ with Autoconf-data exception | ISC | OLDAP-2.8 | X11 | curl"
+  },
+  {
+    "name": "libdata-optlist-perl",
+    "version": "0.113-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libdatetime-locale-perl",
+    "version": "1:1.37-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libdatetime-perl",
+    "version": "2:1.59-1",
+    "licence": "Artistic | Artistic or GPL-1+ | Artistic-2.0 | GPL-1+"
+  },
+  {
+    "name": "libdatetime-timezone-perl",
+    "version": "1:2.60-1+2026c",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libdatrie1",
+    "version": "0.2.13-2+b1",
+    "licence": "GPL-2+ | LGPL-2.1+"
+  },
+  {
+    "name": "libdav1d6",
+    "version": "1.0.0-2+deb12u1",
+    "licence": "BSD-2-clause | ISC | ISC and BSD-2-clause | public-domain"
+  },
+  {
+    "name": "libdb5.3",
+    "version": "5.3.28+dfsg2-1",
+    "licence": "Artistic or BSD-3-clause | BSD-3-clause | BSD-3-clause-fjord | GPL | GPL or Artistic | GPL-3 | MIT-old | Ms-PL | Sleepycat | Sleepycat and BSD-3-clause | TCL-like | X11 | zlib"
+  },
+  {
+    "name": "libdbus-1-3",
+    "version": "1.14.10-1~deb12u1",
+    "licence": "AFL-2.1 | BSD-3-clause | BSD-3-clause and BSD-3-clause-generic | BSD-3-clause-generic | Expat | FSF-unlimited-permission | GPL-2+ | GPL-2+ or AFL-2.1, and Expat and Tcl-BSDish | GPL-2+ with Autoconf exception | LGPL-2.1+ | Tcl-BSDish | autoconf-archive-permissive | g10-permissive"
+  },
+  {
+    "name": "libde265-0",
+    "version": "1.0.11-1+deb12u3",
+    "licence": "BSD-4-clause | GPL-3+ | LGPL-3+ | other-1 | public-domain-1"
+  },
+  {
+    "name": "libdebconfclient0",
+    "version": "0.270",
+    "licence": "BSD-2-Clause | BSD-2-clause | GPL-2+"
+  },
+  {
+    "name": "libdeflate0",
+    "version": "1.14-1",
+    "licence": "Expat"
+  },
+  {
+    "name": "libdevel-callchecker-perl",
+    "version": "0.008-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+ | GPL-3+"
+  },
+  {
+    "name": "libdevel-stacktrace-perl",
+    "version": "2.0400-2",
+    "licence": "Artistic | Artistic or GPL-1+ | Artistic-2.0 | GPL-1+"
+  },
+  {
+    "name": "libdrm-amdgpu1",
+    "version": "2.4.114-1+b1",
+    "licence": "See debian-copyright/libdrm-amdgpu1"
+  },
+  {
+    "name": "libdrm-common",
+    "version": "2.4.114-1",
+    "licence": "See debian-copyright/libdrm-common"
+  },
+  {
+    "name": "libdrm-intel1",
+    "version": "2.4.114-1+b1",
+    "licence": "See debian-copyright/libdrm-intel1"
+  },
+  {
+    "name": "libdrm-nouveau2",
+    "version": "2.4.114-1+b1",
+    "licence": "See debian-copyright/libdrm-nouveau2"
+  },
+  {
+    "name": "libdrm-radeon1",
+    "version": "2.4.114-1+b1",
+    "licence": "See debian-copyright/libdrm-radeon1"
+  },
+  {
+    "name": "libdrm2",
+    "version": "2.4.114-1+b1",
+    "licence": "See debian-copyright/libdrm2"
+  },
+  {
+    "name": "libdynaloader-functions-perl",
+    "version": "0.003-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+ | GPL-3+"
+  },
+  {
+    "name": "libedit2",
+    "version": "3.1-20221030-2",
+    "licence": "BSD-3-clause"
+  },
+  {
+    "name": "libelf1",
+    "version": "0.188-2.1",
+    "licence": "BSD-2-clause | GFDL-NIV-1.3 | GPL-3+ | GPL-3+ with Bison exception | LGPL-2.1+ | LGPL-3+ or GPL-2+"
+  },
+  {
+    "name": "libeval-closure-perl",
+    "version": "0.14-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libexception-class-perl",
+    "version": "1.45-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libexpat1",
+    "version": "2.5.0-1+deb12u3",
+    "licence": "MIT"
+  },
+  {
+    "name": "libexporter-tiny-perl",
+    "version": "1.006000-1",
+    "licence": "Artistic | Artistic or GPL-1+ | Expat | GPL-1+ | GPL-3+"
+  },
+  {
+    "name": "libext2fs2",
+    "version": "1.47.0-2+b2",
+    "licence": "Apache-2 | BSD-3-Clause | GPL or MIT-US-export | GPL-2 | GPL-2+ with Texinfo exception | ISC | Kazlib | LGPL-2 | Latex2e"
+  },
+  {
+    "name": "libffi8",
+    "version": "3.4.4-1",
+    "licence": "Expat | GPL | GPL-2+ | GPL-3+ | MPL-1.1 or GPL-2+ or LGPL-2.1+ | X11 | public-domain"
+  },
+  {
+    "name": "libfile-sharedir-perl",
+    "version": "1.118-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libfontconfig1",
+    "version": "2.14.1-4",
+    "licence": "See debian-copyright/libfontconfig1"
+  },
+  {
+    "name": "libfontenc1",
+    "version": "1:1.1.4-1",
+    "licence": "See debian-copyright/libfontenc1"
+  },
+  {
+    "name": "libfreetype6",
+    "version": "2.12.1+dfsg-5+deb12u4",
+    "licence": "BSD-3-Clause | BSL-1.0 | FSFAP | FTL | FTL and MIT | GPL-2+ | GPL-3+ | MIT | OpenGroup-BSD-like | Public-Domain | Zlib"
+  },
+  {
+    "name": "libfribidi0",
+    "version": "1.0.8-2.1",
+    "licence": "LGPL-2.1+"
+  },
+  {
+    "name": "libgbm1",
+    "version": "22.3.6-1+deb12u2",
+    "licence": "Apache-2.0 | BSD-2-clause | BSD-3-google | BSL | GPL | Khronos | MIT | MLAA | SGI"
+  },
+  {
+    "name": "libgcc-s1",
+    "version": "12.2.0-14+deb12u1",
+    "licence": "See debian-copyright/libgcc-s1"
+  },
+  {
+    "name": "libgcrypt20",
+    "version": "1.10.1-3+deb12u1",
+    "licence": "Most of the package is licensed under the GNU Lesser General Public"
+  },
+  {
+    "name": "libgdbm-compat4",
+    "version": "1.23-3",
+    "licence": "GFDL-NIV-1.3+ | GPL-2+ | GPL-3+"
+  },
+  {
+    "name": "libgdbm6",
+    "version": "1.23-3",
+    "licence": "GFDL-NIV-1.3+ | GPL-2+ | GPL-3+"
+  },
+  {
+    "name": "libgdk-pixbuf-2.0-0",
+    "version": "2.42.10+dfsg-1+deb12u4",
+    "licence": "CC0-1.0 | GPL-2+ | LGPL-2+ | LGPL-2+ and LGPL-2.1+ and CC0-1.0 | LGPL-2.1+"
+  },
+  {
+    "name": "libgdk-pixbuf2.0-common",
+    "version": "2.42.10+dfsg-1+deb12u4",
+    "licence": "CC0-1.0 | GPL-2+ | LGPL-2+ | LGPL-2+ and LGPL-2.1+ and CC0-1.0 | LGPL-2.1+"
+  },
+  {
+    "name": "libgif7",
+    "version": "5.2.1-2.5+deb12u1",
+    "licence": "ISC | MIT"
+  },
+  {
+    "name": "libgl1",
+    "version": "1.6.0-1",
+    "licence": "Apache-2.0 | BSD-1-clause | GPL | GPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libgl1-mesa-dri",
+    "version": "22.3.6-1+deb12u2",
+    "licence": "Apache-2.0 | BSD-2-clause | BSD-3-google | BSL | GPL | Khronos | MIT | MLAA | SGI"
+  },
+  {
+    "name": "libglapi-mesa",
+    "version": "22.3.6-1+deb12u2",
+    "licence": "Apache-2.0 | BSD-2-clause | BSD-3-google | BSL | GPL | Khronos | MIT | MLAA | SGI"
+  },
+  {
+    "name": "libglib2.0-0",
+    "version": "2.74.6-2+deb12u9",
+    "licence": "AFL-2.0 | AFL-2.0 or LGPL-2.1+ | Apache-2.0 with LLVM exception | BSD-3-clause-pcre | CC-BY-SA-3.0 | CC0-1.0 | Expat | FSFULLR | GPL-2+ | GPL-2+ with Autoconf exception | Iconv-PD | Janik-permissive | Kuchling-PD | LGPL-2+ | LGPL-2+ and LGPL-2.1+ and FSFULLR and CC0-1.0 and Janik-permissive and Iconv-PD and Mingw-PD and Old-GLib-Tests-permissive | LGPL-2.1+ | LGPL-2.1+ and BSD-3-clause-pcre | LGPL-2.1+ and Expat | LGPL-2.1+ and Kuchling-PD and Plumb-PD | LGPL-3+ | Mingw-PD | Old-GLib-Tests-permissive | Plumb-PD | Unicode-DFS-2016 | bzip2-1.0.6"
+  },
+  {
+    "name": "libglvnd0",
+    "version": "1.6.0-1",
+    "licence": "Apache-2.0 | BSD-1-clause | GPL | GPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libglx-mesa0",
+    "version": "22.3.6-1+deb12u2",
+    "licence": "Apache-2.0 | BSD-2-clause | BSD-3-google | BSL | GPL | Khronos | MIT | MLAA | SGI"
+  },
+  {
+    "name": "libglx0",
+    "version": "1.6.0-1",
+    "licence": "Apache-2.0 | BSD-1-clause | GPL | GPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libgmp10",
+    "version": "2:6.2.1+dfsg1-1.1",
+    "licence": "GPL-2+ | GPL-2+ or LGPL-3+ | GPL-3+ | GPL-3+ with Bison exception | LGPL-3+"
+  },
+  {
+    "name": "libgnutls30",
+    "version": "3.7.9-2+deb12u7",
+    "licence": "* Redistribution and use in source and binary forms, with or without | Apache-2.0 | BSD-3-Clause | CC0 license | Expat | GPLv3+ | LGPLv2.1+ | LGPLv3+_or_GPLv2+ | Public domain. | The main library is licensed under GNU Lesser | based on Russian standard GOST 28147-89"
+  },
+  {
+    "name": "libgpg-error0",
+    "version": "1.46-1",
+    "licence": "BSD-3-clause | GPL-3+ | LGPL-2.1+ | LGPL-2.1+ or BSD-3-clause | g10-permissive"
+  },
+  {
+    "name": "libgraphite2-3",
+    "version": "1.3.14-1+deb12u1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+ | GPL-2+ | LGPL-2.1+ | LGPL-2.1+ or GPL-2+ or MPL-1.1 | LGPL-2.1+ or MPL-1.1 or GPL-2+ | MPL-1.1 | custom-sil-open-font-license | public-domain"
+  },
+  {
+    "name": "libgs-common",
+    "version": "10.0.0~dfsg-11+deb12u8",
+    "licence": "AGPL-3 | AGPL-3+ | AGPL-3+ and FTL | AGPL-3+ and custom | AGPL-3+ with font exception | Apache-2.0 | BSD-3-Clause | BSD-3-Clause~Adobe | Expat | Expat~Ghostgum | Expat~SunSoft | Expat~SunSoft with SunSoft exception | FTL | GAP~configure | GPL-1+ | GPL-2+ | GPL-3+ | GPL-3+ with Autoconf exception | ISC | LGPL-2.1 | MIT-Open-Group | NTP~Lucent | NTP~WSU | X11 | ZLIB | none | public-domain"
+  },
+  {
+    "name": "libgs10",
+    "version": "10.0.0~dfsg-11+deb12u8",
+    "licence": "AGPL-3 | AGPL-3+ | AGPL-3+ and FTL | AGPL-3+ and custom | AGPL-3+ with font exception | Apache-2.0 | BSD-3-Clause | BSD-3-Clause~Adobe | Expat | Expat~Ghostgum | Expat~SunSoft | Expat~SunSoft with SunSoft exception | FTL | GAP~configure | GPL-1+ | GPL-2+ | GPL-3+ | GPL-3+ with Autoconf exception | ISC | LGPL-2.1 | MIT-Open-Group | NTP~Lucent | NTP~WSU | X11 | ZLIB | none | public-domain"
+  },
+  {
+    "name": "libgs10-common",
+    "version": "10.0.0~dfsg-11+deb12u8",
+    "licence": "AGPL-3 | AGPL-3+ | AGPL-3+ and FTL | AGPL-3+ and custom | AGPL-3+ with font exception | Apache-2.0 | BSD-3-Clause | BSD-3-Clause~Adobe | Expat | Expat~Ghostgum | Expat~SunSoft | Expat~SunSoft with SunSoft exception | FTL | GAP~configure | GPL-1+ | GPL-2+ | GPL-3+ | GPL-3+ with Autoconf exception | ISC | LGPL-2.1 | MIT-Open-Group | NTP~Lucent | NTP~WSU | X11 | ZLIB | none | public-domain"
+  },
+  {
+    "name": "libgssapi-krb5-2",
+    "version": "1.20.1-2+deb12u5",
+    "licence": "See debian-copyright/libgssapi-krb5-2"
+  },
+  {
+    "name": "libharfbuzz0b",
+    "version": "6.0.0+dfsg-3",
+    "licence": "Apache-2.0 | CC0-1.0 | Expat | FSFAP | FSFUL | FSFULLR | GPL-2+ with AutoConf exception | GPL-2+ with Font exception | GPL-2+ with LibTool exception | GPL-3+ | GPL-3+ with AutoConf exception | ISC | LGPL-2.1+ | MIT | Monotype | OFL-1.1 | UFL-1.0 | Unicode"
+  },
+  {
+    "name": "libhash-merge-simple-perl",
+    "version": "0.051-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libheif1",
+    "version": "1.15.1-1+deb12u1",
+    "licence": "BOOST-1.0 | BSD-3-clause | BSD-4-clause | GPL-3+ | LGPL-3+ | MIT"
+  },
+  {
+    "name": "libhogweed6",
+    "version": "3.8.1-2",
+    "licence": "Expat | GAP | GPL-2 | GPL-2+ | GPL-3+ | GPL-3+ with Autoconf exception | LGPL-2+ | LGPL-3+ | LGPL-3+ or GPL-2+ | public-domain"
+  },
+  {
+    "name": "libhwy1",
+    "version": "1.0.3-3+deb12u1",
+    "licence": "Apache-2.0"
+  },
+  {
+    "name": "libice6",
+    "version": "2:1.0.10-1",
+    "licence": "See debian-copyright/libice6"
+  },
+  {
+    "name": "libicu72",
+    "version": "72.1-3+deb12u1",
+    "licence": "GPL-3 | MIT"
+  },
+  {
+    "name": "libid3tag0",
+    "version": "0.15.1b-14",
+    "licence": "See debian-copyright/libid3tag0"
+  },
+  {
+    "name": "libidn12",
+    "version": "1.41-1",
+    "licence": "GAP | GFDL-NIV-1.3+ | GPL-2+ | GPL-3+ | LGPL-2.1+ | LGPL-3+ | LGPL-3+ or GPL-2+"
+  },
+  {
+    "name": "libidn2-0",
+    "version": "2.3.3-1+b1",
+    "licence": "GPL-2+ | GPL-3+ | LGPL-3+ | LGPL-3+ or GPL-2+ | Unicode"
+  },
+  {
+    "name": "libijs-0.35",
+    "version": "0.35-15",
+    "licence": "Expat | Expat~X | Expat~X with X exception | GAP | GAP~Makefile.in | GAP~configure | GPL-2+ | GPL-2+ with Autoconf exception"
+  },
+  {
+    "name": "libimlib2",
+    "version": "1.10.0-4+deb12u1",
+    "licence": "imlib2-license"
+  },
+  {
+    "name": "libjbig0",
+    "version": "2.1-6.1",
+    "licence": "GPL-2+"
+  },
+  {
+    "name": "libjbig2dec0",
+    "version": "0.19-3+deb12u1",
+    "licence": "AGPL-3+ | BSD-2-clause | GPL-3+ | LGPL-2.1+ | pubic-domain | public-domain"
+  },
+  {
+    "name": "libjpeg62-turbo",
+    "version": "1:2.1.5-2",
+    "licence": "BSD-3-clause | BSD-BY-LC-NE | Expat | NTP | Zlib | zlib"
+  },
+  {
+    "name": "libjxl0.7",
+    "version": "0.7.0-10+deb12u1",
+    "licence": "BSD-3-clause-Google | ISC-License"
+  },
+  {
+    "name": "libk5crypto3",
+    "version": "1.20.1-2+deb12u5",
+    "licence": "See debian-copyright/libk5crypto3"
+  },
+  {
+    "name": "libkeyutils1",
+    "version": "1.6.3-2",
+    "licence": "GPL-2+ | LGPL-2+"
+  },
+  {
+    "name": "libkrb5-3",
+    "version": "1.20.1-2+deb12u5",
+    "licence": "See debian-copyright/libkrb5-3"
+  },
+  {
+    "name": "libkrb5support0",
+    "version": "1.20.1-2+deb12u5",
+    "licence": "See debian-copyright/libkrb5support0"
+  },
+  {
+    "name": "liblcms2-2",
+    "version": "2.14-2+deb12u1",
+    "licence": "GPL-2+ | GPL-3 | IJG | MIT"
+  },
+  {
+    "name": "libldap-2.5-0",
+    "version": "2.5.13+dfsg-5",
+    "licence": "BSD-3-clause | BSD-3-clause-California | BSD-3-clause-variant | BSD-4-clause-California | Beerware | Expat | Expat-ISC | Expat-UNM | F5 | FSF-unlimited | FSF-unlimited and GPL-2+ with Autoconf exception | FSF-unlimited and GPL-2+ with Libtool exception | FSF-unlimited and OpenLDAP-2.8 | GPL-2+ | GPL-2+ with Autoconf exception | GPL-2+ with Libtool exception | GPL-2+ with Libtool exception and GPL-3+ with Libtool exception and GPL-3+ | GPL-3+ | GPL-3+ with Autoconf exception | GPL-3+ with Libtool exception | JCG | MIT-XC | NeoSoft-permissive | OpenLDAP-2.8 | OpenLDAP-2.8 and BSD-3-clause | OpenLDAP-2.8 and BSD-3-clause-variant | OpenLDAP-2.8 and BSD-4-clause-California | OpenLDAP-2.8 and Beerware | OpenLDAP-2.8 and Expat | OpenLDAP-2.8 and Expat-ISC | OpenLDAP-2.8 and Expat-UNM | OpenLDAP-2.8 and FSF-unlimited and GPL-2+ with Libtool exception | OpenLDAP-2.8 and JCG and UMich | OpenLDAP-2.8 and UMich | OpenLDAP-2.8 and UMich and F5 | UMich | public-domain"
+  },
+  {
+    "name": "liblerc4",
+    "version": "4.0.0+ds-2",
+    "licence": "Apache-2.0"
+  },
+  {
+    "name": "liblist-moreutils-perl",
+    "version": "0.430-2",
+    "licence": "Apache-2.0 | Artistic | Artistic or GPL-1+ | Artistic or GPL-1+ or Apache-2.0 | Artistic or GPL-1+, and Apache-2.0 | GPL-1+"
+  },
+  {
+    "name": "liblist-moreutils-xs-perl",
+    "version": "0.430-3+b1",
+    "licence": "Apache-2.0 | Apache-2.0 or Artistic or GPL-1+ | Artistic | Artistic or GPL-1+ | Artistic or GPL-1+, and Apache-2.0 | GPL-1+"
+  },
+  {
+    "name": "libllvm15",
+    "version": "1:15.0.6-4+b1",
+    "licence": "APACHE-2-LLVM-EXCEPTIONS | BSD-3-Clause | BSD-3-clause | MIT | Python | solar-public-domain"
+  },
+  {
+    "name": "liblz4-1",
+    "version": "1.9.4-1",
+    "licence": "BSD-2-clause | GPL-2+ | GPL-2+ or BSD-2-clause"
+  },
+  {
+    "name": "liblzma5",
+    "version": "5.4.1-1+deb12u2",
+    "licence": "Autoconf | Different licenses apply to different files in this package. Here | GPL-2 | GPL-2+ | LGPL-2.1+ | PD | PD-debian | config-h | noderivs | none | permissive-fsf | permissive-nowarranty | probably-PD"
+  },
+  {
+    "name": "libmd0",
+    "version": "1.0.4-2",
+    "licence": "BSD-2-clause | BSD-2-clause-NetBSD | BSD-3-clause | BSD-3-clause-Aaron-D-Gifford | Beerware | ISC | public-domain-md4 | public-domain-md5 | public-domain-sha1"
+  },
+  {
+    "name": "libmodule-implementation-perl",
+    "version": "0.09-2",
+    "licence": "Artistic | Artistic or Artistic-2.0 or GPL-1+ | Artistic-2.0 | GPL-1+"
+  },
+  {
+    "name": "libmodule-runtime-perl",
+    "version": "0.016-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libmount1",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libmro-compat-perl",
+    "version": "0.15-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libnamespace-autoclean-perl",
+    "version": "0.29-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libnamespace-clean-perl",
+    "version": "0.27-2",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libncursesw6",
+    "version": "6.4-4",
+    "licence": "BSD-3-clause | MIT/X11 | X11"
+  },
+  {
+    "name": "libnettle8",
+    "version": "3.8.1-2",
+    "licence": "Expat | GAP | GPL-2 | GPL-2+ | GPL-3+ | GPL-3+ with Autoconf exception | LGPL-2+ | LGPL-3+ | LGPL-3+ or GPL-2+ | public-domain"
+  },
+  {
+    "name": "libnghttp2-14",
+    "version": "1.52.0-1+deb12u3",
+    "licence": "BSD-2-clause | Expat | GPL-3+ with autoconf exception | MIT | all-permissive"
+  },
+  {
+    "name": "libnsl2",
+    "version": "1.3.0-2",
+    "licence": "BSD-3-clause | GPL-2+-autoconf-exception | GPL-2+-libtool-exception | GPL-3+-autoconf-exception | LGPL-2.1 | LGPL-2.1+ | MIT | permissive-autoconf-m4 | permissive-autoconf-m4-no-warranty | permissive-configure | permissive-fsf | permissive-makefile-in"
+  },
+  {
+    "name": "libnspr4",
+    "version": "2:4.35-1",
+    "licence": "MPL-2.0"
+  },
+  {
+    "name": "libnss3",
+    "version": "2:3.87.1-1+deb12u4",
+    "licence": "BSD-3 | MPL-2.0 | Zlib | public-domain"
+  },
+  {
+    "name": "libnuma1",
+    "version": "2.0.16-1",
+    "licence": "See debian-copyright/libnuma1"
+  },
+  {
+    "name": "libobrender32v5",
+    "version": "3.6.1-10",
+    "licence": "BSD-3-clause | GPL-2+ | GPL-3+"
+  },
+  {
+    "name": "libobt2v5",
+    "version": "3.6.1-10",
+    "licence": "BSD-3-clause | GPL-2+ | GPL-3+"
+  },
+  {
+    "name": "libopenjp2-7",
+    "version": "2.5.0-2+deb12u3",
+    "licence": "BSD-2 | BSD-3 | LIBPNG | LIBTIFF | LIBTIFF-GLARSON | LIBTIFF-PIXAR | MIT | ZLIB | public-domain"
+  },
+  {
+    "name": "libp11-kit0",
+    "version": "0.24.1-2",
+    "licence": "Apache-2.0 | BSD-3-Clause | ISC | ISC+IBM | LGPL-2.1+ | permissive-like-automake-output | same-as-rest-of-p11kit"
+  },
+  {
+    "name": "libpackage-stash-perl",
+    "version": "0.40-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libpam-modules",
+    "version": "1.5.2-6+deb12u2",
+    "licence": "BSD-3-clause or GPL | BSD-tcp_wrappers | Beerware | GPL-2 | GPL-2+ | GPL-3 | GPL-3+ with Bison exception | LGPL-2+ | public-domain"
+  },
+  {
+    "name": "libpam-modules-bin",
+    "version": "1.5.2-6+deb12u2",
+    "licence": "BSD-3-clause or GPL | BSD-tcp_wrappers | Beerware | GPL-2 | GPL-2+ | GPL-3 | GPL-3+ with Bison exception | LGPL-2+ | public-domain"
+  },
+  {
+    "name": "libpam-runtime",
+    "version": "1.5.2-6+deb12u2",
+    "licence": "BSD-3-clause or GPL | BSD-tcp_wrappers | Beerware | GPL-2 | GPL-2+ | GPL-3 | GPL-3+ with Bison exception | LGPL-2+ | public-domain"
+  },
+  {
+    "name": "libpam0g",
+    "version": "1.5.2-6+deb12u2",
+    "licence": "BSD-3-clause or GPL | BSD-tcp_wrappers | Beerware | GPL-2 | GPL-2+ | GPL-3 | GPL-3+ with Bison exception | LGPL-2+ | public-domain"
+  },
+  {
+    "name": "libpango-1.0-0",
+    "version": "1.50.12+ds-1",
+    "licence": "Apache-2 | Apache-2 and Bitstream-Vera and OFL-1.1 | Bitstream-Vera | CC0-1.0 | Chromium-BSD-style | Example | GPL-2+ | ICU | LGPL-2+ | LGPL-2+ and ICU | LGPL-2+ and LGPL-2.1+ | LGPL-2+ and TCL | LGPL-2.1+ | OFL-1.1 | TCL | Unicode"
+  },
+  {
+    "name": "libpangocairo-1.0-0",
+    "version": "1.50.12+ds-1",
+    "licence": "Apache-2 | Apache-2 and Bitstream-Vera and OFL-1.1 | Bitstream-Vera | CC0-1.0 | Chromium-BSD-style | Example | GPL-2+ | ICU | LGPL-2+ | LGPL-2+ and ICU | LGPL-2+ and LGPL-2.1+ | LGPL-2+ and TCL | LGPL-2.1+ | OFL-1.1 | TCL | Unicode"
+  },
+  {
+    "name": "libpangoft2-1.0-0",
+    "version": "1.50.12+ds-1",
+    "licence": "Apache-2 | Apache-2 and Bitstream-Vera and OFL-1.1 | Bitstream-Vera | CC0-1.0 | Chromium-BSD-style | Example | GPL-2+ | ICU | LGPL-2+ | LGPL-2+ and ICU | LGPL-2+ and LGPL-2.1+ | LGPL-2+ and TCL | LGPL-2.1+ | OFL-1.1 | TCL | Unicode"
+  },
+  {
+    "name": "libpangoxft-1.0-0",
+    "version": "1.50.12+ds-1",
+    "licence": "Apache-2 | Apache-2 and Bitstream-Vera and OFL-1.1 | Bitstream-Vera | CC0-1.0 | Chromium-BSD-style | Example | GPL-2+ | ICU | LGPL-2+ | LGPL-2+ and ICU | LGPL-2+ and LGPL-2.1+ | LGPL-2+ and TCL | LGPL-2.1+ | OFL-1.1 | TCL | Unicode"
+  },
+  {
+    "name": "libpaper1",
+    "version": "1.1.29",
+    "licence": "See debian-copyright/libpaper1"
+  },
+  {
+    "name": "libparams-classify-perl",
+    "version": "0.015-2+b1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libparams-util-perl",
+    "version": "1.102-2+b1",
+    "licence": "Apache-2.0 | Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libparams-validationcompiler-perl",
+    "version": "0.31-1",
+    "licence": "Artistic | Artistic or Artistic-2.0 or GPL-1+ | Artistic-2.0 | GPL-1+"
+  },
+  {
+    "name": "libpciaccess0",
+    "version": "0.17-2",
+    "licence": "See debian-copyright/libpciaccess0"
+  },
+  {
+    "name": "libpcre2-8-0",
+    "version": "10.42-1+deb12u1",
+    "licence": "BSD-2-clause | BSD-3-clause | BSD-3-clause-Cambridge with BINARY LIBRARY-LIKE PACKAGES exception | X11 | public-domain"
+  },
+  {
+    "name": "libperl5.36",
+    "version": "5.36.0-7+deb12u3",
+    "licence": "Artistic | Artistic or GPL-1+ or Artistic-dist | Artistic-2 | Artistic-dist | BSD-3-clause | BSD-3-clause-GENERIC | BSD-3-clause-with-weird-numbering | BSD-4-clause-POWERDOG | BZIP | CC0-1.0 | DONT-CHANGE-THE-GPL | Expat | Expat or GPL-1+ or Artistic | GPL-1+ | GPL-1+ or Artistic | GPL-1+ or Artistic or Artistic-dist | GPL-1+ or Artistic, and BSD-3-clause-GENERIC | GPL-1+ or Artistic, and BSD-4-clause-POWERDOG | GPL-1+ or Artistic, and Expat | GPL-1+ or Artistic, and Unicode | GPL-2+ | GPL-2+ or Artistic | GPL-3+-WITH-BISON-EXCEPTION | HSIEH-BSD | HSIEH-DERIVATIVE | LGPL-2.1 | REGCOMP | REGCOMP, and GPL-1+ or Artistic | RRA-KEEP-THIS-NOTICE | SDBM-PUBLIC-DOMAIN | TEXT-TABS | Unicode | ZLIB"
+  },
+  {
+    "name": "libpixman-1-0",
+    "version": "0.42.2-1",
+    "licence": "See debian-copyright/libpixman-1-0"
+  },
+  {
+    "name": "libpng16-16",
+    "version": "1.6.39-2+deb12u5",
+    "licence": "Apache-2.0 | BSD-3-clause | BSD-like-with-advertising-clause | GPL-2+ | GPL-2+ or BSD-like-with-advertising-clause | expat | libpng | libpng OR Apache-2.0 OR BSD-3-clause"
+  },
+  {
+    "name": "libpoppler126",
+    "version": "22.12.0-2+deb12u3",
+    "licence": "Apache-2.0 | GPL-2 | GPL-2 or GPL-3 | GPL-3"
+  },
+  {
+    "name": "libproc2-0",
+    "version": "2:4.0.2-3",
+    "licence": "GPL-2.0+ | LGPL-2.0+ | LGPL-2.1+"
+  },
+  {
+    "name": "libpsl5",
+    "version": "0.21.2-1",
+    "licence": "Chromium | MIT | gnulib"
+  },
+  {
+    "name": "libpython3-stdlib",
+    "version": "3.11.2-1+b1",
+    "licence": "See debian-copyright/libpython3-stdlib"
+  },
+  {
+    "name": "libpython3.11-minimal",
+    "version": "3.11.2-6+deb12u8",
+    "licence": "* Permission to use this software in any way is granted without | * Permission to use, copy, modify, and distribute this software and | By obtaining, using, and/or copying this software and/or its | Permission  is  hereby granted,  free  of charge,  to  any person | Permission is hereby granted, free of charge, to any person obtaining | Permission to use, copy, modify, and distribute this software and | Permission to use, copy, modify, and distribute this software and its | Permission to use, copy, modify, and distribute this software for any | Redistribution and use in source and binary forms, with or without | The following text includes the Python license and licenses and | This software is provided 'as-is', without any express or implied | This software is provided as-is, without express or implied"
+  },
+  {
+    "name": "libpython3.11-stdlib",
+    "version": "3.11.2-6+deb12u8",
+    "licence": "* Permission to use this software in any way is granted without | * Permission to use, copy, modify, and distribute this software and | By obtaining, using, and/or copying this software and/or its | Permission  is  hereby granted,  free  of charge,  to  any person | Permission is hereby granted, free of charge, to any person obtaining | Permission to use, copy, modify, and distribute this software and | Permission to use, copy, modify, and distribute this software and its | Permission to use, copy, modify, and distribute this software for any | Redistribution and use in source and binary forms, with or without | The following text includes the Python license and licenses and | This software is provided 'as-is', without any express or implied | This software is provided as-is, without express or implied"
+  },
+  {
+    "name": "libreadline8",
+    "version": "8.2-1.3",
+    "licence": "GFDL-NIV-1.3+ | GPL-2+ | GPL-3 | GPL-3+ | ISC-no-attribution"
+  },
+  {
+    "name": "librole-tiny-perl",
+    "version": "2.002004-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "librsvg2-2",
+    "version": "2.54.7+dfsg-1~deb12u1",
+    "licence": "0BSD | Apache-2.0 | Apache-2.0, and BSD-2-clause, and BSD-3-clause, and Expat, and Apache-2.0 or Expat or 0BSD, and Apache-2.0 or Boost-1.0, and Apache-2.0 or Expat, and Expat or Unlicense, and MPL-2.0, and Sun-permissive, and zlib | BSD-2-clause | BSD-3-clause | Boost-1.0 | CC-BY-3.0 | CC-zero-waive-1.0-us | Expat | FSFAP | LGPL-2+ | MPL-2.0 | OFL-1.1 | Sun-permissive | Unlicense | zlib"
+  },
+  {
+    "name": "librtmp1",
+    "version": "2.4+20151223.gitfa8646d.1-2+b2",
+    "licence": "See debian-copyright/librtmp1"
+  },
+  {
+    "name": "libsasl2-2",
+    "version": "2.1.28+dfsg-10",
+    "licence": "BSD-2-clause | BSD-2-clause and MIT-CMU | BSD-2.2-clause | BSD-3-clause | BSD-3-clause-JANET | BSD-3-clause-JANET and BSD-4-clause | BSD-3-clause-PADL | BSD-3-clause-PADL and MIT-OpenVision | BSD-4-clause | BSD-4-clause and BSD-4-clause-KTH | BSD-4-clause and IBM-as-is | BSD-4-clause and MIT-Export | BSD-4-clause-KTH | BSD-4-clause-UC | FSFULLR | FSFULLR and MIT-CMU | GPL-3 | GPL-3+ | IBM-as-is | MIT-CMU | MIT-Export | MIT-OpenVision | OpenLDAP | OpenSSL | OpenSSL and SSLeay | RSA-MD | SSLeay"
+  },
+  {
+    "name": "libsasl2-modules-db",
+    "version": "2.1.28+dfsg-10",
+    "licence": "BSD-2-clause | BSD-2-clause and MIT-CMU | BSD-2.2-clause | BSD-3-clause | BSD-3-clause-JANET | BSD-3-clause-JANET and BSD-4-clause | BSD-3-clause-PADL | BSD-3-clause-PADL and MIT-OpenVision | BSD-4-clause | BSD-4-clause and BSD-4-clause-KTH | BSD-4-clause and IBM-as-is | BSD-4-clause and MIT-Export | BSD-4-clause-KTH | BSD-4-clause-UC | FSFULLR | FSFULLR and MIT-CMU | GPL-3 | GPL-3+ | IBM-as-is | MIT-CMU | MIT-Export | MIT-OpenVision | OpenLDAP | OpenSSL | OpenSSL and SSLeay | RSA-MD | SSLeay"
+  },
+  {
+    "name": "libseccomp2",
+    "version": "2.5.4-1+deb12u1",
+    "licence": "LGPL-2.1"
+  },
+  {
+    "name": "libselinux1",
+    "version": "3.4-1+b6",
+    "licence": "See debian-copyright/libselinux1"
+  },
+  {
+    "name": "libsemanage-common",
+    "version": "3.4-1",
+    "licence": "See debian-copyright/libsemanage-common"
+  },
+  {
+    "name": "libsemanage2",
+    "version": "3.4-1+b5",
+    "licence": "See debian-copyright/libsemanage2"
+  },
+  {
+    "name": "libsensors-config",
+    "version": "1:3.6.0-7.1",
+    "licence": "See debian-copyright/libsensors-config"
+  },
+  {
+    "name": "libsensors5",
+    "version": "1:3.6.0-7.1",
+    "licence": "See debian-copyright/libsensors5"
+  },
+  {
+    "name": "libsepol2",
+    "version": "3.4-2.1",
+    "licence": "GPL-2 | GPL-2+ | LGPL-2.1+ | Zlib"
+  },
+  {
+    "name": "libsm6",
+    "version": "2:1.2.3-1",
+    "licence": "See debian-copyright/libsm6"
+  },
+  {
+    "name": "libsmartcols1",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libspecio-perl",
+    "version": "0.48-1",
+    "licence": "Artistic | Artistic or Artistic-2.0 or GPL-1+ | Artistic-2.0 | GPL-1+"
+  },
+  {
+    "name": "libspectre1",
+    "version": "0.2.12-1",
+    "licence": "GPL-2+"
+  },
+  {
+    "name": "libsqlite3-0",
+    "version": "3.40.1-2+deb12u2",
+    "licence": "GPL-2+ | public-domain"
+  },
+  {
+    "name": "libss2",
+    "version": "1.47.0-2+b2",
+    "licence": "Apache-2 | BSD-3-Clause | GPL or MIT-US-export | GPL-2 | GPL-2+ with Texinfo exception | ISC | Kazlib | LGPL-2 | Latex2e"
+  },
+  {
+    "name": "libssh2-1",
+    "version": "1.10.0-3+deb12u1",
+    "licence": "BSD3"
+  },
+  {
+    "name": "libssl3",
+    "version": "3.0.22-1~deb12u1",
+    "licence": "Apache-2.0 | Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libstartup-notification0",
+    "version": "0.12-6+b1",
+    "licence": "part MIT, part LGPL, see below."
+  },
+  {
+    "name": "libstdc++6",
+    "version": "12.2.0-14+deb12u1",
+    "licence": "See debian-copyright/libstdc++6"
+  },
+  {
+    "name": "libsub-exporter-perl",
+    "version": "0.989-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libsub-exporter-progressive-perl",
+    "version": "0.001013-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libsub-identify-perl",
+    "version": "0.14-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libsub-install-perl",
+    "version": "0.929-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libsub-name-perl",
+    "version": "0.26-2+b1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libsub-quote-perl",
+    "version": "2.006008-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libswitch-perl",
+    "version": "2.17-3",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libsystemd0",
+    "version": "252.39-1~deb12u2",
+    "licence": "CC0-1.0 | Expat | GPL-2 with Linux-syscall-note exception | GPL-2+ | LGPL-2.1+ | public-domain"
+  },
+  {
+    "name": "libtasn1-6",
+    "version": "4.19.0-2+deb12u1",
+    "licence": "See debian-copyright/libtasn1-6"
+  },
+  {
+    "name": "libthai-data",
+    "version": "0.1.29-1",
+    "licence": "GPL-2+ | LGPL-2.1+"
+  },
+  {
+    "name": "libthai0",
+    "version": "0.1.29-1",
+    "licence": "GPL-2+ | LGPL-2.1+"
+  },
+  {
+    "name": "libtiff6",
+    "version": "4.5.0-6+deb12u4",
+    "licence": "Hylafax"
+  },
+  {
+    "name": "libtinfo6",
+    "version": "6.4-4",
+    "licence": "BSD-3-clause | MIT/X11 | X11"
+  },
+  {
+    "name": "libtirpc-common",
+    "version": "1.3.3+ds-1",
+    "licence": "BSD-2-Clause | BSD-3-Clause | BSD-4-Clause | GPL-2 | LGPL-2.1+ | PERMISSIVE | __AUTO_PERMISSIVE__"
+  },
+  {
+    "name": "libtirpc3",
+    "version": "1.3.3+ds-1",
+    "licence": "BSD-2-Clause | BSD-3-Clause | BSD-4-Clause | GPL-2 | LGPL-2.1+ | PERMISSIVE | __AUTO_PERMISSIVE__"
+  },
+  {
+    "name": "libtry-tiny-perl",
+    "version": "0.31-2",
+    "licence": "Expat"
+  },
+  {
+    "name": "libudev1",
+    "version": "252.39-1~deb12u2",
+    "licence": "CC0-1.0 | Expat | GPL-2 with Linux-syscall-note exception | GPL-2+ | LGPL-2.1+ | public-domain"
+  },
+  {
+    "name": "libunistring2",
+    "version": "1.0-2",
+    "licence": "FreeSoftware | GFDL-1.2+ | GPL-2+ | GPL-2+ with distribution exception | GPL-3+ | GPL-3+ or GFDL-1.2+ | LGPL-3+ | LGPL-3+ or GPL-2+ | MIT"
+  },
+  {
+    "name": "libunwind8",
+    "version": "1.6.2-3",
+    "licence": "Expat | GPL-2+"
+  },
+  {
+    "name": "libuuid1",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "libvariable-magic-perl",
+    "version": "0.63-1+b1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libwayland-server0",
+    "version": "1.21.0-1",
+    "licence": "X11"
+  },
+  {
+    "name": "libwebp7",
+    "version": "1.2.4-0.2+deb12u1",
+    "licence": "Redistribution and use in source and binary forms, with or without"
+  },
+  {
+    "name": "libwebpdemux2",
+    "version": "1.2.4-0.2+deb12u1",
+    "licence": "Redistribution and use in source and binary forms, with or without"
+  },
+  {
+    "name": "libx11-6",
+    "version": "2:1.8.4-2+deb12u2",
+    "licence": "See debian-copyright/libx11-6"
+  },
+  {
+    "name": "libx11-data",
+    "version": "2:1.8.4-2+deb12u2",
+    "licence": "See debian-copyright/libx11-data"
+  },
+  {
+    "name": "libx11-xcb1",
+    "version": "2:1.8.4-2+deb12u2",
+    "licence": "See debian-copyright/libx11-xcb1"
+  },
+  {
+    "name": "libx265-199",
+    "version": "3.5-2+b1",
+    "licence": "Expat | GPL-2+ | ISC | LGPL-2.1+"
+  },
+  {
+    "name": "libxau6",
+    "version": "1:1.0.9-1",
+    "licence": "See debian-copyright/libxau6"
+  },
+  {
+    "name": "libxaw7",
+    "version": "2:1.0.14-1",
+    "licence": "See debian-copyright/libxaw7"
+  },
+  {
+    "name": "libxcb-dri2-0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-dri2-0"
+  },
+  {
+    "name": "libxcb-dri3-0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-dri3-0"
+  },
+  {
+    "name": "libxcb-glx0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-glx0"
+  },
+  {
+    "name": "libxcb-present0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-present0"
+  },
+  {
+    "name": "libxcb-randr0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-randr0"
+  },
+  {
+    "name": "libxcb-render0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-render0"
+  },
+  {
+    "name": "libxcb-shape0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-shape0"
+  },
+  {
+    "name": "libxcb-shm0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-shm0"
+  },
+  {
+    "name": "libxcb-sync1",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-sync1"
+  },
+  {
+    "name": "libxcb-util1",
+    "version": "0.4.0-1+b1",
+    "licence": "GPL-2+ | MIT"
+  },
+  {
+    "name": "libxcb-xfixes0",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb-xfixes0"
+  },
+  {
+    "name": "libxcb1",
+    "version": "1.15-1",
+    "licence": "See debian-copyright/libxcb1"
+  },
+  {
+    "name": "libxcomposite1",
+    "version": "1:0.4.5-1",
+    "licence": "See debian-copyright/libxcomposite1"
+  },
+  {
+    "name": "libxcursor1",
+    "version": "1:1.2.1-1",
+    "licence": "See debian-copyright/libxcursor1"
+  },
+  {
+    "name": "libxdamage1",
+    "version": "1:1.1.6-1",
+    "licence": "See debian-copyright/libxdamage1"
+  },
+  {
+    "name": "libxdmcp6",
+    "version": "1:1.1.2-3",
+    "licence": "See debian-copyright/libxdmcp6"
+  },
+  {
+    "name": "libxext6",
+    "version": "2:1.3.4-1+b1",
+    "licence": "See debian-copyright/libxext6"
+  },
+  {
+    "name": "libxfixes3",
+    "version": "1:6.0.0-2",
+    "licence": "See debian-copyright/libxfixes3"
+  },
+  {
+    "name": "libxfont2",
+    "version": "1:2.0.6-1+deb12u1",
+    "licence": "See debian-copyright/libxfont2"
+  },
+  {
+    "name": "libxft2",
+    "version": "2.3.6-1",
+    "licence": "See debian-copyright/libxft2"
+  },
+  {
+    "name": "libxi6",
+    "version": "2:1.8-1+b1",
+    "licence": "See debian-copyright/libxi6"
+  },
+  {
+    "name": "libxinerama1",
+    "version": "2:1.1.4-3",
+    "licence": "See debian-copyright/libxinerama1"
+  },
+  {
+    "name": "libxkbcommon0",
+    "version": "1.5.0-1",
+    "licence": "See debian-copyright/libxkbcommon0"
+  },
+  {
+    "name": "libxkbfile1",
+    "version": "1:1.1.0-1",
+    "licence": "See debian-copyright/libxkbfile1"
+  },
+  {
+    "name": "libxml2",
+    "version": "2.9.14+dfsg-1.3~deb12u6",
+    "licence": "ISC | MIT-1"
+  },
+  {
+    "name": "libxmu6",
+    "version": "2:1.1.3-3",
+    "licence": "See debian-copyright/libxmu6"
+  },
+  {
+    "name": "libxmuu1",
+    "version": "2:1.1.3-3",
+    "licence": "See debian-copyright/libxmuu1"
+  },
+  {
+    "name": "libxpm4",
+    "version": "1:3.5.12-1.1+deb12u1",
+    "licence": "See debian-copyright/libxpm4"
+  },
+  {
+    "name": "libxrandr2",
+    "version": "2:1.5.2-2+b1",
+    "licence": "See debian-copyright/libxrandr2"
+  },
+  {
+    "name": "libxrender1",
+    "version": "1:0.9.10-1.1",
+    "licence": "See debian-copyright/libxrender1"
+  },
+  {
+    "name": "libxshmfence1",
+    "version": "1.3-1",
+    "licence": "See debian-copyright/libxshmfence1"
+  },
+  {
+    "name": "libxstring-perl",
+    "version": "0.005-2+b1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libxt6",
+    "version": "1:1.2.1-1.1",
+    "licence": "See debian-copyright/libxt6"
+  },
+  {
+    "name": "libxtst6",
+    "version": "2:1.2.3-1.1",
+    "licence": "See debian-copyright/libxtst6"
+  },
+  {
+    "name": "libxv1",
+    "version": "2:1.0.11-1.1",
+    "licence": "All Rights Reserved"
+  },
+  {
+    "name": "libxxf86dga1",
+    "version": "2:1.1.5-1",
+    "licence": "See debian-copyright/libxxf86dga1"
+  },
+  {
+    "name": "libxxf86vm1",
+    "version": "1:1.1.4-1+b2",
+    "licence": "See debian-copyright/libxxf86vm1"
+  },
+  {
+    "name": "libxxhash0",
+    "version": "0.8.1-1",
+    "licence": "BSD-2-clause | GPL-2"
+  },
+  {
+    "name": "libyaml-tiny-perl",
+    "version": "1.73-1",
+    "licence": "Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "libz3-4",
+    "version": "4.8.12-3.1",
+    "licence": "Expat | GPL-2+"
+  },
+  {
+    "name": "libzstd1",
+    "version": "1.5.4+dfsg2-5",
+    "licence": "BSD-3-clause | BSD-3-clause or GPL-2 | Expat | GPL-2 | zlib"
+  },
+  {
+    "name": "login",
+    "version": "1:4.13+dfsg1-1+deb12u2",
+    "licence": "BSD-3-clause | GPL-1 | GPL-2+ | public-domain"
+  },
+  {
+    "name": "logsave",
+    "version": "1.47.0-2+b2",
+    "licence": "Apache-2 | BSD-3-Clause | GPL or MIT-US-export | GPL-2 | GPL-2+ with Texinfo exception | ISC | Kazlib | LGPL-2 | Latex2e"
+  },
+  {
+    "name": "mawk",
+    "version": "1.3.4.20200120-3.1",
+    "licence": "CC-BY-3.0 | GPL-2 | X11"
+  },
+  {
+    "name": "media-types",
+    "version": "10.0.0",
+    "licence": "ad-hoc"
+  },
+  {
+    "name": "mount",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "ncurses-base",
+    "version": "6.4-4",
+    "licence": "BSD-3-clause | MIT/X11 | X11"
+  },
+  {
+    "name": "ncurses-bin",
+    "version": "6.4-4",
+    "licence": "BSD-3-clause | MIT/X11 | X11"
+  },
+  {
+    "name": "openbox",
+    "version": "3.6.1-10",
+    "licence": "BSD-3-clause | GPL-2+ | GPL-3+"
+  },
+  {
+    "name": "openssl",
+    "version": "3.0.22-1~deb12u1",
+    "licence": "Apache-2.0 | Artistic | Artistic or GPL-1+ | GPL-1+"
+  },
+  {
+    "name": "passwd",
+    "version": "1:4.13+dfsg1-1+deb12u2",
+    "licence": "BSD-3-clause | GPL-1 | GPL-2+ | public-domain"
+  },
+  {
+    "name": "perl",
+    "version": "5.36.0-7+deb12u3",
+    "licence": "Artistic | Artistic or GPL-1+ or Artistic-dist | Artistic-2 | Artistic-dist | BSD-3-clause | BSD-3-clause-GENERIC | BSD-3-clause-with-weird-numbering | BSD-4-clause-POWERDOG | BZIP | CC0-1.0 | DONT-CHANGE-THE-GPL | Expat | Expat or GPL-1+ or Artistic | GPL-1+ | GPL-1+ or Artistic | GPL-1+ or Artistic or Artistic-dist | GPL-1+ or Artistic, and BSD-3-clause-GENERIC | GPL-1+ or Artistic, and BSD-4-clause-POWERDOG | GPL-1+ or Artistic, and Expat | GPL-1+ or Artistic, and Unicode | GPL-2+ | GPL-2+ or Artistic | GPL-3+-WITH-BISON-EXCEPTION | HSIEH-BSD | HSIEH-DERIVATIVE | LGPL-2.1 | REGCOMP | REGCOMP, and GPL-1+ or Artistic | RRA-KEEP-THIS-NOTICE | SDBM-PUBLIC-DOMAIN | TEXT-TABS | Unicode | ZLIB"
+  },
+  {
+    "name": "perl-base",
+    "version": "5.36.0-7+deb12u3",
+    "licence": "Artistic | Artistic or GPL-1+ or Artistic-dist | Artistic-2 | Artistic-dist | BSD-3-clause | BSD-3-clause-GENERIC | BSD-3-clause-with-weird-numbering | BSD-4-clause-POWERDOG | BZIP | CC0-1.0 | DONT-CHANGE-THE-GPL | Expat | Expat or GPL-1+ or Artistic | GPL-1+ | GPL-1+ or Artistic | GPL-1+ or Artistic or Artistic-dist | GPL-1+ or Artistic, and BSD-3-clause-GENERIC | GPL-1+ or Artistic, and BSD-4-clause-POWERDOG | GPL-1+ or Artistic, and Expat | GPL-1+ or Artistic, and Unicode | GPL-2+ | GPL-2+ or Artistic | GPL-3+-WITH-BISON-EXCEPTION | HSIEH-BSD | HSIEH-DERIVATIVE | LGPL-2.1 | REGCOMP | REGCOMP, and GPL-1+ or Artistic | RRA-KEEP-THIS-NOTICE | SDBM-PUBLIC-DOMAIN | TEXT-TABS | Unicode | ZLIB"
+  },
+  {
+    "name": "perl-modules-5.36",
+    "version": "5.36.0-7+deb12u3",
+    "licence": "Artistic | Artistic or GPL-1+ or Artistic-dist | Artistic-2 | Artistic-dist | BSD-3-clause | BSD-3-clause-GENERIC | BSD-3-clause-with-weird-numbering | BSD-4-clause-POWERDOG | BZIP | CC0-1.0 | DONT-CHANGE-THE-GPL | Expat | Expat or GPL-1+ or Artistic | GPL-1+ | GPL-1+ or Artistic | GPL-1+ or Artistic or Artistic-dist | GPL-1+ or Artistic, and BSD-3-clause-GENERIC | GPL-1+ or Artistic, and BSD-4-clause-POWERDOG | GPL-1+ or Artistic, and Expat | GPL-1+ or Artistic, and Unicode | GPL-2+ | GPL-2+ or Artistic | GPL-3+-WITH-BISON-EXCEPTION | HSIEH-BSD | HSIEH-DERIVATIVE | LGPL-2.1 | REGCOMP | REGCOMP, and GPL-1+ or Artistic | RRA-KEEP-THIS-NOTICE | SDBM-PUBLIC-DOMAIN | TEXT-TABS | Unicode | ZLIB"
+  },
+  {
+    "name": "poppler-data",
+    "version": "0.4.12-1",
+    "licence": "AGPL-3+ | BSD-3-cluase | GPL-2 | MIT"
+  },
+  {
+    "name": "poppler-utils",
+    "version": "22.12.0-2+deb12u3",
+    "licence": "Apache-2.0 | GPL-2 | GPL-2 or GPL-3 | GPL-3"
+  },
+  {
+    "name": "procps",
+    "version": "2:4.0.2-3",
+    "licence": "GPL-2.0+ | LGPL-2.0+ | LGPL-2.1+"
+  },
+  {
+    "name": "python3",
+    "version": "3.11.2-1+b1",
+    "licence": "See debian-copyright/python3"
+  },
+  {
+    "name": "python3-minimal",
+    "version": "3.11.2-1+b1",
+    "licence": "See debian-copyright/python3-minimal"
+  },
+  {
+    "name": "python3-pkg-resources",
+    "version": "66.1.1-1+deb12u2",
+    "licence": "Apache-2.0 | BSD-3-clause | Formerly, PSF or ZPL (both appended in this file). re-licensed in 19.5"
+  },
+  {
+    "name": "python3.11",
+    "version": "3.11.2-6+deb12u8",
+    "licence": "* Permission to use this software in any way is granted without | * Permission to use, copy, modify, and distribute this software and | By obtaining, using, and/or copying this software and/or its | Permission  is  hereby granted,  free  of charge,  to  any person | Permission is hereby granted, free of charge, to any person obtaining | Permission to use, copy, modify, and distribute this software and | Permission to use, copy, modify, and distribute this software and its | Permission to use, copy, modify, and distribute this software for any | Redistribution and use in source and binary forms, with or without | The following text includes the Python license and licenses and | This software is provided 'as-is', without any express or implied | This software is provided as-is, without express or implied"
+  },
+  {
+    "name": "python3.11-minimal",
+    "version": "3.11.2-6+deb12u8",
+    "licence": "* Permission to use this software in any way is granted without | * Permission to use, copy, modify, and distribute this software and | By obtaining, using, and/or copying this software and/or its | Permission  is  hereby granted,  free  of charge,  to  any person | Permission is hereby granted, free of charge, to any person obtaining | Permission to use, copy, modify, and distribute this software and | Permission to use, copy, modify, and distribute this software and its | Permission to use, copy, modify, and distribute this software for any | Redistribution and use in source and binary forms, with or without | The following text includes the Python license and licenses and | This software is provided 'as-is', without any express or implied | This software is provided as-is, without express or implied"
+  },
+  {
+    "name": "readline-common",
+    "version": "8.2-1.3",
+    "licence": "GFDL-NIV-1.3+ | GPL-2+ | GPL-3 | GPL-3+ | ISC-no-attribution"
+  },
+  {
+    "name": "sed",
+    "version": "4.9-1+deb12u1",
+    "licence": "BSD-4-clause-UC | BSL-1 | GFDL-NIV-1.3+ | GPL-3+ | GPL-3+ and ISC | ISC | X11 | pcre"
+  },
+  {
+    "name": "sensible-utils",
+    "version": "0.0.17+nmu1",
+    "licence": "All-permissive | GPL-2+ | configure | installsh"
+  },
+  {
+    "name": "shared-mime-info",
+    "version": "2.2-1",
+    "licence": "This package is free software; you can redistribute it and/or modify"
+  },
+  {
+    "name": "ssl-cert",
+    "version": "1.1.2",
+    "licence": "BSD-3-clause"
+  },
+  {
+    "name": "supervisor",
+    "version": "4.2.5-1",
+    "licence": "BSD-Derived | BSD-derived | GPL-2+ | Medusa | RDFLIB"
+  },
+  {
+    "name": "sysvinit-utils",
+    "version": "3.06-4",
+    "licence": "GPL-2.0 | GPL-2.0+ | GPL-3.0"
+  },
+  {
+    "name": "tar",
+    "version": "1.34+dfsg-1.2+deb12u1",
+    "licence": "GPL-2+ | GPL-3+ | GPL-3+ with Bison exception | LGPL-3+"
+  },
+  {
+    "name": "tzdata",
+    "version": "2026b-0+deb12u1",
+    "licence": "public-domain"
+  },
+  {
+    "name": "ucf",
+    "version": "3.0043+nmu1+deb12u1",
+    "licence": "GPL-2"
+  },
+  {
+    "name": "usr-is-merged",
+    "version": "37~deb12u1",
+    "licence": "GPL-2+"
+  },
+  {
+    "name": "util-linux",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "util-linux-extra",
+    "version": "2.38.1-5+deb12u3",
+    "licence": "BSD-3-clause | BSD-4-clause | BSLA | GPL-2 | GPL-2+ | GPL-3+ | LGPL | LGPL-2+ | LGPL-2.1+ | LGPL-3+ | MIT | public-domain"
+  },
+  {
+    "name": "x11-common",
+    "version": "1:7.7+23",
+    "licence": "See debian-copyright/x11-common"
+  },
+  {
+    "name": "x11-utils",
+    "version": "7.7+5",
+    "licence": "See debian-copyright/x11-utils"
+  },
+  {
+    "name": "x11-xkb-utils",
+    "version": "7.7+7",
+    "licence": "See debian-copyright/x11-xkb-utils"
+  },
+  {
+    "name": "xauth",
+    "version": "1:1.1.2-1",
+    "licence": "See debian-copyright/xauth"
+  },
+  {
+    "name": "xfonts-encodings",
+    "version": "1:1.0.4-2.2",
+    "licence": "See debian-copyright/xfonts-encodings"
+  },
+  {
+    "name": "xfonts-scalable",
+    "version": "1:1.0.3-1.3",
+    "licence": "See debian-copyright/xfonts-scalable"
+  },
+  {
+    "name": "xfonts-utils",
+    "version": "1:7.7+6",
+    "licence": "See debian-copyright/xfonts-utils"
+  },
+  {
+    "name": "xkb-data",
+    "version": "2.35.1-1",
+    "licence": "See debian-copyright/xkb-data"
+  },
+  {
+    "name": "zlib1g",
+    "version": "1:1.2.13.dfsg-1",
+    "licence": "Zlib"
+  }
+]

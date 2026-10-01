@@ -1,0 +1,8 @@
+[08:16:04Z] estimated 325 cents spent; next-day worst-case projection 1251 cents (stop at 2000)
+[08:16:07Z] resizing ocn-spike-default to 1 node(s), then autoscaling 1..3
+ERROR: (gcloud.container.clusters.resize) FAILED_PRECONDITION: Cluster is running incompatible operation operation-1790842075401-1ff9f55b-ca22-44ff-8b27-51db1f34fa91.
+- '@type': type.googleapis.com/google.rpc.RequestInfo
+  requestId: '0xb5790d2017c31d95'
+- '@type': type.googleapis.com/google.rpc.ErrorInfo
+  domain: container.googleapis.com
+  reason: CLUSTER_ALREADY_HAS_OPERATION

@@ -1,0 +1,5 @@
+@openai/codex	0.159.3	Apache-2.0
+@openai/codex	0.159.3-linux-x64	Apache-2.0
+@playwright/mcp	0.0.83	Apache-2.0
+playwright	1.64.0-alpha-1790635538000	Apache-2.0
+playwright-core	1.64.0-alpha-1790635538000	Apache-2.0

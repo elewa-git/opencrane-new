@@ -1,0 +1,14 @@
+Step #1 - "selftest-in-plain-container": PASS health endpoint says ok and lists every process with PID and uptime (56 ms) chromium:pid=33,up=6s codex-app-server:pid=35,up=6s health:pid=37,up=6s openbox:pid=32,up=6s xvnc:pid=31,up=6s
+Step #1 - "selftest-in-plain-container": PASS runs as a non-root user (0 ms) uid=1000 gid=1000
+Step #1 - "selftest-in-plain-container": PASS kernel string is readable (placement is checked separately by smoke.sh) (1 ms) Linux version 5.10.0-32-cloud-amd64 (debian-kernel@lists.debian.org) (gcc-10 (Debian 10.2.1-6) 10.2.
+Step #1 - "selftest-in-plain-container": PASS Chromium renders a page through its debugging port and a screenshot is a real PNG (642 ms) Chrome/155.0.0.0; screenshot 8676 bytes
+Step #1 - "selftest-in-plain-container": PASS Chromium has a real window on the KasmVNC desktop (9 ms) 1 Chromium window(s): 0x400002 "about:blank - Google Chrome for Testing": ("chromium-browser (/home/agent/.config/chromium
+Step #1 - "selftest-in-plain-container": PASS KasmVNC serves its web client on :6901 (6 ms) HTTP 200, 70631 bytes, mentions KasmVNC: true
+Step #1 - "selftest-in-plain-container": PASS KasmVNC websocket answers a browser with the VNC (RFB) banner (446 ms) RFB 003.008
+Step #1 - "selftest-in-plain-container": PASS Codex app-server (idle) answers the initialize request (10 ms) selftest/0.159.3 (Debian 12.0.0; x86_64) unknown (selftest; 0)
+Step #1 - "selftest-in-plain-container": PASS only the expected ports listen outside the container's loopback (6901 and 8080) (1 ms) open to the network: 6901,8080; loopback only: 4500,9222
+Step #1 - "selftest-in-plain-container": PASS /home/agent is a separate volume and a marker file can be written and read back (0 ms) mount: /dev/sda1 /home/agent ext4 rw,relatime,discard,errors=remount-ro 0 0; first start 2026-10-01T08:07:30Z
+Step #1 - "selftest-in-plain-container": PASS Codex CLI is the pinned version and runs without a key (425 ms) codex-cli 0.159.3; Playwright MCP Version 0.0.83
+Step #1 - "selftest-in-plain-container": PASS MarkItDown converts HTML to Markdown and poppler is installed (960 ms) markitdown ok; pdftotext -v exited successfully
+Step #1 - "selftest-in-plain-container": PASS the bridge and local forwarding proxy are present and import cleanly, but are not running (21 ms) bridge.js and local-proxy.js import; not started
+Step #1 - "selftest-in-plain-container": self-test exit code: 0

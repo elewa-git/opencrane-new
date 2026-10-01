@@ -1,0 +1,25 @@
+NumPy 2.4.6 declares BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0
+Installed SplitMix64 paths: ['numpy-2.4.6.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md']
+PASS only the SplitMix64 licence notice is installed, no named source or executable
+SOURCE https://github.com/numpy/numpy/blob/v2.4.6/numpy/random/meson.build
+67:  ['_philox', ['_philox.pyx', 'src/philox/philox.c'], [], [npyrandom_lib]],
+68:  ['_pcg64', ['_pcg64.pyx', 'src/pcg64/pcg64.c'], ['-U__GNUC_GNU_INLINE__'], [npyrandom_lib]],
+69:  ['_sfc64', ['_sfc64.pyx', 'src/sfc64/sfc64.c'], [], [npyrandom_lib]],
+107:    '_pcg64.pyi',
+110:    '_philox.pyi',
+111:    '_sfc64.pyi',
+153:    'tests/data/generator_pcg64_np126.pkl.gz',
+154:    'tests/data/generator_pcg64_np121.pkl.gz',
+SOURCE https://github.com/numpy/numpy/blob/v2.4.6/numpy/random/src/philox/philox-test-data-gen.c
+15:#include "../splitmix64/splitmix64.h"
+31:    key.v[i] = splitmix64_next(&state);
+59:    key.v[i] = splitmix64_next(&state);
+SOURCE https://github.com/numpy/numpy/blob/v2.4.6/numpy/random/src/pcg64/pcg64-benchmark.c
+2: * cl pcg64-benchmark.c pcg64.c ../splitmix64/splitmix64.c /Ox
+5: * gcc pcg64-benchmark.c pcg64.c ../splitmix64/splitmix64.c -O3 -o
+9:#include "../splitmix64/splitmix64.h"
+23:  rng.state = (__uint128_t)splitmix64_next(&seed) << 64;
+24:  rng.state |= splitmix64_next(&seed);
+27:  rng.state.high = splitmix64_next(&seed);
+28:  rng.state.low = splitmix64_next(&seed);
+PARTIAL strict licence clearance: aggregate wheel metadata includes CC0-1.0; upstream references found only in test-data generation and benchmarks. This check does not prove absence of inlined code in every binary.

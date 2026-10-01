@@ -1,0 +1,1 @@
+[08:02:32Z] ERROR: usage: teardown.sh --yes (deletes ocn-spike cluster only; retains shared images and build bucket)

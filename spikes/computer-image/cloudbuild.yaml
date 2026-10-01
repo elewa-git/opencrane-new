@@ -1,0 +1,31 @@
+# Cloud Build config for the computer image. Always run through build.sh, which stages the build context and
+# passes the substitutions. No local Docker is used anywhere.
+#
+# Step 1 builds the image. Step 2 starts it in a plain container (not gVisor) and runs the self-test as an
+# early warning. The image is pushed only if both steps pass (the `images:` list is pushed at the end).
+substitutions:
+  _IMAGE: europe-west1-docker.pkg.dev/weownai-proto/ocn-spike/computer
+  _TAG: dev
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker@sha256:bbb3d633c5c2813b2ce5245852979e1d637768f4acfc504d8ece288f91e9b60f
+    env: ['DOCKER_BUILDKIT=1']
+    args: ['build', '--progress=plain', '--tag', '${_IMAGE}:${_TAG}', '--file', 'Dockerfile', '.']
+
+  - id: selftest-in-plain-container
+    timeout: 600s
+    name: gcr.io/cloud-builders/docker@sha256:bbb3d633c5c2813b2ce5245852979e1d637768f4acfc504d8ece288f91e9b60f
+    entrypoint: bash
+    args: ['ci-selftest.sh', '${_IMAGE}:${_TAG}']
+
+tags: [ocn-spike, owner-opencrane-new, purpose-spike]
+
+images:
+  - '${_IMAGE}:${_TAG}'
+
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1800s
