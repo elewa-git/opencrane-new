@@ -126,7 +126,7 @@ describe('main.ts under the real Node runtime', () => {
     server = undefined;
   });
 
-  it('starts the configured membership route and appends to real NATS', async () => {
+  it('starts the configured membership route, appends to real NATS, and closes NATS on SIGTERM', async () => {
     const nats = await natsFixture();
     try {
       const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme',
@@ -148,6 +148,10 @@ describe('main.ts under the real Node runtime', () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ status: 'joined', memberId: 'alice', sequence: 2 });
       expect(await nats.store.head()).toBe(2);
+      const running = server;
+      await running.stop();
+      server = undefined;
+      expect(parseJsonLines(running.stdout()).map((line) => line['msg'])).toContain('event store connection closed');
     } finally {
       await server?.stop();
       await nats.close();

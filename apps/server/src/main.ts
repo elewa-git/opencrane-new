@@ -23,7 +23,23 @@ if (natsUrl && (!silo || !authConfig.expectedOrgId)) {
 }
 const events = natsUrl ? await connectEventStore(natsUrl) : undefined;
 const app = buildServer(authConfig, events && silo ? { membership: { silo, store: events.store } } : {});
-if (events) app.addHook('onClose', events.close);
+if (events) {
+  app.addHook('onClose', async () => {
+    await events.close();
+    app.log.info('event store connection closed');
+  });
+}
+
+let closing: Promise<void> | undefined;
+const close = (signal: NodeJS.Signals): void => {
+  if (closing) return;
+  closing = app.close().catch((error: unknown) => {
+    app.log.error({ error, signal }, 'server shutdown failed');
+    process.exitCode = 1;
+  });
+};
+process.once('SIGTERM', () => close('SIGTERM'));
+process.once('SIGINT', () => close('SIGINT'));
 
 await app.listen({ port, host });
 attachWebSocketServer(app.server, app.log, authConfig);
