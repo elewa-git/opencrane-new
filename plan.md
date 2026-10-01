@@ -48,15 +48,15 @@ Local stdio tools inside the computer (Playwright, document tools) are exempt un
 
 ## Responsibility split: gateway vs server
 
-The gateway **enforces**; the OpenCrane server **decides** and owns the truth. The gateway holds nothing it can't lose: no business state, no per-user secrets at rest, and no decisions beyond static rules generated from server configuration.
+The gateway **enforces**; the OpenCrane decision service **decides** inside `ext_authz` and owns the truth. The gateway holds nothing it can't lose: no business state, no per-user secrets at rest, and no decisions beyond static rules generated from server configuration.
 
-| Concern | agentgateway | OpenCrane server | Other |
+| Concern | agentgateway | Decision service (ext_authz) and server | Other |
 | --- | --- | --- | --- |
 | Computer tokens | Verifies signature, expiry and audience (JWKS) | Mints them at claim; holds the signing key | Secret store |
 | Coarse allowlist (which models, MCP servers, web domains exist in this silo) | Enforces it (CEL rules, routes) | Generates the gateway config from admin settings | — |
-| Fine decisions (this computer, this tool, these arguments; Allow/Ask/Block; human ∩ agent) | Calls `ext_authz`, fails closed | Decides | OpenFGA |
-| Budgets | Rate limits as a safety net; usage logs | EUR price table, reserve before the call, settle from logs | Postgres |
-| Approvals | Denies until approved | Approval records, UI, single-use approvals bound to arguments | — |
+| Fine decisions (this computer, this tool, these arguments; Allow/Ask/Deny; human ∩ agent) | Calls `ext_authz`, fails closed | Every allow/ask/deny decision, including budgets and approvals, is made in `ext_authz` | OpenFGA |
+| Budgets | Usage log; rate limits as a safety net | `ext_authz` reserves worst-case cost before the call (single-writer budget actor per silo); a reaction to `effect.observed` settles it after the reply from the gateway's usage log, because real usage arrives only in the reply; admins set ceilings and a routine resets periods | Event store (budget stream), with a Postgres projection |
+| Approvals | Denies until approved | `ext_authz` denies with “approval required” and records `approval.requested`; the person decides in the web app (`approval.decided`); on retry, `ext_authz` allows the call once, bound to requester, conversation, turn, assistant and argument digest | Event store (approval stream), with a Postgres projection |
 | Company model keys (BYOK) | Uses them as backend credentials | Admin screen writes or rotates them | Kubernetes Secret or Secret Manager |
 | Personal / connection credentials (OAuth, bearer) | Injects them into the upstream request | Connect, consent, refresh, revoke; hands the credential to the gateway per call | Secret store |
 | Model routing, failover, MCP protocol, tool federation | ✅ | — | — |
@@ -64,6 +64,8 @@ The gateway **enforces**; the OpenCrane server **decides** and owns the truth. T
 | Live view and takeover (human → computer) | — | Its own authenticated proxy | KasmVNC |
 | Audit | Emits OpenTelemetry logs | The authoritative record: decisions, approvals, reservations, reconciled with gateway logs | — |
 | Memory | Passes allowed scopes from `ext_authz` to the memory MCP | Resolves allowed scopes from IAM context; commands append `memory.*` events | OpenCrane memory MCP; Postgres memory projection |
+
+Decisions happen in `ext_authz`; the server around it handles what happens before or after a request (UI, settlement, admin changes, schedules).
 
 ## Design rules for the main building blocks
 
