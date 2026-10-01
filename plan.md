@@ -15,9 +15,9 @@ Follow the [engineering standard](docs/process/standards.md) for the full review
 - **Night.** Take ready issues with acceptance criteria and decisions made. Up to three builders use separate worktrees and assigned files. Aim for at most about 1,500 non-generated added/deleted lines per coherent change. Each whole feature has a development branch and a well-described PR (Why / Functional outcome / Architecture / Evidence / Not in this PR). The orchestrator merges serially after gates, independent review by a different model and green CI. Small fixes belong inside their feature PR; never add co-author or AI attribution.
 - **Review.** At most two passes: review the actual diff and evidence, then verify fixes and batched disputes. If blockers remain, hold the change for the owner's decision; never reset the count by renaming it.
 - **Morning (human, about 1–2 hours).** Review results, resolve held blockers and decisions, and ready new issues.
-- **Every day (agent).** Run smoke tests and most live journeys on a k3d test silo on the developer box; the results go in the deploy ledger.
+- **Every day (agent).** Run `infra/dev-stack/up.sh --fresh` and its core journeys on the developer box (computers use the existing k3d cluster); the results go in the deploy ledger.
 - **Occasionally (human + agent).** Run a fresh production-like qualification install on a managed cluster. A capability is done only on a ledger PASS.
-- **Weekly (human + agent).** Run journeys on a fresh test-silo install and record receipts. Source is ready with green checks and an explicit remaining live-qualification issue; a capability is done only on a live journey PASS.
+- **Weekly (human + agent).** Run journeys on a fresh dev stack and record receipts; Phase 5 adds Helm-installed silos. Source is ready with green checks and an explicit remaining live-qualification issue; a capability is done only on a live journey PASS.
 - **Feature PRs.** One PR per whole feature, stacks at most two, no consolidation PRs.
 - **Always.** Run `lint`, `typecheck`, `test` and `check:events` before landing and on `main`, plus the separate web build/tests. Repair or revert a failed combined result before landing more. Never turn an untested condition into PASS.
 - **Commits.** One emoji plus a plain sentence; no co-author line or AI attribution. Decisions belong in issues with a needed-by date.
@@ -303,42 +303,46 @@ Each spike is one night of agent work plus a morning decision. The result is a o
 
 ## Phases and acceptance
 
-| Phase | Scope | Done when (live on a fresh install) | PRs (estimate) |
+| Phase | Scope | Done when | PRs (remaining estimate, 1 October) |
 | --- | --- | --- | --- |
-| **1. Foundation** | Repository scaffold (npm workspaces, four apps: `web`, `server`, `computer`, `deploy`); CI with required checks; Helm umbrella from OpenCrane 1 charts; CNPG with backups; NATS JetStream `EVENTS` stream (R3); **event core**: typed catalogue, command → conditional append, projection runner with checkpoints, dispatcher → handler runtime, replay tool, per-handler logs and traces; Zitadel sign-in (copied auth library); OpenFGA as a projection; WebSocket realtime skeleton | Sign in and out on the test silo; `member.joined` flows through to members and OpenFGA projections; a projection is dropped and rebuilt by replay; backup and restore drill passes | 14–18 |
-| **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); the bridge; claim and bind from the warm pool; chat UI from OpenCrane 1 components; file upload into the workspace; models through agentgateway with a simple cap | A person chats with their assistant, it reads an uploaded PDF, and the answer survives a reload and a Pod replacement | 15–20 |
-| **3. Governed work** | Decision service: EUR price table, reserve-before-call, settlement from gateway logs; Allow/Ask/Block with the approval card; the MCP install flow; per-user connections and credential injection; the Odoo MCP (our `odoo-mcp-server`, remote mode); screenshots; live view; takeover; audit | One Odoo read and one approved Odoo write pass live, with every refusal case; the budget stops the next call at its limit; takeover is audited | 25–35 |
-| **4. Company product** | Flat groups, shared group assistants, child chats and member threads/sub-agents; members, tools, models, budgets, usage and audit screens; OpenCrane memory MCP on Postgres (remember/recall/correct/forget, full-text search, capped preferences and pinned facts at turn start, nightly per-scope dreaming); scheduled routines (`routine.due` → `message.posted` to the assistant); delegation (Codex sub-agents under one root budget) | MVP user stories pass on the test silo; any member writes group memory without approval; personal preferences stay in that member's thread, shared facts reach group members, no memory reaches disk or another group; correction, forgetting, replay and dreaming pass; cross-user, unauthorised-scope and cross-silo calls are denied | 30–45 |
-| **5. Qualification and hardening** | Daily smoke tests and most live journeys on a k3d test silo; occasional fresh production-like installs on a managed cluster; backup/restore of NATS JetStream, Postgres and persistent volumes together; memory projection rebuilt by replay; security review of the gateway and live-view exposure; negative tests; operator docs | A release candidate passes the full journey list on a fresh managed-cluster install; no open Critical/High finding | 15–20 |
+| **1. Foundation** | Repository, CI and event core; local dev stack (#10); Zitadel sign-in (#11); typed catalogue, conditional append, checkpointed projections, dispatcher, replay, OpenFGA and WebSocket realtime | **Passes on a fresh dev stack:** sign in/out; `member.joined` reaches members, OpenFGA and a live subscriber; members and MCP catalogue replay verify; admin integrations return typed rows | 2–4 |
+| **2. Prototype: talk to your computer** | Computer image (Codex, runtimes, Playwright, MarkItDown); bridge; warm-pool claim/bind; chat UI; upload; models through agentgateway with a simple cap | **Passes on a fresh dev stack:** a person chats with their assistant, it reads an uploaded PDF, and the answer survives reload and Pod replacement | 10–14 |
+| **3. Governed work** | EUR price table, reserve-before-call and settlement; Allow/Ask/Block and approvals; MCP install; per-user connections and credentials; Odoo MCP; screenshots; live view/takeover; audit | **Passes on a fresh dev stack:** Odoo read and approved write, every refusal case, budget exhaustion and audited takeover | 16–22 |
+| **4. Company product** | Flat groups, shared assistants and child chats; administration screens; Postgres memory MCP (remember/recall/correct/forget, full-text search, capped preferences, pinned facts, nightly dreaming); routines; delegation under one root budget | **Passes on a fresh dev stack:** MVP stories; group memory without approval; isolated personal and group memory; no memory on disk; correction, forgetting, replay and dreaming; cross-user, unauthorised-scope and cross-silo denials | 20–28 |
+| **5. Qualification and hardening (#15)** | Helm umbrella; CNPG and backups; NATS R3 and failover; coordinated NATS/Postgres/volume backup and restore drill; fresh managed-cluster installs; memory replay; gateway/live-view security; negative tests; operator docs; cross-replica realtime | Full journey list passes on a fresh managed-cluster install; restore drill passes; no open Critical/High finding | 14–20 |
+
+Phases 1–4 use the local Compose services and host processes, with computers in
+Agent Sandbox Pods under gVisor on `ocn`. Helm packaging is Phase 5, following
+[the owner's 1 October decision](https://github.com/elewa-git/opencrane-new/issues/7).
+A dev-stack PASS does not claim OIDC, R3, failover or disaster-recovery qualification.
 
 ## Estimate
 
-**Assumptions:**
+Observed on 1 October: **8 merged PRs**, including **2 spike PRs and 1 small fix**,
+between 12:36 and 20:44 UTC. The other 5 shipped product/infrastructure slices.
+That is one busy day, not a sustained nightly rate; the original 3 PRs/night was
+an assumption. Larger whole features, review and owner decisions still limit output.
+The table counts remaining whole-feature PRs, including #10, not commits or fixes.
 
-- About **3 mergeable PRs per night** (three parallel agents, one PR each), **5 nights a week**.
-- About 1–2 hours of human review each morning.
-- A rework factor of **1.3–1.5×** for rejected PRs and fixes found during live runs.
-- No work for optional Pod Snapshots or gVisor checkpoint and restore; suspend and resume use the persistent volume.
+Plan at **3–5 accepted whole-feature PRs per working day**, five days a week,
+with **25–40% contingency** for live failures, review and owner waits. Today's
+spikes reduce unknowns; they do not qualify the remaining product journeys.
+Keep 1–2 hours of owner review daily. Re-estimate weekly from accepted features
+and fresh-stack receipts, and again after the prototype.
 
-These are planning estimates, not measurements. Re-estimate after Phase 2 from the real throughput.
-
-| Milestone | Nights of agent work | Calendar (5 nights/week, with rework) |
+| Remaining milestone | Working days, before contingency | Calendar from 1 October, cumulative |
 | --- | --- | --- |
-| Phase 0: start-gate spikes S0.1, S0.2, S0.7 (others run alongside later phases) | 3 (+3 alongside) | **Week 1** |
-| Phase 1: foundation (incl. event core) | 5–7 | Week 2–4 |
-| **Phase 2: working prototype** | 5–7 | **About week 4–5** |
-| Phase 3: governed work | 9–12 | Week 6–9 (first live governed action around week 7) |
-| Phase 4: company product | 10–15 | Week 9–13 |
-| Phase 5: qualification | 5–7 plus human-run live tests | Week 13–16 |
-| **MVP** | **About 40–56 nights** | **About 12–16 weeks** |
+| Phase 1 foundation | 1–2 | Week 1 (OIDC waits for owner) |
+| **Phase 2 working prototype** | 2–5 | **Weeks 1–2** |
+| Phase 3 governed work | 4–8 | Weeks 2–4 |
+| Phase 4 company product | 4–10 | Weeks 3–7 |
+| Phase 5 qualification | 3–7 plus human-run live tests | Weeks 4–9 |
+| **MVP including qualification** | **14–32 working days** | **About 4–9 weeks, including contingency** |
 
-Phase 4 saves about 5 PRs (2 nights): reusing Postgres removes Cognee deployment and graph work, while scope isolation and live memory tests still take time.
-
-**What moves the date:**
-
-- **Human bandwidth, the main limit.** Morning review, decisions, and human-only steps: identity-provider changes, approvals that need a real re-login, visual approval.
-- **Spike outcomes.** A failed harness, gateway or event-store spike adds about 1–2 weeks before the start gate (the event store falls back to Postgres).
-- **Live bring-up.** OpenCrane 1 needed 20–30 ledger entries per fresh install. Daily k3d runs from Phase 1 onwards, backed by occasional managed-cluster qualification, are meant to bring that down.
+The remaining estimate is **62–88 feature PRs**. This is a forecast, not a delivery
+promise. Identity-provider setup, model credentials, visual approval and managed
+cluster qualification remain owner-dependent. Daily fresh-stack runs expose product
+install failures early; production packaging and recovery risk remain in Phase 5.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
 
