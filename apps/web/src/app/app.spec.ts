@@ -109,6 +109,7 @@ describe('MCP register', () => {
     const retry = button(root(fixture), 'Refreshing list…');
     expect(notice?.getAttribute('aria-live')).toBe('polite');
     expect(notice?.textContent).toContain('Refreshing the integrations list…');
+    expect(root(fixture).textContent).not.toContain('Nothing set up yet');
     expect(retry.getAttribute('aria-disabled')).toBe('true');
     finish(response(loaded));
     await fixture.whenStable();
@@ -128,7 +129,23 @@ describe('MCP register', () => {
     const fixture = create(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
     await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
     expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Owner or Admin role');
+    expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Ask an admin');
     expect(root(fixture).querySelector('.register')).toBeNull();
+  });
+
+  it('clears protected rows after an authority refusal and does not restore them during an outage', async () => {
+    const fixture = create();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
+    fetchSpy.mockResolvedValueOnce(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
+    button(root(fixture), 'Refresh list').click();
+    await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(0);
+
+    fetchSpy.mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
+    button(root(fixture), 'Refresh list').click();
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(0);
+    expect(root(fixture).textContent).not.toContain('Showing what we loaded');
   });
 
   it('keeps the existing sign-in shell outside /org routes', () => {

@@ -22,7 +22,7 @@ main { flex: 1; min-width: 0; padding: 28px 32px 32px; display: flex; flex-direc
 .page-heading > div { flex: 1; min-width: 200px; }
 h1, h2, p { margin: 0; } h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); } h2 { font: var(--oc-type-card); }
 .page-heading p { margin-top: 3px; color: var(--oc-ink-admin-muted); font-size: 13px; }
-.page-actions { display: flex; gap: 10px; }
+.page-actions { display: flex; justify-content: flex-end; gap: 10px; }
 .button { min-height: 36px; padding: 8px 14px; border: 1px solid transparent; border-radius: var(--oc-radius-control); font-size: 13px; font-weight: 500; white-space: nowrap; }
 .button:active { transform: translateY(1px); }
 .button.primary { background: var(--oc-accent); border-color: var(--oc-accent); box-shadow: var(--oc-shadow-primary); }

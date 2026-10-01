@@ -46,7 +46,7 @@
       @if (loadState() === 'access') {
         <section class="access-state">
           <h2>Access needed</h2>
-          <oc-shared-state kind="access_changed" message="You no longer have permission" detail="The Owner or Admin role is needed to view organisation integrations." />
+          <oc-shared-state kind="access_changed" message="You no longer have permission" detail="The Owner or Admin role is needed to view organisation integrations." actionLabel="Ask an admin" />
         </section>
       } @else {
         <div class="tabs" role="tablist" aria-label="Integration filters">
@@ -55,7 +55,7 @@
           <button id="integrations-tab-review" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'review'" [attr.tabindex]="selectedTab() === 'review' ? 0 : -1" (click)="select('review')" (keydown)="tabKeydown($event)">Pending review · {{ reviews().length }}</button>
         </div>
 
-        <section id="integrations-panel" class="register" role="tabpanel" [attr.aria-labelledby]="'integrations-tab-' + selectedTab()">
+        <section id="integrations-panel" class="register" role="tabpanel" tabindex="0" [attr.aria-labelledby]="'integrations-tab-' + selectedTab()">
           @if (loadState() === 'failed' || loadState() === 'retrying') {
             <div class="refresh-notice" role="status" aria-live="polite" [attr.data-retrying]="loadState() === 'retrying'">
               @if (loadState() === 'retrying') {
@@ -67,7 +67,7 @@
           }
           @if (loadState() === 'loading') {
             <div class="loading"><oc-shared-state kind="checking" message="Loading integrations…" /></div>
-          } @else if (loadState() === 'failed' && !loadedAt()) {
+          } @else if ((loadState() === 'failed' || loadState() === 'retrying') && !loadedAt()) {
           } @else if (rows().length === 0) {
             <div class="empty"><strong>Not configured</strong><oc-shared-state kind="not_configured" message="Nothing set up yet" /></div>
           } @else if (visibleRows().length === 0) {

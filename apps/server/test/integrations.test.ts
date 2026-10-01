@@ -205,6 +205,8 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('tab', { name: /^All/ }).press('ArrowRight');
     expect(await page.locator(':focus').getAttribute('id')).toBe('integrations-tab-attention');
     await page.getByRole('tab', { name: /^All/ }).click();
+    await page.getByRole('tab', { name: /^All/ }).press('Tab');
+    expect(await page.locator(':focus').getAttribute('id')).toBe('integrations-panel');
 
     await page.getByRole('button', { name: 'Add MCP server' }).click();
     await page.getByText("Adding MCP servers isn't available yet").waitFor();
@@ -228,9 +230,47 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       expect(await refresh.getAttribute('aria-disabled')).toBe('true');
       await page.getByText(/Showing what we loaded at 09:40/).waitFor({ timeout: 5_000 });
       expect(await page.locator('.register-row').count()).toBe(6);
+
+      const firstRead = await context.newPage();
+      const firstFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
+      await firstRead.goto(`${base}/org/integrations`);
+      expect((await firstFailure).status()).toBe(503);
+      await firstRead.getByText("Couldn't load the integrations list.").waitFor();
+      const retryFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
+      await firstRead.getByRole('button', { name: 'Refresh list' }).click();
+      await firstRead.getByText('Refreshing the integrations list…').waitFor();
+      expect(await firstRead.getByText('Nothing set up yet').count()).toBe(0);
+      expect((await retryFailure).status()).toBe(503);
+      expect(await firstRead.getByText('Nothing set up yet').count()).toBe(0);
+      await firstRead.close();
     } finally {
       await held.query('ROLLBACK');
       held.release();
+    }
+
+    const roleChanged = fixture('member.role_changed', 'member-alice', {
+      memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'amina',
+    });
+    await append(roleChanged);
+    await runner.run(members);
+    await authorisation.handler.handle(roleChanged, pgDb(dbs.queue));
+    const refused = page.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
+    await page.getByRole('button', { name: 'Refresh list' }).click();
+    expect((await refused).status()).toBe(403);
+    await page.getByText('You no longer have permission').waitFor();
+    expect(await page.getByText('Ask an admin').count()).toBe(1);
+    expect(await page.locator('.register-row').count()).toBe(0);
+
+    await fga.pause();
+    try {
+      const unavailable = page.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
+      await page.getByRole('button', { name: 'Refresh list' }).click();
+      expect((await unavailable).status()).toBe(503);
+      await page.getByText("Couldn't load the integrations list.").waitFor();
+      expect(await page.locator('.register-row').count()).toBe(0);
+      expect(await page.getByText(/Showing what we loaded/).count()).toBe(0);
+    } finally {
+      await fga.resume();
     }
     await context.close();
   } finally {

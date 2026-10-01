@@ -8,12 +8,13 @@
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--oc-needs-input); }
 .spinner { width: 11px; height: 11px; border: 2px solid var(--oc-accent-border); border-top-color: var(--oc-accent); border-radius: 50%; animation: oc-spin .9s linear infinite; }
 .question { width: 12px; height: 12px; border: 1.5px solid currentColor; border-radius: 50%; font: 700 8px/9px var(--oc-font-sans); display: inline-flex; align-items: center; justify-content: center; }
-svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .dash { width: 10px; height: 2px; border-radius: 1px; background: var(--oc-ink-faint); }
 [data-state='ready'] { color: var(--oc-success-admin); }
 [data-state='draft'], [data-state='needs_input'] { color: var(--oc-warning-text); }
 [data-state='checking'] { color: var(--oc-accent-dark); }
 [data-state='failed'] { color: var(--oc-danger-admin); }
+[data-state='failed'] svg { width: 11px; height: 11px; }
 [data-state='not_configured'], [data-state='access_changed'], [data-state='disabled'] { color: var(--oc-ink-admin-muted); }
 .state-action { color: var(--oc-accent-dark); font-size: 13px; font-weight: 500; text-align: left; }
 @keyframes oc-spin { to { transform: rotate(360deg); } }

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, type OnInit, computed, inject, signal } from '@angular/core';
-import { integrationsRefusalSchema, integrationsResponseSchema, logoutResponseSchema, type IntegrationRow, type SharedStateKind } from '@opencrane/protocol';
+import { integrationsResponseSchema, logoutResponseSchema, type IntegrationRow, type SharedStateKind } from '@opencrane/protocol';
 import { NAVIGATE } from './core/navigate';
 import { WebSocketService } from './core/websocket.service';
 import { SharedState } from './shared-state/shared-state';
@@ -96,7 +96,9 @@ export class App implements OnInit {
     try {
       const response = await fetch('/api/org/integrations', { headers: { accept: 'application/json' } });
       const raw: unknown = await response.json().catch(() => null);
-      if (response.status === 403 && integrationsRefusalSchema.safeParse(raw).success) {
+      if (response.status === 401 || response.status === 403) {
+        this.rows.set([]);
+        this.loadedAt.set(undefined);
         this.loadState.set('access');
         return;
       }
