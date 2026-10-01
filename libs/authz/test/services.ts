@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
@@ -6,10 +6,26 @@ import { Pool } from "pg";
 import { freePort } from "@opencrane/event-store/testing";
 
 const exec = promisify(execFile);
+const containers = new Set<string>();
+const fixtureLabel = `opencrane.test.process=${process.pid}`;
 const image =
   "openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55";
 async function docker(...args: string[]) {
   return (await exec("docker", args, { timeout: 120_000 })).stdout.trim();
+}
+function reapContainers() {
+  if (containers.size === 0) return;
+  spawnSync("docker", ["rm", "-f", ...containers], {
+    stdio: "ignore",
+    timeout: 10_000,
+  });
+}
+process.once("exit", reapContainers);
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    reapContainers();
+    process.kill(process.pid, signal);
+  });
 }
 export async function until(check: () => boolean | Promise<boolean>, timeout = 15_000) {
   const deadline = performance.now() + timeout;
@@ -23,6 +39,7 @@ export async function until(check: () => boolean | Promise<boolean>, timeout = 1
 
 export async function openfga(postgres?: string) {
   const name = `authz-${randomUUID()}`;
+  containers.add(name);
   const port = await freePort();
   const grpc = await freePort();
   const apiUrl = `http://127.0.0.1:${port}`;
@@ -45,6 +62,8 @@ export async function openfga(postgres?: string) {
     "-d",
     "--name",
     name,
+    "--label",
+    fixtureLabel,
     "--network",
     "host",
     image,
@@ -73,6 +92,7 @@ export async function openfga(postgres?: string) {
     await ready();
   } catch (error) {
     await docker("rm", "-f", name);
+    containers.delete(name);
     throw error;
   }
   return {
@@ -90,6 +110,7 @@ export async function openfga(postgres?: string) {
     },
     async close() {
       await docker("rm", "-f", name);
+      containers.delete(name);
     },
   };
 }
@@ -99,10 +120,16 @@ export async function databases() {
   let url = process.env["PG_TEST_URL"];
   if (!url) {
     const port = await freePort();
-    container = await docker(
+    container = `authz-postgres-${randomUUID()}`;
+    containers.add(container);
+    await docker(
       "run",
       "-d",
       "--rm",
+      "--name",
+      container,
+      "--label",
+      fixtureLabel,
       "-p",
       `127.0.0.1:${port}:5432`,
       "-e",
@@ -146,6 +173,7 @@ export async function databases() {
       await admin.end();
       if (container) {
         await docker("rm", "-f", container);
+        containers.delete(container);
       }
     },
   };

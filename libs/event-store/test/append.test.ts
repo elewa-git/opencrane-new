@@ -274,4 +274,6 @@ it("retries no-responder failures through recovery and the full deadline", async
   ).toBe("unavailable");
   expect(performance.now() - started).toBeGreaterThanOrEqual(9_900);
   expect(performance.now() - started).toBeLessThan(10_750);
-}, 20_000);
+// The checks above keep the retry window strict. This limit also covers fixture
+// setup and three real NATS process starts on a busy machine.
+}, 45_000);

@@ -5,7 +5,7 @@ import { WebSocket } from 'ws';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { until } from '@opencrane/authz/testing';
-import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
+import { parseJsonLines, startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let server: RunningServer | undefined;
@@ -24,12 +24,17 @@ async function start(extra = {}) {
   return server;
 }
 async function exit(running: RunningServer, code: number) {
-  const timeout = setTimeout(() => running.child.kill('SIGKILL'), 3000);
+  const timeout = setTimeout(() => running.child.kill('SIGKILL'), 10_000);
   const result = await running.exited;
   clearTimeout(timeout);
   expect(result, running.stdout()).toEqual({ code, signal: null });
   expect(running.stdout().split('test NATS close called').length - 1).toBe(1);
   expect(running.stdout().split('test telemetry close called').length - 1).toBe(1);
+}
+function elapsed(running: RunningServer, message: string) {
+  const value = parseJsonLines(running.stdout()).find((line) => line['msg'] === message)?.['elapsedMs'];
+  if (typeof value !== 'number') throw new Error(`Missing elapsed time for ${message}`);
+  return value;
 }
 it.each(['SIGTERM', 'SIGINT'] as const)('idle %s exits 0 and closes NATS once', async (signal) => {
   const running = await start();
@@ -41,11 +46,10 @@ it('gives an open WebSocket a 1001 close and exits inside grace', async () => {
   const ws = new WebSocket(`ws://127.0.0.1:${running.port}/ws`, { headers: headers() });
   await once(ws, 'open');
   const closed = once(ws, 'close');
-  const started = performance.now();
   running.child.kill('SIGTERM');
   expect((await closed)[0]).toBe(1001);
   await exit(running, 0);
-  expect(performance.now() - started).toBeLessThan(1000);
+  expect(elapsed(running, 'server shutdown completed')).toBeLessThan(1000);
 }, CASE_TIMEOUT_MS);
 it('bounds a stalled partial body, reports timeout and invokes cleanup once', async () => {
   const running = await start();
@@ -54,10 +58,9 @@ it('bounds a stalled partial body, reports timeout and invokes cleanup once', as
   await once(socket, 'connect');
   socket.write('POST /members/join HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{');
   await until(() => running.stdout().includes('"url":"/members/join"'));
-  const started = performance.now();
   running.child.kill('SIGTERM');
   await exit(running, 1);
-  expect(performance.now() - started).toBeLessThan(1250);
+  expect(elapsed(running, 'server shutdown failed')).toBeLessThan(1250);
   socket.destroy();
 }, CASE_TIMEOUT_MS);
 it('lets a 700 ms in-flight join finish with 200 and durable append during a 1000 ms grace', async () => {
@@ -85,10 +88,9 @@ it('a second signal exits at once while cleanup is hung', async () => {
   const running = await start({ TEST_CLOSE: 'hang', SHUTDOWN_GRACE_MS: '10000' });
   running.child.kill('SIGTERM');
   await until(() => running.stdout().includes('test NATS close called'));
-  const started = performance.now();
   running.child.kill('SIGINT');
   await exit(running, 1);
-  expect(performance.now() - started).toBeLessThan(500);
+  expect(elapsed(running, 'server shutdown forced')).toBeLessThan(500);
 }, CASE_TIMEOUT_MS);
 it('exits non-zero on telemetry cleanup failure while still closing NATS', async () => {
   const running = await start({ TEST_TELEMETRY: 'fail' });

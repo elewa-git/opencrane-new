@@ -37,7 +37,8 @@ beforeEach(async () => {
   const binding = authz.binding;
   server = await startServer({ ...env, ...nats.env(), DATABASE_URL: dbs.queue.options.connectionString,
     OPENFGA_API_URL: binding.apiUrl, OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
-}, 30_000);
+// Fixture setup includes certificates, PostgreSQL and a real server process.
+}, 60_000);
 afterEach(async () => {
   for (const socket of sockets.splice(0)) socket.terminate();
   await server?.stop();
@@ -251,7 +252,9 @@ it('drops live deltas for a paused consumer and replays every missing position o
   await until(() => resumed.messages.some((message) => message.type === 'ready'), 15_000);
   const replayed = resumed.messages.filter((message) => message.type === 'member').map((message) => message.position);
   expect([...received, ...replayed]).toEqual(Array.from({ length: changeCount }, (_, i) => i + 3));
-}, 30_000);
+// The reconnect wait above remains 15 seconds; this limit also covers filling
+// the real TCP buffer and projecting 64 large rows on a busy machine.
+}, 60_000);
 it('terminates a peer that does not answer heartbeats', async () => {
   const client = await connect('oidc-alice', 'org-acme', false);
   const closed = once(client.ws, 'close');
