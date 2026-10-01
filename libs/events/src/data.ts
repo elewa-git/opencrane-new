@@ -126,6 +126,9 @@ export const memberInvitedDataSchema = z
     role: roleSchema,
     invitedBy: id,
     invitationId: id,
+    // Older invitations replay, but cannot be accepted without both fields.
+    invitedIdentity: z.object({ issuer: z.url(), sub: id }).strict().optional(),
+    expiresAt: z.iso.datetime({ offset: true }).optional(),
   })
   .strict();
 

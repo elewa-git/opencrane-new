@@ -6,6 +6,8 @@ import { record as asRecord } from './record.ts';
 import { spawn } from 'node:child_process';
 import { connect, createServer } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
+import { encodeSession, loadAuthConfig } from '@opencrane/auth';
+import { event, natsFixture } from '@opencrane/event-store/testing';
 
 const TEST_OIDC_ENV = {
   OIDC_ISSUER_URL: 'https://issuer.example.test',
@@ -71,7 +73,7 @@ interface RunningServer {
 }
 
 /** Launch main.ts as a child process and wait until /healthz answers. */
-async function startServer(): Promise<RunningServer> {
+async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<RunningServer> {
   const port = await findFreePort();
   let stdout = '';
   let stderr = '';
@@ -80,7 +82,7 @@ async function startServer(): Promise<RunningServer> {
     // OTEL_EXPORTER_OTLP_ENDPOINT is blanked so the result never depends on what the host shell exports.
     // The OIDC settings are made-up test values: main.ts will not start without them, but nothing here
     // signs anyone in, so the issuer is never contacted.
-    env: { ...process.env, ...TEST_OIDC_ENV, PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '' },
+    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', SILO_ID: '', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
@@ -123,6 +125,34 @@ describe('main.ts under the real Node runtime', () => {
     await server?.stop();
     server = undefined;
   });
+
+  it('starts the configured membership route and appends to real NATS', async () => {
+    const nats = await natsFixture();
+    try {
+      const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme',
+        NATS_URL: nats.connection.getServer(), SILO_ID: 'acme' };
+      server = await startServer(env);
+      const invited = event('invite-process', 'member-alice', 'member.invited');
+      await nats.store.append({ expectedSequence: 0, event: { ...invited, silo: 'acme',
+        data: { ...invited.data, invitationId: 'invite-process',
+          invitedIdentity: { issuer: env.OIDC_ISSUER_URL, sub: 'alice' },
+          expiresAt: new Date(Date.now() + 60_000).toISOString() } } });
+      const config = loadAuthConfig(env);
+      const cookie = encodeSession(config, { sub: 'alice', orgId: 'org-acme', roles: [],
+        authTime: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 60 });
+      const response = await fetch(`http://127.0.0.1:${server.port}/members/join`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: 'https://app.example.test',
+          cookie: `${config.cookieName}=${cookie}` },
+        body: JSON.stringify({ memberId: 'alice', invitationId: 'invite-process', commandId: 'join-process', displayName: 'Alice' }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ status: 'joined', memberId: 'alice', sequence: 2 });
+      expect(await nats.store.head()).toBe(2);
+    } finally {
+      await server?.stop();
+      await nats.close();
+    }
+  }, 40_000);
 
   it('starts, serves /healthz, and never prints a secret from a request URL: known route, unknown route, plain GET to /ws, the sign-in callback, or a URL Node cannot parse', async () => {
     server = await startServer();

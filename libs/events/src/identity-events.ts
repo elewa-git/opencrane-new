@@ -17,7 +17,8 @@ export const identityEvents = [
     'member',
     'An admin invited someone to join.',
     data.memberInvitedDataSchema,
-    { memberId: 'mem_2', email: 'bob@example.com', role: 'member', invitedBy: 'mem_1', invitationId: 'inv_1' },
+    { memberId: 'mem_2', email: 'bob@example.com', role: 'member', invitedBy: 'mem_1', invitationId: 'inv_1',
+      invitedIdentity: { issuer: 'https://idp.example.com', sub: 'bob' }, expiresAt: '2026-11-01T00:00:00Z' },
   ),
   event(
     'member.joined',
