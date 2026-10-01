@@ -6,6 +6,18 @@ import { spawn } from 'node:child_process';
 import { connect, createServer } from 'node:net';
 import { afterEach, describe, expect, it } from 'vitest';
 
+const TEST_OIDC_ENV = {
+  OIDC_ISSUER_URL: 'https://issuer.example.test',
+  OIDC_CLIENT_ID: 'opencrane-test',
+  OIDC_REDIRECT_URI: 'https://app.example.test/auth/callback',
+  OIDC_COOKIE_SECRET: 'test-only-cookie-secret-test-only-cookie-secret',
+  // Blanked so a value exported by the host shell cannot change the result.
+  OIDC_CLIENT_SECRET_ENV_VAR: '',
+  OIDC_COOKIE_SECURE: '',
+  OIDC_ALLOW_INSECURE_REQUESTS: '',
+  OIDC_EXPECTED_ORG_ID: '',
+};
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /** Ask the OS for a free TCP port by briefly binding to port 0, then releasing it. */
@@ -65,7 +77,9 @@ async function startServer(): Promise<RunningServer> {
   const child = spawn(process.execPath, ['--experimental-strip-types', 'apps/server/src/main.ts'], {
     cwd: process.cwd(),
     // OTEL_EXPORTER_OTLP_ENDPOINT is blanked so the result never depends on what the host shell exports.
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '' },
+    // The OIDC settings are made-up test values: main.ts will not start without them, but nothing here
+    // signs anyone in, so the issuer is never contacted.
+    env: { ...process.env, ...TEST_OIDC_ENV, PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
@@ -109,7 +123,7 @@ describe('main.ts under the real Node runtime', () => {
     server = undefined;
   });
 
-  it('starts, serves /healthz, and never prints a secret from a request URL: known route, unknown route, plain GET to /ws, or a URL Node cannot parse', async () => {
+  it('starts, serves /healthz, and never prints a secret from a request URL: known route, unknown route, plain GET to /ws, the sign-in callback, or a URL Node cannot parse', async () => {
     server = await startServer();
     const { port } = server;
     const get = (path: string): Promise<Response> => fetch(`http://127.0.0.1:${port}${path}`);
@@ -120,6 +134,12 @@ describe('main.ts under the real Node runtime', () => {
     // The "Route ... not found" line Fastify writes itself, and a plain GET (no upgrade) to the WebSocket path.
     expect((await get('/nope?token=SECRET_MAIN_404&code=SECRET_MAIN_CODE')).status).toBe(404);
     expect((await get('/ws?token=SECRET_MAIN_WS')).status).toBe(404);
+    // The sign-in callback: its `code` and `state` are secrets, and so is the login-flow cookie. With a
+    // cookie that is not a real one the route refuses the request, which needs no identity provider.
+    const callback = await fetch(`http://127.0.0.1:${port}/auth/callback?code=SECRET_MAIN_AUTH_CODE&state=SECRET_MAIN_AUTH_STATE`, {
+      headers: { cookie: 'oc_auth_flow=SECRET_MAIN_FLOW_COOKIE' },
+    });
+    expect(callback.status).toBe(400);
     // A request line the URL parser rejects: `fetch` will not send it, so use a raw socket.
     const raw = await sendRaw(port, 'GET //[x?token=SECRET_MAIN_BRACKET HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
     expect(raw).toMatch(/^HTTP\/1\.1 \d{3} /u);
@@ -133,10 +153,11 @@ describe('main.ts under the real Node runtime', () => {
     const stdout = server.stdout();
     expect(stdout).not.toContain('SECRET_MAIN_');
     const lines = parseJsonLines(stdout);
+    const messages = lines.map((line) => line['msg']);
     // Every line the server wrote is JSON, and the redacted forms are what was logged.
     expect(lines).toHaveLength(stdout.split('\n').filter(Boolean).length);
-    expect(loggedUrls(stdout)).toEqual(expect.arrayContaining(['/healthz?token=[Redacted]', '/nope?token=[Redacted]&code=[Redacted]', '//[x?token=[Redacted]']));
-    const messages = lines.map((line) => line['msg']);
+    expect(loggedUrls(stdout)).toEqual(expect.arrayContaining(['/healthz?token=[Redacted]', '/nope?token=[Redacted]&code=[Redacted]', '/auth/callback?code=[Redacted]&state=[Redacted]', '//[x?token=[Redacted]']));
+    expect(messages).toContain('sign-in callback refused: login flow cookie is invalid');
     expect(messages).toContain('Route GET:/nope?token=[Redacted]&code=[Redacted] not found');
     expect(messages).toContain('Route GET:/ws?token=[Redacted] not found');
     // The request id is called request_id everywhere.

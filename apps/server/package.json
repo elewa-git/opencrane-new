@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Phase 1 server skeleton: GET /healthz and a WebSocket hello-echo. No business logic yet.",
+  "description": "OIDC sign-in plus GET /healthz and a WebSocket hello-echo gated on a valid session.",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node --experimental-strip-types src/main.ts"
   },
   "dependencies": {
+    "@opencrane/auth": "0.1.0",
     "@opencrane/events": "0.1.0",
     "@opencrane/observability": "0.1.0",
     "fastify": "5.12.5",
@@ -16,6 +17,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/ws": "8.18.2"
+    "@types/ws": "8.18.2",
+    "jose": "6.2.12"
   }
 }

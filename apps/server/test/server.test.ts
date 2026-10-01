@@ -1,9 +1,19 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { WebSocket } from 'ws';
+import { encodeSession } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from '../src/websocket.ts';
 import type { HelloEcho } from '../src/protocol.ts';
+import { testAuthConfig } from './support/test-auth-config.ts';
+
+// The WebSocket endpoint now requires a session and a matching Origin (see
+// websocket-auth.test.ts), so every test below that opens one carries both.
+const authConfig = testAuthConfig();
+const nowSeconds = Math.floor(Date.now() / 1000);
+const sessionCookie = encodeSession(authConfig, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
+// testAuthConfig's redirectUri is https://app.example.test/auth/callback.
+const wsHeaders = { Origin: 'https://app.example.test', Cookie: `${authConfig.cookieName}=${sessionCookie}` };
 
 describe('server skeleton', () => {
   let app: FastifyInstance | undefined;
@@ -14,17 +24,17 @@ describe('server skeleton', () => {
   });
 
   it('GET /healthz returns ok', async () => {
-    app = buildServer();
+    app = buildServer(authConfig);
     const response = await app.inject({ method: 'GET', url: '/healthz' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
   });
 
   it('echoes a typed hello over the WebSocket endpoint', async () => {
-    app = buildServer();
+    app = buildServer(authConfig);
     // Port 0 asks the OS for a free ephemeral port, so tests never clash.
     await app.listen({ port: 0, host: '127.0.0.1' });
-    attachWebSocketServer(app.server, app.log);
+    attachWebSocketServer(app.server, app.log, authConfig);
 
     const address = app.server.address();
     if (address === null || typeof address === 'string') {
@@ -32,7 +42,7 @@ describe('server skeleton', () => {
     }
 
     const echo = await new Promise<HelloEcho>((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`);
+      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, { headers: wsHeaders });
       socket.on('open', () => {
         socket.send(JSON.stringify({ type: 'hello', text: 'hello, opencrane' }));
       });
@@ -49,9 +59,9 @@ describe('server skeleton', () => {
   });
 
   it('replies with a typed error for a message that is not a hello', async () => {
-    app = buildServer();
+    app = buildServer(authConfig);
     await app.listen({ port: 0, host: '127.0.0.1' });
-    attachWebSocketServer(app.server, app.log);
+    attachWebSocketServer(app.server, app.log, authConfig);
 
     const address = app.server.address();
     if (address === null || typeof address === 'string') {
@@ -59,7 +69,7 @@ describe('server skeleton', () => {
     }
 
     const reply = await new Promise<{ type: string; message: string }>((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`);
+      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, { headers: wsHeaders });
       socket.on('open', () => {
         socket.send(JSON.stringify({ type: 'not-hello' }));
       });
@@ -74,9 +84,9 @@ describe('server skeleton', () => {
   });
 
   it('replies with a typed error for a message that is not valid JSON', async () => {
-    app = buildServer();
+    app = buildServer(authConfig);
     await app.listen({ port: 0, host: '127.0.0.1' });
-    attachWebSocketServer(app.server, app.log);
+    attachWebSocketServer(app.server, app.log, authConfig);
 
     const address = app.server.address();
     if (address === null || typeof address === 'string') {
@@ -84,7 +94,7 @@ describe('server skeleton', () => {
     }
 
     const reply = await new Promise<{ type: string; message: string }>((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`);
+      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, { headers: wsHeaders });
       socket.on('open', () => {
         // Sent as a raw frame, deliberately bypassing JSON.stringify.
         socket.send('{not json');
@@ -101,9 +111,9 @@ describe('server skeleton', () => {
   });
 
   it('validates an event through @opencrane/events and accepts a well-formed one', async () => {
-    app = buildServer();
+    app = buildServer(authConfig);
     await app.listen({ port: 0, host: '127.0.0.1' });
-    attachWebSocketServer(app.server, app.log);
+    attachWebSocketServer(app.server, app.log, authConfig);
 
     const address = app.server.address();
     if (address === null || typeof address === 'string') {
@@ -111,7 +121,7 @@ describe('server skeleton', () => {
     }
 
     const reply = await new Promise<{ type: string; valid: boolean }>((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`);
+      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, { headers: wsHeaders });
       socket.on('open', () => {
         socket.send(
           JSON.stringify({
@@ -140,9 +150,9 @@ describe('server skeleton', () => {
   });
 
   it('validates an event through @opencrane/events and rejects an unknown event type', async () => {
-    app = buildServer();
+    app = buildServer(authConfig);
     await app.listen({ port: 0, host: '127.0.0.1' });
-    attachWebSocketServer(app.server, app.log);
+    attachWebSocketServer(app.server, app.log, authConfig);
 
     const address = app.server.address();
     if (address === null || typeof address === 'string') {
@@ -150,7 +160,7 @@ describe('server skeleton', () => {
     }
 
     const reply = await new Promise<{ type: string; valid: boolean; reason?: string }>((resolve, reject) => {
-      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`);
+      const socket = new WebSocket(`ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}`, { headers: wsHeaders });
       socket.on('open', () => {
         socket.send(
           JSON.stringify({
@@ -184,7 +194,7 @@ describe('server logging', () => {
   function loggingServer(): { app: FastifyInstance; text: () => string; lines: () => Record<string, unknown>[] } {
     vi.stubEnv('LOG_LEVEL', 'info');
     const chunks: string[] = [];
-    app = buildServer({ logDestination: { write: (msg: string) => void chunks.push(msg) } });
+    app = buildServer(authConfig, { logDestination: { write: (msg: string) => void chunks.push(msg) } });
     const text = (): string => chunks.join('');
     return { app, text, lines: () => text().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>) };
   }

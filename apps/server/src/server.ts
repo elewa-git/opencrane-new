@@ -1,7 +1,9 @@
 // Builds the Fastify instance. Kept separate from main.ts so tests can
 // build a server without binding a real port.
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
+import type { AuthConfig } from '@opencrane/auth';
 import { shutdownTelemetry, type LogDestination } from '@opencrane/observability';
+import { registerAuthRoutes } from './auth/routes.ts';
 import { createServerLogger } from './logging.ts';
 
 export interface BuildServerOptions {
@@ -9,7 +11,7 @@ export interface BuildServerOptions {
   logDestination?: LogDestination;
 }
 
-export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
+export function buildServer(authConfig: AuthConfig, options: BuildServerOptions = {}): FastifyInstance {
   // Structured logging via @opencrane/observability: one JSON line per event
   // to stdout, secrets and URL tokens redacted. LOG_LEVEL sets the level
   // (vitest.config.ts sets "silent"). Typed as FastifyBaseLogger so Fastify
@@ -30,6 +32,10 @@ export function buildServer(options: BuildServerOptions = {}): FastifyInstance {
   app.get('/healthz', () => {
     return { status: 'ok' };
   });
+
+  // The auth routes log through app.log, the observability logger above, so
+  // the callback URL's `code` and `state` are redacted like any other secret.
+  registerAuthRoutes(app, authConfig);
 
   return app;
 }

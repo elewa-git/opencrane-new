@@ -1,6 +1,7 @@
 // Entry point: starts the Fastify server and attaches the WebSocket
 // server to its underlying HTTP server. Run with:
 //   node --experimental-strip-types src/main.ts
+import { loadAuthConfig } from '@opencrane/auth';
 import { startTelemetry } from '@opencrane/observability';
 import { buildServer } from './server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from './websocket.ts';
@@ -13,9 +14,10 @@ startTelemetry({ serviceName: 'opencrane-server' });
 const port = Number(process.env['PORT'] ?? 8080);
 const host = process.env['HOST'] ?? '0.0.0.0';
 
-const app = buildServer();
+const authConfig = loadAuthConfig();
+const app = buildServer(authConfig);
 
 await app.listen({ port, host });
-attachWebSocketServer(app.server, app.log);
+attachWebSocketServer(app.server, app.log, authConfig);
 
 app.log.info(`opencrane-server listening on http://${host}:${port} (ws at ${WEBSOCKET_PATH})`);

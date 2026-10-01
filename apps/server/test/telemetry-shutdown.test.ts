@@ -15,6 +15,7 @@ vi.mock('@opentelemetry/exporter-trace-otlp-http', () => ({ OTLPTraceExporter: c
 
 const { startTelemetry } = await import('@opencrane/observability');
 const { buildServer } = await import('../src/server.ts');
+const { testAuthConfig } = await import('./support/test-auth-config.ts');
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -24,7 +25,7 @@ describe('closing the server when the telemetry flush fails', () => {
   it('still closes cleanly and logs the failure, instead of app.close() rejecting', async () => {
     vi.stubEnv('LOG_LEVEL', 'info');
     const chunks: string[] = [];
-    const app = buildServer({ logDestination: { write: (msg: string) => void chunks.push(msg) } });
+    const app = buildServer(testAuthConfig(), { logDestination: { write: (msg: string) => void chunks.push(msg) } });
     startTelemetry({ serviceName: 'opencrane-server-test', enabled: true });
 
     await expect(app.close()).resolves.toBeUndefined();
