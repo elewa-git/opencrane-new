@@ -184,6 +184,18 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | --- | --- | --- | --- |
 | `security.alert_raised` | any reaction | alerts | notify admins |
 
+## Named handler subscriptions
+
+These queue names and subscriptions are checked against `libs/events` by
+`check:events`. A host enables a handler explicitly. `update-members` can
+wrap the members projection; `update-openfga` reserves the catalogue mapping
+for its later implementation (scope promotion remains deferred).
+
+| Handler | Subscribed events |
+| --- | --- |
+| `update-members` | `member.invited`, `member.joined`, `member.role_changed`, `member.removed` |
+| `update-openfga` | `member.joined`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+
 ## Rebuilding content
 
 1. **Deploy the new projection code.** It writes to shadow tables with its own checkpoint.

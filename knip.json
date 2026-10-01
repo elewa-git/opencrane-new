@@ -80,6 +80,16 @@
         "src/**/*.ts",
         "test/**/*.ts"
       ]
+    },
+    "libs/handlers": {
+      "entry": [
+        "test/**/*.test.ts",
+        "test/crash-process.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ]
     }
   }
 }

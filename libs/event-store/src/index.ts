@@ -1,6 +1,7 @@
 export { createEventStore, EventStore } from "./jetstream.ts";
 export {
   wireSubject,
+  decodeEvent,
   type AppendCommand,
   type AppendResult,
   type StoredEvent,

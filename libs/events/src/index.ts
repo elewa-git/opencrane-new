@@ -29,3 +29,5 @@ export {
 } from './registry.ts';
 
 export { parseEventByType, type ParseEventByTypeResult } from './parse.ts';
+
+export { handlerSubscriptions, type HandlerName } from './handlers.ts';

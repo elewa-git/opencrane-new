@@ -8,6 +8,7 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { handlerSubscriptions } from '../libs/events/src/handlers.ts';
 import { eventRegistry } from '../libs/events/src/registry.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -85,6 +86,17 @@ export function parseCatalogueEventTypes(markdown) {
 
 async function main() {
   const markdown = await readFile(cataloguePath, 'utf8');
+  const subscriptionSection = markdown.split('## Named handler subscriptions')[1]?.split('\n## ')[0] ?? '';
+  const documented = Object.fromEntries(subscriptionSection.split('\n')
+    .filter((line) => line.startsWith('| `'))
+    .map((line) => {
+      const names = [...line.matchAll(/`([^`]+)`/g)].map((match) => match[1]);
+      return [names[0], names.slice(1)];
+    }));
+  if (JSON.stringify(documented) !== JSON.stringify(handlerSubscriptions) ||
+      Object.values(handlerSubscriptions).flat().some((type) => !eventRegistry.some((entry) => entry.type === type))) {
+    throw new Error('Named handler subscriptions differ from the event catalogue');
+  }
   const catalogueTypes = parseCatalogueEventTypes(markdown);
   const registryTypes = new Set(eventRegistry.map((entry) => entry.type));
 
