@@ -8,6 +8,18 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17.6-alpine
+        env:
+          POSTGRES_PASSWORD: test-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      PG_TEST_URL: postgres://postgres:test-only@127.0.0.1:5432/postgres
     steps:
       - uses: actions/checkout@v4
 
@@ -21,6 +33,9 @@ jobs:
 
       - name: Install pinned Lychee
         run: sh scripts/fetch-lychee.sh && .tools/lychee --version
+
+      - name: Install pinned NATS server
+        run: sh scripts/fetch-nats.sh
 
       - name: Lint
         run: npm run lint

@@ -19,8 +19,8 @@ If it isn't in this catalogue, it doesn't happen. CI checks two things:
 5. **No secrets and no plaintext history in events.** Events carry secret *references*. Message and memory text is encrypted with a per-conversation or per-scope key, so "forget" deletes the key (crypto-shredding) and appends a tombstone event.
 6. **An event never grants anything.** Permissions come from the OpenFGA projection, which is rebuilt from events like any other.
 7. **Idempotency is by event id, not by the event store's duplicate window.** Every projection and reaction records the event ids it has applied (in the same Postgres transaction as its checkpoint), and commands use expected-sequence appends. JetStream's `Nats-Msg-Id` de-duplication only lasts for its duplicate window, is lost on backup/restore, and is **stream-wide** (an id first used on another subject makes the append report a duplicate and store nothing), so it is an optimisation, never the guarantee (found in spike S0.7).
-   - A retried **command** is recognised from the stream itself: the event carries the command id, and the command checks the entity history it already loads before appending. There is no separate command ledger: a ledger written after the publish leaves a gap, and a ledger restored to a different point than the stream re-runs commands.
-   - Command ids are scoped to the principal and the entity's subject; a client-supplied idempotency key never becomes a global id.
+   - A retried **command** is recognised from the stream itself: the envelope carries `commandId` (a non-empty string; optional for older events), and the command checks the entity history it already loads before appending. There is no separate command ledger: a ledger written after the publish leaves a gap, and a ledger restored to a different point than the stream re-runs commands.
+   - New command appends require `commandId` and a principal (including system commands). Command ids are scoped to the principal and the entity's subject; a client-supplied idempotency key never becomes a global id.
    - An append whose acknowledgement says `duplicate` is accepted only if it points at the expected subject.
 8. **Brief write pauses are normal.** When the JetStream stream leader fails, writes pause for roughly 5–8 seconds while a new leader is elected (measured in S0.7). Commands retry with backoff, and the UI shows the message as "saving" rather than failing.
 9. **Money is integer euro cents.** Every amount in an event is a whole, non-negative number of euro cents, in a field whose name ends in `Cents` (`costCents`, `ceilingCents`), never a float in euros, so sums stay exact.
@@ -81,7 +81,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | Event | Emitted by | Projections (content) | Reactions (logic) |
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
-| `member.invited` | admin command | invitations | send the invitation |
+| `member.invited` | admin command | invitations, members (pending) | send the invitation |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal) |
 | `member.role_changed` | admin command | members | OpenFGA role tuples |
 | `member.removed` | admin command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |

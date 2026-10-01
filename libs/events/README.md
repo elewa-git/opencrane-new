@@ -41,3 +41,7 @@ Runtime dependency: Zod only. No app or product-domain dependency belongs here.
 Live append, ordered replay, failover and backup/restore remain separate event-store
 qualification work. This package alone cannot prove those guarantees.
 See the [architecture and plan](../../plan.md) and the [server](../../apps/server/README.md).
+
+New event-store commands require a non-empty `commandId` and `principal`.
+The envelope keeps `commandId` optional so older stored events still parse;
+its scope is the principal and entity subject, as [principle 7](../../docs/architecture/events.md#principles) specifies.

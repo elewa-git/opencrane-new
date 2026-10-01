@@ -1,0 +1,258 @@
+import { afterEach, expect, it } from "vitest";
+import { setTimeout as delay } from "node:timers/promises";
+import { jetstreamManager } from "@nats-io/jetstream";
+import { event, natsFixture } from "./testing.ts";
+
+let fixture: Awaited<ReturnType<typeof natsFixture>>;
+afterEach(async () => {
+  await fixture?.close();
+});
+
+it("accepts the EVENTS configuration and supports two projection consumers", async () => {
+  fixture = await natsFixture();
+  await fixture.store.ensureStream({ replicas: 1 });
+  const manager = await jetstreamManager(fixture.connection);
+  const info = await manager.streams.info("EVENTS");
+  expect(info.config).toMatchObject({
+    num_replicas: 1,
+    max_age: 0,
+    max_msgs: -1,
+    max_consumers: -1,
+    max_msg_size: -1,
+    duplicate_window: 120_000_000_000,
+    discard: "old",
+    storage: "file",
+  });
+  expect(
+    await fixture.store.append({ event: event("accepted"), expectedSequence: 0 }),
+  ).toEqual({ status: "appended", sequence: 1 });
+  const consumers = [fixture.store.subscribe(), fixture.store.subscribe()];
+  try {
+    const results = await Promise.all(consumers.map((consumer) => consumer.next()));
+    for (const result of results) {
+      expect(result.done).toBe(false);
+      if (!result.done) {
+        expect(result.value.sequence).toBe(1);
+      }
+    }
+  } finally {
+    await Promise.all(consumers.map((consumer) => consumer.return(undefined)));
+  }
+});
+
+it.each([
+  ["max_msgs", { max_msgs: 10 }],
+  ["max_consumers", { max_consumers: 1 }],
+  ["max_msg_size", { max_msg_size: 16 }],
+  ["republish", { republish: { src: "ev.>", dest: "copy.>" } }],
+  ["no_ack", { no_ack: true }],
+  ["duplicate_window", { duplicate_window: 1_000_000_000 }],
+  ["consumer_limits", { consumer_limits: { max_ack_pending: 1 } }],
+])("rejects incompatible %s without repairing it", async (field, change) => {
+  fixture = await natsFixture();
+  const manager = await jetstreamManager(fixture.connection);
+  const { config } = await manager.streams.info("EVENTS");
+  // max_consumers cannot be updated, so create a pre-existing incompatible stream.
+  await manager.streams.delete("EVENTS");
+  await manager.streams.add({ ...config, ...change });
+  await expect(fixture.store.ensureStream({ replicas: 1 })).rejects.toThrow(field);
+  expect((await manager.streams.info("EVENTS")).config).toMatchObject(change);
+});
+
+it("accepts settings that only affect operations or read access", async () => {
+  fixture = await natsFixture();
+  const manager = await jetstreamManager(fixture.connection);
+  await manager.streams.update("EVENTS", {
+    description: "Silo events",
+    metadata: { owner: "test" },
+    compression: "s2",
+    allow_direct: true,
+  });
+  await expect(fixture.store.ensureStream({ replicas: 1 })).resolves.toBeUndefined();
+});
+
+it("rejects malformed events without writing; races have exactly one winner", async () => {
+  fixture = await natsFixture();
+  for (const invalid of [
+    {},
+    { ...event("bad"), commandId: "" },
+    { ...event("bad"), subject: "member-a.*" },
+    { ...event("bad"), principal: undefined },
+    { ...event("bad"), data: {} },
+  ]) {
+    expect(
+      await fixture.store.append({ event: invalid, expectedSequence: 0 }),
+    ).toEqual({ status: "rejected", reason: "invalid_event" });
+  }
+  expect(await fixture.store.head()).toBe(0);
+  const results = await Promise.all(
+    Array.from({ length: 16 }, (_, n) =>
+      fixture.store.append({ event: event(`race-${n}`), expectedSequence: 0 }),
+    ),
+  );
+  expect(results.filter((result) => result.status === "appended")).toEqual([
+    { status: "appended", sequence: 1 },
+  ]);
+  expect(results.filter((result) => result.status === "conflict")).toHaveLength(
+    15,
+  );
+  expect(
+    await Array.fromAsync(fixture.store.readStream("member-alice")),
+  ).toHaveLength(1);
+});
+
+it("recognises concurrent and old commands by principal and subject, not event id", async () => {
+  fixture = await natsFixture();
+  const command = event("first");
+  const results = await Promise.all(
+    Array.from({ length: 8 }, (_, n) =>
+      fixture.store.append({
+        event: { ...command, id: `attempt-${n}` },
+        expectedSequence: 0,
+      }),
+    ),
+  );
+  expect(results).toEqual(
+    Array.from({ length: 8 }, () => ({ status: "appended", sequence: 1 })),
+  );
+  expect(
+    await fixture.store.append({ event: event("second"), expectedSequence: 1 }),
+  ).toEqual({ status: "appended", sequence: 2 });
+  expect(
+    await fixture.store.append({
+      event: { ...command, id: "fresh-id" },
+      expectedSequence: 2,
+    }),
+  ).toEqual({ status: "appended", sequence: 1 });
+  expect(
+    await fixture.store.append({
+      event: {
+        ...command,
+        id: "other-principal",
+        principal: { id: "other", kind: "human" },
+      },
+      expectedSequence: 2,
+    }),
+  ).toEqual({ status: "appended", sequence: 3 });
+  expect(
+    await fixture.store.append({
+      event: { ...command, id: "other-subject", subject: "member-bob" },
+      expectedSequence: 0,
+    }),
+  ).toEqual({ status: "appended", sequence: 4 });
+  expect(await fixture.store.head()).toBe(4);
+  expect(
+    (await Array.fromAsync(fixture.store.readStream("member-alice", 2))).map(
+      (stored) => stored.sequence,
+    ),
+  ).toEqual([2, 3]);
+});
+
+it("refuses a stream-wide duplicate acknowledgement for another subject or command", async () => {
+  fixture = await natsFixture();
+  expect(
+    await fixture.store.append({
+      event: event("collision"),
+      expectedSequence: 0,
+    }),
+  ).toEqual({ status: "appended", sequence: 1 });
+  expect(
+    await fixture.store.append({
+      event: event("collision", "member-bob"),
+      expectedSequence: 0,
+    }),
+  ).toEqual({ status: "rejected", reason: "duplicate_id" });
+  expect(
+    await fixture.store.append({
+      event: { ...event("collision"), commandId: "different" },
+      expectedSequence: 1,
+    }),
+  ).toEqual({ status: "rejected", reason: "duplicate_id" });
+  expect(await Array.fromAsync(fixture.store.readStream("member-bob"))).toEqual(
+    [],
+  );
+  expect(await fixture.store.head()).toBe(1);
+});
+
+it("retries through a real restart, then reports unavailable at the ten-second bound", async () => {
+  fixture = await natsFixture();
+  await fixture.stop();
+  const started = performance.now();
+  const pending = fixture.store.append({
+    event: event("restart"),
+    expectedSequence: 0,
+  });
+  const observed = pending.then((result) => result);
+  await delay(600);
+  await fixture.restart();
+  expect(await observed).toEqual({ status: "appended", sequence: 1 });
+  expect(performance.now() - started).toBeLessThan(10_500);
+  expect(
+    await Array.fromAsync(fixture.store.readStream("member-alice")),
+  ).toHaveLength(1);
+  await fixture.stop();
+  const unavailableAt = performance.now();
+  const unavailable = await fixture.store.append({
+    event: event("outage"),
+    expectedSequence: 1,
+  });
+  expect(unavailable.status).toBe("unavailable");
+  if (unavailable.status === "unavailable") {
+    expect(unavailable.cause).toBeInstanceOf(Error);
+  }
+  expect(performance.now() - unavailableAt).toBeGreaterThanOrEqual(9_900);
+  expect(performance.now() - unavailableAt).toBeLessThan(10_750);
+}, 20_000);
+
+it("subscribes in global order from the requested sequence and stops on abort", async () => {
+  fixture = await natsFixture();
+  for (const id of ["a", "b", "c"]) {
+    await fixture.store.append({
+      event: event(id, `member-${id}`),
+      expectedSequence: 0,
+    });
+  }
+  const abort = new AbortController();
+  const sequences: number[] = [];
+  for await (const stored of fixture.store.subscribe(2, abort.signal)) {
+    sequences.push(stored.sequence);
+    if (stored.sequence === 3) {
+      break;
+    }
+  }
+  expect(sequences).toEqual([2, 3]);
+  const pending = fixture.store.subscribe(4, abort.signal).next();
+  abort.abort();
+  expect((await pending).done).toBe(true);
+});
+
+it("retries no-responder failures through recovery and the full deadline", async () => {
+  fixture = await natsFixture();
+  await fixture.stop();
+  await fixture.restart(false);
+  await expect(jetstreamManager(fixture.connection)).rejects.toMatchObject({
+    name: "JetStreamNotEnabled",
+  });
+  const pending = fixture.store.append({
+    event: event("no-responders"),
+    expectedSequence: 0,
+  });
+  await delay(300);
+  await fixture.stop();
+  await fixture.restart();
+  expect(await pending).toEqual({ status: "appended", sequence: 1 });
+  expect(await fixture.store.head()).toBe(1);
+  await fixture.stop();
+  await fixture.restart(false);
+  const started = performance.now();
+  expect(
+    (
+      await fixture.store.append({
+        event: event("still-unavailable"),
+        expectedSequence: 1,
+      })
+    ).status,
+  ).toBe("unavailable");
+  expect(performance.now() - started).toBeGreaterThanOrEqual(9_900);
+  expect(performance.now() - started).toBeLessThan(10_750);
+}, 20_000);

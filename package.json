@@ -13,6 +13,7 @@
   "scripts": {
     "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links",
     "typecheck": "npm run typecheck --workspaces",
+    "pretest": "sh scripts/fetch-nats.sh",
     "test": "vitest run",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
     "lint:code": "eslint .",

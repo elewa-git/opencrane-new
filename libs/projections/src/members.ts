@@ -1,0 +1,71 @@
+import { getEventDefinition } from "@opencrane/events";
+import type { Projection } from "./runner.ts";
+
+function field(data: unknown, name: string): string {
+  if (typeof data !== "object" || data === null || !(name in data)) {
+    throw new Error("Missing member field");
+  }
+  const value: unknown = Reflect.get(data, name);
+  if (typeof value !== "string") {
+    throw new Error("Invalid member field");
+  }
+  return value;
+}
+
+/** Invited rows are pending invitations, never an authorisation grant. Removed rows are retained for display. */
+export const members: Projection = {
+  name: "members",
+  async create(db) {
+    await db.query(`CREATE TABLE IF NOT EXISTS members (
+      silo TEXT NOT NULL, member_id TEXT NOT NULL, email TEXT NOT NULL,
+      display_name TEXT, role TEXT NOT NULL, status TEXT NOT NULL,
+      PRIMARY KEY (silo, member_id))`);
+  },
+  async drop(db) {
+    await db.query("DROP TABLE IF EXISTS members");
+  },
+  async apply(db, event) {
+    if (
+      ![
+        "member.invited",
+        "member.joined",
+        "member.removed",
+        "member.role_changed",
+      ].includes(event.type)
+    ) {
+      return;
+    }
+    const data: unknown = getEventDefinition(event.type)?.dataSchema.parse(
+      event.data,
+    );
+    const id = field(data, "memberId");
+    if (event.subject !== `member-${id}`) {
+      throw new Error("Member subject mismatch");
+    }
+    if (event.type === "member.removed") {
+      await db.query(
+        "UPDATE members SET status = $3 WHERE silo = $1 AND member_id = $2",
+        [event.silo, id, "removed"],
+      );
+    } else if (event.type === "member.role_changed") {
+      await db.query(
+        "UPDATE members SET role = $3 WHERE silo = $1 AND member_id = $2",
+        [event.silo, id, field(data, "newRole")],
+      );
+    } else {
+      const joined = event.type === "member.joined";
+      await db.query(
+        `INSERT INTO members VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (silo, member_id) DO UPDATE SET email = $3, display_name = $4, role = $5, status = $6`,
+        [
+          event.silo,
+          id,
+          field(data, "email"),
+          joined ? field(data, "displayName") : null,
+          field(data, "role"),
+          joined ? "joined" : "invited",
+        ],
+      );
+    }
+  },
+};

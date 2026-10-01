@@ -46,6 +46,8 @@ export function eventEnvelopeSchema<DataSchema extends z.ZodType>(dataSchema: Da
       id: z.string().min(1),
       // The event type, in past tense, e.g. "member.joined".
       type: z.string().min(1),
+      // Stable caller key, scoped to principal and subject; absent in older events.
+      commandId: z.string().min(1).optional(),
       // Which part of the system appended this event, e.g. "opencrane-server".
       source: z.string().min(1),
       // When the event happened, as an ISO 8601 timestamp with an offset.
