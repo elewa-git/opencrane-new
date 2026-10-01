@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
-import { jetstreamManager } from "@nats-io/jetstream";
+import { JetStreamApiError, jetstreamManager } from "@nats-io/jetstream";
 import { event, natsFixture } from "./testing.ts";
 
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
@@ -54,7 +54,24 @@ it.each([
   const { config } = await manager.streams.info("EVENTS");
   // max_consumers cannot be updated, so create a pre-existing incompatible stream.
   await manager.streams.delete("EVENTS");
-  await manager.streams.add({ ...config, ...change });
+  // NATS removes the old stream's files in the background, so creating it again
+  // straight away can fail with "error creating store". Retry for a short while.
+  const deadline = performance.now() + 5_000;
+  for (;;) {
+    try {
+      await manager.streams.add({ ...config, ...change });
+      break;
+    } catch (error) {
+      const storeNotReady =
+        error instanceof JetStreamApiError &&
+        error.code === 10049 &&
+        error.message === "error creating store for stream";
+      if (!storeNotReady || performance.now() >= deadline) {
+        throw error;
+      }
+      await delay(50);
+    }
+  }
   await expect(fixture.store.ensureStream({ replicas: 1 })).rejects.toThrow(field);
   expect((await manager.streams.info("EVENTS")).config).toMatchObject(change);
 });
