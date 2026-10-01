@@ -27,16 +27,18 @@ describe('eventRegistry', () => {
     expect(getEventDefinition('no.such.event')).toBeUndefined();
   });
 
-  it('uses the four example schemas for their events, and z.unknown() elsewhere', () => {
+  it('reuses the same four schema instances for their events', () => {
     expect(getEventDefinition('member.joined')?.dataSchema).toBe(memberJoinedDataSchema);
     expect(getEventDefinition('message.posted')?.dataSchema).toBe(messagePostedDataSchema);
     expect(getEventDefinition('approval.decided')?.dataSchema).toBe(approvalDecidedDataSchema);
     expect(getEventDefinition('effect.observed')?.dataSchema).toBe(effectObservedDataSchema);
+  });
 
-    // A handful of events that are still placeholders: any data passes.
-    for (const type of ['org.created', 'budget.exhausted', 'security.alert_raised']) {
-      const schema = getEventDefinition(type)?.dataSchema;
-      expect(schema?.safeParse({ anything: 'goes' }).success).toBe(true);
+  // Every event now has a real, strict schema (no more z.unknown()
+  // placeholders): arbitrary data must be rejected everywhere.
+  it('rejects arbitrary data for every event type', () => {
+    for (const entry of eventRegistry) {
+      expect(entry.dataSchema.safeParse({ anything: 'goes' }).success).toBe(false);
     }
   });
 

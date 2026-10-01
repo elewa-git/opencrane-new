@@ -68,30 +68,28 @@ describe('parseEventByType', () => {
   });
 
   describe('message.posted', () => {
-    it('accepts a message carrying encrypted ciphertext', () => {
-      const result = parseEventByType(
-        baseEnvelope('message.posted', {
-          conversationId: 'conv_1',
-          authorId: 'alice',
-          authorKind: 'human',
-          ciphertext: 'YmFzZTY0LWxvb2tpbmctdGV4dA==',
-          contentType: 'text',
-        }),
-      );
+    const validMessageData = {
+      conversationId: 'conv_1',
+      authorId: 'alice',
+      authorKind: 'human',
+      ciphertext: 'YmFzZTY0LWxvb2tpbmctdGV4dA==',
+      keyId: 'key:1',
+      contentType: 'text',
+    };
+
+    it('accepts a message carrying encrypted ciphertext and its key id', () => {
+      const result = parseEventByType(baseEnvelope('message.posted', validMessageData));
       expect(result.success).toBe(true);
     });
 
     // events.md rule 5: "no secrets and no plaintext history in events" —
-    // message text must never travel as a plain `text` field.
-    it('rejects plaintext text instead of ciphertext', () => {
+    // message text must never travel as a plain `text` field, even next to
+    // an otherwise valid ciphertext. Starting from the valid data and
+    // adding only `text` means this can only fail for that one reason (see
+    // security-rules.test.ts for the same check on every risky type).
+    it('rejects plaintext text next to otherwise valid data', () => {
       const result = parseEventByType(
-        baseEnvelope('message.posted', {
-          conversationId: 'conv_1',
-          authorId: 'alice',
-          authorKind: 'human',
-          text: 'this should have been encrypted',
-          contentType: 'text',
-        }),
+        baseEnvelope('message.posted', { ...validMessageData, text: 'this should have been encrypted' }),
       );
       expect(result.success).toBe(false);
       if (!result.success) {
@@ -135,7 +133,7 @@ describe('parseEventByType', () => {
           computerId: 'computer_1',
           tool: 'odoo.read',
           destination: 'odoo-mcp',
-          costEur: 0.02,
+          costMinorUnits: 2,
           outcome: 'success',
         }),
       );
@@ -149,7 +147,28 @@ describe('parseEventByType', () => {
           computerId: 'computer_1',
           tool: 'odoo.read',
           destination: 'odoo-mcp',
-          costEur: -1,
+          costMinorUnits: -1,
+          outcome: 'success',
+        }),
+      );
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.reason).toBe('invalid_event');
+      }
+    });
+
+    // EUR minor units are whole cents: a fractional value can't be a real
+    // number of cents, and float EUR is exactly the bug this avoids
+    // (0.1 + 0.2 !== 0.3). This is the event the budget actor turns into
+    // budget.settled, so it has to be the same integer shape.
+    it('rejects a non-integer cost', () => {
+      const result = parseEventByType(
+        baseEnvelope('effect.observed', {
+          permitId: 'permit_1',
+          computerId: 'computer_1',
+          tool: 'odoo.read',
+          destination: 'odoo-mcp',
+          costMinorUnits: 0.1 + 0.2,
           outcome: 'success',
         }),
       );
@@ -160,8 +179,44 @@ describe('parseEventByType', () => {
     });
   });
 
-  it('accepts a placeholder-schema event with any data', () => {
-    const result = parseEventByType(baseEnvelope('org.created', { anything: 'goes' }));
-    expect(result.success).toBe(true);
+  // Both kinds of MCP server go through parseEventByType (the field-by-field
+  // cases are in security-rules.test.ts).
+  describe('mcp.server_registered', () => {
+    const register = (kind: string, locator: string) =>
+      parseEventByType(baseEnvelope('mcp.server_registered', { serverId: 'mcp_1', kind, locator, registeredBy: 'mem_1' }));
+
+    it('accepts a remote URL and a hosted image pinned by digest', () => {
+      expect(register('remote', 'https://odoo.example.com/mcp').success).toBe(true);
+      expect(register('hosted', `ghcr.io/elewa-git/odoo-mcp-server@sha256:${'ab'.repeat(32)}`).success).toBe(true);
+    });
+
+    it.each([
+      ['hosted', 'ghcr.io/elewa-git/odoo-mcp-server:latest'],
+      ['remote', 'https:admin:pass@odoo.example.com/mcp'],
+      ['remote', 'https://odoo.example.com/mcp#access_token=abc'],
+      ['remote', 'https://odoo.example.com/mcp?client_secret=abc'],
+      ['remote', 'https://odoo.example.com/mcp?api%5Fkey=abc'],
+      ['remote', 'file:///etc/passwd'],
+    ])('rejects a %s locator of %j', (kind, locator) => {
+      const result = register(kind, locator);
+      expect(!result.success && result.reason).toBe('invalid_event');
+    });
+  });
+
+  // Every event has a real, strict schema now (generated-examples.test.ts
+  // covers all of them); this proves one that used to be a placeholder is
+  // wired into parseEventByType end to end, and no longer takes any data.
+  describe('org.created (was a placeholder schema)', () => {
+    it('accepts its real data', () => {
+      expect(parseEventByType(baseEnvelope('org.created', { orgName: 'Acme Ltd' })).success).toBe(true);
+    });
+
+    it('rejects arbitrary data', () => {
+      const result = parseEventByType(baseEnvelope('org.created', { anything: 'goes' }));
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.reason).toBe('invalid_event');
+      }
+    });
   });
 });

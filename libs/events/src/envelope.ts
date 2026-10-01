@@ -62,9 +62,9 @@ export function eventEnvelopeSchema<DataSchema extends z.ZodType>(dataSchema: Da
     .strict();
 }
 
-// The envelope shape for an event type whose data we have not typed yet.
-// Most entries in the registry use this placeholder until someone gives
-// them a real schema.
+// An envelope with an untyped `data` field, only so envelope.test.ts can test
+// the envelope's own shape. Every real event type has its own strict data
+// schema, so this is not exported from index.ts.
 export const unknownEventEnvelopeSchema = eventEnvelopeSchema(z.unknown());
 
 export type EventEnvelope<DataSchema extends z.ZodType = z.ZodUnknown> = z.infer<
