@@ -51,10 +51,11 @@ read optimisation that preserves this guarantee.
 
 `readStream(subject, fromSequence)` is a finite snapshot through the head
 observed on entry; `fromSequence` is an inclusive global position.
-`subscribe(fromSequence, signal, consumerName)` binds a provisioned pull consumer;
-readers use the enumerated names and provisioning steps in [ADR 0005](../../docs/adr/0005-nats-access.md).
-Without a name, command/operator connections create a temporary ordered consumer;
-break or abort to release it. `head()` supports bounded projection drains.
+`subscribe(fromSequence, signal)` reads exact global sequences from the caller's
+SQL checkpoint, with no durable consumer cursor. It polls the live tail every 100 ms;
+break or abort to stop it. Read-ahead cannot change the next subscription's position.
+`head()` supports bounded projection drains. Provision EVENTS and the dispatcher
+with `npm run provision`; see [ADR 0005](../../docs/adr/0005-nats-access.md).
 `ensureStream` verifies file storage, replicas and unlimited retention and
 refuses incompatible configuration. Deletion/purge are disabled; payload
 forgetting needs a separate qualified design. Callers supply credential file paths

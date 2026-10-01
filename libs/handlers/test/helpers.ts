@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { fork, type ChildProcess } from "node:child_process";
+import { execFile, fork, type ChildProcess } from "node:child_process";
+import { promisify } from "node:util";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { Pool } from "pg";
@@ -7,7 +8,7 @@ import { createLogger } from "@opencrane/observability";
 import { pgDb, type Query } from "@opencrane/projections";
 import type { EventEnvelope } from "@opencrane/events";
 import { event, natsFixture } from "@opencrane/event-store/testing";
-import { HandlerRuntime, dispatch, provisionDispatcher, type Handler } from "../src/index.ts";
+import { HandlerRuntime, dispatch, type Handler } from "../src/index.ts";
 
 export const logger = createLogger("handler-tests", { level: "silent" });
 export async function effect(
@@ -40,8 +41,10 @@ export async function fixture() {
   const db = pgDb(pool);
   await db.query(`CREATE TABLE handler_effects (
     ordinal SERIAL, handler TEXT, event_id TEXT, stream TEXT)`);
-  const nats = await natsFixture();
-  await provisionDispatcher(nats.connection);
+  const nats = await natsFixture({ provision: false });
+  await promisify(execFile)(process.execPath,
+    ["--experimental-strip-types", "libs/handlers/src/provision.ts"],
+    { env: { ...process.env, ...nats.env(), NATS_REPLICAS: "1" } });
   const runtimes: HandlerRuntime[] = [];
   const children: ChildProcess[] = [];
   const dispatchers: { controller: AbortController; task: Promise<void> }[] =
@@ -116,7 +119,7 @@ export async function fixture() {
         env: {
           ...process.env,
           PG_TEST_URL: connectionString,
-          ...nats.env("dispatcher"),
+          ...nats.env(mode.startsWith("projection") ? "projection" : "dispatcher"),
           CRASH_MODE: mode,
         },
         stdio: ["ignore", "pipe", "pipe", "ipc"],

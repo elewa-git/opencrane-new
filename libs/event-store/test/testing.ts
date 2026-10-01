@@ -3,7 +3,6 @@ import { once } from "node:events";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
-import { jetstreamManager } from "@nats-io/jetstream";
 import type { NatsConnection } from "@nats-io/transport-node";
 import { certificates } from "./certificates.ts";
 import { getEventDefinition } from "@opencrane/events";
@@ -49,7 +48,7 @@ export function event(
   };
 }
 
-export async function natsFixture() {
+export async function natsFixture({ provision = true } = {}) {
   const directory = await mkdtemp(resolve(".tools/nats-test-"));
   await certificates(directory);
   const publicKeys = Object.fromEntries(await Promise.all(
@@ -107,25 +106,13 @@ export async function natsFixture() {
   const connection = await client("command");
   const readerConnection = await client("projection");
   const dispatcherConnection = await client("dispatcher");
-  const readerStore = await createEventStore(readerConnection, "projection-replay");
+  const readerStore = await createEventStore(readerConnection);
   const store = await createEventStore(connection);
-  await store.ensureStream({ replicas: 1 });
-  // Simulate the installation/replay job separately from the unprivileged reader.
-  const reader = {
-    head: () => readerStore.head(),
-    async *subscribe(fromSequence = 1, signal?: AbortSignal) {
-      await store.provisionProjection("projection-replay", fromSequence);
-      try { yield* readerStore.subscribe(fromSequence, signal); }
-      finally {
-        const manager = await jetstreamManager(connection);
-        await manager.consumers.delete("EVENTS", "projection-replay");
-      }
-    },
-  };
+  if (provision) await store.ensureStream({ replicas: 1 });
   return {
     store,
     connection,
-    reader,
+    reader: readerStore,
     dispatcherConnection,
     env,
     client,

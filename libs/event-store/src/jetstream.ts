@@ -4,12 +4,9 @@ import {
   jetstream,
   jetstreamManager,
   JetStreamApiError,
-  DeliverPolicy,
-  AckPolicy,
   type JetStreamClient,
   type JetStreamManager,
   type StreamConfig,
-  type ConsumerConfig,
 } from "@nats-io/jetstream";
 import {
   connect,
@@ -109,13 +106,6 @@ function verifyEventsConfig(config: StreamConfig, replicas: number): void {
   }
 }
 
-function verifyProjectionConfig(config: ConsumerConfig): void {
-  if (config.deliver_subject || config.filter_subject !== "ev.>" ||
-      config.filter_subjects?.length || config.ack_policy !== AckPolicy.None) {
-    throw new Error("Incompatible projection consumer");
-  }
-}
-
 // JetStreamNotEnabled is not in the SDK public exports; check its name and typed cause.
 function transient(error: unknown): boolean {
   return (
@@ -132,9 +122,9 @@ function transient(error: unknown): boolean {
 }
 
 /** The caller owns the authenticated TLS connection and its lifecycle. */
-export async function createEventStore(connection: NatsConnection, consumerName?: string) {
+export async function createEventStore(connection: NatsConnection) {
   const manager = await jetstreamManager(connection, { timeout: requestMs });
-  return new EventStore(jetstream(connection, { timeout: requestMs }), manager, consumerName);
+  return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
 }
 
 /** TLS is mandatory, including before the NATS protocol handshake. */
@@ -169,7 +159,7 @@ export async function connectNats(env: NodeJS.ProcessEnv = process.env) {
 export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
   const connection = await connectNats(env);
   try {
-    const store = await createEventStore(connection, env["NATS_CONSUMER_NAME"]);
+    const store = await createEventStore(connection);
     return { store, close: () => connection.close() };
   } catch (error) {
     await connection.close();
@@ -180,9 +170,7 @@ export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
 export class EventStore {
   private readonly client: JetStreamClient;
   private readonly manager: JetStreamManager;
-  private readonly consumerName: string | undefined;
-  constructor(client: JetStreamClient, manager: JetStreamManager, consumerName?: string) {
-    this.consumerName = consumerName;
+  constructor(client: JetStreamClient, manager: JetStreamManager) {
     this.client = client;
     this.manager = manager;
   }
@@ -314,52 +302,31 @@ export class EventStore {
     }
   }
 
-  /** Run with provisioning credentials before starting a reader or replay job. */
-  async provisionProjection(name: string, fromSequence = 1): Promise<void> {
-    if (!["projection-members", "projection-authz", "projection-replay"].includes(name)) {
-      throw new Error("Unknown projection consumer");
-    }
-    await this.manager.consumers.add(streamName, {
-      durable_name: name, filter_subject: "ev.>", ack_policy: AckPolicy.None,
-      deliver_policy: DeliverPolicy.StartSequence, opt_start_seq: Math.max(1, fromSequence),
-      max_deliver: 1,
-    });
-  }
-
-  /** Bind a provisioned reader consumer, or create a temporary one with command credentials. */
+  /** Read from the caller's SQL checkpoint; no server-side delivery cursor survives a restart. */
   async *subscribe(
     fromSequence = 1,
     signal?: AbortSignal,
-    consumerName = this.consumerName,
   ): AsyncGenerator<StoredEvent> {
     signal?.throwIfAborted();
-    const consumer = await this.client.consumers.get(streamName, consumerName ?? {
-      deliver_policy: DeliverPolicy.StartSequence,
-      opt_start_seq: Math.max(1, fromSequence),
-    });
-    if (consumerName) {
-      const { config } = await consumer.info();
-      verifyProjectionConfig(config);
-    }
-    const messages = await consumer.consume();
-    const stop = () => {
-      void messages.close();
-    };
-    signal?.addEventListener("abort", stop, { once: true });
-    if (signal?.aborted) {
-      stop();
-    }
-    try {
-      for await (const message of messages) {
-        yield {
-          sequence: message.seq,
-          event: decodeEvent(message.data, message.subject),
-        };
+    let sequence = Math.max(1, fromSequence);
+    let head = 0;
+    while (!signal?.aborted) {
+      if (sequence > head) head = await this.head();
+      if (sequence > head) {
+        // Poll only at the live tail. Historical reads have no delay or shared cursor.
+        await delay(100);
+        continue;
       }
-    } finally {
-      signal?.removeEventListener("abort", stop);
-      await messages.close();
-      if (!consumerName) await consumer.delete();
+      const message = await this.manager.streams.getMessage(streamName, { seq: sequence });
+      if (signal?.aborted) return;
+      if (!message) {
+        throw new Error("Event sequence gap");
+      }
+      yield {
+        sequence: message.seq,
+        event: decodeEvent(message.data, message.subject),
+      };
+      sequence = message.seq + 1;
     }
   }
 

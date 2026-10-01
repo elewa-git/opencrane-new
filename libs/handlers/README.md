@@ -22,7 +22,8 @@ await runtime.stop();
 
 Use a dedicated silo database and its `pgboss` schema; jobs and handler SQL
 writes must share the supplied database. The role needs schema/table creation
-and DML rights. Initialise EVENTS with the event-store adapter first. Start
+and DML rights. Run `npm run provision` with command credentials first (R3 by
+default; `NATS_REPLICAS=1` for local tests). Start
 telemetry in the host for real trace ids; every valid handler attempt uses
 observability's `runHandler` (name, event id, stream, attempt). Queue errors
 are logged; dispatcher errors reject its promise and require host restart.
@@ -87,4 +88,4 @@ and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.m
 Never supply the command identity to a reader process.
 
 Consumer creation/reset belongs to the authorised provisioning job, following
-[ADR 0005](../../docs/adr/0005-nats-access.md); reader connections only bind existing consumers.
+[ADR 0005](../../docs/adr/0005-nats-access.md); dispatchers bind the existing durable consumer; projections read exact sequences.
