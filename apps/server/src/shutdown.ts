@@ -19,13 +19,14 @@ export function installShutdown(app: FastifyInstance, sockets: WebSocketServer, 
   ]);
   const stop = () => {
     const signalAt = performance.now();
+    const signalReceivedAtMs = Date.now();
     if (closing) {
-      app.log.error({ elapsedMs: performance.now() - signalAt }, 'server shutdown forced');
+      app.log.error({ signalReceivedAtMs }, 'server shutdown forced');
       process.exit(1);
     }
     closing = true;
     startedAt = signalAt;
-    app.log.info('server shutdown started');
+    app.log.info({ signalReceivedAtMs }, 'server shutdown started');
     // No cleanup reserve: a request gets the entire advertised grace period.
     const deadline = setTimeout(() => {
       timedOut = true;

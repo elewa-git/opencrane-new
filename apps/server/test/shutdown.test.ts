@@ -27,13 +27,14 @@ async function exit(running: RunningServer, code: number) {
   const timeout = setTimeout(() => running.child.kill('SIGKILL'), 10_000);
   const result = await running.exited;
   clearTimeout(timeout);
-  expect(result, running.stdout()).toEqual({ code, signal: null });
+  expect(result, running.stdout()).toMatchObject({ code, signal: null });
   expect(running.stdout().split('test NATS close called').length - 1).toBe(1);
   expect(running.stdout().split('test telemetry close called').length - 1).toBe(1);
+  return result.exitedAtMs;
 }
-function elapsed(running: RunningServer, message: string) {
-  const value = parseJsonLines(running.stdout()).find((line) => line['msg'] === message)?.['elapsedMs'];
-  if (typeof value !== 'number') throw new Error(`Missing elapsed time for ${message}`);
+function signalReceivedAt(running: RunningServer, message: string) {
+  const value = parseJsonLines(running.stdout()).find((line) => line['msg'] === message)?.['signalReceivedAtMs'];
+  if (typeof value !== 'number') throw new Error(`Missing signal receipt time for ${message}`);
   return value;
 }
 it.each(['SIGTERM', 'SIGINT'] as const)('idle %s exits 0 and closes NATS once', async (signal) => {
@@ -48,8 +49,8 @@ it('gives an open WebSocket a 1001 close and exits inside grace', async () => {
   const closed = once(ws, 'close');
   running.child.kill('SIGTERM');
   expect((await closed)[0]).toBe(1001);
-  await exit(running, 0);
-  expect(elapsed(running, 'server shutdown completed')).toBeLessThan(1000);
+  const exitedAt = await exit(running, 0);
+  expect(exitedAt - signalReceivedAt(running, 'server shutdown started')).toBeLessThan(1000);
 }, CASE_TIMEOUT_MS);
 it('bounds a stalled partial body, reports timeout and invokes cleanup once', async () => {
   const running = await start();
@@ -59,8 +60,8 @@ it('bounds a stalled partial body, reports timeout and invokes cleanup once', as
   socket.write('POST /members/join HTTP/1.1\r\nHost: localhost\r\nContent-Type: application/json\r\nContent-Length: 1000\r\n\r\n{');
   await until(() => running.stdout().includes('"url":"/members/join"'));
   running.child.kill('SIGTERM');
-  await exit(running, 1);
-  expect(elapsed(running, 'server shutdown failed')).toBeLessThan(1250);
+  const exitedAt = await exit(running, 1);
+  expect(exitedAt - signalReceivedAt(running, 'server shutdown started')).toBeLessThan(1250);
   socket.destroy();
 }, CASE_TIMEOUT_MS);
 it('lets a 700 ms in-flight join finish with 200 and durable append during a 1000 ms grace', async () => {
@@ -89,8 +90,8 @@ it('a second signal exits at once while cleanup is hung', async () => {
   running.child.kill('SIGTERM');
   await until(() => running.stdout().includes('test NATS close called'));
   running.child.kill('SIGINT');
-  await exit(running, 1);
-  expect(elapsed(running, 'server shutdown forced')).toBeLessThan(500);
+  const exitedAt = await exit(running, 1);
+  expect(exitedAt - signalReceivedAt(running, 'server shutdown forced')).toBeLessThan(500);
 }, CASE_TIMEOUT_MS);
 it('exits non-zero on telemetry cleanup failure while still closing NATS', async () => {
   const running = await start({ TEST_TELEMETRY: 'fail' });

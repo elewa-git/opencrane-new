@@ -60,7 +60,7 @@ export async function sendRaw(port: number, request: string): Promise<string> {
 
 export interface RunningServer {
   child: ReturnType<typeof spawn>;
-  exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+  exited: Promise<{ code: number | null; signal: NodeJS.Signals | null; exitedAtMs: number }>;
   port: number;
   stdout: () => string;
   stop: () => Promise<void>;
@@ -79,7 +79,7 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
     env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', NATS_CA_FILE: '', NATS_CERT_FILE: '', NATS_KEY_FILE: '', SILO_ID: '', DATABASE_URL: '', SHUTDOWN_GRACE_MS: '1000', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null; exitedAtMs: number }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal, exitedAtMs: Date.now() })));
   child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
   child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
 

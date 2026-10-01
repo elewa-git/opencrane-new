@@ -7,18 +7,22 @@ import { freePort } from "@opencrane/event-store/testing";
 
 const exec = promisify(execFile);
 const containers = new Set<string>();
-const fixtureLabel = `opencrane.test.process=${process.pid}`;
+const fixtureLabelValue = String(process.pid);
+const fixtureLabel = `opencrane.test.process=${fixtureLabelValue}`;
 const image =
   "openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55";
 async function docker(...args: string[]) {
   return (await exec("docker", args, { timeout: 120_000 })).stdout.trim();
 }
 function reapContainers() {
-  if (containers.size === 0) return;
-  spawnSync("docker", ["rm", "-f", ...containers], {
-    stdio: "ignore",
-    timeout: 10_000,
-  });
+  for (const id of containers) {
+    const inspected = spawnSync("docker", [
+      "inspect", "--format", '{{ index .Config.Labels "opencrane.test.process" }}', id,
+    ], { encoding: "utf8", timeout: 10_000 });
+    if (inspected.status === 0 && inspected.stdout.trim() === fixtureLabelValue) {
+      spawnSync("docker", ["rm", "-f", id], { stdio: "ignore", timeout: 10_000 });
+    }
+  }
 }
 process.once("exit", reapContainers);
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -39,7 +43,6 @@ export async function until(check: () => boolean | Promise<boolean>, timeout = 1
 
 export async function openfga(postgres?: string) {
   const name = `authz-${randomUUID()}`;
-  containers.add(name);
   const port = await freePort();
   const grpc = await freePort();
   const apiUrl = `http://127.0.0.1:${port}`;
@@ -57,7 +60,7 @@ export async function openfga(postgres?: string) {
       ...database,
     );
   }
-  await docker(
+  const container = await docker(
     "run",
     "-d",
     "--name",
@@ -78,6 +81,7 @@ export async function openfga(postgres?: string) {
     "--log-level",
     "error",
   );
+  containers.add(container);
   const ready = () =>
     until(async () => {
       try {
@@ -91,26 +95,26 @@ export async function openfga(postgres?: string) {
   try {
     await ready();
   } catch (error) {
-    await docker("rm", "-f", name);
-    containers.delete(name);
+    await docker("rm", "-f", container);
+    containers.delete(container);
     throw error;
   }
   return {
     apiUrl,
     async pause() {
-      await docker("pause", name);
+      await docker("pause", container);
     },
     async resume() {
-      await docker("unpause", name);
+      await docker("unpause", container);
       await ready();
     },
     async restart() {
-      await docker("restart", name);
+      await docker("restart", container);
       await ready();
     },
     async close() {
-      await docker("rm", "-f", name);
-      containers.delete(name);
+      await docker("rm", "-f", container);
+      containers.delete(container);
     },
   };
 }
@@ -120,14 +124,13 @@ export async function databases() {
   let url = process.env["PG_TEST_URL"];
   if (!url) {
     const port = await freePort();
-    container = `authz-postgres-${randomUUID()}`;
-    containers.add(container);
-    await docker(
+    const name = `authz-postgres-${randomUUID()}`;
+    container = await docker(
       "run",
       "-d",
       "--rm",
       "--name",
-      container,
+      name,
       "--label",
       fixtureLabel,
       "-p",
@@ -136,6 +139,7 @@ export async function databases() {
       "POSTGRES_PASSWORD=test",
       "postgres:17.6-alpine",
     );
+    containers.add(container);
     url = `postgres://postgres:test@127.0.0.1:${port}/postgres`;
   }
   const admin = new Pool({ connectionString: url });
