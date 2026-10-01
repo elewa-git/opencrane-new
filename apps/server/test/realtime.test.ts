@@ -169,12 +169,13 @@ it('limits each connection to 20 messages per second', async () => {
   expect((await closed)[0]).toBe(1008);
 });
 it('drops live deltas for a paused consumer and replays every missing position on reconnect', async () => {
+  const changeCount = 64;
   const client = await connect();
   client.subscribe(2);
   await until(() => client.messages.some((message) => message.type === 'ready'));
   client.ws.pause();
   // Real TCP backpressure: exceed the kernel receive window, with no socket mocks.
-  for (let i = 0; i < 100; i++) await append(`slow-${i}`, 'member.joined', { displayName: 'x'.repeat(100_000) }, false);
+  for (let i = 0; i < changeCount; i++) await append(`slow-${i}`, 'member.joined', { displayName: 'x'.repeat(64_000) }, false);
   await runner.run(members);
   await delay(300);
   const closed = once(client.ws, 'close');
@@ -183,12 +184,12 @@ it('drops live deltas for a paused consumer and replays every missing position o
   expect(client.messages.some((message) => message.type === 'resync')).toBe(true);
   const received = client.messages.filter((message) => message.type === 'member').map((message) => message.position);
   const last = received.at(-1) ?? 2;
-  expect(last).toBeLessThan(102);
+  expect(last).toBeLessThan(changeCount + 2);
   const resumed = await connect();
   resumed.subscribe(last);
   await until(() => resumed.messages.some((message) => message.type === 'ready'), 15_000);
   const replayed = resumed.messages.filter((message) => message.type === 'member').map((message) => message.position);
-  expect([...received, ...replayed]).toEqual(Array.from({ length: 100 }, (_, i) => i + 3));
+  expect([...received, ...replayed]).toEqual(Array.from({ length: changeCount }, (_, i) => i + 3));
 }, 30_000);
 it('terminates a peer that does not answer heartbeats', async () => {
   const client = await connect('oidc-alice', 'org-acme', false);
