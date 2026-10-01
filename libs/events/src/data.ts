@@ -32,7 +32,14 @@ const digestSchema = z.string().regex(HEX64, 'expected a sha-256 hex digest, not
 const id = z.string().min(1);
 const minorUnits = z.int().nonnegative(); // EUR minor units (cents): 150 = €1.50
 const roleSchema = z.enum(['owner', 'admin', 'member']);
-const budgetScopeSchema = z.enum(['global', 'paying_group', 'assistant']);
+
+// A short machine code such as "model_error" or "ssrf_guard_failed": lower
+// case words joined by underscores. Used wherever an event needs a reason.
+// A code has no spaces, so a sentence (which could carry conversation
+// content or a person's name) cannot be put in a reason field.
+export const reasonCodeSchema = z
+  .string()
+  .regex(/^[a-z][a-z0-9_]{1,63}$/, 'reason must be a short snake_case code such as "model_error", not free text');
 
 // An id that is used to build a stream's subject (see subject.ts): every
 // event type whose `subjectFields` names a field uses this narrower shape
@@ -42,15 +49,23 @@ export const subjectId = z
   .string()
   .regex(SUBJECT_ID_PATTERN, 'must contain only letters, digits and underscores (subjects join ids with "-")');
 
-// Encrypted text is base64 (or base64url) output, never plaintext. A real
-// sentence like "wire EUR 10,000 today" has spaces and punctuation that
-// fail the base64 character class outright; the minimum length also rules
-// out a short plaintext word that happens to be made only of letters.
-const BASE64_PATTERN = /^[A-Za-z0-9+/_-]+={0,2}$/;
+// Encrypted text is standard base64 (RFC 4648, with "=" padding), never
+// plaintext. The server uses one encoding, so base64url ("-" and "_") is
+// not accepted: that also rules out a plaintext phrase glued together with
+// hyphens or underscores, which would otherwise look like base64url. A real
+// sentence like "wire EUR 10,000 today" fails outright (spaces, commas),
+// and the minimum length rules out a short plaintext word.
+//
+// This is a shape check, not proof of encryption: one long plain word whose
+// length is a multiple of 4 would still pass. It catches accidents (a
+// sentence, JSON or a phrase put in the wrong field), not someone who
+// deliberately disguises text. The real protection is that only the server
+// encrypts and writes these events.
+const BASE64_PATTERN = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
 export const ciphertextSchema = z
   .string()
   .min(16, 'ciphertext must be real encrypted output (base64), not a placeholder or plaintext value')
-  .regex(BASE64_PATTERN, 'ciphertext must be base64 or base64url, with no whitespace');
+  .regex(BASE64_PATTERN, 'ciphertext must be standard base64 with correct padding and no whitespace');
 
 // A reference to the key that encrypted some ciphertext, or to a secret
 // held in the secret store — never the key or secret value itself. The
@@ -118,7 +133,7 @@ export const memberRoleChangedDataSchema = z
   .strict();
 
 export const memberRemovedDataSchema = z
-  .object({ memberId: subjectId, removedBy: id, reason: id.optional() })
+  .object({ memberId: subjectId, removedBy: id, reason: reasonCodeSchema.optional() })
   .strict();
 
 export const teamCreatedDataSchema = z.object({ teamId: subjectId, name: id, createdBy: id }).strict();
@@ -196,7 +211,7 @@ export const agentTurnStartedDataSchema = z
 export const agentTurnCompletedDataSchema = z.object({ conversationId: subjectId, turnId: id }).strict();
 
 export const agentTurnFailedDataSchema = z
-  .object({ conversationId: subjectId, turnId: id, reason: id })
+  .object({ conversationId: subjectId, turnId: id, reason: reasonCodeSchema })
   .strict();
 
 // Risky type: the bridge reports a completed assistant message, but the
@@ -252,6 +267,7 @@ export const toolApprovalRequestedDataSchema = z
     approvalId: subjectId,
     conversationId: id,
     turnId: id,
+    assistantId: id, // approvals are bound to requester, conversation, turn, assistant and digest
     tool: id,
     argumentsDigest: digestSchema,
     requesterId: id,
@@ -280,7 +296,9 @@ export const mcpServerDiscoveredDataSchema = z
   .object({ serverId: subjectId, toolCount: z.int().nonnegative(), schemaDigest: digestSchema })
   .strict();
 
-export const mcpServerRejectedDataSchema = z.object({ serverId: subjectId, reason: id }).strict();
+export const mcpServerRejectedDataSchema = z
+  .object({ serverId: subjectId, reason: reasonCodeSchema })
+  .strict();
 
 export const mcpToolModeSetDataSchema = z
   .object({ serverId: subjectId, toolName: id, mode: z.enum(['allow', 'ask', 'block']), setBy: id })
@@ -300,8 +318,8 @@ export const mcpToolListChangedDataSchema = z
 
 export const grantGivenDataSchema = z
   .object({
+    resourceType: subjectId,
     resourceId: subjectId,
-    resourceType: id,
     granteeId: id,
     granteeKind: z.enum(['member', 'team', 'assistant']),
     grantedBy: id,
@@ -309,7 +327,7 @@ export const grantGivenDataSchema = z
   .strict();
 
 export const grantRevokedDataSchema = z
-  .object({ resourceId: subjectId, granteeId: id, revokedBy: id })
+  .object({ resourceType: subjectId, resourceId: subjectId, granteeId: id, revokedBy: id })
   .strict();
 
 // Risky type: the secret itself never appears here, only a reference id
@@ -330,17 +348,22 @@ export const connectionRevokedDataSchema = z
 
 // --- Budgets (single-writer actor per silo) -----------------------------
 
-export const budgetCeilingSetDataSchema = z
-  .object({
-    scope: budgetScopeSchema,
-    scopeId: id.optional(), // set for paying_group and assistant, omitted for global
-    ceilingMinorUnits: minorUnits,
-    setBy: id,
-  })
-  .strict();
+// A ceiling or exhaustion applies to one scope: the whole silo ("global",
+// no scopeId), one paying group, or one assistant (those two must name
+// which one). Three strict shapes keyed on `scope` make "assistant with no
+// scopeId" and "global with a scopeId" invalid instead of silently legal.
+const ceilingFields = { ceilingMinorUnits: minorUnits, setBy: id };
+export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
+  z.object({ scope: z.literal('global'), ...ceilingFields }).strict(),
+  z.object({ scope: z.literal('paying_group'), scopeId: id, ...ceilingFields }).strict(),
+  z.object({ scope: z.literal('assistant'), scopeId: id, ...ceilingFields }).strict(),
+]);
 
+// The reservation names both the paying group and the assistant, because
+// the budget actor checks every ceiling (global, group, optional
+// per-assistant) in the one append that records the charge.
 export const budgetReservedDataSchema = z
-  .object({ reservationId: id, permitId: id, amountMinorUnits: minorUnits, payingGroupId: id })
+  .object({ reservationId: id, permitId: id, amountMinorUnits: minorUnits, payingGroupId: id, assistantId: id })
   .strict();
 
 export const budgetSettledDataSchema = z
@@ -351,9 +374,11 @@ export const budgetPeriodStartedDataSchema = z
   .object({ periodStart: z.iso.datetime({ offset: true }) })
   .strict();
 
-export const budgetExhaustedDataSchema = z
-  .object({ scope: budgetScopeSchema, scopeId: id.optional() })
-  .strict();
+export const budgetExhaustedDataSchema = z.discriminatedUnion('scope', [
+  z.object({ scope: z.literal('global') }).strict(),
+  z.object({ scope: z.literal('paying_group'), scopeId: id }).strict(),
+  z.object({ scope: z.literal('assistant'), scopeId: id }).strict(),
+]);
 
 // --- Company brain -------------------------------------------------------
 
@@ -416,6 +441,6 @@ export const securityAlertRaisedDataSchema = z
   .object({
     alertId: id,
     severity: z.enum(['low', 'medium', 'high', 'critical']),
-    reason: id,
+    reason: reasonCodeSchema,
   })
   .strict();

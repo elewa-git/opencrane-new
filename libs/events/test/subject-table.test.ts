@@ -85,8 +85,8 @@ const EXPECTED_SUBJECT: Readonly<Record<string, string>> = {
   'mcp.server_unpublished': 'mcp-mcp_1',
   'mcp.tool_list_changed': 'mcp-mcp_1',
 
-  'grant.given': 'grant-mcp_1',
-  'grant.revoked': 'grant-mcp_1',
+  'grant.given': 'grant-mcp_server-mcp_1',
+  'grant.revoked': 'grant-mcp_server-mcp_1',
 
   'connection.created': 'connection-mem_1-mcp_1-default',
   'connection.refreshed': 'connection-mem_1-mcp_1-default',
@@ -182,5 +182,22 @@ describe('the connection composite subject cannot collide across a "-" boundary'
     const second = { userId: 'alice', serverId: 'x-odoo', profile: 'default', secretRef: 'secret:1' };
     expect(definition.dataSchema.safeParse(first).success).toBe(false);
     expect(definition.dataSchema.safeParse(second).success).toBe(false);
+  });
+});
+
+describe('the grant stream is keyed by resource type and id together', () => {
+  // Two resources of different types can share an id. They must not share
+  // a stream, or their grant history would be mixed into one ordered
+  // stream and one expected-sequence fence.
+  it('the same resource id under two resource types gets two different subjects', () => {
+    const grantedTo = { granteeId: 'team_1', revokedBy: 'mem_1' };
+    const server = { resourceType: 'mcp_server', resourceId: 'r_1', ...grantedTo };
+    const routine = { resourceType: 'routine', resourceId: 'r_1', ...grantedTo };
+
+    expect(parseEventByType(envelope('grant.revoked', 'grant-mcp_server-r_1', server)).success).toBe(true);
+    expect(parseEventByType(envelope('grant.revoked', 'grant-routine-r_1', routine)).success).toBe(true);
+    // Each is refused on the other's stream.
+    expect(parseEventByType(envelope('grant.revoked', 'grant-routine-r_1', server)).success).toBe(false);
+    expect(parseEventByType(envelope('grant.revoked', 'grant-mcp_server-r_1', routine)).success).toBe(false);
   });
 });

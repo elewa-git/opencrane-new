@@ -13,15 +13,21 @@
 //   EVENT_PREFIX_STREAM_EXCEPTIONS below) — this is what catches, say,
 //   `approval.used` moved onto the `effect` stream, which the check above
 //   alone would wave through because `effect` is still a real stream;
-// - a backticked name in the "## Catalogue" section that looks like it
-//   was meant to be an event, but doesn't match the strict event-name
-//   shape (three dotted parts, a hyphen, camelCase), is flagged instead
-//   of silently dropped, so a typo doesn't just vanish from the check.
+// - a malformed event name in the "## Catalogue" section fails the build
+//   instead of vanishing from the comparison: anything in an "Event"
+//   column (the first column) that is not a plain `word.word_word` name
+//   (`member-joined`, `memberJoined`, `tool.list.changed` ...), and any
+//   dotted name in another column that has the wrong shape (a reaction
+//   saying "emit `tool.list.changed`"). A dot-less hyphenated or camelCase
+//   name in another column only produces a warning, as it may be a product
+//   or tool name rather than an event.
 // If the registry and the catalogue disagree, the catalogue is no longer
-// the contract it claims to be, so this fails the build; a malformed name
-// is only a warning, since it may just be an unrelated technical term.
+// the contract it claims to be, so this fails the build.
 //
-// Run with: npm run check:events (wired into CI too).
+// Run with: npm run check:events (wired into CI too). The optional
+// `--catalogue <path>` reads a different markdown file instead of
+// docs/architecture/events.md; the tests use it to prove the script exits
+// non-zero on a doctored copy.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +35,11 @@ import { eventRegistry } from '../libs/events/src/registry.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
-const cataloguePath = path.join(repoRoot, 'docs/architecture/events.md');
+const catalogueFlag = process.argv.indexOf('--catalogue');
+const cataloguePath =
+  catalogueFlag !== -1 && process.argv[catalogueFlag + 1]
+    ? path.resolve(process.argv[catalogueFlag + 1])
+    : path.join(repoRoot, 'docs/architecture/events.md');
 
 // An event type is always written `<stream-word>.<past-tense-words>`, all
 // lower case, e.g. `member.joined` or `mcp.tool_list_changed`. Other things
@@ -38,15 +48,15 @@ const cataloguePath = path.join(repoRoot, 'docs/architecture/events.md');
 // enough to tell an event name apart from everything else in backticks.
 const EVENT_TYPE_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 
-// A backticked token that contains a dot and otherwise looks like a plain
-// identifier (letters, digits, dots, underscores, hyphens — no angle
-// brackets, slashes or spaces). Anything matching this but failing
-// EVENT_TYPE_PATTERN is a candidate: maybe a three-part name
-// (`tool.list.changed`), a hyphenated one, or camelCase, and maybe
-// something unrelated (a stray version number). It's cheap to check by
-// eye, so this reports it rather than silently leaving it out of the
-// comparison the way the old, narrower regex did.
-const MALFORMED_CANDIDATE_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+// A backticked token that looks like a plain identifier (letters, digits,
+// dots, underscores, hyphens: no angle brackets, slashes or spaces).
+const IDENTIFIER_PATTERN = /^[A-Za-z][A-Za-z0-9_.-]*$/;
+
+// A dot-less identifier that is written like an event name someone got
+// wrong: hyphenated (`member-joined`) or camelCase (`memberJoined`).
+function looksLikeWrongEventName(token) {
+  return !token.includes('.') && (token.includes('-') || /[a-z][A-Z]/.test(token));
+}
 
 // Which stream an event type's own prefix (the word before the first dot,
 // e.g. "member" in "member.joined") belongs to, for the handful of event
@@ -136,12 +146,15 @@ export function parseStreamTypes(markdown) {
  * rejected`"), and that still counts: if it isn't caught here, the
  * catalogue can drift from the registry without this check ever noticing.
  *
- * Also collects, separately, any backticked token in the same tables that
- * looks like it was meant to be an event name but doesn't match the
- * strict shape (see MALFORMED_CANDIDATE_PATTERN above).
+ * Also collects, separately:
+ * - `malformedNames`: names that must fail the build. Every backticked
+ *   token in an "Event" column (first column) that is not a well-formed
+ *   event name, and any dotted identifier in another column that is not.
+ * - `suspectNames`: dot-less hyphenated or camelCase names in other
+ *   columns, which only deserve a warning (they may be tool names).
  *
  * @param {string} markdown
- * @returns {{ eventTypes: Set<string>, malformedNames: Set<string> }}
+ * @returns {{ eventTypes: Set<string>, malformedNames: Set<string>, suspectNames: Set<string> }}
  */
 export function parseCatalogueEventTypes(markdown) {
   const lines = markdown.split('\n');
@@ -163,6 +176,7 @@ export function parseCatalogueEventTypes(markdown) {
 
   const eventTypes = new Set();
   const malformedNames = new Set();
+  const suspectNames = new Set();
 
   for (const line of section) {
     const trimmed = line.trim();
@@ -184,27 +198,32 @@ export function parseCatalogueEventTypes(markdown) {
       continue;
     }
 
-    for (const cell of cells) {
+    cells.forEach((cell, column) => {
       for (const match of cell.matchAll(/`([^`]+)`/g)) {
         const token = match[1];
         if (EVENT_TYPE_PATTERN.test(token)) {
           eventTypes.add(token);
-        } else if (token.includes('.') && MALFORMED_CANDIDATE_PATTERN.test(token)) {
-          // Looks like an identifier and contains a dot, but not in the
-          // `word.word` shape every real event name uses: a three-part
-          // name, a hyphen, or camelCase. Flag it rather than dropping it.
+        } else if (column === 0) {
+          // The Event column only ever holds event names.
           malformedNames.add(token);
+        } else if (token.includes('.') && IDENTIFIER_PATTERN.test(token)) {
+          // A dotted name elsewhere that is not `word.word`: a three-part
+          // name, a hyphen or camelCase around a dot. Not an event name
+          // anyone could have meant, so it fails rather than disappearing.
+          malformedNames.add(token);
+        } else if (looksLikeWrongEventName(token)) {
+          suspectNames.add(token);
         }
       }
-    }
+    });
   }
 
-  return { eventTypes, malformedNames };
+  return { eventTypes, malformedNames, suspectNames };
 }
 
 async function main() {
   const markdown = await readFile(cataloguePath, 'utf8');
-  const { eventTypes: catalogueTypes, malformedNames } = parseCatalogueEventTypes(markdown);
+  const { eventTypes: catalogueTypes, malformedNames, suspectNames } = parseCatalogueEventTypes(markdown);
   const streamTypes = parseStreamTypes(markdown);
   const registryTypes = new Set(eventRegistry.map((entry) => entry.type));
 
@@ -230,17 +249,18 @@ async function main() {
   const wrongStreams = wrongStreamAssignments(eventRegistry);
 
   const ok =
+    malformedNames.size === 0 &&
     missingFromRegistry.length === 0 &&
     missingFromCatalogue.length === 0 &&
     unknownStreams.length === 0 &&
     unusedStreamTypes.length === 0 &&
     wrongStreams.length === 0;
 
-  if (malformedNames.size > 0) {
+  if (suspectNames.size > 0) {
     console.warn(
-      `check:events — warning: ${String(malformedNames.size)} backticked name(s) in the Catalogue section look like they were meant to be event types, but don't match the word.word shape:`,
+      `check:events — warning: ${String(suspectNames.size)} hyphenated or camelCase name(s) in the Catalogue section may have been meant as event types:`,
     );
-    for (const name of [...malformedNames].sort()) {
+    for (const name of [...suspectNames].sort()) {
       console.warn(`  - \`${name}\``);
     }
   }
@@ -253,6 +273,12 @@ async function main() {
   }
 
   console.error('check:events — FAILED: the registry and the catalogue disagree.');
+  if (malformedNames.size > 0) {
+    console.error('\nNames in the Catalogue section that are not valid event names (use `word.word_word`):');
+    for (const name of [...malformedNames].sort()) {
+      console.error(`  - \`${name}\``);
+    }
+  }
   if (missingFromRegistry.length > 0) {
     console.error('\nIn docs/architecture/events.md but missing from libs/events/src/registry.ts:');
     for (const type of missingFromRegistry) {

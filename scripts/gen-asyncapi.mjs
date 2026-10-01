@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 // Generates docs/architecture/asyncapi.yaml from the event registry
 // (libs/events/src/registry.ts): one AsyncAPI message per event type,
-// one channel per stream, with each message's payload built from the
-// event's own zod `data` schema via zod's `z.toJSONSchema`.
+// one channel per stream. Each message's payload is the whole CloudEvents
+// envelope that goes on the wire (id, type, source, time, subject, silo,
+// principal, correlation, data), with `data` pointing at that event's own
+// zod schema, all built with zod's `z.toJSONSchema`. Each message's example
+// is a full valid event, on the subject its stream requires.
 //
 // Run `npm run gen:asyncapi` after changing the registry, and commit the
 // result. `npm run check:asyncapi` (wired into CI) regenerates the
@@ -13,7 +16,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { stringify } from 'yaml';
+import { eventEnvelopeSchema } from '../libs/events/src/envelope.ts';
 import { eventRegistry } from '../libs/events/src/registry.ts';
+import { expectedSubject } from '../libs/events/src/subject.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -26,6 +31,27 @@ const HEADER = [
   '# docs/architecture/events.md for the prose version of this catalogue.',
   '',
 ].join('\n');
+
+// The fixed envelope fields used in every generated example event.
+const EXAMPLE_SILO = 'acme';
+const EXAMPLE_ENVELOPE = {
+  id: 'evt_1',
+  source: 'opencrane-server',
+  time: '2026-10-01T09:00:00.000Z',
+  silo: EXAMPLE_SILO,
+};
+
+/**
+ * AsyncAPI schemas are JSON Schema draft-07. Zod adds a "$schema" key to
+ * each document, which does not belong inside a component, so drop it.
+ *
+ * @param {import('zod').ZodType} schema
+ * @returns {Record<string, unknown>}
+ */
+function toJsonSchema(schema) {
+  const { $schema: _dropped, ...rest } = z.toJSONSchema(schema, { target: 'draft-7' });
+  return rest;
+}
 
 /**
  * "member.joined" -> "memberJoined": AsyncAPI component names have to be
@@ -68,18 +94,39 @@ export function buildDocument() {
   /** @type {Record<string, unknown>} */
   const messages = {};
   /** @type {Record<string, unknown>} */
-  const schemas = {};
+  const schemas = { EventEnvelope: toJsonSchema(eventEnvelopeSchema(z.unknown())) };
 
   for (const entry of eventRegistry) {
     const name = toComponentName(entry.type);
-    schemas[`${name}Data`] = z.toJSONSchema(entry.dataSchema);
+    schemas[`${name}Data`] = toJsonSchema(entry.dataSchema);
     messages[name] = {
       name: entry.type,
       title: entry.type,
       summary: entry.description,
-      payload: { $ref: `#/components/schemas/${name}Data` },
+      payload: {
+        allOf: [
+          { $ref: '#/components/schemas/EventEnvelope' },
+          {
+            type: 'object',
+            properties: {
+              type: { const: entry.type },
+              data: { $ref: `#/components/schemas/${name}Data` },
+            },
+          },
+        ],
+      },
       'x-stream-subject': subjectPattern(entry),
-      examples: [{ name: 'default', payload: entry.example }],
+      examples: [
+        {
+          name: 'default',
+          payload: {
+            ...EXAMPLE_ENVELOPE,
+            type: entry.type,
+            subject: expectedSubject(entry, entry.example, EXAMPLE_SILO),
+            data: entry.example,
+          },
+        },
+      ],
     };
   }
 
@@ -113,7 +160,10 @@ export function buildDocument() {
 
 /** @returns {string} */
 export function renderDocument() {
-  return HEADER + stringify(buildDocument(), { lineWidth: 0 });
+  // YAML 1.1 mode quotes strings an older YAML reader would turn into dates
+  // or booleans (an example `time`, or the word "yes"), so every reader
+  // sees the same document.
+  return HEADER + stringify(buildDocument(), { lineWidth: 0, version: '1.1' });
 }
 
 async function main() {

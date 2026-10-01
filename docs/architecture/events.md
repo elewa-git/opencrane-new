@@ -66,7 +66,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
 | `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
-| `grant-<resource>` | shared resource | given, revoked |
+| `grant-<type>-<resource>` | shared resource (type and id together, as ids can repeat across types) | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
 | `scope-<id>` | brain permission scope | memory written, corrected, forgotten, consolidated, promoted |
 | `routine-<id>` | scheduled routine | created, due, paused, retired |

@@ -38,33 +38,54 @@ describe('parseStreamTypes', () => {
 });
 
 describe('parseCatalogueEventTypes', () => {
-  it('collects event names from any cell, and flags a malformed one instead of dropping it', () => {
-    const markdown = [
-      '## Catalogue',
-      '',
-      '### A section',
-      '| Event | Emitted by | Projections | Reactions |',
-      '|---|---|---|---|',
-      '| `member.joined` | invitation | members | emit `assistant.created` |',
-      // A three-part name a real event catalogue could plausibly contain
-      // by mistake (see plan.md's `tool.list.changed` vs the registry's
-      // `mcp.tool_list_changed`): it should be flagged, not silently lost.
-      '| `tool.list.changed` | drift check | catalogue | — |',
-      '| `ext_authz` | — | — | — |',
-      '',
-      '## Streams',
-      'not part of the Catalogue section',
-    ].join('\n');
+  const catalogue = (...rows: string[]) =>
+    ['## Catalogue', '', '| Event | Emitted by | Projections | Reactions |', '|---|---|---|---|', ...rows].join('\n');
 
-    const { eventTypes, malformedNames } = parseCatalogueEventTypes(markdown);
+  it('collects event names from any cell, not only the first column', () => {
+    const { eventTypes, malformedNames } = parseCatalogueEventTypes(
+      catalogue('| `member.joined` | invitation | members | emit `assistant.created` |'),
+    );
     expect(eventTypes).toEqual(new Set(['member.joined', 'assistant.created']));
+    expect(malformedNames.size).toBe(0);
+  });
+
+  it('collects both names from a combined "a / b" Event cell', () => {
+    const { eventTypes } = parseCatalogueEventTypes(catalogue('| `grant.given` / `grant.revoked` | admin | grants | — |'));
+    expect(eventTypes).toEqual(new Set(['grant.given', 'grant.revoked']));
+  });
+
+  // Plan.md calls one event `tool.list.changed` where the registry says
+  // `mcp.tool_list_changed`: exactly the kind of slip that must not vanish.
+  it.each(['tool.list.changed', 'member-joined', 'memberJoined', 'member', 'Member.Joined'])(
+    'fails on "%s" in the Event column',
+    (name) => {
+      const { malformedNames, eventTypes } = parseCatalogueEventTypes(catalogue(`| \`${name}\` | x | x | x |`));
+      expect(malformedNames).toEqual(new Set([name]));
+      expect(eventTypes.size).toBe(0);
+    },
+  );
+
+  it('fails on a three-part dotted name in a Reactions cell', () => {
+    const { malformedNames } = parseCatalogueEventTypes(
+      catalogue('| `mcp.tool_list_changed` | drift check | catalogue | emit `tool.list.changed` |'),
+    );
     expect(malformedNames).toEqual(new Set(['tool.list.changed']));
   });
 
-  it('does not flag a token with no dot, even if it looks unusual', () => {
-    const markdown = ['## Catalogue', '| Event | X |', '|---|---|', '| `ext_authz` | `Nats-Msg-Id` |'].join('\n');
-    const { malformedNames } = parseCatalogueEventTypes(markdown);
+  it.each(['member-joined', 'memberJoined'])('only warns about dot-less "%s" outside the Event column', (name) => {
+    const { malformedNames, suspectNames } = parseCatalogueEventTypes(
+      catalogue(`| \`member.joined\` | x | x | emit \`${name}\` |`),
+    );
     expect(malformedNames.size).toBe(0);
+    expect(suspectNames).toEqual(new Set([name]));
+  });
+
+  it('leaves ordinary non-event words alone outside the Event column', () => {
+    const { malformedNames, suspectNames } = parseCatalogueEventTypes(
+      catalogue('| `member.joined` | x | OpenFGA `member` | `acts_for` and `ext_authz` |'),
+    );
+    expect(malformedNames.size).toBe(0);
+    expect(suspectNames.size).toBe(0);
   });
 
   it('throws when there is no Catalogue heading', () => {

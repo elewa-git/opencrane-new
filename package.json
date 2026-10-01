@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "lint": "eslint .",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p scripts/tsconfig.json",
     "test": "vitest run",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
     "gen:asyncapi": "node --experimental-strip-types scripts/gen-asyncapi.mjs",
