@@ -37,7 +37,9 @@ manual deletion also removes its MinIO data.
 
 The script proves the registry and gVisor paths with temporary Pods, then removes
 them. It also waits for the four Agent Sandbox CRDs, its controller, and MinIO.
-`tailscale serve` is deliberately deferred until its access policy is decided.
+`tailscale serve` is now configured by [the dev stack](../dev-stack/README.md):
+HTTPS on the tailnet proxies to a loopback-only web server. It never enables
+Funnel. Tailnet access rules still determine which owner devices can reach it.
 
 ## Pinned versions
 

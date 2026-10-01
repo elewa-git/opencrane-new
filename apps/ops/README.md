@@ -86,3 +86,13 @@ Run `npm test -- apps/ops libs/projections/test libs/authz/test` for the replay
 contracts. Tests use real NATS, disposable PostgreSQL 17 databases and OpenFGA.
 `PG_TEST_URL` is an admin URL; tests never use its selected database for content.
 Fresh-install and multi-replica live qualification remain outstanding.
+
+## Live workers
+
+`npm run worker -w apps/ops -- members` and `-- mcp-catalogue` run the existing
+projections continuously with projection-reader NATS credentials and `DATABASE_URL`.
+`-- dispatcher` runs durable dispatch and the OpenFGA handler with dispatcher NATS
+credentials, its own `DATABASE_URL`, `SILO_ID` and the three OpenFGA binding settings.
+Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
+readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
+supplies these settings and qualifies the processes together on real services.

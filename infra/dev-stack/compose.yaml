@@ -1,0 +1,47 @@
+name: opencrane-dev
+services:
+  postgres:
+    image: postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f
+    env_file: ${DEV_STACK_DIR}/postgres.env
+    ports: ["127.0.0.1:${PG_PORT}:5432"]
+    volumes: ["postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  nats:
+    image: nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4
+    user: "0:0"
+    command: ["-c", /etc/nats/nats.conf]
+    env_file: ${DEV_STACK_DIR}/nats.env
+    ports: ["127.0.0.1:${NATS_PORT}:4222"]
+    volumes:
+      - ../nats/nats.conf:/etc/nats/nats.conf:ro
+      - ${DEV_STACK_DIR}/ca.crt:/tls/ca.crt:ro
+      - ${DEV_STACK_DIR}/server.crt:/tls/server.crt:ro
+      - ${DEV_STACK_DIR}/server.key:/tls/server.key:ro
+      - nats:/data
+  openfga-migrate:
+    image: &openfga openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55
+    command: [migrate]
+    env_file: ${DEV_STACK_DIR}/openfga.env
+  openfga:
+    image: *openfga
+    command: [run, --http-addr, "0.0.0.0:8080", --grpc-addr, "127.0.0.1:8081", --playground-enabled=false, --metrics-enabled=false]
+    env_file: ${DEV_STACK_DIR}/openfga.env
+    ports: ["127.0.0.1:${FGA_PORT}:8080"]
+    depends_on:
+      openfga-migrate:
+        condition: service_completed_successfully
+  minio:
+    user: "0:0"
+    image: alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4
+    command: [server, /data, --console-address, ":9001"]
+    env_file: ${DEV_STACK_DIR}/minio.env
+    ports: ["127.0.0.1:${MINIO_PORT}:9000", "127.0.0.1:${MINIO_CONSOLE_PORT}:9001"]
+    volumes: ["minio:/data"]
+volumes:
+  postgres:
+  nats:
+  minio:

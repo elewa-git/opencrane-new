@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "start": "node --experimental-strip-types src/replay.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "worker": "node --experimental-strip-types src/worker.ts"
   },
   "dependencies": {
     "@opencrane/authz": "0.1.0",
     "@opencrane/event-store": "0.1.0",
     "@opencrane/observability": "0.1.0",
-    "@opencrane/projections": "0.1.0"
+    "@opencrane/projections": "0.1.0",
+    "@opencrane/handlers": "0.1.0"
   }
 }

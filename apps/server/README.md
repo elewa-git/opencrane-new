@@ -161,3 +161,8 @@ once. A clean shutdown exits 0; cleanup failure or expiry exits 1. At expiry,
 remaining sockets are destroyed and cleanup is invoked if it has not started;
 the next event-loop turn exits 1 even if a closer is still hung. Thus a timeout
 reports incomplete cleanup, never success. A second signal exits 1 immediately.
+
+For local bring-up without a provider, use the [dev stack](../../infra/dev-stack/README.md).
+It supplies syntactically valid OIDC settings with a reserved `.invalid` issuer;
+startup makes no discovery request. Real sign-in stays unavailable until #11.
+The journey uses short-lived encrypted test cookies, with no bypass route in the server.
