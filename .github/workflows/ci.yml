@@ -37,6 +37,10 @@ jobs:
       - name: Install pinned NATS server
         run: sh scripts/fetch-nats.sh
 
+      # Browser tests use the Chromium build that matches the pinned playwright package.
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
       - name: Lint
         run: npm run lint
 
