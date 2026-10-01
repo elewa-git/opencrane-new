@@ -9,6 +9,7 @@ import {
   type StreamConfig,
 } from "@nats-io/jetstream";
 import {
+  connect,
   TimeoutError,
   RequestError,
   ConnectionError,
@@ -123,6 +124,18 @@ function transient(error: unknown): boolean {
 export async function createEventStore(connection: NatsConnection) {
   const manager = await jetstreamManager(connection, { timeout: requestMs });
   return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
+}
+
+/** Process entrypoints use this adapter; the EVENTS stream is provisioned separately. */
+export async function connectEventStore(servers: string) {
+  const connection = await connect({ servers });
+  try {
+    const store = await createEventStore(connection);
+    return { store, close: () => connection.close() };
+  } catch (error) {
+    await connection.close();
+    throw error;
+  }
 }
 
 export class EventStore {

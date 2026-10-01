@@ -19,6 +19,10 @@ const history = await Array.fromAsync(store.readStream('member-alice'));
 await connection.close();
 ```
 
+Process entrypoints can instead call `connectEventStore(servers)`, which returns
+`{ store, close }` and keeps the NATS SDK inside this adapter. It does not create
+or alter `EVENTS`; provision the stream separately. Call `close()` on shutdown.
+
 Envelope subjects retain the catalogue's `member-alice` format. The adapter
 maps the first hyphen to `ev.member.alice`; ids may contain further hyphens,
 but no dots, whitespace or NATS wildcards. Event types must use their

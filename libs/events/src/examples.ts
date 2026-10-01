@@ -15,8 +15,7 @@ export const memberJoinedDataSchema = z
     email: z.email(),
     displayName: z.string().min(1),
     role: z.enum(['owner', 'admin', 'member']),
-    // The invitation this join came from, if any (a person can also join
-    // through single sign-on with no standing invitation).
+    // Optional for older events. The server acceptance command always sets it.
     invitationId: z.string().min(1).optional(),
   })
   .strict();
