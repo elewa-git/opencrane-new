@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // This package imports Node builtins (crypto, url) directly, unlike a
+    // sibling package a `ws` or `fastify` import would pull Node's ambient
+    // types in for automatically, so it must ask for them itself.
+    "types": ["node"]
+  },
+  "include": ["src", "test"]
+}
