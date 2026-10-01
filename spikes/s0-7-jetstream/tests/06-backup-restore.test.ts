@@ -1,14 +1,17 @@
 // Pass condition 6: backup and restore. Snapshot a populated stream with
 // the official `nats` CLI (`nats backup stream`), restore it into a FRESH
-// server, and check every message and per-subject last sequence survives,
-// and that expected-sequence appends continue to work correctly after
-// restore.
+// server, and check EVERY SINGLE MESSAGE survives byte-for-byte (subject,
+// stream sequence, headers and payload bytes) — not just message counts
+// and each subject's last message, which could hide a corrupted or
+// reordered message in the middle of a subject's history — and that
+// expected-sequence appends continue to work correctly after restore.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DeliverPolicy } from "@nats-io/jetstream";
 import { freePorts } from "../src/ports.ts";
 import {
   freshStateDir,
@@ -19,6 +22,42 @@ import {
   type RunningNatsServer,
 } from "../src/nats-proc.ts";
 import { conditionalAppend, encode, ensureEventsStream, makeCtx, STREAM_NAME, STREAM_WRONG_LAST_SEQUENCE, type Ctx } from "../src/jetstream.ts";
+
+interface WireMessage {
+  subject: string;
+  seq: number;
+  msgId: string | null;
+  headerKeys: string[];
+  data: Uint8Array;
+}
+
+/** Reads every message under `filterSubject`, in stream order, via a
+ * filtered ordered consumer — the same mechanism the projection tests use
+ * — so the comparison below is over the real wire representation (subject,
+ * sequence, headers, payload bytes), not just a count or a "last message"
+ * spot check. */
+async function readAllMessages(ctx: Ctx, filterSubject: string, count: number): Promise<WireMessage[]> {
+  const consumer = await ctx.js.consumers.get(STREAM_NAME, {
+    filter_subjects: [filterSubject],
+    deliver_policy: DeliverPolicy.All,
+  });
+  const iter = await consumer.consume({ max_messages: count + 10, expires: 3000 });
+  const out: WireMessage[] = [];
+  for await (const m of iter) {
+    out.push({
+      subject: m.subject,
+      seq: m.seq,
+      msgId: m.headers?.get("Nats-Msg-Id") ?? null,
+      headerKeys: m.headers ? [...m.headers.keys()].sort() : [],
+      data: m.data,
+    });
+    m.ack();
+    if (out.length >= count) break;
+  }
+  await iter.stop();
+  out.sort((a, b) => a.seq - b.seq);
+  return out;
+}
 
 const execFileAsync = promisify(execFile);
 
@@ -86,6 +125,12 @@ describe("S0.7 pass condition 6: backup and restore", () => {
     const fixture = await populate(originalCtx);
     expect(fixture.totalMessages).toBe(N_SUBJECTS * APPENDS_PER_SUBJECT);
 
+    // Read back EVERY message from the original server, in stream order,
+    // before backing anything up — this is the ground truth every restored
+    // message will be compared against below, not just a count.
+    const messagesBefore = await readAllMessages(originalCtx, "ev.backup.>", fixture.totalMessages);
+    expect(messagesBefore).toHaveLength(fixture.totalMessages);
+
     const infoBefore = await originalCtx.jsm.streams.info(STREAM_NAME);
     console.log(
       `[t6] populated ${STREAM_NAME}: messages=${infoBefore.state.messages} subjects=${infoBefore.state.num_subjects}`,
@@ -130,7 +175,7 @@ describe("S0.7 pass condition 6: backup and restore", () => {
       `[t6] restored ${STREAM_NAME}: messages=${infoAfter.state.messages} subjects=${infoAfter.state.num_subjects}`,
     );
 
-    // Every message and every per-subject last sequence must match exactly.
+    // Every per-subject last sequence must match (a quick spot check)...
     let checkedSubjects = 0;
     for (const [subject, seqs] of fixture.bySubject) {
       const restoredLast = await restoredCtx.jsm.direct.getMessage(STREAM_NAME, { last_by_subj: subject });
@@ -141,6 +186,31 @@ describe("S0.7 pass condition 6: backup and restore", () => {
       checkedSubjects++;
     }
     expect(checkedSubjects).toBe(N_SUBJECTS);
+
+    // ...but the real claim is EVERY message, not just each subject's last
+    // one: read every message back from the restored server and compare
+    // it, one for one in stream order, against what was read from the
+    // original server before backup — subject, stream sequence, header
+    // keys (Nats-Msg-Id included) and the exact payload bytes.
+    const messagesAfter = await readAllMessages(restoredCtx, "ev.backup.>", fixture.totalMessages);
+    expect(messagesAfter).toHaveLength(messagesBefore.length);
+    let mismatches = 0;
+    for (let i = 0; i < messagesBefore.length; i++) {
+      const before = messagesBefore[i];
+      const after = messagesAfter[i];
+      if (
+        before.subject !== after.subject ||
+        before.seq !== after.seq ||
+        before.msgId !== after.msgId ||
+        before.headerKeys.join(",") !== after.headerKeys.join(",") ||
+        Buffer.compare(Buffer.from(after.data), Buffer.from(before.data)) !== 0
+      ) {
+        mismatches++;
+        console.log(`[t6] MISMATCH at index ${i}: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`);
+      }
+    }
+    expect(mismatches).toBe(0);
+    console.log(`[t6] compared ${messagesBefore.length}/${messagesBefore.length} messages byte-for-byte: 0 mismatches`);
 
     // Conditional appends must continue to work correctly against the
     // restored stream: the correct expected sequence is accepted...
@@ -162,6 +232,8 @@ describe("S0.7 pass condition 6: backup and restore", () => {
     expect(staleAppend.ok).toBe(false);
     expect(staleAppend.errCode).toBe(STREAM_WRONG_LAST_SEQUENCE);
 
-    console.log(`[t6] PASS: ${checkedSubjects} subjects verified byte-identical after restore; appends still enforced`);
+    console.log(
+      `[t6] PASS: all ${messagesBefore.length} messages across ${checkedSubjects} subjects verified byte-for-byte identical after restore; appends still enforced`,
+    );
   });
 });

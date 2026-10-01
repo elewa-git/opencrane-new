@@ -1,13 +1,24 @@
 # ADR 0003: agent harness — Codex app-server (local spike, S0.1a)
 
-**Status:** Draft, from spike S0.1a. Ready for the morning decision, but
-**not the full S0.1 decision** — this is only the *local* half (no Pod, no
-gVisor, no cluster). S0.1b (this same harness inside a real GKE Agent
-Sandbox Pod) is still open; plan.md's start gate needs both.
+**Status:** Draft, from spike S0.1a, round 2. Ready for the morning
+decision, but **not the full S0.1 decision** — this is only the *local*
+half (no Pod, no gVisor, no cluster). S0.1b (this same harness inside a
+real GKE Agent Sandbox Pod) is still open; plan.md's start gate needs both.
 **Spike evidence:** [`spikes/s0-1-codex/`](../../spikes/s0-1-codex/), all 7
-pass conditions run on 2026-09-30 (darwin/arm64, `@openai/codex` 0.159.2,
-Node 22.15.0) — 9/9 tests passing across 6 test files, reproducible with
-one command (`cd spikes/s0-1-codex && npm install && npm test`).
+pass conditions re-run on 2026-09-30 (darwin/arm64, `@openai/codex`
+0.159.2, Node 22.15.0) — 8 test files, 16 tests passing, verified 3+ clean
+runs in a row from a clean state, reproducible with one command (`cd
+spikes/s0-1-codex && npm install && npm test`).
+
+**Round 2 note:** an independent verifier re-ran round 1's tests from a
+clean copy and found real problems: a crash test that killed the wrong
+process (the JS launcher, not the native binary — SIGKILL is uncatchable
+and only ever hits the exact pid it's sent to), a bridge bug that could
+shuffle the audit log, two refuted claims (the MCP headers, and
+`review/start`'s "separate thread"), and an unbuilt design piece (the local
+forwarding proxy). Every one of those is fixed in this round — see "What
+changed" below. This ADR states only what round 2's tests actually proved;
+round 1's now-refuted claims are not repeated as fact anywhere below.
 
 ## Question
 
@@ -22,7 +33,7 @@ pass) — with the caveat above that S0.1b still needs to run.
 
 | Option | Licence | Verdict |
 |---|---|---|
-| **Codex app-server** | Apache-2.0 | **Passes this spike's 7 conditions** (6 PASS, 1 PARTIAL) — see evidence below |
+| **Codex app-server** | Apache-2.0 (binary bundles OSI-approved LGPL-2.1/MIT/BSD components too — see the spike README's licence note) | **Passes this spike's 7 conditions** (6 PASS, 1 PARTIAL) — see evidence below |
 | OpenCode | — | Fallback per plan.md, not spiked |
 | Goose | — | Second fallback per plan.md, not spiked |
 
@@ -33,18 +44,18 @@ unmodified `@openai/codex` 0.159.2 binary (not mocked), driven by a plain
 TypeScript bridge over its newline-delimited JSON-RPC-over-stdio protocol,
 against a scripted stub model (OpenAI Responses API wire format) and a
 hand-rolled stub MCP server. Full detail, every log line, and the "how we
-learned the wire framing" provenance trail are in the spike's README;
+learned the wire framing" source trail are in the spike's README;
 condensed here:
 
 | # | Pass condition | Result |
 |---|---|---|
-| 1 | Thread + turn over JSON-RPC; streamed agent-message events; turn-completed | **PASS** — item-level streaming confirmed; token-level delta streaming not exercised (stub sends whole messages) |
+| 1 | Thread + turn over JSON-RPC; streamed agent-message events; turn-completed | **PASS** — item-level streaming confirmed; token-level delta streaming (`item/agentMessage/delta`) is now genuinely exercised (round 2: 40 chunks per run, asserted in exact arrival order — needed the bridge ordering fix, below) |
 | 2 | Shell approval request; approve continues, deny handled cleanly; do MCP calls approve too? | **PASS**, with a deviation — `approval_policy = "untrusted"` is a removed value in 0.159.2; approval is forced instead the way a real model would (`sandbox_permissions: "require_escalated"`). MCP tool calls approve through a **separate** mechanism (`mcpServer/elicitation/request`), on by default |
-| 3 | MCP call via streamable HTTP pinned to 2026-07-28; result reaches the model; exact headers | **PARTIAL** — the call and result both work, and the exact headers plan.md asks for (`mcp-method`, `mcp-name`, `mcp-protocol-version: 2026-07-28`, rich `_meta`) are all present; but the *stateless, session-less* 2026-07-28 behaviour plan.md describes is **not** what a third-party `mcp_servers.<id>.url` server gets — Codex still runs a classic `initialize` handshake and an `Mcp-Session-Id`, even with `features.mcp_2026_07_28 = true` explicitly enabled |
-| 4 | Per-turn header to model + MCP, changing per turn, no restart (else: a proxy) | **PASS**, direct mechanism, no proxy needed — `turn/start.responsesapiClientMetadata` reaches both sides as `x-codex-turn-metadata`, confirmed across two turns on one running process. Gated behind `capabilities.experimentalApi = true`; upstream marks it `[UNSTABLE]` |
-| 5 | Sub-agent support? | **PASS** — protocol-level (`Thread.parentThreadId`, `SubAgentSource`, `x-openai-subagent` header, a gated `spawn_agent` tool) and live (`review/start` produces a genuine separate thread + header) |
-| 6 | Crash semantics: sent-before-kill; resume; what happens to the interrupted call | **PASS** — call confirmed sent (by an independent process) before `SIGKILL`; resume succeeds against the same `CODEX_HOME`, reports the turn `"interrupted"`, and has **no record at all** of the in-flight MCP call — no auto-retry |
-| 7 | Event inventory, gaps noted | **PASS** (deliverable) — full table in the spike's README |
+| 3 | MCP call via streamable HTTP pinned to 2026-07-28; result reaches the model; exact headers | **PARTIAL** — the call and result both work. The method/tool-name headers are **conditional**, not "sent regardless" (round 1's claim, now refuted): they appear only when the server's `initialize` answer is exactly `2026-07-28`, and Codex does not validate that answer at all (accepts `"1999-01-01"` without complaint). A genuinely STRICT server (2026-07-28 only, built and run this round) **cannot complete a handshake with Codex 0.159.x at all** — proven, not assumed. The per-server `protocol_version` config key the task brief named does not exist in this Codex version (`--strict-config` rejects it by name) |
+| 4 | Per-turn header to model + MCP, changing per turn, no restart (else: a proxy) | **PASS** — built the proxy. `src/local-proxy.ts` is now real code: Codex's model provider and MCP server both point at 127.0.0.1 proxy ports; the bridge sets the turn token on both at `startTurn`; every proxied request gets the computer token and the current turn token as real HTTP headers, with zero leakage across two turns on one running process, and no Codex cooperation needed at all (unlike round 1's `[UNSTABLE]`/`experimentalApi`-gated field, now superseded). Also proves key custody: Codex's shell can read its own (placeholder) key and it lands in a real shell-snapshot file — but never anything else, because nothing else was ever given to it |
+| 5 | Sub-agent support? | **PASS**, corrected and extended — round 1's claim that `review/start` "produced a genuinely separate reviewThreadId" is **refuted**: for the default (inline) delivery, it equals the root thread id, exactly as the generated protocol type's own doc comment says it should. `delivery: "detached"` needs a `historyMode: "legacy"` thread and gets no subagent tag. But `spawn_agent` — the actual delegation tool "Computers: delegated children" needs — **works live**, with the plain stub model, no multi-agent-capable model-catalog entry required: a genuine child thread, correct `parentThreadId`, its own `x-openai-subagent: collab_spawn` tag |
+| 6 | Crash semantics: sent-before-kill; resume; what happens to the interrupted call | **PASS**, now a genuine hard kill — `SIGKILL` goes to the real `codex-rs` binary directly (round 1 killed only the JS launcher, which the native process survives — proven by directly observing the orphaned process outlive it). The rollout records the MCP call's *intent* before it's sent (read and asserted, before the kill); after a genuine hard kill, no `function_call_output` for it ever appears (asserted, not just expected); resume reports the turn `"interrupted"`, the shell item intact, no item at all for the MCP call, no automatic retry — all hard-asserted now, not merely logged |
+| 7 | Event inventory, gaps noted | **PASS** (deliverable) — updated table in the spike's README, adding `item/agentMessage/delta` (now observed) and the `collabAgentToolCall` item type (from `spawn_agent`), mapped to events.md's `delegation.started`/`delegation.completed` pair |
 
 ### What this proves for the architecture in plan.md
 
@@ -53,30 +64,39 @@ condensed here:
   completed turn, all observable and controllable from a thin external
   bridge process, with no need to touch Codex's internals.
 - **The two-channel audit model (plan.md "Conversation stream and
-  audit") is the right call, confirmed by a negative result**: the crash
-  test shows Codex's own reported history genuinely has no idea what
-  happened to an interrupted MCP call — only something *outside* Codex
-  (standing in for the gateway) could see that the call was actually sent.
-  "Computer reports are useful but not proof" is not a defensive
-  assumption; it is exactly what we observed.
-- **The turn-token mechanism plan.md's IAM section needs (README "Key
-  ideas" #3, "the turn token says on whose behalf") already exists and
-  works**, end to end, to both the model provider and MCP servers, without
-  OpenCrane needing to build a forwarding proxy — but it is an unstable,
-  experimental-flagged field today, not a stable public API.
+  audit") is the right call, confirmed by a negative result, and refined
+  this round**: the crash test shows Codex's own rollout records a call's
+  *intent* (the function_call, with its arguments, before it's even sent)
+  but never its *effect* — a genuine hard kill proves this cleanly, with
+  no synthetic "aborted" result left behind to muddy it (round 1's
+  launcher-only kill did leave one, which is exactly why it was a false
+  signal). "Computer reports intent, gateway observes effect" is the
+  precise split, not "Codex records nothing".
+- **The local forwarding proxy from plan.md's computer design is now
+  real, working code, not a hedge on the shelf.** It supplies the turn
+  token to both the model provider and MCP servers as a genuine HTTP
+  header, needs no Codex cooperation or capability flags, and is the
+  answer to "on whose behalf" (README "Key ideas" #3) that the
+  `[UNSTABLE]`-gated native field only partially was.
 - **MCP 2026-07-28 as README "Key ideas" #5 describes it ("one request,
-  one identity, no sessions") is not yet true for ordinary MCP servers in
-  this Codex build** — only the headers half is there; the stateless,
-  session-less half is seemingly reserved for Codex's own hosted
-  connectors right now. This is a real gap between the plan's assumption
-  and upstream's current behaviour, not a configuration mistake on our
-  side (we tried the matching feature flag explicitly and it made no
-  difference).
+  one identity, no sessions") is confirmed broken for ordinary MCP
+  servers in this Codex build — not merely unconfirmed.** A server that
+  actually enforces it (built and run this round) cannot complete a
+  handshake with Codex 0.159.x at all. This is a real gap between the
+  plan's assumption and upstream's current behaviour, settled by direct
+  experiment, not a configuration mistake on our side.
 - **Approval is not simply a policy string any more.** `untrusted` is
   gone; a harmless sandboxed command needs no approval at all under
   `on-request`, and only a command that itself asks for escalation
-  surfaces a prompt. Whatever in plan.md assumed the older three-way
-  model (untrusted/on-request/never) needs re-reading against this.
+  surfaces a prompt. Unchanged from round 1.
+- **Sub-agent delegation works today, with the `v1` mechanism, and needs
+  none of the machinery round 1 assumed it would.** `spawn_agent` is
+  available to any model configuration by default (the `multi_agent`
+  feature is stable and on by default); it does not need a
+  multi-agent-capable model-catalog entry or reasoning effort `"ultra"` —
+  those apply to the separate, currently-disabled `multi_agent_v2`
+  ("collaboration") system, not the `v1` path plan.md's delegation design
+  actually needs.
 
 ## Consequences
 
@@ -84,51 +104,77 @@ condensed here:
   name,** to distinguish `agent.turn_completed` from `agent.turn_failed` —
   there is no separate "failed" notification, and a third status,
   `"interrupted"`, exists for the crash/resume case and needs its own
-  handling (it is not simply a failure).
+  handling (it is not simply a failure). **Still no catalogue event for
+  `"interrupted"`** — open gap, unchanged from round 1.
 - **The bridge needs an elicitation handler for MCP tool calls from day
   one**, separately from the shell/file-change approval handler — it is on
   by default, and a bridge without one will have every MCP tool call stall
-  silently (we hit this ourselves on the first pass).
-- **Depending on `responsesapiClientMetadata` for the turn token is a
-  calculated risk**, not a settled fact: it is `[UNSTABLE]` and
-  capability-gated. The forwarding-proxy fallback design should stay on
-  the shelf, documented, rather than being dropped as unnecessary.
-- **The MCP 2026-07-28 gap is a real open item for decision 5 in
-  plan.md's "Responsibility split"** and for ADR 0002's gateway work: if
-  the gateway/decision-service design assumed a stateless MCP client on
-  the computer side, it needs to instead tolerate (or itself terminate)
-  a session-carrying MCP client, at least until upstream Codex extends
-  2026-07-28 support to third-party servers.
+  silently.
+- **The bridge must serialise its own incoming-message handling.** Found
+  this round: a bridge that dispatches `readline` "line" events
+  fire-and-forget, with an `await` inside the handler before it logs or
+  dispatches, can deliver notifications (and log them) out of the order
+  Codex actually sent them — reproduced 3/3 times with a stream of 40
+  delta chunks, fixed by chaining each line's handling onto the previous
+  one's completion. This matters directly for the real audit stream this
+  bridge pattern is meant to become: an out-of-order delta stream, or an
+  out-of-order audit log, is a real correctness bug, not a cosmetic one.
+- **Build the local forwarding proxy now, not as a hedge.** It is real,
+  working code this round, needs no Codex-side capability flags, and
+  covers both the model provider and every MCP server uniformly. The
+  `responsesapiClientMetadata` field round 1 found is superseded by this
+  and should not be relied on for anything the proxy already covers.
+- **The MCP 2026-07-28 gap is a confirmed blocker, not an open question,
+  for decision 5 in plan.md's "Responsibility split"** and for ADR 0002's
+  gateway work: the gateway/decision-service design must tolerate (or
+  itself terminate) a session-carrying, `2025-06-18`-proposing MCP client
+  from Codex, because there is no known way to make Codex 0.159.x speak
+  pure stateless 2026-07-28 to an ordinary third-party MCP server.
+- **`spawn_agent` is ready to build the delegation design around now.**
+  Plan.md's "Computers: delegated children" can target the `v1`
+  mechanism directly; the `v2`/"collaboration" system (still disabled by
+  default) is the one that may need a real model-catalog entry, and is a
+  separate, later question.
 - **Codex ships several features with no home in events.md yet** (a
   built-in "goal" tool/notification set, token-usage and rate-limit
-  notifications, remote-control status) — these need an explicit
-  suppress-or-adopt decision before Phase 1's event catalogue is
-  considered complete for this harness.
+  notifications, remote-control status) — unchanged from round 1, still
+  needs an explicit suppress-or-adopt decision.
+- **Network egress to chatgpt.com/github.com is neither confirmed nor
+  ruled out.** This round's own logs show no evidence of it (the only
+  `github.com` hits are the workspace's own git remote URL, echoed back
+  in thread metadata, not a network call), but this bridge only ever sees
+  Codex's JSON-RPC stdout, never its raw outbound traffic — settling this
+  needs actual network-level instrumentation, which is squarely S0.1b's
+  "gateway-enforced egress" territory.
 
 ## Open questions for the owner
 
 See the spike's README for the full list; the ones that matter for this
 decision specifically:
 
-1. Does the "MCP 2026-07-28 only" decision (README #5) assume a Codex
-   capability that does not exist yet for third-party servers? If the
-   stateless behaviour is a hard requirement, S0.1b and the gateway design
-   (ADR 0002) may need to plan around a session-carrying MCP client for
-   longer than expected.
-2. Is an `[UNSTABLE]`/`experimentalApi`-gated field an acceptable
-   foundation for the turn token — something central to every `ext_authz`
-   decision (plan.md "IAM context in every gateway decision")? Or should
-   the forwarding-proxy fallback be built now, regardless of this PASS?
-3. `spawn_agent` (the "headline" multi-agent path, vs. the `review/start`
-   path this spike actually exercised) needs a multi-agent-capable model
-   catalog entry and reasoning effort "ultra" — worth a follow-up spike
-   once a real model provider is wired up, before relying on it for
-   plan.md's "delegated children" design.
+1. **MCP 2026-07-28 is a confirmed blocker for third-party servers on
+   this Codex version** (not an open question about whether it's true —
+   it is confirmed true this round). Does the gateway design (ADR 0002)
+   need to plan around tolerating a `2025-06-18` + session-carrying MCP
+   client indefinitely, or is this a hard prerequisite on an upstream
+   Codex release before S0.1b can proceed?
+2. **The local forwarding proxy now works end-to-end — should it become
+   the ONLY turn-token mechanism**, with `responsesapiClientMetadata`
+   dropped from the design entirely rather than kept as a redundant,
+   less-capable alternative?
+3. `spawn_agent` (the `v1` delegation path) works today with no
+   model-catalog gating. Safe to build plan.md's "delegated children"
+   design around it now? The `v2`/"collaboration" system is the one that
+   may still need a real model provider — worth a follow-up once one is
+   wired up, but it no longer blocks the `v1` decision.
 4. Approval semantics changed from what the plan assumed (no more
    `untrusted`; escalation is per-command, not per-policy). Does the
    Allow/Ask/Block per-tool design (plan.md "Installing an MCP server")
    still map cleanly onto this, or does OpenCrane need its own
    always-intercept layer in front of Codex's own approval decision?
 5. **S0.1b is still required** before the Phase 0 start gate is fully met:
-   this spike used plain local processes; Pod-level kill semantics,
-   gVisor sandboxing, and gateway-enforced egress are all untested here.
+   this spike used plain local processes (though this round's crash test
+   now uses a genuine hard kill of the real binary, closer to what Pod
+   eviction will need to reproduce); gVisor sandboxing and
+   gateway-enforced egress (including settling the chatgpt.com/github.com
+   question above) are all still untested here.

@@ -8,6 +8,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PORTS, URLS } from "../src/shared/ports.js";
@@ -17,6 +18,23 @@ const STATE_DIR = path.join(ROOT, ".state");
 const TOOLS_DIR = path.join(ROOT, ".tools");
 
 mkdirSync(STATE_DIR, { recursive: true });
+
+/**
+ * The same platform tag `scripts/fetch-tools.sh` uses for its filenames
+ * (`darwin-arm64` or `linux-amd64`), so the two agree on where the
+ * downloaded binary lives without either one hard-coding the other's
+ * assumption about which machine is running the suite.
+ */
+function agentgatewayPlatformTag(): string {
+  const platform = os.platform();
+  const arch = os.arch();
+  if (platform === "darwin" && arch === "arm64") return "darwin-arm64";
+  if (platform === "linux" && arch === "x64") return "linux-amd64";
+  throw new Error(
+    `no pinned agentgateway/OpenFGA binary for platform=${platform} arch=${arch}. ` +
+      "scripts/fetch-tools.sh only supports darwin-arm64 and linux-amd64.",
+  );
+}
 
 export interface ManagedProcess {
   name: string;
@@ -121,7 +139,7 @@ export async function startModelStub(): Promise<void> {
 }
 
 export async function startGateway(): Promise<void> {
-  const bin = path.join(TOOLS_DIR, "agentgateway-darwin-arm64");
+  const bin = path.join(TOOLS_DIR, `agentgateway-${agentgatewayPlatformTag()}`);
   spawnLogged("agentgateway", bin, ["-f", "config/agentgateway.yaml"]);
   // agentgateway has no /healthz; poll the readiness admin port instead.
   await waitForHealth("http://127.0.0.1:15021/healthz/ready");
@@ -226,6 +244,15 @@ export interface McpCallOptions {
   method?: string;
   credentialHeader?: string;
   bodyOverride?: unknown;
+  /** Sent as the raw request body text, verbatim, instead of building one
+   * from the other options -- the only way to send something that isn't
+   * valid-and-unique-keyed JSON (a batch array, a duplicate top-level key,
+   * ...), since `JSON.stringify` can't produce those from a JS object. */
+  rawBody?: string;
+  /** Extra headers a test wants the client to send, beyond the usual
+   * ones above -- used to prove an arbitrary client header never reaches
+   * the backend, the same as a spoofed credential header. */
+  extraHeaders?: Record<string, string>;
 }
 
 export async function callMcp(opts: McpCallOptions): Promise<Response> {
@@ -235,6 +262,11 @@ export async function callMcp(opts: McpCallOptions): Promise<Response> {
   if (opts.protocolVersion !== null) headers["mcp-protocol-version"] = opts.protocolVersion ?? "2026-07-28";
   if (opts.headerTool !== null) headers["mcp-tool-name"] = opts.headerTool ?? opts.bodyTool ?? "echo";
   if (opts.credentialHeader) headers["x-opencrane-credential"] = opts.credentialHeader;
+  Object.assign(headers, opts.extraHeaders ?? {});
+
+  if (opts.rawBody !== undefined) {
+    return fetch(`${URLS.gateway}/mcp`, { method: "POST", headers, body: opts.rawBody });
+  }
 
   const body = opts.bodyOverride ?? {
     jsonrpc: "2.0",
@@ -251,17 +283,33 @@ export interface ModelCallOptions {
   computerToken?: string;
   turnToken?: string;
   maxTokens?: number;
+  maxCompletionTokens?: number;
+  /** Replaces the whole JSON body with exactly this object (still sent
+   * through JSON.stringify) -- lets a test omit both token-bound fields,
+   * or send a non-numeric one, without callModel silently filling one in. */
+  bodyOverride?: Record<string, unknown>;
+  credentialHeader?: string;
+  extraHeaders?: Record<string, string>;
 }
 
 export async function callModel(opts: ModelCallOptions): Promise<Response> {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (opts.computerToken !== undefined) headers.authorization = `Bearer ${opts.computerToken}`;
   if (opts.turnToken !== undefined) headers["x-turn-token"] = opts.turnToken;
-  return fetch(`${URLS.gateway}/v1/chat/completions`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ model: "stub-model", max_tokens: opts.maxTokens ?? 100, messages: [{ role: "user", content: "hi" }] }),
-  });
+  if (opts.credentialHeader) headers["x-opencrane-credential"] = opts.credentialHeader;
+  Object.assign(headers, opts.extraHeaders ?? {});
+
+  const body =
+    opts.bodyOverride ??
+    {
+      model: "stub-model",
+      ...(opts.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
+      ...(opts.maxCompletionTokens !== undefined ? { max_completion_tokens: opts.maxCompletionTokens } : {}),
+      ...(opts.maxTokens === undefined && opts.maxCompletionTokens === undefined ? { max_tokens: 100 } : {}),
+      messages: [{ role: "user", content: "hi" }],
+    };
+
+  return fetch(`${URLS.gateway}/v1/chat/completions`, { method: "POST", headers, body: JSON.stringify(body) });
 }
 
 export async function testRevoke(user = "user-alice", assistant = "assistant-alice"): Promise<void> {
@@ -278,13 +326,43 @@ export async function testCredentialRaw(): Promise<string> {
   const res = await fetch(`${URLS.decisionService}/_test/credential-raw`);
   return ((await res.json()) as { value: string }).value;
 }
+export async function testModelCredentialHash(): Promise<string> {
+  const res = await fetch(`${URLS.decisionService}/_test/model-credential-hash`);
+  return ((await res.json()) as { hash: string }).hash;
+}
 export async function testSetBudget(ceilingUsd: number): Promise<void> {
   await fetch(`${URLS.decisionService}/_test/set-budget`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ceilingUsd }) });
 }
-export async function testDecideApproval(toolName: string, args: unknown, decision: "approved" | "denied", assistant = "assistant-alice"): Promise<Response> {
+
+export interface DecideApprovalOptions {
+  requester?: string;
+  conversation?: string;
+  turn?: string;
+  assistant?: string;
+}
+
+/** Decides a pending approval. The key fields default to this file's usual
+ * fixture (user-alice, conv-1, turn-1, assistant-alice) so existing calls
+ * that don't care about the requester/conversation/turn binding don't need
+ * to change; a test proving the binding (describe("7. ...")) passes them
+ * explicitly. */
+export async function testDecideApproval(
+  toolName: string,
+  args: unknown,
+  decision: "approved" | "denied",
+  opts: DecideApprovalOptions = {},
+): Promise<Response> {
   return fetch(`${URLS.decisionService}/_test/approvals/decide`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ assistant, toolName, arguments: args, decision }),
+    body: JSON.stringify({
+      requester: opts.requester ?? "user-alice",
+      conversation: opts.conversation ?? "conv-1",
+      turn: opts.turn ?? "turn-1",
+      assistant: opts.assistant ?? "assistant-alice",
+      toolName,
+      arguments: args,
+      decision,
+    }),
   });
 }

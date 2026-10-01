@@ -31,6 +31,11 @@ export interface ServerRequestHandlerArgs {
 export type ServerRequestHandler = (args: ServerRequestHandlerArgs) => void | Promise<void>;
 export type NotificationHandler = (method: string, params: unknown) => void;
 
+/** What the bridge needs from a local forwarding proxy (see src/local-proxy.ts). */
+export interface TurnTokenSink {
+  setTurnToken(token: string | undefined): void;
+}
+
 export interface CodexBridgeOptions {
   codexBinPath: string;
   codexHome: string;
@@ -56,9 +61,43 @@ export class CodexBridge {
   private stderrChunks: string[] = [];
   private exited: { code: number | null; signal: NodeJS.Signals | null } | undefined;
   private exitWaiters: Array<() => void> = [];
+  // Every incoming line is chained onto this promise, so the next line's
+  // handling only starts once the previous one (log write + handler
+  // dispatch) has fully finished. Without this, several `readline` "line"
+  // events firing close together each call the async handleIncoming
+  // fire-and-forget, and whichever one's `appendFile` finishes first "wins"
+  // -- so notifications (and the JSONL log built from them) can arrive at
+  // handlers out of the order Codex actually sent them. Found live with a
+  // stub that streams many `item/agentMessage/delta` notifications: 3 of 3
+  // rounds came out shuffled before this fix.
+  private incomingChain: Promise<void> = Promise.resolve();
+  private turnTokenSinks: TurnTokenSink[] = [];
 
   constructor(private readonly opts: CodexBridgeOptions) {
     this.logPath = opts.logPath;
+  }
+
+  /**
+   * Register a local forwarding proxy (or anything else that needs to know
+   * the current turn token) so `startTurn` can set it at each turn -- see
+   * plan.md "Local forwarding proxy in every computer": "the bridge sets
+   * the current turn token on the proxy at each turn".
+   */
+  attachTurnTokenSink(sink: TurnTokenSink): void {
+    this.turnTokenSinks.push(sink);
+  }
+
+  /**
+   * Like `request("turn/start", params)`, but first sets `turnToken` on
+   * every attached proxy. This is the one place a real bridge would also
+   * do this -- the server hands the bridge a turn token when it delivers a
+   * message to the computer, and the bridge's job is to make sure that
+   * token, not the previous turn's, is what gets added to every call this
+   * turn makes.
+   */
+  async startTurn<T = unknown>(params: unknown, turnToken: string, timeoutMs = 20_000): Promise<T> {
+    for (const sink of this.turnTokenSinks) sink.setTurnToken(turnToken);
+    return this.request<T>("turn/start", params, timeoutMs);
   }
 
   get pid(): number | undefined {
@@ -123,7 +162,15 @@ export class CodexBridge {
       } catch {
         return; // ignore non-JSON stray output
       }
-      void this.handleIncoming(parsed);
+      // Serialised: see the `incomingChain` field comment. Each line's
+      // handling is queued after the previous one, in the order `readline`
+      // delivered them (which matches the order codex wrote them, since
+      // it's one process writing one pipe). The `catch` matters as much as
+      // the chaining: without it, one bad message would reject the chain
+      // forever and silently stop delivering every message after it.
+      this.incomingChain = this.incomingChain.then(() => this.handleIncoming(parsed)).catch((err: unknown) => {
+        this.stderrChunks.push(`[bridge] error handling incoming message: ${String(err)}\n`);
+      });
     });
 
     // Give the process a moment to come up before the caller sends anything.

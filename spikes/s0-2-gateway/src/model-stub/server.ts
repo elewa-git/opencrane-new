@@ -6,6 +6,7 @@
 // (reserve a worst case from max_tokens, then see the real usage) has
 // something real to call.
 
+import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { PORTS } from "../shared/ports.js";
 import { log, readJson, sendJson } from "../shared/http.js";
@@ -28,6 +29,8 @@ const server = createServer(async (req, res) => {
   const body = (await readJson<ChatRequest>(req)) ?? {};
   const promptTokens = Math.max(1, JSON.stringify(body.messages ?? []).length / 4) | 0;
   const completionTokens = Math.min(body.max_tokens ?? 64, 64); // the stub never actually generates much
+  const credentialHeader = req.headers["x-opencrane-credential"];
+  const credentialHash = typeof credentialHeader === "string" ? createHash("sha256").update(credentialHeader).digest("hex") : null;
   log("model-stub", { event: "request", model: body.model, max_tokens: body.max_tokens });
   sendJson(res, 200, {
     id: `stub-${Date.now()}`,
@@ -39,6 +42,12 @@ const server = createServer(async (req, res) => {
       completion_tokens: completionTokens,
       total_tokens: promptTokens + completionTokens,
     },
+    // Test-only extras (not part of any real provider's response shape):
+    // only ever the credential's hash, never the raw value, and the exact
+    // header names received, so a test can prove the gateway stripped the
+    // client's Authorization/turn-token headers on this route too.
+    receivedCredentialHash: credentialHash,
+    receivedHeaderNames: Object.keys(req.headers),
   });
 });
 

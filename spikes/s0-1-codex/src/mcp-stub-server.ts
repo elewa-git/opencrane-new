@@ -46,14 +46,39 @@ export interface McpStubServer {
   port: number;
   requests: RecordedMcpRequest[];
   toolCalls: McpToolCallRecord[];
+  /** Every `initialize` request's proposed protocolVersion, in arrival order. */
+  initializeVersionsSeen: string[];
   /** Milliseconds to wait before answering the next tools/call. 0 = immediate. */
   setNextCallDelayMs(ms: number): void;
   close(): Promise<void>;
 }
 
+export interface McpStubOptions {
+  /**
+   * When true, the stub answers `initialize` with 2026-07-28 ONLY if the
+   * client proposed exactly that version, and otherwise refuses with a
+   * JSON-RPC error instead of quietly accepting whatever the client asked
+   * for (the stub's normal, permissive behaviour, used to observe what
+   * Codex actually sends). This is what plan.md means by "the gateway
+   * rejects other versions" (see docs/architecture/events.md and README
+   * "MCP: version 2026-07-28 only") -- used here to find out what happens
+   * to a real Codex turn when a server actually enforces that.
+   */
+  strict?: boolean;
+  /**
+   * Override the protocolVersion the stub replies with at `initialize`
+   * (default: the real "2026-07-28"). Used to check, empirically, whether
+   * Codex validates the server's answer at all -- see README "Findings".
+   */
+  respondProtocolVersion?: string;
+}
+
 const PROTOCOL_VERSION = "2026-07-28";
 
-export async function startMcpStubServer(): Promise<McpStubServer> {
+export async function startMcpStubServer(opts: McpStubOptions = {}): Promise<McpStubServer> {
+  const strict = opts.strict ?? false;
+  const respondProtocolVersion = opts.respondProtocolVersion ?? PROTOCOL_VERSION;
+  const initializeVersionsSeen: string[] = [];
   const requests: RecordedMcpRequest[] = [];
   const toolCalls: McpToolCallRecord[] = [];
   let nextDelayMs = 0;
@@ -108,10 +133,23 @@ export async function startMcpStubServer(): Promise<McpStubServer> {
       };
 
       if (rpc.method === "initialize") {
+        const proposedVersion = (rpc.params as { protocolVersion?: string } | undefined)?.protocolVersion;
+        initializeVersionsSeen.push(String(proposedVersion));
+        if (strict && proposedVersion !== PROTOCOL_VERSION) {
+          // Deny-by-default, per plan.md's "MCP: version 2026-07-28 only":
+          // a real gateway/server enforcing the revision refuses anything
+          // else outright, rather than accepting and echoing back whatever
+          // the client proposed (the stub's default, permissive behaviour).
+          respond(undefined, {
+            code: -32600,
+            message: `unsupported protocol version: ${String(proposedVersion)} (this server only speaks ${PROTOCOL_VERSION})`,
+          });
+          return;
+        }
         sessionCounter += 1;
         res.setHeader("Mcp-Session-Id", `stub-session-${sessionCounter}`);
         respond({
-          protocolVersion: PROTOCOL_VERSION,
+          protocolVersion: respondProtocolVersion,
           serverInfo: { name: "s0-1-spike-mcp-stub", version: "0.1.0" },
           capabilities: { tools: {} },
         });
@@ -231,6 +269,7 @@ export async function startMcpStubServer(): Promise<McpStubServer> {
     port,
     requests,
     toolCalls,
+    initializeVersionsSeen,
     setNextCallDelayMs: (ms: number) => {
       nextDelayMs = ms;
     },

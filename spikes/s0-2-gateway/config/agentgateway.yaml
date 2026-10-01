@@ -11,7 +11,11 @@
 #     turn token and MCP headers forwarded, and the request body included
 #     (capped, not truncated) so the decision service can see MCP tool
 #     calls and model max_tokens;
-#   - fail closed if the decision service does not answer.
+#   - fail closed if the decision service does not answer;
+#   - after that, replace the header set going to the backend with an
+#     explicit allowlist (see "transformations" on each route below), so
+#     the computer's own JWT and the turn token never reach an MCP server
+#     or a model backend, however many other headers a client sends.
 #
 # Two backend types agentgateway ships natively -- `ai` (for real model
 # providers) and `mcp` (for MCP servers speaking a revision agentgateway
@@ -23,10 +27,39 @@
 # the fail-closed ext_authz call, body-size enforcement) versus what the
 # decision service verifies itself (the turn token, MCP protocol version,
 # tool-name agreement, OpenFGA, budget). See the ADR for the write-up.
+#
+# Finding: `policies.transformations.request.replace` runs AFTER
+# `extAuthz`, the same as `requestHeaderModifier` (see the note below on
+# credential injection). Proved live: a probe with `x-opencrane-credential`
+# spoofed by the client, plus an arbitrary extra header and a `cookie`,
+# reached the MCP stub carrying only the five allowlisted names below, and
+# `x-opencrane-credential` held the *real* value ext_authz had just
+# injected, not the client's -- so the replace expression, which reads
+# `request.headers["x-opencrane-credential"]` at the point it runs, was
+# already seeing ext_authz's overwritten value, not the original.
 
 gateways:
   default:
     port: 3000
+
+frontendPolicies:
+  # Gateway-native usage logging (condition 8 / README "findings"): these
+  # fields are computed by agentgateway itself, from CEL, into its own
+  # stdout access log line -- not by the decision service. Both fields are
+  # guarded by `proxy.route.name == "model-route"` so the right-hand side,
+  # which parses the response body as JSON, is only ever evaluated for
+  # model calls (CEL's `&&` short-circuits, so this never touches the MCP
+  # route's JSON-RPC bodies). `extauthz.reservationId` is simply absent
+  # -- not an error -- on a denied call or on the MCP route, so those log
+  # lines just omit the "reservation" field rather than failing to log at
+  # all; this is what the finding in the README first got wrong: an
+  # earlier attempt used `has()` on the `extauthz` root, which this CEL
+  # build genuinely rejects at config-validation time, but *direct*
+  # property access (no `has()`) on the same dynamic map is fine.
+  accessLog:
+    add:
+      reservation: 'extauthz.reservationId'
+      usageTotalTokens: 'proxy.route.name == "model-route" && "usage" in json(response.body) ? json(response.body).usage.total_tokens : 0'
 
 routes:
   - name: mcp-route
@@ -66,6 +99,15 @@ routes:
               decisionOutcome: '"x-decision" in response.headers ? response.headers["x-decision"] : ""'
         failureMode:
           denyWithStatus: 503
+      transformations:
+        request:
+          # Deny by default, for headers as much as for methods: replace
+          # the whole outgoing header set with exactly these five names.
+          # The client's Authorization (the computer JWT) and x-turn-token
+          # are never in this list, so they never reach the MCP stub,
+          # however the client sends them -- there is no remove-list to
+          # keep in sync with every header a client might invent.
+          replace: '{"content-type": ("content-type" in request.headers ? request.headers["content-type"] : "application/json"), "accept": ("accept" in request.headers ? request.headers["accept"] : "*/*"), "mcp-protocol-version": ("mcp-protocol-version" in request.headers ? request.headers["mcp-protocol-version"] : ""), "mcp-tool-name": ("mcp-tool-name" in request.headers ? request.headers["mcp-tool-name"] : ""), "x-opencrane-credential": ("x-opencrane-credential" in request.headers ? request.headers["x-opencrane-credential"] : "")}'
     backends:
       - host: 127.0.0.1:4103
 
@@ -100,24 +142,18 @@ routes:
             path: '"/authorize/model"'
             includeResponseHeaders:
               - x-reservation-id
+              - x-opencrane-credential
             metadata:
               reservationId: '"x-reservation-id" in response.headers ? response.headers["x-reservation-id"] : ""'
               decisionOutcome: '"x-decision" in response.headers ? response.headers["x-decision"] : ""'
         failureMode:
           denyWithStatus: 503
+      transformations:
+        request:
+          # Same allowlist idea as the MCP route, with the model route's
+          # own two injected headers (the reservation id and the model
+          # credential) in place of the MCP ones. Authorization and
+          # x-turn-token are absent here too.
+          replace: '{"content-type": ("content-type" in request.headers ? request.headers["content-type"] : "application/json"), "accept": ("accept" in request.headers ? request.headers["accept"] : "*/*"), "x-reservation-id": ("x-reservation-id" in request.headers ? request.headers["x-reservation-id"] : ""), "x-opencrane-credential": ("x-opencrane-credential" in request.headers ? request.headers["x-opencrane-credential"] : "")}'
     backends:
       - host: 127.0.0.1:4104
-
-# Note (see the ADR / README "findings" section): we also tried adding
-# frontendPolicies.accessLog.add fields that read the `extauthz.*` CEL
-# variable, so the gateway's own stdout access log would carry the
-# reservation id and the allow/deny outcome. agentgateway's CEL dialect
-# rejects `has()` on a dynamic map root var (`extauthz`, `response.headers`
-# indexed by a hyphenated key) with "invalid argument to has() macro", and
-# there is no hyphen-safe presence check we found that both validates and
-# survives a live reload. We dropped it rather than ship a config that
-# might silently fail validation. The decision service's own structured
-# log (one JSON line per decision, see src/decision-service/server.ts)
-# carries the same reservation id and outcome, so pass condition 8's
-# "logs usage with the reservation id" is still demonstrated -- just by
-# the decision service, not by agentgateway's own access log.

@@ -15,6 +15,7 @@
     "test:4": "vitest run tests/04-r3-failover.test.ts --reporter=verbose",
     "test:5": "vitest run tests/05-scale-1m.test.ts --reporter=verbose",
     "test:6": "vitest run tests/06-backup-restore.test.ts --reporter=verbose",
+    "test:7": "vitest run tests/07-dedup-lost-on-restore.test.ts --reporter=verbose",
     "all": "npm run test"
   },
   "dependencies": {

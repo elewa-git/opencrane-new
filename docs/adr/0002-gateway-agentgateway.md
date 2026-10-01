@@ -1,7 +1,19 @@
 # ADR 0002: gateway — agentgateway
 
-**Status:** Draft, from spike S0.2. Ready for the morning decision.
-**Spike evidence:** [`spikes/s0-2-gateway/`](../../spikes/s0-2-gateway/), all 8 pass conditions run on 2026-09-30 (darwin/arm64, agentgateway v1.5.0, OpenFGA v1.21.0, Node 22.15.0) — 17/17 tests passing, reproducible with one command (`spikes/s0-2-gateway/scripts/run.sh`).
+**Status:** Draft, from spike S0.2, second round after independent verification. Ready for the morning decision.
+**Spike evidence:** [`spikes/s0-2-gateway/`](../../spikes/s0-2-gateway/), run on 2026-09-30 (darwin/arm64, agentgateway v1.5.0, OpenFGA v1.21.0, Node 22.15.0) — 33/33 tests passing, reproduced 3/3 in a row **from a genuinely clean clone** (`.tools/`, `.state/` and `node_modules/` all removed first) via `spikes/s0-2-gateway/scripts/run.sh`, which now fetches and checksum-verifies both binaries itself.
+
+**What changed since the first round:** an independent verifier found a
+reproducibility gap (nothing downloaded the gitignored `.tools/` binaries),
+an allow-by-default gap in the MCP method check, both bearer tokens
+(`Authorization` and the turn token) reaching the MCP and model backends
+despite the plan saying client headers are stripped, approvals that a
+second operator of the same assistant could consume, a budget check that
+silently defaulted to 1000 tokens when neither `max_tokens` nor
+`max_completion_tokens` was a valid number, and a condition 8 write-up that
+called a config limitation a permanent one when it was actually about four
+lines away from working. All six are fixed and tested in this round; see
+the spike's README for the detail behind each fix.
 
 ## Question
 
@@ -31,14 +43,14 @@ findings, and every log line behind each number below.
 
 | # | Pass condition | Result |
 |---|---|---|
-| 1 | Every call reaches `ext_authz` with verified computer + turn claims; no turn token or a bad signature → deny | **PASS** — bad computer-token signature denied by agentgateway's own `jwtAuth`, before `ext_authz` is ever called; bad/missing turn token denied by the decision service |
+| 1 | Every call reaches `ext_authz` with verified computer + turn claims; no turn token or a bad signature → deny | **PASS** — bad computer-token signature denied by agentgateway's own `jwtAuth`, before `ext_authz` is ever called; bad/missing turn token denied by the decision service; a computer token just past expiry is inside the gateway's own leeway but still caught by the decision service's strict re-check (see "Consequences") |
 | 2 | Live OpenFGA; revoking the requester's tuple denies the next call (< 2 s); OpenFGA down → deny | **PASS** — measured revoke-to-deny latency **3–4 ms**; OpenFGA down → fast-failing 503, not a hang |
 | 3 | Fail closed: decision service stopped → denied, never forwarded | **PASS** — 503, and the backend's request-log line count is asserted unchanged |
-| 4 | MCP 2026-07-28 only; tool-name header must match body, or refused (say which layer) | **PASS** — enforced by the decision service (`ext_authz`), not natively by agentgateway; see "Consequences" for why |
+| 4 | MCP 2026-07-28 only; tool-name header must match body, or refused (say which layer); **only an explicit method allowlist is permitted** | **PASS** — protocol-version and tool-name checks enforced by the decision service (`ext_authz`), not natively by agentgateway (see "Consequences"); only `server/discover`, `tools/list` and `tools/call` are permitted — a JSON-RPC batch, a duplicate-keyed body, a case variant like `Tools/Call`, and every `resources/*` method are all refused, each with its own test |
 | 5 | Oversized request bodies rejected, not truncated | **PASS** — 413, `allowPartialMessage: false`, confirmed never reaching the backend |
-| 6 | Client-supplied credential header can't spoof; injected credential reaches the MCP server; never logged | **PASS** — proven by hash comparison (reaches the server) and by grepping every captured log for the one raw value that existed during the run (zero matches) |
-| 7 | Deny-until-approved, single use, bound to an argument digest | **PASS** — first Ask denied with an approval id; approved retry passes once; second identical retry denied (409, single use); changed arguments get a fresh approval id |
-| 8 | Model route: reserve worst-case from `max_tokens`; deny once exhausted; log usage with the reservation id | **PASS, with one caveat**: the reservation id is logged by the decision service, not by agentgateway's own access log — a genuine CEL limitation we hit and documented, not something left untried |
+| 6 | Client-supplied credential header can't spoof; injected credential reaches the MCP server; never logged; **client headers other than a small allowlist never reach either backend** | **PASS** — the credential proven by hash comparison and by grepping every captured log for the one raw value that existed during the run (zero matches); separately, the computer JWT (`Authorization`) and the turn token are proven absent from what the MCP and model backends actually receive, via an explicit header allowlist the backends themselves report back |
+| 7 | Deny-until-approved, single use, bound to an argument digest, **and to the requester, conversation and turn** | **PASS** — first Ask denied with an approval id; approved retry passes once; second identical retry denied (409, single use); changed arguments get a fresh approval id; a second operator of the same assistant making the identical call in their own turn gets their own fresh approval, never the first operator's |
+| 8 | Model route: reserve worst-case from `max_tokens` **and `max_completion_tokens`**, denying a request with no valid bound; deny once exhausted; log usage with the reservation id **from the gateway's own access log** | **PASS** — worst case now covers whichever of the two fields is larger, and a request with neither (or a non-numeric `max_tokens`) is denied rather than defaulted; agentgateway's own stdout access log records the reservation id and the model's actual reported usage, read directly from the gateway's log in the test, not the decision service's |
 
 ### What this proves for the architecture in plan.md
 
@@ -72,17 +84,26 @@ findings, and every log line behind each number below.
   support: OpenFGA's revocation latency was measured at single-digit
   milliseconds, nowhere near the "revisit if revocation latency fails a
   test" trigger.
-- **The gateway config (`jwtAuth` + `extAuthz`, two routes) is a usable
+- **The gateway config (`jwtAuth` + `extAuthz` + a `transformations.request.replace`
+  header allowlist + `frontendPolicies.accessLog`, two routes) is a usable
   starting point** for Phase 3's real decision service, not throwaway code —
   see the spike's `config/agentgateway.yaml` and its inline comments for the
   exact traps found (`preserveToken`, header-modifier-vs-`ext_authz`
-  ordering, the CEL `has()` limitation).
+  ordering, and the CEL `has()` macro's real limitation versus what plain
+  property access on the same dynamic map actually tolerates).
+- **A generated route needs its header allowlist generated alongside it.**
+  The header allowlist that keeps bearer tokens off the backend is an
+  explicit list of header names per route; the MCP install flow (plan.md,
+  "Installing an MCP server") can add per-server headers, so whatever
+  generates a route's config from the catalogue needs to generate its
+  allowlist too, not just copy this spike's fixed five names.
 - **MCP and model traffic go through agentgateway as plain HTTP backends**,
   not its native `ai`/`mcp` backend types, until either (a) Codex/the chosen
   harness and the real MCP spec converge on a revision agentgateway
   recognises, or (b) it's worth adopting the native `ai` backend type for
   the model route specifically to get its built-in `llm.*` CEL fields (see
-  open question 1 below). This is a design choice to revisit, not a defect.
+  the spike's README, open question 3). This is a design choice to revisit,
+  not a defect.
 - **The turn token is verified twice, by two different processes** (the
   decision service always; agentgateway never, since it has only one
   `jwtAuth` slot and that is spent on the computer token). Both
@@ -102,16 +123,17 @@ findings, and every log line behind each number below.
 See the spike's README for the full list; the ones that matter for this
 decision specifically:
 
-1. Is decision-service-level logging of the reservation id (condition 8)
-   acceptable, or does the architecture specifically need agentgateway's own
-   process to emit it? If the latter, worth a short follow-up into
-   agentgateway's native `ai` backend type (which does expose `llm.*` to
-   CEL) for the model route only, while MCP traffic stays on a plain HTTP
-   backend.
-2. Is it acceptable, long-term, that the computer token is verified by
+1. Is it acceptable, long-term, that the computer token is verified by
    agentgateway's `jwtAuth` while the turn token is verified independently
    by the decision service? Both are fully signature-checked against the
    same JWKS; only *which process* does the verifying differs per token.
+2. agentgateway's own JWT verification has an undocumented, unconfigurable
+   ~60-second expiry leeway (no `clockSkew`/`leeway` field exists anywhere in
+   its config schema). The decision service's independent strict re-check
+   is what actually enforces "short-lived" for a token in that window, and
+   this spike treats that as the permanent design rather than a gap to close
+   at the gateway. Confirm that reading, or flag it as worth raising with
+   agentgateway upstream.
 3. The price table used here ($/token) is invented. Should the real decision
    service's budget reservation read from LiteLLM's cost map, reusing the
    mechanism already decided for BYOK/BYOM (plan.md, LiteLLM section)?

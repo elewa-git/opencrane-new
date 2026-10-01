@@ -10,3 +10,4 @@ keys/
 node_modules/
 spikes/**/.state/
 spikes/**/data/
+infra/spike-cluster/.state/

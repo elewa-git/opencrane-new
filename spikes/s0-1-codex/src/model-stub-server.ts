@@ -56,8 +56,20 @@ export interface ModelStubOptions {
    * "alwaysFinal": skip both tool calls and always answer with the final
    * message straight away. Used by tests (e.g. sub-agent review calls)
    * that just need *some* well-formed reply, not the full script.
+   * "streamedDeltas": always answer straight away, but as a genuine SSE
+   * stream of `response.output_text.delta` chunks (not one whole message),
+   * so item/agentMessage/delta notifications actually fire. Used by the
+   * bridge-ordering test.
+   * "spawnAgentThenFinal": call the built-in `multi_agent_v1.spawn_agent`
+   * tool at step 0 (a genuine Codex-native tool, not an MCP one -- see the
+   * sub-agents test), then answer with the final message once its result
+   * comes back.
    */
-  behavior?: "toolThenFinal" | "alwaysFinal";
+  behavior?: "toolThenFinal" | "alwaysFinal" | "streamedDeltas" | "spawnAgentThenFinal";
+  /** For "streamedDeltas": how many delta chunks to emit. Default 30. */
+  deltaCount?: number;
+  /** For "spawnAgentThenFinal": the sub-agent's initial task message. */
+  spawnAgentMessage?: string;
 }
 
 export interface ModelStubServer {
@@ -162,6 +174,21 @@ function evAssistantMessage(id: string, text: string): Record<string, unknown> {
   };
 }
 
+/** SSE event shapes for a genuinely streamed message (see `responses.rs`'s
+ * `ev_message_item_added` / `ev_output_text_delta`): an "added" item with
+ * empty content, then one "delta" event per chunk, then a "done" item with
+ * the full text. */
+function evMessageItemAdded(id: string): Record<string, unknown> {
+  return {
+    type: "response.output_item.added",
+    item: { type: "message", role: "assistant", id, content: [{ type: "output_text", text: "" }] },
+  };
+}
+
+function evOutputTextDelta(delta: string): Record<string, unknown> {
+  return { type: "response.output_text.delta", delta };
+}
+
 export async function startModelStubServer(opts: ModelStubOptions = {}): Promise<ModelStubServer> {
   const shellCommand = opts.shellCommand ?? "echo hello-from-stub-shell";
   // Codex exposes a third-party MCP server's tools to the model as a
@@ -175,6 +202,13 @@ export async function startModelStubServer(opts: ModelStubOptions = {}): Promise
 
   const requests: RecordedModelRequest[] = [];
   let respId = 0;
+  // For "spawnAgentThenFinal": the sub-agent's own turn hits this same
+  // stub server too (it inherits the parent model/provider), and its
+  // input array independently looks like "step 0" the first time. Track
+  // globally, across every thread, so only the very first eligible
+  // request spawns -- everything after that (root turn's continuation,
+  // AND the sub-agent's own turn) just answers with the final message.
+  let hasSpawnedAgent = false;
 
   const server = createServer((req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? "/", "http://localhost");
@@ -204,11 +238,39 @@ export async function startModelStubServer(opts: ModelStubOptions = {}): Promise
           receivedAtMs: Date.now(),
         });
 
-        const step = opts.behavior === "alwaysFinal" ? 2 : countFunctionCallOutputs(body);
+        // "spawnAgentThenFinal" doesn't use this step count at all -- see
+        // hasSpawnedAgent below, which is a once-only flag instead, for
+        // the reason explained above.
+        const step =
+          opts.behavior === "alwaysFinal" || opts.behavior === "streamedDeltas"
+            ? 2
+            : countFunctionCallOutputs(body);
         respId += 1;
         const id = `resp-${respId}`;
         let events: Record<string, unknown>[];
-        if (step === 0) {
+        if (opts.behavior === "spawnAgentThenFinal" && !hasSpawnedAgent) {
+          hasSpawnedAgent = true;
+          events = [
+            evResponseCreated(id),
+            evFunctionCallNamespaced(`call-spawn-${respId}`, "multi_agent_v1", "spawn_agent", {
+              message: opts.spawnAgentMessage ?? "Say hello and nothing else.",
+            }),
+            evCompleted(id),
+          ];
+        } else if (opts.behavior === "spawnAgentThenFinal") {
+          events = [evResponseCreated(id), evAssistantMessage(`msg-${respId}`, finalMessage), evCompleted(id)];
+        } else if (opts.behavior === "streamedDeltas") {
+          const count = opts.deltaCount ?? 30;
+          const msgId = `msg-${respId}`;
+          const deltas = Array.from({ length: count }, (_, i) => `d${String(i).padStart(2, "0")} `);
+          events = [
+            evResponseCreated(id),
+            evMessageItemAdded(msgId),
+            ...deltas.map((d) => evOutputTextDelta(d)),
+            evAssistantMessage(msgId, deltas.join("")),
+            evCompleted(id),
+          ];
+        } else if (step === 0) {
           const shellArgs: Record<string, unknown> = { cmd: shellCommand };
           if (opts.forceEscalatedShellApproval) {
             shellArgs.sandbox_permissions = "require_escalated";

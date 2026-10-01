@@ -111,7 +111,15 @@ const server = createServer(async (req, res) => {
     const resultText = tool.name === "echo" ? JSON.stringify(body.params?.arguments ?? {}) : `${tool.name} ok (stub, no real effect)`;
     sendJson(res, 200, rpcResult(body.id, {
       content: [{ type: "text", text: resultText }],
-      _meta: { "io.modelcontextprotocol/protocol-version": PROTOCOL_VERSION, receivedCredentialHash: credentialHash },
+      _meta: {
+        "io.modelcontextprotocol/protocol-version": PROTOCOL_VERSION,
+        receivedCredentialHash: credentialHash,
+        // The exact set of header names this stub received, so a test can
+        // prove the gateway stripped the client's Authorization and
+        // turn-token headers (and anything else not on its allowlist)
+        // before forwarding -- not just that *some* credential arrived.
+        receivedHeaderNames: Object.keys(req.headers),
+      },
     }));
     return;
   }

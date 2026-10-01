@@ -56,15 +56,20 @@ beforeAll(async () => {
 
   const allUrls = peers.map((p) => `127.0.0.1:${p.port}`);
   clientNc = await connectTo(allUrls);
-  ctx = await makeCtx(clientNc);
 
-  // Cluster routes need a moment to connect and elect a metadata leader
-  // before a replicated stream can actually be placed. Retry stream
-  // creation rather than guessing a fixed sleep.
+  // Cluster routes need a moment to connect and elect a metadata leader.
+  // `makeCtx` itself calls `jetstreamManager`, which calls `getAccountInfo`
+  // — that call needs a meta leader too, so it must be INSIDE this retry
+  // loop, not run once before it. Calling it too early throws a
+  // TimeoutError (no meta leader yet), which used to fail the whole test
+  // in beforeAll with no retry. Retry the whole "get a JetStream context,
+  // then create the replicated stream" sequence together rather than
+  // guessing a fixed sleep.
   const deadline = Date.now() + 20_000;
   let lastErr: unknown;
   while (Date.now() < deadline) {
     try {
+      ctx = await makeCtx(clientNc);
       await ensureEventsStream(ctx.jsm, { replicas: 3, subjects: ["ev.>"] });
       lastErr = undefined;
       break;

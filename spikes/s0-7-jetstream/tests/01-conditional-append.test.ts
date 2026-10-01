@@ -59,7 +59,6 @@ describe("S0.7 pass condition 1: conditional append + de-duplication", () => {
     // Reload-and-retry: losers keep re-reading the true last sequence and
     // re-publishing against it, round after round, like a real command
     // handler would. Track rounds needed to converge.
-    let outstanding = firstRoundLosers.map((_, idx) => idx).length; // count only, identity doesn't matter
     let pendingWriterIds = Array.from({ length: N - 1 }, (_, i) => i); // relabel remaining writers 0..N-2
     let rounds = 1;
     const maxRounds = N + 5;
@@ -86,31 +85,49 @@ describe("S0.7 pass condition 1: conditional append + de-duplication", () => {
         if (r.ok) won.add(pendingWriterIds[i]);
         else expect(r.errCode).toBe(STREAM_WRONG_LAST_SEQUENCE);
       });
-      // Exactly one writer should win each contested round (or possibly
-      // zero if, by race, two both read the same currentLastSeq and both
-      // lost to each other — but with N-1 down to 1 contenders and a
-      // single server, at least one always gets seq currentLastSeq+1).
-      expect(won.size).toBeGreaterThanOrEqual(1);
+      // Exactly one writer wins each contested round: every pending writer
+      // reads the SAME currentLastSeq, then races to be the one publish
+      // that lands at currentLastSeq+1. JetStream processes conditional
+      // appends for one subject strictly one at a time (there is one
+      // writer at a time per stream), so the first to arrive wins and
+      // every other one is rejected with a wrong-last-sequence error — it
+      // can never be zero (someone is always first) or more than one
+      // (only one publish can match currentLastSeq+1).
+      expect(won.size).toBe(1);
       pendingWriterIds = pendingWriterIds.filter((id) => !won.has(id));
     }
 
     expect(pendingWriterIds).toHaveLength(0);
 
     // Final state: exactly N messages on the subject, strictly 1..N, no
-    // gaps, no duplicates.
+    // gaps, no duplicates — and NOTHING beyond N. Rather than stopping the
+    // instant N messages are seen (which would never notice an N+1th
+    // message), keep the consumer open and reset an idle timer on every
+    // message; only stop once nothing new has arrived for a full idle
+    // window. Any extra message would show up during that window.
     const consumer = await ctx.js.consumers.get("EVENTS", {
       filter_subjects: [subject],
       deliver_policy: DeliverPolicy.All,
     });
     const seen: number[] = [];
-    const iter = await consumer.consume({ max_messages: N + 5, expires: 3000 });
+    const IDLE_MS = 1500;
+    const iter = await consumer.consume({ max_messages: N + 20, expires: 3000 });
+    let idleTimer: NodeJS.Timeout | undefined;
+    const armIdleStop = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => void iter.stop(), IDLE_MS);
+    };
+    armIdleStop();
     for await (const m of iter) {
       seen.push(m.seq);
       m.ack();
-      if (seen.length >= N) break;
+      armIdleStop(); // any further message resets the "are we really done" clock
     }
-    await iter.stop();
+    if (idleTimer) clearTimeout(idleTimer);
     seen.sort((a, b) => a - b);
+    // Exactly N, nothing more: proves the round-based convergence above
+    // didn't quietly create an extra message (e.g. two writers both
+    // thinking they won).
     expect(seen).toHaveLength(N);
     // Contiguous run: last - first + 1 === N, and no duplicate values.
     expect(new Set(seen).size).toBe(N);
