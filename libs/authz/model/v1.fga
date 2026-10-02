@@ -3,6 +3,10 @@ model
 
 type person
 
+type assistant
+  relations
+    define acts_for: [person]
+
 type silo
   relations
     define member: [person]

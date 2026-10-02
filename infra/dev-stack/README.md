@@ -12,10 +12,11 @@ infra/dev-stack/down.sh
 ```
 
 `up` always runs the core journey. `--fresh` first stops this stack, deletes its
-three Compose volumes and generated service credentials, then provisions from nothing.
-The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
+three Compose volumes, computer namespace and generated service credentials, then provisions
+from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
 Plain `up` reuses data and running processes; `down` retains data and credentials.
-These scripts do not touch `pg-test`, the `ocn` cluster or its registry/MinIO.
+These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
+own only the `opencrane-<silo>` computer namespace.
 Run one stack per host. The scripts serialise operations with `flock`.
 
 ## Services and identities
@@ -34,10 +35,13 @@ and a generated Angular proxy file; application code has no Compose branch.
 
 `npm run provision` uses only the command NKey/TLS identity. The server receives
 that identity and a read-only PostgreSQL role. Separate members and MCP catalogue
-processes use the projection NKey and own the projection database. The dispatcher
-uses its own NKey and database; the existing pg-boss handler updates OpenFGA.
-OpenFGA uses its own PostgreSQL database. The worker entrypoint is also usable
-outside this stack: `npm run worker -w apps/ops -- members|mcp-catalogue|dispatcher`.
+processes use the projection NKey and own the projection database. The computers
+projection does the same. The dispatcher uses its own NKey and database; pg-boss
+updates OpenFGA and runs the lifecycle reactions. OpenFGA uses its own PostgreSQL
+database. Startup installs the checked SandboxTemplate, zero-size pool and
+namespace-only ServiceAccount on k3d `ocn`, then writes a short-lived kubeconfig
+beside the other generated credentials. The worker entrypoint is also usable
+outside this stack: `npm run worker -w apps/ops -- members|mcp-catalogue|computers|dispatcher`.
 It uses the same settings as replay; dispatcher also requires the silo and OpenFGA
 binding. Shutdown aborts readers, stops jobs and closes connections.
 
@@ -141,7 +145,9 @@ prints **FAIL sign-in** and exits non-zero even if the service checks pass.
 The journey uses running services, never mocks: an HTTP join reaches SQL and
 OpenFGA while an authorised WebSocket is subscribed; seeded `mcp.*` events produce
 typed admin API rows; anonymous and member access are refused; members and MCP
-catalogue replay verify online. It also fetches the web page over tailnet HTTPS.
+catalogue replay verify online. The joined member also reaches a Ready gVisor
+computer; native suspend/resume and a deleted Pod retain a file on its PVC. It
+also fetches the web page over tailnet HTTPS.
 Each invocation adds invitation/join events for the two test members and a new MCP row;
 fresh runs remove this local business state.
 Failure exits non-zero. Private logs identify a failed stage without printing

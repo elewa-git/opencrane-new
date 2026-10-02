@@ -6,9 +6,13 @@ Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
 The checked template pins the tested release image at
-`sha256:4dbe85e978021417c8e3fa509da2af5b8ab608f126dc5c92c04a89242ea43156`.
-It is published as `127.0.0.1:5001/opencrane/computer:p2-1` after fresh and
-resumed k3d checks. See [evidence.json](evidence.json).
+`sha256:385fa42847a1afd9a49ec71f5c1785e4e8adc25d7890a920e0af360eda030ca7`.
+This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
+credential through the Kubernetes Pod proxy; the bridge atomically stores it in
+`/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
+proxy control socket accepts per-thread grants. Dependencies and OS layers are
+unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
+names the earlier image. The lifecycle k3d test checks delivery on the current digest.
 
 ## Build and check
 
@@ -185,7 +189,8 @@ kubectl -n "$namespace" apply -f apps/computer/sandbox-template.json
 The test applies the tracked manifest byte-for-byte, with no image, environment
 or probe-volume substitutions. During qualification, `build.sh` pins the candidate digest, then promotes that
 same digest to the release tag only after all image checks pass. The neutral template has `emptyDir` home storage;
-lifecycle work selects a PVC before Pod creation. A running warm Pod cannot
+the P2-2 lifecycle claim supplies the `home` volume claim template before Pod
+creation, producing one PVC per computer. A running warm Pod cannot
 have its volume replaced (ADR 0006).
 
 The runner refuses an existing `p21-computer` namespace. It creates a zero-size

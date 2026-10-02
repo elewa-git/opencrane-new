@@ -7,12 +7,14 @@ import { registerAuthRoutes } from './auth/routes.ts';
 import { createServerLogger } from './logging.ts';
 import { registerMemberRoutes, type MembershipOptions } from './members/routes.ts';
 import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
+import { registerComputerRoutes, type ComputerOptions } from './computers/routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
   integrations?: IntegrationOptions;
+  computers?: ComputerOptions;
   /** The process entrypoint owns bounded cleanup; embedded servers close telemetry here. */
   processOwnsTelemetry?: boolean;
 }
@@ -44,6 +46,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerAuthRoutes(app, authConfig);
   registerMemberRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
+  registerComputerRoutes(app, authConfig, options.computers);
 
   return app;
 }

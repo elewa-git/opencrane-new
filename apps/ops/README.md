@@ -1,6 +1,6 @@
 # Operator replay
 
-`@opencrane/ops` rebuilds the `members` and `mcp-catalogue` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `mcp-catalogue` and `computers` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. It never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -14,6 +14,7 @@ that every global sequence through the reported stream head can be read:
 ```sh
 npm run replay -- members --dry-run
 npm run replay -- mcp-catalogue --dry-run
+npm run replay -- computers --dry-run
 npm run replay -- openfga --dry-run
 ```
 
@@ -29,6 +30,7 @@ Set the same NATS reader settings and `DATABASE_URL`, then run:
 ```sh
 npm run replay -- members --verify
 npm run replay -- mcp-catalogue --verify
+npm run replay -- computers --verify
 ```
 
 The normal projection runner and the tool share a PostgreSQL advisory lock. The
@@ -89,10 +91,39 @@ Fresh-install and multi-replica live qualification remain outstanding.
 
 ## Live workers
 
-`npm run worker -w apps/ops -- members` and `-- mcp-catalogue` run the existing
+`npm run worker -w apps/ops -- members`, `-- mcp-catalogue` and `-- computers` run the
 projections continuously with projection-reader NATS credentials and `DATABASE_URL`.
-`-- dispatcher` runs durable dispatch and the OpenFGA handler with dispatcher NATS
-credentials, its own `DATABASE_URL`, `SILO_ID` and the three OpenFGA binding settings.
+`-- dispatcher` runs durable dispatch, OpenFGA and the lifecycle reactions. It uses
+dispatcher NATS credentials for delivery and `COMMAND_NATS_*` credentials for the
+single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
+`TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER` are required; the signing key is read by
+path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
+Run one active lifecycle reconciler per silo. Commands append intent before any
+Kubernetes effect; restart retries claims, modes and credential delivery from events.
+The Kubernetes identity can create/get claims, get/patch Sandboxes, get PVCs, list
+Pods and POST the Pod proxy subresource in its namespace. It cannot exec, read Secrets
+or mutate Pods, templates or pools. Install `node infra/dev-stack/computer-admission.mjs <NAMESPACE>` before claims: fail-closed CEL policies pin the computer image and
+security fields and restrict worker Sandbox patches to `spec.operatingMode`.
+Kubernetes RBAC has no field-level patch permission or operating-mode subresource.
+The policies cover all Pods in the dedicated computer namespace without a bypassable
+label selector; install service workloads elsewhere.
+
+The required credential sink POSTs through the authenticated Kubernetes Pod proxy to
+`/credentials`. The computer atomically writes `/run/codex/computer.json` (0600, UID
+1000, memory volume); Ready is appended only after delivery. The reconciler refreshes
+short-lived credentials before expiry. P2-3 may read that file to supply the existing
+per-thread proxy `/grant` control socket. No token value enters an event or PVC.
+
+P2-4 is not present on this branch. `computerCredentials(store, tokens, silo)` in
+[src/credentials.ts](src/credentials.ts) supplies its turn issuer and ext_authz check
+interface. Pass the live turn's committed token id to `check(headers, activeTurnId)`;
+it checks signature, expiry, silo, assistant, conversation and the current computer
+credential id against events. This is a credential check; P2-4 still owns requester,
+permission and budget decisions. The real agentgateway fixture in
+[test/credentials.test.ts](test/credentials.test.ts) proves acceptance and refusal.
+Run `LIFECYCLE_K3D=1 PG_TEST_URL=... npx vitest run apps/ops/test/lifecycle-k3d.test.ts`
+for admission, ephemeral delivery, crash recovery, races, readiness and Pod/PVC loss.
+Fresh-install browser and Codex-thread recovery qualification remains NOT RUN.
 Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
 readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
 supplies these settings and qualifies the processes together on real services.

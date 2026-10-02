@@ -3,7 +3,7 @@
 //   node --experimental-strip-types src/main.ts
 import { loadAuthConfig } from '@opencrane/auth';
 import { connectEventStore } from '@opencrane/event-store';
-import { connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
+import { connectComputers, connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
 import { installShutdown } from './shutdown.ts';
 import type { RealtimeOptions } from './realtime.ts';
 import { startTelemetry } from '@opencrane/observability';
@@ -29,6 +29,7 @@ if (natsUrl && (!silo || !authConfig.expectedOrgId)) {
 const events = natsUrl ? await connectEventStore() : undefined;
 let realtime: RealtimeOptions | undefined;
 let catalogue: ReturnType<typeof connectMcpCatalogue> | undefined;
+let computers: ReturnType<typeof connectComputers> | undefined;
 const databaseUrl = process.env['DATABASE_URL'];
 if (databaseUrl) {
   const apiUrl = process.env['OPENFGA_API_URL'];
@@ -39,12 +40,15 @@ if (databaseUrl) {
   }
   realtime = { feed: await connectMemberFeed(databaseUrl), binding: { apiUrl, storeId, authorizationModelId, silo } };
   catalogue = connectMcpCatalogue(databaseUrl);
+  computers = connectComputers(databaseUrl);
 }
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
     catalogue, binding: realtime.binding } } : {}),
+  ...(realtime && computers ? { computers: { silo: realtime.binding.silo, feed: realtime.feed,
+    computers, binding: realtime.binding } } : {}),
 });
 
 const address = await app.listen({ port, host });
@@ -54,6 +58,7 @@ installShutdown(app, sockets, graceMs, async () => {
     events?.close().then(() => app.log.info('event store connection closed')),
     realtime?.feed.close(),
     catalogue?.close(),
+    computers?.close(),
   ]);
   if (results.some((result) => result.status === 'rejected')) throw new Error('Resource cleanup failed');
 });

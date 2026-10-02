@@ -111,15 +111,28 @@ SSO membership path. Invitation creation and identity binding are separate work.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `assistant.created` | reaction or admin | assistants (owner, kind, scope) | OpenFGA `acts_for`; request a computer on first use |
+| `assistant.created` | reaction or admin | assistants (owner, kind, scope) | OpenFGA `acts_for`; claim a computer |
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
-| `computer.claimed` | server (claim & bind) | computers (Pod UID, generation) | — (the token is issued inside the claim command) |
-| `computer.ready` | bridge | computers | deliver queued messages and decisions |
-| `computer.suspended` / `computer.resumed` | server | computers | — |
+| `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
+| `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
+| `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
 | `takeover.started` / `takeover.ended` | live-view proxy | computers, audit | pause / resume the agent |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
+
+Computer credentials are short-lived signed tokens. `computer.claimed` and
+`computer.resumed` store only the active token id; the signing key is deployment
+configuration referenced by file path, and no token value is event data. The
+Sandbox UID is the durable Kubernetes identity: native suspension and Pod
+replacement keep it and the computer's PVC while `generation` advances after loss.
+Commands decide from one stream snapshot and conditionally append before any
+Kubernetes effect. A duplicate or conflict returns committed state and token id.
+The reconciler retries committed intent after restart. `computer.ready` records
+its owned Pod UID; readiness changes alone never emit loss. Pod absence or UID
+replacement emits `computer.lost`. Old event shapes remain readable; new readiness
+observations include both UIDs. Suspension revokes access immediately at the gateway;
+turn tokens bind to the committed computer token id and cannot survive rotation.
 
 There are two kinds of tools, so two events. `mcp.tools_changed` is for a registered MCP server's tools. `toolset.changed` is for the computer's own tools: a new computer image (CLI programs, runtimes, local stdio MCP such as Playwright) or Codex built-in tool settings (`shell`, `apply_patch`, `web_search`, `view_image`, `spawn_agent`). It goes on the profile's own stream rather than on each computer's, because one admin command changes every computer that uses the profile and a command appends to one stream only. Hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
 
@@ -216,6 +229,8 @@ explicitly until implemented (scope promotion remains deferred).
 | --- | --- |
 | `update-members` | `member.invited`, `member.joined`, `member.role_changed`, `member.removed` |
 | `update-openfga` | `member.joined`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `create-assistant` | `member.joined` |
+| `claim-computer` | `assistant.created`, `computer.lost` |
 
 ## Rebuilding content
 

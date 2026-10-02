@@ -164,6 +164,16 @@ describe('credentials only as a reference id', () => {
   });
 });
 
+describe('token ids are references, not credentials', () => {
+  const tokenIdTypes = typesDeclaring('tokenId');
+  it('covers claim and resume', () => {
+    expect(tokenIdTypes).toEqual(['computer.claimed', 'computer.resumed']);
+  });
+  it.each(tokenIdTypes)('%s rejects a token value', (type) => {
+    expect(rejectedFields(type, { tokenId: 'eyJhbGciOiJFUzI1NiJ9.payload.signature' })).toEqual(['tokenId']);
+  });
+});
+
 // plan.md: "the admin enters a URL or picks an image". Neither kind may hold
 // a credential. The example is a remote server, so `kind` and `locator` are
 // patched together.
@@ -340,7 +350,7 @@ const RISKY_FIELD_NAME = new RegExp(
 // The risky-looking names that are approved: encrypted text and its key id, a
 // secret reference, and a message's id. Any `...Digest` is approved too (a
 // hash of a value, not the value). Matching is exact, so `Ciphertext` is not.
-const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId']);
+const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId']);
 
 // Declared field names, at any depth, that are risky and not approved. This is a
 // net for accidents, not proof: a field with an innocent name still passes by

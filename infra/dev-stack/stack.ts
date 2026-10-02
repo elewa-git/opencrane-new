@@ -8,7 +8,7 @@ import { createStore } from '@opencrane/authz';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'dispatcher', 'server', 'web'];
+const names = ['members', 'mcp-catalogue', 'computers', 'dispatcher', 'server', 'web'];
 async function run(command: string, args: string[], env: Record<string, string> = base) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, args, { cwd: root, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -118,6 +118,31 @@ async function initialiseDatabase() {
   } finally { await projection.end(); }
   await save('database-ready', 'ready');
 }
+function prefixed(values: Record<string, string>, prefix: string) {
+  return Object.fromEntries(Object.entries(values).map(([name, value]) => [`${prefix}${name}`, value]));
+}
+async function provisionComputers(settings: Record<string, string>) {
+  const namespace = `opencrane-${settings['SILO_ID']}`;
+  if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
+    await run('kubectl', ['create', 'namespace', namespace]);
+  }
+  await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
+  await run('kubectl', ['-n', namespace, 'apply', '-f', 'infra/dev-stack/computer-worker-rbac.yaml']);
+  await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/sandbox-template.json']);
+  await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/network-policy.json']);
+  await run('kubectl', ['-n', namespace, 'apply', '-f', 'infra/dev-stack/computer-pool.json']);
+  const configExists = (await run('kubectl', ['-n', namespace, 'get', 'configmap/computer-runtime', '--ignore-not-found', '-o', 'name'])).trim();
+  if (!configExists) await run('kubectl', ['-n', namespace, 'create', 'configmap', 'computer-runtime',
+    '--from-literal=gateway=http://host.k3d.internal:3000']);
+  const raw = JSON.parse(await run('kubectl', ['config', 'view', '--raw', '--minify', '-o', 'json'])) as {
+    clusters: Array<{ cluster: unknown }>;
+  };
+  const token = (await run('kubectl', ['-n', namespace, 'create', 'token', 'computer-lifecycle', '--duration=24h'])).trim();
+  await save('computer-kubeconfig.json', JSON.stringify({ apiVersion: 'v1', kind: 'Config',
+    clusters: [{ name: 'ocn', cluster: raw.clusters[0]?.cluster }], users: [{ name: 'lifecycle', user: { token } }],
+    contexts: [{ name: 'ocn', context: { cluster: 'ocn', user: 'lifecycle', namespace } }], 'current-context': 'ocn' }));
+  return { namespace, kubeconfig: `${directory}/computer-kubeconfig.json` };
+}
 async function up(fresh: boolean) {
   const tail = JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
@@ -125,6 +150,9 @@ async function up(fresh: boolean) {
   if (fresh) {
     await stop();
     await compose('down', '--volumes', '--remove-orphans');
+    const oldSettings = await readEnv('settings');
+    await run('kubectl', ['delete', 'namespace', `opencrane-${oldSettings['SILO_ID']}`, '--ignore-not-found',
+      '--wait=true', '--timeout=180s']);
     // The ownership marker fences this directory to this worktree.
     const files = await import('node:fs/promises').then((fs) => fs.readdir(directory));
     for (const file of files) if (file !== 'stack-owner' && !file.startsWith('zitadel-') && file !== 'zitadel.json') await rm(`${directory}/${file}`);
@@ -133,6 +161,7 @@ async function up(fresh: boolean) {
   const settings = await readEnv('settings');
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
   await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio');
+  const computer = await provisionComputers(settings);
   await initialiseDatabase();
   await compose('up', '-d', 'openfga');
   await wait(() => healthy(`${settings['OPENFGA_API_URL']}/healthz`), 'OpenFGA');
@@ -144,11 +173,14 @@ async function up(fresh: boolean) {
       OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
   }
   const binding = await readEnv('binding');
-  for (const name of ['members', 'mcp-catalogue']) {
+  for (const name of ['members', 'mcp-catalogue', 'computers']) {
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
   }
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...binding });
+    { ...await readEnv('dispatcher'), ...binding, ...prefixed(await readEnv('command'), 'COMMAND_'),
+      KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
+      TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
+      COMPUTER_IDLE_MS: process.env['COMPUTER_IDLE_MS'] ?? '900000' });
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
