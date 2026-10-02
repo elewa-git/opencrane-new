@@ -172,7 +172,8 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
   const cli = resolve('node_modules/@angular/cli/bin/ng.js');
   const web = spawn(process.execPath, ['--experimental-strip-types', '--import',
     resolve('apps/server/test/support/ephemeral-ports.ts'), cli, 'serve', '--host', '127.0.0.1', '--port', '0', '--proxy-config', proxy],
-    { cwd: resolve('apps/web'), stdio: ['ignore', 'pipe', 'pipe'] });
+    // CI=true makes Angular colour its output; ask for plain text and strip any codes anyway.
+    { cwd: resolve('apps/web'), stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } });
   web.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   web.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   const webExited = once(web, 'exit');
@@ -181,7 +182,9 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
   try {
     await vi.waitFor(async () => {
       expect(web.exitCode, output).toBeNull();
-      base = /Local:\s+(http:\/\/127\.0\.0\.1:\d+)/.exec(output)?.[1] ?? '';
+      // eslint-disable-next-line no-control-regex -- removes ANSI colour codes from the CLI output.
+      const plain = output.replace(/\u001b\[[0-9;]*m/gu, '');
+      base = /Local:\s+(http:\/\/127\.0\.0\.1:\d+)/.exec(plain)?.[1] ?? '';
       expect(base, output).not.toBe('');
       expect(await fetch(base).then((response) => response.ok, () => false), output).toBe(true);
     }, { timeout: 60_000, interval: 200 });
