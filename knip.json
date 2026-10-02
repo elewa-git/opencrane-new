@@ -137,6 +137,15 @@
         "setpriv",
         "kubectl"
       ]
+    },
+    "libs/models": {
+      "entry": [
+        "test/**/*.test.ts"
+      ],
+      "project": [
+        "src/**/*.ts",
+        "test/**/*.ts"
+      ]
     }
   }
 }

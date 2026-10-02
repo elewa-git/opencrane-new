@@ -186,6 +186,27 @@ There are two kinds of tools, so two events. `mcp.tools_changed` is for a regist
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
 
+The Phase 2 model actor records the global monthly `ceilingCents` and
+`dailyCeilingCents` together. Reservations include `modelCall`: model, pinned
+price-table id, computer, assistant, requester, conversation, thread and turn,
+and a digest of the checked IAM context. Gateway observations add integer
+`inputTokens` and `outputTokens` under `usage`; settlement releases the unused
+reservation. The catalogue has no model configuration events: Phase 2's two
+allowed models and price table are pinned source configuration.
+
+The actor is elected with a PostgreSQL session advisory lease, used only for
+process leadership. It reads the budget stream once and serialises commands in
+memory. A `budget.period_started` append on leadership acquisition fences the
+previous writer; a failed conditional append disables that actor. This event
+never clears reservations. UTC day/month totals are derived from reservation
+timestamps; outstanding reservations count against both caps even across a
+period boundary. Missing gateway usage produces `effect.uncertain` after three
+minutes and keeps the full reservation. `settle-budget` retries a recorded
+observation through the decision process; duplicate settlement is a no-op.
+The budget projection can be rebuilt with reactions disabled. Model refusals
+from ext_authz emit `security.alert_raised` with an optional `decision` record:
+verified requester/assistant ids when available and a context digest, never tokens.
+
 ### Memory
 
 | Event | Emitted by | Projections | Reactions |
@@ -227,6 +248,7 @@ explicitly until implemented (scope promotion remains deferred).
 
 | Handler | Subscribed events |
 | --- | --- |
+| `settle-budget` | `effect.observed` |
 | `update-members` | `member.invited`, `member.joined`, `member.role_changed`, `member.removed` |
 | `update-openfga` | `member.joined`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
 | `create-assistant` | `member.joined` |

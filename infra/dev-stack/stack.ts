@@ -8,7 +8,7 @@ import { createStore } from '@opencrane/authz';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'computers', 'dispatcher', 'server', 'web'];
+const names = ['members', 'mcp-catalogue', 'computers', 'budgets', 'models', 'dispatcher', 'server', 'web'];
 async function run(command: string, args: string[], env: Record<string, string> = base) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, args, { cwd: root, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -173,11 +173,22 @@ async function up(fresh: boolean) {
       OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
   }
   const binding = await readEnv('binding');
-  for (const name of ['members', 'mcp-catalogue', 'computers']) {
+  for (const name of ['members', 'mcp-catalogue', 'computers', 'budgets']) {
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
   }
+  // The public verification keys are provisioned by the computer token issuer.
+  const modelJwks = process.env['MODEL_JWKS_FILE'];
+  if (!modelJwks) throw new Error('MODEL_JWKS_FILE must name the computer issuer public JWKS file');
+  await run('bash', ['spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
+  await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], {
+    ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
+    MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: modelJwks,
+    AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
+    MODEL_DECISION_PORT: '43001', MODEL_GATEWAY_PORT: '43000', MODEL_READINESS_PORT: '43002',
+  });
+  await wait(() => healthy('http://127.0.0.1:43002/healthz/ready'), 'model gateway');
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...binding, ...prefixed(await readEnv('command'), 'COMMAND_'),
+    { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: 'http://127.0.0.1:43001', ...prefixed(await readEnv('command'), 'COMMAND_'),
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
       COMPUTER_IDLE_MS: process.env['COMPUTER_IDLE_MS'] ?? '900000' });
@@ -200,7 +211,7 @@ async function up(fresh: boolean) {
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));
   for (let i = 0; i < names.length; i++) if (!pids[i]) throw new Error(`${names[i]} stopped`);
-  const ports = new Set(['443', ...['PG_PORT', 'NATS_PORT', 'FGA_PORT', 'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'SERVER_PORT', 'WEB_PORT']
+  const ports = new Set(['443', '43000', '43001', '43002', ...['PG_PORT', 'NATS_PORT', 'FGA_PORT', 'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'SERVER_PORT', 'WEB_PORT']
     .map((name) => settings[name]!)]);
   const allowed = new Set(['127.0.0.1', '::1', ...tail.Self.TailscaleIPs]);
   for (const line of after.trim().split('\n')) {
@@ -208,6 +219,8 @@ async function up(fresh: boolean) {
     const match = /^(?:\[(.*)\]|([^:]*)):(\d+)$/u.exec(address);
     const ownedProcess = pids.some((pid) => line.includes(`pid=${pid},`));
     if (ownedProcess && !match) throw new Error(`Cannot verify stack listener address: ${address}`);
+    // agentgateway v1.5 listens on all interfaces; k3d reaches this authenticated model port.
+    if (match?.[3] === '43000') continue;
     if ((ownedProcess || ports.has(match?.[3] ?? '')) && !allowed.has(match?.[1] ?? match?.[2] ?? '')) {
       throw new Error(`Stack listener is not on loopback or Tailscale: ${address}`);
     }

@@ -192,3 +192,39 @@ Compare listeners with a snapshot from before bring-up: no new `0.0.0.0`, `*`
 or `[::]` listener is allowed. Existing host SSH is outside this stack.
 See [sign-in evidence](../../docs/process/signin-evidence.md) and [the original evidence receipt](../../docs/process/dev-stack-evidence.md) for results
 and conditions not qualified by these local journeys.
+
+## Phase 2 model gateway
+
+The start script now starts the pinned agentgateway binary and budget decision
+process, the budget projection, and the `settle-budget` handler. Provision the
+computer issuer's **public** JWKS file and pass its path as `MODEL_JWKS_FILE`.
+The issuer must follow the [model token contract](../../libs/models/README.md).
+The gateway reads the git-ignored `.keys/.openai-key` itself using its native
+file secret mechanism; never put its contents in an environment file or command.
+
+Ports 43001 (decision) and 43002 (readiness) are loopback-only. agentgateway 1.5
+binds the authenticated model listener on all interfaces at 43000 so k3d can
+reach it. This is an explicit exception to the UI/data listener restriction.
+Every route still requires the computer token, turn token and live decision.
+The decision endpoint is not published through the browser server.
+
+In the computer namespace on k3d, install the pinned agentgateway relay and use
+its Service IP: the computer NetworkPolicy deliberately permits no DNS egress.
+The relay's `app=opencrane-gateway` label matches the existing policy. It contains
+no credential and forwards to `host.k3d.internal:43000`; authentication and
+settlement remain at the host gateway. Run these only during an authorised
+stack installation, with `namespace` set to the silo's computer namespace:
+
+```sh
+kubectl -n "$namespace" apply -f infra/dev-stack/gateway.yaml
+kubectl -n "$namespace" rollout status deployment/gateway
+address=$(kubectl -n "$namespace" get service gateway -o jsonpath='{.spec.clusterIP}')
+kubectl -n "$namespace" create configmap computer-runtime \
+  --from-literal="gateway=http://$address:3000" --dry-run=client -o yaml |
+  kubectl -n "$namespace" apply -f -
+```
+
+Existing dispatcher state must undergo a controlled rebuild when adding
+`settle-budget`, as required by the handler subscription manifest check. This
+change has not migrated or restarted the running stack in `zitadel-signin`.
+Dev-stack/k3d integration and a fresh-install journey: **NOT RUN**.

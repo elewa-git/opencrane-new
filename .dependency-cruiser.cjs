@@ -1,5 +1,5 @@
 // Only current packages and adapters belong here; spikes and infra qualify separately.
-const libraries = ['libs/events', 'libs/auth', 'libs/observability', 'libs/protocol', 'libs/event-store', 'libs/projections', 'libs/handlers', 'libs/authz'];
+const libraries = ['libs/events', 'libs/auth', 'libs/observability', 'libs/protocol', 'libs/event-store', 'libs/projections', 'libs/handlers', 'libs/authz', 'libs/models'];
 module.exports = {
   forbidden: [
     { name: 'no-cycles', severity: 'error', from: {}, to: { circular: true } },
