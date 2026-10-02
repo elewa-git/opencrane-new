@@ -1,4 +1,4 @@
-export { loadAuthConfig, type AuthConfig } from './config.ts';
+export { isIdentityAllowed, loadAuthConfig, type AuthConfig } from './config.ts';
 
 export {
   sessionSchema,

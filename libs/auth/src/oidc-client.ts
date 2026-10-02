@@ -7,7 +7,7 @@
 // logout, built around the plain {@link AuthConfig} from ./config.ts.
 import { URL } from 'node:url';
 import * as client from 'openid-client';
-import type { AuthConfig } from './config.ts';
+import { isIdentityAllowed, type AuthConfig } from './config.ts';
 import type { SessionData } from './session.ts';
 
 /** Thrown when the identity provider rejects or cannot complete a login. */
@@ -108,7 +108,7 @@ export async function completeLogin(
   if (typeof orgId !== 'string' || orgId === '') {
     throw new OidcLoginError(`the identity provider returned no "${config.orgClaim}" claim`);
   }
-  if (config.expectedOrgId !== undefined && orgId !== config.expectedOrgId) {
+  if (!isIdentityAllowed(config, { issuer: claims.iss, subject: claims.sub, orgId })) {
     // The reason is fixed text. It never says which organisation the person
     // belongs to, so the callback can show or log it without leaking that.
     throw new OidcLoginError('this account belongs to a different organisation');

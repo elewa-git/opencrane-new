@@ -1,7 +1,7 @@
 import { setImmediate as yieldIo } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
-import type { AuthConfig, SessionData } from '@opencrane/auth';
+import { isIdentityAllowed, type AuthConfig, type SessionData } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { connectMemberFeed } from '@opencrane/projections';
 import type { RealtimeMessage } from '@opencrane/protocol';
@@ -19,7 +19,8 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
   const envelope = () => ({ version: 1 as const, topic: 'members' as const, position, generation });
   const authz = options && memberAuthorisation(options.binding);
   async function allowed() {
-    if (!options || !authz || !config.expectedOrgId || session.orgId !== config.expectedOrgId
+    if (!options || !authz || !config.expectedOrgId
+      || !isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })
       || session.exp * 1000 <= Date.now()) return false;
     const id = await options.feed.memberId(options.binding.silo, config.issuerUrl, session.sub);
     return Boolean(id && (await authz.check(id, 'member')).allowed);

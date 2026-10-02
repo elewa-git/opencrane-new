@@ -36,6 +36,11 @@ Defaults include secure cookies, a 12-hour session, five-minute step-up freshnes
 Zitadel needs its provider-specific claim names and matching scopes.
 Production requires an organisation pin. Keep the cookie key in the secret store;
 `OIDC_CLIENT_SECRET_ENV_VAR` names the variable through which a client secret is injected.
+`OIDC_EXTRA_IDENTITIES` is an environment-specific JSON array of `{ "issuer", "subject" }`
+objects and defaults to empty. An entry bypasses only the organisation mismatch: the
+token must still be signed by the configured issuer, and both strings must match exactly.
+Never put email addresses, usernames or roles in this list. Servers must use
+`isIdentityAllowed` when rechecking an encrypted session as well as at callback time.
 Insecure HTTP and non-secure cookies expose credentials and are only for local tests.
 
 ```sh
@@ -43,7 +48,8 @@ npm test -- libs/auth
 npm run typecheck -w libs/auth
 ```
 
-Tests exercise cookies, expiry, malformed config, PKCE and cross-organisation refusal
+Tests exercise cookies, expiry, malformed config, PKCE, exact issuer/subject exceptions
+and cross-organisation refusal
 against a disposable loopback provider. The [dev-stack journey](../../infra/dev-stack/README.md) also exercises real Zitadel,
 including logout, a mismatched organisation pin and a short-lived session.
 There is no database state to replay here; rotating the cookie key invalidates old cookies.

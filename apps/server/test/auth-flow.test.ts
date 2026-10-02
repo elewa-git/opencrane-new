@@ -247,6 +247,17 @@ describe('OIDC login flow (against a local mock provider)', () => {
       expect((await signIn(stack)).statusCode).toBe(302);
     });
 
+    it('keeps an allowlisted cross-organisation session active on server routes', async () => {
+      const stack = await startStack({}, { expectedOrgId: 'org-2' });
+      stack.config.extraIdentities.push({ issuer: stack.provider.url, subject: 'user-1' });
+      const callback = await signIn(stack);
+      expect(callback.statusCode).toBe(302);
+      const sessionCookie = cookieValue(callback, stack.config.cookieName);
+      expect((await whoAmI(stack, sessionCookie)).authenticated).toBe(true);
+      expect((await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' },
+        cookies: { [stack.config.cookieName]: sessionCookie } })).statusCode).toBe(303);
+    });
+
     it('records auth_time 0 when the ID token has none, so step-up never counts it as recent', async () => {
       // If a missing auth_time fell back to "now", a silent SSO login would
       // look freshly authenticated.

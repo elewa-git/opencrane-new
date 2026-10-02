@@ -73,6 +73,7 @@ export async function generate(origin: string) {
   }
   const oidc = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')) as {
     issuer: string; orgId: string; clientId: string; origin: string;
+    extraIdentities: Array<{ issuer: string; subject: string }>;
   };
   if (origin !== oidc.origin) throw new Error('Tailnet origin does not match the registered OIDC redirects');
   if (!(await exists(`${directory}/zitadel-client-secret`))) throw new Error('Run zitadel-setup.ts first');
@@ -81,7 +82,8 @@ export async function generate(origin: string) {
     OIDC_COOKIE_SECRET: secret(), OIDC_EXPECTED_ORG_ID: oidc.orgId, OIDC_COOKIE_SECURE: 'true',
     OIDC_CLIENT_SECRET_FILE: `${directory}/zitadel-client-secret`,
     OIDC_ORG_CLAIM: 'urn:zitadel:iam:user:resourceowner:id', OIDC_ROLES_CLAIM: 'urn:zitadel:iam:org:project:roles',
-    OIDC_SCOPES: 'openid profile email urn:zitadel:iam:user:resourceowner' });
+    OIDC_SCOPES: 'openid profile email urn:zitadel:iam:user:resourceowner',
+    OIDC_EXTRA_IDENTITIES: JSON.stringify(oidc.extraIdentities) });
   await writeEnv('server', { HOST: '127.0.0.1', PORT: ports['SERVER_PORT']!, DATABASE_URL: database('server', 'projections') });
   await writeEnv('admin', { DATABASE_URL: database('postgres', 'postgres') });
   await save('proxy.json', JSON.stringify(Object.fromEntries(['/api', '/auth', '/ws', '/members'].map((path) =>

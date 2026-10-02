@@ -33,6 +33,12 @@ const configSchema = z
     // (loadAuthConfig refuses to start without OIDC_EXPECTED_ORG_ID). It is
     // optional here only so local development and tests can leave it out.
     expectedOrgId: z.string().min(1).optional(),
+    // Matched exactly against token claims, so refuse whitespace that could be
+    // trimmed away between configuration and comparison.
+    extraIdentities: z.array(z.object({
+      issuer: z.string().regex(/^\S+$/).url(),
+      subject: z.string().regex(/^\S+$/),
+    }).strict()),
     stepUpMaxAgeSeconds: z.number().int().positive(),
     // Lets openid-client talk to a provider over plain http://. For local
     // development and tests only; a real deployment leaves it unset.
@@ -85,6 +91,7 @@ export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
 
   const postLogoutRedirectUri = text(env, 'OIDC_POST_LOGOUT_REDIRECT_URI');
   const expectedOrgId = text(env, 'OIDC_EXPECTED_ORG_ID');
+  const extraIdentities = readExtraIdentities(env['OIDC_EXTRA_IDENTITIES']);
 
   return configSchema.parse({
     ...readDefaults(env),
@@ -95,7 +102,26 @@ export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
     ...(postLogoutRedirectUri ? { postLogoutRedirectUri } : {}),
     cookieSecret,
     ...(expectedOrgId ? { expectedOrgId } : {}),
+    extraIdentities,
   });
+}
+
+function readExtraIdentities(raw: string | undefined): unknown {
+  if (!raw?.trim()) return [];
+  try {
+    return JSON.parse(raw);
+  } catch {
+    throw new Error('OIDC_EXTRA_IDENTITIES must be a JSON array of issuer and subject objects');
+  }
+}
+
+/** Applies the organisation pin, with exact issuer-and-subject exceptions. */
+export function isIdentityAllowed(
+  config: AuthConfig,
+  identity: { issuer: string; subject: string; orgId: string },
+): boolean {
+  return config.expectedOrgId === undefined || identity.orgId === config.expectedOrgId
+    || config.extraIdentities.some(({ issuer, subject }) => issuer === identity.issuer && subject === identity.subject);
 }
 
 const TRUE_VALUES = ['1', 'true', 'yes', 'on'];
