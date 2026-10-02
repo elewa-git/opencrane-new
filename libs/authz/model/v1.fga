@@ -19,3 +19,11 @@ type silo
 type projection_event
   relations
     define applied: [silo]
+
+# Personal conversation content stays private even from silo administrators.
+type conversation
+  relations
+    define silo: [silo]
+    define participant: [person]
+    define read: participant and member from silo
+    define post: read

@@ -31,13 +31,26 @@ export function memberAuthorisation(binding: Binding) {
   const client = new TupleClient(binding);
   const object = objectId("silo", binding.silo);
 
+  async function applyConversation(event: EventEnvelope, receipt: Tuple) {
+      const conversationId = field(event.data, 'conversationId');
+      if (event.subject !== `conversation-${conversationId}`) throw new Error('Conversation subject mismatch');
+      const target = objectId('conversation', binding.silo, conversationId);
+      const participant = { user: objectId('person', binding.silo,
+        field(event.data, event.type === 'conversation.created' ? 'createdBy' : 'participantId')), relation: 'participant', object: target };
+      const exists = (await client.read(participant)).length > 0;
+      await client.write([receipt,
+        ...(event.type === 'conversation.created' ? [{ user: object, relation: 'silo', object: target }] : []),
+        ...(!exists && event.type !== 'participant.removed' ? [participant] : [])],
+      exists && event.type === 'participant.removed' ? [participant] : []);
+  }
+
   async function apply(input: EventEnvelope): Promise<void> {
     const parsed = parseEventByType(input);
     if (!parsed.success || parsed.event.silo !== binding.silo) {
       throw new Error("Invalid authorisation event or silo");
     }
     const event = parsed.event;
-    if (!["member.joined", "member.role_changed", "member.removed", "assistant.created"].includes(event.type)) {
+    if (!["member.joined", "member.role_changed", "member.removed", "assistant.created", "conversation.created", "participant.added", "participant.removed"].includes(event.type)) {
       throw new Error(`OpenFGA event not implemented: ${event.type}`);
     }
     const receipt = {
@@ -46,6 +59,10 @@ export function memberAuthorisation(binding: Binding) {
       object: objectId("projection_event", binding.silo, event.id),
     };
     if ((await client.read(receipt)).length) return;
+    if (['conversation.created', 'participant.added', 'participant.removed'].includes(event.type)) {
+      await applyConversation(event, receipt);
+      return;
+    }
     if (event.type === 'assistant.created') {
       const assistantId = field(event.data, 'assistantId');
       const ownerId = field(event.data, 'ownerId');
@@ -94,6 +111,10 @@ export function memberAuthorisation(binding: Binding) {
         object,
         relation,
       });
+    },
+    conversation(memberId: string, conversationId: string, relation: 'read' | 'post') {
+      return client.check({ user: objectId('person', binding.silo, memberId),
+        object: objectId('conversation', binding.silo, conversationId), relation });
     },
     actsFor(memberId: string, assistantId: string) {
       return client.check({ user: objectId('person', binding.silo, memberId),

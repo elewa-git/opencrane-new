@@ -131,3 +131,11 @@ Fresh-install browser and Codex-thread recovery qualification remains NOT RUN.
 Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
 readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
 supplies these settings and qualifies the processes together on real services.
+
+`npm run worker -w apps/ops -- conversations` runs the encrypted conversation
+feed projection. `ProjectionRunner.rebuild(conversations)` rebuilds it with readers
+and the runner stopped; it increments the generation so reconnecting browsers
+reload. No chat reaction runs during replay. Bridge delivery reads durable posted
+messages, invokes the existing resume command, and waits for Ready before issuing
+a turn. The idle timer accounts for pending messages and recent conversation
+activity. Pod-proxy GET permission permits the server's inbound bridge WebSocket.

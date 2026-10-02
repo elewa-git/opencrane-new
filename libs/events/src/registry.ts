@@ -116,6 +116,9 @@ export const eventRegistry: readonly EventDefinition[] = [
     },
   ),
 
+  event('agent.message_delta', 'conversation', 'The bridge reported streamed assistant text.', data.agentMessageCompletedDataSchema,
+    { conversationId: 'conv_1', turnId: 'turn_1', messageId: 'msg_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }),
+
   // Conversations and agent activity
   event(
     'conversation.created',

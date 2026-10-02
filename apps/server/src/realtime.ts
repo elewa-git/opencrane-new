@@ -6,7 +6,9 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { connectMemberFeed } from '@opencrane/projections';
 import type { RealtimeMessage } from '@opencrane/protocol';
 
+import type { ChatOptions } from './chat/routes.ts';
 export interface RealtimeOptions {
+  chat?: ChatOptions;
   feed: Awaited<ReturnType<typeof connectMemberFeed>>;
   binding: Binding;
 }

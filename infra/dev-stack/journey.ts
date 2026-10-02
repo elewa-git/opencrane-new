@@ -7,17 +7,16 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
-import { tokenIssuer } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb } from '@opencrane/projections';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
-import { modelJourney } from './model-journey.ts';
+import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { base, directory, readEnv, root, authEnv } from './config.ts';
 import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
-import { resumeComputer, suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycle.ts';
+import { suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycle.ts';
 
 const settings = await readEnv('settings');
 const binding = await readEnv('binding');
@@ -31,6 +30,7 @@ const authz = memberAuthorisation({ silo, apiUrl: binding['OPENFGA_API_URL']!, s
   authorizationModelId: binding['OPENFGA_MODEL_ID']! });
 const id = randomUUID();
 let ws: WebSocket | undefined;
+let chat: Awaited<ReturnType<typeof chatJourney>> | undefined;
 let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
 const identities = new Map<string, { sub: string; cookie: string }>();
 async function until(check: () => Promise<boolean> | boolean, label: string) {
@@ -126,11 +126,10 @@ try {
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
   const namespace = `opencrane-${silo}`;
-  const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${origin}/` });
-  const conversationId = `conversation-${id}`, turnId = `turn-${id}`;
-  await append('conversation.created', `conversation-${conversationId}`, { conversationId, assistantId: computer!.assistant_id, createdBy: member });
-  await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, assistantId: computer!.assistant_id, turnId });
-  await modelJourney(events.store, issuer, { silo, namespace, assistantId: computer!.assistant_id, computerId: computer!.computer_id, conversationId, turnId, requesterId: member });
+  chat = await chatJourney(server, headers(member), computer!.assistant_id);
+  const replyMs = await chat.message();
+  await chat.reconnect();
+  console.log(`PASS joined member HTTP message → streamed Codex/stub reply → projection; ${replyMs} ms; browser reconnect no duplicates`);
   const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['-n', namespace, ...args], { cwd: root, timeout: 180_000 });
   await runKube('exec', computer!.computer_id, '--', 'node', '-e',
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
@@ -144,7 +143,9 @@ try {
   await suspendComputer(events.store, state);
   await until(async () => (await kube.state(computer!.computer_id))?.suspended === true, 'computer suspended');
   const resumedAt = performance.now();
-  await resumeComputer(events.store, issuer, silo, computer!.assistant_id);
+  const wakeReplyMs = await chat.message();
+  assert(chat.starting(), 'Starting your computer state');
+  console.log(`PASS suspended computer wakes on HTTP message and completes Codex reply; ${wakeReplyMs} ms`);
   await until(async () => (await db.db.query("SELECT 1 FROM computers WHERE assistant_id=$1 AND status='ready'",
     [computer!.assistant_id])).rows.length === 1, 'resumed computer Ready');
   const resumeMs = Math.round(performance.now() - resumedAt);
@@ -184,6 +185,7 @@ try {
   console.log('PASS tailnet HTTPS web page');
 } finally {
   ws?.terminate();
+  chat?.close();
   await events.close();
   await db.close();
   await browser?.close();

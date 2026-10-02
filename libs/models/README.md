@@ -86,3 +86,8 @@ Licences: agentgateway v1.5.0 Apache-2.0, jose 6.2.12 MIT, zod 4.6.5 MIT;
 all other runtime code reuses existing OSI-approved workspace packages. No new
 third-party dependency version was introduced. The binary SHA-256 is verified
 before every launch; the k3d relay image is pinned by OCI digest too.
+
+P2-3 also verifies the native Codex text request shape through the real gateway:
+nullable message ids, input/output text, reasoning summaries, local function
+selection, parallel calls and cache/client metadata. These fields do not relax
+the output limit or admit media, hosted tools or stored-history references.

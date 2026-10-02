@@ -64,7 +64,7 @@ try {
   assert.match(runtime, /io.containerd.runsc.v1/);
   assert.equal(pod.spec.containers[0].resources.limits.memory, '512Mi');
   pass('runtime', 'CRI confirms gVisor, 512 MiB limit');
-  assert.deepEqual(JSON.parse(await exec(podName, "console.log(await fetch('http://127.0.0.1:8081/health').then(r=>r.text()))")), { ready: true, bridge: 'stub' });
+  assert.deepEqual(JSON.parse(await exec(podName, "console.log(await fetch('http://127.0.0.1:8081/health').then(r=>r.text()))")), { ready: true, bridge: 'ready' });
   assert.match(await k('logs', podName), /"report":"ready"/);
   pass('health', 'ready endpoint and ready report after Codex initialisation');
   await exec(podName, `import assert from 'node:assert/strict';import {statSync,realpathSync} from 'node:fs';assert.equal(statSync('/home/agent').uid,0);assert.equal(statSync('/home/agent').mode&511,493);for(const [name,uid,mode] of [['codex',1000,448],['workspace',1001,493],['profile',1002,448]]){const st=statSync('/home/agent/'+name);assert.equal(st.uid,uid);assert.equal(st.mode&511,mode)}assert.equal(realpathSync('/home/codex/.codex'),'/home/agent/codex');`);

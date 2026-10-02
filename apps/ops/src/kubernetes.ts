@@ -117,9 +117,9 @@ export class SandboxClient {
       ...(typeof podUid === 'string' ? { podUid } : {}) };
   }
 
-  async credentials(name: string, token: IssuedToken): Promise<void> {
+  async credentials(name: string, token: IssuedToken, force = false): Promise<void> {
     const previous = this.delivered.get(name);
-    if (previous?.id === token.id && previous.expiresAt > Date.now() + 60_000) return;
+    if (!force && previous?.id === token.id && previous.expiresAt > Date.now() + 60_000) return;
     await this.input(['create', '--raw', `/api/v1/namespaces/${this.namespace}/pods/${name}:8081/proxy/credentials`, '-f', '-'], token);
     this.delivered.set(name, token);
   }

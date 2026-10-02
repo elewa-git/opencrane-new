@@ -6,5 +6,8 @@
     "typecheck": "tsc --noEmit",
     "build:image": "sh build.sh",
     "test:image": "node test/run.mjs"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
   }
 }

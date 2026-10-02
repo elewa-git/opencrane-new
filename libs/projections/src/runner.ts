@@ -187,6 +187,7 @@ export class ProjectionRunner {
     await this.db.transaction(async (tx) => {
       await projection.drop(tx);
       await projection.create(tx);
+      await tx.query("UPDATE projection_generations SET generation = generation + 1 WHERE name = $1", [projection.name]);
       await tx.query("DELETE FROM projection_events WHERE projection = $1", [
         projection.name,
       ]);

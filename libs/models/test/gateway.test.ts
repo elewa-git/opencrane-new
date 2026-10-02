@@ -338,3 +338,12 @@ it.runIf(process.env['MODELS_REAL_CALL'] === '1')('makes exactly one real OpenAI
     expect(f.actor.state.reservations).toHaveLength(1);
   } finally { await f.close(); }
 }, 120_000);
+it('accepts the native Codex text request shape while retaining the bounded Responses contract', async () => {
+  const f = await fixture();
+  try {
+    expect((await f.call({}, { input: [{ type: 'message', id: null, role: 'user', content: [{ type: 'input_text', text: 'Say OK.' }] }],
+      tool_choice: 'auto', parallel_tool_calls: true, reasoning: { summary: 'auto' }, include: ['reasoning.encrypted_content'],
+      prompt_cache_key: 'thread', client_metadata: { 'x-codex-turn-metadata': '{}' } })).status).toBe(200);
+    await f.settled(); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);

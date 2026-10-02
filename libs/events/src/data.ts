@@ -6,7 +6,7 @@
 //
 // Two security rules from events.md rule 5 are schema rules here, not prose:
 // - message and agent text travel only as `ciphertext` plus `keyId` (see
-//   `ciphertextSchema`), or are not stored as events at all (streamed deltas);
+//   `ciphertextSchema`), including streamed deltas;
 // - tool arguments and commands travel only as a sha-256 digest, and
 //   credentials only as a `secretRef`, never a token or password value.
 import { z } from 'zod';

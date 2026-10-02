@@ -148,6 +148,20 @@ async function reconcileComputer(store: EventStore, kube: SandboxClient,
   await observeReady(store, state, events, sandbox, tokens, sink, idleMs);
 }
 
+async function lastActivity(store: EventStore, silo: string, assistantId: string): Promise<number> {
+  const conversations = new Set<string>(), pending = new Set<string>();
+  let time = 0;
+  for await (const { event } of readEvents(store, 1, await store.head())) {
+    if (event.silo !== silo) continue;
+    if (event.type === 'conversation.created' && field(event.data, 'assistantId') === assistantId) conversations.add(event.subject);
+    if (!conversations.has(event.subject)) continue;
+    if (event.type === 'message.posted') pending.add(event.id);
+    if (['agent.turn_completed', 'agent.turn_failed'].includes(event.type)) pending.delete(field(event.data, 'turnId'));
+    time = Math.max(time, Date.parse(event.time));
+  }
+  return pending.size ? Infinity : time;
+}
+
 async function observeReady(store: EventStore, state: ComputerState, events: StoredEvent[],
   sandbox: SandboxState | undefined, tokens: Tokens, sink: CredentialSink, idleMs: number) {
   const subject = `computer-${state.assistantId}`;
@@ -155,7 +169,7 @@ async function observeReady(store: EventStore, state: ComputerState, events: Sto
   const previousPodUid = readyPodUid(state);
   if (!sandbox?.podUid || (previousPodUid !== undefined && sandbox.podUid !== previousPodUid)) {
     await append(store, state.latest, events, 'computer.lost', subject, data);
-  } else if (state.ready && Date.now() - Date.parse(state.ready.time) >= idleMs) {
+  } else if (state.ready && Date.now() - Math.max(Date.parse(state.ready.time), await lastActivity(store, state.latest.silo, state.assistantId)) >= idleMs) {
     await suspendComputer(store, state);
   } else if (sandbox.ready) {
     const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;

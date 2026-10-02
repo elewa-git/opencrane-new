@@ -2578,6 +2578,27 @@
         ]
       },
       "bundled": []
+    },
+    "npm:ws@8.22.0": {
+      "detected": [
+        "MIT"
+      ],
+      "files": {
+        "/app/node_modules/ws/LICENSE": "sha256:2b29dcfe0d6471f7e8c92c5fb38c9f93edee10330937055440192f1832b1ecef",
+        "/app/node_modules/ws/package.json": "sha256:c1ef91ca04eb4754c011c5f0e7638b5078ff71104fada400c44ac761cf93e0b1"
+      },
+      "primary": {
+        "spdx": [
+          "MIT"
+        ],
+        "source": "/app/node_modules/ws/LICENSE",
+        "sources": [
+          "/app/node_modules/ws/LICENSE",
+          "/app/node_modules/ws/package.json"
+        ],
+        "reason": "The installed ws 8.22.0 metadata declares MIT and its LICENSE contains the complete MIT grant. No bundled notices or native optional dependencies are installed."
+      },
+      "bundled": []
     }
   }
 }

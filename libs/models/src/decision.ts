@@ -13,8 +13,8 @@ const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
 const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id,
   delegation: z.array(id).length(1) });
-const textContent = z.object({ type: z.literal('input_text'), text: z.string() }).strict();
-const message = z.object({ type: z.literal('message').optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
+const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
+const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]) }).strict();
 const requestSchema = z.object({ model: z.enum(['gpt-5-nano', 'gpt-5-mini']), stream: z.literal(true),
   input: z.union([z.string(), z.array(z.union([message,
@@ -23,7 +23,10 @@ const requestSchema = z.object({ model: z.enum(['gpt-5-nano', 'gpt-5-mini']), st
   instructions: z.string().optional(), max_output_tokens: z.int().positive().max(2000),
   tools: z.array(z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
     parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict()).optional(),
-  reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']) }).strict().optional(),
+  reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional() }).strict().optional(),
+  tool_choice: z.literal('auto').optional(), parallel_tool_calls: z.boolean().optional(),
+  include: z.array(z.literal('reasoning.encrypted_content')).max(1).optional(),
+  prompt_cache_key: z.string().max(200).optional(), client_metadata: z.record(z.string(), z.string()).optional(),
   store: z.literal(false).optional(), service_tier: z.literal('default').optional(),
 }).strict();
 async function readBody(req: IncomingMessage) {

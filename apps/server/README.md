@@ -178,3 +178,29 @@ Browser callback refusals clear both cookies and redirect to `/signin/rejected` 
 one fixed reason code. API clients still receive 400 JSON. Provider discovery
 failure also reaches that screen. `/auth/me` refuses expired sessions and sessions
 whose organisation no longer matches the configured pin or an exact configured identity.
+
+## Conversation core
+
+With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
+(`id`, `conversationId`, `assistantId`), `POST /api/conversations/:conversationId/messages`
+(`id`, `text`), and GET on those paths. The caller supplies stable event ids for
+retries. POST requires the session's exact Origin. Only live silo members acting
+for their personal assistant can create; conversation participants can read/post.
+Owner/admin roles do not bypass private conversation access. List/messages reads
+come from the `conversations` projection; text is decrypted only after permission
+checks. The messages response contains ordered event rows, a position, generation
+and `computerState` (`ready` or `starting your computer`).
+
+On `/ws`, subscribe with `{type: 'subscribe', topic: 'conversation', conversationId,
+since, generation}`. Apply event rows by position; deltas append to their message
+id, completed messages replace that message's text. `ready` marks catch-up;
+`resync` requires restarting at position 0. Keep the last applied position and
+generation when reconnecting. The server rechecks permissions throughout a stream.
+
+The bridge runner also needs `KUBECONFIG`, `KUBE_NAMESPACE`,
+`TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER`. The dev host uses a loopback Kubernetes
+proxy with scoped Pod-proxy permission. Its separate `x-bridge-token` capability
+never replaces Kubernetes authentication. Per-conversation AES-GCM keys live in
+the private dev secret-store directory, outside events and projections. Preserve
+those keys with event backups; deleting a key makes that conversation’s event/projection text unreadable.
+[Qualification and limits](../../docs/process/bridge-evidence.md).

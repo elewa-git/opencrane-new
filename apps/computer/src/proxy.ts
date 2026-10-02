@@ -3,10 +3,10 @@ import { createServer, request } from 'node:http';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
-interface Grant { computer: string; token: string; expires: number }
+interface Grant { conversation?: string; computer: string; token: string; expires: number }
 export async function proxy(gateway: string): Promise<string> {
   const caller = randomBytes(32).toString('hex');
-  const deadline = Date.now() + 600_000;
+  let deadline = Date.now() + 600_000;
   const turns = new Map<string, Grant>();
   writeFileSync('/home/codex/caller', caller, { mode: 0o600 });
   const control = createServer((req, res) => {
@@ -18,7 +18,8 @@ export async function proxy(gateway: string): Promise<string> {
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
             input['expires'] <= Date.now() || input['expires'] > Date.now() + 120_000) throw new Error('Bad grant');
-        turns.set(input['thread'], { computer: input['computer'], token: input['token'], expires: input['expires'] });
+        deadline = Date.now() + 600_000;
+        turns.set(input['thread'], { ...(typeof input['conversation'] === 'string' ? { conversation: input['conversation'] } : {}), computer: input['computer'], token: input['token'], expires: input['expires'] });
       } else { json(res, { error: 'path' }, 404); return; }
       json(res, { ok: true });
     })().catch(() => json(res, { error: 'bad input' }, 400));
@@ -38,10 +39,12 @@ export async function proxy(gateway: string): Promise<string> {
       const grant = typeof thread === 'string' ? turns.get(thread) : undefined;
       if (!grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
       if (req.url !== '/v1/responses' || req.method !== 'POST') { json(res, { error: 'route' }, 404); return; }
-      const raw = JSON.stringify(await body(req));
+      const payload = record(await body(req));
+      payload['max_output_tokens'] = 128;
+      const raw = JSON.stringify(payload);
       const outgoing = request(`${gateway}/v1/responses`, { method: 'POST', headers: {
         'content-type': 'application/json', authorization: `Bearer ${grant.computer}`,
-        'x-turn-token': grant.token, 'session-id': String(thread),
+        'x-turn-token': grant.token, 'session-id': grant.conversation ?? String(thread),
       } }, upstream => {
         res.writeHead(upstream.statusCode ?? 502, upstream.headers); upstream.pipe(res);
         res.on('close', () => upstream.destroy());

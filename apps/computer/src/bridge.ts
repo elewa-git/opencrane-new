@@ -1,9 +1,10 @@
-// P2-1 process stub only. P2-3 owns the server protocol, turns and event dispatch.
+// Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
-import { createServer } from 'node:http';
-import { writeFileSync, chmodSync, renameSync } from 'node:fs';
+import { createServer, request } from 'node:http';
+import { writeFileSync, chmodSync, renameSync, readFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
 import { body, json, record } from './http.ts';
 process.umask(0o077);
@@ -50,13 +51,21 @@ process.on('SIGTERM', () => child.kill('SIGTERM'));
 let initialised = false;
 let reported = false;
 let client: Socket | undefined;
+let nextRpc = 0;
+const pending = new Map<string, { resolve(value: unknown): void; reject(error: Error): void }>();
 createInterface({ input: child.stdout }).on('line', line => {
   const message = record(JSON.parse(line) as unknown);
   if (message['id'] === 'boot') {
     if (message['error']) process.exit(1);
     child.stdin.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
     initialised = true;
-  } else if (client && !client.write(line + '\n')) child.stdout.pause();
+  } else if (typeof message['id'] === 'string' && pending.has(message['id'])) {
+    const call = pending.get(message['id'])!; pending.delete(message['id']);
+    if (message['error']) call.reject(new Error('Codex request failed')); else call.resolve(message['result']);
+  } else {
+    channel.notification(message);
+    if (client) client.write(line + '\n');
+  }
 });
 child.stdin.write(JSON.stringify({ id: 'boot', method: 'initialize', params: {
   clientInfo: { name: 'opencrane-computer', version: '1' }, capabilities: { experimentalApi: true },
@@ -69,7 +78,7 @@ netServer(socket => {
   socket.on('error', () => socket.destroy());
   socket.on('close', () => { client = undefined; child.stdout.resume(); });
 }).listen('/run/codex/app.sock', () => chmodSync('/run/codex/app.sock', 0o600));
-createServer((req, res) => {
+const server = createServer((req, res) => {
   if (req.url === '/credentials' && req.method === 'POST') {
     void (async () => {
       const token = record(await body(req));
@@ -89,11 +98,38 @@ createServer((req, res) => {
     answered = true; desktop.destroy();
     if (ready && !reported) {
       reported = true;
-      process.stdout.write(JSON.stringify({ report: 'ready', bridge: 'stub', codexUid: 1000 }) + '\n');
+      process.stdout.write(JSON.stringify({ report: 'ready', bridge: 'ready', codexUid: 1000 }) + '\n');
     }
-    json(res, { ready, bridge: 'stub' }, ready ? 200 : 503);
+    json(res, { ready, bridge: 'ready' }, ready ? 200 : 503);
   };
   desktop.setTimeout(500, () => reply(false));
   desktop.on('error', () => reply(false));
   desktop.on('connect', () => reply(initialised));
 }).listen(8081, '0.0.0.0');
+
+const channel = bridgeChannel(server, {
+  journal: '/home/agent/codex/bridge-reports.jsonl',
+  credential() {
+    const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
+    if (typeof value['value'] !== 'string' || typeof value['expiresAt'] !== 'number') throw new Error('Missing credential');
+    return { value: value['value'], expiresAt: value['expiresAt'] };
+  },
+  rpc(method, params) {
+    return new Promise((resolve, reject) => {
+      const id = `bridge-${++nextRpc}`;
+      const timeout = setTimeout(() => { pending.delete(id); reject(new Error('Codex request timed out')); }, 30_000);
+      pending.set(id, { resolve: value => { clearTimeout(timeout); resolve(value); }, reject: error => { clearTimeout(timeout); reject(error); } });
+      child.stdin.write(JSON.stringify({ id, method, params }) + '\n');
+    });
+  },
+  grant(thread, conversation, token, expiresAt) {
+    return new Promise<void>((resolve, reject) => {
+      const computer = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
+      const req = request({ socketPath: '/run/codex/control.sock', path: token ? '/grant' : '/drop', method: 'POST' }, res => {
+        res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error('Grant refused')));
+      });
+      req.on('error', reject); req.setTimeout(5000, () => req.destroy(new Error('Grant timeout')));
+      req.end(JSON.stringify({ thread, conversation, computer: computer['value'], token, expires: expiresAt }));
+    });
+  },
+});

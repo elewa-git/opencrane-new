@@ -9,6 +9,7 @@ import { parseEventByType } from '@opencrane/events';
 import { decodeSession, isIdentityAllowed, parseCookieHeader, type AuthConfig, type SessionData } from '@opencrane/auth';
 import {
   subscribeSchema,
+  chatSubscribeSchema,
   errorMessageSchema,
   eventValidationResultSchema,
   helloMessageSchema,
@@ -16,6 +17,7 @@ import {
   type HelloEcho,
 } from '@opencrane/protocol';
 
+import { conversationSubscription } from './chat/realtime.ts';
 import { memberSubscription, type RealtimeOptions } from './realtime.ts';
 
 export const WEBSOCKET_PATH = '/ws';
@@ -98,6 +100,8 @@ export function attachWebSocketServer(
       return;
     }
     const subscribe = memberSubscription(socket, session, authConfig, logger, realtime);
+    const chat = conversationSubscription(socket, session, authConfig, realtime?.chat);
+    let subscribed = false;
     heartbeat(socket);
     let windowStart = Date.now();
     let messages = 0;
@@ -114,8 +118,14 @@ export function attachWebSocketServer(
         return;
       }
 
+      const conversation = chatSubscribeSchema.safeParse(parsed);
+      if (conversation.success) {
+        if (subscribed) { socket.close(1008); return; } subscribed = true;
+        void chat(conversation.data.conversationId, conversation.data.since, conversation.data.generation).catch(() => socket.close(1011)); return;
+      }
       const subscription = subscribeSchema.safeParse(parsed);
       if (subscription.success) {
+        if (subscribed) { socket.close(1008); return; } subscribed = true;
         void subscribe(subscription.data.since, subscription.data.generation).catch(() => socket.close(1011, 'members unavailable'));
         return;
       }

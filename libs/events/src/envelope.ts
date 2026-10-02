@@ -59,6 +59,7 @@ export function eventEnvelopeSchema<DataSchema extends z.ZodType>(dataSchema: Da
       silo: z.string().min(1),
       principal: principalSchema.optional(),
       correlation: correlationIdsSchema.default({}),
+      report: z.object({ computerId: z.string().min(1), sequence: z.int().positive(), digest: z.string().regex(/^[a-f0-9]{64}$/u) }).strict().optional(),
       data: dataSchema,
     })
     .strict();

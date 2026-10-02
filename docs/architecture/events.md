@@ -150,10 +150,17 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
 | `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
-| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Streamed text deltas are sent live and not stored as events |
+| `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |
+| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
+
+Bridge reports carry the computer id, a strictly increasing per-computer sequence
+and a digest in the envelope. The server acknowledges only a recorded report.
+Encrypted message deltas and completed text share the conversation key; replay
+rebuilds the messages/activity feed without invoking Codex. Interrupted turns are
+reported failed and are never automatically repeated.
 
 ### Tools, approvals and effects
 
