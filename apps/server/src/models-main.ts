@@ -27,13 +27,15 @@ try {
   await db.db.lock!(`budget-leader:${silo}`, async locked => {
     const actor = new BudgetActor(events.store, silo);
     await actor.start();
-    const decision = await startDecision(actor, jwks, { silo, apiUrl: required('OPENFGA_API_URL'),
+    const decision = await startDecision(actor, { jwks, issuer: required('TOKEN_ISSUER') }, { silo, apiUrl: required('OPENFGA_API_URL'),
       storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, Number(required('MODEL_DECISION_PORT')));
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     try {
       gateway = await startGateway({ binary: required('AGENTGATEWAY_BINARY'), configFile: `${directory}/gateway.json`,
-        usageFile: `${directory}/usage.jsonl`, keyFile: resolve(import.meta.dirname, '../../../.keys/.openai-key'), port: Number(required('MODEL_GATEWAY_PORT')),
-        readinessPort: Number(required('MODEL_READINESS_PORT')), decisionUrl: decision.url });
+        usageFile: `${directory}/usage.jsonl`, keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'), port: Number(required('MODEL_GATEWAY_PORT')),
+        readinessPort: Number(required('MODEL_READINESS_PORT')), decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
+        ...(process.env['MODEL_UPSTREAM'] ? { upstream: process.env['MODEL_UPSTREAM'] } : {}),
+      });
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.
         if (!gateway.healthy()) throw new Error('Gateway stopped');

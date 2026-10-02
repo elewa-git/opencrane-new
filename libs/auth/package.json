@@ -16,7 +16,8 @@
   "dependencies": {
     "jose": "6.2.12",
     "openid-client": "6.8.8",
-    "zod": "4.6.5"
+    "zod": "4.6.5",
+    "@opencrane/event-store": "0.1.0"
   },
   "devDependencies": {
     "@types/node": "22.20.4",

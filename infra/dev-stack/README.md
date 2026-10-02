@@ -1,7 +1,7 @@
 # Local dev stack
 
 On `ocn-dev`, with Node 22, installed workspaces (`npm ci`), Docker Compose,
-OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve, and an authenticated
+OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve and the model-port firewall, and an authenticated
 Tailscale daemon:
 
 ```sh
@@ -16,7 +16,7 @@ three Compose volumes, computer namespace and generated service credentials, the
 from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
 Plain `up` reuses data and running processes; `down` retains data and credentials.
 These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
-own only the `opencrane-<silo>` computer namespace.
+own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
 Run one stack per host. The scripts serialise operations with `flock`.
 
 ## Services and identities
@@ -195,36 +195,31 @@ and conditions not qualified by these local journeys.
 
 ## Phase 2 model gateway
 
-The start script now starts the pinned agentgateway binary and budget decision
-process, the budget projection, and the `settle-budget` handler. Provision the
-computer issuer's **public** JWKS file and pass its path as `MODEL_JWKS_FILE`.
-The issuer must follow the [model token contract](../../libs/models/README.md).
-The gateway reads the git-ignored `.keys/.openai-key` itself using its native
-file secret mechanism; never put its contents in an environment file or command.
+`up.sh` starts the model decision and pinned agentgateway binary, budget projection,
+settlement handler and a loopback-only scripted SSE provider. It derives public
+JWKS from the same lifecycle signing key and supplies the same `TOKEN_ISSUER`.
+The decision process only reads the public keys. The dev stack always sets
+`MODEL_UPSTREAM=127.0.0.1:43003` and uses a disposable placeholder key; it neither
+loads `.keys/.openai-key` nor calls OpenAI.
 
-Ports 43001 (decision) and 43002 (readiness) are loopback-only. agentgateway 1.5
-binds the authenticated model listener on all interfaces at 43000 so k3d can
-reach it. This is an explicit exception to the UI/data listener restriction.
-Every route still requires the computer token, turn token and live decision.
-The decision endpoint is not published through the browser server.
+The joined member's Ready computer receives a lifecycle turn credential. The
+journey installs it over the private control socket, then runs as the Codex UID
+through the authenticated local proxy, k3d relay, model gateway and decision.
+It asserts a completed stub response and the turn's `budget.reserved` event.
+Unit/integration gates additionally prove expired, pre-resume, pre-loss and
+mismatched computer/generation credentials cannot reserve money.
 
-In the computer namespace on k3d, install the pinned agentgateway relay and use
-its Service IP: the computer NetworkPolicy deliberately permits no DNS egress.
-The relay's `app=opencrane-gateway` label matches the existing policy. It contains
-no credential and forwards to `host.k3d.internal:43000`; authentication and
-settlement remain at the host gateway. Run these only during an authorised
-stack installation, with `namespace` set to the silo's computer namespace:
+Ports 43001–43003 are loopback-only. agentgateway 1.5 binds 43000 on all interfaces;
+startup first installs a dedicated IPv4/IPv6 firewall chain allowing only loopback,
+Tailscale and the private k3d bridge. Shutdown removes that chain after stopping
+the gateway. No public interface or Funnel path is permitted.
 
-```sh
-kubectl -n "$namespace" apply -f infra/dev-stack/gateway.yaml
-kubectl -n "$namespace" rollout status deployment/gateway
-address=$(kubectl -n "$namespace" get service gateway -o jsonpath='{.spec.clusterIP}')
-kubectl -n "$namespace" create configmap computer-runtime \
-  --from-literal="gateway=http://$address:3000" --dry-run=client -o yaml |
-  kubectl -n "$namespace" apply -f -
-```
+The relay lives in `opencrane-dev-gateway`, outside the computer admission namespace.
+A dedicated NetworkPolicy permits only that namespace's gateway Pods on port 3000;
+the computer uses its Service IP without DNS egress. Startup provisions both and
+sets `computer-runtime` automatically. The relay has no credential. Existing
+handler subscriptions need a controlled rebuild when introducing `settle-budget`;
+the fresh run creates them from the combined catalogue.
 
-Existing dispatcher state must undergo a controlled rebuild when adding
-`settle-budget`, as required by the handler subscription manifest check. This
-change has not migrated or restarted the running stack in `zitadel-signin`.
-Dev-stack/k3d integration and a fresh-install journey: **NOT RUN**.
+See the [model integration evidence](../../docs/process/models-evidence.md) for
+fresh/repeat journeys, owner-stack restoration and unqualified conditions.

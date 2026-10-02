@@ -114,13 +114,17 @@ The required credential sink POSTs through the authenticated Kubernetes Pod prox
 short-lived credentials before expiry. P2-3 may read that file to supply the existing
 per-thread proxy `/grant` control socket. No token value enters an event or PVC.
 
-P2-4 is not present on this branch. `computerCredentials(store, tokens, silo)` in
-[src/credentials.ts](src/credentials.ts) supplies its turn issuer and ext_authz check
-interface. Pass the live turn's committed token id to `check(headers, activeTurnId)`;
-it checks signature, expiry, silo, assistant, conversation and the current computer
-credential id against events. This is a credential check; P2-4 still owns requester,
-permission and budget decisions. The real agentgateway fixture in
-[test/credentials.test.ts](test/credentials.test.ts) proves acceptance and refusal.
+P2-4 now uses the shared `computerCredentials(store, tokens, silo)` check in
+[libs/auth](../../libs/auth/src/credentials.ts), moved from this app so both workers
+and model admission use one credential scheme. The decision process reads only
+public verification keys. It checks signature, strict expiry, assistant, current
+computer id/generation/token id and a matching Ready event before reservation.
+A turn binds to that computer grant and its conversation (`session-id`); resume
+and loss revoke old grants. The model decision also checks the active turn,
+personal assistant ownership and live requester membership. `-- budgets` projects
+spending; `MODEL_DECISION_URL` enables the dispatcher's settlement handler.
+The [gateway tests](../../libs/models/test/gateway.test.ts) exercise actual lifecycle
+tokens and prove refusals leave the budget stream unchanged.
 Run `LIFECYCLE_K3D=1 PG_TEST_URL=... npx vitest run apps/ops/test/lifecycle-k3d.test.ts`
 for admission, ephemeral delivery, crash recovery, races, readiness and Pod/PVC loss.
 Fresh-install browser and Codex-thread recovery qualification remains NOT RUN.

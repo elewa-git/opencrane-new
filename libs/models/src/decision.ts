@@ -1,18 +1,18 @@
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage } from 'node:http';
 import { once } from 'node:events';
-import { createLocalJWKSet, jwtVerify, type JSONWebKeySet } from 'jose';
+import type { JSONWebKeySet } from 'jose';
+import { computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { BudgetActor, history } from './actor.ts';
 import { costCents, data, models, priceTableId, type ModelCall } from './state.ts';
 
-export const issuer = 'https://token-issuer.opencrane.local/';
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
 const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id,
-  thread: id, delegation: z.array(id).length(1) });
+  delegation: z.array(id).length(1) });
 const textContent = z.object({ type: z.literal('input_text'), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]) }).strict();
@@ -51,26 +51,11 @@ async function readBody(req: IncomingMessage) {
   }
   return value;
 }
-function header(req: IncomingMessage, name: string): string {
-  const value = req.headers[name];
-  if (typeof value !== 'string') throw new Error('Missing identity');
-  return value;
-}
-async function activeComputer(actor: BudgetActor, c: z.infer<typeof computerSchema>) {
-  const computers = await history(actor.store, `computer-${c.assistant}`, actor.silo);
-  const claim = computers.findLast(r => r.event.type === 'computer.claimed');
-  const live = computers.findLast(r => ['computer.ready', 'computer.resumed', 'computer.suspended', 'computer.lost', 'computer.retired', 'computer.claimed'].includes(r.event.type));
-  if (!claim || !live || !['computer.ready', 'computer.resumed'].includes(live.event.type) ||
-      data(claim.event)['computerId'] !== c.computer || data(claim.event)['generation'] !== c.generation ||
-      data(live.event)['computerId'] !== c.computer || data(live.event)['generation'] !== c.generation) throw new Error('Computer inactive');
-  return live.sequence;
-}
-async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>): Promise<ModelCall> {
+async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(t.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
   const assistant = (await history(actor.store, `assistant-${c.assistant}`, actor.silo)).find(r => r.event.type === 'assistant.created');
   if (!assistant || data(assistant.event)['ownerId'] !== t.requester || data(assistant.event)['kind'] !== 'personal') throw new Error('Assistant refused');
-  const liveSequence = await activeComputer(actor, c);
   const conversation = await history(actor.store, `conversation-${t.conversation}`, actor.silo);
   const created = conversation.find(r => r.event.type === 'conversation.created');
   if (!created || data(created.event)['assistantId'] !== c.assistant || data(created.event)['createdBy'] !== t.requester ||
@@ -78,32 +63,28 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   const turn = conversation.findLast(r => data(r.event)['turnId'] === t.turn && r.event.type.startsWith('agent.turn_'));
   if (!turn || turn.event.type !== 'agent.turn_started') throw new Error('Turn is not active');
   return { model: '', priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
-    conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
+    conversationId: t.conversation, turnId: t.turn, threadId: t.conversation,
     contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed])).digest('hex') };
 }
-export async function startDecision(actor: BudgetActor, jwks: JSONWebKeySet, binding: Binding, port = 0) {
-  const keys = createLocalJWKSet(jwks);
-  const verify = async (token: string, audience: string) => (await jwtVerify(token, keys, {
-    issuer, audience, algorithms: ['ES256'], requiredClaims: ['exp', 'iat'], maxTokenAge: '10m',
-  })).payload;
+export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0) {
+  const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     let auditedContext: { requesterId: string; assistantId: string; claims: unknown } | undefined;
     let reservationAttempted = false;
     void (async () => {
       res.setHeader('content-type', 'application/json');
-      if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(jwks)); return; }
+      if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return; }
       if (req.url === '/settle' && req.method === 'POST') {
         const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(await readBody(req));
         await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return;
       }
       if (req.url !== '/authorize' || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
-      const c = computerSchema.parse(await verify(header(req, 'authorization').replace(/^Bearer /u, ''), 'agentgateway'));
-      const t = turnSchema.parse(await verify(header(req, 'x-turn-token'), 'decision-service'));
+      const checked = await credentials.check(req.headers);
+      const c = computerSchema.parse(checked.computer), t = turnSchema.parse(checked.turn);
       auditedContext = { requesterId: t.requester, assistantId: c.assistant, claims: [c, t] };
-      if (c.silo !== actor.silo || t.silo !== c.silo || t.assistant !== c.assistant || t.thread !== header(req, 'session-id') ||
-          t.delegation[0] !== t.requester || t.exp - t.iat > 120) throw new Error('Token binding refused');
+      if (t.delegation[0] !== t.requester) throw new Error('Delegation refused');
       const body = requestSchema.parse(await readBody(req));
-      const call = await context(actor, binding, c, t);
+      const call = await context(actor, binding, c, t, checked.sequence);
       call.model = body.model;
       // ponytail: reserve the entire 400k context; tokenisation can replace this conservative bound later.
       reservationAttempted = true;

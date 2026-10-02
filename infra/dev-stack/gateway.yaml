@@ -34,7 +34,7 @@ spec:
       automountServiceAccountToken: false
       containers:
       - name: gateway
-        image: cr.agentgateway.dev/agentgateway:v1.5.0@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+        image: ghcr.io/agentgateway/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
         args: ["-f", "/config/config.yaml"]
         ports:
         - containerPort: 3000

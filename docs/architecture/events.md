@@ -137,8 +137,10 @@ turn tokens bind to the committed computer token id and cannot survive rotation.
 There are two kinds of tools, so two events. `mcp.tools_changed` is for a registered MCP server's tools. `toolset.changed` is for the computer's own tools: a new computer image (CLI programs, runtimes, local stdio MCP such as Playwright) or Codex built-in tool settings (`shell`, `apply_patch`, `web_search`, `view_image`, `spawn_agent`). It goes on the profile's own stream rather than on each computer's, because one admin command changes every computer that uses the profile and a command appends to one stream only. Hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
 
 Ready and resumed events carry the claimed `computerId` and `generation`.
-Generation is optional only so older events remain readable; model authorisation
-refuses missing or mismatched generation context, including delayed lifecycle events.
+Generation is optional in the schema so older events remain readable. Model
+authorisation requires the signed generation to match the current claim and an
+explicit matching Ready event. A historical resume grant inherits its claim
+generation; it still requires its rotated token id and a newly observed Ready event.
 
 ### Conversations and agent activity
 

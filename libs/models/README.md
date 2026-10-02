@@ -1,7 +1,7 @@
 # Models and silo spending
 
-Phase 2, issue #29. The decision process verifies the S0.1b computer and
-per-thread turn tokens; agentgateway v1.5.0 enforces its answer and sends
+Phase 2, issue #29. The decision process verifies the lifecycle computer and
+per-conversation turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
 S0.1c's native streamed usage fields and checksum-verified binary fetcher.
 No extra proxy sees the provider key. `backendAuth.key.file` reads
@@ -32,8 +32,11 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
 - IAM is Phase 2 personal-assistant ownership ∩ live OpenFGA membership.
   The claimed computer generation, ready state, conversation and active turn
   are read from events on every call. JWTs are ES256, with strict expiry;
-  turn claims include `thread` matching `session-id` and at most 120 seconds
-  between `iat` and `exp`. Both use the spike issuer and audiences. Delegation
+  turn claims include `conversation` matching `session-id` and the current
+  `computerTokenId`, with at most 120 seconds between `iat` and `exp`.
+  Both use `libs/auth` and the configured `TOKEN_ISSUER`; the gateway verifies
+  the same public keys. Computer tokens include the claim generation, and
+  only a matching Ready event permits model admission. Delegation
   currently contains only the requester; group/delegated grants are deferred.
 - Only reservation ids, token counts and a fixed error outcome survive the gateway log filter.
   Observations are appended as `effect.observed`; the existing handler runtime
@@ -60,7 +63,9 @@ price administration are Phase 3 work; uncertainty never automatically refunds.
 
 `apps/server/src/models-main.ts` is the supervised process entrypoint; the dev
 stack supplies its NATS command credentials, projection database, silo/OpenFGA
-binding, public JWKS file, state directory and three ports. Only the public JWKS
+binding, lifecycle public JWKS file, `TOKEN_ISSUER`, state directory and three ports.
+`MODEL_UPSTREAM` and `MODEL_KEY_FILE` select the dev-stack stub; the default
+production upstream remains OpenAI. Dev-stack startup always selects the stub. Only the public JWKS
 is read by this process. The issuer's private signing key stays with the issuer.
 `apps/ops/src/worker.ts budgets` runs the projection; the dispatcher enables
 settlement when `MODEL_DECISION_URL` is set. An existing dispatcher needs a

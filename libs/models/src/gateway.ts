@@ -5,10 +5,9 @@ import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { issuer } from './decision.ts';
 import type { BudgetActor } from './actor.ts';
 
-function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, upstream?: string) {
+function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string) {
   const decision = new URL(decisionUrl);
   return {
     config: { adminAddr: 'off', statsAddr: 'off', readinessAddr: `127.0.0.1:${readinessPort}` },
@@ -48,11 +47,11 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
   }
 }
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
-  port: number; readinessPort: number; decisionUrl: string; upstream?: string }) {
+  port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string }) {
   const expected = process.platform === 'linux' ? 'daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b'
     : 'da432d35bd696da0564f7b2b6bbc783542b6b9c616d6c0c4d4c3daef9dfa11a1';
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
-  await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.upstream)), { mode: 0o600 });
+  await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream)), { mode: 0o600 });
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });

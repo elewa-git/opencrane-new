@@ -131,7 +131,7 @@ beforeEach(async () => {
   app = buildServer(config, { integrations: { silo: 'test', feed, catalogue, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
     now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
-});
+}, 30_000);
 
 afterEach(async () => {
   const results: PromiseSettledResult<void>[] = await Promise.allSettled([app?.close()]);

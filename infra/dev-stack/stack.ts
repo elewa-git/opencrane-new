@@ -4,11 +4,13 @@ import { open, readFile, rm } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
+import { tokenIssuer } from '@opencrane/auth';
+import { modelFirewall } from './model-network.ts';
 import { createStore } from '@opencrane/authz';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'computers', 'budgets', 'models', 'dispatcher', 'server', 'web'];
+const names = ['members', 'mcp-catalogue', 'computers', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'];
 async function run(command: string, args: string[], env: Record<string, string> = base) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, args, { cwd: root, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -88,6 +90,7 @@ async function stop() {
     }
     await rm(`${directory}/${name}.pid`, { force: true });
   }
+  await modelFirewall(false);
   if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
 }
 async function initialiseDatabase() {
@@ -131,9 +134,22 @@ async function provisionComputers(settings: Record<string, string>) {
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/sandbox-template.json']);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/network-policy.json']);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'infra/dev-stack/computer-pool.json']);
-  const configExists = (await run('kubectl', ['-n', namespace, 'get', 'configmap/computer-runtime', '--ignore-not-found', '-o', 'name'])).trim();
-  if (!configExists) await run('kubectl', ['-n', namespace, 'create', 'configmap', 'computer-runtime',
-    '--from-literal=gateway=http://host.k3d.internal:3000']);
+  // Service workloads stay outside the namespace fenced by computer admission.
+  const gatewayNamespace = `${namespace}-gateway`;
+  if (!(await run('kubectl', ['get', 'namespace', gatewayNamespace, '--ignore-not-found', '-o', 'name'])).trim()) {
+    await run('kubectl', ['create', 'namespace', gatewayNamespace]);
+  }
+  await run('kubectl', ['-n', gatewayNamespace, 'apply', '-f', 'infra/dev-stack/gateway.yaml']);
+  await run('kubectl', ['-n', gatewayNamespace, 'rollout', 'status', 'deployment/gateway', '--timeout=120s']);
+  const address = (await run('kubectl', ['-n', gatewayNamespace, 'get', 'service/gateway', '-o', 'jsonpath={.spec.clusterIP}'])).trim();
+  await save('computer-runtime.json', JSON.stringify({ apiVersion: 'v1', kind: 'ConfigMap',
+    metadata: { name: 'computer-runtime', namespace }, data: { gateway: `http://${address}:3000` } }));
+  await run('kubectl', ['apply', '-f', `${directory}/computer-runtime.json`]);
+  await save('model-egress.json', JSON.stringify({ apiVersion: 'networking.k8s.io/v1', kind: 'NetworkPolicy',
+    metadata: { name: 'model-gateway', namespace }, spec: { podSelector: { matchLabels: { app: 'computer' } },
+      policyTypes: ['Egress'], egress: [{ to: [{ namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': gatewayNamespace } },
+        podSelector: { matchLabels: { app: 'opencrane-gateway' } } }], ports: [{ protocol: 'TCP', port: 3000 }] }] } }));
+  await run('kubectl', ['apply', '-f', `${directory}/model-egress.json`]);
   const raw = JSON.parse(await run('kubectl', ['config', 'view', '--raw', '--minify', '-o', 'json'])) as {
     clusters: Array<{ cluster: unknown }>;
   };
@@ -151,11 +167,11 @@ async function up(fresh: boolean) {
     await stop();
     await compose('down', '--volumes', '--remove-orphans');
     const oldSettings = await readEnv('settings');
-    await run('kubectl', ['delete', 'namespace', `opencrane-${oldSettings['SILO_ID']}`, '--ignore-not-found',
+    await run('kubectl', ['delete', 'namespace', `opencrane-${oldSettings['SILO_ID']}`, `opencrane-${oldSettings['SILO_ID']}-gateway`, '--ignore-not-found',
       '--wait=true', '--timeout=180s']);
     // The ownership marker fences this directory to this worktree.
     const files = await import('node:fs/promises').then((fs) => fs.readdir(directory));
-    for (const file of files) if (file !== 'stack-owner' && !file.startsWith('zitadel-') && file !== 'zitadel.json') await rm(`${directory}/${file}`);
+    for (const file of files) if (file !== 'stack-owner' && !file.startsWith('zitadel-') && file !== 'zitadel.json') await rm(`${directory}/${file}`, { recursive: true });
     await generate(origin);
   }
   const settings = await readEnv('settings');
@@ -176,13 +192,16 @@ async function up(fresh: boolean) {
   for (const name of ['members', 'mcp-catalogue', 'computers', 'budgets']) {
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
   }
-  // The public verification keys are provisioned by the computer token issuer.
-  const modelJwks = process.env['MODEL_JWKS_FILE'];
-  if (!modelJwks) throw new Error('MODEL_JWKS_FILE must name the computer issuer public JWKS file');
+  const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
+  await save('model-jwks.json', JSON.stringify(issuer.jwks));
+  await save('model-stub-key', 'dev-stack-stub-only');
+  await modelFirewall(true);
+  await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'], {});
   await run('bash', ['spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
   await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
-    MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: modelJwks,
+    MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
+    MODEL_UPSTREAM: '127.0.0.1:43003', MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
     MODEL_DECISION_PORT: '43001', MODEL_GATEWAY_PORT: '43000', MODEL_READINESS_PORT: '43002',
   });
@@ -211,7 +230,7 @@ async function up(fresh: boolean) {
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));
   for (let i = 0; i < names.length; i++) if (!pids[i]) throw new Error(`${names[i]} stopped`);
-  const ports = new Set(['443', '43000', '43001', '43002', ...['PG_PORT', 'NATS_PORT', 'FGA_PORT', 'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'SERVER_PORT', 'WEB_PORT']
+  const ports = new Set(['443', '43000', '43001', '43002', '43003', ...['PG_PORT', 'NATS_PORT', 'FGA_PORT', 'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'SERVER_PORT', 'WEB_PORT']
     .map((name) => settings[name]!)]);
   const allowed = new Set(['127.0.0.1', '::1', ...tail.Self.TailscaleIPs]);
   for (const line of after.trim().split('\n')) {
@@ -219,13 +238,14 @@ async function up(fresh: boolean) {
     const match = /^(?:\[(.*)\]|([^:]*)):(\d+)$/u.exec(address);
     const ownedProcess = pids.some((pid) => line.includes(`pid=${pid},`));
     if (ownedProcess && !match) throw new Error(`Cannot verify stack listener address: ${address}`);
-    // agentgateway v1.5 listens on all interfaces; k3d reaches this authenticated model port.
+    // The verified IPv4/IPv6 firewall restricts this wildcard listener to loopback, tailnet and k3d.
     if (match?.[3] === '43000') continue;
     if ((ownedProcess || ports.has(match?.[3] ?? '')) && !allowed.has(match?.[1] ?? match?.[2] ?? '')) {
       throw new Error(`Stack listener is not on loopback or Tailscale: ${address}`);
     }
   }
-  console.log('PASS listener check: every stack listener is on loopback or Tailscale');
+  await modelFirewall(true);
+  console.log('PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d');
   console.log(`Stack ready: ${origin}/org/integrations (Zitadel sign-in)`);
 }
 async function journey() {

@@ -1,7 +1,9 @@
 # P2-4 model gateway evidence
 
-2 October 2026, branch `work/models`. No independent review, push, merge or
-restart of the running `zitadel-signin` dev stack was performed.
+2 October 2026, branch `work/models`. The sections below through “Review fixes”
+record the original P2-4 qualification before the lifecycle rebase. The final
+integration receipt records the current source, stub-only journeys and restoration.
+No push or merge was performed.
 
 ## Real call — PASS
 
@@ -111,3 +113,78 @@ per UTC day, including across leadership changes.
 Real OpenAI calls, running-stack integration/restart, fresh-install qualification,
 production HA/credential rotation, hosted CI and a second independent review:
 **NOT RUN** in this fix task. Nothing was pushed or merged.
+
+## Lifecycle integration — 2 October 2026
+
+Source: `work/models`, rebased from `c869499` onto lifecycle main `f5c4eef`;
+rebased parent `441f82f`, plus the integration commit containing this receipt.
+Environment: `ocn-dev`, Node 22.23.3, local PostgreSQL 17/NATS/OpenFGA,
+k3d Agent Sandbox/gVisor and agentgateway 1.5.0. This task made **no real
+OpenAI call**; `MODELS_REAL_CALL=0` and the stack's explicit loopback SSE provider
+keep both test paths off paid upstreams.
+
+### Wiring and regression evidence
+
+The former ops `computerCredentials` implementation now lives in `libs/auth`.
+Lifecycle delivery, turn issuance and model admission share ES256 audiences,
+issuer and strict lifetime checks. The decision process receives only the public
+JWKS derived from the lifecycle signing key. Admission reads the current claim,
+rotated token id, computer id/generation and matching Ready event from NATS,
+then checks the conversation, active turn, personal ownership and live membership
+before reserving integer cents. `session-id` binds the conversation.
+
+- **RED → GREEN:** real lifecycle credentials initially received 401 at the
+  spike-configured gateway. They now receive a completed stub response.
+- **PASS:** expired computer/turn, suspended, pre-resume, pre-loss, wrong computer
+  and wrong/missing generation credentials leave the budget stream unchanged.
+- **RED → GREEN:** review reproduced failure after a legacy resume without a
+  generation and a newly observed Ready event. The shared check now inherits that
+  legacy grant's claim generation while retaining explicit signed/Ready matching.
+- **PASS:** a temporary untrusted veth/network namespace could not reach port
+  43000 over IPv4 or IPv6; loopback reached its 401 JWT gate. The real computer
+  reached the gateway through the separately namespaced k3d relay. Startup
+  installs the port firewall before launching agentgateway; shutdown removes it
+  after stopping the process.
+
+The first combined server fixture exceeded its old ten-second setup deadline
+while provisioning real services. Its bound is now thirty seconds. Two fresh
+attempts failed during browser login probes; neither is recorded as a passing
+fresh run. The complete diagnostic journey passed between those attempts.
+The final fresh and repeat runs completed after the competing checks stopped.
+Both model reservations also reached `budget.settled` through the combined
+dispatcher. Final repeatable receipts follow below.
+
+### Final qualification
+
+| Check | Result |
+| --- | --- |
+| `lint`, `typecheck`, `check:events`, dev-stack TypeScript | PASS; 70 event types; three existing lint warnings |
+| `PG_TEST_URL=… LIFECYCLE_K3D=1 MODELS_REAL_CALL=0 npm test` | PASS; 53 files, 922 passed, 1 real-call skip; 176 seconds |
+| Web production build | PASS; existing CSS size warning |
+| `npm run test -w apps/web -- --watch=false` | PASS; 4 files, 41 tests |
+| Models `up.sh --fresh` | PASS; join→Ready 12,348 ms, resume 8,415 ms; model stub, replacement/disk and browser journey passed |
+| Models plain `up.sh` | PASS; join→Ready 236 ms, resume 6,569 ms; all browser/model/lifecycle/replay checks repeated |
+| Restore main stack and ownership marker | PASS on main `92bff32`: fresh startup, then plain startup; services left running |
+| Independent review | PASS; one compatibility blocker reproduced and fixed, second pass verified strict refusals |
+
+Main advanced to `92bff32` (#37) during qualification. The model branch remains
+rebased onto the requested lifecycle main `f5c4eef`; restoration uses the owner’s
+current main code. Its older event catalogue cannot replay the new model fields,
+so restoration uses fresh disposable data. The private model usage receipt was
+retained outside the stack directory before cleanup; the extra relay namespace
+and model firewall/listeners were removed. Retained Zitadel file hashes matched
+before and after restoration. Main’s first extra repeat journey hit a WebSocket
+join timeout while its services remained healthy; the retry passed every check.
+
+Zitadel access stayed within organisation `393311211338337681`; its retained
+files are excluded from every fresh cleanup. The model stub uses a placeholder
+credential, never `.keys/.openai-key`. No secrets were printed, and no push or
+merge was performed.
+
+**NOT RUN:** real OpenAI calls in this integration task, hosted CI, production HA
+and signing-key rotation, the complete Codex/chat product journey, group/delegated
+model access and full conversation OpenFGA projection. The latter remains an
+existing unimplemented reaction that retries on `conversation.created`; this
+personal-assistant decision path enforces ownership directly from events and
+live membership. This receipt qualifies the requested lifecycle-to-model path,
+not the complete Phase 2 product.

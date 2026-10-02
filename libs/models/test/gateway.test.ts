@@ -5,14 +5,15 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
-import { exportJWK, generateKeyPair, SignJWT } from 'jose';
+import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
+import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, issuer, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
+import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
 
 let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
@@ -37,21 +38,32 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   const joined = await append('member-alice', 'member.joined', { memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'owner' });
   await db.transaction(tx => auth.handler.handle(joined, tx));
   await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' });
-  await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', podUid: 'pod', generation: 1 });
-  await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1 });
+  await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:initial', generation: 1 });
+  await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
   await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice' });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
-  const { publicKey, privateKey } = await generateKeyPair('ES256');
-  const jwk = { ...await exportJWK(publicKey), kid: 'test' };
+  const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
+  const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
+  const issuer = 'https://lifecycle.test/';
+  const privateKeyPath = `${directory}/issuer.pem`;
+  await writeFile(privateKeyPath, await exportPKCS8(privateKey), { mode: 0o600 });
+  let credentialClock = Math.floor(Date.now() / 1000);
+  const tokens = await tokenIssuer({ privateKeyPath, issuer, now: () => credentialClock });
+  const credentials = computerCredentials(nats.store, tokens, 'test');
   const sign = (claims: Record<string, unknown>, audience: string, ttl = 120) => new SignJWT(claims)
-    .setProtectedHeader({ alg: 'ES256', kid: 'test' }).setIssuer(issuer).setAudience(audience)
+    .setProtectedHeader({ alg: 'ES256', kid: 'lifecycle' }).setIssuer(issuer).setAudience(audience)
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) + ttl).sign(privateKey);
-  const c = { typ: 'computer', silo: 'test', computer: 'computer', assistant: 'assistant', generation: 1 };
-  const t = { typ: 'turn', silo: 'test', assistant: 'assistant', conversation: 'conversation', turn: 'turn', requester: 'alice', thread: 'thread', delegation: ['alice'] };
-  const headers = { authorization: `Bearer ${await sign(c, 'agentgateway')}`, 'x-turn-token': await sign(t, 'decision-service'), 'session-id': 'thread', 'content-type': 'application/json' };
+  const c = { typ: 'computer', silo: 'test', computer: 'computer', assistant: 'assistant', generation: 1, jti: 'token:initial' };
+  const t = { jti: 'token:turn', typ: 'turn', silo: 'test', assistant: 'assistant', conversation: 'conversation', turn: 'turn', requester: 'alice', computerTokenId: 'token:initial', delegation: ['alice'] };
+  const issue = async (generation = 1, tokenId = 'token:initial', computerId = 'computer') => ({
+    authorization: `Bearer ${(await tokens.computer({ silo: 'test', assistantId: 'assistant', computerId, generation, tokenId })).value}`,
+    'x-turn-token': (await credentials.turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', requesterId: 'alice' })).value,
+    'session-id': 'conversation', 'content-type': 'application/json',
+  });
+  const headers = await issue();
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly);
-  const decision = await startDecision(actor, { keys: [jwk] }, binding);
+  const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer }, binding);
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
@@ -75,7 +87,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   if (!real) await writeFile(keyFile, 'stub-only-placeholder');
   const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
-    port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url,
+    port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }) };
   let gateway = await startGateway(options);
   const runner = new ProjectionRunner(db, nats.store, logger); await runner.initialise(budgets);
@@ -85,7 +97,8 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   const abort = new AbortController(); const dispatching = dispatch(nats.connection, runtime, abort.signal);
   void dispatching.catch(() => undefined);
   const body = { model: 'gpt-5-nano', input: 'Say OK.', max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { actor, append, headers, t, c, sign, options, runner, db, nats, runtime, auth,
+  return { actor, append, headers, t, c, sign, issue, credentials,
+    credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     reject: (status: number) => { rejection = status; },
     received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
@@ -134,30 +147,66 @@ it('settles streamed gateway usage exactly, strips identity, rebuilds PostgreSQL
     await f.decisionDown(); expect((await f.call()).status).toBe(503); expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
-it('refuses a newer claim after a delayed ready event for the old computer', async () => {
+it('uses lifecycle credentials and refuses expired, pre-resume and pre-loss grants before reserving', async () => {
   const f = await fixture();
   try {
-    await f.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer-b', podUid: 'pod-b', generation: 2 });
-    await f.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1 });
-    const token = await f.sign({ ...f.c, computer: 'computer-b', generation: 2 }, 'agentgateway');
-    expect((await f.call({ authorization: `Bearer ${token}` })).status).toBe(403);
-    expect(f.received()).toBe(0);
-    expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type)).toEqual(['budget.ceiling_set', 'budget.period_started']);
+    expect((await f.call()).status).toBe(200); await f.settled();
+    const budgetBefore = await history(f.nats.store, 'budget-test', 'test');
+    const refused = async (headers = f.headers) => {
+      expect((await f.call(headers)).status).toBeGreaterThanOrEqual(400);
+      expect(await history(f.nats.store, 'budget-test', 'test')).toEqual(budgetBefore);
+      expect(f.received()).toBe(1);
+    };
+    f.credentialTime(-601);
+    await refused(await f.issue());
+    f.credentialTime(480); // Unexpired computer, expired turn.
+    await refused(await f.issue());
+    f.credentialTime(121);
+    await f.append('computer-assistant', 'computer.suspended', { assistantId: 'assistant', computerId: 'computer' });
+    await refused();
+    await f.append('computer-assistant', 'computer.resumed', { assistantId: 'assistant', computerId: 'computer', generation: 1, tokenId: 'token:resumed' });
+    await refused();
+    await f.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'resumed' });
+    const resumed = await f.issue(1, 'token:resumed');
+    await refused({ ...resumed, authorization: f.headers.authorization });
+    await refused({ ...resumed, 'x-turn-token': f.headers['x-turn-token'] });
+    await f.append('computer-assistant', 'computer.lost', { assistantId: 'assistant', computerId: 'computer' });
+    await refused(resumed);
+    await f.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', generation: 2, tokenId: 'token:replacement' });
+    await refused(resumed);
+    await f.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 2, podUid: 'replacement' });
+    const replacement = await f.issue(2, 'token:replacement');
+    await refused({ ...replacement, authorization: resumed.authorization });
+    await refused({ ...replacement, 'x-turn-token': resumed['x-turn-token'] });
+    await refused(await f.issue(1, 'token:replacement'));
+    await refused(await f.issue(2, 'token:replacement', 'other-computer'));
+    expect((await f.call(replacement)).status).toBe(200);
+    expect(f.received()).toBe(2);
   } finally { await f.close(); }
 }, 40_000);
-it.each(['computer.ready', 'computer.resumed'])('requires matching generation context on %s', async type => {
+it('accepts a re-observed Ready computer after a legacy resume without generation', async () => {
   const f = await fixture();
   try {
-    await f.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', podUid: 'pod-b', generation: 2 });
-    const token = await f.sign({ ...f.c, generation: 2 }, 'agentgateway');
-    for (const context of [{ generation: 1 }, {}]) {
-      await f.append('computer-assistant', type, { assistantId: 'assistant', computerId: 'computer', ...context });
-      expect((await f.call({ authorization: `Bearer ${token}` })).status).toBe(403);
-    }
-    expect(f.actor.state.reservations).toHaveLength(0); expect(f.received()).toBe(0);
-    await f.append('computer-assistant', type, { assistantId: 'assistant', computerId: 'computer', generation: 2 });
-    expect((await f.call()).status).toBe(403); // The old token cannot use the new generation.
-    expect((await f.call({ authorization: `Bearer ${token}` })).status).toBe(200);
+    await f.append('computer-assistant', 'computer.suspended', { assistantId: 'assistant', computerId: 'computer' });
+    await f.append('computer-assistant', 'computer.resumed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:legacy-resume' });
+    await f.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'observed' });
+    const current = await f.issue(1, 'token:legacy-resume');
+    expect((await f.call(current)).status).toBe(200);
+    expect((await f.call()).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(1);
+  } finally { await f.close(); }
+}, 40_000);
+it.each([{ computerId: 'old-computer', generation: 2 }, { computerId: 'computer', generation: 1 }, { computerId: 'computer' }])(
+  'refuses readiness that does not match the current claim: %j', async ready => {
+  const f = await fixture();
+  try {
+    await f.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', generation: 2, tokenId: 'token:replacement' });
+    await f.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', ...ready });
+    const headers = { authorization: `Bearer ${await f.sign({ ...f.c, generation: 2, jti: 'token:replacement' }, 'agentgateway')}`,
+      'x-turn-token': await f.sign({ ...f.t, computerTokenId: 'token:replacement' }, 'decision-service') };
+    expect((await f.call(headers)).status).toBe(403);
+    expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type)).toEqual(['budget.ceiling_set', 'budget.period_started']);
+    expect(f.received()).toBe(0);
   } finally { await f.close(); }
 }, 40_000);
 it.each([[2, 2000], [2000, 2]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {

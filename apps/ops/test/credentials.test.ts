@@ -9,8 +9,8 @@ import { expect, it } from 'vitest';
 import { tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
 import type { EventEnvelope } from '@opencrane/events';
-import { computerCredentials } from '../src/credentials.ts';
-import { history, lifecycleHandlers, resumeComputer, suspendComputer } from '../src/lifecycle.ts';
+import { computerCredentials } from '@opencrane/auth';
+import { field, history, lifecycleHandlers, resumeComputer, suspendComputer } from '../src/lifecycle.ts';
 
 const execFile = promisify(execFileCallback);
 async function listen(server: Server) {
@@ -37,7 +37,8 @@ it('agentgateway enforces committed computer and per-turn credentials across rac
     let now = Math.floor(Date.now() / 1000);
     const tokens = await tokenIssuer({ privateKeyPath, issuer: 'https://test.invalid', now: () => now });
     const credentials = computerCredentials(fixture.store, tokens, 'test');
-    const assistantId = 'assistant-test', computerId = 'computer-test';
+    const assistantId = 'assistant-test';
+    let computerId = 'computer-test';
     const subject = `computer-${assistantId}`;
     const append = async (type: string, extra: Record<string, unknown> = {}) => {
       const events = await history(fixture.store, subject);
@@ -48,7 +49,7 @@ it('agentgateway enforces committed computer and per-turn credentials across rac
       return event;
     };
     await append('computer.claimed', { generation: 1, tokenId: 'token:initial' });
-    let ready = await append('computer.ready', { podUid: 'pod-one', sandboxUid: 'sandbox-one' });
+    let ready = await append('computer.ready', { generation: 1, podUid: 'pod-one', sandboxUid: 'sandbox-one' });
     let currentTurnId = '';
     const authz = createServer((req, res) => {
       void credentials.check(req.headers, currentTurnId).then(() => { res.writeHead(200); res.end(); },
@@ -117,6 +118,7 @@ routes:
     expect((await history(fixture.store, subject)).filter(item => item.event.type === 'computer.resumed')).toHaveLength(1);
     await suspendComputer(fixture.store, { assistantId, computerId, latest: ready });
     expect((await history(fixture.store, subject)).at(-1)!.event.type).toBe('computer.resumed');
+    await append('computer.ready', { generation: 1, podUid: 'pod-resumed' });
     const resumed = await issue();
     for (const computer of raced) expect((await request(computer.value, resumed.turn.value)).status).toBe(200);
     expect((await request(first.computer.value, resumed.turn.value)).status).toBe(403);
@@ -132,14 +134,15 @@ routes:
     const unexpiredTurn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: 'later', requesterId: 'alice' });
     currentTurnId = unexpiredTurn.id;
     expect((await request(resumed.computer.value, unexpiredTurn.value)).status).toBe(403);
-    ready = await append('computer.ready', { podUid: 'pod-two' });
+    ready = await append('computer.ready', { generation: 1, podUid: 'pod-two' });
     const beforeLoss = await issue();
     const lost = await append('computer.lost');
     expect((await request(beforeLoss.computer.value, beforeLoss.turn.value)).status).toBe(403);
     // The real durable reaction appends replacement intent; no Kubernetes call belongs here.
     const handler = lifecycleHandlers(fixture.store)[1];
     await handler.handle(lost, { query: () => Promise.reject(new Error('Claim command must not query SQL')) });
-    await append('computer.ready', { podUid: 'pod-three' });
+    computerId = field((await history(fixture.store, subject)).at(-1)!.event.data, 'computerId');
+    await append('computer.ready', { generation: 2, podUid: 'pod-three' });
     const replacement = await issue();
     expect((await request(replacement.computer.value, replacement.turn.value)).status).toBe(200);
     expect((await request(beforeLoss.computer.value, replacement.turn.value)).status).toBe(403);

@@ -173,14 +173,14 @@ export const computerClaimedDataSchema = z
   .object({ assistantId: id, computerId: id, sandboxUid: id.optional(), generation: z.int().positive(), tokenId })
   .strict();
 
-export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id, podUid: id.optional(), sandboxUid: id.optional() }).strict();
+export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id, generation: z.int().positive().optional(), podUid: id.optional(), sandboxUid: id.optional() }).strict();
 
 export const computerSuspendedDataSchema = z
   .object({ assistantId: id, computerId: id, snapshotId: id.optional() })
   .strict();
 
 export const computerResumedDataSchema = z
-  .object({ assistantId: id, computerId: id, tokenId, snapshotId: id.optional() })
+  .object({ assistantId: id, computerId: id, tokenId, generation: z.int().positive().optional(), snapshotId: id.optional() })
   .strict();
 
 export const computerLostDataSchema = z.object({ assistantId: id, computerId: id }).strict();
