@@ -19,7 +19,9 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   optimising; choosing the right tool matters more than cost. The registry in
   `src/state.ts` is the only price data: Astra, 6.1 Sol, 6 Luna, 6 Sol,
   5.6 Sol/Terra/Luna, 5.5/5.5 Pro and 5.4/5.4 Pro. `gpt-5-nano` and
-  `gpt-5-mini` are refused. Standard rates are pinned from
+  `gpt-5-mini` are retired and refused for new calls. Their original price rows
+  remain available to settle pending reservations at the recorded tariff.
+  Standard rates are pinned from
   [OpenAI pricing](https://developers.openai.com/api/docs/pricing), checked
   2 October 2026, at the existing planning FX of EUR 95/100 USD. Prices are
   integer euro cents per billion tokens, preserving fractional USD-cent rates.
@@ -51,8 +53,10 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
 - IAM is Phase 2 personal-assistant ownership ∩ live OpenFGA membership.
   The claimed computer generation, ready state, conversation and active turn
   are read from events on every call. JWTs are ES256, with strict expiry;
-  turn claims include `thread` matching the actual Codex `session-id`, signed `conversation`, `requester` and `task` and the current
+  turn claims include `thread` matching the actual Codex `session-id`, signed `conversation`, `requester`, `task` and allowed `model` and the current
   `computerTokenId`, with at most 120 seconds between `iat` and `exp`.
+  The server chooses the allowed model from the task-routing table; admission
+  refuses a different request model before reserving or reaching the provider.
   Both use `libs/auth` and the configured `TOKEN_ISSUER`; the gateway verifies
   the same public keys. Computer tokens include the claim generation, and
   only a matching Ready event permits model admission. Delegation
@@ -64,7 +68,9 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   amount. A duplicate effect cannot charge twice. Observed provider rejections
   without usage settle at zero cents. Timeouts, lost connections and other
   missing outcomes produce `effect.uncertain` after three minutes and retain
-  the full reservation. Cap refusals append only `budget.exhausted`, once per
+  the full reservation. Unknown models or tariffs produce `effect.uncertain`
+  with reason `unknown_tariff`, keep the reservation and allow later usage
+  lines to be processed. Cap refusals append only `budget.exhausted`, once per
   unchanged budget per UTC day, including across actor recovery. Other refusals
   before a budget command become `security.alert_raised` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.

@@ -330,7 +330,7 @@ export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
 export const approvalUsedDataSchema = z.object({ approvalId: id, permitId: id }).strict();
 
 export const effectUncertainDataSchema = z
-  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost']) })
+  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost', 'unknown_tariff']) })
   .strict();
 
 export const effectResolvedDataSchema = z

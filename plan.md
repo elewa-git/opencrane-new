@@ -318,31 +318,21 @@ A dev-stack PASS does not claim OIDC, R3, failover or disaster-recovery qualific
 
 ## Estimate
 
-Observed on 1 October: **8 merged PRs**, including **2 spike PRs and 1 small fix**,
-between 12:36 and 20:44 UTC. The other 5 shipped product/infrastructure slices.
-That is one busy day, not a sustained nightly rate; the original 3 PRs/night was
-an assumption. Larger whole features, review and owner decisions still limit output.
-The table counts remaining whole-feature PRs, including #10, not commits or fixes.
+Measured rate: about **5 whole features per nightly cycle**. On 1 October,
+6 whole features, 2 spikes and 1 fix landed; on 2 October, 5 larger features
+landed (#34–#38).
 
-Plan at **3–5 accepted whole-feature PRs per working day**, five days a week,
-with **25–40% contingency** for live failures, review and owner waits. Today's
-spikes reduce unknowns; they do not qualify the remaining product journeys.
-Keep 1–2 hours of owner review daily. Re-estimate weekly from accepted features
-and fresh-stack receipts, and again after the prototype.
+| Remaining phase | Nightly cycles |
+| --- | --- |
+| Phase 2 working prototype | 1–2 |
+| Phase 3 governed work | 3–4 |
+| Phase 4 company product | 4–5 |
+| Phase 5 qualification | 3–4 |
+| **Total** | **About 11–16** |
 
-| Remaining milestone | Working days, before contingency | Calendar from 1 October, cumulative |
-| --- | --- | --- |
-| Phase 1 foundation | 1–2 | Week 1 (OIDC waits for owner) |
-| **Phase 2 working prototype** | 2–5 | **Weeks 1–2** |
-| Phase 3 governed work | 4–8 | Weeks 2–4 |
-| Phase 4 company product | 4–10 | Weeks 3–7 |
-| Phase 5 qualification | 3–7 plus human-run live tests | Weeks 4–9 |
-| **MVP including qualification** | **14–32 working days** | **About 4–9 weeks, including contingency** |
-
-The remaining estimate is **62–88 feature PRs**. This is a forecast, not a delivery
-promise. Identity-provider setup, model credentials, visual approval and managed
-cluster qualification remain owner-dependent. Daily fresh-stack runs expose product
-install failures early; production packaging and recovery risk remain in Phase 5.
+The remaining estimate is **about 38–49 PRs**. The limits are one shared dev
+stack, two full suites per box, and owner gates: chat UI visuals, an Odoo test
+instance and managed-cluster spend. This is a forecast, not a delivery promise.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
 

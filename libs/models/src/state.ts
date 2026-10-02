@@ -24,10 +24,15 @@ export const models = [
   { id: 'gpt-5.5-pro', short: rates(30000, null, null, 180000), long: rates(60000, null, null, 270000) },
   { id: 'gpt-5.4', short: rates(2500, 250, null, 15000), long: rates(5000, 500, null, 22500) },
   { id: 'gpt-5.4-pro', short: rates(30000, null, null, 180000), long: rates(60000, null, null, 270000) },
-].map(row => ({ ...row, default: row.id === 'gpt-6.1-sol', perTokens }));
-function priceFor(model: string, inputTokens: number) {
+].map(row => ({ ...row, default: row.id === 'gpt-6.1-sol', retired: false, priceTableId, perTokens })).concat([
+  // Keep the original tariff for reservations made before the registry upgrade.
+  { id: 'gpt-5-nano', short: rates(50, null, null, 400), long: rates(50, null, null, 400) },
+  { id: 'gpt-5-mini', short: rates(250, null, null, 2000), long: rates(250, null, null, 2000) },
+].map(row => ({ ...row, default: false, retired: true, priceTableId: 'openai-2026-10-02-eur95', perTokens })));
+function priceFor(model: string, inputTokens: number, tariffId?: string) {
   const modelPrice = models.find(row => row.id === model);
   if (!modelPrice) throw new Error('Unknown model');
+  if (tariffId !== undefined && tariffId !== modelPrice.priceTableId) throw new Error('Unknown model tariff');
   return inputTokens <= shortContextTokens ? modelPrice.short : modelPrice.long;
 }
 function roundedCents(numerator: bigint): number {
@@ -35,10 +40,10 @@ function roundedCents(numerator: bigint): number {
   if (!Number.isSafeInteger(cents)) throw new Error('Cost overflow');
   return cents;
 }
-export function costCents(model: string, inputTokens: number, outputTokens: number, cachedInputTokens = 0, cacheWriteTokens = 0): number {
+export function costCents(model: string, inputTokens: number, outputTokens: number, cachedInputTokens = 0, cacheWriteTokens = 0, tariffId?: string): number {
   if (![inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens].every(n => Number.isSafeInteger(n) && n >= 0) ||
       cachedInputTokens + cacheWriteTokens > inputTokens) throw new Error('Invalid usage');
-  const price = priceFor(model, inputTokens);
+  const price = priceFor(model, inputTokens, tariffId);
   if ((cachedInputTokens && price.cachedInputCents === null) || (cacheWriteTokens && price.cacheWriteCents === null)) throw new Error('Unsupported cache usage');
   return roundedCents(BigInt(inputTokens - cachedInputTokens - cacheWriteTokens) * BigInt(price.inputCents) +
     BigInt(cachedInputTokens) * BigInt(price.cachedInputCents ?? 0) + BigInt(cacheWriteTokens) * BigInt(price.cacheWriteCents ?? 0) +
@@ -46,6 +51,7 @@ export function costCents(model: string, inputTokens: number, outputTokens: numb
 }
 // ponytail: full supported context is the safe bound until we measure server-side tokenisation.
 export function reservationCents(model: string, outputBound: number, inputBound = 1_050_000): number {
+  if (models.some(row => row.id === model && row.retired)) throw new Error('Retired model');
   if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('Invalid bound');
   const price = priceFor(model, inputBound);
   return roundedCents(BigInt(inputBound) * BigInt(Math.max(price.inputCents, price.cacheWriteCents ?? 0)) +

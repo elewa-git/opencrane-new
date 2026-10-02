@@ -93,7 +93,7 @@ routes:
     }
     const issue = async () => {
       const computer = await resumeComputer(fixture.store, tokens, 'test', assistantId);
-      const turn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: randomUUID(), requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn' });
+      const turn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: randomUUID(), requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn', model: 'gpt-6.1-sol' });
       currentTurnId = turn.id;
       return { computer, turn };
     };
@@ -127,11 +127,11 @@ routes:
     currentTurnId = resumed.turn.id;
     now += 121;
     expect((await request(resumed.computer.value, resumed.turn.value)).status).toBe(403);
-    const freshTurn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: 'next', requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn' });
+    const freshTurn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: 'next', requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn', model: 'gpt-6.1-sol' });
     currentTurnId = freshTurn.id;
     expect((await request(resumed.computer.value, freshTurn.value)).status).toBe(200);
     now += 601;
-    const unexpiredTurn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: 'later', requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn' });
+    const unexpiredTurn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: 'later', requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn', model: 'gpt-6.1-sol' });
     currentTurnId = unexpiredTurn.id;
     expect((await request(resumed.computer.value, unexpiredTurn.value)).status).toBe(403);
     ready = await append('computer.ready', { generation: 1, podUid: 'pod-two' });

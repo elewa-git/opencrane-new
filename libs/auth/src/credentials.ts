@@ -30,7 +30,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
     return { ...current, sequence: latest.sequence };
   }
   return {
-    async turn(input: { assistantId: string; conversationId: string; turnId: string; requesterId: string; threadId: string; task: string }) {
+    async turn(input: { assistantId: string; conversationId: string; turnId: string; requesterId: string; threadId: string; task: string; model: string }) {
       const computer = await active(input.assistantId);
       if (!tokens.turn) throw new Error('Turn issuer unavailable');
       return tokens.turn({ ...input, silo, computerTokenId: computer.tokenId });

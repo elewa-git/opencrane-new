@@ -2,6 +2,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
+import { modelForTask } from '@opencrane/models/routing';
 import { listConversations } from '@opencrane/projections';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
@@ -38,7 +39,7 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
           const binding = await turnCommand(options.store, context, { ...report, status });
           if (status === 'started') {
             if (!tokens || !binding) throw new Error('Turn issuer unavailable');
-            grant = await computerCredentials(options.store, tokens, options.silo).turn({ ...binding, assistantId: input.assistantId });
+            grant = await computerCredentials(options.store, tokens, options.silo).turn({ ...binding, assistantId: input.assistantId, model: modelForTask(binding.task) });
           }
         }
         if (socket.readyState === socket.OPEN) socket.send(JSON.stringify({ type: 'ack', sequence: report.sequence,

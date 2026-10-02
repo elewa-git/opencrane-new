@@ -342,6 +342,8 @@ it('restricts the model and spending read to projected owners and admins', async
         { id: 'gpt-6-astra', default: false }, { id: 'gpt-6.1-sol', default: true }, { id: 'gpt-6-luna', default: false },
         { id: 'gpt-6-sol' }, { id: 'gpt-5.6-sol' }, { id: 'gpt-5.6-terra' }, { id: 'gpt-5.6-luna' },
         { id: 'gpt-5.5' }, { id: 'gpt-5.5-pro' }, { id: 'gpt-5.4' }, { id: 'gpt-5.4-pro' },
+        { id: 'gpt-5-nano', default: false, retired: true, priceTableId: 'openai-2026-10-02-eur95' },
+        { id: 'gpt-5-mini', default: false, retired: true, priceTableId: 'openai-2026-10-02-eur95' },
       ] });
   }
   expect((await app.inject({ method: 'GET', url: '/api/org/models' })).statusCode).toBe(401);

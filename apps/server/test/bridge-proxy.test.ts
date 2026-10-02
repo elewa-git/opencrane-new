@@ -42,7 +42,7 @@ it('passes the actual proxy thread to admission even when a grant is installed w
   const local = await proxy(`http://127.0.0.1:${address.port}`, options);
   try {
     const computer = await tokens.computer({ silo: 'test', assistantId: 'assistant', computerId: 'computer', generation: 1, tokenId: 'token:computer' });
-    const turn = await computerCredentials(nats.store, tokens, 'test').turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn' });
+    const turn = await computerCredentials(nats.store, tokens, 'test').turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', model: 'gpt-6.1-sol' });
     const install = (thread: string, conversation: string) => new Promise<void>((resolve, reject) => {
       const req = request({ socketPath: options.controlSocket, path: '/grant', method: 'POST' }, res => { res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error('Grant installation refused'))); });
       req.on('error', reject); req.end(JSON.stringify({ thread, conversation, computer: computer.value, token: turn.value, expires: turn.expiresAt }));

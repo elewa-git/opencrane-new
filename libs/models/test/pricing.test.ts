@@ -39,11 +39,13 @@ it.each([
     expect(costCents(model, 300_000, 0, 0, 300_000)).toBe(writeLong);
   } else expect(() => costCents(model, 100_000, 0, 0, 100_000)).toThrow('Unsupported cache usage');
 });
-it('refuses unknown/removed models and invalid usage, and rounds once per call', () => {
-  expect(models).toHaveLength(11);
-  for (const model of ['unknown', 'gpt-5-nano', 'gpt-5-mini']) {
-    expect(() => costCents(model, 1, 1)).toThrow('Unknown model');
-    expect(() => reservationCents(model, 1)).toThrow('Unknown model');
+it('refuses unknown models, retired reservations and invalid usage, and rounds once per call', () => {
+  expect(models.filter(row => !row.retired)).toHaveLength(11);
+  expect(() => costCents('unknown', 1, 1)).toThrow('Unknown model');
+  expect(() => reservationCents('unknown', 1)).toThrow('Unknown model');
+  for (const model of ['gpt-5-nano', 'gpt-5-mini']) {
+    expect(models.find(row => row.id === model)?.retired).toBe(true);
+    expect(() => reservationCents(model, 1)).toThrow('Retired model');
   }
   for (const count of [-1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
     expect(() => costCents('gpt-6-luna', count, 1)).toThrow('Invalid usage');

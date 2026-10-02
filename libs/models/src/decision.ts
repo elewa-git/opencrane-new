@@ -11,12 +11,12 @@ import { reservationCents, data, models, priceTableId, type ModelCall } from './
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
-const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id, thread: id, task: z.string().min(1),
+const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id, thread: id, task: z.string().min(1), model: z.string().min(1),
   delegation: z.array(id).length(1) });
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]) }).strict();
-const requestSchema = z.object({ model: z.enum(models.map(row => row.id)), stream: z.literal(true),
+const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired).map(row => row.id)), stream: z.literal(true),
   input: z.union([z.string(), z.array(z.union([message,
     z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string() }).strict(),
     z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
@@ -64,7 +64,7 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   if (!created || data(created.event)['assistantId'] !== c.assistant || data(created.event)['createdBy'] !== t.requester ||
       conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Conversation refused');
   const turn = await activeTurn(actor, c, t);
-  return { model: '', priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
+  return { model: t.model, priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
     conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
     contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed])).digest('hex') };
 }
@@ -95,8 +95,8 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       auditedContext = { requesterId: t.requester, assistantId: c.assistant, claims: [c, t] };
       if (t.delegation[0] !== t.requester) throw new Error('Delegation refused');
       const body = requestSchema.parse(await readBody(req));
+      if (body.model !== t.model) throw new Error('Model does not match turn grant');
       const call = await context(actor, binding, c, t, checked.sequence);
-      call.model = body.model;
       // No client token count is trusted; reserve the full supported context at long rates.
       reservationAttempted = true;
       const reservation = await actor.reserve(call, reservationCents(body.model, body.max_output_tokens));

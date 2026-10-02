@@ -220,9 +220,13 @@ the unused reservation. Prices are integer euro cents at the pinned planning FX,
 rounded upwards once per call. The catalogue has no model configuration events:
 the eleven allowed models, price table and explicit task routing are pinned source
 configuration (owner decision, 2 October 2026). Nano and mini are refused; chat
-turns use 6.1 Sol, demanding tasks Astra, and scoped automations Luna. Historical
-reservations retain their recorded tariff id when replayed; unresolved calls under
-an older tariff remain reserved rather than being silently repriced.
+turns use 6.1 Sol, demanding tasks Astra, and scoped automations Luna. The server
+binds the task kind and routed model into the signed turn grant;
+admission refuses a different request model before any reservation or provider
+access. Historical reservations retain their recorded tariff id when replayed.
+Retired nano and mini price rows settle pending usage at their original tariff;
+unknown models or tariffs produce `effect.uncertain` with reason `unknown_tariff`,
+retain the full reservation and allow later usage processing to continue.
 
 The actor is elected with a PostgreSQL session advisory lease, used only for
 process leadership. It reads the budget stream once and serialises commands in

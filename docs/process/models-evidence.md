@@ -300,3 +300,45 @@ calls to the remaining eight models: **NOT RUN**; their arithmetic/admission
 are tested with pinned data and scripted provider usage. The three real calls
 qualify model ids and usage parsing through the complete gateway/settlement path.
 Nothing was pushed or merged.
+
+## Registry review fixes — 2 October 2026
+
+Source: `6207df7` plus these fixes on `work/bridge`. Linux, disposable NATS,
+PostgreSQL, OpenFGA and agentgateway with a scripted provider; no shared-stack
+change or paid call. Independent pass 1 identified both blockers below.
+
+- **PASS, red then green:** a `chat_turn` submitting `gpt-5.5` first returned
+  200, then returned 403 with no budget reservation or provider access. The
+  signed grant carries task `chat_turn` and allowed model `gpt-6.1-sol`; a
+  matching request still succeeds and settles. The server chooses that model
+  from the task table before signing; admission checks it before reserving.
+- **PASS, red then green:** replaying pending old-tariff nano/mini reservations
+  first threw `Unknown model` from usage ingestion. Retained, retired price rows
+  now settle one million input plus one million output tokens at **43 cents**
+  for nano and **214 cents** for mini, using their original tariff id. Both
+  remain refused for new calls even with a matching signed grant.
+- **PASS:** an unknown model between those usage lines records
+  `effect.uncertain` with `unknown_tariff`, retains its 100-cent reservation and
+  allows later ingestion, new Sol admission and settlement to continue.
+  An unknown-model rejection line first settled at zero cents; the extra
+  regression now keeps that second 100-cent reservation charged too.
+  Repeated ingestion is idempotent, and the budget projection rebuild matches
+  the recovered actor.
+- **PASS:** focused models, signed-token and proxy checks: 5 files passed,
+  58 tests passed / 1 paid test skipped.
+
+| Final check | Result |
+| --- | --- |
+| `npm run lint` | PASS, all five checks; five existing function-length warnings |
+| `npm run typecheck` | PASS, every workspace |
+| `npm run check:events` | PASS, 73 event types agree |
+| `MODELS_REAL_CALL=0 npm test` | PASS, 57 files passed / 5 skipped; 981 tests passed / 31 skipped; 243.27 seconds |
+| Staged secret scan | PASS |
+
+An earlier full run caught the API assertion that still expected eleven rows;
+it now verifies the two retained rows are retired and carry the old tariff id.
+One overlapping run also saw agentgateway exit during fixture startup, before
+an existing readiness assertion. All three readiness cases passed in isolation,
+and the final full run above passed without overlap.
+Fresh-install live upgrade, shared-stack deployment, paid calls, hosted CI and
+independent review pass 2: **NOT RUN** in this fix task.
