@@ -19,3 +19,4 @@ infra/spike-cluster/.state/
 # (apps/web); never committed, rebuilt on every install.
 .angular/
 out-tsc/
+apps/computer/.state/

@@ -11,7 +11,7 @@ export default tseslint.config(
   {
     // spikes and infra have separate qualification; they are not production workspaces.
     // The last two are apps/web's Angular build cache and its project-reference output.
-    ignores: ['**/dist/**', '**/node_modules/**', '**/coverage/**', 'spikes/**', 'infra/**', 'docs/design/**/*.js', '**/.angular/**', '**/out-tsc/**'],
+    ignores: ['**/.tools/**', '**/dist/**', '**/node_modules/**', '**/coverage/**', 'spikes/**', 'infra/**', 'docs/design/**/*.js', '**/.angular/**', '**/out-tsc/**'],
   },
   { linterOptions: { reportUnusedDisableDirectives: 'error' } },
   js.configs.recommended,
@@ -73,7 +73,7 @@ export default tseslint.config(
   {
     // Plain Node scripts and root config files: none of these belong to a
     // package tsconfig, so they get no type-aware rules.
-    files: ['scripts/**/*.mjs', '*.mjs', '*.cjs', 'vitest.config.ts'],
+    files: ['scripts/**/*.mjs', 'apps/computer/test/*.mjs', '*.mjs', '*.cjs', 'vitest.config.ts'],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
       globals: {

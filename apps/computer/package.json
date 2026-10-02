@@ -1,0 +1,10 @@
+{
+  "name": "@opencrane/computer",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build:image": "sh build.sh",
+    "test:image": "node test/run.mjs"
+  }
+}

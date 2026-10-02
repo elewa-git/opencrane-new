@@ -47,7 +47,7 @@ const app = buildServer(authConfig, {
     catalogue, binding: realtime.binding } } : {}),
 });
 
-await app.listen({ port, host });
+const address = await app.listen({ port, host });
 const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime);
 installShutdown(app, sockets, graceMs, async () => {
   const results = await Promise.allSettled([
@@ -58,4 +58,4 @@ installShutdown(app, sockets, graceMs, async () => {
   if (results.some((result) => result.status === 'rejected')) throw new Error('Resource cleanup failed');
 });
 
-app.log.info(`opencrane-server listening on http://${host}:${port} (ws at ${WEBSOCKET_PATH})`);
+app.log.info(`opencrane-server listening on ${address} (ws at ${WEBSOCKET_PATH})`);

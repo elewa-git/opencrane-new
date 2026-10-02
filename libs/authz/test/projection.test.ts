@@ -307,7 +307,7 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
 }, 45_000);
 
 it("persists model, tuples and event receipts in PostgreSQL across an OpenFGA restart", async () => {
-  const service = await openfga(dbs.postgres);
+  const service = await openfga(await dbs.postgres());
   try {
     const p = memberAuthorisation(await createStore(service.apiUrl, "test"));
     const events = [member("join"), member("role", "member.role_changed")];
@@ -426,7 +426,7 @@ it("deletes the fresh OpenFGA store when model creation fails", async () => {
 });
 
 it("cleans a rebuild store when the create response is lost at the HTTP boundary", async () => {
-  const service = await openfga(dbs.postgres);
+  const service = await openfga(await dbs.postgres());
   const client = new OpenFgaClient({ apiUrl: service.apiUrl });
   const before = await client.listStores({ pageSize: 100 });
   let releaseCreate: () => void = () => undefined;

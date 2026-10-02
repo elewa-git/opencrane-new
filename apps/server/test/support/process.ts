@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { connect, createServer } from 'node:net';
+import { connect } from 'node:net';
 import { record as asRecord } from '../record.ts';
 export const TEST_OIDC_ENV = {
   OIDC_ISSUER_URL: 'https://issuer.example.test',
@@ -14,18 +14,6 @@ export const TEST_OIDC_ENV = {
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Ask the OS for a free TCP port by briefly binding to port 0, then releasing it. */
-async function findFreePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.on('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      probe.close(() => (address === null || typeof address === 'string' ? reject(new Error('expected a network address')) : resolve(address.port)));
-    });
-  });
-}
 
 /** Parse every complete JSON line on `text`; a partial trailing line (still being written) is skipped. */
 export function parseJsonLines(text: string): Record<string, unknown>[] {
@@ -60,7 +48,7 @@ export async function sendRaw(port: number, request: string): Promise<string> {
 
 export interface RunningServer {
   child: ReturnType<typeof spawn>;
-  exited: Promise<{ code: number | null; signal: NodeJS.Signals | null }>;
+  exited: Promise<{ code: number | null; signal: NodeJS.Signals | null; exitedAtMs: number }>;
   port: number;
   stdout: () => string;
   stop: () => Promise<void>;
@@ -68,7 +56,7 @@ export interface RunningServer {
 
 /** Launch main.ts as a child process and wait until /healthz answers. */
 export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<RunningServer> {
-  const port = await findFreePort();
+  let port = 0;
   let stdout = '';
   let stderr = '';
   const child = spawn(process.execPath, ['--experimental-strip-types', ...(extraEnv['TEST_PROCESS_FAULTS'] ? ['--import', './apps/server/test/support/process-faults.ts'] : []), 'apps/server/src/main.ts'], {
@@ -76,10 +64,10 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
     // OTEL_EXPORTER_OTLP_ENDPOINT is blanked so the result never depends on what the host shell exports.
     // The OIDC settings are made-up test values: main.ts will not start without them, but nothing here
     // signs anyone in, so the issuer is never contacted.
-    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', NATS_CA_FILE: '', NATS_CERT_FILE: '', NATS_KEY_FILE: '', SILO_ID: '', DATABASE_URL: '', SHUTDOWN_GRACE_MS: '1000', PORT: String(port), HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
+    env: { ...process.env, ...TEST_OIDC_ENV, NATS_URL: '', NATS_CA_FILE: '', NATS_CERT_FILE: '', NATS_KEY_FILE: '', SILO_ID: '', DATABASE_URL: '', SHUTDOWN_GRACE_MS: '1000', PORT: '0', HOST: '127.0.0.1', LOG_LEVEL: 'info', OTEL_EXPORTER_OTLP_ENDPOINT: '', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null; exitedAtMs: number }>((resolve) => child.once('exit', (code, signal) => resolve({ code, signal, exitedAtMs: Date.now() })));
   child.stdout.on('data', (chunk: Buffer) => (stdout += chunk.toString('utf8')));
   child.stderr.on('data', (chunk: Buffer) => (stderr += chunk.toString('utf8')));
 
@@ -103,7 +91,13 @@ export async function startServer(extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
       await stop();
       throw new Error(`${failure}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
     }
-    if (await fetch(`http://127.0.0.1:${port}/healthz`).then((response) => response.ok, () => false)) {
+    const ready = parseJsonLines(stdout).find((line) => typeof line['msg'] === 'string'
+      && line['msg'].startsWith('opencrane-server listening on '));
+    if (ready) port = Number(/http:\/\/127\.0\.0\.1:(\d+)/.exec(String(ready['msg']))?.[1]);
+    if (port && await fetch(`http://127.0.0.1:${port}/healthz`).then(async (response) => {
+      await response.arrayBuffer();
+      return response.ok;
+    }, () => false)) {
       return { child, exited, port, stdout: () => stdout, stop };
     }
     await sleep(100);

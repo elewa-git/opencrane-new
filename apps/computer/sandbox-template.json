@@ -1,0 +1,141 @@
+{
+  "apiVersion": "extensions.agents.x-k8s.io/v1beta1",
+  "kind": "SandboxTemplate",
+  "metadata": {
+    "name": "computer"
+  },
+  "spec": {
+    "volumeClaimTemplatesPolicy": "Allowed",
+    "podTemplate": {
+      "metadata": {
+        "labels": {
+          "app": "computer"
+        }
+      },
+      "spec": {
+        "runtimeClassName": "gvisor",
+        "automountServiceAccountToken": false,
+        "terminationGracePeriodSeconds": 5,
+        "containers": [
+          {
+            "name": "computer",
+            "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:4dbe85e978021417c8e3fa509da2af5b8ab608f126dc5c92c04a89242ea43156",
+            "env": [
+              {
+                "name": "GATEWAY",
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "name": "computer-runtime",
+                    "key": "gateway"
+                  }
+                }
+              }
+            ],
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ],
+                "add": [
+                  "SETUID",
+                  "SETGID",
+                  "CHOWN",
+                  "DAC_OVERRIDE"
+                ]
+              },
+              "readOnlyRootFilesystem": true
+            },
+            "resources": {
+              "requests": {
+                "memory": "256Mi",
+                "cpu": "100m"
+              },
+              "limits": {
+                "memory": "512Mi"
+              }
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/health",
+                "port": 8081
+              },
+              "periodSeconds": 1,
+              "timeoutSeconds": 2
+            },
+            "volumeMounts": [
+              {
+                "name": "home",
+                "mountPath": "/home/agent"
+              },
+              {
+                "name": "codex",
+                "mountPath": "/home/codex"
+              },
+              {
+                "name": "control",
+                "mountPath": "/run/codex"
+              },
+              {
+                "name": "desktop",
+                "mountPath": "/home/desktop"
+              },
+              {
+                "name": "tmp",
+                "mountPath": "/tmp"
+              },
+              {
+                "name": "tool",
+                "mountPath": "/home/tool"
+              },
+              {
+                "name": "executor",
+                "mountPath": "/run/executor"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "home",
+            "emptyDir": {}
+          },
+          {
+            "name": "codex",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "control",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "desktop",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "tmp",
+            "emptyDir": {}
+          },
+          {
+            "name": "tool",
+            "emptyDir": {}
+          },
+          {
+            "name": "executor",
+            "emptyDir": {}
+          }
+        ]
+      }
+    },
+    "networkPolicyManagement": "Unmanaged"
+  }
+}

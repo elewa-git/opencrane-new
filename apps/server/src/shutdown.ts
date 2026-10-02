@@ -5,6 +5,7 @@ import { shutdownTelemetry } from '@opencrane/observability';
 export function installShutdown(app: FastifyInstance, sockets: WebSocketServer, graceMs: number, closeResources: () => Promise<void>) {
   let closing = false;
   let timedOut = false;
+  let startedAt = 0;
   // A request can become idle after close() has already swept keep-alive sockets.
   app.server.on('request', (_request, response) => {
     response.once('finish', () => {
@@ -17,9 +18,15 @@ export function installShutdown(app: FastifyInstance, sockets: WebSocketServer, 
     shutdownTelemetry((error) => { throw new Error('Telemetry shutdown failed', { cause: error }); }),
   ]);
   const stop = () => {
-    if (closing) process.exit(1);
+    const signalAt = performance.now();
+    const signalReceivedAtMs = Date.now();
+    if (closing) {
+      app.log.error({ signalReceivedAtMs }, 'server shutdown forced');
+      process.exit(1);
+    }
     closing = true;
-    app.log.info('server shutdown started');
+    startedAt = signalAt;
+    app.log.info({ signalReceivedAtMs }, 'server shutdown started');
     // No cleanup reserve: a request gets the entire advertised grace period.
     const deadline = setTimeout(() => {
       timedOut = true;
@@ -42,7 +49,9 @@ export function installShutdown(app: FastifyInstance, sockets: WebSocketServer, 
       // allSettled above keeps cleanup running even when one close fails.
       const failed = timedOut || results.some((result) => result.status === 'rejected')
         || resources.some((result) => result.status === 'rejected');
-      if (failed) app.log.error('server shutdown failed');
+      const elapsedMs = performance.now() - startedAt;
+      if (failed) app.log.error({ elapsedMs }, 'server shutdown failed');
+      else app.log.info({ elapsedMs }, 'server shutdown completed');
       process.exit(failed ? 1 : 0);
     });
   };

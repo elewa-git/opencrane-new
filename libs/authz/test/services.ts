@@ -1,15 +1,35 @@
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { Pool } from "pg";
-import { freePort } from "@opencrane/event-store/testing";
+import { tcpProxy } from "@opencrane/event-store/testing";
 
 const exec = promisify(execFile);
+const containers = new Set<string>();
+const fixtureLabelValue = String(process.pid);
+const fixtureLabel = `opencrane.test.process=${fixtureLabelValue}`;
 const image =
   "openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55";
 async function docker(...args: string[]) {
   return (await exec("docker", args, { timeout: 120_000 })).stdout.trim();
+}
+function reapContainers() {
+  for (const id of containers) {
+    const inspected = spawnSync("docker", [
+      "inspect", "--format", '{{ index .Config.Labels "opencrane.test.process" }}', id,
+    ], { encoding: "utf8", timeout: 10_000 });
+    if (inspected.status === 0 && inspected.stdout.trim() === fixtureLabelValue) {
+      spawnSync("docker", ["rm", "-f", id], { stdio: "ignore", timeout: 10_000 });
+    }
+  }
+}
+process.once("exit", reapContainers);
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    reapContainers();
+    process.kill(process.pid, signal);
+  });
 }
 export async function until(check: () => boolean | Promise<boolean>, timeout = 15_000) {
   const deadline = performance.now() + timeout;
@@ -23,9 +43,17 @@ export async function until(check: () => boolean | Promise<boolean>, timeout = 1
 
 export async function openfga(postgres?: string) {
   const name = `authz-${randomUUID()}`;
-  const port = await freePort();
-  const grpc = await freePort();
-  const apiUrl = `http://127.0.0.1:${port}`;
+  // The container reaches loopback-only control databases through a bound relay.
+  let relay: Awaited<ReturnType<typeof tcpProxy>> | undefined;
+  if (postgres) {
+    const address = new URL(postgres);
+    const gateway = await docker("network", "inspect", "bridge", "--format", "{{(index .IPAM.Config 0).Gateway}}");
+    relay = await tcpProxy(() => ({ host: address.hostname, port: Number(address.port || 5432) }), gateway);
+    const forwarded = new URL(postgres);
+    forwarded.hostname = gateway;
+    forwarded.port = String(relay.port);
+    postgres = forwarded.href;
+  }
   const database = postgres
     ? ["--datastore-engine", "postgres", "--datastore-uri", postgres]
     : ["--datastore-engine", "memory"];
@@ -33,32 +61,36 @@ export async function openfga(postgres?: string) {
     await docker(
       "run",
       "--rm",
-      "--network",
-      "host",
       image,
       "migrate",
       ...database,
     );
   }
-  await docker(
+  const container = await docker(
     "run",
     "-d",
     "--name",
     name,
-    "--network",
-    "host",
+    "--label",
+    fixtureLabel,
+    "-p",
+    "127.0.0.1::8080",
     image,
     "run",
     ...database,
     "--http-addr",
-    `127.0.0.1:${port}`,
+    "0.0.0.0:8080",
     "--grpc-addr",
-    `127.0.0.1:${grpc}`,
+    "0.0.0.0:8081",
     "--metrics-enabled=false",
     "--playground-enabled=false",
     "--log-level",
     "error",
   );
+  containers.add(container);
+  let httpPort = Number((await docker("port", container, "8080/tcp")).split(":")[1]);
+  const proxy = await tcpProxy(() => ({ host: "127.0.0.1", port: httpPort }));
+  const apiUrl = `http://127.0.0.1:${proxy.port}`;
   const ready = () =>
     until(async () => {
       try {
@@ -72,24 +104,31 @@ export async function openfga(postgres?: string) {
   try {
     await ready();
   } catch (error) {
-    await docker("rm", "-f", name);
+    await docker("rm", "-f", container);
+    containers.delete(container);
+    await proxy.close();
+    await relay?.close();
     throw error;
   }
   return {
     apiUrl,
     async pause() {
-      await docker("pause", name);
+      await docker("pause", container);
     },
     async resume() {
-      await docker("unpause", name);
+      await docker("unpause", container);
       await ready();
     },
     async restart() {
-      await docker("restart", name);
+      await docker("restart", container);
+      httpPort = Number((await docker("port", container, "8080/tcp")).split(":")[1]);
       await ready();
     },
     async close() {
-      await docker("rm", "-f", name);
+      await docker("rm", "-f", container);
+      containers.delete(container);
+      await proxy.close();
+      await relay?.close();
     },
   };
 }
@@ -98,18 +137,23 @@ export async function databases() {
   let container: string | undefined;
   let url = process.env["PG_TEST_URL"];
   if (!url) {
-    const port = await freePort();
+    const name = `authz-postgres-${randomUUID()}`;
     container = await docker(
       "run",
       "-d",
       "--rm",
+      "--name",
+      name,
+      "--label",
+      fixtureLabel,
       "-p",
-      `127.0.0.1:${port}:5432`,
+      "127.0.0.1::5432",
       "-e",
       "POSTGRES_PASSWORD=test",
       "postgres:17.6-alpine",
     );
-    url = `postgres://postgres:test@127.0.0.1:${port}/postgres`;
+    containers.add(container);
+    url = `postgres://postgres:test@${await docker("port", container, "5432/tcp")}/postgres`;
   }
   const admin = new Pool({ connectionString: url });
   await until(async () => {
@@ -130,10 +174,15 @@ export async function databases() {
     return address.href;
   }
   const queue = new Pool({ connectionString: await create() });
-  const postgres = process.env["OPENFGA_TEST_PG_URL"] ?? (await create());
+  let postgres: Promise<string> | undefined;
   return {
     queue,
-    postgres,
+    // Most tests only use the queue database. Do not create and drop an unused database.
+    postgres() {
+      return postgres ??= process.env["OPENFGA_TEST_PG_URL"]
+        ? Promise.resolve(process.env["OPENFGA_TEST_PG_URL"])
+        : create();
+    },
     async close() {
       await queue.end();
       for (const name of names) {
@@ -146,6 +195,7 @@ export async function databases() {
       await admin.end();
       if (container) {
         await docker("rm", "-f", container);
+        containers.delete(container);
       }
     },
   };

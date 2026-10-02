@@ -1,5 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    "**/.tools/**"
+  ],
   "workspaces": {
     ".": {
       "entry": [],
@@ -11,7 +14,8 @@
     "apps/server": {
       "entry": [
         "test/**/*.test.ts",
-        "test/support/process-faults.ts"
+        "test/support/process-faults.ts",
+        "test/support/ephemeral-ports.ts"
       ],
       "project": [
         "src/**/*.ts",
@@ -112,6 +116,23 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ]
+    },
+    "apps/computer": {
+      "entry": [
+        "src/entrypoint.ts",
+        "src/bridge.ts",
+        "src/desktop.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "codex",
+        "kasmvncpasswd",
+        "Xvnc",
+        "setpriv",
+        "kubectl"
       ]
     }
   }

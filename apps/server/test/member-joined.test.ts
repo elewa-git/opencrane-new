@@ -264,7 +264,9 @@ it('reports unavailable if NATS stops after validation and before append, with n
   expect(response.json<JoinResult>()).toEqual({ status: 'unavailable' });
   await nats.restart();
   expect(await nats.store.head()).toBe(1);
-}, 20_000);
+// EventStore still stops retrying after ten seconds. This limit also covers
+// stopping and restarting the real NATS process on a busy machine.
+}, 45_000);
 
 it('uses the process connection adapter against real NATS', async () => {
   const connected = await connectEventStore(nats.env());

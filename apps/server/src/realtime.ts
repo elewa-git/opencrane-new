@@ -32,6 +32,7 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
   }
   function slow() {
     active = false;
+    logger.info({ operation: 'members.backpressure', position }, 'member subscriber needs resync');
     // Do not advance past a dropped delta. The durable projection keeps every state.
     send({ ...envelope(), type: 'resync' });
     socket.close(1013, 'resume from last received position');
