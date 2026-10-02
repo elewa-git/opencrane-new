@@ -233,3 +233,5 @@ Permanent report refusals close with 1008 and a safe reason. The watcher logs th
 computer id and reason, then stops reconnecting that computer for its lifetime;
 other computers continue. Resolve the refused report before restarting the server.
 Transient persistence failures still close with 1011 and retry from durable history.
+Credential expiry closes with 4001 and reconnects with a fresh credential; only a
+recorded report refusal stops automatic recovery.

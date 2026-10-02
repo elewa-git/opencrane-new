@@ -101,10 +101,10 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
             await kube.credentials(computer.computerId, token, true);
             const connected = await connectBridge(options, { ...computer, assistantId: conversation.assistantId, bearer: token.value,
               url: `${proxyUrl.replace('http:', 'ws:')}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081/proxy/bridge` }, tokens);
-            connected.socket.once('close', code => {
-              if (code !== 1008) return;
+            connected.socket.once('close', () => {
+              if (!connected.rejection) return;
               refused.add(computer.computerId);
-              logger.error({ computerId: computer.computerId, reason: connected.rejection ?? 'Bridge refused connection' }, 'Bridge recovery stopped; report rejected');
+              logger.error({ computerId: computer.computerId, reason: connected.rejection }, 'Bridge recovery stopped; report rejected');
             });
             links.set(computer.computerId, connected); return connected;
               })().finally(() => opening.delete(computer.computerId));

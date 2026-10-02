@@ -108,7 +108,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
   } });
   wss.on('connection', next => {
     socket?.terminate(); socket = next; resumed = false;
-    const expiry = setTimeout(() => next.close(1008), Math.max(1, driver.credential().expiresAt - Date.now()));
+    const expiry = setTimeout(() => next.close(4001, 'Credential expired'), Math.max(1, driver.credential().expiresAt - Date.now()));
     next.once('close', () => clearTimeout(expiry)); next.on('error', () => next.terminate());
     next.on('message', bytes => {
       try {
