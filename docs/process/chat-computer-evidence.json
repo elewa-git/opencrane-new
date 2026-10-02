@@ -1,0 +1,127 @@
+{
+  "date": "2026-10-02T21:04:16.451Z",
+  "source": "113854436bc4b4caaae595ac222b5c45d5834cd3",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:b2a2852e085fe852a61125f48258630ac284ab1090e35fcf235e9eed9b8a3994",
+  "receipts": [
+    {
+      "name": "Pod ready",
+      "result": "PASS",
+      "detail": "7379 ms from claim apply, fresh Pod; local registry/layers may be cached"
+    },
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "CRI confirms gVisor, 512 MiB limit"
+    },
+    {
+      "name": "health",
+      "result": "PASS",
+      "detail": "ready endpoint and ready report after Codex initialisation"
+    },
+    {
+      "name": "storage",
+      "result": "PASS",
+      "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
+    },
+    {
+      "name": "proxy grants",
+      "result": "PASS",
+      "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
+    },
+    {
+      "name": "executor isolation",
+      "result": "PASS",
+      "detail": "real Codex-requested native exec-server command: UID 1001, seccomp EPERM for proxy/gateway/IPv6, private files and process tokens denied"
+    },
+    {
+      "name": "desktop",
+      "result": "PASS",
+      "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
+    },
+    {
+      "name": "documents",
+      "result": "PASS",
+      "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
+    },
+    {
+      "name": "network policy",
+      "result": "PASS",
+      "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
+    },
+    {
+      "name": "fresh image checks",
+      "result": "PASS",
+      "detail": "all isolation, proxy, desktop, document and network assertions passed"
+    },
+    {
+      "name": "hostile PVC symlink",
+      "result": "PASS",
+      "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
+    },
+    {
+      "name": "hostile PVC fifo",
+      "result": "PASS",
+      "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
+    },
+    {
+      "name": "hostile PVC dangling",
+      "result": "PASS",
+      "detail": "UID 1001 creates attack in legacy 0777 PVC; real entrypoint refuses before services; launcher hash and target ownership/mode unchanged"
+    },
+    {
+      "name": "PVC resume",
+      "result": "PASS",
+      "detail": "same PVC, new Pod after native suspension; retained file and safely repaired 0777 volume root"
+    },
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "CRI confirms gVisor, 512 MiB limit"
+    },
+    {
+      "name": "health",
+      "result": "PASS",
+      "detail": "ready endpoint and ready report after Codex initialisation"
+    },
+    {
+      "name": "storage",
+      "result": "PASS",
+      "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
+    },
+    {
+      "name": "proxy grants",
+      "result": "PASS",
+      "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
+    },
+    {
+      "name": "executor isolation",
+      "result": "PASS",
+      "detail": "real Codex-requested native exec-server command: UID 1001, seccomp EPERM for proxy/gateway/IPv6, private files and process tokens denied"
+    },
+    {
+      "name": "desktop",
+      "result": "PASS",
+      "detail": "UID 1002 + no_new_privs, private home denied; sandbox-enabled Playwright launches real Chromium and renders text"
+    },
+    {
+      "name": "documents",
+      "result": "PASS",
+      "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
+    },
+    {
+      "name": "network policy",
+      "result": "PASS",
+      "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
+    },
+    {
+      "name": "resumed image checks",
+      "result": "PASS",
+      "detail": "all isolation, proxy, desktop, document and network assertions passed"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "p21-computer deleted"
+    }
+  ]
+}

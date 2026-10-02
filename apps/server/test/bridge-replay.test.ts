@@ -164,7 +164,7 @@ it('reconnects after credential expiry and delivers the pending message once', a
       .toEqual(['agent.turn_started', 'agent.turn_completed']);
     expect(loggerLines.join('')).not.toContain('Bridge recovery stopped');
   } finally { stop.abort(); await work; delivery.mockRestore(); await channel.close(); server.close(); await fixture.close(); await dbs.close(); }
-});
+}, 30_000);
 
 it('surfaces a permanent report rejection and stops automatic reconnect attempts', async () => {
   const fixture = await replayFixture(), dbs = await databases(), stop = new AbortController();

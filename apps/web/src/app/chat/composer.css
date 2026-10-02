@@ -1,0 +1,21 @@
+/* Adapted from OpenCrane 1 10abd0ef6, conversation-composer.component.scss; handoff sizing and toolbar. */
+:host { display: block; }
+.composer { position: relative; background: #fff; border: 1px solid #d9dfe0; border-radius: 12px; box-shadow: 0 3px 14px #16191a08; padding: 12px 14px 8px; }
+.composer:focus-within { border-color: #9fdde8; }
+textarea { width: 100%; resize: none; border: 0; background: transparent; color: #2b3133; font: 14px/1.6 var(--oc-font-sans); min-height: 54px; }
+textarea:focus { outline: none; }
+textarea:focus-visible { outline: 2px solid #0db5cc; outline-offset: 2px; }
+.toolbar { display: flex; gap: 8px; align-items: center; }
+.toolbar button { min-width: 32px; min-height: 32px; border-radius: 7px; font-size: 20px; }
+.spacer { flex: 1; }
+.mode { color: #616a6c; font-size: 11px; white-space: nowrap; }
+.hint { color: #81888a; font: 9px var(--oc-font-mono); }
+.toolbar .send { background: #0db5cc; color: #16191a; }
+.toolbar .send:disabled { background: #c9d1d2; cursor: default; }
+.toolbar .stop { font-size: 12px; color: #c1392b; border: 1px solid #ecd2cf; padding: 0 10px; }
+.attach-menu { position: absolute; z-index: 5; bottom: 54px; left: 12px; width: min(300px, calc(100% - 24px)); border: 1px solid #d9dfe0; border-radius: 10px; background: white; box-shadow: var(--oc-shadow-paper); padding: 12px; animation: oc-deal .38s var(--oc-ease-fold); }
+.attach-menu strong, .attach-menu p { font-size: 12px; }
+.attach-menu button { width: 100%; display: flex; gap: 8px; align-items: center; min-height: 44px; text-align: left; font-size: 12px; }
+.attach-menu small { color: #81888a; margin-left: auto; }
+.notice { color: #616a6c; font-size: 11px; margin: 8px 2px 0; }
+@media(max-width: 700px) { .toolbar button { min-width: 44px; min-height: 44px; } .hint { display: none; } .composer { padding: 10px; } .mode { font-size: 10px; } }

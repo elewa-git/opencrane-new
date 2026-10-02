@@ -76,7 +76,9 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
         try {
           const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
           const message = rows.find(r => r.event.type === 'message.posted' && !rows.some(t =>
-            ['agent.turn_completed', 'agent.turn_failed'].includes(t.event.type) && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id));
+            ['agent.turn_completed', 'agent.turn_failed'].includes(t.event.type) && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id) &&
+            (!rows.some(t => t.event.type === 'agent.turn_stop_requested' && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id) ||
+              rows.some(t => t.event.type === 'agent.turn_started' && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id)));
           const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
           const current = lifecycle.findLast(row => !row.event.type.startsWith('computer.turn_'))?.event;
           const closed = new Set(lifecycle.filter(row => row.event.type === 'computer.turn_closed' && row.event.silo === options.silo)
@@ -117,10 +119,17 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
           }
           link.socket.send(JSON.stringify({ type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
             assistantId: conversation.assistantId, text: options.keys.decrypt(options.silo, conversation.conversationId, message.event.data), token: 'preparing', expiresAt: Date.now() + 120_000 }));
+          sendStop(link.socket, rows, message.event.id, conversation.conversationId);
         } catch { /* Dependency failures retry from the recorded message; no turn is invented. */ }
       }));
       await delay(250, undefined, { signal });
     }
   } catch (error) { if (!signal.aborted) throw error; }
   finally { for (const link of links.values()) link.socket.terminate(); await Promise.all([...links.values()].map(link => link.settled())); }
+}
+
+function sendStop(socket: WebSocket, rows: Awaited<ReturnType<typeof chatHistory>>, turnId: string, conversationId: string) {
+  if (rows.some(row => row.event.type === 'agent.turn_stop_requested' && z.object({ turnId: z.string() }).parse(row.event.data).turnId === turnId)) {
+    socket.send(JSON.stringify({ type: 'stop', turnId, conversationId }));
+  }
 }

@@ -1,4 +1,4 @@
-@if (!orgPage) {
+@if (workspacePage) { <oc-workspace /> } @else if (!orgPage) {
   <oc-sign-in />
 } @else { <div class="app-frame">
   <header class="mobile-bar">

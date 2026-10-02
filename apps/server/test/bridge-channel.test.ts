@@ -135,3 +135,84 @@ it('reconnects after 121 seconds and executes the pending message once with a fr
     expect(runs).toBe(1);
   } finally { clock.mockRestore(); socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+it('interrupts the requested Codex turn and retains the partial report', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-stop-`), server = createServer();
+  const reports: { type: string; text?: string | undefined }[] = [];
+  const channel = bridgeChannel(server, {
+    rpc(method, params) {
+      if (method === 'thread/start') return Promise.resolve({ thread: { id: 'thread' } });
+      if (method === 'turn/start') {
+        channel.notification({ method: 'item/agentMessage/delta', params: { threadId: 'thread', itemId: 'reply', delta: 'Partial' } });
+        return Promise.resolve({ turn: { id: 'codex-turn' } });
+      }
+      expect(method).toBe('turn/interrupt'); expect(params).toEqual({ threadId: 'thread', turnId: 'codex-turn' });
+      channel.notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { status: 'interrupted' } } });
+      return Promise.resolve({});
+    },
+    async grant() {}, credential: () => ({ value: 'test', expiresAt: Date.now() + 60_000 }), journal: `${directory}/reports`,
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, { headers: { 'x-bridge-token': 'test' } });
+  socket.on('message', raw => {
+    const row = z.object({ sequence: z.number(), type: z.string(), text: z.string().optional() }).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : ''));
+    reports.push(row); socket.send(JSON.stringify({ type: 'ack', sequence: row.sequence, token: 'turn', expiresAt: Date.now() + 60_000 }));
+  });
+  try {
+    await once(socket, 'open'); socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    socket.send(JSON.stringify({ type: 'turn', id: 'message', conversationId: 'conversation', assistantId: 'assistant', text: 'Hello', token: 'turn', expiresAt: Date.now() + 60_000 }));
+    await until(() => reports.some(row => row.text === 'Partial'));
+    socket.send(JSON.stringify({ type: 'stop', turnId: 'message', conversationId: 'conversation' }));
+    await until(() => reports.some(row => row.type === 'agent.turn_failed'), 1500);
+    expect(reports.find(row => row.type === 'agent.message_delta')?.text).toBe('Partial');
+  } finally { socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('retries a failed Stop after turn/start returns, retaining the active turn and its reports', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-stop-race-`), server = createServer();
+  let release!: (value: unknown) => void, interrupts = 0;
+  const start = new Promise<unknown>(resolve => { release = resolve; });
+  const reports: { type: string; text?: string | undefined }[] = [];
+  const channel = bridgeChannel(server, {
+    rpc(method) {
+      if (method === 'thread/start') return Promise.resolve({ thread: { id: 'thread' } });
+      if (method === 'turn/start') {
+        channel.notification({ method: 'item/agentMessage/delta', params: { threadId: 'thread', itemId: 'reply', delta: 'Partial' } });
+        return start;
+      }
+      if (++interrupts === 1) return Promise.reject(new Error('Transport unavailable'));
+      channel.notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { status: 'interrupted' } } });
+      return Promise.resolve({});
+    },
+    async grant() {}, credential: () => ({ value: 'test', expiresAt: Date.now() + 60_000 }), journal: `${directory}/reports`,
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const connect = async () => {
+    const ws = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, { headers: { 'x-bridge-token': 'test' } });
+    ws.on('message', raw => {
+      const row = z.object({ sequence: z.number(), type: z.string(), text: z.string().optional() }).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : ''));
+      reports.push(row); ws.send(JSON.stringify({ type: 'ack', sequence: row.sequence, token: 'turn', expiresAt: Date.now() + 60_000 }));
+    });
+    await once(ws, 'open'); ws.send(JSON.stringify({ type: 'resume', since: 0 })); return ws;
+  };
+  let socket = await connect();
+  const stop = { type: 'stop', turnId: 'message', conversationId: 'conversation' };
+  try {
+    socket.send(JSON.stringify({ type: 'turn', id: 'message', conversationId: 'conversation', assistantId: 'assistant', text: 'Hello', token: 'turn', expiresAt: Date.now() + 60_000 }));
+    await until(() => reports.some(row => row.text === 'Partial'));
+    socket.send(JSON.stringify(stop));
+    // A subsequent replay response proves the preceding Stop frame was processed.
+    const count = reports.length; socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    await until(() => reports.length > count);
+    release({ turn: { id: 'codex-turn' } });
+    await until(() => interrupts === 1);
+    expect(reports.some(row => row.type === 'agent.turn_failed')).toBe(false);
+    socket.terminate(); socket = await connect();
+    channel.notification({ method: 'item/agentMessage/delta', params: { threadId: 'thread', itemId: 'reply', delta: ' still running' } });
+    await until(() => reports.some(row => row.text === ' still running'));
+    socket.send(JSON.stringify(stop)); await until(() => reports.some(row => row.type === 'agent.turn_failed'));
+    expect(interrupts).toBe(2);
+  } finally { socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});

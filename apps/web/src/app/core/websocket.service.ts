@@ -4,6 +4,7 @@
 // waiting longer each time with a random jitter so a server restart is not
 // met with every client retrying at once.
 import { Injectable, type OnDestroy, computed, inject, signal } from '@angular/core';
+import { Subject } from 'rxjs';
 import { serverMessageSchema, type ClientMessage, type ServerMessage } from '@opencrane/protocol';
 import {
   PAGE_LOCATION,
@@ -44,6 +45,9 @@ export class WebSocketService implements OnDestroy {
   private readonly stateSignal = signal<ConnectionState>('idle');
   private readonly historySignal = signal<ServerMessage[]>([]);
   private readonly lastMessageSignal = signal<ServerMessage | undefined>(undefined);
+  private readonly incoming = new Subject<ServerMessage>();
+  /** Every validated envelope, including bursts within one Angular render. */
+  readonly received = this.incoming.asObservable();
 
   /** The current connection state, for a status indicator. */
   readonly state = this.stateSignal.asReadonly();
@@ -192,6 +196,7 @@ export class WebSocketService implements OnDestroy {
   }
 
   private pushMessage(message: ServerMessage): void {
+    this.incoming.next(message);
     this.lastMessageSignal.set(message);
     this.historySignal.update((history) => [...history, message].slice(-MAX_HISTORY));
   }

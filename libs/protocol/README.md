@@ -41,3 +41,8 @@ runtime socket boundary; Angular tests cover client handling. This skeleton is n
 live-qualified chat or command protocol and stores no recoverable state.
 The only runtime dependency is Zod; the package is usable by browser and Node code.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
+
+Chat HTTP response schemas (`chatContextSchema`, `chatListSchema`,
+`chatFeedSchema`, `chatRowSchema`) validate browser reads. Known display fields
+are typed; unrendered event fields stay opaque. `WebSocketService.received` in the
+web app delivers each validated envelope without Angular signal coalescing.

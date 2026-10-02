@@ -12,6 +12,7 @@ import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb } from '@opencrane/projections';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
+import { browserChatJourney } from './browser-chat.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { base, directory, readEnv, root, authEnv } from './config.ts';
@@ -125,6 +126,7 @@ try {
     return Boolean(computer);
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
+  if (browser) await browserChatJourney(browser.memberPage, origin);
   const namespace = `opencrane-${silo}`;
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();

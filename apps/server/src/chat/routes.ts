@@ -26,6 +26,7 @@ export async function chatRows(options: ChatOptions, conversationId: string, sin
   }) };
 }
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
+  app.get('/api/chat', handler);
   app.route({ method: ['GET', 'POST'], url: '/api/conversations', handler });
   app.route({ method: ['GET', 'POST'], url: '/api/conversations/:conversationId/messages', handler });
   async function handler(request: FastifyRequest, reply: FastifyReply) {
@@ -50,16 +51,35 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
 
 async function read(request: FastifyRequest, reply: FastifyReply, options: ChatOptions, memberId: string, conversationId?: string) {
   const auth = memberAuthorisation(options.binding);
+        if (request.url === '/api/chat') {
+          const result = await options.db.query<{ assistant_id: string }>(
+            "SELECT assistant_id FROM computers WHERE silo = $1 AND owner_id = $2 AND kind = 'personal'", [options.silo, memberId]);
+          const assistantId = result.rows[0]?.assistant_id;
+          return reply.send({ memberId, assistantId: assistantId && (await auth.actsFor(memberId, assistantId)).allowed ? assistantId : null });
+        }
         if (conversationId) {
           const { since } = z.object({ since: z.coerce.number().int().nonnegative().default(0) }).parse(request.query);
           return reply.send(await chatRows(options, conversationId, since));
         }
         const rows = [];
         for (const row of await listConversations(options.db, options.silo)) {
-          if ((await auth.conversation(memberId, row.conversationId, 'read')).allowed) rows.push(row);
+          if ((await auth.conversation(memberId, row.conversationId, 'read')).allowed) rows.push({ ...row, ...await summary(options, row.conversationId) });
         }
         return reply.send({ rows });
 
+}
+
+async function summary(options: ChatOptions, conversationId: string) {
+  // ponytail: scan each authorised projection for the prototype; cache summaries in the projection when history grows.
+  const result = await options.db.query<{ type: string; data: unknown }>(
+    'SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2 ORDER BY position', [options.silo, conversationId]);
+  const first = result.rows.find(row => row.type === 'message.posted');
+  const last = result.rows.findLast(row => ['message.posted', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested', 'conversation.closed'].includes(row.type));
+  const title = first ? options.keys.decrypt(options.silo, conversationId, first.data).slice(0, 60) : 'New session';
+  const status = last?.type === 'conversation.closed' ? 'closed' : last?.type === 'agent.turn_failed' ? 'failed'
+    : last?.type === 'agent.turn_completed' || last?.type === 'agent.turn_stop_requested' ? 'done'
+      : last ? 'working' : 'open';
+  return { title, status };
 }
 
 async function write(request: FastifyRequest, reply: FastifyReply, options: ChatOptions, memberId: string, conversationId?: string) {

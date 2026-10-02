@@ -11,9 +11,9 @@ import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepa
 
 const exec = promisify(execFile);
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'];
-async function run(command: string, args: string[], env: Record<string, string> = base) {
+async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
-  try { return (await exec(command, args, { cwd: root, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout; }
+  try { return (await exec(command, args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
   catch (error) {
     await save('last-error.log', String(error));
     throw new Error(`${command} failed; see the private last-error.log`);
@@ -252,7 +252,7 @@ async function up(fresh: boolean) {
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory });
+    { ...base, DEV_STACK_DIR: directory }, 300_000);
   console.log(output.trim());
 }
 async function status() {

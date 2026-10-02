@@ -67,10 +67,13 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       page.setDefaultTimeout(30_000);
       stage = `${role} login`;
       await login(page, origin, users[role]);
-      stage = `${role} cookie`;
+      stage = `${role} signed-in screen`;
       await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+      stage = `${role} cookie`;
       const value = await cookie(page.context(), config, origin);
+      stage = `${role} session decoding`;
       const session = decodeSession(config, value);
+      stage = `${role} identity`;
       assert.equal(session.sub, users[role].id);
       assert.equal(session.orgId, config.expectedOrgId);
       assert(session.idToken, 'Real login retains its ID token for logout');
@@ -83,10 +86,11 @@ export async function browserSessions(config: AuthConfig, origin: string) {
     await logoutCsrfChecks(page, origin);
     stage = 'refusal checks';
     await refusalChecks(browser, config, origin, users.member);
-    return { sessions, close: async () => {
+    return { sessions, memberPage, close: async () => {
       try {
         stage = 'token exposure probes';
         await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });
+        await memberPage.goto(origin);
         stage = 'form logout';
         await formLogout(memberPage, config, origin);
         stage = 'credentials after logout';
