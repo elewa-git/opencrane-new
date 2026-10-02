@@ -58,3 +58,18 @@ durable history and event replay belong to the future server implementation.
 Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-hosted
 DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
+
+## Sign-in
+
+`/` shows the SSO-first sign-in screen or the current session and sign-out action.
+`/signin/handoff` opens the existing server login route; Cancel returns home.
+`/signin/rejected` shows fixed, safe failure copy with an SSO recovery action.
+All three use the organisation-admin tokens and shared states at desktop and
+390px widths. Passwords stay on Zitadel. Email sign-in is unavailable until
+delivery is qualified; there is no fake sent-email screen.
+
+Run `npm run visual:signin` with the dev stack running to capture the three screens
+and reference comparisons in `/home/jente/.fleet/signin-shots/`. The capture freezes
+the transient handoff timer only in its own browser. The live journey uses normal
+timers, real Zitadel and both test accounts; see the
+[sign-in evidence](../../docs/process/signin-evidence.md).

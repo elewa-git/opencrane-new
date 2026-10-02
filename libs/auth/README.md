@@ -38,7 +38,8 @@ npm run typecheck -w libs/auth
 ```
 
 Tests exercise cookies, expiry, malformed config, PKCE and cross-organisation refusal
-against a disposable loopback provider. Real Zitadel and fresh-silo journeys remain unqualified.
+against a disposable loopback provider. The [dev-stack journey](../../infra/dev-stack/README.md) also exercises real Zitadel,
+including logout, a mismatched organisation pin and a short-lived session.
 There is no database state to replay here; rotating the cookie key invalidates old cookies.
 Runtime dependencies are openid-client and Zod. See the [plan](../../plan.md) for
 identity boundaries and [protocol](../protocol/README.md) for the logout response contract.

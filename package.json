@@ -23,7 +23,8 @@
     "lint:unused": "knip",
     "lint:docs": "markdownlint-cli2",
     "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'",
-    "provision": "node --experimental-strip-types libs/handlers/src/provision.ts"
+    "provision": "node --experimental-strip-types libs/handlers/src/provision.ts",
+    "visual:signin": "node scripts/capture-signin.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

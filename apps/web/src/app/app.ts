@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, type OnInit, computed, inject, signal } from '@angular/core';
-import { integrationsResponseSchema, logoutResponseSchema, type IntegrationRow, type SharedStateKind } from '@opencrane/protocol';
-import { NAVIGATE } from './core/navigate';
+import { integrationsResponseSchema, type IntegrationRow, type SharedStateKind } from '@opencrane/protocol';
+import { SignIn } from './sign-in/sign-in';
 import { WebSocketService } from './core/websocket.service';
 import { SharedState } from './shared-state/shared-state';
 
@@ -20,12 +20,11 @@ const STATE_EXAMPLES: ReadonlyArray<{ kind: SharedStateKind; name: string; messa
 ];
 
 @Component({
-  selector: 'app-root', imports: [SharedState], templateUrl: './app.html', styleUrl: './app.css',
+  selector: 'app-root', imports: [SharedState, SignIn], templateUrl: './app.html', styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class App implements OnInit {
   private readonly ws = inject(WebSocketService);
-  private readonly navigate = inject(NAVIGATE);
   protected readonly orgPage = globalThis.location.pathname.startsWith('/org');
   protected readonly statesPage = globalThis.location.pathname.endsWith('/states');
   protected readonly examples = STATE_EXAMPLES;
@@ -35,8 +34,6 @@ export class App implements OnInit {
   protected readonly loadedAt = signal<string | undefined>(undefined);
   protected readonly addUnavailable = signal(false);
   protected readonly menuOpen = signal(false);
-  protected readonly signOutPending = signal(false);
-  protected readonly signOutError = signal<string | undefined>(undefined);
   protected readonly attention = computed(() => this.rows().filter((row) =>
     ['needs_input', 'failed', 'unknown', 'access_changed'].includes(row.status.kind)));
   protected readonly reviews = computed(() => this.rows().filter((row) =>
@@ -45,24 +42,10 @@ export class App implements OnInit {
     : this.selectedTab() === 'attention' ? this.attention() : this.reviews());
 
   ngOnInit(): void {
-    this.ws.connect();
+    if (this.orgPage) this.ws.connect();
     if (this.orgPage && !this.statesPage) void this.load();
   }
 
-  protected signIn(): void { this.navigate('/auth/login'); }
-  protected async signOut(): Promise<void> {
-    this.signOutPending.set(true);
-    this.signOutError.set(undefined);
-    try {
-      const response = await fetch('/auth/logout', { method: 'POST' });
-      if (!response.ok) throw new Error(`sign out failed with status ${response.status}`);
-      const body: unknown = await response.json().catch(() => null);
-      const result = logoutResponseSchema.safeParse(body);
-      this.navigate(result.success && result.data.endSessionUrl !== null ? result.data.endSessionUrl : '/');
-    } catch (error) {
-      this.signOutError.set(error instanceof Error ? error.message : 'sign out failed');
-    } finally { this.signOutPending.set(false); }
-  }
   protected select(tab: Tab): void { this.selectedTab.set(tab); }
   protected refresh(): void {
     if (this.loadState() === 'loading' || this.loadState() === 'retrying') return;

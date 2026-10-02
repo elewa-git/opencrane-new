@@ -68,9 +68,17 @@ export async function generate(origin: string) {
       NATS_NKEY_SEED_FILE: `${directory}/${role}.seed`, NATS_INBOX_PREFIX: `_INBOX.${role}`, NATS_REPLICAS: '1',
       ...(role === 'command' ? {} : { DATABASE_URL: database(role as 'projection' | 'dispatcher', role === 'projection' ? 'projections' : 'handlers') }) });
   }
-  await writeEnv('auth', { OIDC_ISSUER_URL: 'https://oidc.invalid', OIDC_CLIENT_ID: 'dev-only-no-provider',
-    OIDC_REDIRECT_URI: `${origin}/auth/callback`, OIDC_COOKIE_SECRET: secret(), OIDC_EXPECTED_ORG_ID: 'dev-only',
-    OIDC_COOKIE_SECURE: 'true' });
+  const oidc = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')) as {
+    issuer: string; orgId: string; clientId: string; origin: string;
+  };
+  if (origin !== oidc.origin) throw new Error('Tailnet origin does not match the registered OIDC redirects');
+  if (!(await exists(`${directory}/zitadel-client-secret`))) throw new Error('Run zitadel-setup.ts first');
+  await writeEnv('auth', { OIDC_ISSUER_URL: oidc.issuer, OIDC_CLIENT_ID: oidc.clientId,
+    OIDC_REDIRECT_URI: `${origin}/auth/callback`, OIDC_POST_LOGOUT_REDIRECT_URI: `${origin}/`,
+    OIDC_COOKIE_SECRET: secret(), OIDC_EXPECTED_ORG_ID: oidc.orgId, OIDC_COOKIE_SECURE: 'true',
+    OIDC_CLIENT_SECRET_FILE: `${directory}/zitadel-client-secret`,
+    OIDC_ORG_CLAIM: 'urn:zitadel:iam:user:resourceowner:id', OIDC_ROLES_CLAIM: 'urn:zitadel:iam:org:project:roles',
+    OIDC_SCOPES: 'openid profile email urn:zitadel:iam:user:resourceowner' });
   await writeEnv('server', { HOST: '127.0.0.1', PORT: ports['SERVER_PORT']!, DATABASE_URL: database('server', 'projections') });
   await writeEnv('admin', { DATABASE_URL: database('postgres', 'postgres') });
   await save('proxy.json', JSON.stringify(Object.fromEntries(['/api', '/auth', '/ws', '/members'].map((path) =>
@@ -79,4 +87,10 @@ export async function generate(origin: string) {
   // Written last: an interrupted generator is safe to rerun.
   await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory, SILO_ID: 'dev', ORIGIN: origin,
     OPENFGA_API_URL: `http://127.0.0.1:${ports['FGA_PORT']}` });
+}
+
+export async function authEnv() {
+  const env = await readEnv('auth');
+  return { ...env, OIDC_CLIENT_SECRET_ENV_VAR: 'DEV_OIDC_CLIENT_SECRET',
+    DEV_OIDC_CLIENT_SECRET: (await readFile(env['OIDC_CLIENT_SECRET_FILE']!, 'utf8')).trim() };
 }

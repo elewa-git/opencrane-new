@@ -9,7 +9,7 @@
 // error object, a cookie, a code or a token, because an error from the
 // identity provider can hold the response body it sent back.
 import { URL } from 'node:url';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   buildLoginRedirect,
   buildLogoutUrl,
@@ -40,6 +40,16 @@ function readCookie(request: FastifyRequest, name: string): string | undefined {
   return parseCookieHeader(request.headers.cookie)[name];
 }
 
+function rejectLogin(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, reason: string) {
+  reply.header('set-cookie', [clearCookie(config.flowCookieName, cookieAttrs(config)), clearCookie(config.cookieName, cookieAttrs(config))]);
+  if (request.headers.accept?.includes('text/html')) {
+    const code = reason === 'this account belongs to a different organisation' ? 'organisation'
+      : reason === 'identity provider unavailable' ? 'unavailable' : 'rejected';
+    return reply.redirect(`/signin/rejected?reason=${code}`, 302);
+  }
+  return reply.code(400).send({ error: reason });
+}
+
 export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): void {
   app.get('/auth/login', async (request, reply) => {
     const query = request.query;
@@ -48,7 +58,9 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
         ? query.returnTo : undefined,
     );
 
-    const redirect = await buildLoginRedirect(config);
+    let redirect;
+    try { redirect = await buildLoginRedirect(config); }
+    catch { return rejectLogin(request, reply, config, 'identity provider unavailable'); }
     const flowCookie = encodeFlow(config, {
       state: redirect.state,
       nonce: redirect.nonce,
@@ -65,8 +77,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     const flowCookie = readCookie(request, config.flowCookieName);
     if (!flowCookie) {
       request.log.warn('sign-in callback refused: no login is in progress');
-      reply.code(400).send({ error: 'no login is in progress' });
-      return;
+      return rejectLogin(request, reply, config, 'no login is in progress');
     }
 
     let flow;
@@ -75,8 +86,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     } catch (err) {
       const reason = err instanceof FlowInvalidError ? err.message : 'invalid login state';
       request.log.warn(`sign-in callback refused: ${reason}`);
-      reply.code(400).send({ error: reason });
-      return;
+      return rejectLogin(request, reply, config, reason);
     }
 
     // The query carries `state`, which authorizationCodeGrant checks below;
@@ -89,8 +99,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     } catch (err) {
       const reason = err instanceof OidcLoginError ? err.message : 'login failed';
       request.log.warn(`sign-in failed: ${reason}`);
-      reply.code(400).send({ error: reason });
-      return;
+      return rejectLogin(request, reply, config, reason);
     }
 
     const sessionCookie = encodeSession(config, result.session);
@@ -127,6 +136,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     }
     try {
       const session = decodeSession(config, cookieValue);
+      if (config.expectedOrgId && session.orgId !== config.expectedOrgId) return reply.send({ authenticated: false, user: null });
       reply.send({ authenticated: true, user: session });
     } catch (err) {
       if (err instanceof SessionInvalidError || err instanceof SessionExpiredError) {

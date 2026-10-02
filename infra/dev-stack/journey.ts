@@ -12,11 +12,12 @@ import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb } from '@opencrane/projections';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
-import { base, directory, readEnv, root } from './config.ts';
+import { browserSessions } from './browser-signin.ts';
+import { base, directory, readEnv, root, authEnv } from './config.ts';
 
 const settings = await readEnv('settings');
 const binding = await readEnv('binding');
-const config = loadAuthConfig(await readEnv('auth'));
+const config = loadAuthConfig(await authEnv());
 const silo = settings['SILO_ID']!;
 const origin = settings['ORIGIN']!;
 const server = `http://127.0.0.1:${settings['WEB_PORT']}`;
@@ -26,6 +27,8 @@ const authz = memberAuthorisation({ silo, apiUrl: binding['OPENFGA_API_URL']!, s
   authorizationModelId: binding['OPENFGA_MODEL_ID']! });
 const id = randomUUID();
 let ws: WebSocket | undefined;
+let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
+const identities = new Map<string, { sub: string; cookie: string }>();
 async function until(check: () => Promise<boolean> | boolean, label: string) {
   const deadline = Date.now() + 30_000;
   while (!(await check())) {
@@ -46,22 +49,25 @@ async function append(type: string, subject: string, data: Record<string, unknow
   assert.equal(result.status, 'appended');
 }
 function headers(memberId: string) {
+  const identity = identities.get(memberId);
+  if (identity) return { origin, cookie: identity.cookie };
+  assert(process.env['DEV_STACK_OFFLINE_FALLBACK'] === '1', 'No real sign-in session');
   const now = Math.floor(Date.now() / 1000);
   return { origin, cookie: `${config.cookieName}=${encodeSession(config, {
     sub: `dev-${memberId}`, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 300,
   })}` };
 }
-async function invite(memberId: string, role: 'admin' | 'member') {
-  // Dev-only bootstrap: the first-member policy and real identity provider are #11.
-  await append('member.invited', `member-${memberId}`, { memberId, role, invitationId: `invite-${memberId}`,
+async function invite(memberId: string, role: 'owner' | 'member') {
+  // Dev-only bootstrap: the first-member policy is still separate from identity-provider login.
+  await append('member.invited', `member-${memberId}`, { memberId, role, invitationId: `invite-${memberId}-${id}`,
     email: `${memberId}@example.test`, invitedBy: 'dev-only-bootstrap',
-    invitedIdentity: { issuer: config.issuerUrl, sub: `dev-${memberId}` },
+    invitedIdentity: { issuer: config.issuerUrl, sub: identities.get(memberId)?.sub ?? `dev-${memberId}` },
     expiresAt: new Date(Date.now() + 3600_000).toISOString() });
 }
 async function join(memberId: string) {
   const response = await fetch(`${server}/members/join`, { method: 'POST',
     headers: { ...headers(memberId), 'content-type': 'application/json' },
-    body: JSON.stringify({ memberId, invitationId: `invite-${memberId}`, commandId: `join-${memberId}`, displayName: memberId }),
+    body: JSON.stringify({ memberId, invitationId: `invite-${memberId}-${id}`, commandId: `join-${memberId}-${id}`, displayName: memberId }),
     signal: AbortSignal.timeout(5000) });
   assert.equal(response.status, 200);
   const body: unknown = await response.json();
@@ -69,8 +75,21 @@ async function join(memberId: string) {
 }
 try {
   assert.equal((await fetch(`${server}/api/org/integrations`)).status, 401);
-  const admin = `admin-${id}`;
-  await invite(admin, 'admin');
+  if (process.env['DEV_STACK_OFFLINE_FALLBACK'] === '1') {
+    let unreachable = false;
+    try { unreachable = !(await fetch(`${config.issuerUrl}/.well-known/openid-configuration`, { signal: AbortSignal.timeout(10_000) })).ok; }
+    catch { unreachable = true; }
+    assert(unreachable, 'Offline fallback is only allowed when Zitadel is unreachable');
+    console.error('FAIL sign-in: explicit offline fallback uses minted dev-only cookies');
+    process.exitCode = 1;
+  } else browser = await browserSessions(config, origin);
+  const admin = browser ? 'zitadel-owner' : `offline-admin-${id}`;
+  const member = browser ? 'zitadel-member' : `offline-member-${id}`;
+  if (browser) {
+    identities.set(admin, browser.sessions.get('owner')!);
+    identities.set(member, browser.sessions.get('member')!);
+  }
+  await invite(admin, 'owner');
   await join(admin);
   await until(async () => (await authz.check(admin, 'admin')).allowed, 'admin OpenFGA');
   await until(async () => (await db.db.query('SELECT 1 FROM members WHERE member_id=$1 AND status=$2', [admin, 'joined'])).rows.length === 1, 'admin projection');
@@ -80,7 +99,7 @@ try {
   await once(ws, 'open', { signal: AbortSignal.timeout(5000) });
   ws.send(JSON.stringify({ type: 'subscribe', topic: 'members', since: 0 }));
   await until(() => messages.some((message) => message.type === 'ready'), 'WebSocket initial catch-up');
-  const member = `member-${id}`;
+  messages.length = 0;
   await invite(member, 'member');
   await join(member);
   await until(() => messages.some((message) => message.type === 'member' && message.member.memberId === member
@@ -116,4 +135,5 @@ try {
   ws?.terminate();
   await events.close();
   await db.close();
+  await browser?.close();
 }

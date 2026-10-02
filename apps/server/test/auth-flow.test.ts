@@ -190,6 +190,22 @@ describe('OIDC login flow (against a local mock provider)', () => {
     });
   });
 
+  it('sends browser callback failures to the rejected screen and clears both cookies', async () => {
+    const stack = await startStack();
+    const reply = await stack.app.inject({ method: 'GET', url: '/auth/callback?error=access_denied', headers: { accept: 'text/html' } });
+    expect(reply.statusCode).toBe(302);
+    expect(reply.headers.location).toBe('/signin/rejected?reason=rejected');
+    expect(findCookie(reply, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
+    expect(findCookie(reply, stack.config.flowCookieName)).toMatchObject({ value: '', maxAge: 0 });
+  });
+
+  it('refuses an existing session after the configured organisation pin changes', async () => {
+    const stack = await startStack({}, { expectedOrgId: 'org-2' });
+    const now = Math.floor(Date.now() / 1000);
+    const cookie = encodeSession(stack.config, { sub: 'user-1', orgId: 'org-1', roles: [], authTime: now, exp: now + 300 });
+    expect(await whoAmI(stack, cookie)).toEqual(NOT_SIGNED_IN);
+  });
+
   describe('returnTo after login', () => {
     it('keeps a genuine same-site path', async () => {
       const stack = await startStack();
@@ -214,14 +230,14 @@ describe('OIDC login flow (against a local mock provider)', () => {
       const stack = await startStack({ user: { sub: 'user-1', roles: ['member'], authTime: 1_700_000_000 } });
       const callback = await signIn(stack);
       expect(callback.statusCode).toBe(400);
-      expect(callback.cookies.find((entry) => entry.name === stack.config.cookieName)).toBeUndefined();
+      expect(findCookie(callback, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
     });
 
     it('rejects a login from another organisation when expectedOrgId is set', async () => {
       const stack = await startStack({}, { expectedOrgId: 'org-2' });
       const callback = await signIn(stack);
       expect(callback.statusCode).toBe(400);
-      expect(callback.cookies.find((entry) => entry.name === stack.config.cookieName)).toBeUndefined();
+      expect(findCookie(callback, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
     });
 
     it('accepts a login from the expected organisation', async () => {

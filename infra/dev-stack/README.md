@@ -12,7 +12,8 @@ infra/dev-stack/down.sh
 ```
 
 `up` always runs the core journey. `--fresh` first stops this stack, deletes its
-three Compose volumes and generated credentials, then provisions from nothing.
+three Compose volumes and generated service credentials, then provisions from nothing.
+The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
 Plain `up` reuses data and running processes; `down` retains data and credentials.
 These scripts do not touch `pg-test`, the `ocn` cluster or its registry/MinIO.
 Run one stack per host. The scripts serialise operations with `flock`.
@@ -59,14 +60,72 @@ Only tailnet devices allowed by the tailnet policy can connect. No Funnel is use
 The stack refuses to overwrite an existing Serve configuration it does not own;
 `down` removes the stack's HTTPS service.
 
-There is **no OIDC provider yet** (#11). The existing server starts with a reserved
-`.invalid` issuer setting and makes no discovery request until sign-in. Real
-sign-in therefore remains unavailable. The journey alone mints five-minute
-**dev-only test session cookies**, using the existing encrypted session codec;
-it never prints or persists cookies or adds a login bypass route. Cookie roles
-are empty: authorisation comes from event-driven OpenFGA relations. Bootstrap
-invitations use command credentials and are labelled dev-only; this is not the
-owner's first-member policy. The owner can open the UI, but cannot sign in yet.
+## Zitadel sign-in
+
+The stack uses `https://weownai-oidc-8dwlat.eu1.zitadel.cloud` with the
+[non-secret configuration](zitadel.json). Only **OpenCrane 2 Dev** is managed:
+
+| Resource | Name | ID |
+| --- | --- | --- |
+| Organisation | OpenCrane 2 Dev | `393311211338337681` |
+| Project | OpenCrane 2 Dev | `393311211539664273` |
+| OIDC web app | OpenCrane 2 Dev Web | `393311211707436433` |
+| Client | OpenCrane 2 Dev Web | `393311211707501969` |
+| Human owner | opencrane2-dev-owner | `393311211875208593` |
+| Human member | opencrane2-dev-member | `393311212596681804` |
+
+The owner has `ORG_OWNER` in this organisation. OpenCrane product permissions
+come separately from invitation/join events and OpenFGA, never OIDC roles.
+The app uses code + S256 PKCE and client-secret POST authentication, with redirects
+`https://ocn-dev.tail00285e.ts.net/auth/callback` and
+`https://ocn-dev.tail00285e.ts.net/` after logout. The server pins the resource-owner
+claim to this organisation, requesting `urn:zitadel:iam:user:resourceowner`.
+
+To rerun the setup, with `.keys/.zitadel-key` available locally:
+
+```sh
+flock "/tmp/opencrane-dev-stack-$(id -u).lock" \
+  node --experimental-strip-types infra/dev-stack/zitadel-setup.ts
+```
+
+The script searches by exact organisation name, checks the recorded ID, and
+scopes all management requests to that org. It creates missing named resources
+and reuses existing ones. It does not rotate an existing client secret or password;
+missing secret files fail closed. The PAT is read only into an Authorization header,
+never printed or passed in argv. No other organisation or instance setting is changed.
+The script uses the documented [Zitadel management API](https://zitadel.com/docs/apis/resources/mgmt).
+
+Private files under `~/.config/opencrane/dev-stack/` (0600):
+`zitadel-client-secret`, `zitadel-owner-password`, `zitadel-member-password` and
+`zitadel.json` (user IDs, login names and password paths). `auth.env` references
+the client secret by `OIDC_CLIENT_SECRET_FILE`; the launcher reads it and uses
+`libs/auth`'s existing environment-variable indirection. Neither the PAT nor test
+passwords are supplied to the server. Run setup before first bring-up. A different
+checkout must first stop the old stack and deliberately transfer `stack-owner`;
+normal scripts continue to refuse a foreign owner marker.
+
+Open `/` on the tailnet URL and choose **Continue with single sign-on**. Credentials
+are entered only on Zitadel. After **Sign out**, Zitadel asks which account to end;
+select it to return home. Email-link delivery is not qualified; its shared state
+says unavailable, and no sent-email screen or lockout count is invented.
+
+The journey signs in as both real users in Playwright at 390px and uses their
+actual encrypted cookies for HTTP and WebSocket requests. Dev-only bootstrap
+invitations bind these subjects to stable member IDs; they do not define the
+production first-owner policy. Each run adds a new invitation/join and MCP row.
+Wrong-org and expiry checks run another real server on temporary loopback ports:
+its pin differs from the real token's org, or its session lasts two seconds.
+Only those browser auth requests go to the probe. No other cloud org is accessed.
+
+An explicit diagnostic fallback remains for an unreachable issuer only:
+
+```sh
+DEV_STACK_OFFLINE_FALLBACK=1 node --experimental-strip-types infra/dev-stack/journey.ts
+```
+
+It checks discovery reachability, uses minted five-minute **dev-only** cookies,
+prints **FAIL sign-in** and exits non-zero even if the service checks pass.
+`up.sh` and `journey.sh` always use real login; they never silently take this path.
 
 ## Qualification
 
@@ -74,7 +133,8 @@ The journey uses running services, never mocks: an HTTP join reaches SQL and
 OpenFGA while an authorised WebSocket is subscribed; seeded `mcp.*` events produce
 typed admin API rows; anonymous and member access are refused; members and MCP
 catalogue replay verify online. It also fetches the web page over tailnet HTTPS.
-Each invocation adds unique test members and an MCP row; fresh runs remove them.
+Each invocation adds invitation/join events for the two test members and a new MCP row;
+fresh runs remove this local business state.
 Failure exits non-zero. Private logs identify a failed stage without printing
 credentials. `status` reports the host processes, Compose and Tailscale service.
 
@@ -89,12 +149,13 @@ npm run build -w apps/web
 npm run test -w apps/web -- --watch=false
 npx tsc -p infra/dev-stack/tsconfig.json
 shellcheck infra/dev-stack/*.sh
-infra/dev-stack/up.sh --fresh && infra/dev-stack/journey.sh
-infra/dev-stack/up.sh --fresh && infra/dev-stack/journey.sh
+infra/dev-stack/up.sh --fresh
+infra/dev-stack/up.sh --fresh
+npm run visual:signin
 ss -ltnp
 ```
 
 Compare listeners with a snapshot from before bring-up: no new `0.0.0.0`, `*`
 or `[::]` listener is allowed. Existing host SSH is outside this stack.
-See [the evidence receipt](../../docs/process/dev-stack-evidence.md) for results
+See [sign-in evidence](../../docs/process/signin-evidence.md) and [the original evidence receipt](../../docs/process/dev-stack-evidence.md) for results
 and conditions not qualified by these local journeys.
