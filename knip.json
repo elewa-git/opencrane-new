@@ -1,5 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": ["**/.tools/**"],
   "workspaces": {
     ".": {
       "entry": [],
@@ -11,7 +12,8 @@
     "apps/server": {
       "entry": [
         "test/**/*.test.ts",
-        "test/support/process-faults.ts"
+        "test/support/process-faults.ts",
+        "test/support/ephemeral-ports.ts"
       ],
       "project": [
         "src/**/*.ts",

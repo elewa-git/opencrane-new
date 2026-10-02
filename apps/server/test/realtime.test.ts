@@ -40,10 +40,20 @@ beforeEach(async () => {
 // Fixture setup includes certificates, PostgreSQL and a real server process.
 }, 60_000);
 afterEach(async () => {
-  for (const socket of sockets.splice(0)) socket.terminate();
-  await server?.stop();
-  await nats?.close();
-  await dbs?.close();
+  try {
+    await Promise.all(sockets.splice(0).map(async (socket) => {
+      if (socket.readyState === WebSocket.CLOSED) return;
+      const closed = once(socket, 'close');
+      socket.terminate();
+      await closed;
+    }));
+  } finally {
+    try { await server?.stop(); }
+    finally {
+      try { await nats?.close(); }
+      finally { await dbs?.close(); }
+    }
+  }
 });
 async function append(id: string, type = 'member.joined', data = {}, project = true) {
   const raw = event(`realtime-${++sequence}`, `member-${id}`, type);
@@ -231,15 +241,21 @@ it('limits each connection to 20 messages per second', async () => {
   expect((await closed)[0]).toBe(1008);
 });
 it('drops live deltas for a paused consumer and replays every missing position on reconnect', async () => {
-  const changeCount = 64;
+  let changeCount = 0;
   const client = await connect();
   client.subscribe(2);
   await until(() => client.messages.some((message) => message.type === 'ready'));
   client.ws.pause();
-  // Real TCP backpressure: exceed the kernel receive window, with no socket mocks.
-  for (let i = 0; i < changeCount; i++) await append(`slow-${i}`, 'member.joined', { displayName: 'x'.repeat(64_000) }, false);
-  await runner.run(members);
-  await delay(300);
+  const backpressured = () => server.stdout().includes('member subscriber needs resync');
+  // TCP buffers vary by host. Fill in batches until the real server drops a delta.
+  // Cap the fixture at 16 MB so a broken backpressure guard fails this test.
+  while (!backpressured() && changeCount < 256) {
+    for (let i = 0; i < 32; i++) {
+      await append(`slow-${changeCount++}`, 'member.joined', { displayName: 'x'.repeat(64_000) }, false);
+    }
+    await runner.run(members);
+  }
+  await until(backpressured);
   const closed = once(client.ws, 'close');
   client.ws.resume();
   expect((await closed)[0]).toBe(1013);
@@ -253,7 +269,7 @@ it('drops live deltas for a paused consumer and replays every missing position o
   const replayed = resumed.messages.filter((message) => message.type === 'member').map((message) => message.position);
   expect([...received, ...replayed]).toEqual(Array.from({ length: changeCount }, (_, i) => i + 3));
 // The reconnect wait above remains 15 seconds; this limit also covers filling
-// the real TCP buffer and projecting 64 large rows on a busy machine.
+// the real TCP buffers and projecting large rows on a busy machine.
 }, 60_000);
 it('terminates a peer that does not answer heartbeats', async () => {
   const client = await connect('oidc-alice', 'org-acme', false);

@@ -1,25 +1,39 @@
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
 import type { NatsConnection } from "@nats-io/transport-node";
 import { certificates } from "./certificates.ts";
 import { getEventDefinition } from "@opencrane/events";
 import { createEventStore, connectNats } from "../src/index.ts";
 
-export async function freePort(): Promise<number> {
-  const server = createServer();
-  server.listen(0, "127.0.0.1");
+/** Keep the public port bound while a child service stops and starts behind it. */
+export async function tcpProxy(target: () => { host: string; port: number }, host = "127.0.0.1") {
+  const sockets = new Set<Socket>();
+  const server = createServer((socket) => {
+    const upstream = connect(target());
+    for (const peer of [socket, upstream]) {
+      peer.setNoDelay(true);
+      sockets.add(peer);
+      peer.on("close", () => { sockets.delete(peer); socket.destroy(); upstream.destroy(); });
+      peer.on("error", () => { socket.destroy(); upstream.destroy(); });
+    }
+    socket.pipe(upstream).pipe(socket);
+  });
+  server.listen(0, host);
   await once(server, "listening");
   const address = server.address();
-  if (!address || typeof address === "string") {
-    throw new Error("No test port");
-  }
-  await new Promise<void>((done, reject) =>
-    server.close((error) => (error ? reject(error) : done())),
-  );
-  return address.port;
+  if (!address || typeof address === "string") throw new Error("No proxy address");
+  return {
+    port: address.port,
+    async close() {
+      const closed = once(server, "close");
+      server.close();
+      for (const socket of sockets) socket.destroy();
+      await closed;
+    },
+  };
 }
 
 export function event(
@@ -62,8 +76,9 @@ export async function natsFixture({ provision = true } = {}) {
     .replace("jetstream: enabled", "")
     // Remove service routes too: dormant imports otherwise count as responders.
     .replace(/^\s*\{ service:.*\n/gm, ""));
-  const port = await freePort();
-  const url = `127.0.0.1:${port}`;
+  let targetPort = 0;
+  const proxy = await tcpProxy(() => ({ host: "127.0.0.1", port: targetPort }));
+  const url = `127.0.0.1:${proxy.port}`;
   function env(identity = "command") {
     return {
       NATS_URL: url,
@@ -84,14 +99,16 @@ export async function natsFixture({ provision = true } = {}) {
     const process = spawn(resolve(".tools/nats-server"), [
       "-c", `${directory}/${jetstream ? "nats" : "no-js"}.conf`,
     ], { env: { ...globalThis.process.env, ...env("server"), ...publicKeys,
-      NATS_LISTEN: url, NATS_STORE_DIR: `${directory}/store` } });
+      NATS_LISTEN: "127.0.0.1:-1", NATS_STORE_DIR: `${directory}/store` } });
     const exited = once(process, "exit");
     const ready = new Promise<void>((done, reject) => {
       let output = "";
       process.on("error", reject);
       process.stderr.on("data", (chunk: Buffer) => {
         output += chunk.toString();
-        if (output.includes("Server is ready")) {
+        const port = /Listening for client connections on 127\.0\.0\.1:(\d+)/.exec(output)?.[1];
+        if (port && output.includes("Server is ready")) {
+          targetPort = Number(port);
           done();
         }
       });
@@ -144,6 +161,7 @@ export async function natsFixture({ provision = true } = {}) {
         running.process.kill("SIGTERM");
         await running.exited;
       }
+      await proxy.close();
       await rm(directory, { recursive: true, force: true });
     },
   };

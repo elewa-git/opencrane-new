@@ -8,7 +8,7 @@ import { chromium, type Page } from 'playwright';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
-import { freePort, natsFixture } from '@opencrane/event-store/testing';
+import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -116,11 +116,11 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await app?.close();
-  await feed?.close();
-  await catalogue?.close();
-  await nats?.close();
-  await dbs?.close();
+  const results: PromiseSettledResult<void>[] = await Promise.allSettled([app?.close()]);
+  results.push(...await Promise.allSettled([feed?.close(), catalogue?.close(), nats?.close()]));
+  results.push(...await Promise.allSettled([dbs?.close()]));
+  const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason as unknown);
+  if (errors.length) throw new AggregateError(errors, 'Integration fixture cleanup failed');
 });
 
 it('returns the event-derived register and rebuilds to the same rows', async () => {
@@ -160,12 +160,9 @@ it('refuses another organisation and a cookie role without projected membership'
 });
 
 it('loads through the dev proxy and preserves the accessible refresh journey in Chromium', async () => {
-  const apiPort = await freePort();
-  const webPort = await freePort();
-  await app.listen({ host: '127.0.0.1', port: apiPort });
+  const target = await app.listen({ host: '127.0.0.1', port: 0 });
   const directory = await mkdtemp(join(tmpdir(), 'opencrane-org-browser-'));
   const proxy = join(directory, 'proxy.json');
-  const target = `http://127.0.0.1:${apiPort}`;
   await writeFile(proxy, JSON.stringify({
     '/api': { target, changeOrigin: true, secure: false },
     '/auth': { target, changeOrigin: true, secure: false },
@@ -173,16 +170,19 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
   }));
   let output = '';
   const cli = resolve('node_modules/@angular/cli/bin/ng.js');
-  const web = spawn(process.execPath, [cli, 'serve', '--host', '127.0.0.1', '--port', String(webPort), '--proxy-config', proxy],
+  const web = spawn(process.execPath, ['--experimental-strip-types', '--import',
+    resolve('apps/server/test/support/ephemeral-ports.ts'), cli, 'serve', '--host', '127.0.0.1', '--port', '0', '--proxy-config', proxy],
     { cwd: resolve('apps/web'), stdio: ['ignore', 'pipe', 'pipe'] });
   web.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   web.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   const webExited = once(web, 'exit');
-  const base = `http://127.0.0.1:${webPort}`;
+  let base = '';
   const browser = await chromium.launch({ headless: true });
   try {
     await vi.waitFor(async () => {
       expect(web.exitCode, output).toBeNull();
+      base = /Local:\s+(http:\/\/127\.0\.0\.1:\d+)/.exec(output)?.[1] ?? '';
+      expect(base, output).not.toBe('');
       expect(await fetch(base).then((response) => response.ok, () => false), output).toBe(true);
     }, { timeout: 60_000, interval: 200 });
     const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
@@ -283,8 +283,9 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
   } finally {
     await browser.close();
     web.kill('SIGTERM');
-    await Promise.race([webExited, new Promise((done) => setTimeout(done, 5_000))]);
-    if (web.exitCode === null) web.kill('SIGKILL');
+    const hardKill = setTimeout(() => web.kill('SIGKILL'), 5_000);
+    await webExited;
+    clearTimeout(hardKill);
     await rm(directory, { recursive: true, force: true });
   }
 }, 120_000);

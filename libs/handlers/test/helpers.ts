@@ -162,11 +162,9 @@ export async function fixture() {
       const results = await Promise.allSettled(
         dispatchers.map(({ task }) => task),
       );
-      for (const runtime of runtimes) {
-        await runtime.stop();
-      }
-      await nats.close();
-      await pool.end();
+      // Stop every runtime before closing their shared pool, even if one stop fails.
+      results.push(...await Promise.allSettled(runtimes.map((runtime) => runtime.stop())));
+      results.push(...await Promise.allSettled([nats.close(), pool.end()]));
       await until(
         async () =>
           (

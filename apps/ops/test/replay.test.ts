@@ -133,7 +133,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
 
 it("retains completed OpenFGA rebuilds and lets the operator remove only a stale store", async () => {
   const dbs = await databases();
-  const fga = await openfga(dbs.postgres);
+  const fga = await openfga(await dbs.postgres());
   const nats = await natsFixture();
   const prefix = "members-test-rebuild-";
   try {
