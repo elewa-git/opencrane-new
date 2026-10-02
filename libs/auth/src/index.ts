@@ -20,3 +20,10 @@ export { sanitizeReturnTo } from './return-to.ts';
 export { buildLoginRedirect, completeLogin, buildLogoutUrl, OidcLoginError, type LoginRedirect } from './oidc-client.ts';
 
 export { EnvelopeError } from './codec.ts';
+
+export {
+  tokenIssuer,
+  computerTokenAudience,
+  turnTokenAudience,
+  type IssuedToken,
+} from './tokens.ts';

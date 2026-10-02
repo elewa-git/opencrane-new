@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
@@ -53,6 +53,9 @@ export async function generate(origin: string) {
     }));
   const passwords = { postgres: secret(), projection: secret(), server: secret(), dispatcher: secret(), openfga: secret() };
   await save('passwords.json', JSON.stringify(passwords));
+  const signingKey = generateKeyPairSync('ec', { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await save('token-signing-key.pem', signingKey.privateKey);
   await writeEnv('postgres', { POSTGRES_PASSWORD: passwords.postgres });
   await writeEnv('minio', { MINIO_ROOT_USER: 'opencrane', MINIO_ROOT_PASSWORD: secret() });
   await writeEnv('openfga', { OPENFGA_DATASTORE_ENGINE: 'postgres',

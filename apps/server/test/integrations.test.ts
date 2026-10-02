@@ -11,8 +11,8 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
-import { integrationsResponseSchema } from '@opencrane/protocol';
+import { computers, connectComputers, connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { computersResponseSchema, integrationsResponseSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -22,6 +22,7 @@ let dbs: Awaited<ReturnType<typeof databases>>;
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let feed: Awaited<ReturnType<typeof connectMemberFeed>>;
 let catalogue: ReturnType<typeof connectMcpCatalogue>;
+let computerRows: ReturnType<typeof connectComputers>;
 let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let authorisation: ReturnType<typeof memberAuthorisation>;
@@ -79,6 +80,7 @@ beforeEach(async () => {
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('integration-test', { level: 'silent' }));
   await runner.initialise(members);
   await runner.initialise(mcpCatalogue);
+  await runner.initialise(computers);
   authorisation = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
   await member('alice', 'owner');
   await member('amina', 'admin');
@@ -107,17 +109,29 @@ beforeEach(async () => {
   await mcp('retired', 'mcp.server_unpublished', { unpublishedBy: 'alice' });
   await mcp('foreign', 'mcp.server_registered', { kind: 'remote', locator: 'https://foreign.example.test/mcp' }, 'other');
   await runner.run(mcpCatalogue);
+  const assistant = fixture('assistant.created', 'assistant-personal-alice', {
+    assistantId: 'personal-alice', ownerId: 'alice', kind: 'personal',
+  });
+  await append(assistant);
+  await authorisation.handler.handle(assistant, pgDb(dbs.queue));
+  expect(await authorisation.actsFor('alice', 'personal-alice')).toMatchObject({ allowed: true });
+  await append(fixture('computer.claimed', 'computer-personal-alice', { assistantId: 'personal-alice',
+    computerId: 'computer-alice', sandboxUid: 'sandbox-alice', generation: 1, tokenId: 'token:alice' }));
+  await append(fixture('computer.ready', 'computer-personal-alice', { assistantId: 'personal-alice', computerId: 'computer-alice' }));
+  await runner.run(computers);
 
   const connectionString = String(dbs.queue.options.connectionString);
   feed = await connectMemberFeed(connectionString);
   catalogue = connectMcpCatalogue(connectionString);
+  computerRows = connectComputers(connectionString);
   app = buildServer(config, { integrations: { silo: 'test', feed, catalogue, binding: authorisation.binding,
-    now: () => new Date('2026-10-01T09:40:00Z') } });
+    now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
+    computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
 });
 
 afterEach(async () => {
   const results: PromiseSettledResult<void>[] = await Promise.allSettled([app?.close()]);
-  results.push(...await Promise.allSettled([feed?.close(), catalogue?.close(), nats?.close()]));
+  results.push(...await Promise.allSettled([feed?.close(), catalogue?.close(), computerRows?.close(), nats?.close()]));
   results.push(...await Promise.allSettled([dbs?.close()]));
   const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason as unknown);
   if (errors.length) throw new AggregateError(errors, 'Integration fixture cleanup failed');
@@ -149,6 +163,19 @@ it.each([['oidc-alice', 200], ['oidc-amina', 200], ['oidc-bob', 403]])(
     expect((await app.inject({ method: 'GET', url: '/api/org/integrations', headers: headers(sub) })).statusCode).toBe(status);
   },
 );
+
+it('returns computer status only to an owner or admin', async () => {
+  for (const sub of ['oidc-alice', 'oidc-amina']) {
+    const response = await app.inject({ method: 'GET', url: '/api/org/computers', headers: headers(sub) });
+    expect(response.statusCode).toBe(200);
+    expect(computersResponseSchema.parse(response.json()).rows).toEqual([{
+      assistantId: 'personal-alice', ownerId: 'alice', kind: 'personal', computerId: 'computer-alice',
+      generation: 1, status: 'ready', changedAt: '2026-10-01T00:27:00Z',
+    }]);
+  }
+  expect((await app.inject({ method: 'GET', url: '/api/org/computers', headers: headers('oidc-bob') })).statusCode).toBe(403);
+  expect((await app.inject({ method: 'GET', url: '/api/org/computers' })).statusCode).toBe(401);
+});
 
 it('refuses another organisation and a cookie role without projected membership', async () => {
   const other = await app.inject({ method: 'GET', url: '/api/org/integrations', headers: headers('oidc-alice', 'org-other') });

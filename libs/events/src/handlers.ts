@@ -21,5 +21,7 @@ export const handlerSubscriptions = {
     "grant.given",
     "grant.revoked",
   ],
+  "create-assistant": ["member.joined"],
+  "claim-computer": ["assistant.created", "computer.lost"],
 } as const;
 export type HandlerName = keyof typeof handlerSubscriptions;

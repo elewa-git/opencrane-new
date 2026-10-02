@@ -37,24 +37,26 @@ export function memberAuthorisation(binding: Binding) {
       throw new Error("Invalid authorisation event or silo");
     }
     const event = parsed.event;
-    if (
-      !["member.joined", "member.role_changed", "member.removed"].includes(
-        event.type,
-      )
-    ) {
+    if (!["member.joined", "member.role_changed", "member.removed", "assistant.created"].includes(event.type)) {
       throw new Error(`OpenFGA event not implemented: ${event.type}`);
-    }
-    const memberId = field(event.data, "memberId");
-    if (event.subject !== `member-${memberId}`) {
-      throw new Error("Member subject mismatch");
     }
     const receipt = {
       user: object,
       relation: "applied",
       object: objectId("projection_event", binding.silo, event.id),
     };
-    if ((await client.read(receipt)).length) {
+    if ((await client.read(receipt)).length) return;
+    if (event.type === 'assistant.created') {
+      const assistantId = field(event.data, 'assistantId');
+      const ownerId = field(event.data, 'ownerId');
+      if (event.subject !== `assistant-${assistantId}`) throw new Error('Assistant subject mismatch');
+      await client.write([{ user: objectId('person', binding.silo, ownerId), relation: 'acts_for',
+        object: objectId('assistant', binding.silo, assistantId) }, receipt], []);
       return;
+    }
+    const memberId = field(event.data, "memberId");
+    if (event.subject !== `member-${memberId}`) {
+      throw new Error("Member subject mismatch");
     }
     const user = objectId("person", binding.silo, memberId);
     const current = await client.read({ user, object });
@@ -92,6 +94,10 @@ export function memberAuthorisation(binding: Binding) {
         object,
         relation,
       });
+    },
+    actsFor(memberId: string, assistantId: string) {
+      return client.check({ user: objectId('person', binding.silo, memberId),
+        object: objectId('assistant', binding.silo, assistantId), relation: 'acts_for' });
     },
   };
 }

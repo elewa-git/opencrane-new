@@ -42,9 +42,9 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'computer.claimed',
     'computer',
-    'The server bound a warm Pod to an assistant and issued its token.',
+    'The server bound an Agent Sandbox and disk to an assistant and issued its token.',
     data.computerClaimedDataSchema,
-    { assistantId: 'asst_1', computerId: 'computer_1', podUid: 'pod-uid-1', generation: 1 },
+    { assistantId: 'asst_1', computerId: 'computer_1', sandboxUid: 'sandbox-uid-1', generation: 1, tokenId: 'token:1' },
   ),
   event(
     'computer.ready',
@@ -56,16 +56,16 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'computer.suspended',
     'computer',
-    'The server suspended an idle computer to a snapshot.',
+    'The server put an idle Agent Sandbox into Suspended mode.',
     data.computerSuspendedDataSchema,
-    { assistantId: 'asst_1', computerId: 'computer_1', snapshotId: 'snap_1' },
+    { assistantId: 'asst_1', computerId: 'computer_1' },
   ),
   event(
     'computer.resumed',
     'computer',
-    'The server resumed a computer from its snapshot.',
+    'The server put a computer into Running mode and rotated its token.',
     data.computerResumedDataSchema,
-    { assistantId: 'asst_1', computerId: 'computer_1', snapshotId: 'snap_1' },
+    { assistantId: 'asst_1', computerId: 'computer_1', tokenId: 'token:2' },
   ),
   event(
     'computer.lost',

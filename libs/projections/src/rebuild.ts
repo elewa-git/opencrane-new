@@ -7,6 +7,7 @@ import {
   replayMcpCatalogueTables,
 } from "./mcp-catalogue.ts";
 import { members, replayMembers, replayMemberTables } from "./members.ts";
+import { computers, replayComputers, replayComputersTable } from './computers.ts';
 import { ProjectionRunner, type EventSource } from "./runner.ts";
 
 async function removeReplay(tx: Query): Promise<void> {
@@ -223,6 +224,55 @@ export async function rebuildMcpCatalogueProjection(
           { cause: cleanupError },
         );
       }
+      throw error;
+    }
+  });
+}
+
+async function removeComputerReplay(tx: Query): Promise<void> {
+  await replayComputers.drop(tx);
+  await tx.query("DELETE FROM projection_events WHERE projection = $1", [replayComputers.name]);
+  await tx.query("DELETE FROM projection_checkpoints WHERE name = $1", [replayComputers.name]);
+  await tx.query("DELETE FROM projection_generations WHERE name = $1", [replayComputers.name]);
+}
+
+/** Rebuild the computer read model. Reactions and Kubernetes are not loaded here. */
+export async function rebuildComputersProjection(
+  db: Db, source: EventSource, logger: Logger, { verify = false }: { verify?: boolean } = {},
+) {
+  if (!db.lock) throw new Error('Online computers rebuild requires projection locking');
+  return db.lock(computers.name, async (locked) => {
+    const current = new ProjectionRunner(locked, source, logger);
+    const rebuilt = new ProjectionRunner(locked, source, logger);
+    await current.initialise(computers);
+    const liveCheckpoint = await current.checkpoint(computers);
+    await locked.transaction(removeComputerReplay);
+    await rebuilt.initialise(replayComputers);
+    try {
+      await rebuilt.run(replayComputers, { toSequence: liveCheckpoint });
+      const unchanged = JSON.stringify(await rows(locked, 'computers', 'silo, assistant_id'))
+        === JSON.stringify(await rows(locked, replayComputersTable, 'silo, assistant_id'));
+      if (verify && !unchanged) throw new Error('Rebuilt computers state differs from the live projection');
+      const head = await source.head();
+      await rebuilt.run(replayComputers, { toSequence: head });
+      await locked.transaction(async (tx) => {
+        await tx.query('SET LOCAL lock_timeout = \'250ms\'');
+        await tx.query(`LOCK TABLE computers, ${replayComputersTable} IN ACCESS EXCLUSIVE MODE`);
+        await tx.query('TRUNCATE computers');
+        await tx.query(`INSERT INTO computers SELECT * FROM ${replayComputersTable}`);
+        await replayComputers.drop(tx);
+        await tx.query('DELETE FROM projection_events WHERE projection = $1', [computers.name]);
+        await tx.query('UPDATE projection_events SET projection = $1 WHERE projection = $2', [computers.name, replayComputers.name]);
+        await tx.query('DELETE FROM projection_checkpoints WHERE name = $1', [computers.name]);
+        await tx.query('UPDATE projection_checkpoints SET name = $1 WHERE name = $2', [computers.name, replayComputers.name]);
+        await tx.query('DELETE FROM projection_generations WHERE name = $1', [replayComputers.name]);
+        if (!unchanged) await tx.query('UPDATE projection_generations SET generation = generation + 1 WHERE name = $1', [computers.name]);
+      });
+      return { previousSequence: liveCheckpoint, sequence: head, verified: verify, changed: !unchanged };
+    } catch (error) {
+      await locked.transaction(removeComputerReplay).catch((cleanupError: unknown) => {
+        throw new AggregateError([error, cleanupError], 'Computers rebuild and cleanup failed');
+      });
       throw error;
     }
   });

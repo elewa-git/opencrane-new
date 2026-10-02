@@ -12,11 +12,12 @@ import {
   readEvents,
   rebuildMemberProjection,
   rebuildMcpCatalogueProjection,
+  rebuildComputersProjection,
   type EventSource,
 } from "@opencrane/projections";
 
 const usage =
-  "Usage: npm run replay -- <members|mcp-catalogue|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
+  "Usage: npm run replay -- <members|mcp-catalogue|computers|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
@@ -114,7 +115,7 @@ export async function replay(
     options: replayOptions,
   });
   const projection = parsed.positionals[0];
-  if (!projection || parsed.positionals.length !== 1 || !["members", "mcp-catalogue", "openfga"].includes(projection)) {
+  if (!projection || parsed.positionals.length !== 1 || !["members", "mcp-catalogue", "computers", "openfga"].includes(projection)) {
     throw new Error(usage);
   }
   const listStores = parsed.values["list-stores"];
@@ -144,9 +145,8 @@ export async function replay(
         (error) => console.error(`PostgreSQL pool error: ${error.message}`),
       );
       try {
-        const rebuild = projection === "members"
-          ? rebuildMemberProjection
-          : rebuildMcpCatalogueProjection;
+        const rebuild = projection === "members" ? rebuildMemberProjection
+          : projection === 'mcp-catalogue' ? rebuildMcpCatalogueProjection : rebuildComputersProjection;
         const result = await rebuild(
           database.db,
           nats.store,

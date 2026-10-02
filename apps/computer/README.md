@@ -185,7 +185,8 @@ kubectl -n "$namespace" apply -f apps/computer/sandbox-template.json
 The test applies the tracked manifest byte-for-byte, with no image, environment
 or probe-volume substitutions. During qualification, `build.sh` pins the candidate digest, then promotes that
 same digest to the release tag only after all image checks pass. The neutral template has `emptyDir` home storage;
-lifecycle work selects a PVC before Pod creation. A running warm Pod cannot
+the P2-2 lifecycle claim supplies the `home` volume claim template before Pod
+creation, producing one PVC per computer. A running warm Pod cannot
 have its volume replaced (ADR 0006).
 
 The runner refuses an existing `p21-computer` namespace. It creates a zero-size

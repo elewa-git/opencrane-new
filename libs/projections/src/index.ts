@@ -3,6 +3,7 @@ export {
   pgDb,
   connectMemberFeed,
   connectMcpCatalogue,
+  connectComputers,
   connectProjectionDb,
 } from "./pg.ts";
 export { pgliteDb } from "./pglite.ts";
@@ -14,7 +15,9 @@ export {
 } from "./runner.ts";
 export { members } from "./members.ts";
 export { mcpCatalogue } from "./mcp-catalogue.ts";
+export { computers } from './computers.ts';
 export {
   rebuildMemberProjection,
   rebuildMcpCatalogueProjection,
+  rebuildComputersProjection,
 } from "./rebuild.ts";

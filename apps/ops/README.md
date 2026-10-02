@@ -1,6 +1,6 @@
 # Operator replay
 
-`@opencrane/ops` rebuilds the `members` and `mcp-catalogue` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `mcp-catalogue` and `computers` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. It never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -14,6 +14,7 @@ that every global sequence through the reported stream head can be read:
 ```sh
 npm run replay -- members --dry-run
 npm run replay -- mcp-catalogue --dry-run
+npm run replay -- computers --dry-run
 npm run replay -- openfga --dry-run
 ```
 
@@ -29,6 +30,7 @@ Set the same NATS reader settings and `DATABASE_URL`, then run:
 ```sh
 npm run replay -- members --verify
 npm run replay -- mcp-catalogue --verify
+npm run replay -- computers --verify
 ```
 
 The normal projection runner and the tool share a PostgreSQL advisory lock. The
@@ -89,10 +91,16 @@ Fresh-install and multi-replica live qualification remain outstanding.
 
 ## Live workers
 
-`npm run worker -w apps/ops -- members` and `-- mcp-catalogue` run the existing
+`npm run worker -w apps/ops -- members`, `-- mcp-catalogue` and `-- computers` run the
 projections continuously with projection-reader NATS credentials and `DATABASE_URL`.
-`-- dispatcher` runs durable dispatch and the OpenFGA handler with dispatcher NATS
-credentials, its own `DATABASE_URL`, `SILO_ID` and the three OpenFGA binding settings.
+`-- dispatcher` runs durable dispatch, OpenFGA and the lifecycle reactions. It uses
+dispatcher NATS credentials for delivery and `COMMAND_NATS_*` credentials for the
+single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
+`TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER` are required; the signing key is read by
+path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
+The Kubernetes identity may read/create claims, read/patch Sandboxes and read PVCs
+only in its silo namespace. Templates, pools, Pods, ConfigMaps and Secrets remain
+outside its permissions.
 Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
 readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
 supplies these settings and qualifies the processes together on real services.

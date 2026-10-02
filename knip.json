@@ -29,6 +29,9 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "kubectl"
       ]
     },
     "apps/web": {

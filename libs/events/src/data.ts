@@ -19,6 +19,7 @@ const digestSchema = z.string().regex(HEX64, 'expected a sha-256 hex digest, not
 
 // Shared field shapes, reused across schemas that need the same thing.
 const id = z.string().min(1);
+const tokenId = z.string().regex(/^token:[A-Za-z0-9_-]+$/, 'tokenId must be a reference, never a token value');
 const roleSchema = z.enum(['owner', 'admin', 'member']);
 
 // Money is integer euro cents everywhere (owner decision 8): 150 = €1.50. Every
@@ -169,7 +170,7 @@ export const assistantSettingsChangedDataSchema = z
   .strict();
 
 export const computerClaimedDataSchema = z
-  .object({ assistantId: id, computerId: id, podUid: id, generation: z.int().nonnegative() })
+  .object({ assistantId: id, computerId: id, sandboxUid: id, generation: z.int().positive(), tokenId })
   .strict();
 
 export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id }).strict();
@@ -179,7 +180,7 @@ export const computerSuspendedDataSchema = z
   .strict();
 
 export const computerResumedDataSchema = z
-  .object({ assistantId: id, computerId: id, snapshotId: id.optional() })
+  .object({ assistantId: id, computerId: id, tokenId, snapshotId: id.optional() })
   .strict();
 
 export const computerLostDataSchema = z.object({ assistantId: id, computerId: id }).strict();

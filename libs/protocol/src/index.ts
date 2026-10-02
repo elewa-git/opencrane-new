@@ -24,3 +24,4 @@ export {
   type IntegrationsResponse,
   type SharedStateKind,
 } from './integrations.ts';
+export { computerRowSchema, computersResponseSchema, type ComputerRow, type ComputersResponse } from './computers.ts';
