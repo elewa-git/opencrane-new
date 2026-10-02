@@ -12,6 +12,15 @@ on this basis; do not reintroduce them. Build-time data packages pulled in by
 dev tooling (caniuse-lite, spdx data, mdn-data: CC-BY or CC0) are accepted,
 but never in a silo's runtime images.
 
+Runtime images have two layers (owner decision, 2 October 2026):
+
+- **Application dependencies** (npm and Python packages, our own code, Codex
+  and any other binary we add) must be OSI-approved.
+- **The operating-system layer** may use Debian **main** packages (DFSG-free),
+  including public-domain, CC0 and permissive notices such as Unicode, X11,
+  HPND and OFL fonts. Debian `non-free` and `contrib`, and source-available
+  licences (BUSL, SSPL, KLv1 and similar), are always rejected.
+
 Money is always an integer number of euro cents (`…Cents`), never a float.
 
 ## The event store is the only source of truth
