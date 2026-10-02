@@ -15,7 +15,11 @@ but never in a silo's runtime images.
 Runtime images have two layers (owner decision, 2 October 2026):
 
 - **Application dependencies** (npm and Python packages, our own code, Codex
-  and any other binary we add) must be OSI-approved.
+  and any other binary we add) must be OSI-approved. The PSF/Python licence
+  and HPND variants count as OSI-approved. Third-party parts bundled inside an
+  OSI-licensed package may carry DFSG-free notices (for example CC0, public
+  domain, TCL, FreeType, IJG); each one is listed with its reason in the
+  image's reviewed licence file.
 - **The operating-system layer** may use Debian **main** packages (DFSG-free),
   including public-domain, CC0 and permissive notices such as Unicode, X11,
   HPND and OFL fonts. Debian `non-free` and `contrib`, and source-available
