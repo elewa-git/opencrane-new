@@ -134,10 +134,13 @@ describe('auth routes and the log', () => {
     const sessionCookie = cookieValue(callback, stack.sessionCookieName);
 
     await stack.app.inject({ method: 'GET', url: '/auth/me', cookies: { [stack.sessionCookieName]: sessionCookie } });
-    const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.sessionCookieName]: sessionCookie } });
-    expect(logout.statusCode).toBe(200);
+    const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.sessionCookieName]: sessionCookie } });
+    expect(logout.statusCode).toBe(303);
 
     const text = stack.text();
+    const idToken = new URL(String(logout.headers.location)).searchParams.get('id_token_hint');
+    expect(Boolean(idToken) && !text.includes(idToken!)).toBe(true);
+    expect(logout.body).toBe('');
     // The values the test knows about, one by one, so a failure names the leak.
     for (const [name, secret] of [['code', code], ['state', state], ['flow cookie', flowCookie], ['session cookie', sessionCookie]] as const) {
       expect(text, `the ${name} must not be in the log`).not.toContain(secret);

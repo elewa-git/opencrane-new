@@ -1,15 +1,16 @@
 // Copied from OpenCrane 1 (10abd0ef6)
 // libs/backend/server/infra/auth/src/sessions/session.types.ts and
 // oidc-claims.ts; changed: the session is now the plain, schema-checked
-// object the cookie encrypts (sub, org id, roles, auth_time, expiry) rather
-// than an `express-session`-typed object with email/name/groups and a
-// stored id_token — no token of any kind is ever written to the browser.
+// object the cookie encrypts, including the ID token for bound logout.
+// The token stays inside the HttpOnly encrypted cookie and out of /auth/me.
 import { z } from 'zod';
 import { createEnvelopeCodec, EnvelopeError } from './codec.ts';
 import type { AuthConfig } from './config.ts';
 
 export const sessionSchema = z
   .object({
+    /** Used only for provider logout; optional for existing and dev-only sessions. */
+    idToken: z.string().min(1).optional(),
     /** Stable subject identifier from the identity provider. */
     sub: z.string().min(1),
     /** The caller's organisation, from the configured org claim. */

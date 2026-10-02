@@ -1,0 +1,45 @@
+<main class="sign-in" [class.handoff]="handoff">
+  @if (handoff) {
+    <div class="folds" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <h1>Taking you to your identity provider</h1>
+    <p>You will come back here signed in. Your organisation uses Zitadel to verify your account.</p>
+    <oc-shared-state kind="checking" [message]="'Opening single sign-on in ' + seconds() + (seconds() === 1 ? ' second…' : ' seconds…')" />
+    <button type="button" class="text-button" #cancelButton (click)="cancel()">Cancel and go back</button>
+  } @else {
+    <a class="brand" href="/" aria-label="OpenCrane home">
+      <svg width="21" height="16" viewBox="0 0 32 24" aria-hidden="true"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"/><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"/><polygon points="11,15 16,3 19,15" fill="#22c7dd"/><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"/><polygon points="19,15 30,7 22,20" fill="#66d7e6"/></svg>
+      <span>Open<span class="accent">Crane</span></span>
+    </a>
+    <div class="content">
+      @if (authenticated()) {
+        <h1>You are signed in</h1>
+        <oc-shared-state kind="ready" message="Your workspace session is active" />
+        <a class="button secondary" href="/org/integrations">Organisation integrations</a>
+        <form method="post" action="/auth/logout" enctype="text/plain">
+          <button type="submit" class="button primary">Sign out</button>
+        </form>
+      } @else {
+        <div><p class="eyebrow">{{ organisation }}</p><h1>Sign in to your workspace</h1>
+          @if (!rejected) { <p>{{ invited ? 'You were invited by ' + organisation + '. Your work here stays private to you.' : 'Use your organisation’s account to continue to OpenCrane.' }}</p> }
+        </div>
+        @if (rejected) {
+          <div class="rejection" role="alert">
+            <oc-shared-state kind="failed" message="Those details did not sign you in" [detail]="reason === 'organisation' ? 'This account belongs to a different organisation. Use an account invited to this workspace, or ask your organisation’s admin for help.' : reason === 'unavailable' ? 'We could not reach your identity provider. No workspace session was created. Please try again.' : 'Your sign-in could not be completed. The attempt may have expired or been rejected. Please start again.'" [showAction]="false" />
+          </div>
+          <p>Your email and password are checked by your identity provider.</p>
+        }
+        <button type="button" class="button primary" (click)="signIn()">{{ rejected ? 'Use single sign-on' : 'Continue with single sign-on' }}</button>
+        @if (rejected) { <a class="text-button" href="/">Back to sign in</a> } @else {
+          <div class="divider"><span></span>or<span></span></div>
+          <div class="email-fallback"><label for="work-email">Work email</label>
+            <input id="work-email" type="email" placeholder="you@organisation.com" disabled aria-describedby="email-unavailable">
+            <button type="button" class="button secondary" disabled>Email me a sign-in link</button>
+            <div id="email-unavailable"><oc-shared-state kind="not_configured" message="Email sign-in is unavailable" [showAction]="false" /></div>
+          </div>
+        }
+      }
+      @if (error()) { <oc-shared-state kind="unknown" [message]="error()" [showAction]="false" /> }
+    </div>
+    <footer>self-hosted · data sovereign</footer>
+  }
+</main>

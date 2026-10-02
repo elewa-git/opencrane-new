@@ -248,32 +248,37 @@ describe('completeLogin: client authentication', () => {
 });
 
 describe('buildLogoutUrl', () => {
+  it('does not offer an unbound provider logout for an older session', async () => {
+    const { config } = await setup();
+    expect(await buildLogoutUrl(config, undefined)).toBeNull();
+  });
   it('points at the provider logout with client_id and the post-logout redirect', async () => {
     const postLogoutRedirectUri = 'https://app.example.test/signed-out';
     const { provider, config } = await setup({}, { postLogoutRedirectUri });
-    const url = new URL((await buildLogoutUrl(config))!);
+    const url = new URL((await buildLogoutUrl(config, 'test-id-token'))!);
 
     expect(url.origin + url.pathname).toBe(`${provider.url}/endsession`);
     expect(url.searchParams.get('client_id')).toBe(provider.clientId);
+    expect(url.searchParams.get('id_token_hint')).toBe('test-id-token');
     expect(url.searchParams.get('post_logout_redirect_uri')).toBe(postLogoutRedirectUri);
   });
 
   it('leaves post_logout_redirect_uri out when none is configured', async () => {
     const { config } = await setup();
-    const url = new URL((await buildLogoutUrl(config))!);
+    const url = new URL((await buildLogoutUrl(config, 'test-id-token'))!);
 
     expect(url.searchParams.has('post_logout_redirect_uri')).toBe(false);
   });
 
   it('is null when the provider has no end_session_endpoint', async () => {
     const { config } = await setup({ endSession: false });
-    expect(await buildLogoutUrl(config)).toBeNull();
+    expect(await buildLogoutUrl(config, 'test-id-token')).toBeNull();
   });
 
   it('is null, not an error, when the provider cannot be reached', async () => {
     const { provider, config } = await setup();
     await provider.close();
 
-    expect(await buildLogoutUrl(config)).toBeNull();
+    expect(await buildLogoutUrl(config, 'test-id-token')).toBeNull();
   });
 });

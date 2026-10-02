@@ -34,8 +34,11 @@ Register refresh failures keep old rows and their load time visible. The always-
 refresh button stays in place and keeps keyboard focus while retrying. Non-admins see that the Owner or Admin role is required. Adding an
 MCP server is explicitly unavailable; no setup flow or mutation is simulated.
 Socket closure updates state and schedules reconnect with jitter;
-there is no durable outgoing message queue. Logout posts to the server, then follows
-a validated provider URL when available or returns home. Page navigation ends the
+there is no durable outgoing message queue. Sign out uses a native form POST to
+`/auth/logout`; the server sends a 303 navigation to Zitadel. Page JavaScript never
+reads a logout URL or ID token. Zitadel signs out all accounts in that browser,
+returns home without a chooser and requires credentials on the next sign-in.
+That next sign-in may first show a remembered-account selector. Page navigation ends the
 current socket; the shell does not explicitly disconnect it first. The server checks
 the session and Origin on every WebSocket upgrade.
 
@@ -58,3 +61,22 @@ durable history and event replay belong to the future server implementation.
 Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-hosted
 DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
+
+## Sign-in
+
+`/` shows the SSO-first sign-in screen or the current session and sign-out action.
+`/signin/handoff` focuses Cancel and announces a five-second countdown before
+opening the existing server login route; Cancel returns home and stops the timer.
+`/signin/rejected` shows fixed, safe failure copy with an SSO recovery action.
+Set the public `opencrane-org` meta tag in `src/index.html` for the deployment’s
+organisation display name. A non-empty `?invitation=…` arrival shows the frame’s
+invitation copy using that name; it does not grant membership or validate an invite.
+All three use the onboarding SSO colour token and shared states at desktop and
+390px widths. Passwords stay on Zitadel. Email sign-in is unavailable until
+delivery is qualified; there is no fake sent-email screen.
+
+Run `npm run visual:signin` with the dev stack running to capture the three screens
+and 1× card comparisons cropped from the design source in `/home/jente/.fleet/signin-shots/`. The capture checks card dimensions, spacing, tokens, copy, overflow and 44px
+controls. Browser-clock checks exercise focus, Enter/Space cancellation and timing. The live journey uses normal
+timers, real Zitadel and both test accounts; see the
+[sign-in evidence](../../docs/process/signin-evidence.md).

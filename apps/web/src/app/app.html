@@ -1,10 +1,5 @@
 @if (!orgPage) {
-  <header class="shell-header"><h1>OpenCrane</h1></header>
-  <main class="shell-main">
-    <p>Sign in to OpenCrane, or end the current identity-provider session.</p>
-    <div class="shell-actions"><button type="button" class="button primary" (click)="signIn()">Sign in</button><button type="button" class="button secondary" (click)="signOut()" [disabled]="signOutPending()">Sign out</button></div>
-    @if (signOutError(); as message) { <p class="error-message" role="alert">{{ message }}</p> }
-  </main>
+  <oc-sign-in />
 } @else { <div class="app-frame">
   <header class="mobile-bar">
     <button type="button" class="menu-button" aria-label="Open organisation navigation" (click)="menuOpen.set(!menuOpen())">☰</button>

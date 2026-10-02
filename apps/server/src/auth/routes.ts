@@ -8,8 +8,9 @@
 // of that, a line here carries only a fixed reason. It never carries the
 // error object, a cookie, a code or a token, because an error from the
 // identity provider can hold the response body it sent back.
+import { sessionFor } from '../members/routes.ts';
 import { URL } from 'node:url';
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
   buildLoginRedirect,
   buildLogoutUrl,
@@ -30,7 +31,7 @@ import {
   type AuthConfig,
   type CookieAttributes,
 } from '@opencrane/auth';
-import { logoutResponseSchema, type LogoutResponse } from '@opencrane/protocol';
+import { z } from 'zod';
 
 function cookieAttrs(config: AuthConfig): Pick<CookieAttributes, 'httpOnly' | 'secure' | 'path'> {
   return { httpOnly: true, secure: config.cookieSecure, path: '/' };
@@ -38,6 +39,16 @@ function cookieAttrs(config: AuthConfig): Pick<CookieAttributes, 'httpOnly' | 's
 
 function readCookie(request: FastifyRequest, name: string): string | undefined {
   return parseCookieHeader(request.headers.cookie)[name];
+}
+
+function rejectLogin(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, reason: string) {
+  reply.header('set-cookie', [clearCookie(config.flowCookieName, cookieAttrs(config)), clearCookie(config.cookieName, cookieAttrs(config))]);
+  if (request.headers.accept?.includes('text/html')) {
+    const code = reason === 'this account belongs to a different organisation' ? 'organisation'
+      : reason === 'identity provider unavailable' ? 'unavailable' : 'rejected';
+    return reply.redirect(`/signin/rejected?reason=${code}`, 302);
+  }
+  return reply.code(400).send({ error: reason });
 }
 
 export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): void {
@@ -48,7 +59,9 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
         ? query.returnTo : undefined,
     );
 
-    const redirect = await buildLoginRedirect(config);
+    let redirect;
+    try { redirect = await buildLoginRedirect(config); }
+    catch { return rejectLogin(request, reply, config, 'identity provider unavailable'); }
     const flowCookie = encodeFlow(config, {
       state: redirect.state,
       nonce: redirect.nonce,
@@ -65,8 +78,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     const flowCookie = readCookie(request, config.flowCookieName);
     if (!flowCookie) {
       request.log.warn('sign-in callback refused: no login is in progress');
-      reply.code(400).send({ error: 'no login is in progress' });
-      return;
+      return rejectLogin(request, reply, config, 'no login is in progress');
     }
 
     let flow;
@@ -75,8 +87,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     } catch (err) {
       const reason = err instanceof FlowInvalidError ? err.message : 'invalid login state';
       request.log.warn(`sign-in callback refused: ${reason}`);
-      reply.code(400).send({ error: reason });
-      return;
+      return rejectLogin(request, reply, config, reason);
     }
 
     // The query carries `state`, which authorizationCodeGrant checks below;
@@ -89,8 +100,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     } catch (err) {
       const reason = err instanceof OidcLoginError ? err.message : 'login failed';
       request.log.warn(`sign-in failed: ${reason}`);
-      reply.code(400).send({ error: reason });
-      return;
+      return rejectLogin(request, reply, config, reason);
     }
 
     const sessionCookie = encodeSession(config, result.session);
@@ -103,20 +113,25 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
   });
 
   app.post('/auth/logout', async (request, reply) => {
-    // The local session is cleared even if the provider cannot be reached;
-    // the endSessionUrl is just what the browser is asked to go to next.
-    // The reply uses the schema from @opencrane/protocol, the one the web app
-    // reads it with. That schema accepts only an http(s) address, so a
-    // provider address of any other kind is dropped here, not sent to the
-    // browser to be rejected (or, worse, followed).
-    const providerAddress = logoutResponseSchema.safeParse({ endSessionUrl: await buildLogoutUrl(config) });
-    const body: LogoutResponse = providerAddress.success ? providerAddress.data : { endSessionUrl: null };
-    if (!providerAddress.success) {
+    if (request.headers.origin !== new URL(config.redirectUri).origin) {
+      return reply.code(403).send({ error: 'wrong origin' });
+    }
+    const session = sessionFor(request, config, new Date());
+    if (!session) return reply.code(401).send({ error: 'no session' });
+    if (config.expectedOrgId && session.orgId !== config.expectedOrgId) {
+      return reply.code(403).send({ error: 'wrong organisation' });
+    }
+    // Keep the token in the navigation header; never put it in a response body.
+    const address = await buildLogoutUrl(config, session.idToken);
+    const provider = z.url({ protocol: /^https?$/u }).safeParse(address);
+    if (address !== null && !provider.success) {
       request.log.warn('the identity provider logout address is not an http(s) address, so none was sent');
     }
     reply.header('set-cookie', clearCookie(config.cookieName, cookieAttrs(config)));
-    request.log.info({ providerLogout: body.endSessionUrl !== null }, 'signed out');
-    reply.send(body);
+    reply.header('cache-control', 'no-store');
+    request.log.info({ providerLogout: provider.success }, 'signed out');
+    if (provider.success) return reply.code(303).header('location', provider.data).send();
+    return reply.type('text/plain').send('You are signed out of OpenCrane. Your identity provider session could not be ended.');
   });
 
   app.get('/auth/me', async (request, reply) => {
@@ -127,7 +142,9 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     }
     try {
       const session = decodeSession(config, cookieValue);
-      reply.send({ authenticated: true, user: session });
+      if (config.expectedOrgId && session.orgId !== config.expectedOrgId) return reply.send({ authenticated: false, user: null });
+      const { sub, orgId, roles, authTime, exp } = session;
+      reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp } });
     } catch (err) {
       if (err instanceof SessionInvalidError || err instanceof SessionExpiredError) {
         reply.send({ authenticated: false, user: null });

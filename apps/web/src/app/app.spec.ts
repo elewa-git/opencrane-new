@@ -154,7 +154,7 @@ describe('MCP register', () => {
     globalThis.history.replaceState({}, '', '/');
     const fixture = create();
     expect(root(fixture).textContent).toContain('OpenCrane');
-    expect(button(root(fixture), 'Sign in')).toBeTruthy();
-    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(button(root(fixture), 'Continue with single sign-on')).toBeTruthy();
+    expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/auth/me');
   });
 });

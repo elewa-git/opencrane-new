@@ -21,7 +21,6 @@ Server messages include hello echoes, errors, validation results and versioned m
 [subscription contract](../../apps/server/README.md#members-realtime-and-shutdown).
 The event-validation request carries `unknown` data: the server must validate it
 against the [event catalogue package](../events/README.md) before accepting it.
-`logoutResponseSchema` allows a nullable HTTP(S) provider logout URL.
 `integrationsResponseSchema` defines MCP register rows and their shared state kinds;
 `integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
 
@@ -37,7 +36,7 @@ npm test -- libs/protocol
 npm run typecheck -w libs/protocol
 ```
 
-Tests cover valid/invalid messages and logout URL schemes. Server tests cover the
+Tests cover valid/invalid messages. Server tests cover the
 runtime socket boundary; Angular tests cover client handling. This skeleton is not a
 live-qualified chat or command protocol and stores no recoverable state.
 The only runtime dependency is Zod; the package is usable by browser and Node code.

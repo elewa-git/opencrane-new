@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { createStore } from '@opencrane/authz';
-import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory } from './config.ts';
+import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
 const names = ['members', 'mcp-catalogue', 'dispatcher', 'server', 'web'];
@@ -127,7 +127,7 @@ async function up(fresh: boolean) {
     await compose('down', '--volumes', '--remove-orphans');
     // The ownership marker fences this directory to this worktree.
     const files = await import('node:fs/promises').then((fs) => fs.readdir(directory));
-    for (const file of files) if (file !== 'stack-owner') await rm(`${directory}/${file}`);
+    for (const file of files) if (file !== 'stack-owner' && !file.startsWith('zitadel-') && file !== 'zitadel.json') await rm(`${directory}/${file}`);
     await generate(origin);
   }
   const settings = await readEnv('settings');
@@ -150,7 +150,7 @@ async function up(fresh: boolean) {
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
     { ...await readEnv('dispatcher'), ...binding });
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
-    { ...await readEnv('command'), ...await readEnv('auth'), ...await readEnv('server'), ...binding });
+    { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
     '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname });
@@ -179,7 +179,7 @@ async function up(fresh: boolean) {
     }
   }
   console.log('PASS listener check: every stack listener is on loopback or Tailscale');
-  console.log(`Stack ready: ${origin}/org/integrations (dev-only test sessions; OIDC pending #11)`);
+  console.log(`Stack ready: ${origin}/org/integrations (Zitadel sign-in)`);
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
