@@ -28,7 +28,10 @@ fi
 rg -q 'CC0-1.0' "$state/result"
 python3 test/licences.py
 # Exercise collection against installed files, including a metadata-named custom filename.
-docker run --rm -i -v "$PWD/collect-licences.py:/tmp/collect.py:ro" --entrypoint python3 ocn-computer-runtime - <<'PYTHON'
+docker run --rm -i -v "$PWD/collect-licences.py:/tmp/collect.py:ro" \
+  -v "$PWD/check-licences.py:/tmp/check.py:ro" \
+  -v "$PWD/reviewed-licences.json:/tmp/reviewed.json:ro" \
+  -v "$PWD/.state/osi.json:/tmp/osi.json:ro" --entrypoint python3 ocn-computer-runtime - <<'PYTHON'
 import importlib.util
 import json
 from pathlib import Path
@@ -52,4 +55,29 @@ except ValueError as error:
 else:
     raise AssertionError('missing metadata-named file accepted')
 print('PASS: real image collector includes every notice name and custom metadata file; missing named file fails')
+
+spec = importlib.util.spec_from_file_location('checker', '/tmp/check.py')
+checker = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(checker)
+reviewed = json.loads(Path('/tmp/reviewed.json').read_text())
+osi = {p['licenseId'] for p in json.loads(Path('/tmp/osi.json').read_text())['licenses'] if p.get('isOsiApproved')}
+package = {'name': 'lxml', 'version': '6.1.3', 'type': 'python', 'licenses': [{'value': 'BSD-3-Clause'}]}
+evidence = {'notices': notices, 'installedFiles': collector.installed_files()}
+def result():
+    return checker.check({'artifacts': [package]}, osi, evidence, reviewed)[0]['result']
+assert result() == 'PASS'
+for name in ['RNG2Schtrn.xsl', 'XSD2Schtrn.xsl']:
+    path = Path('/opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl') / name
+    assert not path.exists()
+    path.write_text('unlicensed stylesheet restored')
+    evidence['installedFiles'] = collector.installed_files()
+    assert result() == 'FAIL', 'a restored stylesheet must block release'
+    path.unlink()
+    path.symlink_to('/absent-target')
+    evidence['installedFiles'] = collector.installed_files()
+    assert result() == 'FAIL', 'a dangling stylesheet link is not absence'
+    path.unlink()
+evidence['installedFiles'] = collector.installed_files()
+assert result() == 'PASS'
+print('PASS: actual image has no unlicensed stylesheets; restoring either file or a dangling link fails the gate')
 PYTHON

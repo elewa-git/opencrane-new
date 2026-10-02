@@ -1920,9 +1920,36 @@
           "sources": [
             "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info/licenses/LICENSES.txt"
           ],
-          "reason": "The installed notice describes RNG2Schtrn.xsl and XSD2Schtrn.xsl as unlicensed; unknown terms block release."
+          "reason": "The notice describes two unlicensed extraction stylesheets, both removed from the installed image; the reviewed actual-file inventory and absence patterns are required.",
+          "absent": "removed-schematron-stylesheets",
+          "lines": [
+            33,
+            36
+          ]
         }
-      ]
+      ],
+      "absenceProofs": {
+        "removed-schematron-stylesheets": {
+          "roots": [
+            "/opt/python/lib/python3.11/site-packages/lxml",
+            "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info"
+          ],
+          "fileCount": 174,
+          "inventorySha256": "sha256:94723b502963e491d83e0493499eb4b7ec16451760b45fcd00601cfeb3252183",
+          "absentPatterns": [
+            "/(?:RNG2Schtrn|XSD2Schtrn)\\.xsl$"
+          ],
+          "checks": [
+            "Dockerfile deletes exactly lxml/isoschematron/resources/xsl/RNG2Schtrn.xsl and XSD2Schtrn.xsl. The collector scans actual installed files and the checker rejects either filename anywhere in /opt/python.",
+            "Recursive installed-code search for isoschematron|RNG2Schtrn|XSD2Schtrn over /opt/python/lib/python3.11/site-packages, /usr/lib/python3/dist-packages, /app, /spike and /usr/local/lib/node_modules: only lxml/isoschematron/__init__.py lines 1, 46, 48, 132 and 172 match. Extensions searched: .py, .pyi, .pyx, .pxd, .h, .c, .ts, .js, .mjs, .xsl. No external caller uses this module; its import is intentionally unavailable after removal.",
+            "BSD-3-Clause lxml and the reviewed native library/Python helper grants remain unchanged. Fresh and resumed image checks exercise real MarkItDown PDF, DOCX, XLSX and PPTX conversion."
+          ],
+          "removedFiles": [
+            "/opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl/RNG2Schtrn.xsl",
+            "/opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl/XSD2Schtrn.xsl"
+          ]
+        }
+      }
     },
     "python:magika@0.6.3": {
       "detected": [
@@ -2026,17 +2053,137 @@
       },
       "bundled": [
         {
-          "component": "ONNX third-party components including Intel MKL",
+          "component": "ONNX omnibus OSI components",
+          "spdx": [
+            "MIT",
+            "Apache-2.0",
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "MPL-2.0",
+            "NCSA",
+            "BSL-1.0",
+            "Unlicense",
+            "HPND"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+          "reason": "Remaining sections grant these OSI terms: protobuf, zlib, pybind11, ONNX, Eigen, DNNL, GSL, TensorFlow/CNTK, NumPy/PyTorch/Caffe, LLVM, benchmark, HalideIR, dmlc, DLPack/date/getopt/googletest/G3log, scikit-learn/re2/TensorRT/CUTLASS/Boost, DNNLibrary/flatbuffers/glog/abseil/wil/json/SafeInt, MPI/mpi4py/Android, transformers/msgpack/tensorboardX/tensorboard/cerberus/MurmurHash3/gtest-ios/emsdk/coreml/react-native/cpuinfo/XNNPACK/sentencepiece/dlfcn/Pillow/OpenSSL/RapidJSON, pthreads/Triton/mimalloc/TensorFlow.js/Mbed TLS/neural-compressor/FlashAttention/neural-speed/dawn/KleidiAI/telemetry/DeepGEMM. This records notice coverage, not a claim that all optional providers are installed."
+        },
+        {
+          "component": "zlib",
+          "spdx": [
+            "Zlib"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+          "reason": "The madler/zlib section grants the zlib licence."
+        },
+        {
+          "component": "SQLite and libb64 public-domain code",
+          "spdx": [
+            "LicenseRef-Public-Domain"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+          "reason": "Their separate omnibus sections expressly dedicate code to the public domain; these are reviewed free bundled notices, not the primary runtime licence."
+        },
+        {
+          "component": "Intel Math Kernel Library (Intel MKL)",
           "spdx": [
             "LicenseRef-Intel-Restricted"
           ],
           "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
-          "sources": [
-            "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt"
+          "reason": "The exact installed wheel has no MKL or Intel-restricted runtime component, as established by the file inventory, native dependencies, symbols, strings and provider checks below.",
+          "absent": "wheel-without-mkl-or-jsonchecker",
+          "lines": [
+            22,
+            90
+          ]
+        },
+        {
+          "component": "RapidJSON bin/jsonchecker test data",
+          "spdx": [
+            "JSON"
           ],
-          "reason": "Installed omnibus notice contains Intel terms forbidding modification and reverse engineering; these are not OSI or DFSG-free. Release is blocked."
+          "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+          "reason": "The notice explicitly confines JSON terms to bin/jsonchecker, absent from the inspected wheel; MIT runtime terms remain checked.",
+          "absent": "wheel-without-mkl-or-jsonchecker",
+          "lines": [
+            4989,
+            5011
+          ]
         }
-      ]
+      ],
+      "absenceProofs": {
+        "wheel-without-mkl-or-jsonchecker": {
+          "roots": [
+            "/opt/python/lib/python3.11/site-packages/onnxruntime",
+            "/opt/python/lib/python3.11/site-packages/onnxruntime-1.30.0.dist-info",
+            "/opt/python/bin/onnxruntime_test"
+          ],
+          "fileCount": 325,
+          "inventorySha256": "sha256:47f0f608597e46b908b34fd887c7e9449ba1c12f88bc00f666fa728324048041",
+          "absentPatterns": [
+            "(?i)/(?:lib)?(?:mkl|iomp|imf|svml|irc)[^/]*\\.(?:so(?:\\.[0-9.]+)?|a|dll|dylib)$",
+            "(?i)/(?:[^/]*jsonchecker[^/]*|JSON_checker[^/]*)",
+            "/libonnxruntime_providers_(?:dnnl|openvino)\\.so"
+          ],
+          "checks": [
+            "Wheel RECORD and a recursive scan of actual installed paths identify exactly three ELF libraries and one installed CLI wrapper. No libmkl*, libiomp*, Intel compiler runtime, DNNL/OpenVINO provider or JSON_checker file is installed.",
+            "readelf -d on every ELF: NEEDED and SONAME values listed in binaries below. ldd resolves the complete closure to Debian glibc, libstdc++ and libgcc only; no missing or Intel runtime libraries.",
+            "nm -D -C and strings on all three ELF files: zero matches for (?i)(mkl_|mklml|libmkl|libiomp|__intel_|__svml|libsvml|libimf|libirc|iJIT_|ittnotify|neural_speed|JSON_checker|jsonchecker). This covers dynamic symbols and retained static implementation strings; hashes bind the inspection to these exact binaries.",
+            "Broad strings search does find generic DnnlExecutionProvider/OpenVINOExecutionProvider names, absent-provider loader filenames and disabled-provider errors; pybind also contains a documentation string mentioning MKL. These are dispatch stubs/documentation, not shipped implementations. No matching dynamic symbols or provider libraries exist.",
+            "onnxruntime.get_available_providers() returns AzureExecutionProvider and CPUExecutionProvider. get_build_info(): git-branch=HEAD, git-commit-id=f2c39fe, fp8-kv-cache=1, build type=Release.",
+            "onnxruntime_test is a 240-byte Python wrapper importing onnxruntime.tools.onnxruntime_test.main; it embeds no native code. MarkItDown 0.1.8 imports magika unconditionally at _markitdown.py:17 and constructs Magika at line 168; both dependencies are retained.",
+            "The RapidJSON notice also includes JSON-licensed bin/jsonchecker test inputs. No such paths, JSON_checker symbols or strings are installed. RapidJSON runtime code remains MIT; only the JSON test-data terms are excluded."
+          ],
+          "binaries": [
+            {
+              "path": "/opt/python/lib/python3.11/site-packages/onnxruntime/capi/onnxruntime_pybind11_state.cpython-311-x86_64-linux-gnu.so",
+              "sha256": "sha256:04995c66eb464d2c326dc2f644fb202ce5365d5630f8838ef7064d414c05e7ec",
+              "needed": [
+                "libdl.so.2",
+                "librt.so.1",
+                "libpthread.so.0",
+                "libstdc++.so.6",
+                "libm.so.6",
+                "libgcc_s.so.1",
+                "libc.so.6",
+                "ld-linux-x86-64.so.2"
+              ],
+              "soname": null
+            },
+            {
+              "path": "/opt/python/lib/python3.11/site-packages/onnxruntime/capi/libonnxruntime_providers_shared.so",
+              "sha256": "sha256:086ec1d5388f64153d9c63470d126693db9a182c8ce236d3a1119068471b8a0d",
+              "needed": [
+                "libstdc++.so.6",
+                "libm.so.6",
+                "libgcc_s.so.1",
+                "libc.so.6"
+              ],
+              "soname": "libonnxruntime_providers_shared.so"
+            },
+            {
+              "path": "/opt/python/lib/python3.11/site-packages/onnxruntime/capi/libonnxruntime.so.1.30.0",
+              "sha256": "sha256:c902c70b3003c0e99fada202f37478c515ae9bba7944c2b2abd0017bae0c82ed",
+              "needed": [
+                "libdl.so.2",
+                "librt.so.1",
+                "libpthread.so.0",
+                "libstdc++.so.6",
+                "libm.so.6",
+                "libgcc_s.so.1",
+                "libc.so.6",
+                "ld-linux-x86-64.so.2"
+              ],
+              "soname": "libonnxruntime.so.1"
+            },
+            {
+              "path": "/opt/python/bin/onnxruntime_test",
+              "sha256": "sha256:ea7f534cae7015c78f97a115184e64813a526f4a715bc5815488ba7138c84cec",
+              "format": "Python CLI wrapper; no native code"
+            }
+          ]
+        }
+      }
     },
     "python:openpyxl@3.1.5": {
       "detected": [

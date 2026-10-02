@@ -48,6 +48,13 @@ def notice_file(path):
                 and any(part.lower() in {'licenses', 'licences', 'notices'} for part in path.parts)))
 
 
+def installed_files():
+    # Actual paths, not RECORD claims; include links even when dangling.
+    return {str(p): ('symlink:' + str(p.readlink()) if p.is_symlink()
+                    else 'sha256:' + hashlib.sha256(p.read_bytes()).hexdigest())
+            for p in sorted(Path('/opt/python').rglob('*')) if p.is_symlink() or p.is_file()}
+
+
 def notices():
     paths = set(Path('/usr/share/doc').glob('*/copyright'))
     owners = {}
@@ -106,6 +113,7 @@ if __name__ == '__main__':
         texts, owners = notices()
         print(json.dumps({'apt': json.loads(Path('/usr/share/opencrane/apt-packages.json').read_text()),
                           'notices': texts, 'owners': owners,
+                          'installedFiles': installed_files(),
                           'artifacts': [{'name': 'opencrane-computer', 'version': 'p2-1', 'type': 'application',
                                          'licenses': [{'value': re.search(r'SPDX-License-Identifier: (\S+)', Path('/app/LICENSE').read_text())[1],
                                                        'locations': [{'path': '/app/LICENSE'}]}]}]}))

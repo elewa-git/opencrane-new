@@ -13416,13 +13416,16 @@
         "sources": [
           "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info/licenses/LICENSES.txt"
         ],
-        "reason": "The installed notice describes RNG2Schtrn.xsl and XSD2Schtrn.xsl as unlicensed; unknown terms block release."
+        "reason": "The notice describes two unlicensed extraction stylesheets, both removed from the installed image; the reviewed actual-file inventory and absence patterns are required.",
+        "absent": "removed-schematron-stylesheets",
+        "lines": [
+          33,
+          36
+        ]
       }
     ],
-    "result": "FAIL",
-    "unresolved": [
-      "LicenseRef-Unreviewed"
-    ]
+    "result": "PASS",
+    "unresolved": []
   },
   {
     "name": "magika",
@@ -13825,7 +13828,7 @@
     "name": "onnxruntime",
     "version": "1.30.0",
     "type": "python",
-    "category": "application-osi",
+    "category": "application-osi-with-bundled-free",
     "licences": [
       "MIT License"
     ],
@@ -13835,22 +13838,66 @@
     "archives": [],
     "bundled": [
       {
-        "component": "ONNX third-party components including Intel MKL",
+        "component": "ONNX omnibus OSI components",
+        "spdx": [
+          "MIT",
+          "Apache-2.0",
+          "BSD-2-Clause",
+          "BSD-3-Clause",
+          "MPL-2.0",
+          "NCSA",
+          "BSL-1.0",
+          "Unlicense",
+          "HPND"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+        "reason": "Remaining sections grant these OSI terms: protobuf, zlib, pybind11, ONNX, Eigen, DNNL, GSL, TensorFlow/CNTK, NumPy/PyTorch/Caffe, LLVM, benchmark, HalideIR, dmlc, DLPack/date/getopt/googletest/G3log, scikit-learn/re2/TensorRT/CUTLASS/Boost, DNNLibrary/flatbuffers/glog/abseil/wil/json/SafeInt, MPI/mpi4py/Android, transformers/msgpack/tensorboardX/tensorboard/cerberus/MurmurHash3/gtest-ios/emsdk/coreml/react-native/cpuinfo/XNNPACK/sentencepiece/dlfcn/Pillow/OpenSSL/RapidJSON, pthreads/Triton/mimalloc/TensorFlow.js/Mbed TLS/neural-compressor/FlashAttention/neural-speed/dawn/KleidiAI/telemetry/DeepGEMM. This records notice coverage, not a claim that all optional providers are installed."
+      },
+      {
+        "component": "zlib",
+        "spdx": [
+          "Zlib"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+        "reason": "The madler/zlib section grants the zlib licence."
+      },
+      {
+        "component": "SQLite and libb64 public-domain code",
+        "spdx": [
+          "LicenseRef-Public-Domain"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+        "reason": "Their separate omnibus sections expressly dedicate code to the public domain; these are reviewed free bundled notices, not the primary runtime licence."
+      },
+      {
+        "component": "Intel Math Kernel Library (Intel MKL)",
         "spdx": [
           "LicenseRef-Intel-Restricted"
         ],
         "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
-        "sources": [
-          "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt"
+        "reason": "The exact installed wheel has no MKL or Intel-restricted runtime component, as established by the file inventory, native dependencies, symbols, strings and provider checks below.",
+        "absent": "wheel-without-mkl-or-jsonchecker",
+        "lines": [
+          22,
+          90
+        ]
+      },
+      {
+        "component": "RapidJSON bin/jsonchecker test data",
+        "spdx": [
+          "JSON"
         ],
-        "reason": "Installed omnibus notice contains Intel terms forbidding modification and reverse engineering; these are not OSI or DFSG-free. Release is blocked."
+        "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+        "reason": "The notice explicitly confines JSON terms to bin/jsonchecker, absent from the inspected wheel; MIT runtime terms remain checked.",
+        "absent": "wheel-without-mkl-or-jsonchecker",
+        "lines": [
+          4989,
+          5011
+        ]
       }
     ],
-    "result": "FAIL",
-    "unresolved": [
-      "LicenseRef-Intel-Restricted",
-      "Source-available licence: Intel Simplified Software License"
-    ]
+    "result": "PASS",
+    "unresolved": []
   },
   {
     "name": "openpyxl",

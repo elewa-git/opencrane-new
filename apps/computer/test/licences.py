@@ -116,3 +116,39 @@ app_evidence['notices']['/node_modules/probe/NOTICE'] = 'unlisted notice'
 record['files']['/node_modules/probe/NOTICE'] = checker.digest('unlisted notice')
 assert app_result()['result'] == 'FAIL'
 print('PASS: ordinary MIT package restrictive/unlisted notices, and pinned but unclassified notice refused')
+
+# An omnibus notice can name an absent component, but its proof must still
+# match every installed byte. A present component never gets this exclusion.
+app_evidence['notices'].pop('/node_modules/probe/NOTICE')
+record['files'].pop('/node_modules/probe/NOTICE')
+app_evidence['notices'][part_file] = 'MIT bundle\nIntel Simplified Software License\nMIT tail\n'
+record['files'][part_file] = checker.digest(app_evidence['notices'][part_file])
+record['bundled'] = [dict(saved['bundled'][0], spdx=['LicenseRef-Intel-Restricted'],
+                          absent='no-mkl', lines=[2, 2])]
+installed = {'/node_modules/probe/vendor/runtime.so': checker.digest('inspected ELF')}
+app_evidence['installedFiles'] = installed
+proof = {'roots': ['/node_modules/probe/vendor'], 'checks': ['Inspected ELF symbols and dependencies; no MKL.'],
+         'absentPatterns': [r'/libmkl[^/]*$'],
+         'inventorySha256': checker.digest(json.dumps(installed, sort_keys=True, separators=(',', ':')))}
+record['absenceProofs'] = {'no-mkl': proof}
+assert app_result()['result'] == 'PASS', 'exact reviewed absent component'
+for path in ['/node_modules/probe/vendor/libmkl.so', '/elsewhere/libmkl.so']:
+    installed[path] = checker.digest('Intel component actually installed')
+    assert app_result()['result'] == 'FAIL', 'present component cannot use an absent notice review'
+    installed.pop(path)
+installed['/node_modules/probe/vendor/runtime.so'] = checker.digest('changed native code')
+assert app_result()['result'] == 'FAIL', 'changed library invalidates symbol inspection'
+installed['/node_modules/probe/vendor/runtime.so'] = checker.digest('inspected ELF')
+installed['/node_modules/probe/vendor/extra.so'] = checker.digest('unreviewed code')
+assert app_result()['result'] == 'FAIL', 'added library invalidates reviewed inventory'
+installed.pop('/node_modules/probe/vendor/extra.so')
+app_evidence.pop('installedFiles')
+assert app_result()['result'] == 'FAIL', 'missing collection is not evidence of absence'
+app_evidence['installedFiles'] = installed
+record['absenceProofs'] = {}
+assert app_result()['result'] == 'FAIL', 'component name alone is not a proof'
+record['absenceProofs'] = {'no-mkl': proof}
+app_evidence['notices'][part_file] += 'redistribution forbidden\n'
+record['files'][part_file] = checker.digest(app_evidence['notices'][part_file])
+assert app_result()['result'] == 'FAIL', 'other sections of an omnibus notice remain checked'
+print('PASS: absent component needs exact file proof; present, changed, added and missing evidence rejected; other notice sections still checked')

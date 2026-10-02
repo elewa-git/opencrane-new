@@ -1,17 +1,14 @@
 # Computer image — P2-1
 
-Product runtime promoted from S0.1b, S0.3 and S0.5. **Release blocked:** the
-complete notice gate accepts 380/382 packages. It now rejects ONNX Runtime's
-restrictive Intel MKL notice and lxml's explicitly unlicensed Schematron
-stylesheets. These notices were previously omitted or never classified.
-No exception has been added and no replacement dependency has been selected.
+Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
+accepts 382/382 packages. ONNX Runtime is retained: its wheel contains no
+Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
+are removed. Both decisions require reviewed, exact installed-file evidence.
 
-The checked template pins the tested qualification image at
-`sha256:91b7068444fe49de9def1a38b47d02f88d66283b68cb120b58afb02982b47bfe`.
-It is published as `127.0.0.1:5001/opencrane/computer:qualification` for the
-disposable development test only. The `p2-1` release tag remains unchanged at
-`sha256:31bc9036e358a73cb43eb25550e404fd2d1fc5381aa602f8d52365524b19a558`;
-it does **not** contain these fixes. See [evidence.json](evidence.json).
+The checked template pins the tested release image at
+`sha256:4dbe85e978021417c8e3fa509da2af5b8ab608f126dc5c92c04a89242ea43156`.
+It is published as `127.0.0.1:5001/opencrane/computer:p2-1` after fresh and
+resumed k3d checks. See [evidence.json](evidence.json).
 
 ## Build and check
 
@@ -21,7 +18,7 @@ and the root workspace dependencies:
 
 ```sh
 apps/computer/test/licences.sh
-apps/computer/build.sh # currently refuses publication at the licence gate
+apps/computer/build.sh
 shellcheck apps/computer/build.sh apps/computer/test/licences.sh
 ```
 
@@ -70,7 +67,10 @@ application; it receives no Debian-main exception.
   texts. Each entry names its source and reason. Application corrections check
   exact package/version, scanner metadata and every collected metadata/notice
   file hash for **every** application package, including ordinary MIT packages. Missing, changed or additional files fail. Forbidden terms are
-  checked before mappings, including inside bundled text.
+  checked before licence mappings, including inside bundled text. A component
+  notice can be excluded only with a reviewed proof tied to the exact installed
+  file inventory; only its specified lines are excluded. Missing evidence,
+  changed binaries, added files or present excluded components fail.
 
 Syft 1.54.0 produces `.state/sbom.syft.json` and `.state/sbom.spdx.json`.
 Installed notices and apt matches form `.state/licence-evidence.json`;
@@ -88,10 +88,24 @@ image completeness check covers 89 installed notice and metadata-named files.
 Regressions reject an ordinary MIT package with a redistribution-forbidden
 notice, unlisted NOTICE files and missing metadata-named files.
 
-Two newly checked packages block release: `onnxruntime@1.30.0` includes Intel
-terms forbidding modification and reverse engineering in ThirdPartyNotices.txt;
-`lxml@6.1.3` explicitly calls installed RNG2Schtrn.xsl and XSD2Schtrn.xsl
-unlicensed. Their rejected records remain visible in the inventory.
+ONNX Runtime 1.30.0's omnibus notice names Intel MKL, but the installed wheel
+contains only `libonnxruntime.so.1.30.0`, `libonnxruntime_providers_shared.so`,
+`onnxruntime_pybind11_state.cpython-311-x86_64-linux-gnu.so` and the Python
+`onnxruntime_test` CLI wrapper. The review records their hashes, SONAMEs and
+NEEDED libraries, symbol/string checks, the 325-file inventory hash and CPU/Azure
+provider results. No MKL or Intel-restricted runtime is shipped. Generic
+DNNL/OpenVINO loader names remain, with no matching provider libraries.
+The same inspection excludes RapidJSON's JSON-licensed `bin/jsonchecker` test
+data; its MIT runtime notice remains checked. MarkItDown 0.1.8 imports magika
+unconditionally, so both magika and ONNX Runtime are retained.
+
+For lxml 6.1.3, the Dockerfile removes only `RNG2Schtrn.xsl` and `XSD2Schtrn.xsl`.
+Searching installed code finds references only inside `lxml.isoschematron`
+itself; that unused module can no longer be imported. The checker requires
+both files to be absent and pins the remaining 174-file inventory. BSD-3-Clause
+and the other reviewed bundled grants and notice files remain intact. Tests
+restore each stylesheet and a dangling link in the actual image and require
+rejection. Fresh and resumed checks convert PDF, DOCX, XLSX and PPTX documents.
 
 The previously reviewed Python notices remain classified. Defusedxml uses
 PSF-2.0; typing-extensions uses PSF/Python with 0BSD examples; Pillow's primary
@@ -100,6 +114,7 @@ MIT-CMU is an HPND variant. The free bundled notices are:
 | Package (primary) | Bundled free notices beyond the OSI list |
 | --- | --- |
 | Node (MIT) | ICU timezone code/data: public domain |
+| ONNX Runtime (MIT) | SQLite and libb64: public domain |
 | NumPy (BSD-3-Clause) | SplitMix64 and Highway random-inl.h: CC0-1.0 |
 | pandas (BSD-3-Clause) | UltraJSON's Tcl-derived code: TCL |
 | Pillow (MIT-CMU) | FreeType: FTL; MD5/XZ/liblzma: public domain; JPEG: IJG; Tcl/Tk: TCL; bzip2: bzip2-1.0.6; PNG: libpng-2.0; TIFF: libtiff; Xau/Xdmcp: X11 |
@@ -168,9 +183,8 @@ kubectl -n "$namespace" apply -f apps/computer/sandbox-template.json
 ```
 
 The test applies the tracked manifest byte-for-byte, with no image, environment
-or probe-volume substitutions. The manifest uses the qualification digest until
-the licence blockers are resolved; `build.sh` promotes that same digest only
-after all image checks pass. The neutral template has `emptyDir` home storage;
+or probe-volume substitutions. During qualification, `build.sh` pins the candidate digest, then promotes that
+same digest to the release tag only after all image checks pass. The neutral template has `emptyDir` home storage;
 lifecycle work selects a PVC before Pod creation. A running warm Pod cannot
 have its volume replaced (ADR 0006).
 

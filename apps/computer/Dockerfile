@@ -16,6 +16,9 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update -qq && \
 COPY requirements.lock /tmp/requirements.lock
 RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-compile --no-cache-dir --require-hashes -r /tmp/requirements.lock && \
     rm /tmp/requirements.lock && rm -rf /opt/python/lib/python3.11/site-packages/pip* /opt/python/lib/python3.11/site-packages/setuptools* /opt/python/lib/python3.11/site-packages/pkg_resources
+# No installed caller uses lxml.isoschematron; these two stylesheets have no licence.
+RUN rm /opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl/RNG2Schtrn.xsl \
+       /opt/python/lib/python3.11/site-packages/lxml/isoschematron/resources/xsl/XSD2Schtrn.xsl
 RUN find /opt /usr -type d -name __pycache__ -prune -exec rm -rf {} + && \
     rm -rf /tmp/node-compile-cache /workspace && ln -s /home/agent/workspace /workspace && \
     mkdir -p /run/executor /home/tool

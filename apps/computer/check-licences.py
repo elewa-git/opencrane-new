@@ -12,7 +12,8 @@ FORBIDDEN = re.compile(r'\b(?:BUSL(?:-\S+)?|SSPL(?:-\S+)?|Elastic(?:\s+License|-
                        r'Kurrent\s+(?:Software\s+)?Licen[cs]e|Fair[ -]Source|PolyForm(?:-\S+)?|'
                        r'Confluent Community|Sustainable Use License|FSL-\S+|CC-BY-NC(?:-\S+)?|'
                        r'CC-BY-ND(?:-\S+)?|CC-BY-NC-ND(?:-\S+)?|non-commercial use only|'
-                       r'proprietary license|redistribution (?:is )?forbidden|no reverse engineering|Intel Simplified Software License)\b', re.I)
+                       r'proprietary license|redistribution (?:is )?forbidden|no reverse engineering|'
+                       r'Intel Simplified Software License|used for Good, not Evil)\b', re.I)
 
 # Owner's application rule includes these Python and HPND-family identifiers.
 APPLICATION_OSI = {'PSF-2.0', 'Python-2.0', 'Python-2.0.1', 'MIT-CMU', 'HPND'}
@@ -68,6 +69,18 @@ def approved(expression, allowed):
         return False
 
 
+def absent_component(proof, installed):
+    """Bind a human inspection to the exact installed file names and contents."""
+    if not installed or not proof or not proof.get('checks') or not proof.get('absentPatterns'):
+        return False
+    roots = proof.get('roots', [])
+    files = {path: value for path, value in installed.items()
+             if any(path == root or path.startswith(root + '/') for root in roots)}
+    return (bool(roots) and all(any(path == root or path.startswith(root + '/') for path in files) for root in roots)
+            and digest(json.dumps(files, sort_keys=True, separators=(',', ':'))) == proof.get('inventorySha256')
+            and not any(re.search(pattern, path) for pattern in proof['absentPatterns'] for path in installed))
+
+
 def check(sbom, osi, evidence, reviewed):
     osi = osi | APPLICATION_OSI | set(reviewed.get('hpndVariants', []))
     inventory = []
@@ -101,7 +114,29 @@ def check(sbom, osi, evidence, reviewed):
             paths.update(application['files'])
         covered.update(paths)
         texts = {path: notices[path] for path in paths if path in notices}
-        for text in [*licences, *texts.values()]:
+        checked_texts = dict(texts)
+        absent = []
+        if application:
+            for notice in application.get('bundled', []):
+                if 'absent' not in notice:
+                    continue
+                proof = application.get('absenceProofs', {}).get(notice['absent'])
+                source = notice['source']
+                if (source not in texts or digest(texts[source]) != application['files'].get(source)
+                        or not absent_component(proof, evidence.get('installedFiles', {}))):
+                    errors.append('Missing or changed component absence proof: ' + notice['component'])
+                    continue
+                # Exclude only the reviewed component's lines, never its whole
+                # omnibus notice or the package's primary licence metadata.
+                start, end = notice['lines']
+                lines = checked_texts[source].splitlines(keepends=True)
+                if not 1 <= start <= end <= len(lines):
+                    errors.append('Invalid absent component notice range')
+                    continue
+                lines[start - 1:end] = ['\n'] * (end - start + 1)
+                checked_texts[source] = ''.join(lines)
+                absent.append(notice)
+        for text in [*licences, *checked_texts.values()]:
             if FORBIDDEN.search(text):
                 errors.append('Source-available licence: ' + FORBIDDEN.search(text)[0])
         if not debian and not application:
@@ -133,7 +168,8 @@ def check(sbom, osi, evidence, reviewed):
                 if (any(path not in application['files'] for path in [notice['source'], *notice.get('sources', [])]) or not notice['component']
                         or not notice['reason'] or not notice['spdx']):
                     errors.append('Missing bundled licence evidence')
-                errors.extend(value for value in notice['spdx'] if not approved(value, osi | BUNDLED_FREE))
+                if notice not in absent:
+                    errors.extend(value for value in notice['spdx'] if not approved(value, osi | BUNDLED_FREE))
             if any(approved(value, osi | BUNDLED_FREE) and not approved(value, osi)
                    for notice in bundled for value in notice['spdx']):
                 category = 'application-osi-with-bundled-free'
