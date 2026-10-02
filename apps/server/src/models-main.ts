@@ -20,7 +20,8 @@ const events = await connectEventStore();
 const silo = required('SILO_ID');
 const directory = required('MODEL_STATE_DIR');
 await mkdir(directory, { recursive: true, mode: 0o700 });
-const jwks = z.object({ keys: z.array(z.object({ kty: z.string(), kid: z.string(), crv: z.string(), x: z.string(), y: z.string() }).strict()) })
+const jwks = z.object({ keys: z.array(z.object({ kty: z.literal('EC'), kid: z.string(), crv: z.literal('P-256'),
+  alg: z.literal('ES256').default('ES256'), use: z.literal('sig').default('sig'), x: z.string(), y: z.string() }).strict()).min(1) })
   .parse(JSON.parse(await readFile(required('MODEL_JWKS_FILE'), 'utf8'))) satisfies JSONWebKeySet;
 try {
   await db.db.lock!(`budget-leader:${silo}`, async locked => {

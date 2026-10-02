@@ -35,13 +35,16 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   turn claims include `thread` matching `session-id` and at most 120 seconds
   between `iat` and `exp`. Both use the spike issuer and audiences. Delegation
   currently contains only the requester; group/delegated grants are deferred.
-- Only reservation ids and token counts survive the gateway log filter.
+- Only reservation ids, token counts and a fixed error outcome survive the gateway log filter.
   Observations are appended as `effect.observed`; the existing handler runtime
   delivers `settle-budget` to the decision process. Its settlement endpoint
   accepts an event reference and rereads the recorded effect, never a supplied
-  amount. A duplicate effect cannot charge twice. Missing usage after three
-  minutes produces `effect.uncertain` and retains the full reservation.
-  Refusals from ext_authz become `security.alert_raised` with a digest of the
+  amount. A duplicate effect cannot charge twice. Observed provider rejections
+  without usage settle at zero cents. Timeouts, lost connections and other
+  missing outcomes produce `effect.uncertain` after three minutes and retain
+  the full reservation. Cap refusals append only `budget.exhausted`, once per
+  unchanged budget per UTC day, including across actor recovery. Other refusals
+  before a budget command become `security.alert_raised` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
 - `budgets` is a PostgreSQL projection using the existing runner. Rebuild it
   with `ProjectionRunner.rebuild(budgets)` while reactions are stopped.

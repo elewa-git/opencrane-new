@@ -30,7 +30,10 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
     }],
   };
 }
-const observation = z.object({ id: z.uuid(), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative() }).strict();
+const observation = z.union([
+  z.object({ id: z.uuid(), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative() }).strict(),
+  z.object({ id: z.uuid(), outcome: z.literal('error') }).strict(),
+]);
 export async function ingestUsage(actor: BudgetActor, file: string) {
   let text: string;
   try { text = await readFile(file, 'utf8'); } catch (error) {
@@ -40,7 +43,8 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
   // A killed writer can leave one incomplete final line. Its reservation stays charged.
   for (const line of text.split('\n').slice(0, -1)) {
     const value = observation.parse(JSON.parse(line));
-    await actor.effect(value.id, { inputTokens: value.inputTokens, outputTokens: value.outputTokens });
+    if ('outcome' in value) await actor.effect(value.id, undefined, value.outcome);
+    else await actor.effect(value.id, { inputTokens: value.inputTokens, outputTokens: value.outputTokens });
   }
 }
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
@@ -58,8 +62,14 @@ export async function startGateway(options: { binary: string; configFile: string
   lines.on('line', line => {
     const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
     const input = /\binputTokens=(\d+)/u.exec(line)?.[1], output = /\boutputTokens=(\d+)/u.exec(line)?.[1];
-    if (!id || input === undefined || output === undefined) return;
-    const parsed = observation.safeParse({ id, inputTokens: Number(input), outputTokens: Number(output) });
+    if (!id) return;
+    const status = Number(/\bhttp.status=(\d+)/u.exec(line)?.[1]);
+    // Gateway transport failures carry an error; timeout responses are ambiguous too.
+    const rejected = status >= 400 && status < 600 && status !== 408 && status !== 504 && !/\berror=/u.test(line);
+    const value = input !== undefined && output !== undefined ? { id, inputTokens: Number(input), outputTokens: Number(output) }
+      : rejected ? { id, outcome: 'error' } : undefined;
+    if (!value) return;
+    const parsed = observation.safeParse(value);
     if (!parsed.success) { failed = true; return; }
     writes = writes.then(() => appendFile(options.usageFile, `${JSON.stringify(parsed.data)}\n`, { mode: 0o600 }))
       .catch(() => { failed = true; child.kill('SIGTERM'); });

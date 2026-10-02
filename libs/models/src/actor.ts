@@ -25,6 +25,7 @@ export class BudgetActor {
   private queue = Promise.resolve();
   private auditQueue = Promise.resolve();
   private failed = false;
+  private exhaustedDay: string | undefined;
   readonly store: EventStore;
   readonly silo: string;
   readonly now: () => Date;
@@ -32,7 +33,7 @@ export class BudgetActor {
   // Call only after winning the process leadership lease. A new append fences the old leader.
   async start(dailyCeilingCents = 2000, ceilingCents = 20000) {
     for (const row of await history(this.store, `budget-${this.silo}`, this.silo)) {
-      applyBudget(this.state, row.event); this.sequence = row.sequence;
+      this.apply(row.event); this.sequence = row.sequence;
     }
     if (!this.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation' });
     await this.append('budget.period_started', { periodStart: this.now().toISOString() });
@@ -50,7 +51,14 @@ export class BudgetActor {
     const result = await this.store.append({ event, expectedSequence: this.sequence });
     if (result.status !== 'appended') { this.failed = true; throw new Error('Budget writer lost its fence'); }
     this.sequence = result.sequence;
+    this.apply(event);
+  }
+  private apply(event: EventEnvelope) {
     applyBudget(this.state, event);
+    // Leadership changes do not reset a refusal; budget changes or a new UTC day do.
+    if (event.type !== 'budget.period_started') {
+      this.exhaustedDay = event.type === 'budget.exhausted' ? event.time.slice(0, 10) : undefined;
+    }
   }
   reserve(call: ModelCall, amountCents: number) {
     return this.serial(async () => {
@@ -58,7 +66,7 @@ export class BudgetActor {
       const t = totals(this.state, this.now());
       if (t.todayCents + t.reservedCents + amountCents > t.dailyCeilingCents ||
           t.monthCents + t.reservedCents + amountCents > t.ceilingCents) {
-        await this.append('budget.exhausted', { scope: 'global' });
+        if (this.exhaustedDay !== this.now().toISOString().slice(0, 10)) await this.append('budget.exhausted', { scope: 'global' });
         throw new Error('Silo spending cap reached; wait for the next budget period');
       }
       const id = randomUUID();
@@ -72,8 +80,9 @@ export class BudgetActor {
       if (event.silo !== this.silo || event.type !== 'effect.observed') throw new Error('Wrong effect');
       const d = effectObservedDataSchema.parse(event.data);
       const r = this.state.reservations.find(r => r.id === d.permitId);
-      if (!r || !d.usage || d.usage.priceTableId !== priceTableId || d.computerId !== r.call.computerId || d.tool !== r.call.model ||
-          d.costCents !== costCents(r.call.model, d.usage.inputTokens, d.usage.outputTokens)) throw new Error('Usage does not match reservation');
+      const validCost = d.usage ? d.usage.priceTableId === priceTableId &&
+        d.costCents === costCents(d.tool, d.usage.inputTokens, d.usage.outputTokens) : d.outcome === 'error' && d.costCents === 0;
+      if (!r || !validCost || d.computerId !== r.call.computerId || d.tool !== r.call.model) throw new Error('Usage does not match reservation');
       if (r.settledCents !== undefined) {
         if (r.settledCents !== d.costCents) throw new Error('Conflicting settlement');
         return;
@@ -82,15 +91,16 @@ export class BudgetActor {
       await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: d.costCents });
     });
   }
-  async effect(id: string, usage?: { inputTokens: number; outputTokens: number }) {
+  async effect(id: string, usage?: { inputTokens: number; outputTokens: number }, outcome: 'success' | 'error' = 'success') {
     const r = this.state.reservations.find(r => r.id === id);
     if (!r) throw new Error('Unmatched gateway reservation');
-    const type = usage ? 'effect.observed' : 'effect.uncertain';
+    const type = usage || outcome === 'error' ? 'effect.observed' : 'effect.uncertain';
     const eventId = `${id}:${type}`;
     const rows = await history(this.store, `effect-${id}`, this.silo);
     if (rows.some(row => row.event.id === eventId)) return;
-    const payload = usage ? { permitId: id, computerId: r.call.computerId, tool: r.call.model, destination: 'openai',
-      costCents: costCents(r.call.model, usage.inputTokens, usage.outputTokens), outcome: 'success', usage: { ...usage, priceTableId } }
+    const payload = type === 'effect.observed' ? { permitId: id, computerId: r.call.computerId, tool: r.call.model, destination: 'openai',
+      costCents: usage ? costCents(r.call.model, usage.inputTokens, usage.outputTokens) : 0, outcome,
+      ...(usage ? { usage: { ...usage, priceTableId } } : {}) }
       : { permitId: id, computerId: r.call.computerId, reason: 'settle_timeout' };
     const result = await this.store.append({ event: envelope(this.silo, `effect-${id}`, type, payload, eventId),
       expectedSequence: rows.at(-1)?.sequence ?? 0 });

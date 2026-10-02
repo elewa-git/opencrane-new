@@ -136,6 +136,10 @@ turn tokens bind to the committed computer token id and cannot survive rotation.
 
 There are two kinds of tools, so two events. `mcp.tools_changed` is for a registered MCP server's tools. `toolset.changed` is for the computer's own tools: a new computer image (CLI programs, runtimes, local stdio MCP such as Playwright) or Codex built-in tool settings (`shell`, `apply_patch`, `web_search`, `view_image`, `spawn_agent`). It goes on the profile's own stream rather than on each computer's, because one admin command changes every computer that uses the profile and a command appends to one stream only. Hosted built-ins such as `web_search` are allowed or stripped by the gateway on the model request.
 
+Ready and resumed events carry the claimed `computerId` and `generation`.
+Generation is optional only so older events remain readable; model authorisation
+refuses missing or mismatched generation context, including delayed lifecycle events.
+
 ### Conversations and agent activity
 
 | Event | Emitted by | Projections | Reactions |
@@ -200,11 +204,16 @@ memory. A `budget.period_started` append on leadership acquisition fences the
 previous writer; a failed conditional append disables that actor. This event
 never clears reservations. UTC day/month totals are derived from reservation
 timestamps; outstanding reservations count against both caps even across a
-period boundary. Missing gateway usage produces `effect.uncertain` after three
-minutes and keeps the full reservation. `settle-budget` retries a recorded
+period boundary. Observed provider rejections without usage produce
+`effect.observed` with `outcome: error` and `costCents: 0`, releasing the unused
+reservation. Ambiguous outcomes (including timeouts and lost connections) produce
+`effect.uncertain` after three minutes and keep the full reservation.
+`settle-budget` retries a recorded
 observation through the decision process; duplicate settlement is a no-op.
-The budget projection can be rebuilt with reactions disabled. Model refusals
-from ext_authz emit `security.alert_raised` with an optional `decision` record:
+The budget projection can be rebuilt with reactions disabled. Cap refusals append
+only `budget.exhausted`, once per unchanged budget per UTC day, including across
+actor recovery. Other model refusals before a budget command emit
+`security.alert_raised` with an optional `decision` record:
 verified requester/assistant ids when available and a context digest, never tokens.
 
 ### Memory

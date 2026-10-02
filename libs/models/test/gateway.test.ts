@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
@@ -38,7 +38,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   await db.transaction(tx => auth.handler.handle(joined, tx));
   await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' });
   await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', podUid: 'pod', generation: 1 });
-  await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer' });
+  await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1 });
   await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice' });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
   const { publicKey, privateKey } = await generateKeyPair('ES256');
@@ -52,12 +52,17 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly);
   const decision = await startDecision(actor, { keys: [jwk] }, binding);
-  let received = 0, hold = false, providerHeaders: string[] = [], providerAuthHash = '';
+  let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
     received++; providerHeaders = Object.keys(req.headers);
     providerAuthHash = createHash('sha256').update(req.headers.authorization ?? '').digest('hex');
     req.resume();
+    if (rejection === -1) { req.socket.destroy(); return; }
+    if (rejection) {
+      res.writeHead(rejection, { 'content-type': 'application/json' });
+      res.end('{"error":{"message":"Scripted provider rejection","type":"invalid_request_error"}}'); return;
+    }
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     res.write('event: response.created\ndata: {"type":"response.created","response":{"id":"resp_stub","object":"response","status":"in_progress"}}\n\n');
     if (hold) return;
@@ -82,6 +87,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   const body = { model: 'gpt-5-nano', input: 'Say OK.', max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
   return { actor, append, headers, t, c, sign, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
+    reject: (status: number) => { rejection = status; },
     received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}) {
       const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
@@ -128,6 +134,32 @@ it('settles streamed gateway usage exactly, strips identity, rebuilds PostgreSQL
     await f.decisionDown(); expect((await f.call()).status).toBe(503); expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
+it('refuses a newer claim after a delayed ready event for the old computer', async () => {
+  const f = await fixture();
+  try {
+    await f.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer-b', podUid: 'pod-b', generation: 2 });
+    await f.append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1 });
+    const token = await f.sign({ ...f.c, computer: 'computer-b', generation: 2 }, 'agentgateway');
+    expect((await f.call({ authorization: `Bearer ${token}` })).status).toBe(403);
+    expect(f.received()).toBe(0);
+    expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type)).toEqual(['budget.ceiling_set', 'budget.period_started']);
+  } finally { await f.close(); }
+}, 40_000);
+it.each(['computer.ready', 'computer.resumed'])('requires matching generation context on %s', async type => {
+  const f = await fixture();
+  try {
+    await f.append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', podUid: 'pod-b', generation: 2 });
+    const token = await f.sign({ ...f.c, generation: 2 }, 'agentgateway');
+    for (const context of [{ generation: 1 }, {}]) {
+      await f.append('computer-assistant', type, { assistantId: 'assistant', computerId: 'computer', ...context });
+      expect((await f.call({ authorization: `Bearer ${token}` })).status).toBe(403);
+    }
+    expect(f.actor.state.reservations).toHaveLength(0); expect(f.received()).toBe(0);
+    await f.append('computer-assistant', type, { assistantId: 'assistant', computerId: 'computer', generation: 2 });
+    expect((await f.call()).status).toBe(403); // The old token cannot use the new generation.
+    expect((await f.call({ authorization: `Bearer ${token}` })).status).toBe(200);
+  } finally { await f.close(); }
+}, 40_000);
 it.each([[2, 2000], [2000, 2]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {
   const f = await fixture(daily, monthly);
   try {
@@ -151,6 +183,46 @@ it('retains an in-flight reservation across gateway kill and actor recovery, rec
     await f.runner.rebuild(budgets); expect(totals(await readBudget(f.db, 'test')).reservedCents).toBe(2);
   } finally { await f.close(); }
 }, 40_000);
+it('records cap refusals once in the budget stream even when security appends fail and callers retry', async () => {
+  const f = await fixture(0, 0);
+  const append = f.nats.store.append.bind(f.nats.store);
+  const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command => {
+    if (typeof command.event === 'object' && command.event !== null && 'subject' in command.event && command.event.subject === 'security-test') {
+      return Promise.resolve({ status: 'unavailable', cause: new Error('Scripted security outage') });
+    }
+    return append(command);
+  });
+  try {
+    expect((await f.call()).status).toBe(402);
+    expect((await f.call()).status).toBe(402);
+    expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
+      .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.exhausted']);
+    expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
+    expect(f.received()).toBe(0);
+  } finally { fault.mockRestore(); await f.close(); }
+}, 40_000);
+it('does not duplicate exhaustion after its append succeeds but the acknowledgement is lost', async () => {
+  const f = await fixture(2, 2);
+  try {
+    expect((await f.call()).status).toBe(200);
+    const append = f.nats.store.append.bind(f.nats.store);
+    const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
+      const result = await append(command);
+      if (typeof command.event === 'object' && command.event !== null && 'type' in command.event && command.event.type === 'budget.exhausted') {
+        return { status: 'unavailable', cause: new Error('Scripted lost acknowledgement') };
+      }
+      return result;
+    });
+    try { expect((await f.call()).status).toBe(403); } finally { fault.mockRestore(); }
+    expect((await f.call()).status).toBe(403); // The uncertain writer stops admitting commands.
+    const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
+    await expect(recovered.reserve(f.actor.state.reservations[0]!.call, 2)).rejects.toThrow('spending cap');
+    expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
+      .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.reserved', 'budget.exhausted', 'budget.period_started']);
+    expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
 it('leaves money reserved on settlement failure and retries the recorded effect idempotently', async () => {
   const f = await fixture();
   try {
@@ -166,6 +238,32 @@ it('leaves money reserved on settlement failure and retries the recorded effect 
     await replacement.settle(effect); await replacement.settle(effect);
     expect(totals(replacement.state).reservedCents).toBe(0);
     expect((await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.settled')).toHaveLength(1);
+  } finally { await f.close(); }
+}, 40_000);
+it.each([400, 401, 404, 429, 500])('releases an observed provider %i rejection without usage or consuming the cap', async status => {
+  const f = await fixture(2, 2);
+  try {
+    f.reject(status); expect((await f.call()).status).toBe(status);
+    await f.settled();
+    const r = f.actor.state.reservations[0]!;
+    expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => ({ type: r.event.type, data: r.event.data })))
+      .toEqual([{ type: 'effect.observed', data: { permitId: r.id, computerId: 'computer', tool: 'gpt-5-nano', destination: 'openai', costCents: 0, outcome: 'error' } }]);
+    expect(totals(f.actor.state)).toMatchObject({ reservedCents: 0, todayCents: 0, monthCents: 0 });
+    await f.actor.settleRecorded(r.id, `${r.id}:effect.observed`);
+    expect((await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.settled')).toHaveLength(1);
+    f.reject(0); expect((await f.call()).status).toBe(200); await f.settled();
+  } finally { await f.close(); }
+}, 40_000);
+it.each([408, 504, -1])('retains the reservation for an ambiguous provider outcome %i', async status => {
+  const f = await fixture(2, 2);
+  try {
+    f.reject(status); expect((await f.call()).status).toBeGreaterThanOrEqual(400);
+    await f.restart(); // Drain the gateway log writer before inspecting its observations.
+    await ingestUsage(f.actor, f.options.usageFile);
+    f.advance(); await f.actor.expire();
+    const r = f.actor.state.reservations[0]!;
+    expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toEqual(['effect.uncertain']);
+    expect(totals(f.actor.state).reservedCents).toBe(2);
   } finally { await f.close(); }
 }, 40_000);
 it('rolls UTC periods without forgetting outstanding reservations', async () => {

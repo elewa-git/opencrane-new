@@ -61,7 +61,8 @@ async function activeComputer(actor: BudgetActor, c: z.infer<typeof computerSche
   const claim = computers.findLast(r => r.event.type === 'computer.claimed');
   const live = computers.findLast(r => ['computer.ready', 'computer.resumed', 'computer.suspended', 'computer.lost', 'computer.retired', 'computer.claimed'].includes(r.event.type));
   if (!claim || !live || !['computer.ready', 'computer.resumed'].includes(live.event.type) ||
-      data(claim.event)['computerId'] !== c.computer || data(claim.event)['generation'] !== c.generation) throw new Error('Computer inactive');
+      data(claim.event)['computerId'] !== c.computer || data(claim.event)['generation'] !== c.generation ||
+      data(live.event)['computerId'] !== c.computer || data(live.event)['generation'] !== c.generation) throw new Error('Computer inactive');
   return live.sequence;
 }
 async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>): Promise<ModelCall> {
@@ -87,6 +88,7 @@ export async function startDecision(actor: BudgetActor, jwks: JSONWebKeySet, bin
   })).payload;
   const server = createServer((req, res) => {
     let auditedContext: { requesterId: string; assistantId: string; claims: unknown } | undefined;
+    let reservationAttempted = false;
     void (async () => {
       res.setHeader('content-type', 'application/json');
       if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(jwks)); return; }
@@ -104,10 +106,12 @@ export async function startDecision(actor: BudgetActor, jwks: JSONWebKeySet, bin
       const call = await context(actor, binding, c, t);
       call.model = body.model;
       // ponytail: reserve the entire 400k context; tokenisation can replace this conservative bound later.
+      reservationAttempted = true;
       const reservation = await actor.reserve(call, costCents(body.model, 400_000, body.max_output_tokens));
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {
-      try { if (req.url === '/authorize') await actor.refuse(auditedContext); }
+      // A budget command may already have appended, even if its acknowledgement was lost.
+      try { if (req.url === '/authorize' && !reservationAttempted) await actor.refuse(auditedContext); }
       catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
       const capped = error instanceof Error && error.message.startsWith('Silo spending cap');
       res.writeHead(capped ? 402 : 403);

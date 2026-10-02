@@ -75,3 +75,39 @@ a fresh silo installation, production HA/credential rotation and independent
 review: **NOT RUN**. The supplied k3d manifest was not applied. Group/delegated
 model access, media, hosted tools, price administration and manual uncertain-effect
 resolution remain outside Phase 2. Budget reservations are not auto-refunded.
+
+## Review fixes — 2 October 2026
+
+Source: `2657b24` plus this review-fix commit on `work/models`; Linux, Node
+22.23.3, disposable NATS/OpenFGA/gateway instances and PostgreSQL databases.
+The running dev stack was not changed or restarted. `MODELS_REAL_CALL=0`
+explicitly disabled real provider calls throughout these checks.
+
+Each blocker first failed at its public boundary, then passed after the fix:
+
+| Blocker | Red evidence | Passing regression |
+| --- | --- | --- |
+| Stale lifecycle | B's generation-2 token received 200 after A's delayed ready event | 403 with no reservation/provider call; ready/resumed also reject stale or missing generation and accept the matching live generation |
+| Observed rejection | Provider 400 never settled its reservation | 400/401/404/429/500 record an error observation, settle at zero cents, and leave cap available; 408/504/lost connections remain uncertain |
+| Issuer JWKS | Actual issuer JWKS failed with unrecognised `alg`/`use` | Startup reaches gateway binary verification; private keys, wrong algorithm/curve/type/use fail before budget startup |
+| Two-stream cap refusal | Security outage returned 503; after dropping that append, retry duplicated exhaustion | Only one durable exhaustion event; no security event; lost append acknowledgement and actor recovery do not duplicate exhaustion |
+
+The startup test deliberately supplies an untrusted gateway binary and stops at
+its digest check, before loading provider credentials. It fetches public JWKS
+from the actual S0.1c issuer code, rather than hand-building a narrower key.
+Lifecycle generation remains optional in the event schema for historical replay;
+authorisation requires it. Cap exhaustion is recorded once per unchanged budget
+per UTC day, including across leadership changes.
+
+| Fix gate | Result |
+| --- | --- |
+| `npm run lint` | PASS; two existing function-length warnings |
+| `npm run typecheck` | PASS, all workspaces; initial JWK optional-property typing failure fixed with ES256/signing defaults |
+| `npm run check:events` | PASS, 70 event types |
+| `MODELS_REAL_CALL=0 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test` | PASS, 50 files, 909 passed / 1 skipped, 159 seconds; no load-related timeouts |
+| `npm run build -w apps/web` | PASS; existing CSS size warning |
+| `npm run test -w apps/web` | PASS, 3 files / 36 tests |
+
+Real OpenAI calls, running-stack integration/restart, fresh-install qualification,
+production HA/credential rotation, hosted CI and a second independent review:
+**NOT RUN** in this fix task. Nothing was pushed or merged.
