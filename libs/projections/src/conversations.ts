@@ -28,7 +28,7 @@ export async function readConversation(db: Query, silo: string, conversationId: 
 }
 
 export async function listConversations(db: Query, silo: string) {
-  const rows = await db.query<{ conversation_id: string; data: { assistantId: string; createdBy: string }; time: string }>(
+  const rows = await db.query<{ conversation_id: string; data: { assistantId: string; createdBy: string; mode: 'agent_session' | 'direct' | 'group' }; time: string }>(
     "SELECT conversation_id, data, time FROM conversation_feed WHERE silo = $1 AND type = 'conversation.created' ORDER BY position DESC", [silo]);
   return rows.rows.map(row => ({ conversationId: row.conversation_id, ...row.data, createdAt: row.time }));
 }

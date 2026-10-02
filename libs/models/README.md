@@ -1,7 +1,7 @@
 # Models and silo spending
 
 Phase 2, issue #29. The decision process verifies the lifecycle computer and
-per-conversation turn tokens; agentgateway v1.5.0 enforces its answer and sends
+thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
 S0.1c's native streamed usage fields and checksum-verified binary fetcher.
 No extra proxy sees the provider key. `backendAuth.key.file` reads
@@ -51,7 +51,7 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
 - IAM is Phase 2 personal-assistant ownership ∩ live OpenFGA membership.
   The claimed computer generation, ready state, conversation and active turn
   are read from events on every call. JWTs are ES256, with strict expiry;
-  turn claims include `conversation` matching `session-id` and the current
+  turn claims include `thread` matching the actual Codex `session-id`, signed `conversation`, `requester` and `task` and the current
   `computerTokenId`, with at most 120 seconds between `iat` and `exp`.
   Both use `libs/auth` and the configured `TOKEN_ISSUER`; the gateway verifies
   the same public keys. Computer tokens include the claim generation, and

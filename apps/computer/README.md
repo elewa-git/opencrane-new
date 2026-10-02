@@ -217,6 +217,8 @@ renewal, clean-host rebuild and independent review (explicitly excluded).
 P2-3 adds the existing workspace dependency ws 8.22.0 (MIT) to the image. Its
 installed metadata and full licence are checksum-pinned in the reviewed licence
 file. The bridge fsyncs reported events to a private PVC outbox before sending,
-replays from the server acknowledgement, and never repeats an interrupted turn
-automatically. Saved Codex threads resume on the same PVC. Reports carry no turn
+replays from the server acknowledgement, and waits for a fresh thread-bound grant
+before execution. Prepared messages survive replacement and retry; a separate
+fsynced execution marker prevents automatically repeating uncertain effects.
+Older journals without that marker distinction remain uncertain. Saved Codex threads resume on the same PVC. Reports carry no turn
 or computer credential. See [bridge evidence](../../docs/process/bridge-evidence.md).

@@ -115,6 +115,7 @@ SSO membership path. Invitation creation and identity binding are separate work.
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message and thread; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -146,7 +147,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `conversation.created` | command | conversations | OpenFGA participants |
+| `conversation.created` | command | conversations (immutable `mode`: `agent_session`, `direct` or `group`; Phase 2 accepts only `agent_session`) | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
 | `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
@@ -156,11 +157,21 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
 
-Bridge reports carry the computer id, a strictly increasing per-computer sequence
-and a digest in the envelope. The server acknowledges only a recorded report.
+Bridge reports describe activity; they never open model admission. The server's
+separate turn command binds a requested message to its actual Codex thread,
+requester and task on the computer stream. A terminal server event is permanent,
+even if it precedes start admission. The same stream prevents idle suspend while
+a turn is admitted. If suspend wins before admission, an unexecuted preparation
+retries after wake; a report alone never marks execution as having happened.
+
+Bridge reports carry the computer id, a unique increasing per-computer sequence
+and a digest in the envelope. Per-conversation predecessor positions allow
+independent persistence; reconnect uses the largest contiguous committed position.
+The server checks the committed digest before acknowledging a report.
 Encrypted message deltas and completed text share the conversation key; replay
-rebuilds the messages/activity feed without invoking Codex. Interrupted turns are
-reported failed and are never automatically repeated.
+rebuilds the messages/activity feed without invoking Codex. Turns interrupted after their durable execution marker are
+reported failed and are never automatically repeated. Prepared, unexecuted turns
+retry with a fresh grant after reconnect or Pod replacement.
 
 ### Tools, approvals and effects
 

@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
@@ -49,6 +49,7 @@ it('rebuilds conversation messages and report positions from NATS in real Postgr
     await recordReport(nats.store, keys, context, { ...report, sequence: 4, type: 'agent.turn_completed' });
     await runner.run(conversations);
     const before = await readConversation(db, 'test', conversationId);
+    expect(before.rows[0]?.data).toMatchObject({ mode: 'agent_session' });
     expect(before.rows.map(r => r.type)).toEqual(['conversation.created', 'message.posted', 'agent.turn_started', 'agent.message_delta', 'agent.message_completed', 'agent.turn_completed']);
     expect(keys.decrypt('test', conversationId, before.rows[1]!.data)).toBe('Hello computer');
     await runner.rebuild(conversations);
@@ -66,7 +67,7 @@ it('projects conversation access for participants only, including owners/admins,
       silo: 'test', time: new Date().toISOString(), source: 'test', correlation: {}, data }, { query: () => Promise.resolve({ rows: [] }) });
     for (const role of ['member', 'owner', 'admin']) await apply('member.joined', `member-${role}`,
       { memberId: role, email: `${role}@example.test`, displayName: role, role });
-    await apply('conversation.created', 'conversation-chat', { conversationId: 'chat', assistantId: 'assistant', createdBy: 'member' });
+    await apply('conversation.created', 'conversation-chat', { conversationId: 'chat', assistantId: 'assistant', createdBy: 'member', mode: 'agent_session' });
     expect((await auth.conversation('member', 'chat', 'read')).allowed).toBe(true);
     expect((await auth.conversation('member', 'chat', 'post')).allowed).toBe(true);
     expect((await auth.conversation('admin', 'chat', 'read')).allowed).toBe(false);
@@ -75,3 +76,56 @@ it('projects conversation access for participants only, including owners/admins,
     expect((await auth.conversation('member', 'chat', 'read')).allowed).toBe(false);
   } finally { await fga.close(); }
 }, 120_000);
+
+it('rejects a concurrent conflicting report and only acknowledges the committed payload in real NATS', async () => {
+  const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/report-race-`);
+  try {
+    const keys = conversationKeys(directory); keys.provision('test', 'race');
+    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'race', assistantId: 'assistant' });
+    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'race', text: 'Hello' });
+    const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
+    const report = { sequence: 1, conversationId: 'race', turnId: 'message', assistantId: 'assistant', type: 'agent.message_completed', messageId: 'reply' };
+    // Hold both writers at the append boundary, after both have read the same history.
+    let release!: () => void, arrived = 0;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const append = nats.store.append.bind(nats.store), store = nats.store;
+    vi.spyOn(store, 'append').mockImplementation(async (...args) => {
+      if (++arrived === 2) release(); await gate; return append(...args);
+    });
+    const results = await Promise.allSettled(['first', 'second'].map(text => recordReport(store, keys, context, { ...report, text })));
+    expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+    const winner = results.findIndex(r => r.status === 'fulfilled');
+    const rows = await chatHistory(nats.store, 'test', 'race');
+    expect(keys.decrypt('test', 'race', rows.at(-1)!.event.data)).toBe(['first', 'second'][winner]);
+    await expect(recordReport(nats.store, keys, context, { ...report, text: ['second', 'first'][winner] })).rejects.toThrow('Report sequence reused');
+  } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('records immutable agent_session mode, refuses direct and group in Phase 2, and preserves mode on replay', async () => {
+  const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/chat-mode-`);
+  try {
+    const keys = conversationKeys(directory); keys.provision('test', 'mode');
+    const context = { silo: 'test', memberId: 'alice' };
+    const input = { id: 'create-mode', conversationId: 'mode', assistantId: 'assistant' };
+    await chatCommand(nats.store, keys, context, input);
+    expect((await chatHistory(nats.store, 'test', 'mode'))[0]?.event.data).toMatchObject({ mode: 'agent_session' });
+    for (const mode of ['direct', 'group'] as const) {
+      await expect(chatCommand(nats.store, keys, context, { ...input, mode })).rejects.toThrow('Phase 2 supports only agent_session');
+    }
+    expect(await nats.store.head()).toBe(1);
+  } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('closes a turn permanently even if its terminal report arrives before server admission', async () => {
+  const { turnCommand } = await import('../src/chat/turns.ts');
+  const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/turn-close-`);
+  try {
+    const keys = conversationKeys(directory); keys.provision('test', 'early');
+    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'created', conversationId: 'early', assistantId: 'assistant' });
+    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'early', text: 'Hello' });
+    const context = { silo: 'test', assistantId: 'assistant', computerId: 'computer' };
+    await nats.store.append({ expectedSequence: 0, event: { id: 'ready', commandId: 'ready', type: 'computer.ready', subject: 'computer-assistant', silo: 'test', source: 'test', principal: { kind: 'system', id: 'test' }, time: new Date().toISOString(), data: { assistantId: 'assistant', computerId: 'computer', generation: 1 } } });
+    await turnCommand(nats.store, context, { conversationId: 'early', turnId: 'message', status: 'completed' });
+    await expect(turnCommand(nats.store, context, { conversationId: 'early', turnId: 'message', threadId: 'forged', status: 'started' })).rejects.toThrow('Turn is closed');
+  } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
+});

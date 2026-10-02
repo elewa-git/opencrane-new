@@ -1,5 +1,8 @@
 # P2-3 bridge evidence
 
+The later [review-fix receipt](bridge-fixes-evidence.md) records the six blockers,
+corrected source, and qualification limits. The runs below describe the earlier source.
+
 Qualified on 2 October 2026 in `work/bridge`, based on P2-4 commit
 `d10e2c7`. Scope: issues #28 and #25. No paid OpenAI call was made.
 

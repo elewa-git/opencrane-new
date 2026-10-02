@@ -10,7 +10,7 @@ import { body, json, record } from './http.ts';
 process.umask(0o077);
 const gateway = new URL(process.env['GATEWAY'] ?? 'http://127.0.0.1:3000');
 if (gateway.protocol !== 'http:' || gateway.username || gateway.password || gateway.pathname !== '/') throw new Error('Invalid gateway');
-const caller = await proxy(gateway.origin);
+const { caller } = await proxy(gateway.origin);
 writeFileSync('/home/codex/.codex/environments.toml', `default = "tools"
 include_local = false
 [[environments]]

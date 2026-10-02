@@ -21,7 +21,7 @@ it('signs short-lived computer and turn tokens and refuses rotated ids', async (
     typ: 'computer', silo: 'test', computer: 'computer-1', assistant: 'assistant-1', jti: first.id,
   });
   const turn = await issuer.turn({ silo: 'test', conversationId: 'conversation-1', turnId: 'turn-1',
-    requesterId: 'alice', assistantId: 'assistant-1' });
+    requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn', assistantId: 'assistant-1' });
   expect(await issuer.verify(turn.value, turnTokenAudience, turn.id)).toMatchObject({
     typ: 'turn', requester: 'alice', delegation: ['alice'], jti: turn.id,
   });

@@ -41,12 +41,16 @@ it('serves private chat commands and reads to joined members, refusing other org
     const conversationId = randomUUID(), create = { id: randomUUID(), conversationId, assistantId: 'assistant' };
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers('wrong'), payload: create })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: { ...headers(), origin: 'https://wrong.test' }, payload: create })).statusCode).toBe(403);
+    for (const mode of ['direct', 'group']) {
+      const response = await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: { ...create, mode } });
+      expect(response.statusCode).toBe(400); expect(response.body).toContain('Phase 2 supports only agent_session');
+    }
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: create })).statusCode).toBe(200);
     await auth.handler.handle((await history(nats.store, `conversation-${conversationId}`, 'test'))[0]!.event, db);
     expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: { id: randomUUID(), text: 'Hello computer' } })).statusCode).toBe(200);
     await runner.run(conversations);
     const list = await app.inject({ url: '/api/conversations', headers: headers() });
-    expect(list.statusCode).toBe(200); expect(list.body).toContain(conversationId);
+    expect(list.statusCode).toBe(200); expect(list.body).toContain(conversationId); expect(list.body).toContain('agent_session');
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(messages.statusCode).toBe(200); expect(messages.body).toContain('Hello computer');
     const address = await app.listen({ host: '127.0.0.1', port: 0 });

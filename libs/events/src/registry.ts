@@ -10,6 +10,7 @@
 // - `example`: one valid `data` value, used by the generated tests in
 //   test/generated-examples.test.ts.
 import { event, type EventDefinition } from './definition.ts';
+import { bridgeEvents } from './bridge-events.ts';
 import { identityEvents } from './identity-events.ts';
 export type { EventDefinition } from './definition.ts';
 import {
@@ -24,6 +25,7 @@ const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 export const eventRegistry: readonly EventDefinition[] = [
   ...identityEvents,
 
+  ...bridgeEvents,
   // Assistants and computers
   event(
     'assistant.created',
@@ -116,16 +118,13 @@ export const eventRegistry: readonly EventDefinition[] = [
     },
   ),
 
-  event('agent.message_delta', 'conversation', 'The bridge reported streamed assistant text.', data.agentMessageCompletedDataSchema,
-    { conversationId: 'conv_1', turnId: 'turn_1', messageId: 'msg_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }),
-
   // Conversations and agent activity
   event(
     'conversation.created',
     'conversation',
     'A new conversation was started.',
     data.conversationCreatedDataSchema,
-    { conversationId: 'conv_1', assistantId: 'asst_1', createdBy: 'mem_1' },
+    { conversationId: 'conv_1', assistantId: 'asst_1', createdBy: 'mem_1', mode: 'agent_session' },
   ),
   event(
     'participant.added',

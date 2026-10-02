@@ -43,7 +43,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       if (request.method === 'GET') return await read(request, reply, options, memberId, conversationId);
       return await write(request, reply, options, memberId, conversationId);
     } catch (error) {
-      return reply.code(error instanceof z.ZodError ? 400 : 409).send({ status: 'refused' });
+      return chatRefusal(reply, error);
     }
   }
 }
@@ -73,4 +73,9 @@ async function write(request: FastifyRequest, reply: FastifyReply, options: Chat
       return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : 409)
         .send(result.status === 'appended' ? result : { status: result.status });
 
+}
+
+function chatRefusal(reply: FastifyReply, error: unknown) {
+      if (error instanceof Error && error.message === 'Phase 2 supports only agent_session conversations') return reply.code(400).send({ status: 'refused', error: error.message });
+      return reply.code(error instanceof z.ZodError ? 400 : 409).send({ status: 'refused' });
 }

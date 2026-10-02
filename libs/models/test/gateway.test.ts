@@ -32,7 +32,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
   const append = async (subject: string, type: string, payload: unknown) => {
-    const event = envelope('test', subject, type, payload);
+    const event = { ...envelope('test', subject, type, payload), source: 'opencrane-server' };
     const rows = await history(nats.store, subject, 'test');
     expect((await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status).toBe('appended');
     return event;
@@ -42,8 +42,9 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' });
   await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:initial', generation: 1 });
   await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
-  await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice' });
+  await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
+  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn' });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
   const issuer = 'https://lifecycle.test/';
@@ -56,11 +57,11 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
     .setProtectedHeader({ alg: 'ES256', kid: 'lifecycle' }).setIssuer(issuer).setAudience(audience)
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) + ttl).sign(privateKey);
   const c = { typ: 'computer', silo: 'test', computer: 'computer', assistant: 'assistant', generation: 1, jti: 'token:initial' };
-  const t = { jti: 'token:turn', typ: 'turn', silo: 'test', assistant: 'assistant', conversation: 'conversation', turn: 'turn', requester: 'alice', computerTokenId: 'token:initial', delegation: ['alice'] };
+  const t = { jti: 'token:turn', typ: 'turn', silo: 'test', assistant: 'assistant', conversation: 'conversation', turn: 'turn', thread: 'thread', task: 'chat_turn', requester: 'alice', computerTokenId: 'token:initial', delegation: ['alice'] };
   const issue = async (generation = 1, tokenId = 'token:initial', computerId = 'computer') => ({
     authorization: `Bearer ${(await tokens.computer({ silo: 'test', assistantId: 'assistant', computerId, generation, tokenId })).value}`,
-    'x-turn-token': (await credentials.turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', requesterId: 'alice' })).value,
-    'session-id': 'conversation', 'content-type': 'application/json',
+    'x-turn-token': (await credentials.turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', requesterId: 'alice', threadId: 'thread', task: 'chat_turn' })).value,
+    'session-id': 'thread', 'content-type': 'application/json',
   });
   const headers = await issue();
   let clock = Date.now();
@@ -403,5 +404,30 @@ it('admits every pinned model through the decision and gateway under the same ca
       await f.settled();
     }
     expect(f.received()).toBe(11);
+  } finally { await f.close(); }
+}, 40_000);
+
+it.each(['agent.turn_completed', 'agent.turn_failed'])('a forged computer restart after %s stays refused without a reservation', async type => {
+  const f = await fixture();
+  try {
+    await f.append('conversation-conversation', type, { conversationId: 'conversation', turnId: 'turn', ...(type.endsWith('failed') ? { reason: 'bridge_interrupted' } : {}) });
+    await f.append('computer-assistant', 'computer.turn_closed', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', status: type.endsWith('failed') ? 'failed' : 'completed' });
+    const rows = await history(f.nats.store, 'conversation-conversation', 'test');
+    const event = { ...envelope('test', 'conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', turnId: 'turn', assistantId: 'assistant' }), source: 'computer-bridge' };
+    expect((await f.nats.store.append({ event, expectedSequence: rows.at(-1)!.sequence })).status).toBe('appended');
+    expect((await f.call()).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(0);
+    expect(f.received()).toBe(0);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('refuses a valid signed grant installed under another actual Codex thread before reserving', async () => {
+  const f = await fixture();
+  try {
+    const token = await f.sign({ ...f.t, thread: 'thread', task: 'chat_turn' }, 'decision-service');
+    expect((await f.call({ 'x-turn-token': token, 'session-id': 'conversation' })).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(0);
+    expect((await f.call({ 'x-turn-token': token, 'session-id': 'thread' })).status).toBe(200);
+    await f.settled();
   } finally { await f.close(); }
 }, 40_000);

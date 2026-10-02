@@ -182,7 +182,7 @@ whose organisation no longer matches the configured pin or an exact configured i
 ## Conversation core
 
 With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
-(`id`, `conversationId`, `assistantId`), `POST /api/conversations/:conversationId/messages`
+(`id`, `conversationId`, `assistantId`, `mode`), `POST /api/conversations/:conversationId/messages`
 (`id`, `text`), and GET on those paths. The caller supplies stable event ids for
 retries. POST requires the session's exact Origin. Only live silo members acting
 for their personal assistant can create; conversation participants can read/post.
@@ -204,3 +204,21 @@ never replaces Kubernetes authentication. Per-conversation AES-GCM keys live in
 the private dev secret-store directory, outside events and projections. Preserve
 those keys with event backups; deleting a key makes that conversation’s event/projection text unreadable.
 [Qualification and limits](../../docs/process/bridge-evidence.md).
+
+Creation defaults omitted `mode` to `agent_session` and records it immutably in
+`conversation.created`. Phase 2 refuses `direct` and `group` with HTTP 400 and
+“Phase 2 supports only agent_session conversations”. The projection retains mode
+on replay. Changing creation arguments on a retry never changes the conversation.
+
+Each conversation thread has an ordered report queue: at most 64 reports and
+1 MiB, including the report being persisted; at most 64 queues per connection.
+Exceeding either bound closes with 1013, “Report queue limit”. Threads acknowledge
+independently. Reports retain global ids and per-conversation predecessor positions;
+reconnect starts at the largest contiguous committed global position. Committed
+payload digests are checked on both append and deduplication. Acknowledgements
+name one report and never release another thread's pending start.
+
+The start acknowledgement carries a fresh signed thread grant after a separate
+server lifecycle command has acquired the computer-stream suspend fence. Each
+command still makes one conditional append. Terminal reports trigger permanent
+server closure, recovered by the watcher if the server stops between those commands.

@@ -63,9 +63,9 @@ export async function tokenIssuer(options: TokenOptions) {
       return issue({ typ: 'computer', silo: input.silo, computer: input.computerId,
         assistant: input.assistantId, generation: input.generation }, computerTokenAudience, options.computerTtlSeconds ?? 600, input.tokenId);
     },
-    turn(input: { silo: string; conversationId: string; turnId: string; requesterId: string;
+    turn(input: { silo: string; conversationId: string; turnId: string; requesterId: string; threadId: string; task: string;
       assistantId: string; computerTokenId?: string; delegation?: string[] }) {
-      return issue({ typ: 'turn', silo: input.silo, conversation: input.conversationId,
+      return issue({ typ: 'turn', silo: input.silo, conversation: input.conversationId, thread: input.threadId, task: input.task,
         computerTokenId: input.computerTokenId, turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,
         delegation: input.delegation ?? [input.requesterId] }, turnTokenAudience,
       options.turnTtlSeconds ?? 120);

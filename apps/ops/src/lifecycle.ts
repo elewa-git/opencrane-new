@@ -58,7 +58,7 @@ export function lifecycleHandlers(store: Store) {
     const assistantId = field(event.data, 'assistantId');
     const subject = `computer-${assistantId}`;
     const events = await history(store, subject);
-    if (events.length && events.at(-1)!.event.id !== event.id) return;
+    if (events.length && events.findLast(r => !r.event.type.startsWith('computer.turn_'))?.event.id !== event.id) return;
     const generation = events.filter(({ event: item }) => item.type === 'computer.claimed').length + 1;
     await append(store, event, events, 'computer.claimed', subject,
       { assistantId, computerId: stable('computer', event.silo, assistantId), generation, tokenId: `token:${randomUUID()}` });
@@ -80,7 +80,7 @@ async function states(store: EventStore, silo: string): Promise<ComputerState[]>
   const head = await store.head();
   if (!head) return [];
   for await (const { event } of readEvents(store, 1, head)) {
-    if (event.silo !== silo || !event.type.startsWith('computer.')) continue;
+    if (event.silo !== silo || !event.type.startsWith('computer.') || event.type.startsWith('computer.turn_')) continue;
     const assistantId = field(event.data, 'assistantId');
     const computerId = field(event.data, 'computerId');
     const current = computers.get(assistantId) ?? { assistantId, computerId, latest: event };
@@ -94,8 +94,13 @@ async function states(store: EventStore, silo: string): Promise<ComputerState[]>
 export async function suspendComputer(store: Store, state: ComputerState): Promise<EventEnvelope> {
   const subject = `computer-${state.assistantId}`;
   const events = await history(store, subject);
-  const current = events.at(-1)!.event;
-  if (current.id !== state.latest.id || current.type !== 'computer.ready') return current;
+  const current = events.findLast(r => !r.event.type.startsWith('computer.turn_'))!.event;
+  const busy = new Set<string>();
+  for (const { event } of events) {
+    if (event.type === 'computer.turn_started') busy.add(field(event.data, 'turnId'));
+    if (event.type === 'computer.turn_closed') busy.delete(field(event.data, 'turnId'));
+  }
+  if (current.id !== state.latest.id || current.type !== 'computer.ready' || busy.size) return current;
   return append(store, current, events, 'computer.suspended', subject,
     { assistantId: state.assistantId, computerId: state.computerId });
 }
@@ -104,14 +109,14 @@ export async function resumeComputer(store: Store, tokens: Tokens,
   silo: string, assistantId: string): Promise<IssuedToken> {
   const subject = `computer-${assistantId}`;
   let events = await history(store, subject);
-  const current = events.at(-1)?.event;
+  const current = events.findLast(r => !r.event.type.startsWith('computer.turn_'))?.event;
   if (!current || current.silo !== silo) throw new Error('Computer not found');
   if (current.type === 'computer.suspended') {
     await append(store, current, events, 'computer.resumed', subject,
       { assistantId, computerId: field(current.data, 'computerId'), generation: generation(events), tokenId: `token:${randomUUID()}` });
     events = await history(store, subject);
   }
-  const latest = events.at(-1)!.event;
+  const latest = events.findLast(r => !r.event.type.startsWith('computer.turn_'))!.event;
   if (!['computer.resumed', 'computer.ready'].includes(latest.type)) throw new Error('Computer is not running');
   const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
   return tokens.computer({ generation: generation(events), silo, computerId: field(grant.data, 'computerId'), assistantId,
@@ -122,7 +127,7 @@ async function reconcileComputer(store: EventStore, kube: SandboxClient,
   state: ComputerState, tokens: Tokens, sink: CredentialSink, idleMs: number) {
   const subject = `computer-${state.assistantId}`;
   const events = await history(store, subject);
-  if (events.at(-1)?.event.id !== state.latest.id) return;
+  if (events.findLast(r => !r.event.type.startsWith('computer.turn_'))?.event.id !== state.latest.id) return;
   const data = { assistantId: state.assistantId, computerId: state.computerId };
   if (state.latest.type === 'computer.suspended') {
     await kube.mode(state.computerId, 'Suspended');

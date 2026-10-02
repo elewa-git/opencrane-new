@@ -1,10 +1,12 @@
+import { generateKeyPairSync } from 'node:crypto';
+import { tokenIssuer } from '@opencrane/auth';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { until } from '@opencrane/authz/testing';
 import { bridgeChannel } from '../../computer/src/channel.ts';
 
@@ -31,7 +33,7 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     const ws = new WebSocket(url, { headers: { 'x-bridge-token': 'short-lived-test-capability' } });
     ws.on('message', raw => {
       const report = z.object({ sequence: z.number(), conversationId: z.string(), type: z.string() }).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
-      reports.push(report); ws.send(JSON.stringify({ type: 'ack', sequence: report.sequence }));
+      reports.push(report); ws.send(JSON.stringify({ type: 'ack', sequence: report.sequence, token: 'test-turn', expiresAt: Date.now()+120_000 }));
     });
     await once(ws, 'open'); ws.send(JSON.stringify({ type: 'resume', since })); return ws;
   };
@@ -73,7 +75,17 @@ it('recovers the server connector from the NATS report sequence without gaps or 
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   const connection = { url: `ws://127.0.0.1:${address.port}/bridge`, computerId: 'computer', assistantId: 'assistant', bearer: 'short-lived-test' };
-  let link = await connectBridge(options, connection);
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${directory}/key.pem`, key.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: `${directory}/key.pem`, issuer: 'https://bridge.test/' });
+  let position = 0;
+  for (const type of ['computer.claimed', 'computer.ready']) {
+    const result = await nats.store.append({ expectedSequence: position, event: { id: type, commandId: type, type,
+      silo: 'test', subject: 'computer-assistant', source: 'test', principal: { kind: 'system', id: 'test' }, time: new Date().toISOString(),
+      data: { computerId: 'computer', assistantId: 'assistant', generation: 1, ...(type === 'computer.claimed' ? { tokenId: 'token:test' } : { podUid: 'pod' }) } } });
+    if (result.status !== 'appended') throw new Error('Computer fixture failed'); position = result.sequence;
+  }
+  let link = await connectBridge(options, connection, tokens);
   try {
     link.socket.send(JSON.stringify({ type: 'turn', id: 'message', conversationId: 'conversation', assistantId: 'assistant', text: 'Hello', token: 'short-lived-turn', expiresAt: Date.now()+60_000 }));
     await until(async () => await reportPosition(nats.store, 'test', 'computer') === 1);
@@ -82,9 +94,44 @@ it('recovers the server connector from the NATS report sequence without gaps or 
     link.socket.terminate(); await once(link.socket, 'close'); await link.settled();
     channel.notification({ method: 'item/completed', params: { threadId: 'thread', item: { type: 'agentMessage', id: 'reply', text: 'Hello back' } } });
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { status: 'completed' } } });
-    link = await connectBridge(options, connection);
+    link = await connectBridge(options, connection, tokens);
     await until(async () => await reportPosition(nats.store, 'test', 'computer') === 4);
     const reports = (await chatHistory(nats.store, 'test', 'conversation')).flatMap(r => r.event.report ? [r.event.report.sequence] : []);
     expect(reports).toEqual([1, 2, 3, 4]);
   } finally { link.socket.terminate(); await channel.close(); server.close(); await nats.close(); await rm(directory, { recursive: true, force: true }); }
 }, 30_000);
+
+it('reconnects after 121 seconds and executes the pending message once with a fresh grant', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-refresh-`), server = createServer();
+  const initial = Date.now(); let now = initial, runs = 0;
+  const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+  const channel = bridgeChannel(server, {
+    rpc: method => { if (method === 'turn/start') runs++; return Promise.resolve({ thread: { id: 'thread' } }); },
+    grant: (_thread, _conversation, token, expiry) => {
+      if (token !== 'fresh' || expiry <= now) return Promise.reject(new Error('Expired grant'));
+      return Promise.resolve();
+    },
+    credential: () => ({ value: 'computer', expiresAt: now + 600_000 }), journal: `${directory}/reports`,
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const connect = async () => {
+    const socket = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, { headers: { 'x-bridge-token': 'computer' } });
+    await once(socket, 'open'); return socket;
+  };
+  let socket = await connect();
+  try {
+    const first = once(socket, 'message');
+    socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    const input = { type: 'turn', id: 'message', conversationId: 'conversation', assistantId: 'assistant', text: 'Hello', token: 'old', expiresAt: initial + 120_000 };
+    socket.send(JSON.stringify(input)); await first;
+    socket.terminate(); await once(socket, 'close');
+    now += 121_000;
+    socket = await connect();
+    socket.send(JSON.stringify({ type: 'resume', since: 1 }));
+    socket.send(JSON.stringify({ ...input, token: 'fresh', expiresAt: now + 120_000 }));
+    socket.send(JSON.stringify({ type: 'ack', sequence: 1, token: 'fresh', expiresAt: now + 120_000 }));
+    await until(() => runs === 1, 1000);
+    expect(runs).toBe(1);
+  } finally { clock.mockRestore(); socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});

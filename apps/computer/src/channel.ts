@@ -6,7 +6,7 @@ import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 
 export interface BridgeReport {
-  sequence: number; conversationId: string; turnId: string; assistantId: string;
+  sequence: number; previousSequence?: number; conversationId: string; turnId: string; assistantId: string;
   type: string; commandDigest?: string; exitCode?: number; threadId?: string; messageId?: string; text?: string;
 }
 interface Driver {
@@ -31,7 +31,7 @@ function turn(value: Record<string, unknown>): Turn {
 function stored(line: string): BridgeReport {
   const value = record(JSON.parse(line) as unknown), sequence = value['sequence'];
   if (typeof sequence !== 'number' || !Number.isSafeInteger(sequence)) throw new Error('Invalid journal');
-  return { sequence, conversationId: string(value, 'conversationId'), turnId: string(value, 'turnId'), assistantId: string(value, 'assistantId'), type: string(value, 'type'),
+  return { sequence, ...(typeof value['previousSequence'] === 'number' ? { previousSequence: value['previousSequence'] } : {}), conversationId: string(value, 'conversationId'), turnId: string(value, 'turnId'), assistantId: string(value, 'assistantId'), type: string(value, 'type'),
     ...(typeof value['commandDigest'] === 'string' ? { commandDigest: value['commandDigest'] } : {}),
     ...(typeof value['exitCode'] === 'number' ? { exitCode: value['exitCode'] } : {}),
     ...(typeof value['threadId'] === 'string' ? { threadId: value['threadId'] } : {}),
@@ -43,9 +43,10 @@ function stored(line: string): BridgeReport {
 export function bridgeChannel(server: Server, driver: Driver) {
   // ponytail: retain the small prototype outbox; compact acknowledged reports when volume warrants it.
   const reports: BridgeReport[] = existsSync(driver.journal) ? readFileSync(driver.journal, 'utf8').trim().split('\n').filter(Boolean).map(stored) : [];
-  let socket: WebSocket | undefined, acknowledged = 0, resumed = false;
+  const executions = new Set(existsSync(`${driver.journal}.executions`) ? readFileSync(`${driver.journal}.executions`, 'utf8').trim().split('\n') : []);
+  let socket: WebSocket | undefined, resumed = false;
   const active = new Map<string, Turn>();
-  const waiting = new Map<number, () => void>();
+  const waiting = new Map<number, (grant: { token: string; expiresAt: number }) => void>();
   const send = (report: BridgeReport) => {
     if (resumed && socket && socket.readyState === socket.OPEN) {
       if (socket.bufferedAmount > 1_048_576) { socket.close(1013); return; }
@@ -54,16 +55,16 @@ export function bridgeChannel(server: Server, driver: Driver) {
   };
   function report(input: Turn | BridgeReport, type: string, extra: Partial<BridgeReport> = {}) {
     const item: BridgeReport = { conversationId: input.conversationId, assistantId: input.assistantId,
-      turnId: 'id' in input ? input.id : input.turnId, type, ...extra, sequence: reports.length + 1 };
+      turnId: 'id' in input ? input.id : input.turnId, type, ...extra, previousSequence: reports.findLast(r => r.conversationId === input.conversationId)?.sequence ?? 0, sequence: reports.length + 1 };
     appendFileSync(driver.journal, JSON.stringify(item) + '\n', { mode: 0o600, flush: true });
     reports.push(item); send(item); return item.sequence;
   }
-  // An interrupted process cannot know whether an external effect happened. Never replay a turn automatically.
+  // Prepared turns can retry. Executing turns (and older journals without that distinction) have an uncertain effect.
   for (const item of [...reports]) {
-    if (item.type === 'agent.turn_started' && !reports.some(r => r.turnId === item.turnId && ['agent.turn_completed', 'agent.turn_failed'].includes(r.type))) report(item, 'agent.turn_failed');
+    if (item.type === 'agent.turn_started' && (executions.has(item.turnId) || item.previousSequence === undefined) && !reports.some(r => r.turnId === item.turnId && ['agent.turn_completed', 'agent.turn_failed'].includes(r.type))) report(item, 'agent.turn_failed');
   }
   async function start(input: Turn) {
-    if (reports.some(r => r.turnId === input.id) || [...active.values()].some(t => t.id === input.id)) return;
+    if (reports.some(r => r.turnId === input.id && ['agent.turn_completed', 'agent.turn_failed'].includes(r.type)) || [...active.values()].some(t => t.id === input.id)) return;
     if ([...active.values()].some(t => t.conversationId === input.conversationId)) return;
     // Mark preparation immediately; a second request cannot start the same conversation during thread/start.
     active.set(input.conversationId, input);
@@ -73,24 +74,31 @@ export function bridgeChannel(server: Server, driver: Driver) {
         ? { threadId: previous } : { cwd: '/workspace', model: modelForTask(input.taskKind), approvalPolicy: 'never', sandbox: 'danger-full-access' }));
       const thread = record(response['thread'])['id']; if (typeof thread !== 'string') throw new Error('Missing thread');
       active.delete(input.conversationId); active.set(thread, input);
-      const sequence = report(input, 'agent.turn_started', { threadId: thread });
-      await new Promise<void>(resolve => { if (acknowledged >= sequence) resolve(); else waiting.set(sequence, resolve); });
-      await driver.grant(thread, input.conversationId, input.token, input.expiresAt);
+      const previousStart = reports.find(r => r.turnId === input.id && r.type === 'agent.turn_started');
+      const sequence = previousStart?.sequence ?? report(input, 'agent.turn_started', { threadId: thread });
+      const grant = await new Promise<{ token: string; expiresAt: number }>(resolve => {
+        waiting.set(sequence, resolve); if (previousStart) send(previousStart);
+      });
+      await driver.grant(thread, input.conversationId, grant.token, grant.expiresAt);
+      appendFileSync(`${driver.journal}.executions`, input.id + '\n', { mode: 0o600, flush: true });
+      executions.add(input.id);
       await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: input.text, text_elements: [] }] });
     } catch {
       report(input, 'agent.turn_failed');
       for (const [id, t] of active) if (t.id === input.id) active.delete(id);
     }
   }
-  function acknowledge(sequence: unknown) {
-    if (typeof sequence !== 'number' || !Number.isSafeInteger(sequence) || sequence < acknowledged || sequence > reports.length) throw new Error('Invalid ack');
-    acknowledged = sequence;
-    for (const [position, resolve] of waiting) if (position <= sequence) { waiting.delete(position); resolve(); }
+  function acknowledge(sequence: unknown, value?: Record<string, unknown>) {
+    if (typeof sequence !== 'number' || !Number.isSafeInteger(sequence) || sequence < 1 || sequence > reports.length) throw new Error('Invalid ack');
+    const resolve = waiting.get(sequence);
+    if (resolve && typeof value?.['token'] === 'string' && typeof value['expiresAt'] === 'number' && value['expiresAt'] > Date.now()) {
+      waiting.delete(sequence); resolve({ token: value['token'], expiresAt: value['expiresAt'] });
+    }
   }
   function resume(since: unknown) {
     if (typeof since !== 'number' || !Number.isSafeInteger(since) || since < 0 || since > reports.length) throw new Error('Sequence gap');
-    acknowledged = 0; acknowledge(since); resumed = true;
-    for (const item of reports.slice(since)) send(item);
+    resumed = true;
+    for (const item of reports) if (item.sequence > since || waiting.has(item.sequence)) send(item);
   }
   const wss = new WebSocketServer({ server, path: '/bridge', maxPayload: 128 * 1024, verifyClient: (info: { req: IncomingMessage }) => {
     try {
@@ -107,7 +115,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
         if (socket !== next) return;
         const input = record(JSON.parse((Buffer.isBuffer(bytes) ? bytes : Buffer.concat(Array.isArray(bytes) ? bytes : [Buffer.from(bytes)])).toString()) as unknown);
         if (input['type'] === 'resume') resume(input['since']);
-        else if (input['type'] === 'ack') acknowledge(input['sequence']);
+        else if (input['type'] === 'ack') acknowledge(input['sequence'], input);
         else if (input['type'] === 'turn' && resumed) void start(turn(input));
         else throw new Error('Invalid message');
       } catch { next.close(1008, 'Invalid bridge message'); }
