@@ -119,7 +119,7 @@ P2-4 now uses the shared `computerCredentials(store, tokens, silo)` check in
 and model admission use one credential scheme. The decision process reads only
 public verification keys. It checks signature, strict expiry, assistant, current
 computer id/generation/token id and a matching Ready event before reservation.
-A turn binds to that computer grant and its conversation (`session-id`); resume
+A turn binds to that computer grant and its actual Codex thread (`session-id`), conversation and requester; resume
 and loss revoke old grants. The model decision also checks the active turn,
 personal assistant ownership and live requester membership. `-- budgets` projects
 spending; `MODEL_DECISION_URL` enables the dispatcher's settlement handler.
@@ -131,3 +131,16 @@ Fresh-install browser and Codex-thread recovery qualification remains NOT RUN.
 Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
 readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
 supplies these settings and qualifies the processes together on real services.
+
+`npm run worker -w apps/ops -- conversations` runs the encrypted conversation
+feed projection. `ProjectionRunner.rebuild(conversations)` rebuilds it with readers
+and the runner stopped; it increments the generation so reconnecting browsers
+reload. No chat reaction runs during replay. Bridge delivery reads durable posted
+messages, invokes the existing resume command, and waits for Ready before issuing
+a turn. The idle timer accounts for pending messages and recent conversation
+activity. Pod-proxy GET permission permits the server's inbound bridge WebSocket.
+
+Server-owned `computer.turn_started` and `computer.turn_closed` events share the
+computer stream with suspension. A live turn prevents suspension; competing
+start/suspend commands use that stream's conditional append. An unexecuted message
+whose delivery loses to suspension is delivered again after wake.

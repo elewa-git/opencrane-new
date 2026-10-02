@@ -9,10 +9,13 @@ import { registerMemberRoutes, type MembershipOptions } from './members/routes.t
 import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
 import { registerComputerRoutes, type ComputerOptions } from './computers/routes.ts';
 
+import { registerChatRoutes, type ChatOptions } from './chat/routes.ts';
+
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
+  chat?: ChatOptions;
   integrations?: IntegrationOptions;
   computers?: ComputerOptions;
   /** The process entrypoint owns bounded cleanup; embedded servers close telemetry here. */
@@ -47,6 +50,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerMemberRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
+  registerChatRoutes(app, authConfig, options.chat);
 
   return app;
 }

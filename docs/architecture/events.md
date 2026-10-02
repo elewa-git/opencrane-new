@@ -115,6 +115,7 @@ SSO membership path. Invitation creation and identity binding are separate work.
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message and thread; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -146,14 +147,31 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `conversation.created` | command | conversations | OpenFGA participants |
+| `conversation.created` | command | conversations (immutable `mode`: `agent_session`, `direct` or `group`; Phase 2 accepts only `agent_session`; missing mode in older events reads as `agent_session`) | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
 | `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
-| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Streamed text deltas are sent live and not stored as events |
+| `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |
+| `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
+
+Bridge reports describe activity; they never open model admission. The server's
+separate turn command binds a requested message to its actual Codex thread,
+requester and task on the computer stream. A terminal server event is permanent,
+even if it precedes start admission. The same stream prevents idle suspend while
+a turn is admitted. If suspend wins before admission, an unexecuted preparation
+retries after wake; a report alone never marks execution as having happened.
+
+Bridge reports carry the computer id, a unique increasing per-computer sequence
+and a digest in the envelope. Per-conversation predecessor positions allow
+independent persistence; reconnect uses the largest contiguous committed position.
+The server checks the committed digest before acknowledging a report.
+Encrypted message deltas and completed text share the conversation key; replay
+rebuilds the messages/activity feed without invoking Codex. Turns interrupted after their durable execution marker are
+reported failed and are never automatically repeated. Prepared, unexecuted turns
+retry with a fresh grant after reconnect or Pod replacement.
 
 ### Tools, approvals and effects
 
@@ -196,9 +214,19 @@ The Phase 2 model actor records the global monthly `ceilingCents` and
 `dailyCeilingCents` together. Reservations include `modelCall`: model, pinned
 price-table id, computer, assistant, requester, conversation, thread and turn,
 and a digest of the checked IAM context. Gateway observations add integer
-`inputTokens` and `outputTokens` under `usage`; settlement releases the unused
-reservation. The catalogue has no model configuration events: Phase 2's two
-allowed models and price table are pinned source configuration.
+`inputTokens`, `outputTokens` and optional `cachedInputTokens` / `cacheWriteTokens`
+under `usage`; settlement selects short/long context from total input and releases
+the unused reservation. Prices are integer euro cents at the pinned planning FX,
+rounded upwards once per call. The catalogue has no model configuration events:
+the eleven allowed models, price table and explicit task routing are pinned source
+configuration (owner decision, 2 October 2026). Nano and mini are refused; chat
+turns use 6.1 Sol, demanding tasks Astra, and scoped automations Luna. The server
+binds the task kind and routed model into the signed turn grant;
+admission refuses a different request model before any reservation or provider
+access. Historical reservations retain their recorded tariff id when replayed.
+Retired nano and mini price rows settle pending usage at their original tariff;
+unknown models or tariffs produce `effect.uncertain` with reason `unknown_tariff`,
+retain the full reservation and allow later usage processing to continue.
 
 The actor is elected with a PostgreSQL session advisory lease, used only for
 process leadership. It reads the budget stream once and serialises commands in

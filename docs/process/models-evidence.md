@@ -188,3 +188,157 @@ existing unimplemented reaction that retries on `conversation.created`; this
 personal-assistant decision path enforces ownership directly from events and
 live membership. This receipt qualifies the requested lifecycle-to-model path,
 not the complete Phase 2 product.
+
+## All models and task routing — 2 October 2026
+
+Source: `work/bridge`, parent `d024a38`, plus the commit containing this receipt.
+Owner decision: “allow all models but keep optimising. Choosing the right tool
+for the job is more important than cost.” Node **22.23.3**, PostgreSQL 17,
+disposable NATS/OpenFGA/agentgateway 1.5.0 fixtures. The shared dev stack was
+neither restarted nor modified. No third-party dependency was added.
+
+### Contract and test evidence
+
+The eleven requested models share one pinned price registry, with integer euro
+cents per billion tokens at the existing EUR 95/100 USD planning FX. Nano and
+mini are refused. The [official pricing](https://developers.openai.com/api/docs/pricing)
+sets short context at **≤272,000 input tokens** and long context at **>272,000**;
+long rates apply to the whole call. The registry retains every requested input,
+cached-input, cache-write and output rate, with `null` for unavailable rates.
+BigInt settlement rounds up once per call, including reported cached usage.
+
+The explicit task table follows [OpenAI's guidance](https://developers.openai.com/api/docs/guides/model-selection):
+chat turns use 6.1 Sol, demanding work Astra, and scoped work / frequent automations
+Luna. The bridge applies the table to each turn, including resumed threads;
+owners/admins can read the same table, tariffs and threshold in `/api/org/models`.
+Refining the table from measured success, latency and spend is the optimisation
+hook. It does not infer a task kind from message text.
+
+- **RED → GREEN:** the first public pricing test refused Astra; it now prices
+  the worked short-context example correctly.
+- **RED → GREEN:** the cached gateway fixture charged 100 cents instead of 32;
+  it now records native cache-read counts and settles at 32 cents. A subsequent
+  long-context fixture with cache writes settles at 454 cents.
+- **RED → GREEN:** the bridge omitted a model from `turn/start`; it now selects
+  Sol through the task table. Routing tests cover every task kind.
+- **PASS:** pricing arithmetic for all eleven models, both tiers, supported cache
+  rates, the exact threshold, upward rounding and invalid/removed-model refusal.
+- **PASS:** all eleven models admitted through the fixture decision/gateway;
+  expensive Astra refused before the provider under both daily and monthly caps.
+- **PASS:** the existing cap, refusal, crash, uncertainty, retry and replay tests.
+- **PASS:** usage counters reject bearer strings, fractions, negative and unsafe
+  integers. The first full run caught the two new counter names in the secret-field
+  guard; narrow exceptions retain these numeric-only restrictions.
+- **PASS:** independent read-only review by GPT-6.1 Sol, within two passes;
+  no blockers. The first pass ran the pricing/routing tests (25 passed), the
+  second verified packaging and the numeric-only counter guard (264 passed).
+  The reviewer made no provider calls.
+
+Reservations deliberately retain a conservative full 1,050,000-token context
+bound, at long rates and the greater input/cache-write rate. Both existing caps
+still apply: this can refuse an expensive model even for a tiny prompt. A future
+trusted server-side token bound can reduce the reservation and prove short
+context; no computer-supplied count is accepted. Historical reservations retain
+their recorded tariff id on replay; unresolved older tariffs stay reserved.
+
+### Exactly three authorised live calls
+
+**PASS**, 2026-10-02 16:49 UTC: exactly one real call each to the following models.
+Each returned HTTP 200 and `response.completed`; the response model id matched
+its request. The returned usage counts matched the gateway observations and the
+recorded `effect.observed` / `budget.settled` events.
+
+| Model | Input tokens | Cached input | Cache writes | Output tokens | Settled euro cents | Calls |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `gpt-6-luna` | 9 | 0 | 0 | 6 | 1 | 1 |
+| `gpt-6.1-sol` | 9 | 0 | 0 | 5 | 1 | 1 |
+| `gpt-6-astra` | 9 | 0 | 0 | 5 | 1 | 1 |
+
+Prompt: **`Say OK.`** Bound: **16 output tokens**, the
+[documented minimum](https://developers.openai.com/api/reference/java/resources/beta/subresources/responses/methods/create),
+with low reasoning, streaming, `store: false` and standard service tier.
+Total settled charge: **3 euro cents**, rounded up independently per call.
+The isolated live fixture had 20,000-cent daily/monthly ceilings so that its
+conservative reservations fit; it did not change the shared silo's ceilings.
+The gateway read `/home/jente/dev/opencrane-new/.keys/.openai-key` by path;
+the builder never read its contents. No provider key or raw gateway diagnostics
+were persisted or printed. Attempt receipts were written before sending, and
+an existing receipt prevents accidental reruns. There were no retries or other
+real provider calls in this task.
+
+Selected test command: `MODELS_REAL_CALL=1`, `MODELS_REAL_KEY_FILE` set to the
+above path, `PG_TEST_URL` set to the local test database, and
+`npx vitest run libs/models/test/gateway.test.ts -t 'exactly three approved real'`.
+Result: **1 passed / 26 skipped**, 15.31 seconds. Safe local receipts remain in
+`.tools/models-real-attempts.json` and `.tools/models-real-*.json` (ignored).
+Normal gates explicitly use `MODELS_REAL_CALL=0` and never repeat these calls.
+
+### Final gates and qualification limits
+
+| Check | Result |
+| --- | --- |
+| `npm run lint` | PASS, all five checks; five existing function-length warnings |
+| `npm run typecheck` | PASS, every workspace |
+| `npm run check:events` | PASS, 71 event types agree |
+| `PG_TEST_URL=… MODELS_REAL_CALL=0 npm test` | PASS, 57 files passed / 2 skipped; 993 tests passed / 3 skipped; 168.26 seconds |
+| Selected paid gateway test | PASS, exactly three calls; 15.31 seconds |
+| Independent review | PASS, two passes, no blockers |
+| Isolated Node 22 runtime routing import | PASS, chat / analysis / summary; only routing code and package metadata present |
+
+The extra runtime packaging probe first failed with Node 22's
+`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` when `routing.ts` lived inside
+`node_modules`. The image now copies the dependency-free routing entrypoint
+under `/app/libs/models` and links the package from `node_modules`, matching a
+workspace install. The same isolated layout passes under Node 22.23.3. Package
+metadata names the existing **AGPL-3.0-or-later** licence and the image carries
+its full licence file; no server dependency is copied. This is a loader proof,
+not a computer image build or fresh-install qualification.
+
+Computer image rebuild, shared-stack deployment, a fresh-install complete chat
+journey and hosted CI: **NOT RUN**. Real long-context/cache-hit calls and real
+calls to the remaining eight models: **NOT RUN**; their arithmetic/admission
+are tested with pinned data and scripted provider usage. The three real calls
+qualify model ids and usage parsing through the complete gateway/settlement path.
+Nothing was pushed or merged.
+
+## Registry review fixes — 2 October 2026
+
+Source: `6207df7` plus these fixes on `work/bridge`. Linux, disposable NATS,
+PostgreSQL, OpenFGA and agentgateway with a scripted provider; no shared-stack
+change or paid call. Independent pass 1 identified both blockers below.
+
+- **PASS, red then green:** a `chat_turn` submitting `gpt-5.5` first returned
+  200, then returned 403 with no budget reservation or provider access. The
+  signed grant carries task `chat_turn` and allowed model `gpt-6.1-sol`; a
+  matching request still succeeds and settles. The server chooses that model
+  from the task table before signing; admission checks it before reserving.
+- **PASS, red then green:** replaying pending old-tariff nano/mini reservations
+  first threw `Unknown model` from usage ingestion. Retained, retired price rows
+  now settle one million input plus one million output tokens at **43 cents**
+  for nano and **214 cents** for mini, using their original tariff id. Both
+  remain refused for new calls even with a matching signed grant.
+- **PASS:** an unknown model between those usage lines records
+  `effect.uncertain` with `unknown_tariff`, retains its 100-cent reservation and
+  allows later ingestion, new Sol admission and settlement to continue.
+  An unknown-model rejection line first settled at zero cents; the extra
+  regression now keeps that second 100-cent reservation charged too.
+  Repeated ingestion is idempotent, and the budget projection rebuild matches
+  the recovered actor.
+- **PASS:** focused models, signed-token and proxy checks: 5 files passed,
+  58 tests passed / 1 paid test skipped.
+
+| Final check | Result |
+| --- | --- |
+| `npm run lint` | PASS, all five checks; five existing function-length warnings |
+| `npm run typecheck` | PASS, every workspace |
+| `npm run check:events` | PASS, 73 event types agree |
+| `MODELS_REAL_CALL=0 npm test` | PASS, 57 files passed / 5 skipped; 981 tests passed / 31 skipped; 243.27 seconds |
+| Staged secret scan | PASS |
+
+An earlier full run caught the API assertion that still expected eleven rows;
+it now verifies the two retained rows are retired and carry the old tariff id.
+One overlapping run also saw agentgateway exit during fixture startup, before
+an existing readiness assertion. All three readiness cases passed in isolation,
+and the final full run above passed without overlap.
+Fresh-install live upgrade, shared-stack deployment, paid calls, hosted CI and
+independent review pass 2: **NOT RUN** in this fix task.

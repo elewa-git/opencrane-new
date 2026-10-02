@@ -3,7 +3,7 @@
 # Usage: tools/fleet/codex-task.sh <name> <workdir> <prompt-file> [effort] [model]
 #   effort: low | medium | high (default high)
 #   model:  gpt-6-astra (default; design, hard builds, reviews)
-#           gpt-5.6-sol (regular builds) | gpt-5.6-luna (mechanical edits)
+#           gpt-6.1-sol (regular builds; reviews of astra) | gpt-6-luna (mechanical edits)
 # Logs go to $FLEET_LOGS/<name>/ (default ~/.fleet): events.jsonl, stderr.log,
 # last.md (Codex's final message) and exit (its exit code).
 # On the dev box Codex runs without its sandbox: the box is disposable and

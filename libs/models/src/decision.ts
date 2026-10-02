@@ -6,24 +6,35 @@ import { computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { BudgetActor, history } from './actor.ts';
-import { costCents, data, models, priceTableId, type ModelCall } from './state.ts';
+import { reservationCents, data, models, priceTableId, type ModelCall } from './state.ts';
 
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
-const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id,
+const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: id, turn: id, requester: id, thread: id, task: z.string().min(1), model: z.string().min(1),
   delegation: z.array(id).length(1) });
-const textContent = z.object({ type: z.literal('input_text'), text: z.string() }).strict();
-const message = z.object({ type: z.literal('message').optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
+const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
+const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]) }).strict();
-const requestSchema = z.object({ model: z.enum(['gpt-5-nano', 'gpt-5-mini']), stream: z.literal(true),
-  input: z.union([z.string(), z.array(z.union([message,
+const functionTool = z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
+  parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict();
+const tool = z.union([functionTool, z.object({ type: z.literal('custom'), name: z.string(), description: z.string().optional(),
+  format: z.object({ type: z.literal('grammar'), syntax: z.literal('lark'), definition: z.string() }).strict() }).strict()]);
+const additionalTools = z.object({ type: z.literal('additional_tools'), id: z.string(), role: z.literal('developer'),
+  tools: z.array(z.union([tool, z.object({ type: z.literal('namespace'), name: z.string(), description: z.string().optional(),
+    tools: z.array(tool) }).strict()])) }).strict();
+const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired).map(row => row.id)), stream: z.literal(true),
+  input: z.union([z.string(), z.array(z.union([message, additionalTools,
     z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string() }).strict(),
     z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
-  instructions: z.string().optional(), max_output_tokens: z.int().positive().max(2000),
-  tools: z.array(z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
-    parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict()).optional(),
-  reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']) }).strict().optional(),
+  instructions: z.string().optional(), max_output_tokens: z.int().min(16).max(2000),
+  tools: z.array(functionTool).optional(),
+  reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional(),
+    context: z.literal('all_turns').optional() }).strict().optional(),
+  text: z.object({ verbosity: z.enum(['low', 'medium', 'high']) }).strict().optional(),
+  tool_choice: z.literal('auto').optional(), parallel_tool_calls: z.boolean().optional(),
+  include: z.array(z.literal('reasoning.encrypted_content')).max(1).optional(),
+  prompt_cache_key: z.string().max(200).optional(), client_metadata: z.record(z.string(), z.string()).optional(),
   store: z.literal(false).optional(), service_tier: z.literal('default').optional(),
 }).strict();
 async function readBody(req: IncomingMessage) {
@@ -60,11 +71,19 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   const created = conversation.find(r => r.event.type === 'conversation.created');
   if (!created || data(created.event)['assistantId'] !== c.assistant || data(created.event)['createdBy'] !== t.requester ||
       conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Conversation refused');
-  const turn = conversation.findLast(r => data(r.event)['turnId'] === t.turn && r.event.type.startsWith('agent.turn_'));
-  if (!turn || turn.event.type !== 'agent.turn_started') throw new Error('Turn is not active');
-  return { model: '', priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
-    conversationId: t.conversation, turnId: t.turn, threadId: t.conversation,
+  const turn = await activeTurn(actor, c, t);
+  return { model: t.model, priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
+    conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
     contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed])).digest('hex') };
+}
+async function activeTurn(actor: BudgetActor, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>) {
+  const lifecycle = (await history(actor.store, `computer-${c.assistant}`, actor.silo)).filter(r =>
+    r.event.source === 'opencrane-server' && r.event.type.startsWith('computer.turn_') && data(r.event)['turnId'] === t.turn);
+  const turn = lifecycle.find(r => r.event.type === 'computer.turn_started');
+  if (!turn || lifecycle.some(r => r.event.type === 'computer.turn_closed') ||
+      data(turn.event)['threadId'] !== t.thread || data(turn.event)['conversationId'] !== t.conversation ||
+      data(turn.event)['requesterId'] !== t.requester || data(turn.event)['task'] !== t.task) throw new Error('Turn is not active');
+  return turn;
 }
 export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0) {
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
@@ -84,11 +103,11 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       auditedContext = { requesterId: t.requester, assistantId: c.assistant, claims: [c, t] };
       if (t.delegation[0] !== t.requester) throw new Error('Delegation refused');
       const body = requestSchema.parse(await readBody(req));
+      if (body.model !== t.model) throw new Error('Model does not match turn grant');
       const call = await context(actor, binding, c, t, checked.sequence);
-      call.model = body.model;
-      // ponytail: reserve the entire 400k context; tokenisation can replace this conservative bound later.
+      // No client token count is trusted; reserve the full supported context at long rates.
       reservationAttempted = true;
-      const reservation = await actor.reserve(call, costCents(body.model, 400_000, body.max_output_tokens));
+      const reservation = await actor.reserve(call, reservationCents(body.model, body.max_output_tokens));
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {
       // A budget command may already have appended, even if its acknowledgement was lost.

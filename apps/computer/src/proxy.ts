@@ -4,11 +4,11 @@ import { chmodSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
 interface Grant { computer: string; token: string; expires: number }
-export async function proxy(gateway: string): Promise<string> {
+export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }) {
   const caller = randomBytes(32).toString('hex');
-  const deadline = Date.now() + 600_000;
+  let deadline = Date.now() + 600_000;
   const turns = new Map<string, Grant>();
-  writeFileSync('/home/codex/caller', caller, { mode: 0o600 });
+  writeFileSync(options.callerPath, caller, { mode: 0o600 });
   const control = createServer((req, res) => {
     void (async () => {
       const input = record(await body(req));
@@ -18,6 +18,7 @@ export async function proxy(gateway: string): Promise<string> {
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
             input['expires'] <= Date.now() || input['expires'] > Date.now() + 120_000) throw new Error('Bad grant');
+        deadline = Date.now() + 600_000;
         turns.set(input['thread'], { computer: input['computer'], token: input['token'], expires: input['expires'] });
       } else { json(res, { error: 'path' }, 404); return; }
       json(res, { ok: true });
@@ -25,7 +26,7 @@ export async function proxy(gateway: string): Promise<string> {
   });
   await new Promise<void>((resolve, reject) => {
     control.once('error', reject);
-    control.listen('/run/codex/control.sock', () => { chmodSync('/run/codex/control.sock', 0o600); resolve(); });
+    control.listen(options.controlSocket, () => { chmodSync(options.controlSocket, 0o600); resolve(); });
   });
   const server = createServer((req, res) => {
     void (async () => {
@@ -38,7 +39,9 @@ export async function proxy(gateway: string): Promise<string> {
       const grant = typeof thread === 'string' ? turns.get(thread) : undefined;
       if (!grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
       if (req.url !== '/v1/responses' || req.method !== 'POST') { json(res, { error: 'route' }, 404); return; }
-      const raw = JSON.stringify(await body(req));
+      const payload = record(await body(req));
+      payload['max_output_tokens'] = 128;
+      const raw = JSON.stringify(payload);
       const outgoing = request(`${gateway}/v1/responses`, { method: 'POST', headers: {
         'content-type': 'application/json', authorization: `Bearer ${grant.computer}`,
         'x-turn-token': grant.token, 'session-id': String(thread),
@@ -52,7 +55,12 @@ export async function proxy(gateway: string): Promise<string> {
     })().catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); });
   });
   await new Promise<void>((resolve, reject) => {
-    server.once('error', reject); server.listen(8080, '127.0.0.1', resolve);
+    server.once('error', reject); server.listen(options.port, '127.0.0.1', resolve);
   });
-  return caller;
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Proxy listen failed');
+  return { caller, url: `http://127.0.0.1:${address.port}`, close: async () => {
+    server.closeAllConnections(); control.closeAllConnections();
+    await Promise.all([server, control].map(listener => new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()))));
+  } };
 }

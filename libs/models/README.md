@@ -1,7 +1,7 @@
 # Models and silo spending
 
 Phase 2, issue #29. The decision process verifies the lifecycle computer and
-per-conversation turn tokens; agentgateway v1.5.0 enforces its answer and sends
+thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
 S0.1c's native streamed usage fields and checksum-verified binary fetcher.
 No extra proxy sees the provider key. `backendAuth.key.file` reads
@@ -15,25 +15,48 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
 - Defaults are **2,000 cents/day and 20,000 cents/month**, UTC. Pending
   reservations count against both periods until settled, including after
   midnight or a restart. Completed calls belong to their reservation date.
-- The pinned registry allows `gpt-5-nano` (default) and `gpt-5-mini`.
-  Standard input/output prices come from the official
-  [nano](https://developers.openai.com/api/docs/models/gpt-5-nano) and
-  [mini](https://developers.openai.com/api/docs/models/gpt-5-mini) pages,
-  checked 2 October 2026. The S0.1c planning FX of 95/100 EUR/USD is fixed.
-  Prices are integer cents per 100 million tokens: 475/3800 and 2375/19000.
-  BigInt arithmetic rounds the combined cost upwards once per call. Cached
-  input uses the full input price. This is the silo's accounting tariff,
-  not a live FX quote or invoice reconciliation.
-- Reservations cover the entire 400,000-token context plus at most 2,000
-  output tokens: normally 2 cents for nano, 10 for mini. Only inline text and
-  local function calls are accepted. Media, hosted tools, references to stored
-  history, background requests, multiple completions and premium tiers fail
-  closed. The caller must supply `max_output_tokens` and `stream: true`.
+- Owner decision, 2 October 2026: allow all eleven requested models and keep
+  optimising; choosing the right tool matters more than cost. The registry in
+  `src/state.ts` is the only price data: Astra, 6.1 Sol, 6 Luna, 6 Sol,
+  5.6 Sol/Terra/Luna, 5.5/5.5 Pro and 5.4/5.4 Pro. `gpt-5-nano` and
+  `gpt-5-mini` are retired and refused for new calls. Their original price rows
+  remain available to settle pending reservations at the recorded tariff.
+  Standard rates are pinned from
+  [OpenAI pricing](https://developers.openai.com/api/docs/pricing), checked
+  2 October 2026, at the existing planning FX of EUR 95/100 USD. Prices are
+  integer euro cents per billion tokens, preserving fractional USD-cent rates.
+  BigInt arithmetic rounds the combined charge upwards once per call.
+  Short context is **at most 272,000 input tokens**; above that, the whole
+  request uses long-context input, cache and output rates. Settlement uses
+  total input to choose the tier, then charges reported cached input and cache
+  writes at their separate rates. Unsupported cache usage fails closed.
+  This is a planning tariff, not invoice reconciliation or live FX conversion.
+- `src/routing.ts` holds the task table and one selection function, following
+  [OpenAI model guidance](https://developers.openai.com/api/docs/guides/model-selection).
+  Chat turns use **gpt-6.1-sol**. Ambiguous problems, deep analysis and ambitious
+  deliverables use **gpt-6-astra**. Scoped tasks, triage, frequent automations,
+  conversation titles, upload classification and summaries use **gpt-6-luna**.
+  The bridge accepts an explicit task kind (default `chat_turn`) and selects
+  the model on every turn, including resumed threads. It never guesses task
+  difficulty from message text. Refine the rows using measured success, latency
+  and spend; there is no learned router. Automation execution is still future work.
+- Reservations cover the full supported **1,050,000-token** context plus the
+  supplied output limit at long rates, using the greater input/cache-write rate.
+  `reservationCents` accepts a proven input bound for future trusted server-side
+  tokenisation; no caller-supplied token count is trusted today. This can refuse
+  an expensive model under the unchanged daily cap even for a tiny request.
+  Only inline text and local function calls are accepted. Media, hosted tools,
+  stored history, background requests, multiple completions and premium tiers
+  fail closed. The caller supplies `stream: true` and `max_output_tokens` from
+  16 (the [API minimum](https://developers.openai.com/api/reference/java/resources/beta/subresources/responses/methods/create))
+  to 2,000. The gateway fixes the service tier to standard pricing.
 - IAM is Phase 2 personal-assistant ownership ∩ live OpenFGA membership.
   The claimed computer generation, ready state, conversation and active turn
   are read from events on every call. JWTs are ES256, with strict expiry;
-  turn claims include `conversation` matching `session-id` and the current
+  turn claims include `thread` matching the actual Codex `session-id`, signed `conversation`, `requester`, `task` and allowed `model` and the current
   `computerTokenId`, with at most 120 seconds between `iat` and `exp`.
+  The server chooses the allowed model from the task-routing table; admission
+  refuses a different request model before reserving or reaching the provider.
   Both use `libs/auth` and the configured `TOKEN_ISSUER`; the gateway verifies
   the same public keys. Computer tokens include the claim generation, and
   only a matching Ready event permits model admission. Delegation
@@ -45,13 +68,15 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   amount. A duplicate effect cannot charge twice. Observed provider rejections
   without usage settle at zero cents. Timeouts, lost connections and other
   missing outcomes produce `effect.uncertain` after three minutes and retain
-  the full reservation. Cap refusals append only `budget.exhausted`, once per
+  the full reservation. Unknown models or tariffs produce `effect.uncertain`
+  with reason `unknown_tariff`, keep the reservation and allow later usage
+  lines to be processed. Cap refusals append only `budget.exhausted`, once per
   unchanged budget per UTC day, including across actor recovery. Other refusals
   before a budget command become `security.alert_raised` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
 - `budgets` is a PostgreSQL projection using the existing runner. Rebuild it
   with `ProjectionRunner.rebuild(budgets)` while reactions are stopped.
-  `GET /api/org/models` uses live owner/admin authorisation and returns models,
+  `GET /api/org/models` uses live owner/admin authorisation and returns models, prices, the task-routing table and context threshold,
   today's/month's settled cents, outstanding reserved cents and both ceilings.
 
 The prototype stores reservation history in one JSON projection row and rereads
@@ -78,7 +103,8 @@ PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run lib
 
 Fixtures use real NATS, PostgreSQL 17, OpenFGA, agentgateway and a scripted SSE
 provider, each with disposable state. The real-call test is disabled normally;
-`MODELS_REAL_CALL=1` explicitly enables a single call (select that test alone).
+`MODELS_REAL_CALL=1` explicitly enables exactly one call each to Luna, 6.1 Sol and Astra with
+`Say OK.`, 16 output tokens and low reasoning (select that test alone).
 Never rerun it as a normal gate. [Evidence](../../docs/process/models-evidence.md)
 records the authorised call and test qualification.
 
@@ -86,3 +112,10 @@ Licences: agentgateway v1.5.0 Apache-2.0, jose 6.2.12 MIT, zod 4.6.5 MIT;
 all other runtime code reuses existing OSI-approved workspace packages. No new
 third-party dependency version was introduced. The binary SHA-256 is verified
 before every launch; the k3d relay image is pinned by OCI digest too.
+
+P2-3 also verifies the native Codex text request shape through the real gateway:
+nullable message ids, input/output text, reasoning summaries, local function
+selection, parallel calls and cache/client metadata. Native Sol text turns also
+carry strictly checked tool declarations (including namespaces and Lark custom
+tools), `all_turns` reasoning context and text verbosity. These fields do not relax
+the output limit or admit media, hosted tools or stored-history references.

@@ -63,8 +63,12 @@ It exports public `jwks`; `tokenVerifier(jwks, issuer)` applies the same strict
 signature, audience and lifetime checks without loading a private key.
 `computerCredentials(store, tokens, silo)` issues a turn for a Ready computer and
 checks both headers against its event-backed assistant, computer id, generation
-and rotated token id. The conversation must match `session-id`. An optional active
-turn token id further narrows `check`; the model decision also reads the active
-turn from conversation events and checks live permissions before reserving money.
+and rotated token id. The signed `thread` must match the actual Codex `session-id`;
+`conversation`, `requester`, `task` and allowed `model` are also signed. Issuance
+requires `threadId`, `task` and the model chosen by the server from its routing
+table. Model admission refuses a request whose model differs from the grant.
+An optional active turn token id further narrows `check`; model admission
+reads only server-owned `computer.turn_started` / `computer.turn_closed` authority
+and checks live permissions before reserving money. A closed turn cannot reopen.
 Old readiness events without a generation fail closed until the reconciler observes
 and records readiness again. Token values never enter events or projections.

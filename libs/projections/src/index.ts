@@ -21,3 +21,4 @@ export {
   rebuildMcpCatalogueProjection,
   rebuildComputersProjection,
 } from "./rebuild.ts";
+export { conversations, readConversation, listConversations } from './conversations.ts';

@@ -1,6 +1,9 @@
 // Entry point: starts the Fastify server and attaches the WebSocket
 // server to its underlying HTTP server. Run with:
 //   node --experimental-strip-types src/main.ts
+import { conversationKeys } from './chat/keys.ts';
+import { startBridges } from './chat/start.ts';
+import type { ChatOptions } from './chat/routes.ts';
 import { loadAuthConfig } from '@opencrane/auth';
 import { connectEventStore } from '@opencrane/event-store';
 import { connectComputers, connectMcpCatalogue, connectMemberFeed, connectProjectionDb } from '@opencrane/projections';
@@ -44,8 +47,15 @@ if (databaseUrl) {
   computers = connectComputers(databaseUrl);
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
 }
+const keyDirectory = process.env['CONVERSATION_KEYS_DIR'];
+const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirectory ? { silo: realtime.binding.silo, store: events.store,
+  db: modelDb.db, feed: realtime.feed, binding: realtime.binding, keys: conversationKeys(keyDirectory) } : undefined;
+if (realtime && chat) realtime.chat = chat;
+const closeBridges = chat ? await startBridges(chat, process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
+  process.env['TOKEN_SIGNING_KEY_FILE']!, process.env['TOKEN_ISSUER']!) : undefined;
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
+  ...(chat ? { chat } : {}),
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
     catalogue, ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
@@ -56,6 +66,7 @@ const app = buildServer(authConfig, {
 const address = await app.listen({ port, host });
 const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime);
 installShutdown(app, sockets, graceMs, async () => {
+  await closeBridges?.();
   const results = await Promise.allSettled([
     events?.close().then(() => app.log.info('event store connection closed')),
     realtime?.feed.close(),

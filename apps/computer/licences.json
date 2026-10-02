@@ -15773,6 +15773,22 @@
     "unresolved": []
   },
   {
+    "name": "ws",
+    "version": "8.22.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "MIT"
+    ],
+    "resolved": [
+      "MIT"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
     "name": "x11-common",
     "version": "1:7.7+23",
     "type": "deb",

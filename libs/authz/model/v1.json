@@ -131,6 +131,67 @@
           }
         }
       }
+    },
+    {
+      "type": "conversation",
+      "relations": {
+        "silo": {
+          "this": {}
+        },
+        "participant": {
+          "this": {}
+        },
+        "read": {
+          "intersection": {
+            "child": [
+              {
+                "computedUserset": {
+                  "relation": "participant"
+                }
+              },
+              {
+                "tupleToUserset": {
+                  "tupleset": {
+                    "relation": "silo"
+                  },
+                  "computedUserset": {
+                    "relation": "member"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "post": {
+          "computedUserset": {
+            "relation": "read"
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "silo": {
+            "directly_related_user_types": [
+              {
+                "type": "silo"
+              }
+            ]
+          },
+          "participant": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
+          },
+          "read": {
+            "directly_related_user_types": []
+          },
+          "post": {
+            "directly_related_user_types": []
+          }
+        }
+      }
     }
   ]
 }

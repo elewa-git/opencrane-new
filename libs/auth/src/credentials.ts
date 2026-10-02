@@ -15,7 +15,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       if (item.event.silo !== silo) throw new Error('Computer silo mismatch');
       events.push(item);
     }
-    const latest = events.at(-1);
+    const latest = events.findLast(r => !r.event.type.startsWith('computer.turn_'));
     if (latest?.event.type !== 'computer.ready') throw new Error('Computer is not ready');
     const claim = state.parse(events.findLast(({ event }) => event.type === 'computer.claimed')?.event.data);
     const recorded = grant.parse(events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))?.event.data);
@@ -30,7 +30,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
     return { ...current, sequence: latest.sequence };
   }
   return {
-    async turn(input: { assistantId: string; conversationId: string; turnId: string; requesterId: string }) {
+    async turn(input: { assistantId: string; conversationId: string; turnId: string; requesterId: string; threadId: string; task: string; model: string }) {
       const computer = await active(input.assistantId);
       if (!tokens.turn) throw new Error('Turn issuer unavailable');
       return tokens.turn({ ...input, silo, computerTokenId: computer.tokenId });
@@ -45,7 +45,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       if (computer['typ'] !== 'computer' || turn['typ'] !== 'turn' || computer['silo'] !== silo || turn['silo'] !== silo ||
           computer.jti !== current.tokenId || computer['computer'] !== current.computerId || computer['generation'] !== current.generation ||
           turn['computerTokenId'] !== current.tokenId || turn['assistant'] !== computer['assistant'] ||
-          turn['conversation'] !== headers['session-id']) throw new Error('Credential binding mismatch');
+          z.string().min(1).parse(turn['thread']) !== headers['session-id']) throw new Error('Credential binding mismatch');
       return { computer, turn, sequence: current.sequence };
     },
   };

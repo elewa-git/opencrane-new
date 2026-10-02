@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs';
+import { z } from 'zod';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -13,7 +15,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
+import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
 
 let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
@@ -23,14 +25,14 @@ async function freePort() {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
 }
-async function fixture(daily = 2000, monthly = 20000, real = false) {
+async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna') {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture();
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
   const binding = await createStore(fga.apiUrl, 'test');
   const auth = memberAuthorisation(binding);
   const append = async (subject: string, type: string, payload: unknown) => {
-    const event = envelope('test', subject, type, payload);
+    const event = { ...envelope('test', subject, type, payload), source: 'opencrane-server' };
     const rows = await history(nats.store, subject, 'test');
     expect((await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status).toBe('appended');
     return event;
@@ -40,8 +42,9 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' });
   await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:initial', generation: 1 });
   await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
-  await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice' });
+  await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
+  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn' });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
   const issuer = 'https://lifecycle.test/';
@@ -54,16 +57,17 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
     .setProtectedHeader({ alg: 'ES256', kid: 'lifecycle' }).setIssuer(issuer).setAudience(audience)
     .setIssuedAt().setExpirationTime(Math.floor(Date.now() / 1000) + ttl).sign(privateKey);
   const c = { typ: 'computer', silo: 'test', computer: 'computer', assistant: 'assistant', generation: 1, jti: 'token:initial' };
-  const t = { jti: 'token:turn', typ: 'turn', silo: 'test', assistant: 'assistant', conversation: 'conversation', turn: 'turn', requester: 'alice', computerTokenId: 'token:initial', delegation: ['alice'] };
+  const t = { jti: 'token:turn', typ: 'turn', silo: 'test', assistant: 'assistant', conversation: 'conversation', turn: 'turn', thread: 'thread', task: 'chat_turn', model: allowedModel, requester: 'alice', computerTokenId: 'token:initial', delegation: ['alice'] };
   const issue = async (generation = 1, tokenId = 'token:initial', computerId = 'computer') => ({
     authorization: `Bearer ${(await tokens.computer({ silo: 'test', assistantId: 'assistant', computerId, generation, tokenId })).value}`,
-    'x-turn-token': (await credentials.turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', requesterId: 'alice' })).value,
-    'session-id': 'conversation', 'content-type': 'application/json',
+    'x-turn-token': (await credentials.turn({ assistantId: 'assistant', conversationId: 'conversation', turnId: 'turn', requesterId: 'alice', threadId: 'thread', task: 'chat_turn', model: allowedModel })).value,
+    'session-id': 'thread', 'content-type': 'application/json',
   });
   const headers = await issue();
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly);
   const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer }, binding);
+  let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
@@ -78,12 +82,12 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     res.write('event: response.created\ndata: {"type":"response.created","response":{"id":"resp_stub","object":"response","status":"in_progress"}}\n\n');
     if (hold) return;
-    res.end(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { id: 'resp_stub', object: 'response', status: 'completed', model: 'gpt-5-nano',
-      output: [], usage: { input_tokens: 1000, output_tokens: 120, total_tokens: 1120 } } })}\n\n`);
+    res.end(`event: response.completed\ndata: ${JSON.stringify({ type: 'response.completed', response: { id: 'resp_stub', object: 'response', status: 'completed', model: 'gpt-6-luna',
+      output: [], usage } })}\n\n`);
   });
   stub.listen(0, '127.0.0.1'); await once(stub, 'listening');
   const address = stub.address(); if (!address || typeof address === 'string') throw new Error('No stub');
-  const keyFile = real ? resolve('.keys/.openai-key') : `${directory}/stub-key`;
+  const keyFile = real ? resolve(process.env['MODELS_REAL_KEY_FILE'] ?? '.keys/.openai-key') : `${directory}/stub-key`;
   if (!real) await writeFile(keyFile, 'stub-only-placeholder');
   const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
@@ -96,10 +100,11 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
   await runtime.start(); await runtime.work();
   const abort = new AbortController(); const dispatching = dispatch(nats.connection, runtime, abort.signal);
   void dispatching.catch(() => undefined);
-  const body = { model: 'gpt-5-nano', input: 'Say OK.', max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { actor, append, headers, t, c, sign, issue, credentials,
+  const body = { model: allowedModel, input: 'Say OK.', max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
+  return { actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
+    usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
     reject: (status: number) => { rejection = status; },
     received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}) {
@@ -118,11 +123,23 @@ async function fixture(daily = 2000, monthly = 20000, real = false) {
     },
   };
 }
+it('refuses gpt-5.5 for a chat turn before reserving or reaching the provider', async () => {
+  const f = await fixture(20000, 20000, false, 'gpt-6.1-sol');
+  try {
+    expect((await f.call({}, { model: 'gpt-5.5' })).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(0);
+    expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
+      .toEqual(['budget.ceiling_set', 'budget.period_started']);
+    expect(f.received()).toBe(0);
+    expect((await f.credentials.check(f.headers)).turn).toMatchObject({ task: 'chat_turn', model: 'gpt-6.1-sol' });
+    expect((await f.call()).status).toBe(200); await f.settled();
+  } finally { await f.close(); }
+}, 40_000);
 it('settles streamed gateway usage exactly, strips identity, rebuilds PostgreSQL, and rejects invalid calls before the provider', async () => {
   const f = await fixture();
   try {
     expect((await f.call()).status).toBe(200); await f.settled();
-    expect(f.actor.state.reservations[0]?.settledCents).toBe(costCents('gpt-5-nano', 1000, 120));
+    expect(f.actor.state.reservations[0]?.settledCents).toBe(costCents('gpt-6-luna', 1000, 120));
     expect(totals(await readBudget(f.db, 'test')).reservedCents).toBe(0);
     const before = await readBudget(f.db, 'test'); await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(before);
     expect(f.providerAuthHash()).toBe(createHash('sha256').update('Bearer stub-only-placeholder').digest('hex'));
@@ -130,14 +147,14 @@ it('settles streamed gateway usage exactly, strips identity, rebuilds PostgreSQL
     for (const bad of [{ 'session-id': 'other' }, { 'x-turn-token': 'forged' }, { authorization: 'Bearer forged' },
       { 'x-turn-token': await f.sign(f.t, 'decision-service', -1) }, { authorization: `Bearer ${await f.sign(f.c, 'agentgateway', -1)}` },
       { 'x-turn-token': await f.sign({ ...f.t, silo: 'other' }, 'decision-service') }]) expect((await f.call(bad)).status).toBeGreaterThanOrEqual(400);
-    for (const patch of [{ model: 'other' }, { max_output_tokens: 0 }, { max_output_tokens: 2001 }, { max_output_tokens: null },
+    for (const patch of [{ model: 'other' }, { model: 'gpt-5-nano' }, { model: 'gpt-5-mini' }, { max_output_tokens: 0 }, { max_output_tokens: 15 }, { max_output_tokens: 2001 }, { max_output_tokens: null },
       { previous_response_id: 'old' }, { tools: [{ type: 'web_search' }] }, { service_tier: 'priority' }, { n: 2 },
       { input: [{ role: 'user', content: [{ type: 'input_image', image_url: 'https://example.test/a' }] }] }]) {
       expect((await f.call({}, patch)).status).toBe(403);
     }
     expect(f.received()).toBe(1);
     const duplicate = await fetch(`http://127.0.0.1:${f.options.port}/v1/responses`, { method: 'POST', headers: f.headers,
-      body: '{"model":"gpt-5-mini","model":"gpt-5-nano","input":"OK","max_output_tokens":128,"stream":true}' });
+      body: '{"model":"gpt-6.1-sol","model":"gpt-6-luna","input":"OK","max_output_tokens":128,"stream":true}' });
     expect(duplicate.status).toBe(403); expect(f.received()).toBe(1);
     await fga.pause();
     try { expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1); } finally { await fga.resume(); }
@@ -209,7 +226,7 @@ it.each([{ computerId: 'old-computer', generation: 2 }, { computerId: 'computer'
     expect(f.received()).toBe(0);
   } finally { await f.close(); }
 }, 40_000);
-it.each([[2, 2000], [2000, 2]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {
+it.each([[25, 2000], [2000, 25]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {
   const f = await fixture(daily, monthly);
   try {
     const replies = await Promise.all(Array.from({ length: 8 }, () => f.call()));
@@ -219,7 +236,7 @@ it.each([[2, 2000], [2000, 2]])('admits one last reservation under daily %i / mo
   } finally { await f.close(); }
 }, 40_000);
 it('retains an in-flight reservation across gateway kill and actor recovery, recording uncertainty after timeout', async () => {
-  const f = await fixture(2, 200);
+  const f = await fixture(25, 200);
   try {
     f.hold(); const call = f.call().catch(() => ({ status: 502 }));
     await until(() => f.received() === 1); await f.restart(); await call;
@@ -227,10 +244,53 @@ it('retains an in-flight reservation across gateway kill and actor recovery, rec
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toContain('effect.uncertain');
     const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
-    expect(totals(recovered.state).reservedCents).toBe(2);
+    expect(totals(recovered.state).reservedCents).toBe(25);
     expect((await f.call()).status).toBe(403); // The old actor cannot append after the replacement's fence.
-    await f.runner.rebuild(budgets); expect(totals(await readBudget(f.db, 'test')).reservedCents).toBe(2);
+    await f.runner.rebuild(budgets); expect(totals(await readBudget(f.db, 'test')).reservedCents).toBe(25);
   } finally { await f.close(); }
+}, 40_000);
+it('recovers old-tariff usage after an upgrade and continues past an unknown model', async () => {
+  const f = await fixture(20000, 20000, false, 'gpt-6.1-sol');
+  let replacement: Awaited<ReturnType<typeof startDecision>> | undefined;
+  try {
+    const pending = [
+      { id: randomUUID(), model: 'gpt-5-nano', amountCents: 50, expectedCents: 43 },
+      { id: randomUUID(), model: 'unknown-model', amountCents: 100, expectedCents: undefined },
+      { id: randomUUID(), model: 'unknown-model', amountCents: 100, expectedCents: undefined, outcome: 'error' as const },
+      { id: randomUUID(), model: 'gpt-5-mini', amountCents: 250, expectedCents: 214 },
+    ];
+    for (const row of pending) await f.append('budget-test', 'budget.reserved', {
+      reservationId: row.id, permitId: row.id, amountCents: row.amountCents, payingGroupId: 'test', assistantId: 'assistant',
+      modelCall: { model: row.model, priceTableId: 'openai-2026-10-02-eur95', computerId: 'computer', assistantId: 'assistant',
+        requesterId: 'alice', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', contextDigest: '0'.repeat(64) },
+    });
+    await writeFile(f.options.usageFile, pending.map(row => JSON.stringify('outcome' in row ? { id: row.id, outcome: row.outcome } : { id: row.id, inputTokens: 1_000_000, outputTokens: 1_000_000 })).join('\n') + '\n');
+    await f.decisionDown();
+    const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
+    replacement = await startDecision(recovered, f.identity, f.binding, Number(new URL(f.options.decisionUrl).port));
+    await ingestUsage(recovered, f.options.usageFile);
+    await until(() => recovered.state.reservations.filter(r => r.call.model !== 'unknown-model').every(r => r.settledCents !== undefined));
+    for (const row of pending) {
+      expect(recovered.state.reservations.find(r => r.id === row.id)?.settledCents).toBe(row.expectedCents);
+      const effects = await history(f.nats.store, `effect-${row.id}`, 'test');
+      expect(effects.map(r => r.event.type)).toEqual([row.expectedCents === undefined ? 'effect.uncertain' : 'effect.observed']);
+      if (row.expectedCents === undefined) expect(effects[0]?.event.data).toMatchObject({ reason: 'unknown_tariff' });
+      else expect(effects[0]?.event.data).toMatchObject({ costCents: row.expectedCents, usage: { priceTableId: 'openai-2026-10-02-eur95' } });
+    }
+    expect(totals(recovered.state).reservedCents).toBe(200);
+    for (const model of ['gpt-5-nano', 'gpt-5-mini']) {
+      expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model }, 'decision-service') }, { model })).status).toBe(403);
+    }
+    expect((await f.call()).status).toBe(200);
+    await until(async () => {
+      await ingestUsage(recovered, f.options.usageFile);
+      return recovered.state.reservations.at(-1)?.settledCents !== undefined;
+    });
+    expect(recovered.state.reservations.at(-1)?.settledCents).toBe(1);
+    expect(totals(recovered.state)).toMatchObject({ reservedCents: 200, todayCents: 258 });
+    expect(f.received()).toBe(1);
+    await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
+  } finally { await replacement?.close(); await f.close(); }
 }, 40_000);
 it('records cap refusals once in the budget stream even when security appends fail and callers retry', async () => {
   const f = await fixture(0, 0);
@@ -251,7 +311,7 @@ it('records cap refusals once in the budget stream even when security appends fa
   } finally { fault.mockRestore(); await f.close(); }
 }, 40_000);
 it('does not duplicate exhaustion after its append succeeds but the acknowledgement is lost', async () => {
-  const f = await fixture(2, 2);
+  const f = await fixture(25, 25);
   try {
     expect((await f.call()).status).toBe(200);
     const append = f.nats.store.append.bind(f.nats.store);
@@ -265,7 +325,7 @@ it('does not duplicate exhaustion after its append succeeds but the acknowledgem
     try { expect((await f.call()).status).toBe(403); } finally { fault.mockRestore(); }
     expect((await f.call()).status).toBe(403); // The uncertain writer stops admitting commands.
     const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
-    await expect(recovered.reserve(f.actor.state.reservations[0]!.call, 2)).rejects.toThrow('spending cap');
+    await expect(recovered.reserve(f.actor.state.reservations[0]!.call, 25)).rejects.toThrow('spending cap');
     expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
       .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.reserved', 'budget.exhausted', 'budget.period_started']);
     expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
@@ -277,26 +337,26 @@ it('leaves money reserved on settlement failure and retries the recorded effect 
   try {
     await f.runtime.stop(); expect((await f.call()).status).toBe(200);
     await until(async () => { await ingestUsage(f.actor, f.options.usageFile); return (await history(f.nats.store, `effect-${f.actor.state.reservations[0]!.id}`, 'test')).length > 0; });
-    expect(totals(f.actor.state).reservedCents).toBe(2);
+    expect(totals(f.actor.state).reservedCents).toBe(25);
     const r = f.actor.state.reservations[0]!;
     await expect(f.actor.settleRecorded(r.id, randomUUID())).rejects.toThrow('Effect not recorded');
     const effect = (await history(f.nats.store, `effect-${r.id}`, 'test'))[0]!.event;
     const replacement = new BudgetActor(f.nats.store, 'test'); await replacement.start();
     await expect(f.actor.settle(effect)).rejects.toThrow('lost its fence');
-    expect(totals(f.actor.state).reservedCents).toBe(2);
+    expect(totals(f.actor.state).reservedCents).toBe(25);
     await replacement.settle(effect); await replacement.settle(effect);
     expect(totals(replacement.state).reservedCents).toBe(0);
     expect((await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.settled')).toHaveLength(1);
   } finally { await f.close(); }
 }, 40_000);
 it.each([400, 401, 404, 429, 500])('releases an observed provider %i rejection without usage or consuming the cap', async status => {
-  const f = await fixture(2, 2);
+  const f = await fixture(25, 25);
   try {
     f.reject(status); expect((await f.call()).status).toBe(status);
     await f.settled();
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => ({ type: r.event.type, data: r.event.data })))
-      .toEqual([{ type: 'effect.observed', data: { permitId: r.id, computerId: 'computer', tool: 'gpt-5-nano', destination: 'openai', costCents: 0, outcome: 'error' } }]);
+      .toEqual([{ type: 'effect.observed', data: { permitId: r.id, computerId: 'computer', tool: 'gpt-6-luna', destination: 'openai', costCents: 0, outcome: 'error' } }]);
     expect(totals(f.actor.state)).toMatchObject({ reservedCents: 0, todayCents: 0, monthCents: 0 });
     await f.actor.settleRecorded(r.id, `${r.id}:effect.observed`);
     expect((await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.settled')).toHaveLength(1);
@@ -304,7 +364,7 @@ it.each([400, 401, 404, 429, 500])('releases an observed provider %i rejection w
   } finally { await f.close(); }
 }, 40_000);
 it.each([408, 504, -1])('retains the reservation for an ambiguous provider outcome %i', async status => {
-  const f = await fixture(2, 2);
+  const f = await fixture(25, 25);
   try {
     f.reject(status); expect((await f.call()).status).toBeGreaterThanOrEqual(400);
     await f.restart(); // Drain the gateway log writer before inspecting its observations.
@@ -312,29 +372,142 @@ it.each([408, 504, -1])('retains the reservation for an ambiguous provider outco
     f.advance(); await f.actor.expire();
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toEqual(['effect.uncertain']);
-    expect(totals(f.actor.state).reservedCents).toBe(2);
+    expect(totals(f.actor.state).reservedCents).toBe(25);
   } finally { await f.close(); }
 }, 40_000);
 it('rolls UTC periods without forgetting outstanding reservations', async () => {
-  const f = await fixture(2, 20);
+  const f = await fixture(25, 250);
   try {
     expect((await f.call()).status).toBe(200); await f.settled();
     f.advance(32 * 86400_000);
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 0 });
     const call = f.actor.state.reservations[0]!.call;
-    await f.actor.reserve(call, 2); f.advance(32 * 86400_000);
-    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(2);
-    await expect(f.actor.reserve(call, 2)).rejects.toThrow('spending cap');
+    await f.actor.reserve(call, 25); f.advance(32 * 86400_000);
+    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(25);
+    await expect(f.actor.reserve(call, 25)).rejects.toThrow('spending cap');
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
   } finally { await f.close(); }
 }, 40_000);
-it.runIf(process.env['MODELS_REAL_CALL'] === '1')('makes exactly one real OpenAI call and records only tokens and cents', async () => {
-  const f = await fixture(2000, 20000, true);
+it.runIf(process.env['MODELS_REAL_CALL'] === '1')('makes exactly three approved real OpenAI calls and records only tokens and cents', async () => {
+  if (existsSync('.tools/models-real-attempts.json')) throw new Error('Paid calls already attempted; do not rerun');
+  const f = await fixture(20000, 20000, true);
+  const receipts: { model: string; status?: number }[] = [];
   try {
-    expect((await f.call()).status).toBe(200); await f.settled();
-    const usage: unknown = JSON.parse((await readFile(f.options.usageFile, 'utf8')).trim());
-    await writeFile('.tools/models-real-receipt.json', JSON.stringify({ model: 'gpt-5-nano', usage,
-      costCents: f.actor.state.reservations[0]?.settledCents, calls: f.actor.state.reservations.length }, null, 2));
-    expect(f.actor.state.reservations).toHaveLength(1);
+    for (const model of ['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra']) {
+      // Record before sending; an interrupted attempt must never be silently retried.
+      receipts.push({ model });
+      await writeFile('.tools/models-real-attempts.json', JSON.stringify(receipts, null, 2));
+      const reply = await f.call({ 'x-turn-token': await f.sign({ ...f.t, model }, 'decision-service') }, { model, max_output_tokens: 16, reasoning: { effort: 'low' }, service_tier: 'default' });
+      receipts.at(-1)!.status = reply.status;
+      await writeFile('.tools/models-real-attempts.json', JSON.stringify(receipts, null, 2));
+      expect(reply.status).toBe(200);
+      const finalSchema = z.object({ type: z.enum(['response.completed', 'response.incomplete']), response: z.object({
+        model: z.string(), usage: z.object({ input_tokens: z.number(), output_tokens: z.number(),
+          input_tokens_details: z.object({ cached_tokens: z.number().optional(), cache_write_tokens: z.number().optional() }).optional() }),
+      }) });
+      const final = reply.text.split('\n').filter(line => line.startsWith('data: {'))
+        .map(line => finalSchema.safeParse(JSON.parse(line.slice(6)) as unknown)).find(result => result.success)?.data;
+      if (!final) throw new Error('Provider usage missing');
+      expect(final.response.model.startsWith(model)).toBe(true);
+      await f.settled();
+      const r = f.actor.state.reservations.at(-1)!;
+      const effect = (await history(f.nats.store, `effect-${r.id}`, 'test'))[0]!.event;
+      await writeFile('.tools/models-real-receipt.json', JSON.stringify(f.actor.state.reservations.map(r => ({
+        model: r.call.model, costCents: r.settledCents,
+      })), null, 2));
+      await writeFile(`.tools/models-real-${model}.json`, JSON.stringify({ model, responseStatus: final.type, providerUsage: final.response.usage, usage: effect.data,
+        costCents: r.settledCents }, null, 2));
+    }
+    expect(f.actor.state.reservations).toHaveLength(3);
   } finally { await f.close(); }
 }, 120_000);
+it('settles cached input reported by the real gateway at its discounted rate', async () => {
+  const f = await fixture(10000, 20000);
+  try {
+    f.usage(100_000, 80_000, 1000);
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra' })).status).toBe(200);
+    await f.settled();
+    expect(f.actor.state.reservations[0]?.settledCents).toBe(32);
+    f.usage(300_000, 100_000, 1000, 100_000);
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra' })).status).toBe(200);
+    await f.settled();
+    expect(f.actor.state.reservations[1]?.settledCents).toBe(454);
+  } finally { await f.close(); }
+}, 40_000);
+it.each([[2494, 20000], [20000, 2494]])('caps expensive Astra before reaching OpenAI with daily %i / monthly %i', async (daily, monthly) => {
+  const f = await fixture(daily, monthly);
+  try {
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra' })).status).toBe(402);
+    expect(f.received()).toBe(0);
+  } finally { await f.close(); }
+}, 40_000);
+it('accepts the native Codex text request shape while retaining the bounded Responses contract', async () => {
+  const f = await fixture();
+  try {
+    expect((await f.call({}, { input: [{ type: 'message', id: null, role: 'user', content: [{ type: 'input_text', text: 'Say OK.' }] }],
+      tool_choice: 'auto', parallel_tool_calls: true, reasoning: { summary: 'auto' }, include: ['reasoning.encrypted_content'],
+      prompt_cache_key: 'thread', client_metadata: { 'x-codex-turn-metadata': '{}' } })).status).toBe(200);
+    await f.settled(); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('admits every pinned model through the decision and gateway under the same caps', async () => {
+  const f = await fixture(20000, 20000);
+  try {
+    for (const model of models.filter(row => !row.retired)) {
+      expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: model.id }, 'decision-service') }, { model: model.id })).status).toBe(200);
+      await f.settled();
+    }
+    expect(f.received()).toBe(11);
+  } finally { await f.close(); }
+}, 40_000);
+
+it.each(['agent.turn_completed', 'agent.turn_failed'])('a forged computer restart after %s stays refused without a reservation', async type => {
+  const f = await fixture();
+  try {
+    await f.append('conversation-conversation', type, { conversationId: 'conversation', turnId: 'turn', ...(type.endsWith('failed') ? { reason: 'bridge_interrupted' } : {}) });
+    await f.append('computer-assistant', 'computer.turn_closed', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', status: type.endsWith('failed') ? 'failed' : 'completed' });
+    const rows = await history(f.nats.store, 'conversation-conversation', 'test');
+    const event = { ...envelope('test', 'conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', turnId: 'turn', assistantId: 'assistant' }), source: 'computer-bridge' };
+    expect((await f.nats.store.append({ event, expectedSequence: rows.at(-1)!.sequence })).status).toBe('appended');
+    expect((await f.call()).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(0);
+    expect(f.received()).toBe(0);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('refuses a valid signed grant installed under another actual Codex thread before reserving', async () => {
+  const f = await fixture();
+  try {
+    const token = await f.sign({ ...f.t, thread: 'thread', task: 'chat_turn' }, 'decision-service');
+    expect((await f.call({ 'x-turn-token': token, 'session-id': 'conversation' })).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(0);
+    expect((await f.call({ 'x-turn-token': token, 'session-id': 'thread' })).status).toBe(200);
+    await f.settled();
+  } finally { await f.close(); }
+}, 40_000);
+
+// Captured from the pinned computer's native gpt-6.1-sol text turn.
+it('admits routed Sol tool declarations and settings while refusing malformed or unknown fields', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const body = {
+    input: [{ type: 'additional_tools', id: 'tools', role: 'developer', tools: [{
+      type: 'namespace', name: 'functions', description: 'Computer tools', tools: [
+        { type: 'custom', name: 'exec', description: 'Run code', format: { type: 'grammar', syntax: 'lark', definition: 'start: /.+/' } },
+        { type: 'function', name: 'wait', strict: false, parameters: { type: 'object', properties: {} } },
+      ],
+    }] }, { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Reply with OK.' }] }],
+    reasoning: { effort: 'low', context: 'all_turns' }, text: { verbosity: 'low' },
+  };
+  try {
+    expect((await f.call({}, body)).status).toBe(200);
+    await f.settled(); expect(f.received()).toBe(1);
+    for (const invalid of [
+      { ...body, text: { verbosity: 'unbounded' } },
+      { ...body, reasoning: { effort: 'low', context: 'unknown' } },
+      { ...body, input: [{ type: 'additional_tools', id: 'tools', role: 'developer', tools: [{ type: 'unknown' }] }] },
+      { ...body, text: { verbosity: 'low', unknown: true } },
+    ]) expect((await f.call({}, invalid)).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(1); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);

@@ -29,6 +29,12 @@ COPY runtime-package-lock.json package-lock.json
 RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/npm \
     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf /root/.npm
 COPY --from=project LICENSE /app/LICENSE
+# Copy only our dependency-free routing entrypoint; no server dependencies enter the image.
+COPY --from=project libs/models/package.json /app/libs/models/package.json
+COPY --from=project LICENSE /app/libs/models/LICENSE
+COPY --from=project libs/models/src/routing.ts /app/libs/models/src/routing.ts
+# Node 22 strips TypeScript outside node_modules; use the same link as a workspace install.
+RUN mkdir -p /app/node_modules/@opencrane && ln -s ../../libs/models /app/node_modules/@opencrane/models
 COPY src ./src
 RUN chmod 0755 /app/src && chmod 0444 /app/src/* && chmod 0555 /usr/local/bin/tool-user
 ENV PATH="/opt/python/bin:/usr/local/bin:/usr/bin:/bin"

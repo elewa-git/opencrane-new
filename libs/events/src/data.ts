@@ -6,7 +6,7 @@
 //
 // Two security rules from events.md rule 5 are schema rules here, not prose:
 // - message and agent text travel only as `ciphertext` plus `keyId` (see
-//   `ciphertextSchema`), or are not stored as events at all (streamed deltas);
+//   `ciphertextSchema`), including streamed deltas;
 // - tool arguments and commands travel only as a sha-256 digest, and
 //   credentials only as a `secretRef`, never a token or password value.
 import { z } from 'zod';
@@ -244,7 +244,7 @@ export const toolsetChangedDataSchema = z
 // --- Conversations and agent activity ----------------------------------
 
 export const conversationCreatedDataSchema = z
-  .object({ conversationId: id, assistantId: id, createdBy: id })
+  .object({ conversationId: id, assistantId: id, createdBy: id, mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session') })
   .strict();
 
 export const participantAddedDataSchema = z
@@ -256,7 +256,7 @@ export const participantRemovedDataSchema = z
   .strict();
 
 export const agentTurnStartedDataSchema = z
-  .object({ conversationId: id, turnId: id, assistantId: id })
+  .object({ conversationId: id, turnId: id, assistantId: id, threadId: id.optional() })
   .strict();
 
 export const agentTurnCompletedDataSchema = z.object({ conversationId: id, turnId: id }).strict();
@@ -330,7 +330,7 @@ export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
 export const approvalUsedDataSchema = z.object({ approvalId: id, permitId: id }).strict();
 
 export const effectUncertainDataSchema = z
-  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost']) })
+  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost', 'unknown_tariff']) })
   .strict();
 
 export const effectResolvedDataSchema = z
@@ -507,3 +507,9 @@ export const securityAlertRaisedDataSchema = z
       contextDigest: digestSchema }).strict().optional(),
   })
   .strict();
+
+// Server-owned admission and suspend fence; reports never carry this authority.
+export const computerTurnStartedDataSchema = z.object({
+  assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id, requesterId: id, task: z.literal('chat_turn'),
+}).strict();
+export const computerTurnClosedDataSchema = computerTurnStartedDataSchema.extend({ threadId: id.optional(), status: z.enum(['completed', 'failed']) });

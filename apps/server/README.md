@@ -178,3 +178,60 @@ Browser callback refusals clear both cookies and redirect to `/signin/rejected` 
 one fixed reason code. API clients still receive 400 JSON. Provider discovery
 failure also reaches that screen. `/auth/me` refuses expired sessions and sessions
 whose organisation no longer matches the configured pin or an exact configured identity.
+
+## Conversation core
+
+With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
+(`id`, `conversationId`, `assistantId`, `mode`), `POST /api/conversations/:conversationId/messages`
+(`id`, `text`), and GET on those paths. The caller supplies stable event ids for
+retries. POST requires the session's exact Origin. Only live silo members acting
+for their personal assistant can create; conversation participants can read/post.
+Owner/admin roles do not bypass private conversation access. List/messages reads
+come from the `conversations` projection; text is decrypted only after permission
+checks. The messages response contains ordered event rows, a position, generation
+and `computerState` (`ready` or `starting your computer`).
+
+On `/ws`, subscribe with `{type: 'subscribe', topic: 'conversation', conversationId,
+since, generation}`. Apply event rows by position; deltas append to their message
+id, completed messages replace that message's text. `ready` marks catch-up;
+`resync` requires restarting at position 0. Keep the last applied position and
+generation when reconnecting. The server rechecks permissions throughout a stream.
+
+The bridge runner also needs `KUBECONFIG`, `KUBE_NAMESPACE`,
+`TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER`. The dev host uses a loopback Kubernetes
+proxy with scoped Pod-proxy permission. Its separate `x-bridge-token` capability
+never replaces Kubernetes authentication. Per-conversation AES-GCM keys live in
+the private dev secret-store directory, outside events and projections. Preserve
+those keys with event backups; deleting a key makes that conversation’s event/projection text unreadable.
+[Qualification and limits](../../docs/process/bridge-evidence.md).
+
+Creation defaults omitted `mode` to `agent_session` and records it immutably in
+`conversation.created`. Phase 2 refuses `direct` and `group` with HTTP 400 and
+“Phase 2 supports only agent_session conversations”. The projection retains mode
+on replay; older stored events without mode read as `agent_session`. New commands
+always write mode. Changing creation arguments on a retry never changes the conversation.
+
+Each conversation thread has an ordered report queue: at most 64 reports and
+1 MiB, including the report being persisted; at most 64 queues per connection.
+Exceeding either bound closes with 1013, “Report queue limit”. Threads acknowledge
+independently. Reports retain global ids and per-conversation predecessor positions;
+reconnect starts at the largest contiguous committed global position. Committed
+payload digests are checked on both append and deduplication. Acknowledgements
+name one report and never release another thread's pending start.
+
+The start acknowledgement carries a fresh signed thread grant after a separate
+server lifecycle command has acquired the computer-stream suspend fence. Each
+command still makes one conditional append. Terminal reports trigger permanent
+server closure, recovered by the watcher if the server stops between those commands.
+
+A digest-matching start replay for an already closed turn is acknowledged without
+new admission or a turn grant, including recovery after a terminal report but
+before its lifecycle closure. Older journals without `previousSequence` replay
+in global computer order and check continuity across conversations.
+
+Permanent report refusals close with 1008 and a safe reason. The watcher logs the
+computer id and reason, then stops reconnecting that computer for its lifetime;
+other computers continue. Resolve the refused report before restarting the server.
+Transient persistence failures still close with 1011 and retry from durable history.
+Credential expiry closes with 4001 and reconnects with a fresh credential; only a
+recorded report refusal stops automatic recovery.

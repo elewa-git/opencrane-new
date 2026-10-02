@@ -20,6 +20,9 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "kubectl"
       ]
     },
     "apps/ops": {

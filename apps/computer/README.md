@@ -1,18 +1,17 @@
 # Computer image — P2-1
 
 Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
-accepts 382/382 packages. ONNX Runtime is retained: its wheel contains no
+accepts 383/383 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
 The checked template pins the tested release image at
-`sha256:385fa42847a1afd9a49ec71f5c1785e4e8adc25d7890a920e0af360eda030ca7`.
+`sha256:09bc88153ccc6e72fee754dd171235f1aecf988e3b0df62bf7f278d6155df4ac`.
 This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
 credential through the Kubernetes Pod proxy; the bridge atomically stores it in
 `/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
-proxy control socket accepts per-thread grants. Dependencies and OS layers are
-unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
-names the earlier image. The lifecycle k3d test checks delivery on the current digest.
+proxy control socket accepts per-thread grants. The OS layer is unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
+names the earlier image. The lifecycle k3d test checks delivery on the current digest. P2-3 adds the reviewed MIT `ws` package for the bridge channel.
 
 ## Build and check
 
@@ -141,12 +140,12 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
   private Unix socket in root-owned `/run/executor` (0750, group 1000). `tool-user.c` is unchanged from S0.1b; the executable is
   reused from the pinned base. UID 1001 inherits `no_new_privs` and the same
   seccomp rules denying sockets, process inspection and alternative syscall ABIs.
-- The bridge stub, Codex and authenticated loopback model proxy use UID 1000.
-  The stub initialises the real app-server and exposes `/health` on TCP 8081.
+- The bridge, Codex and authenticated loopback model proxy use UID 1000.
+  The bridge initialises the real app-server and exposes `/health` on TCP 8081.
   Health requires initialised Codex and a listening desktop; required child exits
   terminate the container. A ready report is emitted when the first health check confirms both.
-  The private `app.sock` is an owner-only test/future-bridge transport, not a
-  public server API. P2-3 owns the actual inbound protocol and event dispatch.
+  The private `app.sock` is an owner-only image-test transport, not a
+  public server API. The authenticated `/bridge` WebSocket drives conversation turns.
 - KasmVNC and browser checks use UID 1002 with `no_new_privs`. Kasm's stock UI and
   non-free recommended driver remain excluded as in S0.5. Playwright launches
   the existing Chromium with `chromiumSandbox: true`, inside gVisor.
@@ -164,9 +163,8 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
 
 The proxy supports the existing Responses route. Its private control socket
 accepts grants of at most two minutes and explicit drops. Calls without a live
-thread grant or the ten-minute caller capability fail closed. Issuance, renewal,
-turn completion handling, MCP and browser egress brokering belong to later
-work; the stub does not claim to implement them. No provider key is embedded.
+thread grant or the ten-minute caller capability, renewed by a trusted turn grant, fail closed. The bridge installs a grant before each turn and drops it on completion.
+MCP and browser egress brokering remain later work. No provider key is embedded.
 
 ## Kubernetes and checks
 
@@ -215,3 +213,12 @@ See [evidence.json](evidence.json) for exact results, digest, size and latency.
 NOT RUN: fresh silo, paid model, product bridge/chat/upload, full product recovery
 journey, encrypted storage/cloud/CSI, live viewer/takeover, long-lived capability
 renewal, clean-host rebuild and independent review (explicitly excluded).
+
+P2-3 adds the existing workspace dependency ws 8.22.0 (MIT) to the image. Its
+installed metadata and full licence are checksum-pinned in the reviewed licence
+file. The bridge fsyncs reported events to a private PVC outbox before sending,
+replays from the server acknowledgement, and waits for a fresh thread-bound grant
+before execution. Prepared messages survive replacement and retry; a separate
+fsynced execution marker prevents automatically repeating uncertain effects.
+Older journals without that marker distinction remain uncertain. Saved Codex threads resume on the same PVC. Reports carry no turn
+or computer credential. See [bridge evidence](../../docs/process/bridge-evidence.md).

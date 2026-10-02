@@ -336,7 +336,15 @@ it('restricts the model and spending read to projected owners and admins', async
     const reply = await app.inject({ method: 'GET', url: '/api/org/models', headers: headers(sub) });
     expect(reply.statusCode).toBe(status);
     if (status === 200) expect(reply.json()).toMatchObject({ todayCents: 0, monthCents: 0, dailyCeilingCents: 2000,
-      ceilingCents: 20000, models: [{ id: 'gpt-5-nano', default: true }, { id: 'gpt-5-mini', default: false }] });
+      ceilingCents: 20000, shortContextTokens: 272000,
+      taskRouting: { chat_turn: { model: 'gpt-6.1-sol' }, deep_analysis: { model: 'gpt-6-astra' }, summary: { model: 'gpt-6-luna' } },
+      models: [
+        { id: 'gpt-6-astra', default: false }, { id: 'gpt-6.1-sol', default: true }, { id: 'gpt-6-luna', default: false },
+        { id: 'gpt-6-sol' }, { id: 'gpt-5.6-sol' }, { id: 'gpt-5.6-terra' }, { id: 'gpt-5.6-luna' },
+        { id: 'gpt-5.5' }, { id: 'gpt-5.5-pro' }, { id: 'gpt-5.4' }, { id: 'gpt-5.4-pro' },
+        { id: 'gpt-5-nano', default: false, retired: true, priceTableId: 'openai-2026-10-02-eur95' },
+        { id: 'gpt-5-mini', default: false, retired: true, priceTableId: 'openai-2026-10-02-eur95' },
+      ] });
   }
   expect((await app.inject({ method: 'GET', url: '/api/org/models' })).statusCode).toBe(401);
   expect((await app.inject({ method: 'GET', url: '/api/org/models', headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);

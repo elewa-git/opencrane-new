@@ -10,7 +10,7 @@ import { createStore } from '@opencrane/authz';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'computers', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'];
+const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'];
 async function run(command: string, args: string[], env: Record<string, string> = base) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, args, { cwd: root, env, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -189,7 +189,7 @@ async function up(fresh: boolean) {
       OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
   }
   const binding = await readEnv('binding');
-  for (const name of ['members', 'mcp-catalogue', 'computers', 'budgets']) {
+  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets']) {
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
   }
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
@@ -214,7 +214,9 @@ async function up(fresh: boolean) {
   console.log((await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/owner-bootstrap.ts'],
     { ...base, DEV_STACK_DIR: directory })).trim());
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
-    { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding });
+    { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
+      CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
+      TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
     '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname });
