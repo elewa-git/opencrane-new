@@ -1,6 +1,7 @@
 // Named subscriptions from the event catalogue. An implementation is enabled
 // only when its host registers it; this does not enable the future reactions.
 export const handlerSubscriptions = {
+  "settle-budget": ["effect.observed"],
   "update-members": [
     "member.invited",
     "member.joined",

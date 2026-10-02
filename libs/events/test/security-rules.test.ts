@@ -350,7 +350,7 @@ const RISKY_FIELD_NAME = new RegExp(
 // The risky-looking names that are approved: encrypted text and its key id, a
 // secret reference, and a message's id. Any `...Digest` is approved too (a
 // hash of a value, not the value). Matching is exact, so `Ciphertext` is not.
-const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId']);
+const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'inputTokens', 'outputTokens']);
 
 // Declared field names, at any depth, that are risky and not approved. This is a
 // net for accidents, not proof: a field with an innocent name still passes by
@@ -476,4 +476,15 @@ describe('the registry-wide guards catch a bad field added to a real event type'
     expect(looseSpots(acceptedShape(definitionFor('memory.written').dataSchema))).toEqual([]);
     expect(looseSpots(acceptedShape(withField('memory.written', 'extra', z.string().max(10))))).toEqual([]);
   });
+});
+
+
+// Model usage counts contain no bearer-token strings.
+it.each(['inputTokens', 'outputTokens'])('%s only accepts a whole usage count', field => {
+  const definition = definitionFor('effect.observed');
+  const usage = { inputTokens: 9, outputTokens: 19, priceTableId: 'openai-2026-10-02-eur95' };
+  for (const value of ['Bearer secret', -1, 1.5, null, {}, Number.MAX_SAFE_INTEGER + 1]) {
+    expect(definition.dataSchema.safeParse({ ...asRecord(definition.example), usage: { ...usage, [field]: value } }).success).toBe(false);
+  }
+  expect(definition.dataSchema.safeParse({ ...asRecord(definition.example), usage }).success).toBe(true);
 });

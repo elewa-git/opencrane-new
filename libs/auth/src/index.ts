@@ -27,3 +27,6 @@ export {
   turnTokenAudience,
   type IssuedToken,
 } from './tokens.ts';
+
+export { tokenVerifier } from './tokens.ts';
+export { computerCredentials } from './credentials.ts';

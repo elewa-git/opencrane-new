@@ -1,3 +1,4 @@
+import { budgets, BudgetActor } from '@opencrane/models';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -79,6 +80,9 @@ beforeEach(async () => {
   streamSequences.clear();
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('integration-test', { level: 'silent' }));
   await runner.initialise(members);
+  await runner.initialise(budgets);
+  await new BudgetActor(nats.store, 'test').start();
+  await runner.run(budgets);
   await runner.initialise(mcpCatalogue);
   await runner.initialise(computers);
   authorisation = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
@@ -124,10 +128,10 @@ beforeEach(async () => {
   feed = await connectMemberFeed(connectionString);
   catalogue = connectMcpCatalogue(connectionString);
   computerRows = connectComputers(connectionString);
-  app = buildServer(config, { integrations: { silo: 'test', feed, catalogue, binding: authorisation.binding,
+  app = buildServer(config, { integrations: { silo: 'test', feed, catalogue, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
     now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
-});
+}, 30_000);
 
 afterEach(async () => {
   const results: PromiseSettledResult<void>[] = await Promise.allSettled([app?.close()]);
@@ -325,3 +329,15 @@ async function focused(page: Page, id: string): Promise<void> {
   // A string expression runs in the browser; this test file has no DOM types.
   await page.waitForFunction(`document.activeElement?.id === ${JSON.stringify(id)}`, undefined, { timeout: 5_000 });
 }
+
+
+it('restricts the model and spending read to projected owners and admins', async () => {
+  for (const [sub, status] of [['oidc-alice', 200], ['oidc-amina', 200], ['oidc-bob', 403], ['oidc-mallory', 403]] as const) {
+    const reply = await app.inject({ method: 'GET', url: '/api/org/models', headers: headers(sub) });
+    expect(reply.statusCode).toBe(status);
+    if (status === 200) expect(reply.json()).toMatchObject({ todayCents: 0, monthCents: 0, dailyCeilingCents: 2000,
+      ceilingCents: 20000, models: [{ id: 'gpt-5-nano', default: true }, { id: 'gpt-5-mini', default: false }] });
+  }
+  expect((await app.inject({ method: 'GET', url: '/api/org/models' })).statusCode).toBe(401);
+  expect((await app.inject({ method: 'GET', url: '/api/org/models', headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);
+});

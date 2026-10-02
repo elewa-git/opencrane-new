@@ -13,7 +13,7 @@
   "scripts": {
     "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links",
     "typecheck": "npm run typecheck --workspaces",
-    "pretest": "sh scripts/fetch-nats.sh",
+    "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
     "replay": "npm run start -w apps/ops --",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",

@@ -68,6 +68,7 @@ export const effectObservedDataSchema = z
     // has to be the same whole-cents shape, not a float in euros.
     costCents: centsSchema,
     outcome: z.enum(['success', 'error']),
+    usage: z.object({ inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(), priceTableId: z.string().min(1) }).strict().optional(),
   })
   .strict();
 

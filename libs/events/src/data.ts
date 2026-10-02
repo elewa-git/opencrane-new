@@ -173,14 +173,14 @@ export const computerClaimedDataSchema = z
   .object({ assistantId: id, computerId: id, sandboxUid: id.optional(), generation: z.int().positive(), tokenId })
   .strict();
 
-export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id, podUid: id.optional(), sandboxUid: id.optional() }).strict();
+export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id, generation: z.int().positive().optional(), podUid: id.optional(), sandboxUid: id.optional() }).strict();
 
 export const computerSuspendedDataSchema = z
   .object({ assistantId: id, computerId: id, snapshotId: id.optional() })
   .strict();
 
 export const computerResumedDataSchema = z
-  .object({ assistantId: id, computerId: id, tokenId, snapshotId: id.optional() })
+  .object({ assistantId: id, computerId: id, tokenId, generation: z.int().positive().optional(), snapshotId: id.optional() })
   .strict();
 
 export const computerLostDataSchema = z.object({ assistantId: id, computerId: id }).strict();
@@ -411,7 +411,7 @@ export const connectionRevokedDataSchema = z
 // no scopeId), one paying group, or one assistant (those two must name
 // which one). Three strict shapes keyed on `scope` make "assistant with no
 // scopeId" and "global with a scopeId" invalid instead of silently legal.
-const ceilingFields = { ceilingCents: centsSchema, setBy: id };
+const ceilingFields = { ceilingCents: centsSchema, dailyCeilingCents: centsSchema.optional(), setBy: id };
 export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
   z.object({ scope: z.literal('global'), ...ceilingFields }).strict(),
   z.object({ scope: z.literal('paying_group'), scopeId: id, ...ceilingFields }).strict(),
@@ -422,7 +422,9 @@ export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
 // the budget actor checks every ceiling (global, group, optional
 // per-assistant) in the one append that records the charge.
 export const budgetReservedDataSchema = z
-  .object({ reservationId: id, permitId: id, amountCents: centsSchema, payingGroupId: id, assistantId: id })
+  .object({ reservationId: id, permitId: id, amountCents: centsSchema, payingGroupId: id, assistantId: id,
+    modelCall: z.object({ model: id, priceTableId: id, computerId: id, assistantId: id, requesterId: id, conversationId: id,
+      turnId: id, threadId: id, contextDigest: digestSchema }).strict().optional() })
   .strict();
 
 export const budgetSettledDataSchema = z
@@ -501,5 +503,7 @@ export const securityAlertRaisedDataSchema = z
     alertId: id,
     severity: z.enum(['low', 'medium', 'high', 'critical']),
     reason: reasonCodeSchema,
+    decision: z.object({ outcome: z.literal('deny'), requesterId: id.optional(), assistantId: id.optional(),
+      contextDigest: digestSchema }).strict().optional(),
   })
   .strict();

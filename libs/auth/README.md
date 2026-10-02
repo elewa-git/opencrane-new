@@ -53,5 +53,18 @@ and cross-organisation refusal
 against a disposable loopback provider. The [dev-stack journey](../../infra/dev-stack/README.md) also exercises real Zitadel,
 including logout, a mismatched organisation pin and a short-lived session.
 There is no database state to replay here; rotating the cookie key invalidates old cookies.
-Runtime dependencies are openid-client and Zod. See the [plan](../../plan.md) for
+Runtime dependencies are jose, openid-client, Zod and the event-store contract. See the [plan](../../plan.md) for
 identity boundaries and [server](../../apps/server/README.md) for the logout response contract.
+
+## Computer and turn credentials
+
+`tokenIssuer` signs ES256 computer grants (10 minutes) and turn grants (2 minutes).
+It exports public `jwks`; `tokenVerifier(jwks, issuer)` applies the same strict
+signature, audience and lifetime checks without loading a private key.
+`computerCredentials(store, tokens, silo)` issues a turn for a Ready computer and
+checks both headers against its event-backed assistant, computer id, generation
+and rotated token id. The conversation must match `session-id`. An optional active
+turn token id further narrows `check`; the model decision also reads the active
+turn from conversation events and checks live permissions before reserving money.
+Old readiness events without a generation fail closed until the reconciler observes
+and records readiness again. Token values never enter events or projections.

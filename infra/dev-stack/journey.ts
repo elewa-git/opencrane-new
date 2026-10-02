@@ -13,6 +13,7 @@ import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb } from '@opencrane/projections';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
+import { modelJourney } from './model-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { base, directory, readEnv, root, authEnv } from './config.ts';
 import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
@@ -125,6 +126,11 @@ try {
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
   const namespace = `opencrane-${silo}`;
+  const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${origin}/` });
+  const conversationId = `conversation-${id}`, turnId = `turn-${id}`;
+  await append('conversation.created', `conversation-${conversationId}`, { conversationId, assistantId: computer!.assistant_id, createdBy: member });
+  await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, assistantId: computer!.assistant_id, turnId });
+  await modelJourney(events.store, issuer, { silo, namespace, assistantId: computer!.assistant_id, computerId: computer!.computer_id, conversationId, turnId, requesterId: member });
   const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['-n', namespace, ...args], { cwd: root, timeout: 180_000 });
   await runKube('exec', computer!.computer_id, '--', 'node', '-e',
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
@@ -137,7 +143,6 @@ try {
     latest, ...(readyEvent ? { ready: readyEvent } : {}) };
   await suspendComputer(events.store, state);
   await until(async () => (await kube.state(computer!.computer_id))?.suspended === true, 'computer suspended');
-  const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${origin}/` });
   const resumedAt = performance.now();
   await resumeComputer(events.store, issuer, silo, computer!.assistant_id);
   await until(async () => (await db.db.query("SELECT 1 FROM computers WHERE assistant_id=$1 AND status='ready'",

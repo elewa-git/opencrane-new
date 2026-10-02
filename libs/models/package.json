@@ -1,0 +1,21 @@
+{
+  "name": "@opencrane/models",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@opencrane/events": "0.1.0",
+    "@opencrane/event-store": "0.1.0",
+    "@opencrane/projections": "0.1.0",
+    "@opencrane/handlers": "0.1.0",
+    "@opencrane/authz": "0.1.0",
+    "@opencrane/observability": "0.1.0",
+    "jose": "6.2.12",
+    "zod": "4.6.5",
+    "@opencrane/auth": "0.1.0"
+  }
+}

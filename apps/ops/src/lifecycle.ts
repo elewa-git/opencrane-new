@@ -25,6 +25,12 @@ export async function history(store: Pick<EventStore, 'readStream'>, subject: st
   for await (const item of store.readStream(subject)) result.push(item);
   return result;
 }
+function generation(events: StoredEvent[]): number {
+  const data = events.findLast(({ event }) => event.type === 'computer.claimed')?.event.data;
+  const value: unknown = typeof data === 'object' && data !== null ? Reflect.get(data, 'generation') : undefined;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1) throw new Error('Missing computer generation');
+  return value;
+}
 async function append(store: Store, trigger: EventEnvelope, events: StoredEvent[],
   type: string, subject: string, data: Record<string, unknown>) {
   const result = await store.append({ expectedSequence: events.at(-1)?.sequence ?? 0, event: {
@@ -102,13 +108,13 @@ export async function resumeComputer(store: Store, tokens: Tokens,
   if (!current || current.silo !== silo) throw new Error('Computer not found');
   if (current.type === 'computer.suspended') {
     await append(store, current, events, 'computer.resumed', subject,
-      { assistantId, computerId: field(current.data, 'computerId'), tokenId: `token:${randomUUID()}` });
+      { assistantId, computerId: field(current.data, 'computerId'), generation: generation(events), tokenId: `token:${randomUUID()}` });
     events = await history(store, subject);
   }
   const latest = events.at(-1)!.event;
   if (!['computer.resumed', 'computer.ready'].includes(latest.type)) throw new Error('Computer is not running');
   const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
-  return tokens.computer({ silo, computerId: field(grant.data, 'computerId'), assistantId,
+  return tokens.computer({ generation: generation(events), silo, computerId: field(grant.data, 'computerId'), assistantId,
     tokenId: field(grant.data, 'tokenId') });
 }
 
@@ -132,10 +138,10 @@ async function reconcileComputer(store: EventStore, kube: SandboxClient,
   await kube.mode(state.computerId, 'Running');
   if (state.latest.type === 'computer.claimed' || state.latest.type === 'computer.resumed') {
     if (sandbox?.ready && sandbox.podUid) {
-      await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, ...data,
+      await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, ...data, generation: generation(events),
         tokenId: field(state.latest.data, 'tokenId') }));
       await append(store, state.latest, events, 'computer.ready', subject,
-        { ...data, podUid: sandbox.podUid, sandboxUid: sandbox.uid });
+        { ...data, generation: generation(events), podUid: sandbox.podUid, sandboxUid: sandbox.uid });
     }
     return;
   }
@@ -153,10 +159,10 @@ async function observeReady(store: EventStore, state: ComputerState, events: Sto
     await suspendComputer(store, state);
   } else if (sandbox.ready) {
     const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
-    await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, ...data, tokenId: field(grant.data, 'tokenId') }));
+    await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, ...data, generation: generation(events), tokenId: field(grant.data, 'tokenId') }));
     // Upgrade old readiness events without inventing a Pod loss.
-    if (!previousPodUid) await append(store, state.latest, events, 'computer.ready', subject,
-      { ...data, podUid: sandbox.podUid, sandboxUid: sandbox.uid });
+    if (!previousPodUid || (typeof state.ready?.data === 'object' && state.ready.data !== null && !('generation' in state.ready.data))) await append(store, state.latest, events, 'computer.ready', subject,
+      { ...data, generation: generation(events), podUid: sandbox.podUid, sandboxUid: sandbox.uid });
   }
 }
 

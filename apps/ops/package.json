@@ -15,6 +15,7 @@
     "@opencrane/events": "0.1.0",
     "@opencrane/handlers": "0.1.0",
     "@opencrane/observability": "0.1.0",
-    "@opencrane/projections": "0.1.0"
+    "@opencrane/projections": "0.1.0",
+    "@opencrane/models": "0.1.0"
   }
 }

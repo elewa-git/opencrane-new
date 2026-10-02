@@ -16,7 +16,7 @@ it('signs short-lived computer and turn tokens and refuses rotated ids', async (
   await writeFile(path, key.privateKey, { mode: 0o600 });
   let now = 1_800_000_000;
   const issuer = await tokenIssuer({ privateKeyPath: path, issuer: 'https://issuer.example/', now: () => now });
-  const first = await issuer.computer({ silo: 'test', computerId: 'computer-1', assistantId: 'assistant-1' });
+  const first = await issuer.computer({ silo: 'test', computerId: 'computer-1', assistantId: 'assistant-1', generation: 1 });
   expect(await issuer.verify(first.value, computerTokenAudience, first.id)).toMatchObject({
     typ: 'computer', silo: 'test', computer: 'computer-1', assistant: 'assistant-1', jti: first.id,
   });
@@ -25,7 +25,7 @@ it('signs short-lived computer and turn tokens and refuses rotated ids', async (
   expect(await issuer.verify(turn.value, turnTokenAudience, turn.id)).toMatchObject({
     typ: 'turn', requester: 'alice', delegation: ['alice'], jti: turn.id,
   });
-  const rotated = await issuer.computer({ silo: 'test', computerId: 'computer-1', assistantId: 'assistant-1' });
+  const rotated = await issuer.computer({ silo: 'test', computerId: 'computer-1', assistantId: 'assistant-1', generation: 1 });
   await expect(issuer.verify(first.value, computerTokenAudience, rotated.id)).rejects.toThrow('rotated');
   now += 601;
   await expect(issuer.verify(rotated.value, computerTokenAudience, rotated.id)).rejects.toThrow();

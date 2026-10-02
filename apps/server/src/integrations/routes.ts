@@ -1,3 +1,5 @@
+import { models, totals, readBudget } from '@opencrane/models';
+import type { Query } from '@opencrane/projections';
 import type { FastifyInstance } from 'fastify';
 import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -11,11 +13,12 @@ export interface IntegrationOptions {
   catalogue: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
   binding: Binding;
   now?: () => Date;
+  modelDb?: Query;
 }
 
 export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions): void {
   const authorisation = options && memberAuthorisation(options.binding);
-  app.get('/api/org/integrations', async (request, reply) => {
+  for (const path of ['/api/org/integrations', '/api/org/models']) app.get(path, async (request, reply) => {
     const now = options?.now ?? (() => new Date());
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
@@ -33,6 +36,10 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       if (permission.status === 'unavailable') return reply.code(503).send({ status: 'unavailable' });
       if (!permission.allowed) {
         return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
+      }
+      if (path === '/api/org/models') {
+        if (!options.modelDb) return reply.code(503).send({ status: 'unavailable' });
+        return reply.send({ models, ...totals(await readBudget(options.modelDb, options.silo), now()) });
       }
       const response: IntegrationsResponse = { rows: await options.catalogue.rows(options.silo), loadedAt: now().toISOString() };
       return reply.send(response);

@@ -1,0 +1,59 @@
+# This relay puts the host gateway behind the computer's existing podSelector.
+# It has no credentials. The host gateway still authenticates every request.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-relay
+data:
+  config.yaml: |
+    config:
+      adminAddr: "off"
+      statsAddr: "off"
+    gateways:
+      default:
+        port: 3000
+    routes:
+    - gateways: default
+      backends:
+      - host: host.k3d.internal:43000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gateway
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: opencrane-gateway
+  template:
+    metadata:
+      labels:
+        app: opencrane-gateway
+    spec:
+      automountServiceAccountToken: false
+      containers:
+      - name: gateway
+        image: ghcr.io/agentgateway/agentgateway@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896
+        args: ["-f", "/config/config.yaml"]
+        ports:
+        - containerPort: 3000
+        volumeMounts:
+        - name: config
+          mountPath: /config
+          readOnly: true
+      volumes:
+      - name: config
+        configMap:
+          name: gateway-relay
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gateway
+spec:
+  selector:
+    app: opencrane-gateway
+  ports:
+  - port: 3000
+    targetPort: 3000

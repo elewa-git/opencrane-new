@@ -1,7 +1,7 @@
 # Local dev stack
 
 On `ocn-dev`, with Node 22, installed workspaces (`npm ci`), Docker Compose,
-OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve, and an authenticated
+OpenSSL, `flock`, passwordless `sudo` for Tailscale Serve and the model-port firewall, and an authenticated
 Tailscale daemon:
 
 ```sh
@@ -16,7 +16,7 @@ three Compose volumes, computer namespace and generated service credentials, the
 from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
 Plain `up` reuses data and running processes; `down` retains data and credentials.
 These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
-own only the `opencrane-<silo>` computer namespace.
+own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
 Run one stack per host. The scripts serialise operations with `flock`.
 
 ## Services and identities
@@ -192,3 +192,34 @@ Compare listeners with a snapshot from before bring-up: no new `0.0.0.0`, `*`
 or `[::]` listener is allowed. Existing host SSH is outside this stack.
 See [sign-in evidence](../../docs/process/signin-evidence.md) and [the original evidence receipt](../../docs/process/dev-stack-evidence.md) for results
 and conditions not qualified by these local journeys.
+
+## Phase 2 model gateway
+
+`up.sh` starts the model decision and pinned agentgateway binary, budget projection,
+settlement handler and a loopback-only scripted SSE provider. It derives public
+JWKS from the same lifecycle signing key and supplies the same `TOKEN_ISSUER`.
+The decision process only reads the public keys. The dev stack always sets
+`MODEL_UPSTREAM=127.0.0.1:43003` and uses a disposable placeholder key; it neither
+loads `.keys/.openai-key` nor calls OpenAI.
+
+The joined member's Ready computer receives a lifecycle turn credential. The
+journey installs it over the private control socket, then runs as the Codex UID
+through the authenticated local proxy, k3d relay, model gateway and decision.
+It asserts a completed stub response and the turn's `budget.reserved` event.
+Unit/integration gates additionally prove expired, pre-resume, pre-loss and
+mismatched computer/generation credentials cannot reserve money.
+
+Ports 43001–43003 are loopback-only. agentgateway 1.5 binds 43000 on all interfaces;
+startup first installs a dedicated IPv4/IPv6 firewall chain allowing only loopback,
+Tailscale and the private k3d bridge. Shutdown removes that chain after stopping
+the gateway. No public interface or Funnel path is permitted.
+
+The relay lives in `opencrane-dev-gateway`, outside the computer admission namespace.
+A dedicated NetworkPolicy permits only that namespace's gateway Pods on port 3000;
+the computer uses its Service IP without DNS egress. Startup provisions both and
+sets `computer-runtime` automatically. The relay has no credential. Existing
+handler subscriptions need a controlled rebuild when introducing `settle-budget`;
+the fresh run creates them from the combined catalogue.
+
+See the [model integration evidence](../../docs/process/models-evidence.md) for
+fresh/repeat journeys, owner-stack restoration and unqualified conditions.

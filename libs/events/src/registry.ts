@@ -51,7 +51,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'computer',
     'The reconciler observed a ready Pod and delivered its committed credential.',
     data.computerReadyDataSchema,
-    { assistantId: 'asst_1', computerId: 'computer_1' },
+    { assistantId: 'asst_1', computerId: 'computer_1', generation: 1 },
   ),
   event(
     'computer.suspended',
@@ -65,7 +65,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'computer',
     'The server committed resume intent and a rotated computer token id.',
     data.computerResumedDataSchema,
-    { assistantId: 'asst_1', computerId: 'computer_1', tokenId: 'token:2' },
+    { assistantId: 'asst_1', computerId: 'computer_1', generation: 1, tokenId: 'token:2' },
   ),
   event(
     'computer.lost',
