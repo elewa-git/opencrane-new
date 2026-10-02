@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, signal, type OnInit, type OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal, viewChild, ElementRef, type AfterViewInit, type OnDestroy } from '@angular/core';
 import { logoutResponseSchema } from '@opencrane/protocol';
 import { NAVIGATE } from '../core/navigate';
 import { SharedState } from '../shared-state/shared-state';
@@ -7,9 +7,13 @@ import { SharedState } from '../shared-state/shared-state';
   selector: 'oc-sign-in', imports: [SharedState], templateUrl: './sign-in.html', styleUrl: './sign-in.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class SignIn implements OnInit, OnDestroy {
+export class SignIn implements AfterViewInit, OnDestroy {
   private readonly navigate = inject(NAVIGATE);
-  private timer: ReturnType<typeof setTimeout> | undefined;
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private readonly cancelButton = viewChild<ElementRef<HTMLButtonElement>>('cancelButton');
+  protected readonly seconds = signal(5);
+  protected readonly organisation = document.querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
+  protected readonly invited = Boolean(new URLSearchParams(globalThis.location.search).get('invitation'));
   protected readonly handoff = globalThis.location.pathname === '/signin/handoff';
   protected readonly rejected = globalThis.location.pathname === '/signin/rejected';
   protected readonly reason = new URLSearchParams(globalThis.location.search).get('reason');
@@ -17,15 +21,21 @@ export class SignIn implements OnInit, OnDestroy {
   protected readonly pending = signal(false);
   protected readonly error = signal('');
 
-  ngOnInit(): void {
+  ngAfterViewInit(): void {
     if (this.handoff) {
-      this.timer = setTimeout(() => this.navigate('/auth/login?returnTo=/'), 100);
+      this.cancelButton()?.nativeElement.focus();
+      this.timer = setInterval(() => {
+        this.seconds.update((value) => value - 1);
+        if (this.seconds() === 0) {
+          clearInterval(this.timer);
+          this.navigate('/auth/login?returnTo=/');
+        }
+      }, 1000);
     } else if (!this.rejected) void this.checkSession();
   }
-  ngOnDestroy(): void { clearTimeout(this.timer); }
+  ngOnDestroy(): void { clearInterval(this.timer); }
   protected cancel(): void {
-    clearTimeout(this.timer);
-    globalThis.stop();
+    clearInterval(this.timer);
     this.navigate('/');
   }
   protected signIn(): void { this.navigate('/signin/handoff'); }

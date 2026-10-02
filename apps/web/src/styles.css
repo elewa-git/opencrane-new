@@ -36,6 +36,10 @@
 	--oc-border-default: #d9dfe0;
 	--oc-border-strong: #b8c0c1;
 	--oc-accent: #0db5cc;
+	/* Onboarding frames 1a and 1d. */
+	--oc-signin-primary: #2f8d9a;
+	--oc-signin-primary-hover: #3a9dab;
+	--oc-signin-primary-shadow: #23707b;
 	--oc-accent-active: #0b7787;
 	--oc-accent-soft: #e9f8fb;
 	--oc-on-accent: var(--oc-ink-strong);

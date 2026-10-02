@@ -38,7 +38,10 @@ Never put credentials in a URL or event. Fresh-silo qualification remains pendin
 ## Contract and verification
 
 `GET /auth/login` redirects to the provider; `GET /auth/me` reports the session.
-`POST /auth/logout` clears the local cookie and returns a validated provider logout URL or `null`.
+`POST /auth/logout` requires the exact configured Origin and a valid session for
+the pinned organisation. Refusals clear no cookies. Success clears the local cookie
+and returns a validated provider URL bound by the encrypted session’s ID token,
+or `null` if bound provider logout is unavailable. `/auth/me` never returns that token.
 Invalid callbacks return 400; `/ws` upgrades require a valid cookie and matching Origin.
 The socket supports resumable members subscriptions, plus the existing hello and event-validation demos; it never appends events.
 See [protocol schemas](../../libs/protocol/README.md) for real request examples.

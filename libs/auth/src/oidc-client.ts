@@ -126,7 +126,7 @@ export async function completeLogin(
   // deployment's configured maximum, whichever is sooner.
   const exp = Math.min(claims.exp, Math.floor(Date.now() / 1000) + config.sessionMaxAgeSeconds);
 
-  return { session: { sub: claims.sub, orgId, roles, authTime, exp } };
+  return { session: { sub: claims.sub, orgId, roles, authTime, exp, idToken: tokens.id_token! } };
 }
 
 /**
@@ -134,7 +134,8 @@ export async function completeLogin(
  * nothing to redirect to (no `end_session_endpoint`, or discovery failed).
  * A provider problem must never block logging out of this server.
  */
-export async function buildLogoutUrl(config: AuthConfig): Promise<string | null> {
+export async function buildLogoutUrl(config: AuthConfig, idToken: string | undefined): Promise<string | null> {
+  if (!idToken) return null;
   try {
     const discovered = await discover(config);
     if (!discovered.serverMetadata().end_session_endpoint) {
@@ -142,7 +143,7 @@ export async function buildLogoutUrl(config: AuthConfig): Promise<string | null>
     }
     // openid-client adds client_id itself. Zitadel needs it together with
     // post_logout_redirect_uri to send the person back to the app.
-    const params: Record<string, string> = {};
+    const params: Record<string, string> = { id_token_hint: idToken };
     if (config.postLogoutRedirectUri) {
       params['post_logout_redirect_uri'] = config.postLogoutRedirectUri;
     }

@@ -105,12 +105,14 @@ checkout must first stop the old stack and deliberately transfer `stack-owner`;
 normal scripts continue to refuse a foreign owner marker.
 
 Open `/` on the tailnet URL and choose **Continue with single sign-on**. Credentials
-are entered only on Zitadel. After **Sign out**, Zitadel asks which account to end;
-select it to return home. Email-link delivery is not qualified; its shared state
+are entered only on Zitadel. After **Sign out**, the encrypted session’s ID token binds Zitadel logout to that
+account and returns home without an account chooser. Email-link delivery is not qualified; its shared state
 says unavailable, and no sent-email screen or lockout count is invented.
 
-The journey signs in as both real users in Playwright at 390px and uses their
-actual encrypted cookies for HTTP and WebSocket requests. Dev-only bootstrap
+The journey signs in as both real users in one Playwright browser context at 390px and uses their
+actual encrypted cookies for HTTP and WebSocket requests. It refuses hostile and
+missing logout Origins, then ends the member session without a chooser, proves
+the owner can still sign in silently, and finally ends the owner session. Dev-only bootstrap
 invitations bind these subjects to stable member IDs; they do not define the
 production first-owner policy. Each run adds a new invitation/join and MCP row.
 Wrong-org and expiry checks run another real server on temporary loopback ports:

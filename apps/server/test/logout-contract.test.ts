@@ -13,7 +13,7 @@ vi.mock('@opencrane/auth', async (importOriginal) => ({
   buildLogoutUrl: vi.fn(),
 }));
 
-const { buildLogoutUrl } = await import('@opencrane/auth');
+const { buildLogoutUrl, encodeSession } = await import('@opencrane/auth');
 const { buildServer } = await import('../src/server.ts');
 const { testAuthConfig } = await import('./support/test-auth-config.ts');
 
@@ -42,7 +42,7 @@ describe('POST /auth/logout reply', () => {
     vi.mocked(buildLogoutUrl).mockResolvedValue(address);
     const server = loggingServer();
 
-    const response = await server.app.inject({ method: 'POST', url: '/auth/logout' });
+    const response = await server.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: new URL(testAuthConfig().redirectUri).origin }, cookies: { [testAuthConfig().cookieName]: encodeSession(testAuthConfig(), { sub: 'user', orgId: 'org', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 300, idToken: 'test-id-token' }) } });
 
     expect(response.statusCode).toBe(200);
     expect(logoutResponseSchema.parse(response.json())).toEqual({ endSessionUrl: address });
@@ -57,7 +57,7 @@ describe('POST /auth/logout reply', () => {
     vi.mocked(buildLogoutUrl).mockResolvedValue(address);
     const server = loggingServer();
 
-    const response = await server.app.inject({ method: 'POST', url: '/auth/logout' });
+    const response = await server.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: new URL(testAuthConfig().redirectUri).origin }, cookies: { [testAuthConfig().cookieName]: encodeSession(testAuthConfig(), { sub: 'user', orgId: 'org', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 300, idToken: 'test-id-token' }) } });
 
     expect(response.statusCode).toBe(200);
     expect(logoutResponseSchema.parse(response.json())).toEqual({ endSessionUrl: null });

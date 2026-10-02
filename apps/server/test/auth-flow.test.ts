@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { encodeSession, type AuthConfig } from '@opencrane/auth';
+import { decodeSession, encodeSession, type AuthConfig } from '@opencrane/auth';
 import { logoutResponseSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { DEFAULT_MOCK_USER, startMockOidcProvider, type MockOidcProvider } from './support/mock-oidc-provider.ts';
@@ -110,11 +110,13 @@ describe('OIDC login flow (against a local mock provider)', () => {
     const sessionCookie = cookieValue(callback, stack.config.cookieName);
     const me = await whoAmI(stack, sessionCookie);
     expect(me.authenticated).toBe(true);
+    expect(me.user).not.toHaveProperty('idToken');
+    expect(decodeSession(stack.config, sessionCookie).idToken).toBeTruthy();
     expect(me.user).toMatchObject({ sub: 'user-1', orgId: 'org-1', roles: ['member'] });
     // The provider's own auth_time, not the moment the callback ran.
     expect(me.user?.authTime).toBe(DEFAULT_MOCK_USER.authTime);
 
-    const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.config.cookieName]: sessionCookie } });
+    const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
     // The reply is checked with the schema the web app reads it with.
     expect(logoutResponseSchema.parse(logout.json()).endSessionUrl).toContain(`${stack.provider.url}/endsession`);
     expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
@@ -170,7 +172,7 @@ describe('OIDC login flow (against a local mock provider)', () => {
     it('expired', async () => {
       const stack = await startStack();
       const nowSeconds = Math.floor(Date.now() / 1000);
-      const expired = encodeSession(stack.config, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds - 7200, exp: nowSeconds - 1 });
+      const expired = encodeSession(stack.config, { idToken: 'test-id-token', sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds - 7200, exp: nowSeconds - 1 });
       expect(await whoAmI(stack, expired)).toEqual(NOT_SIGNED_IN);
     });
 
@@ -292,13 +294,41 @@ describe('OIDC login flow (against a local mock provider)', () => {
   });
 
   describe('logout', () => {
+    it.each([undefined, 'https://attacker.example', 'http://app.example.test.evil', 'null'])(
+      'refuses origin %s without clearing the session or flow', async (origin) => {
+        const stack = await startStack();
+        const sessionCookie = cookieValue(await signIn(stack), stack.config.cookieName);
+        const response = await stack.app.inject({ method: 'POST', url: '/auth/logout',
+          headers: origin === undefined ? {} : { origin }, cookies: { [stack.config.cookieName]: sessionCookie } });
+        expect(response.statusCode).toBe(403);
+        expect(response.headers['set-cookie']).toBeUndefined();
+        expect((await whoAmI(stack, sessionCookie)).authenticated).toBe(true);
+      });
+
+    it.each(['missing', 'invalid', 'expired', 'wrong organisation'])(
+      'refuses a %s session without clearing cookies', async (kind) => {
+        const stack = await startStack({}, { expectedOrgId: 'org-1' });
+        const now = Math.floor(Date.now() / 1000);
+        const value = kind === 'invalid' ? 'invalid' : encodeSession(stack.config, {
+          sub: 'user-1', orgId: kind === 'wrong organisation' ? 'org-2' : 'org-1', roles: [],
+          authTime: now, exp: kind === 'expired' ? now - 1 : now + 300,
+        });
+        const response = await stack.app.inject({ method: 'POST', url: '/auth/logout',
+          headers: { origin: 'http://app.example.test' },
+          cookies: kind === 'missing' ? {} : { [stack.config.cookieName]: value } });
+        expect(response.statusCode).toBe(kind === 'wrong organisation' ? 403 : 401);
+        expect(response.headers['set-cookie']).toBeUndefined();
+      });
+
     it('asks the provider to send the person back to postLogoutRedirectUri, naming the client', async () => {
       const stack = await startStack({}, { postLogoutRedirectUri: 'http://app.example.test/signed-out' });
-      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout' });
+      const sessionCookie = cookieValue(await signIn(stack), stack.config.cookieName);
+      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
       const endSession = new URL(logoutResponseSchema.parse(logout.json()).endSessionUrl!);
       expect(endSession.origin + endSession.pathname).toBe(`${stack.provider.url}/endsession`);
       expect(endSession.searchParams.get('post_logout_redirect_uri')).toBe('http://app.example.test/signed-out');
       expect(endSession.searchParams.get('client_id')).toBe(stack.provider.clientId);
+      expect(endSession.searchParams.get('id_token_hint')).toBe(decodeSession(stack.config, sessionCookie).idToken);
     });
 
     it('still clears the local session when the provider cannot be reached', async () => {
@@ -307,9 +337,9 @@ describe('OIDC login flow (against a local mock provider)', () => {
       await gone.close();
       const stack = await startStack({}, { issuerUrl: goneUrl });
       const nowSeconds = Math.floor(Date.now() / 1000);
-      const sessionCookie = encodeSession(stack.config, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
+      const sessionCookie = encodeSession(stack.config, { idToken: 'test-id-token', sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
 
-      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.config.cookieName]: sessionCookie } });
+      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
       expect(logout.statusCode).toBe(200);
       expect(logoutResponseSchema.parse(logout.json())).toEqual({ endSessionUrl: null });
       expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
@@ -317,7 +347,8 @@ describe('OIDC login flow (against a local mock provider)', () => {
 
     it('sends no address when the provider has no logout page', async () => {
       const stack = await startStack({ endSessionEndpoint: null });
-      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout' });
+      const sessionCookie = cookieValue(await signIn(stack), stack.config.cookieName);
+      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
       expect(logout.statusCode).toBe(200);
       expect(logoutResponseSchema.parse(logout.json())).toEqual({ endSessionUrl: null });
     });
@@ -329,9 +360,9 @@ describe('OIDC login flow (against a local mock provider)', () => {
     ])('sends no address when the provider advertises %s as its logout page, and still clears the session', async (_name, endSessionEndpoint) => {
       const stack = await startStack({ endSessionEndpoint });
       const nowSeconds = Math.floor(Date.now() / 1000);
-      const sessionCookie = encodeSession(stack.config, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
+      const sessionCookie = encodeSession(stack.config, { idToken: 'test-id-token', sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
 
-      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', cookies: { [stack.config.cookieName]: sessionCookie } });
+      const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
 
       expect(logout.statusCode).toBe(200);
       expect(logout.json()).toEqual({ endSessionUrl: null });

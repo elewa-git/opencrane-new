@@ -3,11 +3,11 @@
     <div class="folds" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <h1>Taking you to your identity provider</h1>
     <p>You will come back here signed in. Your organisation uses Zitadel to verify your account.</p>
-    <oc-shared-state kind="checking" message="Opening single sign-on…" />
-    <button type="button" class="text-button" (click)="cancel()">Cancel and go back</button>
+    <oc-shared-state kind="checking" [message]="'Opening single sign-on in ' + seconds() + ' seconds…'" />
+    <button type="button" class="text-button" #cancelButton (click)="cancel()">Cancel and go back</button>
   } @else {
     <a class="brand" href="/" aria-label="OpenCrane home">
-      <svg width="26" height="20" viewBox="0 0 32 24" aria-hidden="true"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"/><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"/><polygon points="11,15 16,3 19,15" fill="#22c7dd"/><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"/><polygon points="19,15 30,7 22,20" fill="#66d7e6"/></svg>
+      <svg width="21" height="16" viewBox="0 0 32 24" aria-hidden="true"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"/><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"/><polygon points="11,15 16,3 19,15" fill="#22c7dd"/><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"/><polygon points="19,15 30,7 22,20" fill="#66d7e6"/></svg>
       <span>Open<span class="accent">Crane</span></span>
     </a>
     <div class="content">
@@ -17,8 +17,8 @@
         <a class="button secondary" href="/org/integrations">Organisation integrations</a>
         <button type="button" class="button primary" (click)="signOut()" [disabled]="pending()">{{ pending() ? 'Signing out…' : 'Sign out' }}</button>
       } @else {
-        <div><p class="eyebrow">Your workspace</p><h1>Sign in to your workspace</h1>
-          @if (!rejected) { <p>Use your organisation’s account to continue to OpenCrane.</p> }
+        <div><p class="eyebrow">{{ organisation }}</p><h1>Sign in to your workspace</h1>
+          @if (!rejected) { <p>{{ invited ? 'You were invited by ' + organisation + '. Your work here stays private to you.' : 'Use your organisation’s account to continue to OpenCrane.' }}</p> }
         </div>
         @if (rejected) {
           <div class="rejection" role="alert">
@@ -32,12 +32,12 @@
           <div class="email-fallback"><label for="work-email">Work email</label>
             <input id="work-email" type="email" placeholder="you@organisation.com" disabled aria-describedby="email-unavailable">
             <button type="button" class="button secondary" disabled>Email me a sign-in link</button>
-            <div id="email-unavailable"><oc-shared-state kind="not_configured" message="Email sign-in is unavailable" detail="Use single sign-on to continue." [showAction]="false" /></div>
+            <div id="email-unavailable"><oc-shared-state kind="not_configured" message="Email sign-in is unavailable" [showAction]="false" /></div>
           </div>
         }
       }
       @if (error()) { <oc-shared-state kind="unknown" [message]="error()" [showAction]="false" /> }
     </div>
-    <footer>Your organisation’s workspace</footer>
+    <footer>self-hosted · data sovereign</footer>
   }
 </main>

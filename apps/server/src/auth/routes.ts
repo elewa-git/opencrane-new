@@ -8,6 +8,7 @@
 // of that, a line here carries only a fixed reason. It never carries the
 // error object, a cookie, a code or a token, because an error from the
 // identity provider can hold the response body it sent back.
+import { sessionFor } from '../members/routes.ts';
 import { URL } from 'node:url';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import {
@@ -112,13 +113,21 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
   });
 
   app.post('/auth/logout', async (request, reply) => {
+    if (request.headers.origin !== new URL(config.redirectUri).origin) {
+      return reply.code(403).send({ error: 'wrong origin' });
+    }
+    const session = sessionFor(request, config, new Date());
+    if (!session) return reply.code(401).send({ error: 'no session' });
+    if (config.expectedOrgId && session.orgId !== config.expectedOrgId) {
+      return reply.code(403).send({ error: 'wrong organisation' });
+    }
     // The local session is cleared even if the provider cannot be reached;
     // the endSessionUrl is just what the browser is asked to go to next.
     // The reply uses the schema from @opencrane/protocol, the one the web app
     // reads it with. That schema accepts only an http(s) address, so a
     // provider address of any other kind is dropped here, not sent to the
     // browser to be rejected (or, worse, followed).
-    const providerAddress = logoutResponseSchema.safeParse({ endSessionUrl: await buildLogoutUrl(config) });
+    const providerAddress = logoutResponseSchema.safeParse({ endSessionUrl: await buildLogoutUrl(config, session.idToken) });
     const body: LogoutResponse = providerAddress.success ? providerAddress.data : { endSessionUrl: null };
     if (!providerAddress.success) {
       request.log.warn('the identity provider logout address is not an http(s) address, so none was sent');
@@ -137,7 +146,8 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     try {
       const session = decodeSession(config, cookieValue);
       if (config.expectedOrgId && session.orgId !== config.expectedOrgId) return reply.send({ authenticated: false, user: null });
-      reply.send({ authenticated: true, user: session });
+      const { sub, orgId, roles, authTime, exp } = session;
+      reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp } });
     } catch (err) {
       if (err instanceof SessionInvalidError || err instanceof SessionExpiredError) {
         reply.send({ authenticated: false, user: null });

@@ -20,7 +20,10 @@ Use `hasRecentAuth` for freshness based on the provider's `auth_time`, not login
 The provider verifies PKCE, state and nonce through openid-client.
 `SessionInvalidError`, `SessionExpiredError`, `FlowInvalidError` and `OidcLoginError`
 identify rejected data. Configuration errors stop startup; callers sanitise public errors.
-Provider logout discovery failure can yield `null`; local logout must still clear cookies.
+Pass the encrypted session’s `idToken` to `buildLogoutUrl` to bind provider logout.
+Older sessions without a token and provider discovery failures yield `null`.
+The server requires the exact Origin and a valid, correctly pinned session before
+clearing its cookie. `/auth/me` exposes only public identity fields.
 
 ## Configuration and verification
 

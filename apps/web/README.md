@@ -62,14 +62,18 @@ See the [repository architecture](../../README.md) and [plan](../../plan.md).
 ## Sign-in
 
 `/` shows the SSO-first sign-in screen or the current session and sign-out action.
-`/signin/handoff` opens the existing server login route; Cancel returns home.
+`/signin/handoff` focuses Cancel and announces a five-second countdown before
+opening the existing server login route; Cancel returns home and stops the timer.
 `/signin/rejected` shows fixed, safe failure copy with an SSO recovery action.
-All three use the organisation-admin tokens and shared states at desktop and
+Set the public `opencrane-org` meta tag in `src/index.html` for the deployment’s
+organisation display name. A non-empty `?invitation=…` arrival shows the frame’s
+invitation copy using that name; it does not grant membership or validate an invite.
+All three use the onboarding SSO colour token and shared states at desktop and
 390px widths. Passwords stay on Zitadel. Email sign-in is unavailable until
 delivery is qualified; there is no fake sent-email screen.
 
 Run `npm run visual:signin` with the dev stack running to capture the three screens
-and reference comparisons in `/home/jente/.fleet/signin-shots/`. The capture freezes
-the transient handoff timer only in its own browser. The live journey uses normal
+and 1× card comparisons cropped from the design source in `/home/jente/.fleet/signin-shots/`. The capture checks card dimensions, spacing, tokens, copy, overflow and 44px
+controls. Browser-clock checks exercise focus, Enter/Space cancellation and timing. The live journey uses normal
 timers, real Zitadel and both test accounts; see the
 [sign-in evidence](../../docs/process/signin-evidence.md).
