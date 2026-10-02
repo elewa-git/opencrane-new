@@ -54,6 +54,13 @@ changed = dict(package, licenses=[{'value': known_hash, 'locations': [{'path': '
 assert result(changed, dict(evidence, notices={'/notice': 'new, unreviewed text'})) == 'FAIL'
 print('PASS: Debian components, public domain, app CC0, unknown text, version/architecture and source-available rejection')
 
+model_package = {'name': '@opencrane/models', 'version': '0.1.0', 'type': 'npm',
+                 'licenses': [{'value': 'AGPL-3.0-or-later'}]}
+model_evidence = {'notices': {'/app/libs/models/LICENSE': (root.parent.parent / 'LICENSE').read_text()}}
+assert result(model_package, model_evidence) == 'PASS', 'bundled model routing has a reviewed repository licence'
+model_evidence['notices']['/app/libs/models/LICENSE'] = 'changed licence'
+assert result(model_package, model_evidence) == 'FAIL', 'changed routing licence requires review'
+
 # Package metadata declares MIT; a separately identified bundled part uses CC0.
 metadata = '/node_modules/probe/package.json'
 licence_file = '/node_modules/probe/LICENSE'

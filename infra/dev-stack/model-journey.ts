@@ -8,7 +8,7 @@ import { history } from '@opencrane/models';
 export async function modelJourney(store: EventStore, tokens: Awaited<ReturnType<typeof tokenIssuer>>, input: {
   silo: string; namespace: string; assistantId: string; computerId: string; conversationId: string; turnId: string; requesterId: string;
 }) {
-  const turn = await computerCredentials(store, tokens, input.silo).turn({ ...input, threadId: input.conversationId, task: 'chat_turn' });
+  const turn = await computerCredentials(store, tokens, input.silo).turn({ ...input, threadId: input.conversationId, task: 'chat_turn', model: 'gpt-6-luna' });
   const script = `
     const fs = require('node:fs'), http = require('node:http');
     let data = '';

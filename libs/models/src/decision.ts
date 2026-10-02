@@ -16,14 +16,22 @@ const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: i
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]) }).strict();
+const functionTool = z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
+  parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict();
+const tool = z.union([functionTool, z.object({ type: z.literal('custom'), name: z.string(), description: z.string().optional(),
+  format: z.object({ type: z.literal('grammar'), syntax: z.literal('lark'), definition: z.string() }).strict() }).strict()]);
+const additionalTools = z.object({ type: z.literal('additional_tools'), id: z.string(), role: z.literal('developer'),
+  tools: z.array(z.union([tool, z.object({ type: z.literal('namespace'), name: z.string(), description: z.string().optional(),
+    tools: z.array(tool) }).strict()])) }).strict();
 const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired).map(row => row.id)), stream: z.literal(true),
-  input: z.union([z.string(), z.array(z.union([message,
+  input: z.union([z.string(), z.array(z.union([message, additionalTools,
     z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string() }).strict(),
     z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
   instructions: z.string().optional(), max_output_tokens: z.int().min(16).max(2000),
-  tools: z.array(z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
-    parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict()).optional(),
-  reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional() }).strict().optional(),
+  tools: z.array(functionTool).optional(),
+  reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional(),
+    context: z.literal('all_turns').optional() }).strict().optional(),
+  text: z.object({ verbosity: z.enum(['low', 'medium', 'high']) }).strict().optional(),
   tool_choice: z.literal('auto').optional(), parallel_tool_calls: z.boolean().optional(),
   include: z.array(z.literal('reasoning.encrypted_content')).max(1).optional(),
   prompt_cache_key: z.string().max(200).optional(), client_metadata: z.record(z.string(), z.string()).optional(),

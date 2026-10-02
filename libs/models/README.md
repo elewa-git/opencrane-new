@@ -115,5 +115,7 @@ before every launch; the k3d relay image is pinned by OCI digest too.
 
 P2-3 also verifies the native Codex text request shape through the real gateway:
 nullable message ids, input/output text, reasoning summaries, local function
-selection, parallel calls and cache/client metadata. These fields do not relax
+selection, parallel calls and cache/client metadata. Native Sol text turns also
+carry strictly checked tool declarations (including namespaces and Lark custom
+tools), `all_turns` reasoning context and text verbosity. These fields do not relax
 the output limit or admit media, hosted tools or stored-history references.

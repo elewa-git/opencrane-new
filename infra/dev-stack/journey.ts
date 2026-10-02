@@ -135,12 +135,12 @@ try {
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
   const kube = new SandboxClient(`${directory}/computer-kubeconfig.json`, namespace);
   const history = await computerEvents(computer!.assistant_id);
-  const latest = history.at(-1);
+  const latest = history.findLast(event => !event.type.startsWith('computer.turn_'));
   if (!latest) throw new Error('Computer history missing');
   const readyEvent = history.findLast((event) => event.type === 'computer.ready');
   const state: ComputerState = { assistantId: computer!.assistant_id, computerId: computer!.computer_id,
     latest, ...(readyEvent ? { ready: readyEvent } : {}) };
-  await suspendComputer(events.store, state);
+  assert.equal((await suspendComputer(events.store, state)).type, 'computer.suspended', 'Completed chat leaves the computer suspendable');
   await until(async () => (await kube.state(computer!.computer_id))?.suspended === true, 'computer suspended');
   const resumedAt = performance.now();
   const wakeReplyMs = await chat.message();

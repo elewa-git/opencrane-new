@@ -486,3 +486,28 @@ it('refuses a valid signed grant installed under another actual Codex thread bef
     await f.settled();
   } finally { await f.close(); }
 }, 40_000);
+
+// Captured from the pinned computer's native gpt-6.1-sol text turn.
+it('admits routed Sol tool declarations and settings while refusing malformed or unknown fields', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const body = {
+    input: [{ type: 'additional_tools', id: 'tools', role: 'developer', tools: [{
+      type: 'namespace', name: 'functions', description: 'Computer tools', tools: [
+        { type: 'custom', name: 'exec', description: 'Run code', format: { type: 'grammar', syntax: 'lark', definition: 'start: /.+/' } },
+        { type: 'function', name: 'wait', strict: false, parameters: { type: 'object', properties: {} } },
+      ],
+    }] }, { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'Reply with OK.' }] }],
+    reasoning: { effort: 'low', context: 'all_turns' }, text: { verbosity: 'low' },
+  };
+  try {
+    expect((await f.call({}, body)).status).toBe(200);
+    await f.settled(); expect(f.received()).toBe(1);
+    for (const invalid of [
+      { ...body, text: { verbosity: 'unbounded' } },
+      { ...body, reasoning: { effort: 'low', context: 'unknown' } },
+      { ...body, input: [{ type: 'additional_tools', id: 'tools', role: 'developer', tools: [{ type: 'unknown' }] }] },
+      { ...body, text: { verbosity: 'low', unknown: true } },
+    ]) expect((await f.call({}, invalid)).status).toBe(403);
+    expect(f.actor.state.reservations).toHaveLength(1); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);

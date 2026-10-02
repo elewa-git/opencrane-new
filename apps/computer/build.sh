@@ -9,7 +9,7 @@ tar -xzf .state/syft.tar.gz -C .state syft
 curl -fsSL https://raw.githubusercontent.com/spdx/license-list-data/v3.28.0/json/licenses.json -o .state/osi.json
 printf '%s\n' 'f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd36302ee  .state/osi.json' | sha256sum -c -
 docker build --build-context project=../.. --target runtime -t ocn-computer-runtime .
-docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - < test/contents.py
+docker run --rm -i -v "$PWD/src:/expected/src:ro" -v "$PWD/../../libs/models/src/routing.ts:/expected/routing.ts:ro" --entrypoint /usr/bin/python3 ocn-computer-runtime - < test/contents.py
 .state/syft scan docker:ocn-computer-runtime -o syft-json=.state/sbom.syft.json -o spdx-json=.state/sbom.spdx.json
 docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json
 docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime -c "$(cat test/notice-completeness.py)" < .state/licence-evidence.json
