@@ -8,9 +8,10 @@ printf '%s\n' '54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860 
 tar -xzf .state/syft.tar.gz -C .state syft
 curl -fsSL https://raw.githubusercontent.com/spdx/license-list-data/v3.28.0/json/licenses.json -o .state/osi.json
 printf '%s\n' 'f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd36302ee  .state/osi.json' | sha256sum -c -
-docker build --target runtime -t ocn-computer-runtime .
+docker build --build-context project=../.. --target runtime -t ocn-computer-runtime .
 .state/syft scan docker:ocn-computer-runtime -o syft-json=.state/sbom.syft.json -o spdx-json=.state/sbom.spdx.json
-python3 check-licences.py .state/sbom.syft.json .state/osi.json .state/licences.json
+docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json
+python3 check-licences.py .state/sbom.syft.json .state/osi.json .state/licences.json .state/licence-evidence.json
 # A failed licence check cannot publish the product tag.
 docker tag ocn-computer-runtime 127.0.0.1:5001/opencrane/computer:p2-1
 docker push 127.0.0.1:5001/opencrane/computer:p2-1

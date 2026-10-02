@@ -4,9 +4,14 @@ FROM 127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed576
 USER root
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources
 COPY apt.lock /tmp/apt.lock
+COPY collect-licences.py /tmp/collect-licences.py
 RUN apt-get -o Acquire::Check-Valid-Until=false update -qq && \
     xargs apt-get install -y --no-install-recommends < /tmp/apt.lock && \
-    rm -rf /var/lib/apt/lists/* /tmp/apt.lock /lifecycle /desktop && \
+    sed 's/20261001T000000Z/20261002T000000Z/g' /etc/apt/sources.list.d/debian.sources > /etc/apt/sources.list.d/inherited.sources && \
+    apt-get -o Acquire::Check-Valid-Until=false update -qq && \
+    mkdir -p /usr/share/opencrane && \
+    python3 /tmp/collect-licences.py apt > /usr/share/opencrane/apt-packages.json && \
+    rm -rf /var/lib/apt/lists/* /tmp/apt.lock /tmp/collect-licences.py /etc/apt/sources.list.d/inherited.sources /lifecycle /desktop && \
     find /spike -maxdepth 1 -type f -delete
 COPY requirements.lock /tmp/requirements.lock
 RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock && \
@@ -16,6 +21,7 @@ COPY runtime-package.json package.json
 COPY runtime-package-lock.json package-lock.json
 RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/npm \
     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf /root/.npm
+COPY --from=project LICENSE /app/LICENSE
 COPY src ./src
 ENV PATH="/opt/python/bin:/usr/local/bin:/usr/bin:/bin"
 CMD ["node", "--experimental-strip-types", "/app/src/entrypoint.ts"]

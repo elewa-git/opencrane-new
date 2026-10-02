@@ -1,51 +1,85 @@
 # Computer image — P2-1
 
-Product runtime promoted from S0.1b, S0.3 and S0.5. **Qualification is blocked by
-runtime licence findings**. The functional test candidate lives only in the
-local registry; `build.sh` refuses to publish the product tag while the strict
-OSI licence gate fails. This is not a completed Phase 2 capability.
+Product runtime promoted from S0.1b, S0.3 and S0.5. **Release remains blocked
+by application licence findings** under the owner's two-layer rule. Functional
+qualification uses a candidate in the local registry. `build.sh` publishes the
+release tag only after the licence gate passes.
 
 ## Build and check
 
 On the [developer box](../../infra/devbox/README.md), with the pinned S0.5 image
-already present in its local registry, Docker, Node 22, Python 3, curl, tar,
-sha256sum, kubectl and the root workspace dependencies:
+in its local registry, Docker, Node 22, Python 3, curl, tar, sha256sum, kubectl
+and the root workspace dependencies:
 
 ```sh
 apps/computer/build.sh
-node apps/computer/test/run.mjs
 apps/computer/test/licences.sh
+node apps/computer/test/run.mjs
 shellcheck apps/computer/build.sh apps/computer/test/licences.sh
 ```
 
-The build uses the S0.5 digest, including its Node 22.23.1, Codex 0.159.2,
-Chromium 154 and KasmVNC 1.5.0. Python 3.11 and every added Debian package are
-version-locked against the signed 1 October 2026 Debian snapshot. MarkItDown
-0.1.8 and its PDF/Office dependencies are pinned to wheel hashes. Playwright
-Core 1.63.0 uses the installed Chromium; its npm lock retains package integrity.
-MarkItDown is MIT, Playwright Core Apache-2.0 and Python PSF-2.0;
-installed package notices supply the dependency-level inventory. Syft is
-Apache-2.0. Build tools and SPDX data never enter the runtime. MinIO is absent.
-Reproduction requires these pinned upstream artefacts and the local spike base;
-bit-for-bit rebuilding on another host has not been qualified.
+The image retains Node 22.23.1, Codex 0.159.2, Chromium 154 and KasmVNC 1.5.0
+from the pinned S0.5 digest. Added apt packages use the signed 1 October 2026
+snapshot and `apt.lock`. The 2 October snapshot supplies additional archive
+evidence for inherited packages; it is added after installation and removed
+after collection. Python wheels use exact versions and hashes; Playwright Core
+1.63.0 uses installed Chromium. No dependencies have been replaced in this
+change. Build tools and SPDX data stay outside the runtime.
 
-Syft 1.54.0 produces `.state/sbom.syft.json` and `.state/sbom.spdx.json`;
-`check-licences.py` produces `.state/licences.json` and rejects absent,
-unrecognised and non-OSI licence expressions. It understands SPDX AND/OR,
-accepting an OSI alternative for OR and requiring every AND component to pass.
-Its OSI list and scanner downloads have fixed hashes. Copyright files and
-notices stay in the image. A successful build pushes only to
-`127.0.0.1:5001/opencrane/computer:p2-1`, recording the digest and size in `.state/`.
-The injected installed-package test proves MIT succeeds and BUSL-1.1 fails
-through the real scanner and the same gate.
+`collect-licences.py` matches every installed Debian package's name, version
+and architecture against apt-authenticated snapshot indexes. The retained
+`/usr/share/opencrane/apt-packages.json` records archive component, index URL
+and checksum, package filename and checksum. A package name or a `Section`
+label alone is insufficient. Missing matches, contrib, non-free and
+non-free-firmware fail. Debian security's `pool/updates/main` layout is handled.
+KasmVNC is a pinned third-party local deb, so its GPL notice is checked as an
+application; it receives no Debian-main exception.
 
-The scan exposes non-OSI licences in the inherited image, including
-Bitstream-Vera fonts and public-domain SQLite/tzdata. It also finds source and
-documentation notices that require a file-level audit, and binaries with no
-scanner-detected licence. These are **unresolved**, not an automatic allowlist.
-The preceding spike's manual OSI claim is insufficient for this stricter gate.
-No exception or false OSI mapping has been added. Broadening the policy or
-replacing affected contents needs an explicit decision before product release.
+`check-licences.py` applies these rules:
+
+- Debian main permits DFSG-free notices, including public domain, CC0, Unicode,
+  X11, HPND, FSF permissive notices, GPL/LGPL short labels and OFL fonts.
+  [Debian policy](https://www.debian.org/doc/debian-policy/ch-archive.html#the-main-archive-area)
+  defines the archive boundary.
+- Applications require OSI-approved identifiers from the checksum-pinned SPDX
+  3.28 list. SPDX AND/OR syntax is parsed; every identifier must be approved.
+  Unknown terms fail, including unknown OR alternatives.
+- BUSL, SSPL, Elastic, KLv1, Commons Clause and related source-available notices
+  fail in either layer, including when another licence or mapping is present.
+  Boost's `BSL-1.0` is distinct from `BUSL-1.1`.
+- [reviewed-licences.json](reviewed-licences.json) identifies all 42 original
+  scanner text hashes and scopes unusual Debian labels to exact copyright
+  texts. Each entry names its source and reason. Application corrections check
+  exact package/version, scanner metadata and installed notice hashes.
+  Changed or unknown text requires a new examination; hashes are never an
+  unconditional allowlist.
+
+Syft 1.54.0 produces `.state/sbom.syft.json` and `.state/sbom.spdx.json`.
+Installed notices and apt matches form `.state/licence-evidence.json`;
+`.state/licences.json` includes the resulting decisions and archive evidence.
+The inventory also includes OpenCrane code and its inherited native launcher
+under the repository AGPL-3.0-or-later notice, copied into `/app/LICENSE`.
+Codex's native npm bundle includes checked Apache, BSD, MIT, Zlib and LGPL
+notices. The scanner's previously unlicensed binary is Node, not Codex.
+
+The Python audit resolves missing cobble and pdfplumber metadata to BSD-2-Clause
+and MIT; dateutil explicitly permits BSD-3-Clause for all its code. It also
+exposes real blockers: NumPy includes CC0, Pillow uses MIT-CMU, xlrd includes
+an unmatched advertising variant, and PDFium includes non-OSI FTL/IJG notices.
+Defusedxml's PSF-2.0 and the Python-2.0.1 stack in typing-extensions and pandas
+are not flagged OSI-approved by the pinned SPDX list. Node's ICU bundle
+identifies public-domain timezone code/data. Unicode-3.0 and ICU themselves
+are OSI-approved in the pinned list. None is silently relabelled MIT or Python-2.0.
+The exact rejected identifiers and category counts are in
+[evidence.json](evidence.json) and [licences.json](licences.json).
+
+Tests retain the real Syft MIT/BUSL injection and add a real npm CC0 rejection.
+Policy checks cover all three forbidden Debian components, Debian-main public
+domain, unknown and changed text, absent archive evidence, exact version and
+architecture, and source-available notices hidden beside an approved licence.
+A failed gate cannot publish `127.0.0.1:5001/opencrane/computer:p2-1`.
+Rebuilding on a clean host and replacing incompatible dependencies remain
+unqualified; no release success is claimed.
 
 ## Processes and storage
 

@@ -1,15 +1,15 @@
 {
-  "date": "2026-10-02T01:27:48.459048+00:00",
-  "status": "PARTIAL: functional checks pass; product release blocked by strict OSI licence gate",
-  "baseCommit": "61d898d6e7c5daf596480c099189f9cf26d29d24",
+  "date": "2026-10-02T06:43:30.421093+00:00",
+  "status": "PARTIAL: two-layer checker and functional image checks pass; release blocked by eight application licence findings",
+  "baseCommit": "297e096d1ec8eb49634e6b74e084380a5427efb6",
   "environment": "Existing k3d ocn, fresh namespace and SandboxClaim, gVisor; no running dev-stack changes",
-  "image": "k3d-ocn-registry:5000/opencrane/computer-candidate@sha256:c14aba2fa68fd654dca839cb5e78e76bf1cbc29714b796c8019612472dfc0d23",
+  "image": "k3d-ocn-registry:5000/opencrane/computer-candidate@sha256:dfdd7804eafac43dce08ffbd6f93bf660260f8e0352584a933fa8f6f9d3305e9",
   "size": {
-    "uncompressedBytes": 2907591991,
-    "compressedLayerBytes": 828697225
+    "uncompressedBytes": 2908038019,
+    "compressedLayerBytes": 828724221
   },
   "podReady": {
-    "milliseconds": 4247,
+    "milliseconds": 10606,
     "from": "SandboxClaim apply",
     "to": "Pod Ready",
     "conditions": "Cold new Pod; shared layers cached; single developer-box observation"
@@ -18,7 +18,7 @@
     {
       "name": "Pod ready",
       "result": "PASS",
-      "detail": "4247 ms from claim apply, fresh Pod; local registry/layers may be cached"
+      "detail": "10606 ms from claim apply, fresh Pod; local registry/layers may be cached"
     },
     {
       "name": "runtime",
@@ -67,29 +67,129 @@
     }
   ],
   "gates": {
-    "lint": "PASS; two existing function-length warnings and existing Knip configuration hint",
-    "typecheck": "PASS all workspaces; computer repeated after source fixes",
+    "lint": "PASS; existing function-length warnings and Knip configuration hint",
+    "typecheck": "PASS all workspaces",
     "check:events": "PASS 70 matching types",
-    "test": "PASS 48 files / 879 tests, 138.43 seconds; PG_TEST_URL control database on port 55432",
+    "test": "PASS 48 files / 879 tests, 109.21 seconds; PG_TEST_URL control database on port 55432",
     "web:build": "PASS; existing CSS budget warning",
     "web:test": "PASS 3 files / 36 tests",
     "shellcheck": "PASS",
-    "licence-negative-test": "PASS real Syft inventory accepts MIT and rejects injected BUSL-1.1 package",
-    "product-build": "FAIL: strict licence gate; product tag not published",
-    "image-contents": "PASS: no baked runtime credentials, stock Kasm UI, npm build mount, test probe or MinIO binary"
+    "licence-policy-tests": "PASS real Syft MIT/BUSL/CC0 probes; contrib, non-free, non-free-firmware, public-domain main, unknown/changed text, archive version/architecture and source-available notice checks",
+    "product-build": "FAIL at licence gate after successful image build: eight application entries rejected; release tag not published",
+    "image-contents": "PASS: no baked runtime credentials, stock Kasm UI, npm build mount, collector script, test probe or MinIO binary; apt evidence and licence retained",
+    "gvisor-image-checks": "PASS all ten checks, fresh namespace/claim; cleaned up"
   },
   "licences": {
-    "packages": 381,
-    "accepted": 100,
-    "unresolved": 281,
+    "packages": 382,
+    "scannerPackages": 381,
+    "supplementalOwnCodeEntries": 1,
+    "accepted": 374,
+    "rejected": 8,
+    "categories": {
+      "debianMain": {
+        "accepted": 339,
+        "rejected": 0
+      },
+      "applicationOsi": {
+        "accepted": 35,
+        "rejected": 8
+      }
+    },
+    "applicationTypes": {
+      "python": {
+        "accepted": 30,
+        "rejected": 7
+      },
+      "npmIncludingCodex": {
+        "accepted": 3,
+        "rejected": 0
+      },
+      "nodeBinary": {
+        "accepted": 0,
+        "rejected": 1
+      },
+      "localKasmDeb": {
+        "accepted": 1,
+        "rejected": 0
+      },
+      "ownCodeAndNativeLauncher": {
+        "accepted": 1,
+        "rejected": 0
+      }
+    },
+    "rejectedPackages": [
+      {
+        "name": "defusedxml",
+        "version": "0.7.1",
+        "unresolved": [
+          "PSF-2.0"
+        ]
+      },
+      {
+        "name": "node",
+        "version": "22.23.1",
+        "unresolved": [
+          "LicenseRef-Public-Domain"
+        ]
+      },
+      {
+        "name": "numpy",
+        "version": "2.4.6",
+        "unresolved": [
+          "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+        ]
+      },
+      {
+        "name": "pandas",
+        "version": "3.0.6",
+        "unresolved": [
+          "Python-2.0.1",
+          "TCL"
+        ]
+      },
+      {
+        "name": "pillow",
+        "version": "12.3.0",
+        "unresolved": [
+          "MIT-CMU"
+        ]
+      },
+      {
+        "name": "pypdfium2",
+        "version": "5.13.0",
+        "unresolved": [
+          "CC-BY-4.0",
+          "FTL",
+          "IJG"
+        ]
+      },
+      {
+        "name": "typing-extensions",
+        "version": "4.16.0",
+        "unresolved": [
+          "Python-2.0.1"
+        ]
+      },
+      {
+        "name": "xlrd",
+        "version": "2.0.2",
+        "unresolved": [
+          "LicenseRef-xlrd-advertising"
+        ]
+      }
+    ],
+    "archiveEvidence": "Each Debian package has exact version/architecture matches in signed main indexes from 20261001T000000Z and/or 20261002T000000Z; index URL/hash and deb filename/hash retained in licences.json and /usr/share/opencrane/apt-packages.json. Kasm is an external local deb checked as application GPL.",
+    "reviewedMapping": "reviewed-licences.json",
+    "originalUnknownTextHashesIdentified": 42,
+    "reviewedTextRecords": 104,
     "inventory": "licences.json",
     "sbom": "sbom.spdx.json.gz",
-    "sbomSha256": "395766d97913b86c21e635667724f81e82b6f237759d8bd30b07e214bf015bf3",
-    "decision": "No non-OSI or unknown-licence exceptions authorised. Candidate only; do not release."
+    "sbomSha256": "677b39c29688089223c4daf0bbd787787d555574f01c477f03ac21c6008443c0",
+    "decision": "Do not release. No application exceptions or dependency replacements authorised. Known non-OSI and unmatched notices fail; no guesses or false MIT/PSF aliases. Candidate only."
   },
   "notRun": [
     "Independent review (explicitly excluded)",
-    "Product registry tag release (licence gate blocked)",
+    "Release tag publication (blocked by eight application licence findings)",
     "Fresh silo and full Phase 2 chat/upload journey",
     "Paid model and MCP compatibility",
     "Product bridge protocol, turn lifecycle and capability renewal",
@@ -99,15 +199,18 @@
     "Clean-host or bit-for-bit rebuild"
   ],
   "sourceHashes": {
+    "../../LICENSE": "d2bf217acea2905d58d065b0c95e57ce0ce637a82181c72cb494e258a74d8f19",
     ".dockerignore": "674440e9df7750d8a1adcfdfce6ac2326a554ffa9837b55116b77f8d6c94593f",
-    "Dockerfile": "1375cfe46bb62ceae9bf39cbfb6dbb4e8551dd50ba94f6b843d1d13dcfa4def7",
-    "README.md": "e0f34e973b919ec5f50f85dde9e30cd74a6b2b29287460d19344d33233be89a2",
+    "Dockerfile": "32ee064bdd175931bbb087e8f495cf381375fb6d565ad87e89f9d9b1a0974058",
+    "README.md": "d109d2df891e285497104660f2490909a903fc6c438fd4ab71ea66ace6c2ec29",
     "apt.lock": "ca3d39d333d142b464a5d59693b67e5d81e2b18a06b2282caa151566bf1dd306",
-    "build.sh": "5e1dcb5258e07c7d52929f4f28bba73e83b31ea6a36df9a983d3bd4bdecae6f6",
-    "check-licences.py": "5cf619a100d3b32351fab155e93e6c41fc973847985762992f5ca5f69e722df0",
+    "build.sh": "371b777443d8bec8032c83ca67d6934014e3a7f21956078810ea3a44818afa07",
+    "check-licences.py": "a6c8c64b0148a237ff76cfeb96fb68b87b903b45c6c8157484db65cc5bcee847",
+    "collect-licences.py": "610fd12650ea4f9693e7ea814c01eb9f3fc3e8949c04b8c38c94ac8da328e7b1",
     "network-policy.json": "2b5fc16894475501fc6c6058953dec00314e9483d213b9693f33ec23aad5eea9",
     "package.json": "ae1baf7cd0d6e17a2f2e0b48ab35c2d48dbbe2bd849eb0f75712021b0c5c1e29",
     "requirements.lock": "6a48196879393de636457b757c8a6784f90c672d76e15acc78ab376ac1c8e019",
+    "reviewed-licences.json": "9c9f7afef710a8a690843e966007df60426d620c1fa6d8845e24010fbc295003",
     "runtime-package-lock.json": "86c30905697b96674bd1b30255cb6e2acf5a91459e57b14fd2c638978f918288",
     "runtime-package.json": "d6017dac97710312dc579101090561d89b096bf7a2e3716abecd050240a48961",
     "sandbox-template.json": "7e34294ef277aa29affd4130360077c47e2037e3e4809da341af3391eed0ca16",
@@ -118,7 +221,8 @@
     "src/proxy.ts": "762176df17bc0bbe5023c04c1ffd95dd8173dbd80d87e900801e292f0a092461",
     "test/desktop.mjs": "3d1283adfc0d6d38430920f0159ba2064399d9c46ae1a5c8c668392b95d98188",
     "test/document.py": "e011de4b5749ced20cda407249f7ffa8d3f68412157ad10212ed8593285cad48",
-    "test/licences.sh": "b1d721a547f7e26b3044aba17cc073b007638215b844ade9ea933c7cfa0d1bb6",
+    "test/licences.py": "7f7f5648e3e9d4354e8aa03af91a8d8bed6f78cf6b9f5ab82c8cc3c834a152c2",
+    "test/licences.sh": "1ef7c9cb6f12adf74741b127454e2a8cfa0ad9d3d3824f7dd74e31d3569a88c8",
     "test/run.mjs": "6cb822b0989f8f1fa907fc9aa4ca55877e769d3e6fb7de1b3e2a8029101e7c29",
     "tool-user.c": "07dc9f862749089eb70f4b16a4ee764dde46302c23e74906c911eafe157445ac",
     "tsconfig.json": "be9545c8c3cddc0b5c9d88452fc0b6c114848577e482676dc4436fb255d75c5d"
