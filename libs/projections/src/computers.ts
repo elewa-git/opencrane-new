@@ -55,7 +55,7 @@ function computerProjection(name: string, table: string): Projection {
         sandbox_uid = COALESCE($4, sandbox_uid), generation = COALESCE($5, generation),
         token_id = COALESCE($6, token_id), status = $7, changed_at = $8, position = $9
         WHERE silo = $1 AND assistant_id = $2 RETURNING assistant_id`, [event.silo, assistantId,
-        claimed ? field(data, 'computerId') : null, claimed ? field(data, 'sandboxUid') : null,
+        claimed ? field(data, 'computerId') : null, typeof data === 'object' && data !== null && 'sandboxUid' in data ? field(data, 'sandboxUid') : null,
         claimed ? numberField(data, 'generation') : null,
         claimed || resumed ? field(data, 'tokenId') : null, status, event.time, position]);
       if (!result.rows.length) throw new Error('Computer event requires an assistant');

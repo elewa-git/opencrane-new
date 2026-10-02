@@ -6,9 +6,13 @@ Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
 The checked template pins the tested release image at
-`sha256:4dbe85e978021417c8e3fa509da2af5b8ab608f126dc5c92c04a89242ea43156`.
-It is published as `127.0.0.1:5001/opencrane/computer:p2-1` after fresh and
-resumed k3d checks. See [evidence.json](evidence.json).
+`sha256:385fa42847a1afd9a49ec71f5c1785e4e8adc25d7890a920e0af360eda030ca7`.
+This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
+credential through the Kubernetes Pod proxy; the bridge atomically stores it in
+`/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
+proxy control socket accepts per-thread grants. Dependencies and OS layers are
+unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
+names the earlier image. The lifecycle k3d test checks delivery on the current digest.
 
 ## Build and check
 

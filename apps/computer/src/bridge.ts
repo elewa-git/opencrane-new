@@ -2,10 +2,10 @@
 import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
 import { createServer } from 'node:http';
-import { writeFileSync, chmodSync } from 'node:fs';
+import { writeFileSync, chmodSync, renameSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { proxy } from './proxy.ts';
-import { json, record } from './http.ts';
+import { body, json, record } from './http.ts';
 process.umask(0o077);
 const gateway = new URL(process.env['GATEWAY'] ?? 'http://127.0.0.1:3000');
 if (gateway.protocol !== 'http:' || gateway.username || gateway.password || gateway.pathname !== '/') throw new Error('Invalid gateway');
@@ -70,6 +70,17 @@ netServer(socket => {
   socket.on('close', () => { client = undefined; child.stdout.resume(); });
 }).listen('/run/codex/app.sock', () => chmodSync('/run/codex/app.sock', 0o600));
 createServer((req, res) => {
+  if (req.url === '/credentials' && req.method === 'POST') {
+    void (async () => {
+      const token = record(await body(req));
+      if (typeof token['value'] !== 'string' || typeof token['id'] !== 'string' ||
+          typeof token['expiresAt'] !== 'number' || token['expiresAt'] <= Date.now()) throw new Error('Invalid credential');
+      writeFileSync('/run/codex/computer.json.tmp', JSON.stringify(token), { mode: 0o600 });
+      renameSync('/run/codex/computer.json.tmp', '/run/codex/computer.json');
+      json(res, { ok: true });
+    })().catch(() => json(res, { error: 'invalid credential' }, 400));
+    return;
+  }
   if (req.url !== '/health' || req.method !== 'GET') { json(res, { error: 'path' }, 404); return; }
   const desktop = connect(6901, '127.0.0.1');
   let answered = false;

@@ -28,9 +28,9 @@ export async function tokenIssuer(options: TokenOptions) {
   const publicKey = await importSPKI(publicPem, algorithm);
   const now = options.now ?? (() => Math.floor(Date.now() / 1000));
 
-  async function issue(payload: JWTPayload, audience: string, ttl: number): Promise<IssuedToken> {
+  async function issue(payload: JWTPayload, audience: string, ttl: number, tokenId?: string): Promise<IssuedToken> {
     const issuedAt = now();
-    const id = `token:${randomUUID()}`;
+    const id = tokenId ?? `token:${randomUUID()}`;
     const expiresAt = issuedAt + ttl;
     const value = await new SignJWT(payload).setProtectedHeader({ alg: algorithm })
       .setIssuer(options.issuer).setAudience(audience).setJti(id)
@@ -39,21 +39,21 @@ export async function tokenIssuer(options: TokenOptions) {
   }
 
   return {
-    computer(input: { silo: string; computerId: string; assistantId: string }) {
+    computer(input: { silo: string; computerId: string; assistantId: string; tokenId?: string }) {
       return issue({ typ: 'computer', silo: input.silo, computer: input.computerId,
-        assistant: input.assistantId }, computerTokenAudience, options.computerTtlSeconds ?? 600);
+        assistant: input.assistantId }, computerTokenAudience, options.computerTtlSeconds ?? 600, input.tokenId);
     },
     turn(input: { silo: string; conversationId: string; turnId: string; requesterId: string;
-      assistantId: string; delegation?: string[] }) {
+      assistantId: string; computerTokenId?: string; delegation?: string[] }) {
       return issue({ typ: 'turn', silo: input.silo, conversation: input.conversationId,
-        turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,
+        computerTokenId: input.computerTokenId, turn: input.turnId, requester: input.requesterId, assistant: input.assistantId,
         delegation: input.delegation ?? [input.requesterId] }, turnTokenAudience,
       options.turnTtlSeconds ?? 120);
     },
-    async verify(value: string, audience: string, activeId: string) {
+    async verify(value: string, audience: string, activeId?: string) {
       const result = await jwtVerify(value, publicKey, { issuer: options.issuer, audience,
         algorithms: [algorithm], currentDate: new Date(now() * 1000) });
-      if (result.payload.jti !== activeId) throw new Error('Token has been rotated');
+      if (activeId !== undefined && result.payload.jti !== activeId) throw new Error('Token has been rotated');
       return result.payload;
     },
   };

@@ -170,10 +170,10 @@ export const assistantSettingsChangedDataSchema = z
   .strict();
 
 export const computerClaimedDataSchema = z
-  .object({ assistantId: id, computerId: id, sandboxUid: id, generation: z.int().positive(), tokenId })
+  .object({ assistantId: id, computerId: id, sandboxUid: id.optional(), generation: z.int().positive(), tokenId })
   .strict();
 
-export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id }).strict();
+export const computerReadyDataSchema = z.object({ assistantId: id, computerId: id, podUid: id.optional(), sandboxUid: id.optional() }).strict();
 
 export const computerSuspendedDataSchema = z
   .object({ assistantId: id, computerId: id, snapshotId: id.optional() })

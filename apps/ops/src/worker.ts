@@ -44,12 +44,12 @@ try {
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
     runtime = new HandlerRuntime({ db: db.db, logger, silo,
-      handlers: [authorisation.handler, ...lifecycleHandlers(commands.store, kube, tokens)] });
+      handlers: [authorisation.handler, ...lifecycleHandlers(commands.store)] });
     await runtime.start();
     await runtime.work();
     const idleMs = Number(process.env['COMPUTER_IDLE_MS'] ?? 900_000);
     if (!Number.isSafeInteger(idleMs) || idleMs < 1) throw new Error('COMPUTER_IDLE_MS must be positive');
-    watcher = watchComputers(commands.store, kube, silo, idleMs, stop.signal);
+    watcher = watchComputers(commands.store, kube, tokens, (id, token) => kube.credentials(id, token), silo, idleMs, stop.signal);
     await Promise.race([dispatch(connection, runtime, stop.signal), watcher]);
   } else {
     const projection = mode === 'members' ? members : mode === 'mcp-catalogue' ? mcpCatalogue : computers;

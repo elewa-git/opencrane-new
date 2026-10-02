@@ -98,9 +98,32 @@ dispatcher NATS credentials for delivery and `COMMAND_NATS_*` credentials for th
 single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
 `TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER` are required; the signing key is read by
 path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
-The Kubernetes identity may read/create claims, read/patch Sandboxes and read PVCs
-only in its silo namespace. Templates, pools, Pods, ConfigMaps and Secrets remain
-outside its permissions.
+Run one active lifecycle reconciler per silo. Commands append intent before any
+Kubernetes effect; restart retries claims, modes and credential delivery from events.
+The Kubernetes identity can create/get claims, get/patch Sandboxes, get PVCs, list
+Pods and POST the Pod proxy subresource in its namespace. It cannot exec, read Secrets
+or mutate Pods, templates or pools. Install `node infra/dev-stack/computer-admission.mjs <NAMESPACE>` before claims: fail-closed CEL policies pin the computer image and
+security fields and restrict worker Sandbox patches to `spec.operatingMode`.
+Kubernetes RBAC has no field-level patch permission or operating-mode subresource.
+The policies cover all Pods in the dedicated computer namespace without a bypassable
+label selector; install service workloads elsewhere.
+
+The required credential sink POSTs through the authenticated Kubernetes Pod proxy to
+`/credentials`. The computer atomically writes `/run/codex/computer.json` (0600, UID
+1000, memory volume); Ready is appended only after delivery. The reconciler refreshes
+short-lived credentials before expiry. P2-3 may read that file to supply the existing
+per-thread proxy `/grant` control socket. No token value enters an event or PVC.
+
+P2-4 is not present on this branch. `computerCredentials(store, tokens, silo)` in
+[src/credentials.ts](src/credentials.ts) supplies its turn issuer and ext_authz check
+interface. Pass the live turn's committed token id to `check(headers, activeTurnId)`;
+it checks signature, expiry, silo, assistant, conversation and the current computer
+credential id against events. This is a credential check; P2-4 still owns requester,
+permission and budget decisions. The real agentgateway fixture in
+[test/credentials.test.ts](test/credentials.test.ts) proves acceptance and refusal.
+Run `LIFECYCLE_K3D=1 PG_TEST_URL=... npx vitest run apps/ops/test/lifecycle-k3d.test.ts`
+for admission, ephemeral delivery, crash recovery, races, readiness and Pod/PVC loss.
+Fresh-install browser and Codex-thread recovery qualification remains NOT RUN.
 Provision NATS first. The processes fail on dependency errors; SIGINT/SIGTERM stops
 readers, drains handler work and closes connections. The [local dev stack](../../infra/dev-stack/README.md)
 supplies these settings and qualifies the processes together on real services.

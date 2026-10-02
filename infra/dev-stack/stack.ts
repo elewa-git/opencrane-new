@@ -126,6 +126,7 @@ async function provisionComputers(settings: Record<string, string>) {
   if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
     await run('kubectl', ['create', 'namespace', namespace]);
   }
+  await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'infra/dev-stack/computer-worker-rbac.yaml']);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/sandbox-template.json']);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/network-policy.json']);

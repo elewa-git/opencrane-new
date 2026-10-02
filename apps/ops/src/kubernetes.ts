@@ -1,4 +1,5 @@
 import { spawn, execFile as execFileCallback } from 'node:child_process';
+import type { IssuedToken } from '@opencrane/auth';
 import { promisify } from 'node:util';
 
 const execFile = promisify(execFileCallback);
@@ -17,11 +18,12 @@ export interface SandboxState {
   uid: string;
   ready: boolean;
   suspended: boolean;
-  readyChangedAt?: string;
+  podUid?: string;
 }
 
-/** Minimal kubectl adapter; the configured identity never needs Pod access. */
+/** Minimal kubectl adapter; Pod reads observe identity; the proxy subresource delivers ephemeral grants. */
 export class SandboxClient {
+  private readonly delivered = new Map<string, IssuedToken>();
   readonly kubeconfig: string;
   readonly namespace: string;
   readonly pool: string;
@@ -100,10 +102,26 @@ export class SandboxClient {
     const ready = condition('Ready');
     const uid = value(sandbox, 'metadata', 'uid');
     if (typeof uid !== 'string') throw new Error('Sandbox has no UID');
-    const readyChangedAt = value(ready, 'lastTransitionTime');
-    return { uid, ready: value(ready, 'status') === 'True',
+    const pods: unknown = JSON.parse(await this.run('get', 'pods', '-o', 'json'));
+    const items = value(pods, 'items');
+    const pod: unknown = (Array.isArray(items) ? items : []).find((item: unknown) => {
+      const owners = value(item, 'metadata', 'ownerReferences');
+      return Array.isArray(owners) && owners.some((owner: unknown) => value(owner, 'uid') === uid)
+        && !value(item, 'metadata', 'deletionTimestamp');
+    });
+    const podUid = value(pod, 'metadata', 'uid');
+    const podConditions = value(pod, 'status', 'conditions');
+    const podReady = Array.isArray(podConditions) && podConditions.some((c: unknown) => value(c, 'type') === 'Ready' && value(c, 'status') === 'True');
+    return { uid, ready: value(ready, 'status') === 'True' && podReady,
       suspended: value(condition('Suspended'), 'status') === 'True',
-      ...(typeof readyChangedAt === 'string' ? { readyChangedAt } : {}) };
+      ...(typeof podUid === 'string' ? { podUid } : {}) };
+  }
+
+  async credentials(name: string, token: IssuedToken): Promise<void> {
+    const previous = this.delivered.get(name);
+    if (previous?.id === token.id && previous.expiresAt > Date.now() + 60_000) return;
+    await this.input(['create', '--raw', `/api/v1/namespaces/${this.namespace}/pods/${name}:8081/proxy/credentials`, '-f', '-'], token);
+    this.delivered.set(name, token);
   }
 
   async mode(name: string, operatingMode: 'Running' | 'Suspended'): Promise<void> {
