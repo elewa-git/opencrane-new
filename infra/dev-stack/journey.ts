@@ -135,11 +135,11 @@ try {
   const readyEvent = history.findLast((event) => event.type === 'computer.ready');
   const state: ComputerState = { assistantId: computer!.assistant_id, computerId: computer!.computer_id,
     latest, ...(readyEvent ? { ready: readyEvent } : {}) };
-  await suspendComputer(events.store, kube, state);
+  await suspendComputer(events.store, state);
   await until(async () => (await kube.state(computer!.computer_id))?.suspended === true, 'computer suspended');
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${origin}/` });
   const resumedAt = performance.now();
-  await resumeComputer(events.store, kube, issuer, silo, computer!.assistant_id);
+  await resumeComputer(events.store, issuer, silo, computer!.assistant_id);
   await until(async () => (await db.db.query("SELECT 1 FROM computers WHERE assistant_id=$1 AND status='ready'",
     [computer!.assistant_id])).rows.length === 1, 'resumed computer Ready');
   const resumeMs = Math.round(performance.now() - resumedAt);
