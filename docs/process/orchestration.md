@@ -11,7 +11,7 @@ This is how OpenCrane 2 gets built day to day. The [standards](standards.md) say
   | --- | --- |
   | `gpt-6-astra` | Design, hard builds, adversarial reviews |
   | `gpt-6.1-sol` | Regular builds; reviews of astra's work, so a different model checks it |
-  | `gpt-5.6-luna` | Mechanical edits: docs touch-ups, renames, result tables |
+  | `gpt-6-luna` | Mechanical edits: docs touch-ups, renames, result tables |
 
 - **Owner:** reviews `main` each morning, answers held decisions and approves anything outside the box.
 
