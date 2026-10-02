@@ -39,7 +39,27 @@
           "LGPL-2.1-only"
         ],
         "source": "/spike/node_modules/@openai/codex-linux-x64/package.json",
-        "reason": "Individual bundled notice files are pinned; retain BSD, MIT, Zlib and LGPL grants."
+        "reason": "Individual bundled notice files are pinned; retain BSD, MIT, Zlib and LGPL grants.",
+        "sources": [
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/proxy-libintl.txt",
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/Opus.txt",
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/libffi.txt",
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/LGPL-2.1.txt",
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/sljit.txt",
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/zlib.txt",
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/PCRE2.md"
+        ]
+      },
+      {
+        "component": "Linux voice runtime: GStreamer, GLib and GVDB",
+        "spdx": [
+          "LGPL-2.1-only"
+        ],
+        "source": "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/NOTICE.md",
+        "sources": [
+          "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/NOTICE.md"
+        ],
+        "reason": "NOTICE identifies the Linux LGPL runtime and accompanying OSI dependency notices. Its separate Windows-only Visual C++ paragraph does not describe this Linux package; no Windows DLL is installed."
       }
     ],
     "result": "PASS",
@@ -1539,7 +1559,19 @@
       "MIT"
     ],
     "archives": [],
-    "bundled": [],
+    "bundled": [
+      {
+        "component": "Python standard-library XML code",
+        "spdx": [
+          "Python-2.0.1"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/et_xmlfile-2.0.0.dist-info/LICENCE.python",
+        "sources": [
+          "/opt/python/lib/python3.11/site-packages/et_xmlfile-2.0.0.dist-info/LICENCE.python"
+        ],
+        "reason": "The notice explicitly separates Python-derived XML code from the MIT package."
+      }
+    ],
     "result": "PASS",
     "unresolved": []
   },
@@ -13360,9 +13392,37 @@
       "BSD-3-Clause"
     ],
     "archives": [],
-    "bundled": [],
-    "result": "PASS",
-    "unresolved": []
+    "bundled": [
+      {
+        "component": "libxml2, libxslt, libexslt, iconv, zlib and Python-derived helpers",
+        "spdx": [
+          "MIT",
+          "LGPL-2.1-only",
+          "Zlib",
+          "PSF-2.0"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info/licenses/LICENSES.txt",
+        "sources": [
+          "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info/licenses/LICENSES.txt"
+        ],
+        "reason": "The wheel notice names the bundled native libraries and Python-derived code."
+      },
+      {
+        "component": "Schematron extraction stylesheets",
+        "spdx": [
+          "LicenseRef-Unreviewed"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info/licenses/LICENSES.txt",
+        "sources": [
+          "/opt/python/lib/python3.11/site-packages/lxml-6.1.3.dist-info/licenses/LICENSES.txt"
+        ],
+        "reason": "The installed notice describes RNG2Schtrn.xsl and XSD2Schtrn.xsl as unlicensed; unknown terms block release."
+      }
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "LicenseRef-Unreviewed"
+    ]
   },
   {
     "name": "magika",
@@ -13717,7 +13777,29 @@
           "Apache-2.0"
         ],
         "source": "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/METADATA",
-        "reason": "License-File entries name libdivide, pythoncapi-compat, Highway, dragon4, x86-simd-sort, SVML, pocketfft, LAPACK, masked arrays and random generators; all installed files are pinned."
+        "reason": "License-File entries name libdivide, pythoncapi-compat, Highway, dragon4, x86-simd-sort, SVML, pocketfft, LAPACK, masked arrays and random generators; all installed files are pinned.",
+        "sources": [
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/highway/LICENSE",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/umath/svml/LICENSE",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/sfc64/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/include/numpy/libdivide/LICENSE.txt",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/common/pythoncapi-compat/COPYING",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/pcg64/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/mt19937/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/multiarray/dragon4_LICENSE.txt",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/distributions/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/LICENSE.txt",
+          "/opt/python/lib/python3.11/site-packages/numpy/random/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/fft/pocketfft/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/philox/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/ma/LICENSE",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy/ma/LICENSE",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/npysort/x86-simd-sort/LICENSE.md",
+          "/opt/python/lib/python3.11/site-packages/numpy/_core/include/numpy/random/LICENSE.txt",
+          "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/linalg/lapack_lite/LICENSE.txt"
+        ]
       },
       {
         "component": "SplitMix64 generator",
@@ -13751,9 +13833,24 @@
       "MIT"
     ],
     "archives": [],
-    "bundled": [],
-    "result": "PASS",
-    "unresolved": []
+    "bundled": [
+      {
+        "component": "ONNX third-party components including Intel MKL",
+        "spdx": [
+          "LicenseRef-Intel-Restricted"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt",
+        "sources": [
+          "/opt/python/lib/python3.11/site-packages/onnxruntime/ThirdPartyNotices.txt"
+        ],
+        "reason": "Installed omnibus notice contains Intel terms forbidding modification and reverse engineering; these are not OSI or DFSG-free. Release is blocked."
+      }
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "LicenseRef-Intel-Restricted",
+      "Source-available licence: Intel Simplified Software License"
+    ]
   },
   {
     "name": "openpyxl",
@@ -14294,7 +14391,98 @@
       "Apache-2.0"
     ],
     "archives": [],
-    "bundled": [],
+    "bundled": [
+      {
+        "component": "Puppeteer-derived code",
+        "spdx": [
+          "Apache-2.0"
+        ],
+        "source": "/app/node_modules/playwright-core/NOTICE",
+        "sources": [
+          "/app/node_modules/playwright-core/NOTICE"
+        ],
+        "reason": "NOTICE explicitly credits Puppeteer under Apache-2.0."
+      },
+      {
+        "component": "Playwright bundle notice index",
+        "spdx": [
+          "Apache-2.0"
+        ],
+        "source": "/app/node_modules/playwright-core/ThirdPartyNotices.txt",
+        "sources": [
+          "/app/node_modules/playwright-core/ThirdPartyNotices.txt"
+        ],
+        "reason": "Attribution index points to the separately collected sidecar licences; it adds no licence restriction."
+      },
+      {
+        "component": "chokidar and readdirp",
+        "spdx": [
+          "MIT"
+        ],
+        "source": "/app/node_modules/playwright-core/lib/serverRegistry.js.LICENSE",
+        "sources": [
+          "/app/node_modules/playwright-core/lib/serverRegistry.js.LICENSE"
+        ],
+        "reason": "Both named bundled packages carry the full MIT grant."
+      },
+      {
+        "component": "@hono/node-server@1.19.14, @modelcontextprotocol/sdk@1.29.0, @sec-ant/readable-stream@0.4.1, agent-base@9.0.0, ajv-formats@3.0.1, ajv@8.20.0, ansi-colors@4.1.3, ansi-regex@5.0.1, balanced-match@4.0.4, brace-expansion@5.0.7, buffer-crc32@1.0.0, buffer-from@1.1.2, bundle-name@4.1.0, bytes@3.1.2, chokidar@4.0.3, colors@1.4.0, commander@15.0.0, content-type@1.0.5, cross-spawn@7.0.6, debug@4.4.3, default-browser-id@5.0.1, default-browser@5.5.0, define-lazy-prop@3.0.0, enquirer@2.4.1, eventsource-parser@3.1.0, eventsource@3.0.7, fast-deep-equal@3.1.3, get-east-asian-width@1.6.0, get-stream@9.0.1, has-flag@4.0.0, https-proxy-agent@9.1.0, ip-address@10.2.0, is-docker@3.0.0, is-in-ssh@1.0.0, is-inside-container@1.0.0, is-stream@4.0.1, is-wsl@3.1.1, json-schema-traverse@1.0.0, json5@2.2.3, mime@4.1.0, ms@2.1.3, open@11.0.0, path-key@3.1.1, pend@1.2.0, pkce-challenge@5.0.1, pngjs@7.0.0, powershell-utils@0.1.0, progress@2.0.3, proxy-agent-negotiate@1.1.0, proxy-from-env@2.1.0, readdirp@4.1.2, retry@0.13.1, run-applescript@7.1.0, shebang-command@2.0.0, shebang-regex@3.0.0, smart-buffer@4.2.0, socks-proxy-agent@10.1.0, socks@2.8.9, source-map-support@0.5.21, strip-ansi@6.0.1, supports-color@7.2.0, ws@8.21.0, wsl-utils@0.3.1, yauzl@3.4.0, yazl@3.3.1, zod@4.4.3",
+        "spdx": [
+          "MIT"
+        ],
+        "source": "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE",
+        "sources": [
+          "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE"
+        ],
+        "reason": "Named sidecar sections carry this grant; proxy-agent-negotiate explicitly declares MIT without reproducing its text."
+      },
+      {
+        "component": "diff@9.0.0, dotenv@17.4.2, fast-uri@3.1.3, jpeg-js@0.4.4, source-map@0.6.1",
+        "spdx": [
+          "BSD-3-Clause"
+        ],
+        "source": "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE",
+        "sources": [
+          "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE"
+        ],
+        "reason": "Named sidecar sections carry this grant; proxy-agent-negotiate explicitly declares MIT without reproducing its text."
+      },
+      {
+        "component": "graceful-fs@4.2.11, ini@7.0.0, isexe@2.0.0, signal-exit@4.1.0, which@2.0.2, yaml@2.9.0, zod-to-json-schema@3.25.2",
+        "spdx": [
+          "ISC"
+        ],
+        "source": "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE",
+        "sources": [
+          "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE"
+        ],
+        "reason": "Named sidecar sections carry this grant; proxy-agent-negotiate explicitly declares MIT without reproducing its text."
+      },
+      {
+        "component": "minimatch@10.2.5",
+        "spdx": [
+          "BlueOak-1.0.0"
+        ],
+        "source": "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE",
+        "sources": [
+          "/app/node_modules/playwright-core/lib/utilsBundle.js.LICENSE"
+        ],
+        "reason": "Named sidecar sections carry this grant; proxy-agent-negotiate explicitly declares MIT without reproducing its text."
+      },
+      {
+        "component": "libwebp, Emscripten, Node path code and musl",
+        "spdx": [
+          "BSD-3-Clause",
+          "MIT",
+          "NCSA"
+        ],
+        "source": "/app/node_modules/playwright-core/lib/webp_codec.LICENSE",
+        "sources": [
+          "/app/node_modules/playwright-core/lib/webp_codec.LICENSE"
+        ],
+        "reason": "WebP has BSD-3-Clause plus a patent grant; Emscripten offers MIT/NCSA, and its Node and musl parts use MIT."
+      }
+    ],
     "result": "PASS",
     "unresolved": []
   },
@@ -14400,7 +14588,28 @@
           "ICU"
         ],
         "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/METADATA",
-        "reason": "METADATA lists each BUILD_LICENSES file; those files retain the OSI grants and are all pinned. LLVM adds permission via its exception."
+        "reason": "METADATA lists each BUILD_LICENSES file; those files retain the OSI grants and are all pinned. LLVM adds permission via its exception.",
+        "sources": [
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/fast_float.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/BSD-3-Clause.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/lcms.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libopenjpeg.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libpng.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/icu.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/CC-BY-4.0.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/Apache-2.0.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/llvm-libc.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libtiff.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/freetype.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.ijg",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/zlib.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/agg23.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/pdfium.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/simdutf.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/abseil.txt",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.md",
+          "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/pdfium-binaries.txt"
+        ]
       },
       {
         "component": "FreeType",

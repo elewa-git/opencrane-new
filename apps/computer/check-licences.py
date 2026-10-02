@@ -12,7 +12,7 @@ FORBIDDEN = re.compile(r'\b(?:BUSL(?:-\S+)?|SSPL(?:-\S+)?|Elastic(?:\s+License|-
                        r'Kurrent\s+(?:Software\s+)?Licen[cs]e|Fair[ -]Source|PolyForm(?:-\S+)?|'
                        r'Confluent Community|Sustainable Use License|FSL-\S+|CC-BY-NC(?:-\S+)?|'
                        r'CC-BY-ND(?:-\S+)?|CC-BY-NC-ND(?:-\S+)?|non-commercial use only|'
-                       r'proprietary license)\b', re.I)
+                       r'proprietary license|redistribution (?:is )?forbidden|no reverse engineering|Intel Simplified Software License)\b', re.I)
 
 # Owner's application rule includes these Python and HPND-family identifiers.
 APPLICATION_OSI = {'PSF-2.0', 'Python-2.0', 'Python-2.0.1', 'MIT-CMU', 'HPND'}
@@ -73,6 +73,7 @@ def check(sbom, osi, evidence, reviewed):
     inventory = []
     archives = {(p['name'], p['version'], p['architecture']): p['archives'] for p in evidence.get('apt', [])}
     notices = evidence.get('notices', {})
+    covered = set()
     for package in [*sbom['artifacts'], *evidence.get('artifacts', [])]:
         name, version, kind = (package[key] for key in ['name', 'version', 'type'])
         licences = sorted({item['value'] for item in package.get('licenses', [])})
@@ -93,14 +94,18 @@ def check(sbom, osi, evidence, reviewed):
             paths.add(f'/usr/share/doc/{name}/copyright')
         if kind in {'npm', 'python'}:
             for location in package.get('locations', []):
+                paths.update(evidence.get('owners', {}).get(location['path'], []))
                 prefix = str(Path(location['path']).parent) + '/'
                 paths.update(path for path in notices if path.startswith(prefix))
         if application:
             paths.update(application['files'])
+        covered.update(paths)
         texts = {path: notices[path] for path in paths if path in notices}
         for text in [*licences, *texts.values()]:
             if FORBIDDEN.search(text):
                 errors.append('Source-available licence: ' + FORBIDDEN.search(text)[0])
+        if not debian and not application:
+            errors.append('Missing application notice review')
         if application:
             for path, expected in application['files'].items():
                 if path not in texts or digest(texts[path]) != expected:
@@ -112,18 +117,25 @@ def check(sbom, osi, evidence, reviewed):
             # primary licence and the files/sections describing bundled parts.
             errors.extend('Unreviewed application notice: ' + path for path in texts
                           if path not in application['files'])
+            classified = {application['primary']['source']} | set(application['primary'].get('sources', []))
+            classified.update(path for notice in application.get('bundled', [])
+                              for path in [notice['source'], *notice.get('sources', [])])
+            errors.extend('Unclassified application notice: ' + path for path in texts
+                          if path not in classified)
             primary = application['primary']
-            if primary['source'] not in application['files'] or not primary['reason']:
+            if (any(path not in application['files'] for path in [primary['source'], *primary.get('sources', [])])
+                    or not primary['reason']):
                 errors.append('Missing primary licence evidence')
             resolved = list(primary['spdx'])
             errors.extend(value for value in resolved if not approved(value, osi))
             bundled = application.get('bundled', [])
             for notice in bundled:
-                if (notice['source'] not in application['files'] or not notice['component']
-                        or not notice['reason']):
+                if (any(path not in application['files'] for path in [notice['source'], *notice.get('sources', [])]) or not notice['component']
+                        or not notice['reason'] or not notice['spdx']):
                     errors.append('Missing bundled licence evidence')
                 errors.extend(value for value in notice['spdx'] if not approved(value, osi | BUNDLED_FREE))
-            if any(not approved(value, osi) for notice in bundled for value in notice['spdx']):
+            if any(approved(value, osi | BUNDLED_FREE) and not approved(value, osi)
+                   for notice in bundled for value in notice['spdx']):
                 category = 'application-osi-with-bundled-free'
         else:
             for licence in licences:
@@ -153,6 +165,11 @@ def check(sbom, osi, evidence, reviewed):
                           'licences': licences, 'resolved': resolved, 'archives': origins,
                           'bundled': application.get('bundled', []) if application else [],
                           'result': 'FAIL' if errors else 'PASS', 'unresolved': sorted(set(errors))})
+    uncovered = set(notices) - covered
+    if uncovered:
+        inventory.append({'name': 'unassigned-notices', 'version': '1', 'type': 'evidence',
+                          'category': 'application-osi', 'result': 'FAIL',
+                          'unresolved': sorted(uncovered)})
     return inventory
 
 

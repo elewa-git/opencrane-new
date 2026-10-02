@@ -1,13 +1,17 @@
 # Computer image — P2-1
 
-Product runtime promoted from S0.1b, S0.3 and S0.5. The licence gate accepts
-**382 packages**: 339 Debian-main, 37 OSI applications and 6 OSI applications
-with reviewed free bundled notices. `build.sh` publishes the release tag only
-after this gate passes. See [evidence.json](evidence.json) for the release digest
-and fresh-Pod qualification on k3d `ocn` with gVisor.
+Product runtime promoted from S0.1b, S0.3 and S0.5. **Release blocked:** the
+complete notice gate accepts 380/382 packages. It now rejects ONNX Runtime's
+restrictive Intel MKL notice and lxml's explicitly unlicensed Schematron
+stylesheets. These notices were previously omitted or never classified.
+No exception has been added and no replacement dependency has been selected.
 
-Release: `127.0.0.1:5001/opencrane/computer:p2-1` at
-`sha256:31bc9036e358a73cb43eb25550e404fd2d1fc5381aa602f8d52365524b19a558`.
+The checked template pins the tested qualification image at
+`sha256:91b7068444fe49de9def1a38b47d02f88d66283b68cb120b58afb02982b47bfe`.
+It is published as `127.0.0.1:5001/opencrane/computer:qualification` for the
+disposable development test only. The `p2-1` release tag remains unchanged at
+`sha256:31bc9036e358a73cb43eb25550e404fd2d1fc5381aa602f8d52365524b19a558`;
+it does **not** contain these fixes. See [evidence.json](evidence.json).
 
 ## Build and check
 
@@ -16,11 +20,14 @@ in its local registry, Docker, Node 22, Python 3, curl, tar, sha256sum, kubectl
 and the root workspace dependencies:
 
 ```sh
-apps/computer/build.sh
 apps/computer/test/licences.sh
-node apps/computer/test/run.mjs
+apps/computer/build.sh # currently refuses publication at the licence gate
 shellcheck apps/computer/build.sh apps/computer/test/licences.sh
 ```
+
+`build.sh` collects and checks notices, publishes a qualification digest, updates
+the tracked manifest, runs the real k3d checks and only then moves `p2-1`. A
+failed licence or image check cannot publish the release.
 
 The image retains Node 22.23.1, Codex 0.159.2, Chromium 154 and KasmVNC 1.5.0
 from the pinned S0.5 digest. Added apt packages use the signed 1 October 2026
@@ -62,7 +69,7 @@ application; it receives no Debian-main exception.
   scanner text hashes and scopes unusual Debian labels to exact copyright
   texts. Each entry names its source and reason. Application corrections check
   exact package/version, scanner metadata and every collected metadata/notice
-  file hash. Missing, changed or additional files fail. Forbidden terms are
+  file hash for **every** application package, including ordinary MIT packages. Missing, changed or additional files fail. Forbidden terms are
   checked before mappings, including inside bundled text.
 
 Syft 1.54.0 produces `.state/sbom.syft.json` and `.state/sbom.spdx.json`.
@@ -73,7 +80,20 @@ under the repository AGPL-3.0-or-later notice, copied into `/app/LICENSE`.
 Codex's native npm bundle includes checked Apache, BSD, MIT, Zlib and LGPL
 notices. The scanner's previously unlicensed binary is Node, not Codex.
 
-The eight former blockers now pass under the refined rule. Defusedxml uses
+The collector includes NOTICE, NOTICE.md, ThirdPartyNotices*, COPYING*,
+LICEN[CS]E* and metadata-named files, including Python RECORD-owned files outside
+`dist-info`. Every collected notice must belong to a scanned package and have
+an exact reviewed hash and primary/bundled classification. The independent
+image completeness check covers 89 installed notice and metadata-named files.
+Regressions reject an ordinary MIT package with a redistribution-forbidden
+notice, unlisted NOTICE files and missing metadata-named files.
+
+Two newly checked packages block release: `onnxruntime@1.30.0` includes Intel
+terms forbidding modification and reverse engineering in ThirdPartyNotices.txt;
+`lxml@6.1.3` explicitly calls installed RNG2Schtrn.xsl and XSD2Schtrn.xsl
+unlicensed. Their rejected records remain visible in the inventory.
+
+The previously reviewed Python notices remain classified. Defusedxml uses
 PSF-2.0; typing-extensions uses PSF/Python with 0BSD examples; Pillow's primary
 MIT-CMU is an HPND variant. The free bundled notices are:
 
@@ -92,11 +112,14 @@ notices. Tests include real Syft MIT/BUSL/primary-CC0 npm probes, acceptance of
 an OSI package with a reviewed CC0 part, refusal of a BUSL part even behind a
 CC0 mapping, unknown/changed/additional notices and Debian archive checks.
 A failed gate cannot publish `127.0.0.1:5001/opencrane/computer:p2-1`.
+Playwright NOTICE, ThirdPartyNotices.txt and all three sidecars now name their
+bundled OSI terms; Codex voice NOTICE.md is pinned with the Linux voice grants.
+Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
 
 ## Processes and storage
 
 - The root supervisor accepts only a fixed native exec-server launch over a
-  private Unix socket. `tool-user.c` is unchanged from S0.1b; the executable is
+  private Unix socket in root-owned `/run/executor` (0750, group 1000). `tool-user.c` is unchanged from S0.1b; the executable is
   reused from the pinned base. UID 1001 inherits `no_new_privs` and the same
   seccomp rules denying sockets, process inspection and alternative syscall ABIs.
 - The bridge stub, Codex and authenticated loopback model proxy use UID 1000.
@@ -107,7 +130,14 @@ A failed gate cannot publish `127.0.0.1:5001/opencrane/computer:p2-1`.
   public server API. P2-3 owns the actual inbound protocol and event dispatch.
 - KasmVNC and browser checks use UID 1002 with `no_new_privs`. Kasm's stock UI and
   non-free recommended driver remain excluded as in S0.5. Playwright launches
-  the existing Chromium, inside the outer gVisor boundary.
+  the existing Chromium with `chromiumSandbox: true`, inside gVisor.
+- `/home/agent` itself is root-owned 0755. UID 1000/1001/1002 cannot replace
+  its children; each writes only inside its own directory. Startup refuses
+  links and non-directories with lstat, O_NOFOLLOW and O_DIRECTORY; ownership
+  and mode changes use the checked descriptor through an open parent. It
+  leaves already-correct directories alone and fails closed on any error.
+  The root filesystem is read-only; supervisor code and binaries cannot be
+  written by agent UIDs. Python bytecode and Node compile caches are removed.
 - `/home/agent/codex` (1000, 0700), `workspace` (1001, 0755) and `profile`
   (1002, 0700) are the persistent layout. `/home/codex`, `/run/codex` and
   `/home/desktop` are separate memory-backed volumes. Caller capabilities,
@@ -126,25 +156,43 @@ limit. It declares `networkPolicyManagement: Unmanaged`; apply
 `network-policy.json` before creating a pool. The policy permits TCP 3000 egress
 only to `app=opencrane-gateway` and TCP 8081/6901 ingress only from
 `app=opencrane-server`, both in the same namespace. There is no DNS exception.
-Set the gateway environment to its IP and port, and the image to a checked
-registry digest from the evidence receipt (the template still contains the older
-qualification candidate). The neutral template has `emptyDir` home storage; lifecycle
-work must select a PVC before Pod creation for a bound computer. A running
-warm Pod cannot have its volume replaced (ADR 0006).
+The gateway is the documented `computer-runtime` ConfigMap parameter, key
+`gateway`. Create it in the computer namespace with the real gateway Pod IP
+and port (DNS is deliberately unavailable):
+
+```sh
+kubectl -n "$namespace" create configmap computer-runtime \
+  --from-literal=gateway="http://$gateway_ip:3000"
+kubectl -n "$namespace" apply -f apps/computer/network-policy.json
+kubectl -n "$namespace" apply -f apps/computer/sandbox-template.json
+```
+
+The test applies the tracked manifest byte-for-byte, with no image, environment
+or probe-volume substitutions. The manifest uses the qualification digest until
+the licence blockers are resolved; `build.sh` promotes that same digest only
+after all image checks pass. The neutral template has `emptyDir` home storage;
+lifecycle work selects a PVC before Pod creation. A running warm Pod cannot
+have its volume replaced (ADR 0006).
 
 The runner refuses an existing `p21-computer` namespace. It creates a zero-size
 warm pool and a real claim, measures cold-Pod readiness, checks CRI's runsc
 runtime, and deletes the namespace in `finally`. It reuses S0.1b's actual
 agentgateway, scripted Responses provider and model-requested isolation probe;
-only identity issuance and model replies are scripted. The probe is mounted
-from a ConfigMap, never included in the product image. Desktop checks inspect
+only identity issuance and model replies are scripted. The provider fixture asks Codex to execute the probe copied into the test
+workspace; it is never included in the product image. Desktop checks inspect
 real Chromium/Xvnc UIDs and `NoNewPrivs`, then render text with Playwright.
 MarkItDown reads generated PDF, DOCX, XLSX and PPTX documents as UID 1001.
-Network checks include a removed-policy positive control. No paid calls or
+Network checks include a removed-policy positive control. A second real gVisor
+Sandbox suspends with a local-path PVC. UID 1001 replaces its workspace with a
+link to `/usr/local/bin`, a FIFO and a dangling link in turn, using a legacy
+0777 volume root. The real entrypoint refuses each; target ownership, mode and
+launcher hash remain unchanged. Resume retains the PVC and a canary file,
+repairs the writable root, creates a new Pod and repeats all isolation,
+browser, document and network checks. No paid calls or
 running dev-stack changes are involved. An externally killed runner may require
 `kubectl delete namespace p21-computer`.
 
 See [evidence.json](evidence.json) for exact results, digest, size and latency.
-NOT RUN: fresh silo, paid model, product bridge/chat/upload, PVC replacement
+NOT RUN: fresh silo, paid model, product bridge/chat/upload, full product recovery
 journey, encrypted storage/cloud/CSI, live viewer/takeover, long-lived capability
 renewal, clean-host rebuild and independent review (explicitly excluded).

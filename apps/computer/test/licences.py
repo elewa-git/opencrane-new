@@ -65,7 +65,7 @@ app_evidence = {'notices': {metadata: '{"name":"probe","version":"1","license":"
 app_review = copy.deepcopy(reviewed)
 record = {'detected': ['MIT', 'CC0-1.0'],
           'files': {path: checker.digest(text) for path, text in app_evidence['notices'].items()},
-          'primary': {'spdx': ['MIT'], 'source': metadata, 'reason': 'package.json declares MIT.'},
+          'primary': {'spdx': ['MIT'], 'source': metadata, 'sources': [licence_file], 'reason': 'package.json declares MIT.'},
           'bundled': [{'component': 'vendor/part', 'spdx': ['CC0-1.0'], 'source': part_file,
                        'reason': 'Separate vendored part dedicates its rights to the public domain.'}]}
 app_review['applications']['npm:probe@1'] = record
@@ -100,5 +100,19 @@ assert app_result()['result'] == 'PASS'
 app_evidence['notices']['/node_modules/probe/vendor/new/LICENSE'] = 'unexamined terms'
 assert app_result()['result'] == 'FAIL', 'new unreviewed bundled file'
 for licence in ['PSF-2.0', 'Python-2.0', 'Python-2.0.1', 'MIT-CMU', 'HPND-sell-variant']:
-    assert result(dict(package, type='python', licenses=[{'value': licence}])) == 'PASS', licence
+    assert checker.approved(licence, osi | checker.APPLICATION_OSI | set(reviewed['hpndVariants'])), licence
 print('PASS: OSI primary, reviewed CC0 bundle, forbidden/unknown bundles and complete notice pins')
+
+# Ordinary OSI-labelled packages cannot bypass the bundle review.
+ordinary = dict(app, licenses=[{'value': 'MIT'}])
+for path, text in [('/node_modules/probe/NOTICE', 'redistribution forbidden unless separately agreed'),
+                   ('/node_modules/probe/NOTICE.md', 'unlisted notice'),
+                   ('/node_modules/probe/ThirdPartyNotices.txt', 'MIT')]:
+    extra = {'notices': {metadata: app_evidence['notices'][metadata], path: text}}
+    assert checker.check({'artifacts': [ordinary]}, osi, extra, reviewed)[0]['result'] == 'FAIL'
+# A primary licence plus a pinned but unclassified notice still fails.
+app_evidence['notices'].pop('/node_modules/probe/vendor/new/LICENSE')
+app_evidence['notices']['/node_modules/probe/NOTICE'] = 'unlisted notice'
+record['files']['/node_modules/probe/NOTICE'] = checker.digest('unlisted notice')
+assert app_result()['result'] == 'FAIL'
+print('PASS: ordinary MIT package restrictive/unlisted notices, and pinned but unclassified notice refused')

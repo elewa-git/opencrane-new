@@ -7,7 +7,7 @@ assert.equal(process.getuid(), 1002);
 assert.match(readFileSync('/proc/self/status', 'utf8'), /NoNewPrivs:\s+1/);
 assert.throws(() => readFileSync('/home/codex/caller'), { code: 'EACCES' });
 assert.throws(() => readdirSync('/home/agent/codex'), { code: 'EACCES' });
-const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+const browser = await chromium.launch({ executablePath: '/usr/bin/chromium', headless: true, chromiumSandbox: true, args: [ '--disable-dev-shm-usage'] });
 try {
   const page = await browser.newPage();
   await page.setContent('<h1>OpenCrane desktop</h1>');

@@ -19,11 +19,16 @@
         "containers": [
           {
             "name": "computer",
-            "image": "k3d-ocn-registry:5000/opencrane/computer-candidate@sha256:c14aba2fa68fd654dca839cb5e78e76bf1cbc29714b796c8019612472dfc0d23",
+            "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:91b7068444fe49de9def1a38b47d02f88d66283b68cb120b58afb02982b47bfe",
             "env": [
               {
                 "name": "GATEWAY",
-                "value": "http://127.0.0.1:3000"
+                "valueFrom": {
+                  "configMapKeyRef": {
+                    "name": "computer-runtime",
+                    "key": "gateway"
+                  }
+                }
               }
             ],
             "securityContext": {
@@ -38,7 +43,8 @@
                   "CHOWN",
                   "DAC_OVERRIDE"
                 ]
-              }
+              },
+              "readOnlyRootFilesystem": true
             },
             "resources": {
               "requests": {
@@ -73,6 +79,18 @@
               {
                 "name": "desktop",
                 "mountPath": "/home/desktop"
+              },
+              {
+                "name": "tmp",
+                "mountPath": "/tmp"
+              },
+              {
+                "name": "tool",
+                "mountPath": "/home/tool"
+              },
+              {
+                "name": "executor",
+                "mountPath": "/run/executor"
               }
             ]
           }
@@ -102,6 +120,18 @@
               "medium": "Memory",
               "sizeLimit": "16Mi"
             }
+          },
+          {
+            "name": "tmp",
+            "emptyDir": {}
+          },
+          {
+            "name": "tool",
+            "emptyDir": {}
+          },
+          {
+            "name": "executor",
+            "emptyDir": {}
           }
         ]
       }

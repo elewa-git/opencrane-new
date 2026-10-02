@@ -14,8 +14,12 @@ RUN apt-get -o Acquire::Check-Valid-Until=false update -qq && \
     rm -rf /var/lib/apt/lists/* /tmp/apt.lock /tmp/collect-licences.py /etc/apt/sources.list.d/inherited.sources /lifecycle /desktop && \
     find /spike -maxdepth 1 -type f -delete
 COPY requirements.lock /tmp/requirements.lock
-RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements.lock && \
+RUN python3 -m venv /opt/python && /opt/python/bin/pip install --no-compile --no-cache-dir --require-hashes -r /tmp/requirements.lock && \
     rm /tmp/requirements.lock && rm -rf /opt/python/lib/python3.11/site-packages/pip* /opt/python/lib/python3.11/site-packages/setuptools* /opt/python/lib/python3.11/site-packages/pkg_resources
+RUN find /opt /usr -type d -name __pycache__ -prune -exec rm -rf {} + && \
+    rm -rf /tmp/node-compile-cache /workspace && ln -s /home/agent/workspace /workspace && \
+    mkdir -p /run/executor /home/tool
+ENV PYTHONDONTWRITEBYTECODE=1 NODE_DISABLE_COMPILE_CACHE=1
 WORKDIR /app
 COPY runtime-package.json package.json
 COPY runtime-package-lock.json package-lock.json
@@ -23,5 +27,6 @@ RUN --mount=from=npm-tools,source=/usr/local/lib/node_modules/npm,target=/tmp/np
     node /tmp/npm/bin/npm-cli.js ci --omit=dev --ignore-scripts && rm -rf /root/.npm
 COPY --from=project LICENSE /app/LICENSE
 COPY src ./src
+RUN chmod 0755 /app/src && chmod 0444 /app/src/* && chmod 0555 /usr/local/bin/tool-user
 ENV PATH="/opt/python/bin:/usr/local/bin:/usr/bin:/bin"
 CMD ["node", "--experimental-strip-types", "/app/src/entrypoint.ts"]
