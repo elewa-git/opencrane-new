@@ -1,9 +1,13 @@
 # Computer image — P2-1
 
-Product runtime promoted from S0.1b, S0.3 and S0.5. **Release remains blocked
-by application licence findings** under the owner's two-layer rule. Functional
-qualification uses a candidate in the local registry. `build.sh` publishes the
-release tag only after the licence gate passes.
+Product runtime promoted from S0.1b, S0.3 and S0.5. The licence gate accepts
+**382 packages**: 339 Debian-main, 37 OSI applications and 6 OSI applications
+with reviewed free bundled notices. `build.sh` publishes the release tag only
+after this gate passes. See [evidence.json](evidence.json) for the release digest
+and fresh-Pod qualification on k3d `ocn` with gVisor.
+
+Release: `127.0.0.1:5001/opencrane/computer:p2-1` at
+`sha256:31bc9036e358a73cb43eb25550e404fd2d1fc5381aa602f8d52365524b19a558`.
 
 ## Build and check
 
@@ -42,17 +46,24 @@ application; it receives no Debian-main exception.
   [Debian policy](https://www.debian.org/doc/debian-policy/ch-archive.html#the-main-archive-area)
   defines the archive boundary.
 - Applications require OSI-approved identifiers from the checksum-pinned SPDX
-  3.28 list. SPDX AND/OR syntax is parsed; every identifier must be approved.
-  Unknown terms fail, including unknown OR alternatives.
+  3.28 list, plus the owner-approved PSF-2.0, Python-2.0, Python-2.0.1 and
+  HPND variants (including MIT-CMU). SPDX AND/OR syntax is parsed; unknown
+  terms fail, including unknown OR alternatives. The primary licence must
+  pass this rule even when a bundled part has a free non-OSI notice.
+- Bundled DFSG-free notices require a package/version-specific record naming
+  the component, licence, source and reason. Node's LICENSE separates its MIT
+  core from externally maintained libraries; wheel METADATA and licence files
+  identify their primary and bundled terms. These are reviewed distinctions,
+  never inferred by subtracting non-OSI terms from a scanner expression.
 - BUSL, SSPL, Elastic, KLv1, Commons Clause and related source-available notices
   fail in either layer, including when another licence or mapping is present.
   Boost's `BSL-1.0` is distinct from `BUSL-1.1`.
 - [reviewed-licences.json](reviewed-licences.json) identifies all 42 original
   scanner text hashes and scopes unusual Debian labels to exact copyright
   texts. Each entry names its source and reason. Application corrections check
-  exact package/version, scanner metadata and installed notice hashes.
-  Changed or unknown text requires a new examination; hashes are never an
-  unconditional allowlist.
+  exact package/version, scanner metadata and every collected metadata/notice
+  file hash. Missing, changed or additional files fail. Forbidden terms are
+  checked before mappings, including inside bundled text.
 
 Syft 1.54.0 produces `.state/sbom.syft.json` and `.state/sbom.spdx.json`.
 Installed notices and apt matches form `.state/licence-evidence.json`;
@@ -62,24 +73,25 @@ under the repository AGPL-3.0-or-later notice, copied into `/app/LICENSE`.
 Codex's native npm bundle includes checked Apache, BSD, MIT, Zlib and LGPL
 notices. The scanner's previously unlicensed binary is Node, not Codex.
 
-The Python audit resolves missing cobble and pdfplumber metadata to BSD-2-Clause
-and MIT; dateutil explicitly permits BSD-3-Clause for all its code. It also
-exposes real blockers: NumPy includes CC0, Pillow uses MIT-CMU, xlrd includes
-an unmatched advertising variant, and PDFium includes non-OSI FTL/IJG notices.
-Defusedxml's PSF-2.0 and the Python-2.0.1 stack in typing-extensions and pandas
-are not flagged OSI-approved by the pinned SPDX list. Node's ICU bundle
-identifies public-domain timezone code/data. Unicode-3.0 and ICU themselves
-are OSI-approved in the pinned list. None is silently relabelled MIT or Python-2.0.
-The exact rejected identifiers and category counts are in
-[evidence.json](evidence.json) and [licences.json](licences.json).
+The eight former blockers now pass under the refined rule. Defusedxml uses
+PSF-2.0; typing-extensions uses PSF/Python with 0BSD examples; Pillow's primary
+MIT-CMU is an HPND variant. The free bundled notices are:
 
-Tests retain the real Syft MIT/BUSL injection and add a real npm CC0 rejection.
-Policy checks cover all three forbidden Debian components, Debian-main public
-domain, unknown and changed text, absent archive evidence, exact version and
-architecture, and source-available notices hidden beside an approved licence.
+| Package (primary) | Bundled free notices beyond the OSI list |
+| --- | --- |
+| Node (MIT) | ICU timezone code/data: public domain |
+| NumPy (BSD-3-Clause) | SplitMix64 and Highway random-inl.h: CC0-1.0 |
+| pandas (BSD-3-Clause) | UltraJSON's Tcl-derived code: TCL |
+| Pillow (MIT-CMU) | FreeType: FTL; MD5/XZ/liblzma: public domain; JPEG: IJG; Tcl/Tk: TCL; bzip2: bzip2-1.0.6; PNG: libpng-2.0; TIFF: libtiff; Xau/Xdmcp: X11 |
+| pypdfium2 (Apache-2.0/BSD-3-Clause) | FreeType: FTL; JPEG: IJG; ICU timezone: public domain; PNG: libpng-2.0; TIFF: libtiff; accompanying documentation/examples: CC-BY-4.0 |
+| xlrd (BSD-3-Clause) | Earlier Giffin/Khan code: BSD advertising/acknowledgement variant |
+
+The per-package records also retain OSI bundled grants and their sources.
+The full [inventory](licences.json) separates primary results from bundled
+notices. Tests include real Syft MIT/BUSL/primary-CC0 npm probes, acceptance of
+an OSI package with a reviewed CC0 part, refusal of a BUSL part even behind a
+CC0 mapping, unknown/changed/additional notices and Debian archive checks.
 A failed gate cannot publish `127.0.0.1:5001/opencrane/computer:p2-1`.
-Rebuilding on a clean host and replacing incompatible dependencies remain
-unqualified; no release success is claimed.
 
 ## Processes and storage
 
@@ -115,8 +127,8 @@ limit. It declares `networkPolicyManagement: Unmanaged`; apply
 only to `app=opencrane-gateway` and TCP 8081/6901 ingress only from
 `app=opencrane-server`, both in the same namespace. There is no DNS exception.
 Set the gateway environment to its IP and port, and the image to a checked
-registry digest. The committed digest is a blocked test candidate, not a released
-product image. The neutral template has `emptyDir` home storage; lifecycle
+registry digest from the evidence receipt (the template still contains the older
+qualification candidate). The neutral template has `emptyDir` home storage; lifecycle
 work must select a PVC before Pod creation for a bound computer. A running
 warm Pod cannot have its volume replaced (ADR 0006).
 

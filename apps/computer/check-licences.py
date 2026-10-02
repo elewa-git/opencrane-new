@@ -1,4 +1,4 @@
-"""Fail closed: signed Debian main packages or OSI-approved application licences."""
+"""Fail closed: Debian main, OSI applications and reviewed free bundled notices."""
 import hashlib
 import json
 import re
@@ -10,7 +10,15 @@ from pathlib import Path
 FORBIDDEN = re.compile(r'\b(?:BUSL(?:-\S+)?|SSPL(?:-\S+)?|Elastic(?:\s+License|-\d)|KLv?1|'
                        r'Commons[ -]Clause|Business Source Licen[cs]e|Server Side Public Licen[cs]e|'
                        r'Kurrent\s+(?:Software\s+)?Licen[cs]e|Fair[ -]Source|PolyForm(?:-\S+)?|'
-                       r'Confluent Community|Sustainable Use License|FSL-\S+|CC-BY-NC(?:-\S+)?)\b', re.I)
+                       r'Confluent Community|Sustainable Use License|FSL-\S+|CC-BY-NC(?:-\S+)?|'
+                       r'CC-BY-ND(?:-\S+)?|CC-BY-NC-ND(?:-\S+)?|non-commercial use only|'
+                       r'proprietary license)\b', re.I)
+
+# Owner's application rule includes these Python and HPND-family identifiers.
+APPLICATION_OSI = {'PSF-2.0', 'Python-2.0', 'Python-2.0.1', 'MIT-CMU', 'HPND'}
+BUNDLED_FREE = {'CC0-1.0', 'LicenseRef-Public-Domain', 'TCL', 'FTL', 'IJG',
+                'CC-BY-4.0', 'LicenseRef-xlrd-advertising',
+                'bzip2-1.0.6', 'X11', 'libpng-2.0', 'libtiff'}
 
 
 def digest(text):
@@ -61,6 +69,7 @@ def approved(expression, allowed):
 
 
 def check(sbom, osi, evidence, reviewed):
+    osi = osi | APPLICATION_OSI | set(reviewed.get('hpndVariants', []))
     inventory = []
     archives = {(p['name'], p['version'], p['architecture']): p['archives'] for p in evidence.get('apt', [])}
     notices = evidence.get('notices', {})
@@ -99,8 +108,23 @@ def check(sbom, osi, evidence, reviewed):
             # An override only resolves the exact scanner output that was examined.
             if licences != sorted(application['detected']):
                 errors.append('Changed application licence metadata')
-            resolved = application['spdx']
+            # Every collected file is pinned, including metadata declaring the
+            # primary licence and the files/sections describing bundled parts.
+            errors.extend('Unreviewed application notice: ' + path for path in texts
+                          if path not in application['files'])
+            primary = application['primary']
+            if primary['source'] not in application['files'] or not primary['reason']:
+                errors.append('Missing primary licence evidence')
+            resolved = list(primary['spdx'])
             errors.extend(value for value in resolved if not approved(value, osi))
+            bundled = application.get('bundled', [])
+            for notice in bundled:
+                if (notice['source'] not in application['files'] or not notice['component']
+                        or not notice['reason']):
+                    errors.append('Missing bundled licence evidence')
+                errors.extend(value for value in notice['spdx'] if not approved(value, osi | BUNDLED_FREE))
+            if any(not approved(value, osi) for notice in bundled for value in notice['spdx']):
+                category = 'application-osi-with-bundled-free'
         else:
             for licence in licences:
                 value = reviewed['aliases'].get(licence, licence)
@@ -127,6 +151,7 @@ def check(sbom, osi, evidence, reviewed):
             errors.append('No approved licence')
         inventory.append({'name': name, 'version': version, 'type': kind, 'category': category,
                           'licences': licences, 'resolved': resolved, 'archives': origins,
+                          'bundled': application.get('bundled', []) if application else [],
                           'result': 'FAIL' if errors else 'PASS', 'unresolved': sorted(set(errors))})
     return inventory
 

@@ -53,3 +53,52 @@ known_hash, mapping = next((key, value) for key, value in reviewed['texts'].item
 changed = dict(package, licenses=[{'value': known_hash, 'locations': [{'path': '/notice'}]}])
 assert result(changed, dict(evidence, notices={'/notice': 'new, unreviewed text'})) == 'FAIL'
 print('PASS: Debian components, public domain, app CC0, unknown text, version/architecture and source-available rejection')
+
+# Package metadata declares MIT; a separately identified bundled part uses CC0.
+metadata = '/node_modules/probe/package.json'
+licence_file = '/node_modules/probe/LICENSE'
+part_file = '/node_modules/probe/vendor/part/LICENSE'
+app = dict(package, type='npm', licenses=[{'value': 'MIT'}, {'value': 'CC0-1.0'}],
+           locations=[{'path': metadata}])
+app_evidence = {'notices': {metadata: '{"name":"probe","version":"1","license":"MIT"}',
+                           licence_file: 'Probe: MIT', part_file: 'Bundled part: CC0-1.0'}}
+app_review = copy.deepcopy(reviewed)
+record = {'detected': ['MIT', 'CC0-1.0'],
+          'files': {path: checker.digest(text) for path, text in app_evidence['notices'].items()},
+          'primary': {'spdx': ['MIT'], 'source': metadata, 'reason': 'package.json declares MIT.'},
+          'bundled': [{'component': 'vendor/part', 'spdx': ['CC0-1.0'], 'source': part_file,
+                       'reason': 'Separate vendored part dedicates its rights to the public domain.'}]}
+app_review['applications']['npm:probe@1'] = record
+
+
+def app_result():
+    return checker.check({'artifacts': [app]}, osi, app_evidence, app_review)[0]
+
+
+assert app_result()['result'] == 'PASS', 'OSI primary with reviewed CC0 part'
+assert app_result()['category'] == 'application-osi-with-bundled-free'
+saved = copy.deepcopy(record)
+record['primary']['spdx'] = ['CC0-1.0']
+assert app_result()['result'] == 'FAIL', 'review cannot allow CC0 as primary'
+record['primary'] = saved['primary']
+for forbidden in ['BUSL-1.1', 'SSPL-1.0', 'CC-BY-NC-4.0', 'CC-BY-ND-4.0', 'unknown-licence']:
+    # Even an updated review hash cannot permit a forbidden/unknown identifier.
+    record['bundled'][0]['spdx'] = [forbidden]
+    app_evidence['notices'][part_file] = 'Bundled part: ' + forbidden
+    record['files'][part_file] = checker.digest(app_evidence['notices'][part_file])
+    assert app_result()['result'] == 'FAIL', forbidden
+record['bundled'] = saved['bundled']
+app_evidence['notices'][part_file] = 'Bundled part: BUSL-1.1'
+record['files'][part_file] = checker.digest(app_evidence['notices'][part_file])
+assert app_result()['result'] == 'FAIL', 'a misleading CC0 mapping cannot hide BUSL text'
+# Restore the reviewed text hash; changed text must fail independently of labels.
+record['files'] = saved['files']
+app_evidence['notices'][part_file] = 'unexamined terms'
+assert app_result()['result'] == 'FAIL', 'changed bundled text'
+app_evidence['notices'][part_file] = 'Bundled part: CC0-1.0'
+assert app_result()['result'] == 'PASS'
+app_evidence['notices']['/node_modules/probe/vendor/new/LICENSE'] = 'unexamined terms'
+assert app_result()['result'] == 'FAIL', 'new unreviewed bundled file'
+for licence in ['PSF-2.0', 'Python-2.0', 'Python-2.0.1', 'MIT-CMU', 'HPND-sell-variant']:
+    assert result(dict(package, type='python', licenses=[{'value': licence}])) == 'PASS', licence
+print('PASS: OSI primary, reviewed CC0 bundle, forbidden/unknown bundles and complete notice pins')

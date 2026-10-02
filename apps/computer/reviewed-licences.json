@@ -163,21 +163,524 @@
     "sha256:bf23f1dfd52e0f7526b83496effacba1e3f29a38adaf119091efad060f8836b1": {"category": "debian-main", "source": "/usr/share/doc/x11-xkb-utils/copyright", "reason": "XKB tools MIT/X11, HPND and permissive SGI/DEC notices.", "labels": ["sha256:bf23f1dfd52e0f7526b83496effacba1e3f29a38adaf119091efad060f8836b1"]},
     "sha256:35f7f9792a4d64ef293878893d5cf07e09d2e5eb87fd17a4c0f47d66d4735c0c": {"category": "debian-main", "source": "/usr/share/doc/xauth/copyright", "reason": "Xauth X11/HPND sale, modification and redistribution grant; no endorsement.", "labels": ["sha256:35f7f9792a4d64ef293878893d5cf07e09d2e5eb87fd17a4c0f47d66d4735c0c"]},
     "sha256:648621d1a2180678818eb393565849bbc8b332cc521c21e009d948ea5541b3c3": {"category": "debian-main", "source": "/usr/share/doc/xkb-data/copyright", "reason": "Keyboard data MIT/X11, HPND and permissive SGI notices.", "labels": ["sha256:648621d1a2180678818eb393565849bbc8b332cc521c21e009d948ea5541b3c3"]},
-    "sha256:6dc1ad62d707e8dda646a5461c66fff8e6497c8656e04ccee9a64d411b017d65": {"category": "spdx", "spdx": "BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0 AND Python-2.0.1 AND 0BSD AND TCL", "source": "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/METADATA", "reason": "Concatenated pandas, Bottleneck, dateutil, haven, musl, NumPy, packaging, Python, pyperclip and UltraJSON/Tcl notices. The Python-2.0.1 stack is not OSI-approved in the pinned SPDX list; do not discard it when resolving the METADATA hash."}
+    "sha256:6dc1ad62d707e8dda646a5461c66fff8e6497c8656e04ccee9a64d411b017d65": {"category": "spdx", "spdx": "BSD-3-Clause AND BSD-2-Clause AND MIT AND Apache-2.0 AND Python-2.0.1 AND 0BSD AND TCL", "source": "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/METADATA", "reason": "Concatenated pandas, Bottleneck, dateutil, haven, musl, NumPy, packaging, Python, pyperclip and UltraJSON/Tcl notices. Primary and bundled terms are separated in the package-specific application record; this text is not a general bundled-notice allowance."}
   },
+  "hpndVariants": ["HPND-DEC", "HPND-doc", "HPND-doc-sell", "HPND-export-US", "HPND-export-US-acknowledgement", "HPND-export-US-modify", "HPND-export2-US", "HPND-Fenneberg-Livingston", "HPND-INRIA-IMAG", "HPND-Intel", "HPND-Kevlin-Henney", "HPND-Markus-Kuhn", "HPND-merchantability-variant", "HPND-MIT-disclaimer", "HPND-Netrek", "HPND-Pbmplus", "HPND-sell-MIT-disclaimer-xserver", "HPND-sell-regexpr", "HPND-sell-variant", "HPND-sell-variant-critical-systems", "HPND-sell-variant-MIT-disclaimer", "HPND-sell-variant-MIT-disclaimer-rev", "HPND-SMC", "HPND-UC", "HPND-UC-export-US"],
   "applications": {
-    "python:cobble@0.1.4": {"detected": [], "spdx": ["BSD-2-Clause"], "files": {"/opt/python/lib/python3.11/site-packages/cobble-0.1.4.dist-info/METADATA": "sha256:6eb2cf88cfb39b884adde1eff7d8f89f80b256572eb0c6c164d6f99943dbd49f"}, "reason": "Installed metadata explicitly links the 2-Clause BSD licence; not inferred from generic BSD classifier."},
-    "python:pdfplumber@0.11.10": {"detected": [], "spdx": ["MIT"], "files": {"/opt/python/lib/python3.11/site-packages/pdfplumber-0.11.10.dist-info/licenses/LICENSE.txt": "sha256:0d48994da4d1321e395b5e64a724ed4dec63fb96b88ac5b88fc014771e690821"}, "reason": "Installed notice is the full MIT permission and warranty text."},
-    "python:python-dateutil@2.9.0.post0": {"detected": ["Dual License"], "spdx": ["BSD-3-Clause"], "files": {"/opt/python/lib/python3.11/site-packages/python_dateutil-2.9.0.post0.dist-info/LICENSE": "sha256:ba00f51a0d92823b5a1cde27d8b5b9d2321e67ed8da9bc163eff96d5e17e577e"}, "reason": "Notice explicitly says the BSD licence applies to all code, including Apache-covered contributions."},
-    "python:defusedxml@0.7.1": {"detected": ["PSFL"], "spdx": ["PSF-2.0"], "files": {"/opt/python/lib/python3.11/site-packages/defusedxml-0.7.1.dist-info/LICENSE": "sha256:b80ce9da8c42a1f91079627fbbe2bf27210ae108a0ffe5f077d5b08e076c24c8"}, "reason": "PSF version 2 alone. SPDX does not flag this identifier OSI-approved; do not pretend it is the complete Python-2.0 stack."},
-    "python:typing-extensions@4.16.0": {"detected": ["PSF-2.0"], "spdx": ["Python-2.0.1"], "files": {"/opt/python/lib/python3.11/site-packages/typing_extensions-4.16.0.dist-info/licenses/LICENSE": "sha256:3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"}, "reason": "Full PSF/BeOpen/CNRI 1.6.1/CWI stack plus 0BSD documentation examples; Python-2.0.1 is not flagged OSI-approved by the pinned SPDX data."},
-    "python:xlrd@2.0.2": {"detected": ["BSD"], "spdx": ["BSD-3-Clause", "LicenseRef-xlrd-advertising"], "files": {"/opt/python/lib/python3.11/site-packages/xlrd-2.0.2.dist-info/LICENSE": "sha256:b5a5dbce60265e305a815a6cb83ed07f24519d8ba644f2a307994488bced8815"}, "reason": "Bulk code is BSD-3-Clause; earlier Giffin code has advertising and acknowledgement requirements. Unknown variant must fail."},
-    "python:pillow@12.3.0": {"detected": ["MIT-CMU"], "spdx": ["MIT-CMU"], "files": {"/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE": "sha256:dda12a98c1979cf3d94df1cff45d27a4cb3f04a60c76f76902ac54cac03ec0ce"}, "reason": "PIL/Pillow explicitly uses MIT-CMU, not MIT; bundled libraries also carry notices. MIT-CMU is not OSI-approved in SPDX."},
-    "python:numpy@2.4.6": {"detected": ["BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"], "spdx": ["BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"], "files": {"/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md": "sha256:268b0ca06759d31ea3ca68dd35f20e877916e927b1c2a835e4592a3c4354b1f9"}, "reason": "The wheel expression includes CC0; the installed SplitMix64 notice confirms the public-domain dedication. Not an OSI exception."},
-    "python:pandas@3.0.6": {"detected": ["sha256:6dc1ad62d707e8dda646a5461c66fff8e6497c8656e04ccee9a64d411b017d65"], "spdx": ["BSD-3-Clause", "BSD-2-Clause", "MIT", "Apache-2.0", "Python-2.0.1", "0BSD", "TCL"], "files": {"/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/LICENSE": "sha256:5c1052e921e62d36ccda50a61585e9c0444b80c62f39b57c4f3f0d5fb62f5071", "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/METADATA": "sha256:c2e8c472e1f49c30b7b00dc1cde8b8ed384b1b6d85b4d5ffe163e800e71dbc61"}, "reason": "Concatenated pandas, Bottleneck, dateutil, haven, musl, NumPy, packaging, Python, pyperclip and UltraJSON/Tcl notices. The Python-2.0.1 stack is not OSI-approved in the pinned SPDX list; do not discard it when resolving the METADATA hash."},
-    "python:pypdfium2@5.13.0": {"detected": ["BSD-3-Clause, Apache-2.0, dependency licenses"], "spdx": ["BSD-3-Clause", "Apache-2.0", "MIT", "Zlib", "FTL", "IJG", "Unicode-3.0", "ICU", "CC-BY-4.0"], "files": {"/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/pdfium.txt": "sha256:961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/llvm-libc.txt": "sha256:ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.md": "sha256:96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/zlib.txt": "sha256:33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/pdfium-binaries.txt": "sha256:ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libpng.txt": "sha256:bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/abseil.txt": "sha256:c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.ijg": "sha256:75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/icu.txt": "sha256:e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libtiff.txt": "sha256:92b72ba97e6c2749c2a94bc0ef646b47080217f1e772a482b33cf5a5f98a6506", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/fast_float.txt": "sha256:e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/CC-BY-4.0.txt": "sha256:419896aea50c15d6e40c5b4baf4bd346f78223b9a354c7357ad00262afdc08ec", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/simdutf.txt": "sha256:fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/Apache-2.0.txt": "sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/agg23.txt": "sha256:c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/freetype.txt": "sha256:832e75434619e56c81ca252fecd7c50711fda68b7208df37000a7c4370f70e8c", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/BSD-3-Clause.txt": "sha256:a6d11f0694c0137e9b02924b9d33a159f6c72f220fa4655bb2e1ea3654377d39", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/lcms.txt": "sha256:7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a", "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libopenjpeg.txt": "sha256:c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2"}, "reason": "Wrapper BSD/Apache; bundled FreeType FTL, libjpeg IJG and documentation CC-BY-4.0 are not OSI-approved identifiers. ICU and Unicode-3.0 are approved; their presence is not the failure reason."},
-    "binary:node@22.23.1": {"detected": [], "spdx": ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "Zlib", "Unicode-3.0", "ICU", "LicenseRef-Public-Domain"], "files": {"/usr/local/LICENSE": "sha256:c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"}, "reason": "Node core MIT plus bundled MIT/Apache/BSD/Zlib components. ICU and Unicode-3.0 are OSI-approved in the pinned list, but the installed ICU notice also identifies public-domain Time Zone Database code/data, which has no OSI-approved SPDX identifier. HdrHistogram offers BSD-2-Clause as an alternative to CC0."},
-    "deb:kasmvncserver@1.5.0-1": {"detected": ["GPL-2", "GPL-2+"], "spdx": ["GPL-2.0-only", "GPL-2.0-or-later"], "files": {"/usr/share/doc/kasmvncserver/copyright": "sha256:60420ebbac5dae2ffe68f60b294d498fd043db0e28efef7beee02dc4e7df3fae"}, "reason": "Pinned third-party local deb from S0.5, not a Debian archive package. Upstream and Debian packaging GPL notices checked under the application rule.", "localDeb": true},
-    "npm:@openai/codex@0.159.2-linux-x64": {"detected": ["Apache-2.0"], "spdx": ["Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "MIT", "Zlib", "LGPL-2.0-only", "LGPL-2.1-only"], "files": {"/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/Opus.txt": "sha256:01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551", "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/LGPL-2.1.txt": "sha256:ad2eec519ebd4b5df86ea84dff24ae3bfa2edea846a703b58902dd221ae375db", "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/proxy-libintl.txt": "sha256:d245807f90032872d1438d741ed21e2490e1175dc8aa3afa5ddb6c8e529b58e5", "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/sljit.txt": "sha256:5f216505c0f6ea3273caec89e766eef93cdeb7bbb0c429f9360116d7c938feeb", "/spike/node_modules/@openai/codex-linux-x64/package.json": "sha256:64bcf4ada80b1236fbc20de2a41f10cd91ede666e50350148a931e221eb5c25f", "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/libffi.txt": "sha256:17b64dc60f3b6897a60f971e288b973f655c2edcdf08b25f3c3dd5549857881c", "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/PCRE2.md": "sha256:197d8a73ffee0d6b09adba2f9c677b5f5aede24edf89258a68e48248d010d811", "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/zlib.txt": "sha256:e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"}, "reason": "Native Codex package metadata Apache-2.0. Bundled voice notices: Opus/PCRE2 BSD-3-Clause, sljit BSD-2-Clause, libffi MIT, zlib Zlib, proxy-libintl LGPL-2.0 and LGPL-2.1. PCRE2 exemption adds permission; ordinary BSD compliance is sufficient."}
+    "python:cobble@0.1.4": {
+      "detected": [],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/cobble-0.1.4.dist-info/METADATA": "sha256:6eb2cf88cfb39b884adde1eff7d8f89f80b256572eb0c6c164d6f99943dbd49f"
+      },
+      "primary": {
+        "spdx": [
+          "BSD-2-Clause"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/cobble-0.1.4.dist-info/METADATA",
+        "reason": "Installed metadata explicitly links the 2-Clause BSD licence; not inferred from generic BSD classifier."
+      },
+      "bundled": []
+    },
+    "python:pdfplumber@0.11.10": {
+      "detected": [],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/pdfplumber-0.11.10.dist-info/METADATA": "sha256:11a7f2c3a00208fe38389ad3022fbcde4610aec3b9ded312d82701eda1f56c23",
+        "/opt/python/lib/python3.11/site-packages/pdfplumber-0.11.10.dist-info/licenses/LICENSE.txt": "sha256:0d48994da4d1321e395b5e64a724ed4dec63fb96b88ac5b88fc014771e690821"
+      },
+      "primary": {
+        "spdx": [
+          "MIT"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/pdfplumber-0.11.10.dist-info/METADATA",
+        "reason": "Installed notice is the full MIT permission and warranty text."
+      },
+      "bundled": []
+    },
+    "python:python-dateutil@2.9.0.post0": {
+      "detected": [
+        "Dual License"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/python_dateutil-2.9.0.post0.dist-info/LICENSE": "sha256:ba00f51a0d92823b5a1cde27d8b5b9d2321e67ed8da9bc163eff96d5e17e577e",
+        "/opt/python/lib/python3.11/site-packages/python_dateutil-2.9.0.post0.dist-info/METADATA": "sha256:a9d436da322be808332f98d88325998e87cb693a678a9969feb4cfad729a6e93"
+      },
+      "primary": {
+        "spdx": [
+          "BSD-3-Clause"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/python_dateutil-2.9.0.post0.dist-info/METADATA",
+        "reason": "Notice explicitly says the BSD licence applies to all code, including Apache-covered contributions."
+      },
+      "bundled": []
+    },
+    "python:defusedxml@0.7.1": {
+      "detected": [
+        "PSFL"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/defusedxml-0.7.1.dist-info/LICENSE": "sha256:b80ce9da8c42a1f91079627fbbe2bf27210ae108a0ffe5f077d5b08e076c24c8",
+        "/opt/python/lib/python3.11/site-packages/defusedxml-0.7.1.dist-info/METADATA": "sha256:369d3cef64870daf849fba711cb8d05a7efe3c8d9ab0f763adc34079fe378bb1"
+      },
+      "primary": {
+        "spdx": [
+          "PSF-2.0"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/defusedxml-0.7.1.dist-info/METADATA",
+        "reason": "METADATA declares PSFL and the OSI Python Software Foundation classifier; LICENSE contains PSF version 2. Accepted by the owner's Python rule."
+      },
+      "bundled": []
+    },
+    "python:typing-extensions@4.16.0": {
+      "detected": [
+        "PSF-2.0"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/typing_extensions-4.16.0.dist-info/METADATA": "sha256:b05084ca1d50879865178d9fff9fabeab61bdfb1f361bfbde95421ffc8f9be46",
+        "/opt/python/lib/python3.11/site-packages/typing_extensions-4.16.0.dist-info/licenses/LICENSE": "sha256:3b2f81fe21d181c499c59a256c8e1968455d6689d269aa85373bfb6af41da3bf"
+      },
+      "primary": {
+        "spdx": [
+          "PSF-2.0",
+          "Python-2.0.1"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/typing_extensions-4.16.0.dist-info/METADATA",
+        "reason": "METADATA declares PSF-2.0; LICENSE includes the full PSF/BeOpen/CNRI 1.6.1/CWI stack. Both count as OSI under the owner's rule."
+      },
+      "bundled": [
+        {
+          "component": "Python documentation examples",
+          "spdx": [
+            "0BSD"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/typing_extensions-4.16.0.dist-info/licenses/LICENSE",
+          "reason": "The final LICENSE section grants zero-clause BSD terms for documentation examples."
+        }
+      ]
+    },
+    "python:xlrd@2.0.2": {
+      "detected": [
+        "BSD"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/xlrd-2.0.2.dist-info/LICENSE": "sha256:b5a5dbce60265e305a815a6cb83ed07f24519d8ba644f2a307994488bced8815",
+        "/opt/python/lib/python3.11/site-packages/xlrd-2.0.2.dist-info/METADATA": "sha256:ae263dba4d616210bb2d709cd091ba453984314f79f8f50f44af864352656dec"
+      },
+      "primary": {
+        "spdx": [
+          "BSD-3-Clause"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/xlrd-2.0.2.dist-info/METADATA",
+        "reason": "METADATA declares BSD; the first LICENSE section explicitly identifies the bulk of the library and gives BSD-3-Clause terms."
+      },
+      "bundled": [
+        {
+          "component": "Earlier David Giffin code, based on Andrew Khan's Java code",
+          "spdx": [
+            "LicenseRef-xlrd-advertising"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/xlrd-2.0.2.dist-info/LICENSE",
+          "reason": "The second LICENSE section permits modification and redistribution with advertising and retained acknowledgements; the owner explicitly accepts this DFSG-free variant for bundled code."
+        }
+      ]
+    },
+    "python:pillow@12.3.0": {
+      "detected": [
+        "MIT-CMU"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/METADATA": "sha256:8fc07146cab33ef7582361dab6eac596d340b03ec648f18217da7894f73838c8",
+        "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE": "sha256:dda12a98c1979cf3d94df1cff45d27a4cb3f04a60c76f76902ac54cac03ec0ce"
+      },
+      "primary": {
+        "spdx": [
+          "MIT-CMU"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/METADATA",
+        "reason": "METADATA License-Expression and the opening PIL/Pillow LICENSE section explicitly identify MIT-CMU; accepted as an HPND variant under the owner's rule."
+      },
+      "bundled": [
+        {
+          "component": "AOM, Brotli, dav1d, HarfBuzz, LittleCMS, libavif, libwebp, libyuv, OpenJPEG, Raqm, XCB, zlib and zstd",
+          "spdx": [
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "MIT",
+            "Apache-2.0",
+            "HPND",
+            "Zlib"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "Named sections retain permissive OSI grants; the complete concatenated notice is pinned."
+        },
+        {
+          "component": "FreeType font engine",
+          "spdx": [
+            "FTL"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "FREETYPE2 section grants use, modification and redistribution with acknowledgement."
+        },
+        {
+          "component": "FreeType MD5 support and XZ/liblzma",
+          "spdx": [
+            "LicenseRef-Public-Domain"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "FREETYPE2 explicitly identifies MD5 support as public domain; LIBLZMA identifies the runtime library and supporting public-domain files."
+        },
+        {
+          "component": "JPEG code in libavif and libjpeg",
+          "spdx": [
+            "IJG"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "Named sections permit use, modification and distribution with attribution and a disclaimer."
+        },
+        {
+          "component": "Tcl/Tk",
+          "spdx": [
+            "TCL"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "TCL_TK permits use, modification, redistribution and licensing for any purpose with notice retention."
+        },
+        {
+          "component": "bzip2",
+          "spdx": [
+            "bzip2-1.0.6"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "BZIP2 allows redistribution and modification with notices and accurate origin/version attribution."
+        },
+        {
+          "component": "libpng",
+          "spdx": [
+            "libpng-2.0"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "LIBPNG permits use, copying, modification and distribution with origin and notice requirements."
+        },
+        {
+          "component": "libtiff",
+          "spdx": [
+            "libtiff"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "LIBTIFF permits use, copying, modification, distribution and sale with copyright and permission notices."
+        },
+        {
+          "component": "Xau and Xdmcp",
+          "spdx": [
+            "X11"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pillow-12.3.0.dist-info/licenses/LICENSE",
+          "reason": "XAU and XDMCP permit use, copying, modification, distribution and sale; retained notices and no unauthorised endorsement."
+        }
+      ]
+    },
+    "python:numpy@2.4.6": {
+      "detected": [
+        "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/METADATA": "sha256:b082c52ccbe3b880bae177c35171b52ed6c947f3ad71e3762f2723f60a411de0",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/LICENSE.txt": "sha256:4860083caa0de2ac3292ca98bd074bd8f45d8b32624e37b1e70a240bff61e488",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/include/numpy/libdivide/LICENSE.txt": "sha256:fbc539f47d0cf83bc61378080fb873d5c14630126cacbfe754035c3926daa5ec",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/common/pythoncapi-compat/COPYING": "sha256:3f2c1ffa76383a55ae0aac01c9737cd70050dff63e1f026694fbe9d662573c98",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/highway/LICENSE": "sha256:e340270d4f64384569a91d546acb5b094d69ce47f0c015db77abb74dc6f815af",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/multiarray/dragon4_LICENSE.txt": "sha256:f7b14309e5f54e5022b26448eefd419988ada2aec01d3c1162d84a0ea8f21f2c",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/npysort/x86-simd-sort/LICENSE.md": "sha256:211e7d737d6179a08f791ebb0a99897ce7cd2457410c542876d125576edfe910",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/umath/svml/LICENSE": "sha256:c17011467b4fe6e20fbfbeda4df09e58c2bca5480a063e55735a4000a379aad9",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/fft/pocketfft/LICENSE.md": "sha256:a85ca13fdf90160b64a0698215868c13b74d835ad0a4e2ba44713b8c5058a056",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/linalg/lapack_lite/LICENSE.txt": "sha256:a14cc25e10d40a3aa705b7de2fb764a6535d8ee9b2db4e1724900585457dfd55",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/ma/LICENSE": "sha256:05f3b88351988ecfad10abe92c0c50e5875c6452d5009a0084cc291551ffcca6",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/LICENSE.md": "sha256:103166b62b80443afb9eb3488e052ea06be0cff566b908f199e561fde49af19f",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/distributions/LICENSE.md": "sha256:469778be8f33d54e1bcaab28c281cc472916d2d273f835e55bc487d30503face",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/mt19937/LICENSE.md": "sha256:0e111337b25494a773106695f0e799f642b8567aaacca4f116a74a8177179156",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/pcg64/LICENSE.md": "sha256:e7d4f4fb20358f314210a892ae17351e04993813646f697ec387385ca2a36918",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/philox/LICENSE.md": "sha256:6f5828a57223d4cc7f8ea505a2623e7b978b242752c1515e355f46ba2cec1800",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/sfc64/LICENSE.md": "sha256:9d4098846018319cd68e228ee6220361787f73bccbf00237a85e4fc9621b998f",
+        "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md": "sha256:268b0ca06759d31ea3ca68dd35f20e877916e927b1c2a835e4592a3c4354b1f9"
+      },
+      "primary": {
+        "spdx": [
+          "BSD-3-Clause"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/METADATA",
+        "reason": "METADATA lists the distribution expression and License-File entries. LICENSE.txt opens with NumPy's BSD-3-Clause grant before explicitly listing bundled software."
+      },
+      "bundled": [
+        {
+          "component": "OpenBLAS, LAPACK, GCC runtime and libquadmath",
+          "spdx": [
+            "BSD-3-Clause",
+            "BSD-3-Clause-Open-MPI",
+            "GPL-3.0-or-later",
+            "LGPL-2.1-or-later"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/LICENSE.txt",
+          "reason": "The named binary-distribution sections identify each library; GCC adds its Runtime Library Exception 3.1 to the GPL grant."
+        },
+        {
+          "component": "NumPy vendored algorithms and compatibility helpers",
+          "spdx": [
+            "BSD-3-Clause",
+            "BSD-2-Clause",
+            "0BSD",
+            "MIT",
+            "Zlib",
+            "Apache-2.0"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/METADATA",
+          "reason": "License-File entries name libdivide, pythoncapi-compat, Highway, dragon4, x86-simd-sort, SVML, pocketfft, LAPACK, masked arrays and random generators; all installed files are pinned."
+        },
+        {
+          "component": "SplitMix64 generator",
+          "spdx": [
+            "CC0-1.0"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/random/src/splitmix64/LICENSE.md",
+          "reason": "Explicit public-domain dedication with CC0 fallback; bundled generator, not the NumPy primary licence."
+        },
+        {
+          "component": "Highway hwy/contrib/random/random-inl.h",
+          "spdx": [
+            "CC0-1.0"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/numpy-2.4.6.dist-info/licenses/numpy/_core/src/highway/LICENSE",
+          "reason": "Highway explicitly separates this CC0 file from its Apache/BSD primary code."
+        }
+      ]
+    },
+    "python:pandas@3.0.6": {
+      "detected": [
+        "sha256:6dc1ad62d707e8dda646a5461c66fff8e6497c8656e04ccee9a64d411b017d65"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/LICENSE": "sha256:5c1052e921e62d36ccda50a61585e9c0444b80c62f39b57c4f3f0d5fb62f5071",
+        "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/METADATA": "sha256:c2e8c472e1f49c30b7b00dc1cde8b8ed384b1b6d85b4d5ffe163e800e71dbc61"
+      },
+      "primary": {
+        "spdx": [
+          "BSD-3-Clause"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/METADATA",
+        "reason": "METADATA License and LICENSE both open with pandas' BSD-3-Clause grant, followed by separately attributed incorporated code."
+      },
+      "bundled": [
+        {
+          "component": "Bottleneck, dateutil, haven, klib, musl, NumPy, packaging, Python, pyperclip and UltraJSON",
+          "spdx": [
+            "BSD-3-Clause",
+            "BSD-2-Clause",
+            "MIT",
+            "Apache-2.0",
+            "Python-2.0.1",
+            "0BSD"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/LICENSE",
+          "reason": "Separately attributed sections retain their OSI grants, including the owner-approved Python stack."
+        },
+        {
+          "component": "Tcl-derived code in UltraJSON",
+          "spdx": [
+            "TCL"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pandas-3.0.6.dist-info/LICENSE",
+          "reason": "The final UltraJSON notice permits use, modification, redistribution and licensing for any purpose with notice retention."
+        }
+      ]
+    },
+    "python:pypdfium2@5.13.0": {
+      "detected": [
+        "BSD-3-Clause, Apache-2.0, dependency licenses"
+      ],
+      "files": {
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/METADATA": "sha256:ef3d3b0b63299fda9e9df2fbd3978dfef47a3dd35817f979c4a13891d0089b5d",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/Apache-2.0.txt": "sha256:cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/BSD-3-Clause.txt": "sha256:a6d11f0694c0137e9b02924b9d33a159f6c72f220fa4655bb2e1ea3654377d39",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/LICENSES/CC-BY-4.0.txt": "sha256:419896aea50c15d6e40c5b4baf4bd346f78223b9a354c7357ad00262afdc08ec",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/abseil.txt": "sha256:c79a7fea0e3cac04cd43f20e7b648e5a0ff8fa5344e644b0ee09ca1162b62747",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/agg23.txt": "sha256:c110d3ea2ad77467ce0dcff7d3337e6c8be8049a5103f4b9bd5fd911a77972e5",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/fast_float.txt": "sha256:e562f3f974ced7e69dd1db77b820b36bcf8f30377f1aa105723fba449c53c4e6",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/freetype.txt": "sha256:832e75434619e56c81ca252fecd7c50711fda68b7208df37000a7c4370f70e8c",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/icu.txt": "sha256:e55522d81edc687a341a4411e0776e54ca654e90147f354a90458aaced4116af",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/lcms.txt": "sha256:7312b68c5b25e9bf2b828706fb4e29588f22705112f411fd42e1f7d84c3d139a",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.ijg": "sha256:75815e3bf6484201a3c3d17a1bbf10f2e8e3237f84df10a2357ea896db2a81d6",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.md": "sha256:96f5b328adbb78eeaaec6980d73fd558cb1e4d62560ed615646bc3cf5e532430",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libopenjpeg.txt": "sha256:c5ab0890a737c2dfa7ba675036554f6d17741d98629b0c2a145354d00617e6b2",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libpng.txt": "sha256:bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libtiff.txt": "sha256:92b72ba97e6c2749c2a94bc0ef646b47080217f1e772a482b33cf5a5f98a6506",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/llvm-libc.txt": "sha256:ebcd9bbf783a73d05c53ba4d586b8d5813dcdf3bbec50265860ccc885e606f47",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/pdfium-binaries.txt": "sha256:ba26c1263131696b86c10496b5066b918a20b7161822a80c274d0080105f6c93",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/pdfium.txt": "sha256:961eacd9633fff6d051db7208b755e9210e30efac7adec3e6a6d52798f0ccf0e",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/simdutf.txt": "sha256:fc8dbc04e03ad4efc08a647ffe7f995b811a95bc04c0e85a56d5277c6593fa5f",
+        "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/zlib.txt": "sha256:33fd641c9f3b0e0be64bc78fea9e94807674cdd70c48477599226cb8956565fe"
+      },
+      "primary": {
+        "spdx": [
+          "Apache-2.0",
+          "BSD-3-Clause"
+        ],
+        "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/METADATA",
+        "reason": "METADATA Licensing section explicitly separates pypdfium2 itself (Apache/BSD), documentation/examples (CC-BY) and PDFium dependencies; License-File headers enumerate the bundled files."
+      },
+      "bundled": [
+        {
+          "component": "PDFium, pdfium-binaries, abseil, agg23, fast_float, ICU, LittleCMS, libjpeg-turbo, OpenJPEG, llvm-libc, simdutf and zlib",
+          "spdx": [
+            "BSD-3-Clause",
+            "Apache-2.0",
+            "MIT",
+            "Zlib",
+            "Unicode-3.0",
+            "ICU"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/METADATA",
+          "reason": "METADATA lists each BUILD_LICENSES file; those files retain the OSI grants and are all pinned. LLVM adds permission via its exception."
+        },
+        {
+          "component": "FreeType",
+          "spdx": [
+            "FTL"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/freetype.txt",
+          "reason": "Permissive font-engine licence with retained notices and acknowledgement."
+        },
+        {
+          "component": "libjpeg",
+          "spdx": [
+            "IJG"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libjpeg_turbo.ijg",
+          "reason": "Permits modification and redistribution with acknowledgement and disclaimer."
+        },
+        {
+          "component": "ICU Time Zone Database code and data",
+          "spdx": [
+            "LicenseRef-Public-Domain"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/icu.txt",
+          "reason": "The Time Zone Database section explicitly states public-domain status."
+        },
+        {
+          "component": "libpng",
+          "spdx": [
+            "libpng-2.0"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libpng.txt",
+          "reason": "Permissive PNG reference library terms with origin and notice requirements."
+        },
+        {
+          "component": "libtiff",
+          "spdx": [
+            "libtiff"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/licenses/data/linux_x64/BUILD_LICENSES/libtiff.txt",
+          "reason": "Permits use, copying, modification, distribution and sale with retained notices."
+        },
+        {
+          "component": "Bundled documentation and examples",
+          "spdx": [
+            "CC-BY-4.0"
+          ],
+          "source": "/opt/python/lib/python3.11/site-packages/pypdfium2-5.13.0.dist-info/METADATA",
+          "reason": "METADATA explicitly assigns CC-BY-4.0 to documentation/examples separately from the OSI wrapper; permits commercial sharing and adaptation with attribution, a DFSG-free accompanying notice."
+        }
+      ]
+    },
+    "binary:node@22.23.1": {
+      "detected": [],
+      "files": {
+        "/usr/local/LICENSE": "sha256:c738ae413cf561f174e34f6961f8ca458aae2369a73640dda6234c629b98bcc4"
+      },
+      "primary": {
+        "spdx": [
+          "MIT"
+        ],
+        "source": "/usr/local/LICENSE",
+        "reason": "The opening Node.js and Joyent LICENSE sections grant MIT; the text then explicitly separates externally maintained libraries."
+      },
+      "bundled": [
+        {
+          "component": "Externally maintained Node libraries",
+          "spdx": [
+            "MIT",
+            "Apache-2.0",
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "Zlib",
+            "Unicode-3.0",
+            "ICU"
+          ],
+          "source": "/usr/local/LICENSE",
+          "reason": "Named library sections retain their OSI notices; HdrHistogram explicitly offers BSD-2-Clause as an alternative to CC0."
+        },
+        {
+          "component": "ICU Time Zone Database code and data",
+          "spdx": [
+            "LicenseRef-Public-Domain"
+          ],
+          "source": "/usr/local/LICENSE",
+          "reason": "ICU's Time Zone Database section explicitly identifies public-domain code and data, retained as a bundled DFSG-free notice."
+        }
+      ]
+    },
+    "deb:kasmvncserver@1.5.0-1": {
+      "detected": [
+        "GPL-2",
+        "GPL-2+"
+      ],
+      "files": {
+        "/usr/share/doc/kasmvncserver/copyright": "sha256:60420ebbac5dae2ffe68f60b294d498fd043db0e28efef7beee02dc4e7df3fae"
+      },
+      "localDeb": true,
+      "primary": {
+        "spdx": [
+          "GPL-2.0-only",
+          "GPL-2.0-or-later"
+        ],
+        "source": "/usr/share/doc/kasmvncserver/copyright",
+        "reason": "Pinned third-party local deb from S0.5, not a Debian archive package. Upstream and Debian packaging GPL notices checked under the application rule."
+      },
+      "bundled": []
+    },
+    "npm:@openai/codex@0.159.2-linux-x64": {
+      "detected": [
+        "Apache-2.0"
+      ],
+      "files": {
+        "/spike/node_modules/@openai/codex-linux-x64/package.json": "sha256:64bcf4ada80b1236fbc20de2a41f10cd91ede666e50350148a931e221eb5c25f",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/LGPL-2.1.txt": "sha256:ad2eec519ebd4b5df86ea84dff24ae3bfa2edea846a703b58902dd221ae375db",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/Opus.txt": "sha256:01e1167d54a096d123cf6dfbbeb19587278845c6481d2d66d545669846079551",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/PCRE2.md": "sha256:197d8a73ffee0d6b09adba2f9c677b5f5aede24edf89258a68e48248d010d811",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/libffi.txt": "sha256:17b64dc60f3b6897a60f971e288b973f655c2edcdf08b25f3c3dd5549857881c",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/proxy-libintl.txt": "sha256:d245807f90032872d1438d741ed21e2490e1175dc8aa3afa5ddb6c8e529b58e5",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/sljit.txt": "sha256:5f216505c0f6ea3273caec89e766eef93cdeb7bbb0c429f9360116d7c938feeb",
+        "/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/codex-resources/voice/licenses/zlib.txt": "sha256:e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+      },
+      "primary": {
+        "spdx": [
+          "Apache-2.0"
+        ],
+        "source": "/spike/node_modules/@openai/codex-linux-x64/package.json",
+        "reason": "Native Codex package metadata Apache-2.0. Bundled voice notices: Opus/PCRE2 BSD-3-Clause, sljit BSD-2-Clause, libffi MIT, zlib Zlib, proxy-libintl LGPL-2.0 and LGPL-2.1. PCRE2 exemption adds permission; ordinary BSD compliance is sufficient."
+      },
+      "bundled": [
+        {
+          "component": "Native voice dependencies: Opus, PCRE2, sljit, libffi, zlib and proxy-libintl",
+          "spdx": [
+            "BSD-2-Clause",
+            "BSD-3-Clause",
+            "MIT",
+            "Zlib",
+            "LGPL-2.0-only",
+            "LGPL-2.1-only"
+          ],
+          "source": "/spike/node_modules/@openai/codex-linux-x64/package.json",
+          "reason": "Individual bundled notice files are pinned; retain BSD, MIT, Zlib and LGPL grants."
+        }
+      ]
+    }
   }
 }
