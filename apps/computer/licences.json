@@ -1,0 +1,6098 @@
+[
+  {
+    "name": "@openai/codex",
+    "version": "0.159.2",
+    "type": "npm",
+    "licences": [
+      "Apache-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "@openai/codex",
+    "version": "0.159.2-linux-x64",
+    "type": "npm",
+    "licences": [
+      "Apache-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "adduser",
+    "version": "3.134",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "adwaita-icon-theme",
+    "version": "43-1",
+    "type": "deb",
+    "licences": [
+      "sha256:52cc4482d5be5c842da8d52360664d686e18acfeed897364479992356370341a"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:52cc4482d5be5c842da8d52360664d686e18acfeed897364479992356370341a"
+    ]
+  },
+  {
+    "name": "apt",
+    "version": "2.6.1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "Expat",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "at-spi2-common",
+    "version": "2.46.0-5",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "base-files",
+    "version": "12.4+deb12u15",
+    "type": "deb",
+    "licences": [
+      "sha256:fd7e4aae7e7b05f217bcf2d02322825c360e66c52c4c2f1b28d784d6297a1c23"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:fd7e4aae7e7b05f217bcf2d02322825c360e66c52c4c2f1b28d784d6297a1c23"
+    ]
+  },
+  {
+    "name": "base-passwd",
+    "version": "3.6.1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "bash",
+    "version": "5.2.15-2+b13",
+    "type": "deb",
+    "licences": [
+      "BSD-4-clause-UC",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "Latex2e",
+      "MIT-like",
+      "permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause-UC",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3",
+      "Latex2e",
+      "MIT-like",
+      "permissive"
+    ]
+  },
+  {
+    "name": "beautifulsoup4",
+    "version": "4.15.0",
+    "type": "python",
+    "licences": [
+      "MIT License"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "bsdutils",
+    "version": "1:2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "ca-certificates",
+    "version": "20250419~deb12u1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "MPL-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "certifi",
+    "version": "2026.7.22",
+    "type": "python",
+    "licences": [
+      "MPL-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "cffi",
+    "version": "2.1.1",
+    "type": "python",
+    "licences": [
+      "MIT-0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "charset-normalizer",
+    "version": "3.5.2",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "chromium",
+    "version": "154.0.8037.92-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Apple-license",
+      "BSD-2-clause",
+      "BSD-3-clause",
+      "BSL-1",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-2.0",
+      "GPL-3",
+      "GPL-3+",
+      "ICU",
+      "ISC",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.0+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MIT",
+      "MPL-1.1",
+      "MPL-2.0",
+      "Ms-PL",
+      "Public-domain",
+      "Unicode",
+      "zlib"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Apple-license",
+      "BSL-1",
+      "Ms-PL",
+      "Public-domain",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "chromium-common",
+    "version": "154.0.8037.92-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Apple-license",
+      "BSD-2-clause",
+      "BSD-3-clause",
+      "BSL-1",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-2.0",
+      "GPL-3",
+      "GPL-3+",
+      "ICU",
+      "ISC",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.0+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MIT",
+      "MPL-1.1",
+      "MPL-2.0",
+      "Ms-PL",
+      "Public-domain",
+      "Unicode",
+      "zlib"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Apple-license",
+      "BSL-1",
+      "Ms-PL",
+      "Public-domain",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "click",
+    "version": "8.5.0",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "cobble",
+    "version": "0.1.4",
+    "type": "python",
+    "licences": [],
+    "result": "FAIL",
+    "unresolved": [
+      "No detected licence"
+    ]
+  },
+  {
+    "name": "coreutils",
+    "version": "9.1-1",
+    "type": "deb",
+    "licences": [
+      "BSD-4-clause-UC",
+      "FSFULLR",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3",
+      "GPL-3",
+      "GPL-3+",
+      "ISC"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause-UC",
+      "FSFULLR",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3"
+    ]
+  },
+  {
+    "name": "cryptography",
+    "version": "50.0.2",
+    "type": "python",
+    "licences": [
+      "Apache-2.0 OR BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "dash",
+    "version": "0.5.12-2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause",
+      "BSD-3-clause",
+      "GPL-2",
+      "GPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "dbus",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "dbus-bin",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "dbus-daemon",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "dbus-session-bus-common",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "dbus-system-bus-common",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "dbus-user-session",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "dconf-gsettings-backend",
+    "version": "0.40.0-4",
+    "type": "deb",
+    "licences": [
+      "GPL-3",
+      "LGPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "dconf-service",
+    "version": "0.40.0-4",
+    "type": "deb",
+    "licences": [
+      "GPL-3",
+      "LGPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "debconf",
+    "version": "1.5.82",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "debian-archive-keyring",
+    "version": "2023.3+deb12u2",
+    "type": "deb",
+    "licences": [
+      "sha256:b32aecaae84643700a33bc9ee83fa9b36938d35aa7b61b5042092eca77ddb732"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:b32aecaae84643700a33bc9ee83fa9b36938d35aa7b61b5042092eca77ddb732"
+    ]
+  },
+  {
+    "name": "debianutils",
+    "version": "5.7-0.5~deb12u1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "SMAIL-GPL",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "SMAIL-GPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "defusedxml",
+    "version": "0.7.1",
+    "type": "python",
+    "licences": [
+      "PSFL"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "PSFL"
+    ]
+  },
+  {
+    "name": "diffutils",
+    "version": "1:3.8-4",
+    "type": "deb",
+    "licences": [
+      "FSFAP",
+      "FSFULLR",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2.0+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3.0+",
+      "X11",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "FSFAP",
+      "FSFULLR",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3",
+      "X11",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "dmsetup",
+    "version": "2:1.02.185-2",
+    "type": "deb",
+    "licences": [
+      "BSD-2-Clause",
+      "GPL-2",
+      "GPL-2.0",
+      "GPL-2.0+",
+      "LGPL-2",
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "dpkg",
+    "version": "1.21.23",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "GPL-2",
+      "GPL-2+",
+      "public-domain-s-s-d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain-s-s-d"
+    ]
+  },
+  {
+    "name": "e2fsprogs",
+    "version": "1.47.0-2+b2",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "ISC",
+      "Kazlib",
+      "LGPL-2",
+      "Latex2e"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL",
+      "Kazlib",
+      "Latex2e"
+    ]
+  },
+  {
+    "name": "et-xmlfile",
+    "version": "2.0.0",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "findutils",
+    "version": "4.9.0-4",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "FSFAP",
+      "FSFULLR",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3+",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "ISC",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "X11",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "FSFAP",
+      "FSFULLR",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3+",
+      "GPL",
+      "X11",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "flatbuffers",
+    "version": "25.12.19",
+    "type": "python",
+    "licences": [
+      "Apache 2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "fontconfig",
+    "version": "2.14.1-4",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "fontconfig-config",
+    "version": "2.14.1-4",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "fonts-dejavu-core",
+    "version": "2.37-6",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "bitstream-vera"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "bitstream-vera"
+    ]
+  },
+  {
+    "name": "gcc-12-base",
+    "version": "12.2.0-14+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:da8191658b3452ce9caf31638ba61dab31a38c619fa39df119812e050f592fd3"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:da8191658b3452ce9caf31638ba61dab31a38c619fa39df119812e050f592fd3"
+    ]
+  },
+  {
+    "name": "gpgv",
+    "version": "2.2.40-1.1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "CC0-1.0",
+      "Expat",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "RFC-Reference",
+      "TinySCHEME",
+      "permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "RFC-Reference",
+      "TinySCHEME",
+      "permissive"
+    ]
+  },
+  {
+    "name": "grep",
+    "version": "3.8-5",
+    "type": "deb",
+    "licences": [
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "gtk-update-icon-cache",
+    "version": "3.24.38-2~deb12u3",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC-BY-SA-4.0",
+      "Expat",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "SWL",
+      "X11R5-permissive",
+      "ZPL-2.1",
+      "check-gdk-cairo-permissive",
+      "other",
+      "unencumbered"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC-BY-SA-4.0",
+      "SWL",
+      "X11R5-permissive",
+      "check-gdk-cairo-permissive",
+      "other",
+      "unencumbered"
+    ]
+  },
+  {
+    "name": "gzip",
+    "version": "1.12-1",
+    "type": "deb",
+    "licences": [
+      "FSF-manpages",
+      "GFDL-1.3+-no-invariant",
+      "GFDL-3",
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "FSF-manpages",
+      "GFDL-1.3+-no-invariant",
+      "GFDL-3"
+    ]
+  },
+  {
+    "name": "hicolor-icon-theme",
+    "version": "0.17-2",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "hostname",
+    "version": "3.23+nmu1",
+    "type": "deb",
+    "licences": [
+      "GPL-2"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "idna",
+    "version": "3.20",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "init-system-helpers",
+    "version": "1.65.2+deb12u1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "kasmvncserver",
+    "version": "1.5.0-1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libacl1",
+    "version": "2.3.1-3",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2+",
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libalgorithm-c3-perl",
+    "version": "0.11-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libapparmor1",
+    "version": "3.0.8-3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libapt-pkg6.0",
+    "version": "2.6.1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "Expat",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libargon2-1",
+    "version": "0~20171227-0.3+deb12u1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0"
+    ]
+  },
+  {
+    "name": "libasound2",
+    "version": "1.2.8-1+b1",
+    "type": "deb",
+    "licences": [
+      "LGPL-2.1",
+      "LPGL-2.1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "LPGL-2.1+"
+    ]
+  },
+  {
+    "name": "libasound2-data",
+    "version": "1.2.8-1",
+    "type": "deb",
+    "licences": [
+      "LGPL-2.1",
+      "LPGL-2.1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "LPGL-2.1+"
+    ]
+  },
+  {
+    "name": "libasyncns0",
+    "version": "0.8-6+b3",
+    "type": "deb",
+    "licences": [
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libatk-bridge2.0-0",
+    "version": "2.46.0-5",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libatk1.0-0",
+    "version": "2.46.0-5",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libatspi2.0-0",
+    "version": "2.46.0-5",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libattr1",
+    "version": "1:2.5.1-4",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2+",
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libaudit-common",
+    "version": "1:3.0.9-1",
+    "type": "deb",
+    "licences": [
+      "GPL-1",
+      "GPL-2",
+      "LGPL-2.1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1"
+    ]
+  },
+  {
+    "name": "libaudit1",
+    "version": "1:3.0.9-1",
+    "type": "deb",
+    "licences": [
+      "GPL-1",
+      "GPL-2",
+      "LGPL-2.1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1"
+    ]
+  },
+  {
+    "name": "libavahi-client3",
+    "version": "0.8-10+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d"
+    ]
+  },
+  {
+    "name": "libavahi-common-data",
+    "version": "0.8-10+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d"
+    ]
+  },
+  {
+    "name": "libavahi-common3",
+    "version": "0.8-10+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:66849d0ab7cbf0d770e40e00276ed8d264ed8974c0e064fb12814c0f80430c5d"
+    ]
+  },
+  {
+    "name": "libb-hooks-endofscope-perl",
+    "version": "0.26-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libb-hooks-op-check-perl",
+    "version": "0.22-2+b1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libblkid1",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libbrotli1",
+    "version": "1.0.9-2+b6",
+    "type": "deb",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libbsd0",
+    "version": "0.11.7-2",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "BSD-2-clause-NetBSD",
+      "BSD-2-clause-author",
+      "BSD-2-clause-verbatim",
+      "BSD-3-clause",
+      "BSD-3-clause-John-Birrell",
+      "BSD-3-clause-Regents",
+      "BSD-3-clause-author",
+      "BSD-4-clause-Niels-Provos",
+      "Beerware",
+      "Expat",
+      "ISC",
+      "ISC-Original",
+      "libutil-David-Nugent",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-2-clause-NetBSD",
+      "BSD-2-clause-author",
+      "BSD-2-clause-verbatim",
+      "BSD-3-clause-John-Birrell",
+      "BSD-3-clause-Regents",
+      "BSD-3-clause-author",
+      "BSD-4-clause-Niels-Provos",
+      "Beerware",
+      "ISC-Original",
+      "libutil-David-Nugent",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libbz2-1.0",
+    "version": "1.0.8-5+b1",
+    "type": "deb",
+    "licences": [
+      "BSD-variant",
+      "GPL-2"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-variant"
+    ]
+  },
+  {
+    "name": "libc-bin",
+    "version": "2.36-9+deb12u14",
+    "type": "deb",
+    "licences": [
+      "sha256:40c7e1f2118531f038ca22999bd976901254e1bc5cd1b0f0211bdd064c599987"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:40c7e1f2118531f038ca22999bd976901254e1bc5cd1b0f0211bdd064c599987"
+    ]
+  },
+  {
+    "name": "libc6",
+    "version": "2.36-9+deb12u14",
+    "type": "deb",
+    "licences": [
+      "sha256:40c7e1f2118531f038ca22999bd976901254e1bc5cd1b0f0211bdd064c599987"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:40c7e1f2118531f038ca22999bd976901254e1bc5cd1b0f0211bdd064c599987"
+    ]
+  },
+  {
+    "name": "libcairo-gobject2",
+    "version": "1.16.0-7",
+    "type": "deb",
+    "licences": [
+      "sha256:408fb9e704e875cd42d432e7c9b3b378f568e3c89db2b5c5ef3d11c025319574"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:408fb9e704e875cd42d432e7c9b3b378f568e3c89db2b5c5ef3d11c025319574"
+    ]
+  },
+  {
+    "name": "libcairo2",
+    "version": "1.16.0-7",
+    "type": "deb",
+    "licences": [
+      "sha256:408fb9e704e875cd42d432e7c9b3b378f568e3c89db2b5c5ef3d11c025319574"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:408fb9e704e875cd42d432e7c9b3b378f568e3c89db2b5c5ef3d11c025319574"
+    ]
+  },
+  {
+    "name": "libcap-ng0",
+    "version": "0.8.3-1+b3",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libcap2",
+    "version": "1:2.66-4+deb12u3+b1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libclass-c3-perl",
+    "version": "0.35-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libclass-data-inheritable-perl",
+    "version": "0.08-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libclass-inspector-perl",
+    "version": "1.36-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libclass-method-modifiers-perl",
+    "version": "2.14-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libclass-singleton-perl",
+    "version": "1.6-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libcolord2",
+    "version": "1.4.6-2.2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "GFDL-NIV",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1+",
+      "NPES"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "GFDL-NIV",
+      "NPES"
+    ]
+  },
+  {
+    "name": "libcom-err2",
+    "version": "1.47.0-2+b2",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "ISC",
+      "Kazlib",
+      "LGPL-2",
+      "Latex2e"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL",
+      "Kazlib",
+      "Latex2e"
+    ]
+  },
+  {
+    "name": "libcrypt1",
+    "version": "1:4.4.33-2",
+    "type": "deb",
+    "licences": [
+      "sha256:5a5e7ca0e9f3f9679977e3a3e9ede45ad92885a3297ea78e766979f9866c5a16"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5a5e7ca0e9f3f9679977e3a3e9ede45ad92885a3297ea78e766979f9866c5a16"
+    ]
+  },
+  {
+    "name": "libcryptsetup12",
+    "version": "2:2.6.1-4~deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC0",
+      "CC0-1.0",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0",
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libcups2",
+    "version": "2.4.2-3+deb12u9",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Apache-2.0-with-GPL2-LGPL2-Exception",
+      "BSD-2-Clause",
+      "FSFUL",
+      "Zlib"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Apache-2.0-with-GPL2-LGPL2-Exception",
+      "FSFUL"
+    ]
+  },
+  {
+    "name": "libdata-optlist-perl",
+    "version": "0.113-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libdatetime-locale-perl",
+    "version": "1:1.37-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libdatetime-perl",
+    "version": "2:1.59-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2.0",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libdatetime-timezone-perl",
+    "version": "1:2.60-1+2026c",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libdatrie1",
+    "version": "0.2.13-2+b1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libdav1d6",
+    "version": "1.0.0-2+deb12u1",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "ISC",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libdb5.3",
+    "version": "5.3.28+dfsg2-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "BSD-3-clause",
+      "BSD-3-clause-fjord",
+      "GPL",
+      "GPL-3",
+      "MIT-old",
+      "Ms-PL",
+      "Sleepycat",
+      "TCL-like",
+      "X11",
+      "zlib"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-fjord",
+      "GPL",
+      "MIT-old",
+      "Ms-PL",
+      "TCL-like",
+      "X11"
+    ]
+  },
+  {
+    "name": "libdbus-1-3",
+    "version": "1.14.10-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "AFL-2.1",
+      "BSD-3-clause",
+      "BSD-3-clause-generic",
+      "Expat",
+      "FSF-unlimited-permission",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-generic",
+      "FSF-unlimited-permission",
+      "Tcl-BSDish",
+      "autoconf-archive-permissive",
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "libdconf1",
+    "version": "0.40.0-4",
+    "type": "deb",
+    "licences": [
+      "GPL-3",
+      "LGPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libdebconfclient0",
+    "version": "0.270",
+    "type": "deb",
+    "licences": [
+      "BSD-2-Clause",
+      "BSD-2-clause",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libdeflate0",
+    "version": "1.14-1",
+    "type": "deb",
+    "licences": [
+      "Expat"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libdevel-callchecker-perl",
+    "version": "0.008-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libdevel-stacktrace-perl",
+    "version": "2.0400-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2.0",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libdevmapper1.02.1",
+    "version": "2:1.02.185-2",
+    "type": "deb",
+    "licences": [
+      "BSD-2-Clause",
+      "GPL-2",
+      "GPL-2.0",
+      "GPL-2.0+",
+      "LGPL-2",
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libdouble-conversion3",
+    "version": "3.2.1-1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libdrm-amdgpu1",
+    "version": "2.4.114-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ]
+  },
+  {
+    "name": "libdrm-common",
+    "version": "2.4.114-1",
+    "type": "deb",
+    "licences": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ]
+  },
+  {
+    "name": "libdrm-intel1",
+    "version": "2.4.114-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ]
+  },
+  {
+    "name": "libdrm-nouveau2",
+    "version": "2.4.114-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ]
+  },
+  {
+    "name": "libdrm-radeon1",
+    "version": "2.4.114-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ]
+  },
+  {
+    "name": "libdrm2",
+    "version": "2.4.114-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:512c9a57fd8b449aa157351da9df07bf8e19f767e496a72205a4020268ddb2e0"
+    ]
+  },
+  {
+    "name": "libdynaloader-functions-perl",
+    "version": "0.003-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libedit2",
+    "version": "3.1-20221030-2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libelf1",
+    "version": "0.188-2.1",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3",
+      "GPL-2",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GFDL-1.3",
+      "GFDL-NIV-1.3"
+    ]
+  },
+  {
+    "name": "libepoxy0",
+    "version": "1.5.10-1",
+    "type": "deb",
+    "licences": [
+      "Expat"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libeval-closure-perl",
+    "version": "0.14-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libexception-class-perl",
+    "version": "1.45-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libexpat1",
+    "version": "2.5.0-1+deb12u4",
+    "type": "deb",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libexporter-tiny-perl",
+    "version": "1.006000-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Expat",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libext2fs2",
+    "version": "1.47.0-2+b2",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "ISC",
+      "Kazlib",
+      "LGPL-2",
+      "Latex2e"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL",
+      "Kazlib",
+      "Latex2e"
+    ]
+  },
+  {
+    "name": "libfdisk1",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libffi8",
+    "version": "3.4.4-1",
+    "type": "deb",
+    "licences": [
+      "Expat",
+      "GPL",
+      "GPL-2+",
+      "GPL-3+",
+      "MPL-1.1",
+      "X11",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL",
+      "X11",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libfile-sharedir-perl",
+    "version": "1.118-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libflac12",
+    "version": "1.4.2+ds-2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GFDL-1.1+",
+      "GFDL-1.2",
+      "GPL-2",
+      "GPL-2+",
+      "ISC",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GFDL-1.1+",
+      "GFDL-1.2",
+      "Public-domain"
+    ]
+  },
+  {
+    "name": "libfontconfig1",
+    "version": "2.14.1-4",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libfontenc1",
+    "version": "1:1.1.4-1",
+    "type": "deb",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libfreetype6",
+    "version": "2.12.1+dfsg-5+deb12u4",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause",
+      "BSL-1.0",
+      "FSFAP",
+      "FTL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "MIT",
+      "OpenGroup-BSD-like",
+      "Public-Domain",
+      "Zlib"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "FSFAP",
+      "FTL",
+      "OpenGroup-BSD-like",
+      "Public-Domain"
+    ]
+  },
+  {
+    "name": "libfribidi0",
+    "version": "1.0.8-2.1",
+    "type": "deb",
+    "licences": [
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libgbm1",
+    "version": "22.3.6-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2-clause",
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MIT",
+      "MLAA",
+      "SGI"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MLAA",
+      "SGI"
+    ]
+  },
+  {
+    "name": "libgcc-s1",
+    "version": "12.2.0-14+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:da8191658b3452ce9caf31638ba61dab31a38c619fa39df119812e050f592fd3"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:da8191658b3452ce9caf31638ba61dab31a38c619fa39df119812e050f592fd3"
+    ]
+  },
+  {
+    "name": "libgcrypt20",
+    "version": "1.10.1-3+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:95db2f9da663f2bfe2aabe9c72fce9d6c9ae767b912f397d7823f50bd55a1a7d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:95db2f9da663f2bfe2aabe9c72fce9d6c9ae767b912f397d7823f50bd55a1a7d"
+    ]
+  },
+  {
+    "name": "libgdbm-compat4",
+    "version": "1.23-3",
+    "type": "deb",
+    "licences": [
+      "GFDL-NIV-1.3+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GFDL-NIV-1.3+"
+    ]
+  },
+  {
+    "name": "libgdbm6",
+    "version": "1.23-3",
+    "type": "deb",
+    "licences": [
+      "GFDL-NIV-1.3+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GFDL-NIV-1.3+"
+    ]
+  },
+  {
+    "name": "libgdk-pixbuf-2.0-0",
+    "version": "2.42.10+dfsg-1+deb12u4",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0"
+    ]
+  },
+  {
+    "name": "libgdk-pixbuf2.0-common",
+    "version": "2.42.10+dfsg-1+deb12u4",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0"
+    ]
+  },
+  {
+    "name": "libgl1",
+    "version": "1.6.0-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-1-clause",
+      "GPL",
+      "GPL-3",
+      "GPL-3+",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-1-clause",
+      "GPL"
+    ]
+  },
+  {
+    "name": "libgl1-mesa-dri",
+    "version": "22.3.6-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2-clause",
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MIT",
+      "MLAA",
+      "SGI"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MLAA",
+      "SGI"
+    ]
+  },
+  {
+    "name": "libglapi-mesa",
+    "version": "22.3.6-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2-clause",
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MIT",
+      "MLAA",
+      "SGI"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MLAA",
+      "SGI"
+    ]
+  },
+  {
+    "name": "libglib2.0-0",
+    "version": "2.74.6-2+deb12u9",
+    "type": "deb",
+    "licences": [
+      "AFL-2.0",
+      "Apache-2.0",
+      "BSD-3-clause-pcre",
+      "CC-BY-SA-3.0",
+      "CC0-1.0",
+      "Expat",
+      "FSFULLR",
+      "GPL-2",
+      "GPL-2+",
+      "Iconv-PD",
+      "Janik-permissive",
+      "Kuchling-PD",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "Mingw-PD",
+      "Old-GLib-Tests-permissive",
+      "Plumb-PD",
+      "Unicode-DFS-2016",
+      "bzip2-1.0.6"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-pcre",
+      "CC-BY-SA-3.0",
+      "CC0-1.0",
+      "FSFULLR",
+      "Iconv-PD",
+      "Janik-permissive",
+      "Kuchling-PD",
+      "Mingw-PD",
+      "Old-GLib-Tests-permissive",
+      "Plumb-PD",
+      "bzip2-1.0.6"
+    ]
+  },
+  {
+    "name": "libglvnd0",
+    "version": "1.6.0-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-1-clause",
+      "GPL",
+      "GPL-3",
+      "GPL-3+",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-1-clause",
+      "GPL"
+    ]
+  },
+  {
+    "name": "libglx-mesa0",
+    "version": "22.3.6-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2-clause",
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MIT",
+      "MLAA",
+      "SGI"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-google",
+      "BSL",
+      "GPL",
+      "Khronos",
+      "MLAA",
+      "SGI"
+    ]
+  },
+  {
+    "name": "libglx0",
+    "version": "1.6.0-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-1-clause",
+      "GPL",
+      "GPL-3",
+      "GPL-3+",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-1-clause",
+      "GPL"
+    ]
+  },
+  {
+    "name": "libgmp10",
+    "version": "2:6.2.1+dfsg1-1.1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-3",
+      "LGPL-3+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libgnutls30",
+    "version": "3.7.9-2+deb12u7",
+    "type": "deb",
+    "licences": [
+      "sha256:bb7e5c24b3e27bbba5671dd710d159a0066833bda4caa1d55d8027ffed539337"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:bb7e5c24b3e27bbba5671dd710d159a0066833bda4caa1d55d8027ffed539337"
+    ]
+  },
+  {
+    "name": "libgpg-error0",
+    "version": "1.46-1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "g10-permissive"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "g10-permissive"
+    ]
+  },
+  {
+    "name": "libgraphite2-3",
+    "version": "1.3.14-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MPL-1.1",
+      "custom-sil-open-font-license",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+",
+      "custom-sil-open-font-license",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libgssapi-krb5-2",
+    "version": "1.20.1-2+deb12u5",
+    "type": "deb",
+    "licences": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ]
+  },
+  {
+    "name": "libgtk-3-0",
+    "version": "3.24.38-2~deb12u3",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC-BY-SA-4.0",
+      "Expat",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "SWL",
+      "X11R5-permissive",
+      "ZPL-2.1",
+      "check-gdk-cairo-permissive",
+      "other",
+      "unencumbered"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC-BY-SA-4.0",
+      "SWL",
+      "X11R5-permissive",
+      "check-gdk-cairo-permissive",
+      "other",
+      "unencumbered"
+    ]
+  },
+  {
+    "name": "libgtk-3-common",
+    "version": "3.24.38-2~deb12u3",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC-BY-SA-4.0",
+      "Expat",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "SWL",
+      "X11R5-permissive",
+      "ZPL-2.1",
+      "check-gdk-cairo-permissive",
+      "other",
+      "unencumbered"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC-BY-SA-4.0",
+      "SWL",
+      "X11R5-permissive",
+      "check-gdk-cairo-permissive",
+      "other",
+      "unencumbered"
+    ]
+  },
+  {
+    "name": "libharfbuzz-subset0",
+    "version": "6.0.0+dfsg-3",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC0-1.0",
+      "Expat",
+      "FSFAP",
+      "FSFUL",
+      "FSFULLR",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "ISC",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MIT",
+      "Monotype",
+      "OFL-1.1",
+      "UFL-1.0",
+      "Unicode"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "FSFAP",
+      "FSFUL",
+      "FSFULLR",
+      "Monotype",
+      "UFL-1.0",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libharfbuzz0b",
+    "version": "6.0.0+dfsg-3",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "CC0-1.0",
+      "Expat",
+      "FSFAP",
+      "FSFUL",
+      "FSFULLR",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "ISC",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MIT",
+      "Monotype",
+      "OFL-1.1",
+      "UFL-1.0",
+      "Unicode"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "FSFAP",
+      "FSFUL",
+      "FSFULLR",
+      "Monotype",
+      "UFL-1.0",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libhash-merge-simple-perl",
+    "version": "0.051-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libhogweed6",
+    "version": "3.8.1-2",
+    "type": "deb",
+    "licences": [
+      "Expat",
+      "GAP",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-3+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GAP",
+      "GPL",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libice6",
+    "version": "2:1.0.10-1",
+    "type": "deb",
+    "licences": [
+      "sha256:fc16500a74acc2d0a7bb2fa1005956a52551abdce2afe0642a9a8dc2b6af53c6"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:fc16500a74acc2d0a7bb2fa1005956a52551abdce2afe0642a9a8dc2b6af53c6"
+    ]
+  },
+  {
+    "name": "libicu72",
+    "version": "72.1-3+deb12u1",
+    "type": "deb",
+    "licences": [
+      "GPL-3",
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libidn2-0",
+    "version": "2.3.3-1+b1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-3",
+      "LGPL-3+",
+      "Unicode"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libip4tc2",
+    "version": "1.8.9-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-2",
+      "GPL-2+",
+      "custom"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "custom"
+    ]
+  },
+  {
+    "name": "libjbig0",
+    "version": "2.1-6.1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libjpeg62-turbo",
+    "version": "1:2.1.5-2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-BY-LC-NE",
+      "Expat",
+      "NTP",
+      "Zlib"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-BY-LC-NE"
+    ]
+  },
+  {
+    "name": "libjson-c5",
+    "version": "0.16-2",
+    "type": "deb",
+    "licences": [
+      "Expat"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libk5crypto3",
+    "version": "1.20.1-2+deb12u5",
+    "type": "deb",
+    "licences": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ]
+  },
+  {
+    "name": "libkeyutils1",
+    "version": "1.6.3-2",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libkmod2",
+    "version": "30+20221128-1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libkrb5-3",
+    "version": "1.20.1-2+deb12u5",
+    "type": "deb",
+    "licences": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ]
+  },
+  {
+    "name": "libkrb5support0",
+    "version": "1.20.1-2+deb12u5",
+    "type": "deb",
+    "licences": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:936728f4181718f42951b881c1e8f1386bf6b2723c4fbc533c374d6f42c71816"
+    ]
+  },
+  {
+    "name": "liblcms2-2",
+    "version": "2.14-2+deb12u1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "IJG",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "IJG"
+    ]
+  },
+  {
+    "name": "liblerc4",
+    "version": "4.0.0+ds-2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "liblist-moreutils-perl",
+    "version": "0.430-2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "liblist-moreutils-xs-perl",
+    "version": "0.430-3+b1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libllvm15",
+    "version": "1:15.0.6-4+b1",
+    "type": "deb",
+    "licences": [
+      "APACHE-2-LLVM-EXCEPTIONS",
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "BSD-3-clause",
+      "MIT",
+      "Python",
+      "solar-public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "APACHE-2-LLVM-EXCEPTIONS",
+      "Python",
+      "solar-public-domain"
+    ]
+  },
+  {
+    "name": "liblz4-1",
+    "version": "1.9.4-1",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "liblzma5",
+    "version": "5.4.1-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "Autoconf",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "LGPL-2",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "PD",
+      "PD-debian",
+      "config-h",
+      "noderivs",
+      "permissive-fsf",
+      "permissive-nowarranty",
+      "probably-PD"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Autoconf",
+      "PD",
+      "PD-debian",
+      "config-h",
+      "noderivs",
+      "permissive-fsf",
+      "permissive-nowarranty",
+      "probably-PD"
+    ]
+  },
+  {
+    "name": "libmd0",
+    "version": "1.0.4-2",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "BSD-2-clause-NetBSD",
+      "BSD-3-clause",
+      "BSD-3-clause-Aaron-D-Gifford",
+      "Beerware",
+      "ISC",
+      "public-domain-md4",
+      "public-domain-md5",
+      "public-domain-sha1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-2-clause-NetBSD",
+      "BSD-3-clause-Aaron-D-Gifford",
+      "Beerware",
+      "public-domain-md4",
+      "public-domain-md5",
+      "public-domain-sha1"
+    ]
+  },
+  {
+    "name": "libminizip1",
+    "version": "1.1-8+deb12u1",
+    "type": "deb",
+    "licences": [
+      "zlib"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libmodule-implementation-perl",
+    "version": "0.09-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2.0",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libmodule-runtime-perl",
+    "version": "0.016-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libmount1",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libmp3lame0",
+    "version": "3.100-6",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-1",
+      "GPL-1+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "zlib/libpng"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+",
+      "zlib/libpng"
+    ]
+  },
+  {
+    "name": "libmpg123-0",
+    "version": "1.31.2-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libmro-compat-perl",
+    "version": "0.15-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libnamespace-autoclean-perl",
+    "version": "0.29-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libnamespace-clean-perl",
+    "version": "0.27-2",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libncursesw6",
+    "version": "6.4-4",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "MIT/X11",
+      "X11"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "MIT/X11",
+      "X11"
+    ]
+  },
+  {
+    "name": "libnettle8",
+    "version": "3.8.1-2",
+    "type": "deb",
+    "licences": [
+      "Expat",
+      "GAP",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-3+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GAP",
+      "GPL",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libnsl2",
+    "version": "1.3.0-2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-2",
+      "GPL-2+-autoconf-exception",
+      "GPL-2+-libtool-exception",
+      "GPL-3",
+      "GPL-3+-autoconf-exception",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MIT",
+      "permissive-autoconf-m4",
+      "permissive-autoconf-m4-no-warranty",
+      "permissive-configure",
+      "permissive-fsf",
+      "permissive-makefile-in"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-2+-autoconf-exception",
+      "GPL-2+-libtool-exception",
+      "GPL-3+-autoconf-exception",
+      "permissive-autoconf-m4",
+      "permissive-autoconf-m4-no-warranty",
+      "permissive-configure",
+      "permissive-fsf",
+      "permissive-makefile-in"
+    ]
+  },
+  {
+    "name": "libnspr4",
+    "version": "2:4.35-1",
+    "type": "deb",
+    "licences": [
+      "MPL-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libnss3",
+    "version": "2:3.87.1-1+deb12u4",
+    "type": "deb",
+    "licences": [
+      "BSD-3",
+      "MPL-2.0",
+      "Zlib",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libogg0",
+    "version": "1.3.5-3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "rfc3533-license",
+      "rfc5334-license"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "rfc3533-license",
+      "rfc5334-license"
+    ]
+  },
+  {
+    "name": "libopenh264-7",
+    "version": "2.3.1+dfsg-3+deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2-clause",
+      "Expat",
+      "MPL-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libopenjp2-7",
+    "version": "2.5.0-2+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-2",
+      "BSD-3",
+      "LIBPNG",
+      "LIBTIFF",
+      "LIBTIFF-GLARSON",
+      "LIBTIFF-PIXAR",
+      "MIT",
+      "ZLIB",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-2",
+      "BSD-3",
+      "LIBPNG",
+      "LIBTIFF",
+      "LIBTIFF-GLARSON",
+      "LIBTIFF-PIXAR",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libopus0",
+    "version": "1.3.1-3",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "BSD-3-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libp11-kit0",
+    "version": "0.24.1-2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "ISC",
+      "ISC+IBM",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "permissive-like-automake-output",
+      "same-as-rest-of-p11kit"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "ISC+IBM",
+      "permissive-like-automake-output",
+      "same-as-rest-of-p11kit"
+    ]
+  },
+  {
+    "name": "libpackage-stash-perl",
+    "version": "0.40-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libpam-modules",
+    "version": "1.5.2-6+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libpam-modules-bin",
+    "version": "1.5.2-6+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libpam-runtime",
+    "version": "1.5.2-6+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libpam-systemd",
+    "version": "252.39-1~deb12u2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "Expat",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libpam0g",
+    "version": "1.5.2-6+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-tcp_wrappers",
+      "Beerware",
+      "GPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libpango-1.0-0",
+    "version": "1.50.12+ds-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "Bitstream-Vera",
+      "CC0-1.0",
+      "Chromium-BSD-style",
+      "Example",
+      "GPL-2+",
+      "GPL-2.0",
+      "ICU",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "OFL-1.1",
+      "TCL",
+      "Unicode"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Bitstream-Vera",
+      "CC0-1.0",
+      "Chromium-BSD-style",
+      "Example",
+      "TCL",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libpangocairo-1.0-0",
+    "version": "1.50.12+ds-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "Bitstream-Vera",
+      "CC0-1.0",
+      "Chromium-BSD-style",
+      "Example",
+      "GPL-2+",
+      "GPL-2.0",
+      "ICU",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "OFL-1.1",
+      "TCL",
+      "Unicode"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Bitstream-Vera",
+      "CC0-1.0",
+      "Chromium-BSD-style",
+      "Example",
+      "TCL",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libpangoft2-1.0-0",
+    "version": "1.50.12+ds-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "Bitstream-Vera",
+      "CC0-1.0",
+      "Chromium-BSD-style",
+      "Example",
+      "GPL-2+",
+      "GPL-2.0",
+      "ICU",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "OFL-1.1",
+      "TCL",
+      "Unicode"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Bitstream-Vera",
+      "CC0-1.0",
+      "Chromium-BSD-style",
+      "Example",
+      "TCL",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libparams-classify-perl",
+    "version": "0.015-2+b1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libparams-util-perl",
+    "version": "1.102-2+b1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libparams-validationcompiler-perl",
+    "version": "0.31-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2.0",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libpciaccess0",
+    "version": "0.17-2",
+    "type": "deb",
+    "licences": [
+      "sha256:59f90c1ad1face5bd0a516feb8a71e005075d532c522b64ff06b2bfeebde8fe8"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:59f90c1ad1face5bd0a516feb8a71e005075d532c522b64ff06b2bfeebde8fe8"
+    ]
+  },
+  {
+    "name": "libpcre2-8-0",
+    "version": "10.42-1",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "BSD-3-clause",
+      "BSD-3-clause-Cambridge",
+      "X11",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-clause-Cambridge",
+      "X11",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libperl5.36",
+    "version": "5.36.0-7+deb12u3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2",
+      "Artistic-dist",
+      "BSD-3-clause",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "Expat",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "LGPL-2.1",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode",
+      "ZLIB"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Artistic-dist",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "libpixman-1-0",
+    "version": "0.42.2-1",
+    "type": "deb",
+    "licences": [
+      "sha256:1b3fb5690861e15ca4fd6640fd4def4b2576617942eec04b6fcb7d8bc6c4c9da"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:1b3fb5690861e15ca4fd6640fd4def4b2576617942eec04b6fcb7d8bc6c4c9da"
+    ]
+  },
+  {
+    "name": "libpng16-16",
+    "version": "1.6.39-2+deb12u5",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-3-clause",
+      "BSD-like-with-advertising-clause",
+      "GPL-2",
+      "GPL-2+",
+      "expat",
+      "libpng"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-like-with-advertising-clause",
+      "libpng"
+    ]
+  },
+  {
+    "name": "libproc2-0",
+    "version": "2:4.0.2-3",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2.0+",
+      "LGPL-2",
+      "LGPL-2.0+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libpulse0",
+    "version": "16.1+dfsg1-2+b1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "other"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "other"
+    ]
+  },
+  {
+    "name": "libpython3-stdlib",
+    "version": "3.11.2-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ]
+  },
+  {
+    "name": "libpython3.11-minimal",
+    "version": "3.11.2-6+deb12u8",
+    "type": "deb",
+    "licences": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ]
+  },
+  {
+    "name": "libpython3.11-stdlib",
+    "version": "3.11.2-6+deb12u8",
+    "type": "deb",
+    "licences": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ]
+  },
+  {
+    "name": "libreadline8",
+    "version": "8.2-1.3",
+    "type": "deb",
+    "licences": [
+      "GFDL",
+      "GFDL-NIV-1.3+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "ISC-no-attribution"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GFDL",
+      "GFDL-NIV-1.3+",
+      "ISC-no-attribution"
+    ]
+  },
+  {
+    "name": "librole-tiny-perl",
+    "version": "2.002004-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libseccomp2",
+    "version": "2.5.4-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libselinux1",
+    "version": "3.4-1+b6",
+    "type": "deb",
+    "licences": [
+      "sha256:641806738b0c6a3d03168c2649e6b94205198bb66cd557e6bae3a20b71c9bb0b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:641806738b0c6a3d03168c2649e6b94205198bb66cd557e6bae3a20b71c9bb0b"
+    ]
+  },
+  {
+    "name": "libsemanage-common",
+    "version": "3.4-1",
+    "type": "deb",
+    "licences": [
+      "sha256:e00e6a86c598f9e24ced0180a70a5f2f2e45e133d93adf2b17ce8a06ce4b1b51"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:e00e6a86c598f9e24ced0180a70a5f2f2e45e133d93adf2b17ce8a06ce4b1b51"
+    ]
+  },
+  {
+    "name": "libsemanage2",
+    "version": "3.4-1+b5",
+    "type": "deb",
+    "licences": [
+      "sha256:e00e6a86c598f9e24ced0180a70a5f2f2e45e133d93adf2b17ce8a06ce4b1b51"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:e00e6a86c598f9e24ced0180a70a5f2f2e45e133d93adf2b17ce8a06ce4b1b51"
+    ]
+  },
+  {
+    "name": "libsensors-config",
+    "version": "1:3.6.0-7.1",
+    "type": "deb",
+    "licences": [
+      "sha256:36df1f6d732ef306eba85489352b2afe329f7b54c6850c3e2094f7c5df1bc46b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:36df1f6d732ef306eba85489352b2afe329f7b54c6850c3e2094f7c5df1bc46b"
+    ]
+  },
+  {
+    "name": "libsensors5",
+    "version": "1:3.6.0-7.1",
+    "type": "deb",
+    "licences": [
+      "sha256:36df1f6d732ef306eba85489352b2afe329f7b54c6850c3e2094f7c5df1bc46b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:36df1f6d732ef306eba85489352b2afe329f7b54c6850c3e2094f7c5df1bc46b"
+    ]
+  },
+  {
+    "name": "libsepol2",
+    "version": "3.4-2.1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "Zlib"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libsm6",
+    "version": "2:1.2.3-1",
+    "type": "deb",
+    "licences": [
+      "sha256:333d829128c80619625f7e43a0ff0e79f36812b2b7ba12696eec9b4b42ce729b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:333d829128c80619625f7e43a0ff0e79f36812b2b7ba12696eec9b4b42ce729b"
+    ]
+  },
+  {
+    "name": "libsmartcols1",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libsndfile1",
+    "version": "1.2.0-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2-clause",
+      "BSD-3-clause",
+      "FSFAP",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "NTP",
+      "gsm",
+      "sun"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "FSFAP",
+      "gsm",
+      "sun"
+    ]
+  },
+  {
+    "name": "libspecio-perl",
+    "version": "0.48-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2.0",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsqlite3-0",
+    "version": "3.40.1-2+deb12u2",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libss2",
+    "version": "1.47.0-2+b2",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "ISC",
+      "Kazlib",
+      "LGPL-2",
+      "Latex2e"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL",
+      "Kazlib",
+      "Latex2e"
+    ]
+  },
+  {
+    "name": "libssl3",
+    "version": "3.0.22-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libstdc++6",
+    "version": "12.2.0-14+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:da8191658b3452ce9caf31638ba61dab31a38c619fa39df119812e050f592fd3"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:da8191658b3452ce9caf31638ba61dab31a38c619fa39df119812e050f592fd3"
+    ]
+  },
+  {
+    "name": "libsub-exporter-perl",
+    "version": "0.989-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsub-exporter-progressive-perl",
+    "version": "0.001013-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsub-identify-perl",
+    "version": "0.14-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsub-install-perl",
+    "version": "0.929-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsub-name-perl",
+    "version": "0.26-2+b1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsub-quote-perl",
+    "version": "2.006008-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libswitch-perl",
+    "version": "2.17-3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libsystemd-shared",
+    "version": "252.39-1~deb12u2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "Expat",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libsystemd0",
+    "version": "252.39-1~deb12u2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "Expat",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libtasn1-6",
+    "version": "4.19.0-2+deb12u1",
+    "type": "deb",
+    "licences": [
+      "sha256:572ad60ad184d8f52c6dc66d83a61a68f137db560b3452ce00588c9ecf128a65"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:572ad60ad184d8f52c6dc66d83a61a68f137db560b3452ce00588c9ecf128a65"
+    ]
+  },
+  {
+    "name": "libthai-data",
+    "version": "0.1.29-1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libthai0",
+    "version": "0.1.29-1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libtiff6",
+    "version": "4.5.0-6+deb12u4",
+    "type": "deb",
+    "licences": [
+      "Hylafax"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Hylafax"
+    ]
+  },
+  {
+    "name": "libtinfo6",
+    "version": "6.4-4",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "MIT/X11",
+      "X11"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "MIT/X11",
+      "X11"
+    ]
+  },
+  {
+    "name": "libtirpc-common",
+    "version": "1.3.3+ds-1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause",
+      "GPL-2",
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libtirpc3",
+    "version": "1.3.3+ds-1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause",
+      "GPL-2",
+      "LGPL-2.1"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libtry-tiny-perl",
+    "version": "0.31-2",
+    "type": "deb",
+    "licences": [
+      "Expat"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libudev1",
+    "version": "252.39-1~deb12u2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "Expat",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libunistring2",
+    "version": "1.0-2",
+    "type": "deb",
+    "licences": [
+      "FreeSoftware",
+      "GFDL-1.2",
+      "GFDL-1.2+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "FreeSoftware",
+      "GFDL-1.2",
+      "GFDL-1.2+"
+    ]
+  },
+  {
+    "name": "libunwind8",
+    "version": "1.6.2-3",
+    "type": "deb",
+    "licences": [
+      "Expat",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libuuid1",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "libvariable-magic-perl",
+    "version": "0.63-1+b1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libvorbis0a",
+    "version": "1.3.7-1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause",
+      "RFC-special"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "RFC-special"
+    ]
+  },
+  {
+    "name": "libvorbisenc2",
+    "version": "1.3.7-1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause",
+      "RFC-special"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "RFC-special"
+    ]
+  },
+  {
+    "name": "libwayland-client0",
+    "version": "1.21.0-1",
+    "type": "deb",
+    "licences": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ]
+  },
+  {
+    "name": "libwayland-cursor0",
+    "version": "1.21.0-1",
+    "type": "deb",
+    "licences": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ]
+  },
+  {
+    "name": "libwayland-egl1",
+    "version": "1.21.0-1",
+    "type": "deb",
+    "licences": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ]
+  },
+  {
+    "name": "libwayland-server0",
+    "version": "1.21.0-1",
+    "type": "deb",
+    "licences": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:736bf54141fa9808939ffff2691b817888ea53197484c2099e8d03b954b83e3b"
+    ]
+  },
+  {
+    "name": "libwebp7",
+    "version": "1.2.4-0.2+deb12u1",
+    "type": "deb",
+    "licences": [
+      "BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libx11-6",
+    "version": "2:1.8.4-2+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-1-Clause",
+      "HPND",
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libx11-data",
+    "version": "2:1.8.4-2+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-1-Clause",
+      "HPND",
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libx11-xcb1",
+    "version": "2:1.8.4-2+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-1-Clause",
+      "HPND",
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxau6",
+    "version": "1:1.0.9-1",
+    "type": "deb",
+    "licences": [
+      "sha256:118dd263a7b91c8f21c489f949bf13281dff9e766deea92b829dac4dce66601a"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:118dd263a7b91c8f21c489f949bf13281dff9e766deea92b829dac4dce66601a"
+    ]
+  },
+  {
+    "name": "libxaw7",
+    "version": "2:1.0.14-1",
+    "type": "deb",
+    "licences": [
+      "HPND",
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxcb-dri2-0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-dri3-0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-glx0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-present0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-randr0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-render0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-shape0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-shm0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-sync1",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb-xfixes0",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcb1",
+    "version": "1.15-1",
+    "type": "deb",
+    "licences": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:4f7cb9db6bf6542f5417e3d674c780d3a5fd12291a54d63054fb576ee0cfae80"
+    ]
+  },
+  {
+    "name": "libxcomposite1",
+    "version": "1:0.4.5-1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxcursor1",
+    "version": "1:1.2.1-1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxdamage1",
+    "version": "1:1.1.6-1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxdmcp6",
+    "version": "1:1.1.2-3",
+    "type": "deb",
+    "licences": [
+      "sha256:1bcbb50f8603fe8b86d330bfa460b772ea04fbd3c70e4499f0768b5340b9fd6e"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:1bcbb50f8603fe8b86d330bfa460b772ea04fbd3c70e4499f0768b5340b9fd6e"
+    ]
+  },
+  {
+    "name": "libxdo3",
+    "version": "1:3.20160805.1-5",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libxext6",
+    "version": "2:1.3.4-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:bc57e445ca1d9fe082c8d54189dd411ff26caa8552c9c63d44ea06a982f32124"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:bc57e445ca1d9fe082c8d54189dd411ff26caa8552c9c63d44ea06a982f32124"
+    ]
+  },
+  {
+    "name": "libxfixes3",
+    "version": "1:6.0.0-2",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxfont2",
+    "version": "1:2.0.6-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "BSD-2-Clause",
+      "BSD-4-Clause-UC",
+      "HPND",
+      "HPND-sell-variant",
+      "MIT"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-Clause-UC",
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxft2",
+    "version": "2.3.6-1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxi6",
+    "version": "2:1.8-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:c812f9c54513ae593aab9580b54a4b18219648df7068d49ca1daa47f522ba3fa"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:c812f9c54513ae593aab9580b54a4b18219648df7068d49ca1daa47f522ba3fa"
+    ]
+  },
+  {
+    "name": "libxinerama1",
+    "version": "2:1.1.4-3",
+    "type": "deb",
+    "licences": [
+      "sha256:e49d9732f261b3ffcb50c40914bd9d144de5557dad9b2ae20dbe8e3c5b3d17fb"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:e49d9732f261b3ffcb50c40914bd9d144de5557dad9b2ae20dbe8e3c5b3d17fb"
+    ]
+  },
+  {
+    "name": "libxkbcommon0",
+    "version": "1.5.0-1",
+    "type": "deb",
+    "licences": [
+      "sha256:5eeaeb1b6e029a0274e1573765bb0bae2926ef96a3679203faa4fd00fdaeaa88"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5eeaeb1b6e029a0274e1573765bb0bae2926ef96a3679203faa4fd00fdaeaa88"
+    ]
+  },
+  {
+    "name": "libxkbfile1",
+    "version": "1:1.1.0-1",
+    "type": "deb",
+    "licences": [
+      "sha256:41044d815bd99a5d1267fdabc79b5041fa83c7134639bb81e84f367cefe68316"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:41044d815bd99a5d1267fdabc79b5041fa83c7134639bb81e84f367cefe68316"
+    ]
+  },
+  {
+    "name": "libxml2",
+    "version": "2.9.14+dfsg-1.3~deb12u6",
+    "type": "deb",
+    "licences": [
+      "ISC",
+      "MIT-1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "MIT-1"
+    ]
+  },
+  {
+    "name": "libxmu6",
+    "version": "2:1.1.3-3",
+    "type": "deb",
+    "licences": [
+      "sha256:15a3a4d6627af76c0649067260debca0eb66248b96e5fda4f564aac38593e06f"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:15a3a4d6627af76c0649067260debca0eb66248b96e5fda4f564aac38593e06f"
+    ]
+  },
+  {
+    "name": "libxmuu1",
+    "version": "2:1.1.3-3",
+    "type": "deb",
+    "licences": [
+      "sha256:15a3a4d6627af76c0649067260debca0eb66248b96e5fda4f564aac38593e06f"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:15a3a4d6627af76c0649067260debca0eb66248b96e5fda4f564aac38593e06f"
+    ]
+  },
+  {
+    "name": "libxnvctrl0",
+    "version": "525.85.05-3~deb12u1",
+    "type": "deb",
+    "licences": [
+      "Expat",
+      "Expat-Precision",
+      "Expat-RedHat",
+      "GPL-2",
+      "other-MetroLink",
+      "other-XFree"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Expat-Precision",
+      "Expat-RedHat",
+      "other-MetroLink",
+      "other-XFree"
+    ]
+  },
+  {
+    "name": "libxpm4",
+    "version": "1:3.5.12-1.1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libxrandr2",
+    "version": "2:1.5.2-2+b1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxrender1",
+    "version": "1:0.9.10-1.1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxshmfence1",
+    "version": "1.3-1",
+    "type": "deb",
+    "licences": [
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxstring-perl",
+    "version": "0.005-2+b1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libxt6",
+    "version": "1:1.2.1-1.1",
+    "type": "deb",
+    "licences": [
+      "sha256:294382fd73d07b7b086c4829366bad834fc25cdf094400ec6ca4ff3b9ab73665"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:294382fd73d07b7b086c4829366bad834fc25cdf094400ec6ca4ff3b9ab73665"
+    ]
+  },
+  {
+    "name": "libxtst6",
+    "version": "2:1.2.3-1.1",
+    "type": "deb",
+    "licences": [
+      "sha256:304f78731e1e0e78132fbba4e1909c8642878a3b8c4837b36cb2d38891bf2204"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:304f78731e1e0e78132fbba4e1909c8642878a3b8c4837b36cb2d38891bf2204"
+    ]
+  },
+  {
+    "name": "libxv1",
+    "version": "2:1.0.11-1.1",
+    "type": "deb",
+    "licences": [
+      "HPND",
+      "HPND-sell-variant"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "HPND-sell-variant"
+    ]
+  },
+  {
+    "name": "libxxf86dga1",
+    "version": "2:1.1.5-1",
+    "type": "deb",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libxxf86vm1",
+    "version": "1:1.1.4-1+b2",
+    "type": "deb",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libxxhash0",
+    "version": "0.8.1-1",
+    "type": "deb",
+    "licences": [
+      "BSD-2-clause",
+      "GPL-2"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libyaml-tiny-perl",
+    "version": "1.73-1",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "libz3-4",
+    "version": "4.8.12-3.1",
+    "type": "deb",
+    "licences": [
+      "Expat",
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "libzstd1",
+    "version": "1.5.4+dfsg2-5",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "Expat",
+      "GPL-2",
+      "zlib"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "login",
+    "version": "1:4.13+dfsg1-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-1",
+      "GPL-2",
+      "GPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "logsave",
+    "version": "1.47.0-2+b2",
+    "type": "deb",
+    "licences": [
+      "Apache-2",
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "GPL",
+      "GPL-2",
+      "GPL-2+",
+      "ISC",
+      "Kazlib",
+      "LGPL-2",
+      "Latex2e"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL",
+      "Kazlib",
+      "Latex2e"
+    ]
+  },
+  {
+    "name": "lxml",
+    "version": "6.1.3",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "magika",
+    "version": "0.6.3",
+    "type": "python",
+    "licences": [
+      "Apache-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "mammoth",
+    "version": "1.11.0",
+    "type": "python",
+    "licences": [
+      "BSD-2-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "markdownify",
+    "version": "1.2.3",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "markitdown",
+    "version": "0.1.8",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "mawk",
+    "version": "1.3.4.20200120-3.1",
+    "type": "deb",
+    "licences": [
+      "CC-BY-3.0",
+      "GPL-2",
+      "X11"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC-BY-3.0",
+      "X11"
+    ]
+  },
+  {
+    "name": "media-types",
+    "version": "10.0.0",
+    "type": "deb",
+    "licences": [
+      "ad-hoc"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "ad-hoc"
+    ]
+  },
+  {
+    "name": "mount",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "ncurses-base",
+    "version": "6.4-4",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "MIT/X11",
+      "X11"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "MIT/X11",
+      "X11"
+    ]
+  },
+  {
+    "name": "ncurses-bin",
+    "version": "6.4-4",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "MIT/X11",
+      "X11"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "MIT/X11",
+      "X11"
+    ]
+  },
+  {
+    "name": "node",
+    "version": "22.23.1",
+    "type": "binary",
+    "licences": [],
+    "result": "FAIL",
+    "unresolved": [
+      "No detected licence"
+    ]
+  },
+  {
+    "name": "numpy",
+    "version": "2.4.6",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-Clause AND 0BSD AND MIT AND Zlib AND CC0-1.0"
+    ]
+  },
+  {
+    "name": "onnxruntime",
+    "version": "1.30.0",
+    "type": "python",
+    "licences": [
+      "MIT License"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "openpyxl",
+    "version": "3.1.5",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "openssl",
+    "version": "3.0.22-1~deb12u1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "Artistic",
+      "GPL-1",
+      "GPL-1+"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "GPL-1+"
+    ]
+  },
+  {
+    "name": "packaging",
+    "version": "26.3",
+    "type": "python",
+    "licences": [
+      "Apache-2.0 OR BSD-2-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "pandas",
+    "version": "3.0.6",
+    "type": "python",
+    "licences": [
+      "sha256:6dc1ad62d707e8dda646a5461c66fff8e6497c8656e04ccee9a64d411b017d65"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:6dc1ad62d707e8dda646a5461c66fff8e6497c8656e04ccee9a64d411b017d65"
+    ]
+  },
+  {
+    "name": "passwd",
+    "version": "1:4.13+dfsg1-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "GPL-1",
+      "GPL-2",
+      "GPL-2+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GPL-1",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "pdfminer-six",
+    "version": "20260107",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "pdfplumber",
+    "version": "0.11.10",
+    "type": "python",
+    "licences": [],
+    "result": "FAIL",
+    "unresolved": [
+      "No detected licence"
+    ]
+  },
+  {
+    "name": "perl",
+    "version": "5.36.0-7+deb12u3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2",
+      "Artistic-dist",
+      "BSD-3-clause",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "Expat",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "LGPL-2.1",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode",
+      "ZLIB"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Artistic-dist",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "perl-base",
+    "version": "5.36.0-7+deb12u3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2",
+      "Artistic-dist",
+      "BSD-3-clause",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "Expat",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "LGPL-2.1",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode",
+      "ZLIB"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Artistic-dist",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "perl-modules-5.36",
+    "version": "5.36.0-7+deb12u3",
+    "type": "deb",
+    "licences": [
+      "Artistic",
+      "Artistic-2",
+      "Artistic-dist",
+      "BSD-3-clause",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "Expat",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "LGPL-2.1",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode",
+      "ZLIB"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Artistic-dist",
+      "BSD-3-clause-GENERIC",
+      "BSD-3-clause-with-weird-numbering",
+      "BSD-4-clause-POWERDOG",
+      "BZIP",
+      "DONT-CHANGE-THE-GPL",
+      "GPL-1",
+      "GPL-1+",
+      "GPL-3+-WITH-BISON-EXCEPTION",
+      "HSIEH-BSD",
+      "HSIEH-DERIVATIVE",
+      "REGCOMP",
+      "REGCOMP,",
+      "RRA-KEEP-THIS-NOTICE",
+      "SDBM-PUBLIC-DOMAIN",
+      "TEXT-TABS",
+      "Unicode"
+    ]
+  },
+  {
+    "name": "pillow",
+    "version": "12.3.0",
+    "type": "python",
+    "licences": [
+      "MIT-CMU"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "MIT-CMU"
+    ]
+  },
+  {
+    "name": "playwright-core",
+    "version": "1.63.0",
+    "type": "npm",
+    "licences": [
+      "Apache-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "procps",
+    "version": "2:4.0.2-3",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2.0+",
+      "LGPL-2",
+      "LGPL-2.0+",
+      "LGPL-2.1",
+      "LGPL-2.1+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "protobuf",
+    "version": "7.36.2",
+    "type": "python",
+    "licences": [
+      "3-Clause BSD License"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "pycparser",
+    "version": "3.0",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "pypdfium2",
+    "version": "5.13.0",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause, Apache-2.0, dependency licenses"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-3-Clause, Apache-2.0, dependency licenses"
+    ]
+  },
+  {
+    "name": "python-dateutil",
+    "version": "2.9.0.post0",
+    "type": "python",
+    "licences": [
+      "Dual License"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "Dual License"
+    ]
+  },
+  {
+    "name": "python-dotenv",
+    "version": "1.2.4",
+    "type": "python",
+    "licences": [
+      "BSD-3-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "python-pptx",
+    "version": "1.0.2",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "python3",
+    "version": "3.11.2-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ]
+  },
+  {
+    "name": "python3-distutils",
+    "version": "3.11.2-3",
+    "type": "deb",
+    "licences": [
+      "sha256:183860dfd4168e0608fb99fe53cef26088ba7275ce38a41e3c737d4217c0ccc1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:183860dfd4168e0608fb99fe53cef26088ba7275ce38a41e3c737d4217c0ccc1"
+    ]
+  },
+  {
+    "name": "python3-lib2to3",
+    "version": "3.11.2-3",
+    "type": "deb",
+    "licences": [
+      "sha256:183860dfd4168e0608fb99fe53cef26088ba7275ce38a41e3c737d4217c0ccc1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:183860dfd4168e0608fb99fe53cef26088ba7275ce38a41e3c737d4217c0ccc1"
+    ]
+  },
+  {
+    "name": "python3-minimal",
+    "version": "3.11.2-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ]
+  },
+  {
+    "name": "python3-pip-whl",
+    "version": "23.0.1+dfsg-1",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-2",
+      "BSD-3",
+      "Expat",
+      "ISC",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "MPL-2",
+      "MPL-2.0",
+      "Python"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-2",
+      "BSD-3",
+      "MPL-2",
+      "Python"
+    ]
+  },
+  {
+    "name": "python3-setuptools-whl",
+    "version": "66.1.1-1+deb12u2",
+    "type": "deb",
+    "licences": [
+      "Apache-2.0",
+      "BSD-3-Clause",
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "python3-venv",
+    "version": "3.11.2-1+b1",
+    "type": "deb",
+    "licences": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5b274dbb44b28a54b795b9471c07ab045054d6b8a86273cb9feb632b6fd2760d"
+    ]
+  },
+  {
+    "name": "python3.11",
+    "version": "3.11.2-6+deb12u8",
+    "type": "deb",
+    "licences": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ]
+  },
+  {
+    "name": "python3.11-minimal",
+    "version": "3.11.2-6+deb12u8",
+    "type": "deb",
+    "licences": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ]
+  },
+  {
+    "name": "python3.11-venv",
+    "version": "3.11.2-6+deb12u8",
+    "type": "deb",
+    "licences": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:f1cbf908e1daa8789b389fdcf17811ed36b675d736b39a103591399861350382"
+    ]
+  },
+  {
+    "name": "readline-common",
+    "version": "8.2-1.3",
+    "type": "deb",
+    "licences": [
+      "GFDL",
+      "GFDL-NIV-1.3+",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "ISC-no-attribution"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "GFDL",
+      "GFDL-NIV-1.3+",
+      "ISC-no-attribution"
+    ]
+  },
+  {
+    "name": "requests",
+    "version": "2.34.2",
+    "type": "python",
+    "licences": [
+      "Apache-2.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "sed",
+    "version": "4.9-1+deb12u1",
+    "type": "deb",
+    "licences": [
+      "BSD-4-clause-UC",
+      "BSL-1",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3+",
+      "GPL-3",
+      "GPL-3+",
+      "ISC",
+      "X11",
+      "pcre"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause-UC",
+      "BSL-1",
+      "GFDL-1.3",
+      "GFDL-NIV-1.3+",
+      "X11",
+      "pcre"
+    ]
+  },
+  {
+    "name": "shared-mime-info",
+    "version": "2.2-1",
+    "type": "deb",
+    "licences": [
+      "sha256:5145b47d997486e5327091374e807046a32216168b6f2bbf6d1816f60927686c"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:5145b47d997486e5327091374e807046a32216168b6f2bbf6d1816f60927686c"
+    ]
+  },
+  {
+    "name": "six",
+    "version": "1.17.0",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "soupsieve",
+    "version": "2.10",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "ssl-cert",
+    "version": "1.1.2",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "systemd",
+    "version": "252.39-1~deb12u2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "Expat",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "systemd-sysv",
+    "version": "252.39-1~deb12u2",
+    "type": "deb",
+    "licences": [
+      "CC0-1.0",
+      "Expat",
+      "GPL-2",
+      "GPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "CC0-1.0",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "sysvinit-utils",
+    "version": "3.06-4",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2.0",
+      "GPL-2.0+",
+      "GPL-3",
+      "GPL-3.0"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "tar",
+    "version": "1.34+dfsg-1.2+deb12u1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL-3",
+      "LGPL-3+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "typing-extensions",
+    "version": "4.16.0",
+    "type": "python",
+    "licences": [
+      "PSF-2.0"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "PSF-2.0"
+    ]
+  },
+  {
+    "name": "tzdata",
+    "version": "2026b-0+deb12u1",
+    "type": "deb",
+    "licences": [
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "public-domain"
+    ]
+  },
+  {
+    "name": "urllib3",
+    "version": "2.8.0",
+    "type": "python",
+    "licences": [
+      "MIT"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "usr-is-merged",
+    "version": "37~deb12u1",
+    "type": "deb",
+    "licences": [
+      "GPL-2",
+      "GPL-2+"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "util-linux",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "util-linux-extra",
+    "version": "2.38.1-5+deb12u3",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause",
+      "BSD-4-clause",
+      "BSLA",
+      "GPL-2",
+      "GPL-2+",
+      "GPL-3",
+      "GPL-3+",
+      "LGPL",
+      "LGPL-2",
+      "LGPL-2+",
+      "LGPL-2.1",
+      "LGPL-2.1+",
+      "LGPL-3",
+      "LGPL-3+",
+      "MIT",
+      "public-domain"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD-4-clause",
+      "BSLA",
+      "LGPL",
+      "public-domain"
+    ]
+  },
+  {
+    "name": "x11-common",
+    "version": "1:7.7+23",
+    "type": "deb",
+    "licences": [
+      "sha256:2badb73e6e70d0bd2e0b85d39ce18d3c66cfebc3e301720374fa20e6539c947d"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:2badb73e6e70d0bd2e0b85d39ce18d3c66cfebc3e301720374fa20e6539c947d"
+    ]
+  },
+  {
+    "name": "x11-utils",
+    "version": "7.7+5",
+    "type": "deb",
+    "licences": [
+      "sha256:d0317ec182f7c587643808dd95cb358087154a8c0119e865b651dce49975cafc"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:d0317ec182f7c587643808dd95cb358087154a8c0119e865b651dce49975cafc"
+    ]
+  },
+  {
+    "name": "x11-xkb-utils",
+    "version": "7.7+7",
+    "type": "deb",
+    "licences": [
+      "sha256:bf23f1dfd52e0f7526b83496effacba1e3f29a38adaf119091efad060f8836b1"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:bf23f1dfd52e0f7526b83496effacba1e3f29a38adaf119091efad060f8836b1"
+    ]
+  },
+  {
+    "name": "xauth",
+    "version": "1:1.1.2-1",
+    "type": "deb",
+    "licences": [
+      "sha256:35f7f9792a4d64ef293878893d5cf07e09d2e5eb87fd17a4c0f47d66d4735c0c"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:35f7f9792a4d64ef293878893d5cf07e09d2e5eb87fd17a4c0f47d66d4735c0c"
+    ]
+  },
+  {
+    "name": "xdg-utils",
+    "version": "1.1.3-4.1",
+    "type": "deb",
+    "licences": [
+      "Expat"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "xdotool",
+    "version": "1:3.20160805.1-5",
+    "type": "deb",
+    "licences": [
+      "BSD-3-clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "xkb-data",
+    "version": "2.35.1-1",
+    "type": "deb",
+    "licences": [
+      "sha256:648621d1a2180678818eb393565849bbc8b332cc521c21e009d948ea5541b3c3"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "sha256:648621d1a2180678818eb393565849bbc8b332cc521c21e009d948ea5541b3c3"
+    ]
+  },
+  {
+    "name": "xlrd",
+    "version": "2.0.2",
+    "type": "python",
+    "licences": [
+      "BSD"
+    ],
+    "result": "FAIL",
+    "unresolved": [
+      "BSD"
+    ]
+  },
+  {
+    "name": "xlsxwriter",
+    "version": "3.2.9",
+    "type": "python",
+    "licences": [
+      "BSD-2-Clause"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
+    "name": "zlib1g",
+    "version": "1:1.2.13.dfsg-1",
+    "type": "deb",
+    "licences": [
+      "Zlib"
+    ],
+    "result": "PASS",
+    "unresolved": []
+  }
+]

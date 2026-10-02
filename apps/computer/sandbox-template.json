@@ -1,0 +1,111 @@
+{
+  "apiVersion": "extensions.agents.x-k8s.io/v1beta1",
+  "kind": "SandboxTemplate",
+  "metadata": {
+    "name": "computer"
+  },
+  "spec": {
+    "volumeClaimTemplatesPolicy": "Allowed",
+    "podTemplate": {
+      "metadata": {
+        "labels": {
+          "app": "computer"
+        }
+      },
+      "spec": {
+        "runtimeClassName": "gvisor",
+        "automountServiceAccountToken": false,
+        "terminationGracePeriodSeconds": 5,
+        "containers": [
+          {
+            "name": "computer",
+            "image": "k3d-ocn-registry:5000/opencrane/computer-candidate@sha256:c14aba2fa68fd654dca839cb5e78e76bf1cbc29714b796c8019612472dfc0d23",
+            "env": [
+              {
+                "name": "GATEWAY",
+                "value": "http://127.0.0.1:3000"
+              }
+            ],
+            "securityContext": {
+              "allowPrivilegeEscalation": false,
+              "capabilities": {
+                "drop": [
+                  "ALL"
+                ],
+                "add": [
+                  "SETUID",
+                  "SETGID",
+                  "CHOWN",
+                  "DAC_OVERRIDE"
+                ]
+              }
+            },
+            "resources": {
+              "requests": {
+                "memory": "256Mi",
+                "cpu": "100m"
+              },
+              "limits": {
+                "memory": "512Mi"
+              }
+            },
+            "readinessProbe": {
+              "httpGet": {
+                "path": "/health",
+                "port": 8081
+              },
+              "periodSeconds": 1,
+              "timeoutSeconds": 2
+            },
+            "volumeMounts": [
+              {
+                "name": "home",
+                "mountPath": "/home/agent"
+              },
+              {
+                "name": "codex",
+                "mountPath": "/home/codex"
+              },
+              {
+                "name": "control",
+                "mountPath": "/run/codex"
+              },
+              {
+                "name": "desktop",
+                "mountPath": "/home/desktop"
+              }
+            ]
+          }
+        ],
+        "volumes": [
+          {
+            "name": "home",
+            "emptyDir": {}
+          },
+          {
+            "name": "codex",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "control",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "desktop",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          }
+        ]
+      }
+    },
+    "networkPolicyManagement": "Unmanaged"
+  }
+}

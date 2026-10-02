@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-02T01:27:48.459048+00:00",
+  "status": "PARTIAL: functional checks pass; product release blocked by strict OSI licence gate",
+  "baseCommit": "61d898d6e7c5daf596480c099189f9cf26d29d24",
+  "environment": "Existing k3d ocn, fresh namespace and SandboxClaim, gVisor; no running dev-stack changes",
+  "image": "k3d-ocn-registry:5000/opencrane/computer-candidate@sha256:c14aba2fa68fd654dca839cb5e78e76bf1cbc29714b796c8019612472dfc0d23",
+  "size": {
+    "uncompressedBytes": 2907591991,
+    "compressedLayerBytes": 828697225
+  },
+  "podReady": {
+    "milliseconds": 4247,
+    "from": "SandboxClaim apply",
+    "to": "Pod Ready",
+    "conditions": "Cold new Pod; shared layers cached; single developer-box observation"
+  },
+  "checks": [
+    {
+      "name": "Pod ready",
+      "result": "PASS",
+      "detail": "4247 ms from claim apply, fresh Pod; local registry/layers may be cached"
+    },
+    {
+      "name": "runtime",
+      "result": "PASS",
+      "detail": "CRI confirms gVisor, 512 MiB limit"
+    },
+    {
+      "name": "health",
+      "result": "PASS",
+      "detail": "ready endpoint and ready report after Codex initialisation"
+    },
+    {
+      "name": "storage",
+      "result": "PASS",
+      "detail": "per-UID persistent directory ownership/modes and separate memory-backed credential mounts"
+    },
+    {
+      "name": "proxy grants",
+      "result": "PASS",
+      "detail": "dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below"
+    },
+    {
+      "name": "executor isolation",
+      "result": "PASS",
+      "detail": "real Codex-requested native exec-server command: UID 1001, seccomp EPERM for proxy/gateway/IPv6, private files and process tokens denied"
+    },
+    {
+      "name": "desktop",
+      "result": "PASS",
+      "detail": "UID 1002 + no_new_privs, private home denied; Playwright launches real Chromium and renders text"
+    },
+    {
+      "name": "documents",
+      "result": "PASS",
+      "detail": "MarkItDown converts generated sample PDF and Office DOCX/XLSX/PPTX without network"
+    },
+    {
+      "name": "network policy",
+      "result": "PASS",
+      "detail": "gateway-only TCP 3000 egress and server-only health ingress; removed-policy positive control"
+    },
+    {
+      "name": "cleanup",
+      "result": "PASS",
+      "detail": "p21-computer deleted"
+    }
+  ],
+  "gates": {
+    "lint": "PASS; two existing function-length warnings and existing Knip configuration hint",
+    "typecheck": "PASS all workspaces; computer repeated after source fixes",
+    "check:events": "PASS 70 matching types",
+    "test": "PASS 48 files / 879 tests, 138.43 seconds; PG_TEST_URL control database on port 55432",
+    "web:build": "PASS; existing CSS budget warning",
+    "web:test": "PASS 3 files / 36 tests",
+    "shellcheck": "PASS",
+    "licence-negative-test": "PASS real Syft inventory accepts MIT and rejects injected BUSL-1.1 package",
+    "product-build": "FAIL: strict licence gate; product tag not published",
+    "image-contents": "PASS: no baked runtime credentials, stock Kasm UI, npm build mount, test probe or MinIO binary"
+  },
+  "licences": {
+    "packages": 381,
+    "accepted": 100,
+    "unresolved": 281,
+    "inventory": "licences.json",
+    "sbom": "sbom.spdx.json.gz",
+    "sbomSha256": "395766d97913b86c21e635667724f81e82b6f237759d8bd30b07e214bf015bf3",
+    "decision": "No non-OSI or unknown-licence exceptions authorised. Candidate only; do not release."
+  },
+  "notRun": [
+    "Independent review (explicitly excluded)",
+    "Product registry tag release (licence gate blocked)",
+    "Fresh silo and full Phase 2 chat/upload journey",
+    "Paid model and MCP compatibility",
+    "Product bridge protocol, turn lifecycle and capability renewal",
+    "PVC suspend/resume on product image",
+    "Encrypted CSI, cloud, snapshots and multi-node recovery",
+    "Product live view/takeover",
+    "Clean-host or bit-for-bit rebuild"
+  ],
+  "sourceHashes": {
+    ".dockerignore": "674440e9df7750d8a1adcfdfce6ac2326a554ffa9837b55116b77f8d6c94593f",
+    "Dockerfile": "1375cfe46bb62ceae9bf39cbfb6dbb4e8551dd50ba94f6b843d1d13dcfa4def7",
+    "README.md": "e0f34e973b919ec5f50f85dde9e30cd74a6b2b29287460d19344d33233be89a2",
+    "apt.lock": "ca3d39d333d142b464a5d59693b67e5d81e2b18a06b2282caa151566bf1dd306",
+    "build.sh": "5e1dcb5258e07c7d52929f4f28bba73e83b31ea6a36df9a983d3bd4bdecae6f6",
+    "check-licences.py": "5cf619a100d3b32351fab155e93e6c41fc973847985762992f5ca5f69e722df0",
+    "network-policy.json": "2b5fc16894475501fc6c6058953dec00314e9483d213b9693f33ec23aad5eea9",
+    "package.json": "ae1baf7cd0d6e17a2f2e0b48ab35c2d48dbbe2bd849eb0f75712021b0c5c1e29",
+    "requirements.lock": "6a48196879393de636457b757c8a6784f90c672d76e15acc78ab376ac1c8e019",
+    "runtime-package-lock.json": "86c30905697b96674bd1b30255cb6e2acf5a91459e57b14fd2c638978f918288",
+    "runtime-package.json": "d6017dac97710312dc579101090561d89b096bf7a2e3716abecd050240a48961",
+    "sandbox-template.json": "7e34294ef277aa29affd4130360077c47e2037e3e4809da341af3391eed0ca16",
+    "src/bridge.ts": "7fb5939a554caad3a5f148040ee72170045d5a45b3a72204d50865d12b96f8f5",
+    "src/desktop.ts": "959353a6a15bbbf22430bbea82f8edded7ac2607b25fdd21da28bdf03b2c00b0",
+    "src/entrypoint.ts": "c3d0ff55f1519b01000aecf3d0e42722f6877ab3fa66e44f53141e20c7e425d8",
+    "src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6",
+    "src/proxy.ts": "762176df17bc0bbe5023c04c1ffd95dd8173dbd80d87e900801e292f0a092461",
+    "test/desktop.mjs": "3d1283adfc0d6d38430920f0159ba2064399d9c46ae1a5c8c668392b95d98188",
+    "test/document.py": "e011de4b5749ced20cda407249f7ffa8d3f68412157ad10212ed8593285cad48",
+    "test/licences.sh": "b1d721a547f7e26b3044aba17cc073b007638215b844ade9ea933c7cfa0d1bb6",
+    "test/run.mjs": "6cb822b0989f8f1fa907fc9aa4ca55877e769d3e6fb7de1b3e2a8029101e7c29",
+    "tool-user.c": "07dc9f862749089eb70f4b16a4ee764dde46302c23e74906c911eafe157445ac",
+    "tsconfig.json": "be9545c8c3cddc0b5c9d88452fc0b6c114848577e482676dc4436fb255d75c5d"
+  }
+}

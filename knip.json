@@ -1,6 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "ignore": ["**/.tools/**"],
+  "ignore": [
+    "**/.tools/**"
+  ],
   "workspaces": {
     ".": {
       "entry": [],
@@ -114,6 +116,23 @@
       "project": [
         "src/**/*.ts",
         "test/**/*.ts"
+      ]
+    },
+    "apps/computer": {
+      "entry": [
+        "src/entrypoint.ts",
+        "src/bridge.ts",
+        "src/desktop.ts"
+      ],
+      "project": [
+        "src/**/*.ts"
+      ],
+      "ignoreBinaries": [
+        "codex",
+        "kasmvncpasswd",
+        "Xvnc",
+        "setpriv",
+        "kubectl"
       ]
     }
   }
