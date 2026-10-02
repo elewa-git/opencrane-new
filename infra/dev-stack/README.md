@@ -77,6 +77,7 @@ The stack uses `https://weownai-oidc-8dwlat.eu1.zitadel.cloud` with the
 | Client | OpenCrane 2 Dev Web | `393311211707501969` |
 | Human owner | opencrane2-dev-owner | `393311211875208593` |
 | Human member | opencrane2-dev-member | `393311212596681804` |
+| External owner identity | existing WeOwnAI user | `378127409465593948` |
 
 The owner has `ORG_OWNER` in this organisation. OpenCrane product permissions
 come separately from invitation/join events and OpenFGA, never OIDC roles.
@@ -84,6 +85,20 @@ The app uses code + S256 PKCE and client-secret POST authentication, with redire
 `https://ocn-dev.tail00285e.ts.net/auth/callback` and
 `https://ocn-dev.tail00285e.ts.net/` after logout. The server pins the resource-owner
 claim to this organisation, requesting `urn:zitadel:iam:user:resourceowner`.
+
+The setup adds one role-free external user grant for subject `378127409465593948`
+to the OpenCrane project. It does not create or change that user, grant the project to
+the WeOwnAI organisation, or change either organisation. The login request remains
+unchanged: the resource-owner scope returns each user's own organisation, so it does
+not need an organisation hint. The server normally requires the OpenCrane organisation
+claim, but the dev environment allows this exact issuer and subject; all other subjects
+remain pinned. OpenCrane roles still come only from events and OpenFGA.
+
+Each `up` also runs a dev-only owner bootstrap after the projections and dispatcher
+start. Through the command NKey it conditionally appends `member.invited` and
+`member.joined`, binding that issuer and subject to owner member `jente-rosseel`.
+Existing stream state is checked first, so plain and `--fresh` runs do not duplicate it.
+Issue #12 replaces this temporary bootstrap.
 
 To rerun the setup, with `.keys/.zitadel-key` available locally:
 
@@ -94,7 +109,8 @@ flock "/tmp/opencrane-dev-stack-$(id -u).lock" \
 
 The script searches by exact organisation name, checks the recorded ID, and
 scopes all management requests to that org. It creates missing named resources
-and reuses existing ones. It does not rotate an existing client secret or password;
+and reuses existing ones, including the one external user grant. It does not read or
+change the external user. It does not rotate an existing client secret or password;
 missing secret files fail closed. The PAT is read only into an Authorization header,
 never printed or passed in argv. No other organisation or instance setting is changed.
 The script uses the documented [Zitadel management API](https://zitadel.com/docs/apis/resources/mgmt).
@@ -127,7 +143,8 @@ The five process logs are checked for the current ID token without printing it. 
 invitations bind these subjects to stable member IDs; they do not define the
 production first-owner policy. Each run adds a new invitation/join and MCP row.
 Wrong-org and expiry checks run another real server on temporary loopback ports:
-its pin differs from the real token's org, or its session lasts two seconds.
+its pin differs from the generated user's real token org while the owner's exact
+allowlist entry remains configured, or its session lasts two seconds.
 Only those browser auth requests go to the probe. No other cloud org is accessed.
 
 An explicit diagnostic fallback remains for an unreachable issuer only:
@@ -152,6 +169,7 @@ Each invocation adds invitation/join events for the two test members and a new M
 fresh runs remove this local business state.
 Failure exits non-zero. Private logs identify a failed stage without printing
 credentials. `status` reports the host processes, Compose and Tailscale service.
+The owner's own browser sign-in remains a manual check and is **NOT RUN** by these scripts.
 
 Run the repository gates with the existing control database:
 

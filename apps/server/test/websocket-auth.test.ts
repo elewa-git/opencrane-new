@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { connect } from 'node:net';
 import { WebSocket } from 'ws';
-import { encodeSession } from '@opencrane/auth';
+import { encodeSession, type AuthConfig } from '@opencrane/auth';
 import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from '../src/websocket.ts';
 import { replaceInCiphertext, tamperCookie, testAuthConfig, truncateAuthTag } from './support/test-auth-config.ts';
@@ -15,10 +15,10 @@ const ALLOWED_ORIGIN = 'https://app.example.test';
 const validSession = { sub: 'user-1', orgId: 'org-1', roles: [], authTime: nowSeconds, exp: nowSeconds + 3600 };
 const validSessionCookie = () => encodeSession(authConfig, validSession);
 
-async function startServer(): Promise<{ app: FastifyInstance; url: string }> {
-  const app = buildServer(authConfig);
+async function startServer(config: AuthConfig = authConfig): Promise<{ app: FastifyInstance; url: string }> {
+  const app = buildServer(config);
   await app.listen({ port: 0, host: '127.0.0.1' });
-  attachWebSocketServer(app.server, app.log, authConfig);
+  attachWebSocketServer(app.server, app.log, config);
   const address = app.server.address();
   if (!address || typeof address === 'string') throw new Error('expected a TCP address');
   return { app, url: `ws://127.0.0.1:${address.port}${WEBSOCKET_PATH}` };
@@ -125,6 +125,16 @@ describe('WebSocket upgrade requires a session', () => {
     app = started.app;
     const result = await attemptUpgrade(started.url, { Origin: ALLOWED_ORIGIN, Cookie: `${authConfig.cookieName}=${validSessionCookie()}` });
     expect(result).toBe('open');
+  });
+
+  it('keeps the organisation pin while accepting only an exact identity exception', async () => {
+    const config = testAuthConfig({ expectedOrgId: 'org-1',
+      extraIdentities: [{ issuer: 'https://idp.example.test', subject: 'owner' }] });
+    const started = await startServer(config);
+    app = started.app;
+    const cookie = (sub: string) => `${config.cookieName}=${encodeSession(config, { ...validSession, sub, orgId: 'org-other' })}`;
+    expect(await attemptUpgrade(started.url, { Origin: ALLOWED_ORIGIN, Cookie: cookie('other') })).toBe(403);
+    expect(await attemptUpgrade(started.url, { Origin: ALLOWED_ORIGIN, Cookie: cookie('owner') })).toBe('open');
   });
 
   it('closes a session that expires between authentication and connection while the server stays healthy', async () => {

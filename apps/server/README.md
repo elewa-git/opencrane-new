@@ -18,7 +18,8 @@ curl --fail http://localhost:8080/healthz
 Provision OIDC settings first; startup rejects missing or invalid configuration.
 Required: `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI` and
 `OIDC_COOKIE_SECRET` (at least 32 bytes, injected from the secret store).
-Production also requires `OIDC_EXPECTED_ORG_ID`. The callback is `/auth/callback`.
+Production also requires `OIDC_EXPECTED_ORG_ID`. `OIDC_EXTRA_IDENTITIES` may name exact
+issuer/subject exceptions; it is empty by default. The callback is `/auth/callback`.
 See [auth configuration and defaults](../../libs/auth/src/config.ts), including
 client-secret indirection, scopes, cookie settings and provider claim names.
 `HOST` defaults to `0.0.0.0`, `PORT` to `8080`, `LOG_LEVEL` to `info`.
@@ -176,4 +177,4 @@ For real Zitadel sign-in on the tailnet URL, use the [dev stack](../../infra/dev
 Browser callback refusals clear both cookies and redirect to `/signin/rejected` with
 one fixed reason code. API clients still receive 400 JSON. Provider discovery
 failure also reaches that screen. `/auth/me` refuses expired sessions and sessions
-whose organisation no longer matches the configured pin.
+whose organisation no longer matches the configured pin or an exact configured identity.

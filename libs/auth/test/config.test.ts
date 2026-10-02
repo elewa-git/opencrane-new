@@ -25,6 +25,7 @@ describe('loadAuthConfig', () => {
       flowCookieName: 'oc_auth_flow',
       orgClaim: 'org_id',
       rolesClaim: 'roles',
+      extraIdentities: [],
       stepUpMaxAgeSeconds: 5 * 60,
       allowInsecureRequests: false,
     });
@@ -36,6 +37,16 @@ describe('loadAuthConfig', () => {
     const config = loadAuthConfig({ ...requiredEnv, OIDC_STEP_UP_MAX_AGE_SECONDS: '90', OIDC_EXPECTED_ORG_ID: 'org-9' });
     expect(config.stepUpMaxAgeSeconds).toBe(90);
     expect(config.expectedOrgId).toBe('org-9');
+  });
+
+  it('reads exact issuer and subject exceptions from JSON', () => {
+    const extraIdentities = [{ issuer: 'https://idp.example.test', subject: 'owner-1' }];
+    const config = loadAuthConfig({ ...requiredEnv, OIDC_EXTRA_IDENTITIES: JSON.stringify(extraIdentities) });
+    expect(config.extraIdentities).toEqual(extraIdentities);
+  });
+
+  it.each(['not-json', '{}', '[{"issuer":"https://idp.example.test","subject":""}]'])('rejects malformed extra identities: %s', (value) => {
+    expect(() => loadAuthConfig({ ...requiredEnv, OIDC_EXTRA_IDENTITIES: value })).toThrow();
   });
 
   describe('pinning sign-in to the silo organisation', () => {

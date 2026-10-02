@@ -81,8 +81,8 @@ async function connect(sub = 'oidc-alice', org = 'org-acme', autoPong = true) {
     ws.send(JSON.stringify({ type: 'subscribe', topic: 'members', since, ...(generation === undefined ? {} : { generation }) }));
   } };
 }
-it.each(['cookie', 'origin', 'missing-origin'])('refuses an upgrade with bad %s in the real process', async (kind) => {
-  const h: Record<string, string> = headers();
+it.each(['cookie', 'origin', 'missing-origin', 'organisation'])('refuses an upgrade with bad %s in the real process', async (kind) => {
+  const h: Record<string, string> = kind === 'organisation' ? headers('oidc-alice', 'other') : headers();
   if (kind === 'cookie') delete h['cookie'];
   if (kind === 'origin') h['origin'] = 'https://evil.example.test';
   if (kind === 'missing-origin') delete h['origin'];
@@ -93,7 +93,7 @@ it.each(['cookie', 'origin', 'missing-origin'])('refuses an upgrade with bad %s 
   });
   expect(status).toBe(kind === 'cookie' ? 401 : 403);
 });
-it.each([['unknown', 'org-acme'], ['oidc-alice', 'other'], ['alice', 'org-acme']])('refuses identity %s in organisation %s regardless of cookie roles', async (sub, org) => {
+it.each([['unknown', 'org-acme'], ['alice', 'org-acme']])('refuses identity %s in organisation %s regardless of cookie roles', async (sub, org) => {
   const client = await connect(sub, org);
   const closed = once(client.ws, 'close');
   client.subscribe();

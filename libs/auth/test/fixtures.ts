@@ -81,6 +81,7 @@ export function testAuthConfig(overrides: Partial<AuthConfig> = {}): AuthConfig 
     sessionMaxAgeSeconds: 12 * 60 * 60,
     orgClaim: 'org_id',
     rolesClaim: 'roles',
+    extraIdentities: [],
     stepUpMaxAgeSeconds: 5 * 60,
     allowInsecureRequests: false,
     ...overrides,

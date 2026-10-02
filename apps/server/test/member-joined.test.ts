@@ -11,7 +11,8 @@ import { buildServer } from '../src/server.ts';
 import type { JoinResult, JoinStore } from '../src/members/join.ts';
 import { testAuthConfig, tamperCookie } from './support/test-auth-config.ts';
 
-const config = testAuthConfig({ expectedOrgId: 'org-acme' });
+const config = testAuthConfig({ expectedOrgId: 'org-acme',
+  extraIdentities: [{ issuer: 'https://idp.example.test', subject: 'idp-owner' }] });
 let clock = new Date('2026-10-01T12:00:00Z');
 const session: SessionData = {
   sub: 'idp-alice', orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000,
@@ -111,6 +112,13 @@ it('recognises the same command after NATS restart and invitation expiry without
   const append = vi.spyOn(nats.store, 'append');
   expect((await accept()).json<JoinResult>()).toEqual({ status: 'already_joined', memberId: 'alice', sequence: 2 });
   expect(append).not.toHaveBeenCalled();
+  expect(await history()).toHaveLength(2);
+});
+
+it('accepts an exactly allowlisted identity from another organisation', async () => {
+  const external = { ...session, sub: 'idp-owner', orgId: 'org-other' };
+  await invite({ invitedIdentity: { issuer: config.issuerUrl, sub: external.sub } });
+  expect((await accept(input, external)).json<JoinResult>()).toMatchObject({ status: 'joined', memberId: 'alice' });
   expect(await history()).toHaveLength(2);
 });
 

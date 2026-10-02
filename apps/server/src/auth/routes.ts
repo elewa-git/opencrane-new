@@ -22,6 +22,7 @@ import {
   encodeSession,
   FlowInvalidError,
   FLOW_MAX_AGE_SECONDS,
+  isIdentityAllowed,
   OidcLoginError,
   parseCookieHeader,
   sanitizeReturnTo,
@@ -118,7 +119,7 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     }
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ error: 'no session' });
-    if (config.expectedOrgId && session.orgId !== config.expectedOrgId) {
+    if (!isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })) {
       return reply.code(403).send({ error: 'wrong organisation' });
     }
     // Keep the token in the navigation header; never put it in a response body.
@@ -142,7 +143,9 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     }
     try {
       const session = decodeSession(config, cookieValue);
-      if (config.expectedOrgId && session.orgId !== config.expectedOrgId) return reply.send({ authenticated: false, user: null });
+      if (!isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })) {
+        return reply.send({ authenticated: false, user: null });
+      }
       const { sub, orgId, roles, authTime, exp } = session;
       reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp } });
     } catch (err) {

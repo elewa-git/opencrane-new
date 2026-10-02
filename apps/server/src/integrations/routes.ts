@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthConfig } from '@opencrane/auth';
+import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { connectMcpCatalogue, connectMemberFeed } from '@opencrane/projections';
 import type { IntegrationsResponse } from '@opencrane/protocol';
@@ -20,7 +20,8 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
     if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
-    if (session.orgId !== config.expectedOrgId || options.silo !== options.binding.silo) {
+    if (!isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })
+      || options.silo !== options.binding.silo) {
       return reply.code(403).send({ status: 'refused', reason: 'wrong_silo' });
     }
     try {

@@ -9,6 +9,9 @@ const issuer = 'https://weownai-oidc-8dwlat.eu1.zitadel.cloud';
 const name = 'OpenCrane 2 Dev';
 const origin = 'https://ocn-dev.tail00285e.ts.net';
 const object = z.object({ id: z.string(), name: z.string().optional(), preferredLoginName: z.string().optional() });
+const identity = z.object({ issuer: z.string(), subject: z.string() });
+const userGrant = z.object({ id: z.string(), userId: z.string(), projectId: z.string(), roleKeys: z.array(z.string()),
+  state: z.string(), details: z.object({ resourceOwner: z.string() }) });
 let orgId: string | undefined;
 async function api(path: string, body?: unknown) {
   const response = await fetch(`${issuer}${path}`, {
@@ -26,7 +29,10 @@ async function list(path: string, queries: unknown[] = []) {
 const exactName = (value: string) => [{ nameQuery: { name: value, method: 'TEXT_QUERY_METHOD_EQUALS' } }];
 try {
   await prepareDirectory();
-  const pinned = z.object({ orgId: z.string().optional() }).parse(JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')));
+  const pinned = z.object({ orgId: z.string().optional(), extraIdentities: z.array(identity).length(1) })
+    .parse(JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')));
+  const externalOwner = pinned.extraIdentities[0]!;
+  assert(externalOwner.issuer === issuer, 'External owner issuer must match this Zitadel instance');
   const orgs = await list('/admin/v1/orgs/_search', exactName(name));
   assert(orgs.length <= 1 && orgs.every((org) => org.name === name), 'Organisation search must be exact');
   if (pinned.orgId) assert(orgs[0]?.id === pinned.orgId, 'Recorded organisation missing or changed; refusing to create another');
@@ -78,13 +84,34 @@ try {
     assert(user.preferredLoginName);
     users[role] = { id: userId, login: user.preferredLoginName, passwordFile };
   }
+  const ownerGrants = z.object({ result: z.array(userGrant).default([]) }).parse(await api('/management/v1/users/grants/_search', {
+    query: { limit: 100 }, queries: [
+      { userIdQuery: { userId: externalOwner.subject } },
+      { projectIdQuery: { projectId } },
+    ],
+  })).result;
+  assert(ownerGrants.length <= 1, 'External owner has duplicate grants for this project');
+  let ownerGrantId = ownerGrants[0]?.id;
+  if (!ownerGrantId) {
+    ownerGrantId = z.object({ userGrantId: z.string() }).parse(await api(
+      `/management/v1/users/${externalOwner.subject}/grants`, { projectId, roleKeys: [] },
+    )).userGrantId;
+  } else {
+    const grant = ownerGrants[0]!;
+    assert(grant.userId === externalOwner.subject && grant.projectId === projectId
+      && grant.details.resourceOwner === orgId && grant.roleKeys.length === 0,
+    'External owner grant differs from the expected project-only access');
+    assert(grant.state === 'USER_GRANT_STATE_ACTIVE', 'External owner grant is not active');
+  }
   const members = z.object({ result: z.array(z.object({ userId: z.string(), roles: z.array(z.string()) })).default([]) })
     .parse(await api('/management/v1/orgs/me/members/_search', { query: { limit: 100 } })).result;
   const owner = members.find((member) => member.userId === users['owner']!.id);
   if (!owner) await api('/management/v1/orgs/me/members', { userId: users['owner']!.id, roles: ['ORG_OWNER'] });
   else assert(owner.roles.includes('ORG_OWNER'), 'Existing test owner has unexpected roles');
-  await save('zitadel.json', JSON.stringify({ issuer, orgId, projectId, appId, clientId, origin, users }, null, 2));
-  console.log(JSON.stringify({ name, orgId, projectId, appId, clientId, users }, null, 2));
+  await save('zitadel.json', JSON.stringify({ issuer, orgId, projectId, appId, clientId, origin, users,
+    extraIdentities: pinned.extraIdentities, externalOwnerGrantId: ownerGrantId }, null, 2));
+  console.log(JSON.stringify({ name, orgId, projectId, appId, clientId, users,
+    externalOwner: { subject: externalOwner.subject, userGrantId: ownerGrantId } }, null, 2));
 } catch (error) {
   // Only our fixed diagnostics are public; never dump a provider body or request.
   console.error(error instanceof assert.AssertionError ? error.message : 'Zitadel setup failed; no provider response was logged');

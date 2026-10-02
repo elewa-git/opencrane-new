@@ -133,6 +133,20 @@ describe('completeLogin: sign-in pinned to the silo organisation', () => {
     expect(await signIn(config)).toMatchObject({ sub: 'user-1', orgId: 'org-1' });
   });
 
+  it('lets in only the configured issuer and subject from another organisation', async () => {
+    const allowed = await setup({}, { expectedOrgId: 'org-2' });
+    allowed.config.extraIdentities.push({ issuer: allowed.provider.url, subject: 'user-1' });
+    expect(await signIn(allowed.config)).toMatchObject({ sub: 'user-1', orgId: 'org-1' });
+
+    const otherSubject = await setup({ user: { ...member, sub: 'user-2' } }, { expectedOrgId: 'org-2' });
+    otherSubject.config.extraIdentities.push({ issuer: otherSubject.provider.url, subject: 'user-1' });
+    await expectLoginRejected(signIn(otherSubject.config), 'different organisation');
+
+    const wrongIssuer = await setup({}, { expectedOrgId: 'org-2',
+      extraIdentities: [{ issuer: 'https://other-idp.example.test', subject: 'user-1' }] });
+    await expectLoginRejected(signIn(wrongIssuer.config), 'different organisation');
+  });
+
   it('does not decide on the organisation alone: a missing organisation claim is refused too', async () => {
     const provider = await startMockOidcProvider({ user: { sub: 'user-1', roles: [] } });
     providers.push(provider);

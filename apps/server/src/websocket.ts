@@ -6,7 +6,7 @@ import { URL } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
 import { parseEventByType } from '@opencrane/events';
-import { decodeSession, parseCookieHeader, type AuthConfig, type SessionData } from '@opencrane/auth';
+import { decodeSession, isIdentityAllowed, parseCookieHeader, type AuthConfig, type SessionData } from '@opencrane/auth';
 import {
   subscribeSchema,
   errorMessageSchema,
@@ -76,7 +76,12 @@ export function attachWebSocketServer(
           callback(false, 401, 'Unauthorized');
           return;
         }
-        sessions.set(info.req, decodeSession(authConfig, cookie, sessionNow()));
+        const session = decodeSession(authConfig, cookie, sessionNow());
+        if (!isIdentityAllowed(authConfig, { issuer: authConfig.issuerUrl, subject: session.sub, orgId: session.orgId })) {
+          callback(false, 403, 'Forbidden');
+          return;
+        }
+        sessions.set(info.req, session);
         callback(true);
       } catch {
         callback(false, 401, 'Unauthorized');

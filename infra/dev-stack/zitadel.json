@@ -4,5 +4,11 @@
   "projectId": "393311211539664273",
   "appId": "393311211707436433",
   "clientId": "393311211707501969",
-  "origin": "https://ocn-dev.tail00285e.ts.net"
+  "origin": "https://ocn-dev.tail00285e.ts.net",
+  "extraIdentities": [
+    {
+      "issuer": "https://weownai-oidc-8dwlat.eu1.zitadel.cloud",
+      "subject": "378127409465593948"
+    }
+  ]
 }
