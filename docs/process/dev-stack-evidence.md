@@ -94,3 +94,68 @@ Generated directory/file modes were checked as 0700/0600.
 
 Daily automation is not installed by this feature. The repeatable daily command
 is `infra/dev-stack/up.sh --fresh`; the owner/orchestrator chooses its schedule.
+
+## P2-2 post-rebase qualification, 2 October 2026
+
+**PASS:** `work/lifecycle` at `df2492d5e4e19723f248c2bf86c98837f33b4a2a`,
+on `ocn-dev` with the existing `k3d-ocn` gVisor cluster. The main checkout's
+stack was stopped before transferring its ownership marker to
+`/home/jente/dev/wt/lifecycle`. Zitadel files and `zitadel.json` were retained.
+No branch application or journey failure was found; no code fix was needed.
+
+| Command | Result | Join → Ready | Resume → Ready | Pod replacement |
+| --- | --- | --- | --- | --- |
+| `infra/dev-stack/up.sh --fresh` | PASS | 11,732 ms | 6,072 ms | Workspace file retained |
+| `infra/dev-stack/up.sh` | PASS | 161 ms | 7,674 ms | Workspace file retained |
+
+The repeated join reused the existing Ready computer; its 161 ms measurement
+is not a new-computer provisioning time. Both runs passed real Zitadel browser
+sign-in/out, organisation and expiry refusals, logout/token boundary checks,
+HTTP join, PostgreSQL/OpenFGA/WebSocket delivery, typed integrations and access
+refusals, members/MCP replay verification, tailnet HTTPS and listener checks.
+Tailscale Serve reported **tailnet only**, with no Funnel enabled.
+
+Additional read-only assertions against the event store, `handler_receipts`
+and the computers projection passed after the repeated run:
+
+- Each of `zitadel-owner` and `zitadel-member` had two `member.joined` events
+  and two completed `create-assistant` receipts, but only one `assistant.created`
+  event, one computer identity across all claims and one Ready projection row.
+- The computer IDs matched those observed after the fresh run. The owner's
+  generation remained 1; the member's advanced from 2 to 3 after the second
+  deliberate Pod deletion. Re-joining did not create a second computer.
+
+| Focused validation | Result |
+| --- | --- |
+| `npm run lint` | PASS |
+| `npm run typecheck` | PASS |
+| `npx tsc -p infra/dev-stack/tsconfig.json` | PASS |
+| `npx vitest run apps/ops/test/credentials.test.ts` | PASS, 1 test; real NATS and agentgateway |
+| `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run libs/projections/test/computers.test.ts` | PASS, 1 test; real PostgreSQL |
+
+The projection test was initially skipped without `PG_TEST_URL`; the explicit
+PostgreSQL run above passed.
+
+### Restore the owner's main stack
+
+Stopped the worktree stack, restored `stack-owner` to
+`/home/jente/dev/opencrane-new`, and ran that checkout's `up.sh` at
+`ea1f71c7385e7506b17854ca814c4e513328222f`. This first restoration attempt
+**FAILED**: the dispatcher correctly rejected the saved lifecycle handler set
+with “Dispatcher subscriptions changed; a controlled rebuild is required”.
+
+Recovery used main's existing `infra/dev-stack/up.sh --fresh`: **PASS**.
+This rebuilt disposable local stack state while retaining all `zitadel-*`
+files and `zitadel.json`; no dispatcher fence was weakened or code changed.
+All five main services were verified running from the main checkout, with
+the lifecycle-only worker stopped. No Zitadel provisioning changes were made;
+browser sign-ins used only organisation `393311211338337681`.
+
+Final plain `infra/dev-stack/up.sh` from the main checkout: **PASS**, including
+browser sign-in/out, replay and listener checks. The ownership marker remains
+on main and `https://ocn-dev.tail00285e.ts.net/` is serving main code, tailnet only.
+
+**NOT RUN in this qualification:** full test suite, `check:events`, separate web
+build/tests, standalone `LIFECYCLE_K3D` suite, independent review, managed-cluster
+qualification and owner-device interaction. The scope was the required dev-stack
+journey and focused tests plus lint/typecheck. No push or merge was performed.
