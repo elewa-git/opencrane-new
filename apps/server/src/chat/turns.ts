@@ -2,18 +2,19 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { chatHistory } from './commands.ts';
+import { ReportRejected } from './reports.ts';
 
 const binding = z.object({ conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(), requesterId: z.string(), task: z.literal('chat_turn') });
 /** Each lifecycle command makes one conditional append. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: { silo: string; computerId: string; assistantId: string },
-  input: { conversationId: string; turnId: string; threadId?: string | undefined; status: 'started' | 'completed' | 'failed' }) {
+  input: { conversationId: string; turnId: string; threadId?: string | undefined; status: 'started' | 'completed' | 'failed'; replay?: boolean }) {
   const rows = await chatHistory(store, context.silo, input.conversationId);
   const created = z.object({ assistantId: z.string() }).parse(rows.find(r => r.event.type === 'conversation.created')?.event.data);
   const message = rows.find(r => r.event.id === input.turnId && r.event.type === 'message.posted');
-  if (created.assistantId !== context.assistantId || !message) throw new Error('Unrequested turn');
+  if (created.assistantId !== context.assistantId || !message) throw new ReportRejected('Unrequested turn');
   const events = [];
   for await (const row of store.readStream(`computer-${context.assistantId}`)) {
-    if (row.event.silo !== context.silo) throw new Error('Computer silo mismatch');
+    if (row.event.silo !== context.silo) throw new ReportRejected('Computer silo mismatch');
     events.push(row);
   }
   const data = decideTurn(events, rows, input, context.computerId, z.object({ authorId: z.string() }).parse(message.event.data).authorId);
@@ -37,22 +38,23 @@ export async function turnCommand(store: EventStore, context: { silo: string; co
 function checkStart(events: StoredEvent[], rows: StoredEvent[], computerId: string, turnId: string) {
   const current = events.findLast(r => !r.event.type.startsWith('computer.turn_'));
   if (current?.event.type !== 'computer.ready' || z.object({ computerId: z.string() }).parse(current.event.data).computerId !== computerId) throw new Error('Computer is not ready');
-  if (rows.some(r => ['agent.turn_completed', 'agent.turn_failed'].includes(r.event.type) && z.object({ turnId: z.string() }).parse(r.event.data).turnId === turnId)) throw new Error('Turn is closed');
+  if (rows.some(r => ['agent.turn_completed', 'agent.turn_failed'].includes(r.event.type) && z.object({ turnId: z.string() }).parse(r.event.data).turnId === turnId)) throw new ReportRejected('Turn is closed');
 }
 
-function closedTurn(status: string) {
-  if (status === 'started') throw new Error('Turn is closed');
+function closedTurn(status: string, replay = false) {
+  if (status === 'started' && !replay) throw new ReportRejected('Turn is closed');
 }
 
-function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: { conversationId: string; turnId: string; threadId?: string | undefined; status: string }, computerId: string, requesterId: string) {
+function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: { conversationId: string; turnId: string; threadId?: string | undefined; status: string; replay?: boolean }, computerId: string, requesterId: string) {
   const turns = events.filter(r => r.event.type.startsWith('computer.turn_') && binding.parse(r.event.data).turnId === input.turnId);
   const closed = turns.find(r => r.event.type === 'computer.turn_closed');
-  if (closed) return closedTurn(input.status);
+  // A verified duplicate needs no new admission, even after terminal report recovery.
+  if (closed || (input.replay && input.status === 'started' && rows.some(r => ['agent.turn_completed', 'agent.turn_failed'].includes(r.event.type) && binding.pick({ turnId: true }).parse(r.event.data).turnId === input.turnId))) return closedTurn(input.status, input.replay);
   const started = turns.find(r => r.event.type === 'computer.turn_started');
   const data = started ? binding.parse(started.event.data) : binding.parse({ ...input,
     requesterId, task: 'chat_turn' });
   if (input.status === 'started') {
-    if (!input.threadId || input.threadId !== data.threadId) throw new Error('Thread mismatch');
+    if (!input.threadId || input.threadId !== data.threadId) throw new ReportRejected('Thread mismatch');
     if (started) return data;
     checkStart(events, rows, computerId, input.turnId);
   }
@@ -60,5 +62,5 @@ function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: { convers
 }
 
 function verifyBinding(saved: StoredEvent | undefined, expected: z.infer<typeof binding>) {
-  if (!saved || JSON.stringify(binding.parse(saved.event.data)) !== JSON.stringify(expected)) throw new Error('Turn binding conflict');
+  if (!saved || JSON.stringify(binding.parse(saved.event.data)) !== JSON.stringify(expected)) throw new ReportRejected('Turn binding conflict');
 }

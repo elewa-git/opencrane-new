@@ -244,7 +244,7 @@ export const toolsetChangedDataSchema = z
 // --- Conversations and agent activity ----------------------------------
 
 export const conversationCreatedDataSchema = z
-  .object({ conversationId: id, assistantId: id, createdBy: id, mode: z.enum(['agent_session', 'direct', 'group']) })
+  .object({ conversationId: id, assistantId: id, createdBy: id, mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session') })
   .strict();
 
 export const participantAddedDataSchema = z

@@ -16,6 +16,9 @@ it('creates and posts with event-id retries, rejects changed retries, and stores
     const created = { id: randomUUID(), conversationId, assistantId: 'assistant' };
     expect((await chatCommand(nats.store, keys, context, created)).status).toBe('appended');
     expect((await chatCommand(nats.store, keys, context, created)).status).toBe('appended');
+    const raw = await nats.connection.request('$JS.API.STREAM.MSG.GET.EVENTS', JSON.stringify({ seq: 1 }));
+    const stored = raw.json<{ message: { data: string } }>();
+    expect(JSON.parse(Buffer.from(stored.message.data, 'base64').toString()) as unknown).toMatchObject({ data: { mode: 'agent_session' } });
     const posted = { id: randomUUID(), conversationId, text: 'Hello computer' };
     expect((await chatCommand(nats.store, keys, context, posted)).status).toBe('appended');
     expect((await chatCommand(nats.store, keys, context, posted)).status).toBe('appended');

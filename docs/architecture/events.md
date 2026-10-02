@@ -147,7 +147,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `conversation.created` | command | conversations (immutable `mode`: `agent_session`, `direct` or `group`; Phase 2 accepts only `agent_session`) | OpenFGA participants |
+| `conversation.created` | command | conversations (immutable `mode`: `agent_session`, `direct` or `group`; Phase 2 accepts only `agent_session`; missing mode in older events reads as `agent_session`) | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
 | `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |

@@ -208,7 +208,8 @@ those keys with event backups; deleting a key makes that conversation’s event/
 Creation defaults omitted `mode` to `agent_session` and records it immutably in
 `conversation.created`. Phase 2 refuses `direct` and `group` with HTTP 400 and
 “Phase 2 supports only agent_session conversations”. The projection retains mode
-on replay. Changing creation arguments on a retry never changes the conversation.
+on replay; older stored events without mode read as `agent_session`. New commands
+always write mode. Changing creation arguments on a retry never changes the conversation.
 
 Each conversation thread has an ordered report queue: at most 64 reports and
 1 MiB, including the report being persisted; at most 64 queues per connection.
@@ -222,3 +223,13 @@ The start acknowledgement carries a fresh signed thread grant after a separate
 server lifecycle command has acquired the computer-stream suspend fence. Each
 command still makes one conditional append. Terminal reports trigger permanent
 server closure, recovered by the watcher if the server stops between those commands.
+
+A digest-matching start replay for an already closed turn is acknowledged without
+new admission or a turn grant, including recovery after a terminal report but
+before its lifecycle closure. Older journals without `previousSequence` replay
+in global computer order and check continuity across conversations.
+
+Permanent report refusals close with 1008 and a safe reason. The watcher logs the
+computer id and reason, then stops reconnecting that computer for its lifetime;
+other computers continue. Resolve the refused report before restarting the server.
+Transient persistence failures still close with 1011 and retry from durable history.

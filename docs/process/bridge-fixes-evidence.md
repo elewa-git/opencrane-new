@@ -1,5 +1,8 @@
 # P2-3 review fixes — 2 October 2026
 
+The later [replay receipt](bridge-replay-evidence.md) records review pass 2 and
+the owner-authorised final fix round. This receipt describes the earlier source.
+
 Source: `work/bridge`, parent `8185782`, correcting the bridge in `d024a38`.
 This receipt belongs to the commit containing these fixes. Review pass 1 was
 **FIX THEN LAND**. Pass 2 has not run; this change is committed locally, not landed.
