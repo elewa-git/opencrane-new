@@ -409,3 +409,14 @@ Record the source commit in each copied file's header or README.
 - **Recall quality:** qualify Postgres full-text search on real tasks before adding vector search or a later projection.
 - **Persistent volumes hold sensitive state:** use per-silo encrypted storage and short-lived tokens only; keep memory off the shared computer's disk and prevent a volume from being mounted by another computer identity.
 - **Scope creep:** a phase starts only when the previous phase's live PASS is in the ledger.
+
+## Model selection decision — 2 October 2026
+
+Owner: “allow all models but keep optimising. Choosing the right tool for the job
+is more important than cost.” The eleven-model registry and prices live in
+`libs/models/src/state.ts`; nano and mini are excluded. Chat turns default to
+6.1 Sol; the explicit task table routes demanding work to Astra and scoped work
+and frequent automations to Luna. Owners/admins see prices and routing through
+`/api/org/models`. Existing integer-cent daily/monthly caps apply to every model.
+See [the models contract](libs/models/README.md) and
+[qualification evidence](docs/process/models-evidence.md).

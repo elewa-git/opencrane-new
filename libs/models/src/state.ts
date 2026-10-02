@@ -2,25 +2,59 @@ import { z } from 'zod';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import type { Projection, Query } from '@opencrane/projections';
 
-// Pinned 2 October 2026, standard OpenAI text prices, planning FX 95/100 EUR/USD.
-// Per 100 million tokens keeps even the nano price an integer number of cents.
-export const priceTableId = 'openai-2026-10-02-eur95';
+// Pinned standard USD prices, 2 October 2026, at the existing EUR 95/100 planning FX.
+// Integer euro cents per billion tokens retain the $0.125 cache-write rate exactly.
+export const priceTableId = 'openai-2026-10-02-all-eur95';
+export const shortContextTokens = 272_000;
+const perTokens = 1_000_000_000;
+function rates(input: number, cached: number | null, writes: number | null, output: number) {
+  return { inputCents: input * 95, cachedInputCents: cached === null ? null : cached * 95,
+    cacheWriteCents: writes === null ? null : writes * 95, outputCents: output * 95 };
+}
+// USD thousandths per million tokens; this is the only price data to update.
 export const models = [
-  { id: 'gpt-5-nano', default: true, inputCents: 475, outputCents: 3800, perTokens: 100_000_000 },
-  { id: 'gpt-5-mini', default: false, inputCents: 2375, outputCents: 19000, perTokens: 100_000_000 },
-] as const;
-export function costCents(model: string, inputTokens: number, outputTokens: number): number {
-  const price = models.find(row => row.id === model);
-  if (!price || ![inputTokens, outputTokens].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('Invalid usage');
-  const numerator = BigInt(inputTokens) * BigInt(price.inputCents) + BigInt(outputTokens) * BigInt(price.outputCents);
-  const cents = Number((numerator + BigInt(price.perTokens) - 1n) / BigInt(price.perTokens));
+  { id: 'gpt-6-astra', short: rates(10000, 1000, 12500, 50000), long: rates(20000, 2000, 25000, 75000) },
+  { id: 'gpt-6.1-sol', short: rates(2000, 100, 2500, 10000), long: rates(4000, 200, 5000, 15000) },
+  { id: 'gpt-6-luna', short: rates(100, 10, 125, 500), long: rates(200, 20, 250, 750) },
+  { id: 'gpt-6-sol', short: rates(2000, 200, 2500, 10000), long: rates(4000, 400, 5000, 15000) },
+  { id: 'gpt-5.6-sol', short: rates(4000, 400, 5000, 20000), long: rates(8000, 800, 10000, 30000) },
+  { id: 'gpt-5.6-terra', short: rates(2000, 200, 2500, 12000), long: rates(4000, 400, 5000, 18000) },
+  { id: 'gpt-5.6-luna', short: rates(200, 20, 250, 1200), long: rates(400, 40, 500, 1800) },
+  { id: 'gpt-5.5', short: rates(5000, 500, null, 30000), long: rates(10000, 1000, null, 45000) },
+  { id: 'gpt-5.5-pro', short: rates(30000, null, null, 180000), long: rates(60000, null, null, 270000) },
+  { id: 'gpt-5.4', short: rates(2500, 250, null, 15000), long: rates(5000, 500, null, 22500) },
+  { id: 'gpt-5.4-pro', short: rates(30000, null, null, 180000), long: rates(60000, null, null, 270000) },
+].map(row => ({ ...row, default: row.id === 'gpt-6.1-sol', perTokens }));
+function priceFor(model: string, inputTokens: number) {
+  const modelPrice = models.find(row => row.id === model);
+  if (!modelPrice) throw new Error('Unknown model');
+  return inputTokens <= shortContextTokens ? modelPrice.short : modelPrice.long;
+}
+function roundedCents(numerator: bigint): number {
+  const cents = Number((numerator + BigInt(perTokens) - 1n) / BigInt(perTokens));
   if (!Number.isSafeInteger(cents)) throw new Error('Cost overflow');
   return cents;
+}
+export function costCents(model: string, inputTokens: number, outputTokens: number, cachedInputTokens = 0, cacheWriteTokens = 0): number {
+  if (![inputTokens, outputTokens, cachedInputTokens, cacheWriteTokens].every(n => Number.isSafeInteger(n) && n >= 0) ||
+      cachedInputTokens + cacheWriteTokens > inputTokens) throw new Error('Invalid usage');
+  const price = priceFor(model, inputTokens);
+  if ((cachedInputTokens && price.cachedInputCents === null) || (cacheWriteTokens && price.cacheWriteCents === null)) throw new Error('Unsupported cache usage');
+  return roundedCents(BigInt(inputTokens - cachedInputTokens - cacheWriteTokens) * BigInt(price.inputCents) +
+    BigInt(cachedInputTokens) * BigInt(price.cachedInputCents ?? 0) + BigInt(cacheWriteTokens) * BigInt(price.cacheWriteCents ?? 0) +
+    BigInt(outputTokens) * BigInt(price.outputCents));
+}
+// ponytail: full supported context is the safe bound until we measure server-side tokenisation.
+export function reservationCents(model: string, outputBound: number, inputBound = 1_050_000): number {
+  if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('Invalid bound');
+  const price = priceFor(model, inputBound);
+  return roundedCents(BigInt(inputBound) * BigInt(Math.max(price.inputCents, price.cacheWriteCents ?? 0)) +
+    BigInt(outputBound) * BigInt(price.outputCents));
 }
 export function data(event: EventEnvelope): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);
 }
-const callSchema = z.object({ model: z.string(), priceTableId: z.literal(priceTableId), computerId: z.string(),
+const callSchema = z.object({ model: z.string(), priceTableId: z.string().min(1), computerId: z.string(),
   assistantId: z.string(), requesterId: z.string(), conversationId: z.string(), turnId: z.string(), threadId: z.string(), contextDigest: z.string() }).strict();
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),

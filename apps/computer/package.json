@@ -8,6 +8,7 @@
     "test:image": "node test/run.mjs"
   },
   "dependencies": {
-    "ws": "8.22.0"
+    "ws": "8.22.0",
+    "@opencrane/models": "0.1.0"
   }
 }

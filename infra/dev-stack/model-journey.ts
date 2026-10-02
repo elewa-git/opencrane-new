@@ -30,7 +30,7 @@ export async function modelJourney(store: EventStore, tokens: Awaited<ReturnType
         const result = await send({ hostname: '127.0.0.1', port: 8080, path: '/v1/responses', method: 'POST', headers: {
           authorization: 'Bearer ' + fs.readFileSync('/home/codex/caller', 'utf8').trim(),
           'session-id': grant.conversationId, 'content-type': 'application/json' } },
-          { model: 'gpt-5-nano', input: 'Stub journey', max_output_tokens: 128, stream: true });
+          { model: 'gpt-6-luna', input: 'Stub journey', max_output_tokens: 128, stream: true });
         process.stdout.write(JSON.stringify({ status: result.status, completed: result.text.includes('response.completed') }));
       } catch { process.stderr.write('Computer model journey failed'); process.exitCode = 1; }
     });`;

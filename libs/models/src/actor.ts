@@ -81,7 +81,7 @@ export class BudgetActor {
       const d = effectObservedDataSchema.parse(event.data);
       const r = this.state.reservations.find(r => r.id === d.permitId);
       const validCost = d.usage ? d.usage.priceTableId === priceTableId &&
-        d.costCents === costCents(d.tool, d.usage.inputTokens, d.usage.outputTokens) : d.outcome === 'error' && d.costCents === 0;
+        d.costCents === costCents(d.tool, d.usage.inputTokens, d.usage.outputTokens, d.usage.cachedInputTokens, d.usage.cacheWriteTokens) : d.outcome === 'error' && d.costCents === 0;
       if (!r || !validCost || d.computerId !== r.call.computerId || d.tool !== r.call.model) throw new Error('Usage does not match reservation');
       if (r.settledCents !== undefined) {
         if (r.settledCents !== d.costCents) throw new Error('Conflicting settlement');
@@ -91,7 +91,7 @@ export class BudgetActor {
       await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: d.costCents });
     });
   }
-  async effect(id: string, usage?: { inputTokens: number; outputTokens: number }, outcome: 'success' | 'error' = 'success') {
+  async effect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
     const r = this.state.reservations.find(r => r.id === id);
     if (!r) throw new Error('Unmatched gateway reservation');
     const type = usage || outcome === 'error' ? 'effect.observed' : 'effect.uncertain';
@@ -99,7 +99,7 @@ export class BudgetActor {
     const rows = await history(this.store, `effect-${id}`, this.silo);
     if (rows.some(row => row.event.id === eventId)) return;
     const payload = type === 'effect.observed' ? { permitId: id, computerId: r.call.computerId, tool: r.call.model, destination: 'openai',
-      costCents: usage ? costCents(r.call.model, usage.inputTokens, usage.outputTokens) : 0, outcome,
+      costCents: usage ? costCents(r.call.model, usage.inputTokens, usage.outputTokens, usage.cachedInputTokens, usage.cacheWriteTokens) : 0, outcome,
       ...(usage ? { usage: { ...usage, priceTableId } } : {}) }
       : { permitId: id, computerId: r.call.computerId, reason: 'settle_timeout' };
     const result = await this.store.append({ event: envelope(this.silo, `effect-${id}`, type, payload, eventId),

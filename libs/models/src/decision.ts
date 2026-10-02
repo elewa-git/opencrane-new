@@ -6,7 +6,7 @@ import { computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { BudgetActor, history } from './actor.ts';
-import { costCents, data, models, priceTableId, type ModelCall } from './state.ts';
+import { reservationCents, data, models, priceTableId, type ModelCall } from './state.ts';
 
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
@@ -16,11 +16,11 @@ const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: i
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
   content: z.union([z.string(), z.array(textContent)]) }).strict();
-const requestSchema = z.object({ model: z.enum(['gpt-5-nano', 'gpt-5-mini']), stream: z.literal(true),
+const requestSchema = z.object({ model: z.enum(models.map(row => row.id)), stream: z.literal(true),
   input: z.union([z.string(), z.array(z.union([message,
     z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string() }).strict(),
     z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
-  instructions: z.string().optional(), max_output_tokens: z.int().positive().max(2000),
+  instructions: z.string().optional(), max_output_tokens: z.int().min(16).max(2000),
   tools: z.array(z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
     parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict()).optional(),
   reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional() }).strict().optional(),
@@ -89,9 +89,9 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       const body = requestSchema.parse(await readBody(req));
       const call = await context(actor, binding, c, t, checked.sequence);
       call.model = body.model;
-      // ponytail: reserve the entire 400k context; tokenisation can replace this conservative bound later.
+      // No client token count is trusted; reserve the full supported context at long rates.
       reservationAttempted = true;
-      const reservation = await actor.reserve(call, costCents(body.model, 400_000, body.max_output_tokens));
+      const reservation = await actor.reserve(call, reservationCents(body.model, body.max_output_tokens));
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {
       // A budget command may already have appended, even if its acknowledgement was lost.

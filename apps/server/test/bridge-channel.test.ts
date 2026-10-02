@@ -11,9 +11,11 @@ import { bridgeChannel } from '../../computer/src/channel.ts';
 it('authenticates, overlaps conversations and replays a strict report sequence after disconnect', async () => {
   const directory = await mkdtemp(`${tmpdir()}/bridge-`), server = createServer();
   let calls = 0;
+  const turnModels: unknown[] = [];
   const channel = bridgeChannel(server, {
     rpc(method, input) {
       if (method === 'thread/start') return Promise.resolve({ thread: { id: `thread-${++calls}` } });
+      if (method === 'turn/start') { turnModels.push(input['model']); }
       if (method === 'turn/start') channel.notification({ method: 'item/agentMessage/delta', params: { threadId: input['threadId'], itemId: 'reply', delta: 'Hello' } });
       return Promise.resolve({});
     },
@@ -40,6 +42,7 @@ it('authenticates, overlaps conversations and replays a strict report sequence a
     for (const conversationId of ['alice', 'bob']) socket.send(JSON.stringify({ type: 'turn', id: conversationId, conversationId, assistantId: 'assistant', text: 'Hello', token: 'test-turn', expiresAt: Date.now()+60_000 }));
     await until(() => reports.filter(r => r.type === 'agent.message_delta').length === 2);
     expect(calls).toBe(2);
+    expect(turnModels).toEqual(['gpt-6.1-sol', 'gpt-6.1-sol']);
     channel.notification({ method: 'item/reasoning/summaryTextDelta', params: { threadId: 'thread-1', delta: 'Checking the request.' } });
     channel.notification({ method: 'item/completed', params: { threadId: 'thread-1', item: { type: 'commandExecution', command: 'echo safe', exitCode: 0 } } });
     await until(() => reports.some(r => r.type === 'agent.command_ran'));

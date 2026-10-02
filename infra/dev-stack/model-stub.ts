@@ -13,7 +13,7 @@ const server = createServer((req, res) => {
     emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
     for (const delta of ['Hello ', 'from your ', 'computer.']) { emit({ type: 'response.output_text.delta', delta }); await delay(100); }
     emit({ type: 'response.output_item.done', item: { id: message, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello from your computer.' }] } });
-    emit({ type: 'response.completed', response: { id, status: 'completed', model: 'gpt-5-nano', usage: { input_tokens: 1000, output_tokens: 120, total_tokens: 1120 } } });
+    emit({ type: 'response.completed', response: { id, status: 'completed', model: 'gpt-6-luna', usage: { input_tokens: 1000, output_tokens: 120, total_tokens: 1120 } } });
     res.end();
   })().catch(() => res.destroy());
 });

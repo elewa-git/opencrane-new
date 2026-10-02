@@ -1,4 +1,4 @@
-import { models, totals, readBudget } from '@opencrane/models';
+import { models, taskRouting, priceTableId, shortContextTokens, totals, readBudget } from '@opencrane/models';
 import type { Query } from '@opencrane/projections';
 import type { FastifyInstance } from 'fastify';
 import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
@@ -39,7 +39,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       }
       if (path === '/api/org/models') {
         if (!options.modelDb) return reply.code(503).send({ status: 'unavailable' });
-        return reply.send({ models, ...totals(await readBudget(options.modelDb, options.silo), now()) });
+        return reply.send({ models, taskRouting, priceTableId, shortContextTokens, ...totals(await readBudget(options.modelDb, options.silo), now()) });
       }
       const response: IntegrationsResponse = { rows: await options.catalogue.rows(options.silo), loadedAt: now().toISOString() };
       return reply.send(response);

@@ -2,6 +2,7 @@ import type { Server, IncomingMessage } from 'node:http';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 
 export interface BridgeReport {
@@ -14,15 +15,18 @@ interface Driver {
   credential(): { value: string; expiresAt: number };
   journal: string;
 }
-interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number }
+interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number; taskKind: string }
 function string(value: Record<string, unknown>, name: string): string {
   const result = value[name]; if (typeof result !== 'string' || !result) throw new Error('Invalid bridge field'); return result;
 }
 function turn(value: Record<string, unknown>): Turn {
   const expiresAt = value['expiresAt'];
+  const taskKind = value['taskKind'] ?? 'chat_turn';
+  if (typeof taskKind !== 'string') throw new Error('Invalid task kind');
+  modelForTask(taskKind); // Reject unknown task kinds at the bridge boundary.
   if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) throw new Error('Expired turn');
   return { id: string(value, 'id'), conversationId: string(value, 'conversationId'), assistantId: string(value, 'assistantId'),
-    text: string(value, 'text'), token: string(value, 'token'), expiresAt };
+    text: string(value, 'text'), token: string(value, 'token'), expiresAt, taskKind };
 }
 function stored(line: string): BridgeReport {
   const value = record(JSON.parse(line) as unknown), sequence = value['sequence'];
@@ -66,13 +70,13 @@ export function bridgeChannel(server: Server, driver: Driver) {
     try {
       const previous = reports.findLast(r => r.conversationId === input.conversationId && r.threadId)?.threadId;
       const response = record(await driver.rpc(previous ? 'thread/resume' : 'thread/start', previous
-        ? { threadId: previous } : { cwd: '/workspace', model: 'gpt-5-nano', approvalPolicy: 'never', sandbox: 'danger-full-access' }));
+        ? { threadId: previous } : { cwd: '/workspace', model: modelForTask(input.taskKind), approvalPolicy: 'never', sandbox: 'danger-full-access' }));
       const thread = record(response['thread'])['id']; if (typeof thread !== 'string') throw new Error('Missing thread');
       active.delete(input.conversationId); active.set(thread, input);
       const sequence = report(input, 'agent.turn_started', { threadId: thread });
       await new Promise<void>(resolve => { if (acknowledged >= sequence) resolve(); else waiting.set(sequence, resolve); });
       await driver.grant(thread, input.conversationId, input.token, input.expiresAt);
-      await driver.rpc('turn/start', { threadId: thread, input: [{ type: 'text', text: input.text, text_elements: [] }] });
+      await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: input.text, text_elements: [] }] });
     } catch {
       report(input, 'agent.turn_failed');
       for (const [id, t] of active) if (t.id === input.id) active.delete(id);
