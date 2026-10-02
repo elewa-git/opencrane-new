@@ -79,3 +79,36 @@ are assessed as unreachable from uploaded bytes on the shipped path, not fixed
 upstream. No runtime high/critical finding is reported. The full audit additionally
 reports the existing Angular build/Piscina critical findings; this change does
 not alter those build-only dependencies.
+
+## Independent review pass 1 fixes
+
+2 October 2026, source parent `114c2a3`, follow-up on `work/upload`. The
+reviewer's two blockers were reproduced before each fix. These runs used the
+same disposable service/computer fixtures described above and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`. The shared dev
+stack was untouched. This follow-up awaits independent review pass 2.
+
+| Proof | Before fix | After fix |
+| --- | --- | --- |
+| Cyclic CFB FAT chain and concurrent HTTP request | FAIL: synchronous inspection stalls until the separate process's 8-second watchdog kills it | PASS: refused within 5 seconds; concurrent health request completes within 500 ms; all inspection runs in a terminated, time/heap-limited worker |
+| Retry after editing original PDF and converted text | FAIL: the original upload replaces the edited PDF | PASS: both edits survive a forced retry; acknowledgement reports `kept_existing` |
+| New bridge connection after acknowledgement | FAIL: the receiver is called twice | PASS: one transfer and one persisted `file.delivered`; the member's changed bytes survive |
+| Suspend/wake and saved disk | Missing edit-survival proof | PASS: lifecycle suspend/resume, disposable computer pause/unpause and replacement retain both edits; the following real Codex turn reads the edited text through the stub provider |
+| Conflict report and replay | Missing conflict outcome | PASS: a differing existing file is kept on first delivery; the HTTP list reports `deliveryOutcome: kept_existing` after projection rebuild |
+
+PASS: `npx vitest run apps/server/test/upload.test.ts`, all seven tests.
+The red reproduction logs are `/tmp/upload-red-cyclic.log`,
+`/tmp/upload-red-edits.log` and `/tmp/upload-red-reconnect.log`; the final focused
+run is `/tmp/upload-green-blockers-final.log`.
+
+PASS: root `lint`, `typecheck` and `check:events` (76 event types). Lint retains
+five existing function-length warnings. PASS:
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --testTimeout=20000`
+finished with 63 passing files and 1,030 passing tests; two live Kubernetes files
+and the real-provider test were skipped (three tests, NOT RUN). The full run had
+no timing failures requiring an isolated rerun. Safe gate logs:
+`/tmp/upload-blockers-lint.log`, `/tmp/upload-blockers-typecheck.log`,
+`/tmp/upload-fix-events.log` and `/tmp/upload-blockers-tests.log`.
+
+Fresh-install Kubernetes qualification and hosted CI remain NOT RUN. No runtime
+dependency was added.

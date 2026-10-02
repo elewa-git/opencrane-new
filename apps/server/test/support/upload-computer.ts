@@ -36,6 +36,8 @@ export async function uploadComputer() {
     await credentials();
     return { get url() { return url; }, close, async restart() { await docker('rm', '-f', container!); await start(); await credentials(); },
       pause: () => docker('pause', container!), resume: () => docker('unpause', container!),
+      read: (path: string) => docker('exec', container!, 'cat', path),
+      write: (path: string, text: string) => docker('exec', '-u', '1001', container!, '/opt/python/bin/python', '-c', 'import pathlib,sys; path=pathlib.Path(sys.argv[1]); path.parent.mkdir(parents=True,exist_ok=True); path.write_bytes(sys.argv[2].encode())', path, text),
       mtime: (path: string) => docker('exec', container!, 'stat', '-c', '%Y', path) };
   } catch (error) { await close(); throw error; }
 }

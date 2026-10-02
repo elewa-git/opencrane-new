@@ -1,4 +1,6 @@
 """Write a bridge upload and convert PDFs inside the tools user's existing sandbox."""
+import errno
+import stat
 import hashlib
 import io
 import json
@@ -33,23 +35,38 @@ def save(name, value):
     try:
         existing = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
         with os.fdopen(existing, 'rb') as current:
-            if current.read(len(value) + 1) == value:
-                return
+            return stat.S_ISREG(os.fstat(current.fileno()).st_mode) and current.read(len(value) + 1) == value
     except FileNotFoundError:
         pass
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            return False
+        raise
     temporary = '.' + uuid.uuid4().hex
     target = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
     with os.fdopen(target, 'wb') as out:
         out.write(value)
         out.flush()
         os.fsync(out.fileno())
-    os.replace(temporary, name, src_dir_fd=fd, dst_dir_fd=fd)
-    os.fsync(fd)
+    try:
+        # Publish without replacing a file created or edited during delivery.
+        os.link(temporary, name, src_dir_fd=fd, dst_dir_fd=fd, follow_symlinks=False)
+        os.fsync(fd)
+        return True
+    except FileExistsError:
+        return False
+    finally:
+        os.unlink(temporary, dir_fd=fd)
 
 
+kept_existing = False
 if meta['name'].lower().endswith('.pdf'):
     # Convert before publishing the original; failed conversions never acknowledge delivery.
     text = MarkItDown().convert_stream(io.BytesIO(content), file_extension='.pdf').text_content
-    save(meta['name'] + '.md', text.encode())
-save(meta['name'], content)
+    kept_existing = not save(meta['name'] + '.md', text.encode())
+kept_existing = not save(meta['name'], content) or kept_existing
 os.close(fd)
+if kept_existing:
+    print('Existing workspace edits kept; conflicting upload files skipped.')
+    # The bridge treats 10 as an acknowledged delivery that preserved existing files.
+    sys.exit(10)

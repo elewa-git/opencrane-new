@@ -6,24 +6,25 @@ export const files: Projection = {
   async create(db) { await db.query(`CREATE TABLE IF NOT EXISTS conversation_files (
     silo TEXT NOT NULL, conversation_id TEXT NOT NULL, file_id TEXT NOT NULL,
     position BIGINT NOT NULL, data JSONB NOT NULL, status TEXT NOT NULL,
-    PRIMARY KEY (silo, conversation_id, file_id))`); },
+    PRIMARY KEY (silo, conversation_id, file_id))`);
+    await db.query('ALTER TABLE conversation_files ADD COLUMN IF NOT EXISTS delivery_outcome TEXT'); },
   async drop(db) { await db.query('DROP TABLE IF EXISTS conversation_files'); },
   async apply(db, event, position) {
     if (event.type === 'file.uploaded') {
       const data = fileUploadedDataSchema.parse(event.data);
-      await db.query('INSERT INTO conversation_files VALUES ($1,$2,$3,$4,$5,$6)',
+      await db.query('INSERT INTO conversation_files (silo, conversation_id, file_id, position, data, status) VALUES ($1,$2,$3,$4,$5,$6)',
         [event.silo, data.conversationId, data.fileId, position, JSON.stringify(data), 'uploaded']);
     }
     if (event.type === 'file.delivered') {
       const data = fileDeliveredDataSchema.parse(event.data);
-      await db.query('UPDATE conversation_files SET status = $4 WHERE silo = $1 AND conversation_id = $2 AND file_id = $3',
-        [event.silo, data.conversationId, data.fileId, 'delivered']);
+      await db.query('UPDATE conversation_files SET status = $4, delivery_outcome = $5 WHERE silo = $1 AND conversation_id = $2 AND file_id = $3',
+        [event.silo, data.conversationId, data.fileId, 'delivered', data.outcome ?? 'saved']);
     }
   },
 };
 export async function listFiles(db: Query, silo: string, conversationId: string) {
-  const result = await db.query<{ data: unknown; status: string }>(
-    'SELECT data, status FROM conversation_files WHERE silo = $1 AND conversation_id = $2 ORDER BY position', [silo, conversationId]);
+  const result = await db.query<{ data: unknown; status: string; delivery_outcome: string | null }>(
+    'SELECT data, status, delivery_outcome FROM conversation_files WHERE silo = $1 AND conversation_id = $2 ORDER BY position', [silo, conversationId]);
   return result.rows.map(row => { const { objectKey: _objectKey, ...data } = fileUploadedDataSchema.parse(row.data);
-    return { ...data, status: row.status, path: `uploads/${data.conversationId}/${data.fileId}/${data.name}`, ...(data.mime === 'application/pdf' ? { textPath: `uploads/${data.conversationId}/${data.fileId}/${data.name}.md` } : {}) }; });
+    return { ...data, status: row.status, ...(row.delivery_outcome ? { deliveryOutcome: row.delivery_outcome } : {}), path: `uploads/${data.conversationId}/${data.fileId}/${data.name}`, ...(data.mime === 'application/pdf' ? { textPath: `uploads/${data.conversationId}/${data.fileId}/${data.name}.md` } : {}) }; });
 }

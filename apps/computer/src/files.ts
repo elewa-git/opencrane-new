@@ -11,7 +11,7 @@ function metadata(value: Record<string, unknown>): WorkspaceFile {
       typeof sha256 !== 'string' || !/^[a-f0-9]{64}$/u.test(sha256)) throw new Error('Invalid file');
   return { conversationId, fileId, name, size, sha256 };
 }
-export function filePackets(receive: (file: WorkspaceFile, bytes: Buffer) => Promise<void>) {
+export function filePackets(receive: (file: WorkspaceFile, bytes: Buffer) => Promise<void | 'kept_existing'>) {
   let file: WorkspaceFile | undefined, parts: Buffer[] = [], size = 0, busy = false;
   return async (input: Record<string, unknown>) => {
     if (busy) throw new Error('File delivery busy');
@@ -27,7 +27,8 @@ export function filePackets(receive: (file: WorkspaceFile, bytes: Buffer) => Pro
     const bytes = Buffer.concat(parts), done = file; file = undefined; parts = []; busy = true;
     try {
       if (createHash('sha256').update(bytes).digest('hex') !== done.sha256) throw new Error('File digest mismatch');
-      await receive(done, bytes); return { type: 'file_received', fileId: done.fileId, sha256: done.sha256 };
+      const outcome = await receive(done, bytes) ?? 'saved';
+      return { type: 'file_received', fileId: done.fileId, sha256: done.sha256, outcome };
     } finally { busy = false; }
   };
 }
@@ -60,6 +61,7 @@ export async function receiveFile(file: WorkspaceFile, bytes: Buffer) {
     while (true) {
       const result = record(await rpc('process/read', { processId, afterSeq: null, maxBytes: 1024, waitMs: 1000 }));
       if (!result['exited']) continue;
+      if (result['exitCode'] === 10) return 'kept_existing' as const;
       if (result['exitCode'] !== 0) throw new Error('Workspace conversion failed');
       return;
     }

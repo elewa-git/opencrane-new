@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Client } from 'minio/dist/esm/minio.mjs';
-import { fileUploadedDataSchema } from '@opencrane/events';
+import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
 import { fileCommand } from '../files/commands.ts';
 import { once } from 'node:events';
@@ -72,10 +72,16 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
   function deliver(file: z.infer<typeof fileUploadedDataSchema>, bytes: Buffer) {
     const work = transfers.then(async () => {
       if (delivered.has(file.fileId)) return;
+      const rows = await chatHistory(options.store, options.silo, file.conversationId);
+      if (rows.some(row => row.event.type === 'file.delivered' &&
+          fileDeliveredDataSchema.parse(row.event.data).fileId === file.fileId &&
+          fileDeliveredDataSchema.parse(row.event.data).computerId === input.computerId)) {
+        delivered.add(file.fileId); return;
+      }
       if (bytes.length !== file.size || createHash('sha256').update(bytes).digest('hex') !== file.sha256) throw new Error('Stored file digest mismatch');
-      await sendFile(socket, file, bytes);
+      const outcome = await sendFile(socket, file, bytes);
       const result = await fileCommand(options.store, options.silo, file.uploadedBy, `file-delivered-${file.fileId}-${input.computerId}`, 'file.delivered',
-        { conversationId: file.conversationId, fileId: file.fileId, computerId: input.computerId, sha256: file.sha256 });
+        { conversationId: file.conversationId, fileId: file.fileId, computerId: input.computerId, sha256: file.sha256, outcome });
       if (result.status !== 'appended') throw new Error('File acknowledgement unavailable');
       delivered.add(file.fileId);
     });
@@ -131,8 +137,11 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
           const computer = z.object({ computerId: z.string() }).parse(current.data);
           if (rows.some(row => row.event.type === 'conversation.closed')) return;
           await recoverTerminalTurns(options, computer.computerId, conversation.assistantId, conversation.conversationId, rows, closed);
-          const uploads = rows.filter(row => row.event.type === 'file.uploaded').map(row => fileUploadedDataSchema.parse(row.event.data));
-          const pendingUpload = uploads.some(file => !rows.some(row => row.event.type === 'file.delivered' && z.object({ fileId: z.string(), computerId: z.string() }).parse(row.event.data).fileId === file.fileId && z.object({ computerId: z.string() }).parse(row.event.data).computerId === computer.computerId));
+          const acknowledged = rows.filter(row => row.event.type === 'file.delivered').map(row => fileDeliveredDataSchema.parse(row.event.data))
+            .filter(file => file.computerId === computer.computerId).map(file => file.fileId);
+          const uploads = rows.filter(row => row.event.type === 'file.uploaded').map(row => fileUploadedDataSchema.parse(row.event.data))
+            .filter(file => !acknowledged.includes(file.fileId));
+          const pendingUpload = uploads.length > 0;
           if (!message && !pendingUpload) return;
           if (current.type === 'computer.suspended') { await resumeComputer(options.store, tokens, options.silo, conversation.assistantId); return; }
           if (current.type !== 'computer.ready') return;

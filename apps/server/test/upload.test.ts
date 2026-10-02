@@ -11,6 +11,50 @@ it('accepts document content and refuses a disguised executable or archive', asy
   await expect(inspectFile('notes.txt', Buffer.from('PK\u0003\u0004archive'))).rejects.toThrow();
 });
 
+it('refuses a cyclic FAT chain quickly while other HTTP requests stay responsive', async () => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  // A separate process lets the watchdog stop the old synchronous parser safely.
+  const source = `
+    import cfb from 'cfb';
+    import Fastify from 'fastify';
+    import { inspectFile } from './apps/server/src/files/types.ts';
+    const container = cfb.utils.cfb_new();
+    cfb.utils.cfb_add(container, 'Workbook', Buffer.alloc(8192));
+    const bytes = cfb.write(container, { type: 'buffer' });
+    const directory = (bytes.readInt32LE(48) + 1) * 512;
+    const fat = (bytes.readInt32LE(76) + 1) * 512;
+    const start = bytes.readInt32LE(directory + 256 + 116);
+    // Enter the middle of a chain that loops back to its first sector.
+    bytes.writeInt32LE(start + 1, directory + 256 + 116);
+    bytes.writeInt32LE(start, fat + (start + 15) * 4);
+    const app = Fastify();
+    app.get('/inspect', async (_request, reply) => {
+      try { await inspectFile('cyclic.xls', bytes); return { accepted: true }; }
+      catch (error) { return reply.code(415).send({ error: error.message }); }
+    });
+    app.get('/health', async () => ({ ok: true }));
+    const url = await app.listen({ host: '127.0.0.1', port: 0 });
+    const started = Date.now();
+    const pending = fetch(url + '/inspect');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const healthStarted = Date.now();
+    const health = await fetch(url + '/health');
+    const healthMs = Date.now() - healthStarted;
+    const response = await pending;
+    process.stdout.write(JSON.stringify({ status: response.status, body: await response.json(),
+      elapsed: Date.now() - started, health: await health.json(), healthMs }));
+    await app.close();
+  `;
+  const { stdout } = await promisify(execFile)(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', source], { timeout: 8000 });
+  const result = z.object({ status: z.number(), body: z.object({ error: z.string() }), elapsed: z.number(), health: z.object({ ok: z.boolean() }), healthMs: z.number() }).parse(JSON.parse(stdout) as unknown);
+  expect(result.status).toBe(415);
+  expect(result.body.error).toMatch(/inspection|Office document/iu);
+  expect(result.elapsed).toBeLessThan(5000);
+  expect(result.health).toEqual({ ok: true });
+  expect(result.healthMs).toBeLessThan(500);
+}, 12_000);
+
 it('quarantines a member upload, publishes only clean files and rebuilds its list from events', async () => {
   const { natsFixture } = await import('@opencrane/event-store/testing');
   const { databases, openfga } = await import('@opencrane/authz/testing');
@@ -123,53 +167,91 @@ it('quarantines a member upload, publishes only clean files and rebuilds its lis
       const file = fileUploadedDataSchema.parse(row.event.data);
       const stream = await services.client.getObject('files', file.objectKey), bytes = Buffer.concat(z.array(z.instanceof(Buffer)).parse(await stream.toArray()));
       await link.deliver(file, bytes);
-      const path = `/workspace/uploads/conversation/${file.fileId}/project.pdf`, modified = await computer.mtime(path);
+      const path = `/workspace/uploads/conversation/${file.fileId}/project.pdf`;
+      const editedPdf = 'Member edits to the original PDF', editedText = 'Project code: Willow-47. Member edits survive.';
+      await computer.write(path, editedPdf); await computer.write(path + '.md', editedText);
+      // An ambiguous acknowledgement can still retry: the receiver must keep edits too.
+      const { sendFile } = await import('../src/files/delivery.ts');
+      expect(await sendFile(link.socket, file, bytes)).toBe('kept_existing');
+      expect(await computer.read(path)).toBe(editedPdf);
+      expect(await computer.read(path + '.md')).toBe(editedText);
+      const modified = await computer.mtime(path);
+      const conflictFile = fileUploadedDataSchema.parse(racedUploads[0]!.event.data);
+      const conflictStream = await services.client.getObject('files', conflictFile.objectKey);
+      const conflictBytes = Buffer.concat(z.array(z.instanceof(Buffer)).parse(await conflictStream.toArray()));
+      const conflictPath = `/workspace/uploads/conversation/${conflictFile.fileId}/${conflictFile.name}`;
+      await computer.write(conflictPath, 'Member notes kept on first delivery');
+      await link.deliver(conflictFile, conflictBytes);
+      expect(await computer.read(conflictPath)).toBe('Member notes kept on first delivery');
       link.socket.terminate(); await once(link.socket, 'close'); await link.settled();
+      const { suspendComputer, resumeComputer } = await import('../../ops/src/lifecycle.ts');
+      const latest = (await history(nats.store, 'computer-assistant', 'test')).at(-1)!.event;
+      expect((await suspendComputer(nats.store, { computerId: 'computer', assistantId: 'assistant', latest })).type).toBe('computer.suspended');
       await computer.pause(); await computer.resume(); await computer.restart();
+      await resumeComputer(nats.store, tokens, 'test', 'assistant');
+      expect((await history(nats.store, 'computer-assistant', 'test')).at(-1)!.event.type).toBe('computer.resumed');
+      await nats.store.append({ expectedSequence: (await history(nats.store, 'computer-assistant', 'test')).at(-1)!.sequence,
+        event: envelope('test', 'computer-assistant', 'computer.ready', { computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'replacement' }) });
       connection.url = `${computer.url.replace('http:', 'ws:')}/bridge`;
       link = await connectBridge({ ...options, keys }, connection, tokens);
       await link.deliver(file, bytes);
       expect(await computer.mtime(path)).toBe(modified);
+      expect(await computer.read(path)).toBe(editedPdf);
+      expect(await computer.read(path + '.md')).toBe(editedText);
       await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'read-pdf', conversationId: 'conversation', text: 'Read the uploaded PDF.' });
       link.socket.send(JSON.stringify({ type: 'turn', id: 'read-pdf', conversationId: 'conversation', assistantId: 'assistant',
         text: `UPLOAD_PDF_PROOF Read ${path}.md and tell me the project code.`, token: 'preparing', expiresAt: Date.now()+120_000 }));
       await until(async () => (await history(nats.store, 'conversation-conversation', 'test')).some(row => row.event.type === 'agent.turn_completed'), 60_000);
       const answer = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'agent.message_completed')!;
       expect(keys.decrypt('test', 'conversation', answer.event.data)).toContain('The project code is Willow-47.');
+      expect(await computer.read(path)).toBe(editedPdf);
+      expect(await computer.read(path + '.md')).toBe(editedText);
       await runner.run(files);
-      expect((await app.inject({ url, headers })).json()).toMatchObject({ rows: [{}, {}, {}, { status: 'delivered', name: 'project.pdf' }] });
+      await runner.rebuild(files);
+      expect((await app.inject({ url, headers })).json()).toMatchObject({ rows: [{ status: 'delivered', deliveryOutcome: 'kept_existing' }, {}, {}, { status: 'delivered', name: 'project.pdf', deliveryOutcome: 'saved' }] });
     } finally { link.socket.terminate(); await link.settled(); await computer.close(); await rm(directory, { recursive: true, force: true }); }
 
   } finally { await app.close(); await feed.close(); await fga.close(); await nats.close(); await dbs.close(); await services.close(); }
 }, 180_000);
 
-it('delivers verified bytes once across reconnects through the authenticated bridge', async () => {
+it('does not resend acknowledged uploads after reconnect even when workspace bytes changed', async () => {
   const { createServer } = await import('node:http');
   const { createHash } = await import('node:crypto');
   const { mkdtemp, rm } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { bridgeChannel } = await import('../../computer/src/channel.ts');
-  const { sendFile } = await import('../src/files/delivery.ts');
-  const directory = await mkdtemp(`${tmpdir()}/file-bridge-`), server = createServer();
+  const { natsFixture } = await import('@opencrane/event-store/testing');
+  const { connectBridge } = await import('../src/chat/bridge.ts');
+  const { chatCommand, chatHistory } = await import('../src/chat/commands.ts');
+  const { conversationKeys } = await import('../src/chat/keys.ts');
+  const { fileCommand } = await import('../src/files/commands.ts');
+  const directory = await mkdtemp(`${tmpdir()}/file-bridge-`), server = createServer(), nats = await natsFixture();
+  const keys = conversationKeys(directory); keys.provision('test', 'conversation');
+  await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   const bytes = Buffer.alloc(160_000, 'a'), sha256 = createHash('sha256').update(bytes).digest('hex');
   const file = { conversationId: 'conversation', fileId: 'file', name: 'notes.txt', mime: 'text/plain', size: bytes.length, sha256, objectKey: 'test/file', uploadedBy: 'alice' };
+  await fileCommand(nats.store, 'test', 'alice', 'upload', 'file.uploaded', file);
   let writes = 0;
+  let workspace: Buffer = Buffer.alloc(0);
   const channel = bridgeChannel(server, { journal: `${directory}/reports`, rpc: () => Promise.resolve({}), grant: () => Promise.resolve(),
     credential: () => ({ value: 'computer', expiresAt: Date.now()+60_000 }),
-    file(_metadata, content) { expect(content).toEqual(bytes); writes++; return Promise.resolve(); },
+    file(_metadata, content) { expect(content).toEqual(bytes); workspace = content; writes++; return Promise.resolve(); },
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
-  let socket: WebSocket | undefined;
+  let link: Awaited<ReturnType<typeof connectBridge>> | undefined;
   try {
     for (let i = 0; i < 2; i++) {
-      socket = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, { headers: { 'x-bridge-token': 'computer' } });
-      await once(socket, 'open'); socket.send(JSON.stringify({ type: 'resume', since: 0 }));
-      await sendFile(socket, file, bytes);
-      socket.terminate(); await once(socket, 'close');
+      link = await connectBridge({ silo: 'test', store: nats.store, keys }, { url: `ws://127.0.0.1:${address.port}/bridge`,
+        computerId: 'computer', assistantId: 'assistant', bearer: 'computer' });
+      await link.deliver(file, bytes);
+      expect(writes).toBe(1);
+      expect(workspace.toString()).toBe(i === 0 ? bytes.toString() : 'Member edits');
+      workspace = Buffer.from('Member edits');
+      link.socket.terminate(); await once(link.socket, 'close'); await link.settled();
     }
-    expect(writes).toBe(2); // The workspace receiver verifies an existing file; reconnects resend safely.
-  } finally { socket?.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+    expect((await chatHistory(nats.store, 'test', 'conversation')).filter(row => row.event.type === 'file.delivered')).toHaveLength(1);
+  } finally { link?.socket.terminate(); await link?.settled(); await channel.close(); server.close(); await nats.close(); await rm(directory, { recursive: true, force: true }); }
 }, 20_000);
 
 it('refuses a malformed delivery acknowledgement without crashing the server', async () => {

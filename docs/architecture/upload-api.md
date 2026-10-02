@@ -38,8 +38,12 @@ committed upload do not repeat scanning or create another event.
 Accepted: PDF; DOC/DOCX, XLS/XLSX and PPT/PPTX; UTF-8 TXT/MD/CSV/JSON; PNG, JPEG,
 GIF, WebP, BMP and TIFF. Signatures, binary Office streams and Office ZIP entries
 are inspected; HTTP MIME claims are ignored. Executables, scripts, SVG/HTML,
-archives, macro-bearing/encrypted/embedded Office content are refused. Office
-containers have entry and expanded-size limits; ClamAV also refuses scan limits
+archives, macro-bearing/encrypted/embedded Office content are refused. All
+inspection (including CFB, ZIP and XML) runs in a separate worker with a
+1.5-second hard deadline, a 64 MiB old-generation heap limit, a 16 MiB
+young-generation limit and a 4 MiB stack limit. A timeout, worker error or limit
+terminates the worker and gives a clear 415 refusal. Office
+containers also have entry and expanded-size limits; ClamAV also refuses scan limits
 and encrypted content. This is type and malware screening, not a guarantee that a
 third-party document parser will accept every damaged document.
 
@@ -69,14 +73,22 @@ file transfers per connection and waits for a matching digest acknowledgement
 before starting a chat turn. The computer checks byte count and SHA-256, then
 uses its existing socket-denied tools executor (UID 1001) to write the file.
 Directory descriptors and no-follow opens prevent symlink path escapes. Atomic
-replacement and fsync protect the saved disk; repeating unchanged content keeps
-its mtime. PDFs are converted through MarkItDown inside that same sandbox before
+publication without replacement and fsync protect the saved disk;
+repeating unchanged content keeps its mtime. Existing files with differing bytes
+are kept and the conflicting upload is skipped, including converted PDF text
+and a file created during delivery. PDFs are converted through MarkItDown inside
+that same sandbox before
 acknowledgement; conversion failure leaves delivery pending.
 
 The acknowledgement invokes a separate `file.delivered` command. A server crash
-before that append or a disconnected transfer retries the original event. A new
-connection can resend originals safely; a saved computer disk already contains
-both the original and PDF text. Completed uploads alone do not wake an idle
+before that append or a disconnected transfer retries the original event. New
+connections check the recorded acknowledgement for that computer and send
+only undelivered files. A retry before the event is committed preserves existing
+edits. The acknowledgement reports `saved` or `kept_existing`; `file.delivered`
+records that outcome and the HTTP list exposes it as `deliveryOutcome`.
+`kept_existing` means existing workspace edits were kept and conflicting upload
+files were skipped; those paths contain the member's content. Older events
+without an outcome mean `saved`. Completed uploads alone do not wake an idle
 computer repeatedly. The computer has no MinIO access, URL or credential.
 
 The dev stack starts the `files` projection worker, provisions private MinIO

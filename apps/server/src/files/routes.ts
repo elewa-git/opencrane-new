@@ -58,7 +58,7 @@ function uploadStatus(status: string) {
 }
 function refuse(reply: FastifyReply, error: unknown) {
   const message = error instanceof Error ? error.message : '';
-  const known = new Map([['Unauthenticated', 401], ['Conversation refused', 403], ['Id reused', 409], ['Unsupported file type', 415], ['Unsafe Office document', 415], ['Invalid Office document', 415]]);
+  const known = new Map([['Unauthenticated', 401], ['Conversation refused', 403], ['Id reused', 409], ['Unsupported file type', 415], ['Unsafe Office document', 415], ['Invalid Office document', 415], ['File inspection timed out or exceeded limits', 415], ['File inspection failed or exceeded limits', 415], ['File inspection failed', 415]]);
   return reply.code(error instanceof z.ZodError ? 400 : known.get(message) ?? 503)
     .send({ status: 'refused', error: known.has(message) ? message : 'Upload unavailable or refused' });
 }

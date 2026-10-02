@@ -11,7 +11,7 @@ export interface BridgeReport {
   type: string; commandDigest?: string; exitCode?: number; threadId?: string; messageId?: string; text?: string;
 }
 interface Driver {
-  file?(file: WorkspaceFile, bytes: Buffer): Promise<void>;
+  file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
   rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
   credential(): { value: string; expiresAt: number };
