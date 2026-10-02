@@ -2,7 +2,7 @@ import { budgets, settlementHandler, modelGrantHandler, initialiseBudgetProjecti
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
-import { connectProjectionDb, ProjectionRunner, auditTrail, members, mcpCatalogue, computers, conversations } from '@opencrane/projections';
+import { connectProjectionDb, ProjectionRunner, auditTrail, members, mcpCatalogue, computers, conversations, files } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
 import { memberAuthorisation } from '@opencrane/authz';
 import { tokenIssuer } from '@opencrane/auth';
@@ -16,7 +16,7 @@ function required(name: string): string {
   return value;
 }
 const mode = process.argv[2];
-if (!['members', 'mcp-catalogue', 'computers', 'dispatcher', 'budgets', 'conversations', 'audit'].includes(mode ?? '')) {
+if (!['members', 'mcp-catalogue', 'computers', 'dispatcher', 'budgets', 'conversations', 'audit', 'files'].includes(mode ?? '')) {
   throw new Error('Expected members, mcp-catalogue, computers, budgets or dispatcher');
 }
 const logger = createLogger(`worker-${mode}`);
@@ -53,7 +53,7 @@ try {
     watcher = watchComputers(commands.store, kube, tokens, (id, token) => kube.credentials(id, token), silo, idleMs, stop.signal);
     await Promise.race([dispatch(connection, runtime, stop.signal), watcher]);
   } else {
-    const projection = mode === 'audit' ? auditTrail : mode === 'conversations' ? conversations : mode === 'members' ? members : mode === 'budgets' ? budgets : mode === 'computers' ? computers : mcpCatalogue;
+    const projection = mode === 'files' ? files : mode === 'audit' ? auditTrail : mode === 'conversations' ? conversations : mode === 'members' ? members : mode === 'budgets' ? budgets : mode === 'computers' ? computers : mcpCatalogue;
     const runner = new ProjectionRunner(db.db, store, logger);
     await db.db.lock!('initialise', (locked) => new ProjectionRunner(locked, store, logger).initialise(projection));
     if (mode === 'budgets') await initialiseBudgetProjection(db.db, store, logger);

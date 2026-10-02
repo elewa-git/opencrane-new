@@ -2,8 +2,6 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
-import { z } from 'zod';
-const calls: Array<{ body: string; requestId: string }> = [];
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/approval-calls') {
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(calls)); return;
@@ -21,38 +19,34 @@ const server = createServer((req, res) => {
     })().catch(() => res.destroy());
     return;
   }
-  if (process.env['MODEL_STUB_PAUSE_ON_STOP'] !== '1') req.resume();
+  const chunks: Buffer[] = [];
+  req.on('data', (chunk: Buffer) => chunks.push(chunk));
   if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
-  void (async () => {
-    let body = '';
-    if (process.env['MODEL_STUB_PAUSE_ON_STOP'] === '1') {
-      for await (const chunk of req) {
-        body += String(chunk);
-        if (body.length > 1_048_576) { res.writeHead(413); res.end(); return; }
-      }
-    }
-    const input = body ? z.object({ input: z.union([z.string(), z.array(z.object({
-      role: z.string().optional(), content: z.unknown().optional(),
-    }))]) }).parse(JSON.parse(body)).input : '';
-    const currentPrompt = typeof input === 'string' ? input : JSON.stringify(input.findLast(item => item.role === 'user')?.content ?? '');
-    const pauseOnStop = currentPrompt.includes('Say hello again.');
+  req.on('end', () => { void (async () => {
+    const body = JSON.parse(Buffer.concat(chunks).toString()) as { input?: Array<{ type?: string; role?: string; content?: unknown; output?: string }> };
+    const input = body.input ?? [];
+    const user = input.findLastIndex(item => item.type === 'message' && item.role === 'user');
+    const prompt = JSON.stringify(input[user]?.content ?? '');
+    const pdf = prompt.includes('UPLOAD_PDF_PROOF');
+    const output = input.slice(user+1).filter(item => item.type === 'function_call_output').map(item => item.output ?? '').join('\n');
+    const path = /\/workspace\/uploads\/[\w/-]+\/project\.pdf\.md/u.exec(prompt)?.[0];
+    const answer = pdf ? (output.includes('Project code: Willow-47.') ? 'The project code is Willow-47.' : 'PDF reading failed.') : 'Hello from your computer.';
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
     res.writeHead(200, { 'content-type': 'text/event-stream' });
     const id = `resp_${randomUUID()}`, message = `msg_${randomUUID()}`;
     const emit = (event: { type: string; [name: string]: unknown }) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     emit({ type: 'response.created', response: { id } });
+    if (pdf && path && !output) {
+      emit({ type: 'response.output_item.done', item: { type: 'function_call', name: 'exec_command', call_id: `call_${randomUUID()}`, arguments: JSON.stringify({ cmd: `cat ${path}`, max_output_tokens: 1000 }) } });
+    } else {
     emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });
-    for (const delta of ['Hello ', 'from your ', 'computer.']) {
-      emit({ type: 'response.output_text.delta', delta });
-      // This journey prompt exercises Stop against a still-streaming provider.
-      const pause = delta === 'Hello ' && pauseOnStop;
-      await delay(pause ? 30_000 : 500, undefined, { signal: stopped.signal });
+    for (const delta of pdf ? [answer] : ['Hello ', 'from your ', 'computer.']) { emit({ type: 'response.output_text.delta', delta }); await delay(delta === 'Hello ' && prompt.includes('Say hello again.') ? 30_000 : 500, undefined, { signal: stopped.signal }); }
+    emit({ type: 'response.output_item.done', item: { id: message, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: answer }] } });
     }
-    emit({ type: 'response.output_item.done', item: { id: message, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello from your computer.' }] } });
     emit({ type: 'response.completed', response: { id, status: 'completed', model: 'gpt-6-luna', usage: { input_tokens: 1000, output_tokens: 120, total_tokens: 1120 } } });
     res.end();
-  })().catch(() => res.destroy());
+  })().catch(() => res.destroy()); });
 });
-server.listen(Number(process.env['MODEL_STUB_PORT'] ?? 43003), '127.0.0.1');
+server.listen(Number(process.env['MODEL_STUB_PORT'] ?? process.env['STUB_PORT'] ?? 43003), '127.0.0.1', () => { const address = server.address(); if (address && typeof address !== 'string') console.log(`Stub ready ${address.port}`); });
 for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { server.closeAllConnections(); server.close(); });

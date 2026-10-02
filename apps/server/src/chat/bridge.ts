@@ -1,3 +1,8 @@
+import { createHash } from 'node:crypto';
+import type { Client } from 'minio/dist/esm/minio.mjs';
+import { fileUploadedDataSchema } from '@opencrane/events';
+import { sendFile } from '../files/delivery.ts';
+import { fileCommand } from '../files/commands.ts';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
@@ -27,6 +32,7 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
     try {
       const bytes = Buffer.isBuffer(raw) ? raw : Buffer.concat(Array.isArray(raw) ? raw : [Buffer.from(raw)]);
       const value: unknown = JSON.parse(bytes.toString());
+      if (z.object({ type: z.literal('file_received') }).safeParse(value).success) return;
       const report = z.object({ sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(), turnId: z.string(), type: z.string(), threadId: z.string().optional() }).parse(value);
       const queue = queues.get(report.conversationId) ?? { pending: Promise.resolve(), count: 0, bytes: 0 };
       if (queue.count >= 64 || queue.bytes + bytes.length > 1_048_576 || (!queues.has(report.conversationId) && queues.size >= 64)) {
@@ -61,14 +67,52 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
     } catch { refuse('Invalid report'); }
   });
   socket.send(JSON.stringify({ type: 'resume', since: await reportPosition(options.store, options.silo, input.computerId) }));
-  return { socket, get rejection() { return rejection; }, settled: () => Promise.all([...queues.values()].map(queue => queue.pending)) };
+  const delivered = new Set<string>();
+  let transfers = Promise.resolve();
+  function deliver(file: z.infer<typeof fileUploadedDataSchema>, bytes: Buffer) {
+    const work = transfers.then(async () => {
+      if (delivered.has(file.fileId)) return;
+      if (bytes.length !== file.size || createHash('sha256').update(bytes).digest('hex') !== file.sha256) throw new Error('Stored file digest mismatch');
+      await sendFile(socket, file, bytes);
+      const result = await fileCommand(options.store, options.silo, file.uploadedBy, `file-delivered-${file.fileId}-${input.computerId}`, 'file.delivered',
+        { conversationId: file.conversationId, fileId: file.fileId, computerId: input.computerId, sha256: file.sha256 });
+      if (result.status !== 'appended') throw new Error('File acknowledgement unavailable');
+      delivered.add(file.fileId);
+    });
+    transfers = work.catch(() => { socket.terminate(); });
+    return work;
+  }
+  return { socket, deliver, delivered, get rejection() { return rejection; }, settled: () => Promise.all([...queues.values()].map(queue => queue.pending)) };
 }
 
 /** One outbound socket per computer; polling durable messages recovers a server restart without resending completed turns. */
-export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'>, tokens: Tokens, kube: SandboxClient, proxyUrl: string, signal: AbortSignal, logger: Logger = createLogger('bridge')) {
+export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> & { objects?: Client }, tokens: Tokens, kube: SandboxClient, proxyUrl: string, signal: AbortSignal, logger: Logger = createLogger('bridge')) {
   const refused = new Set<string>();
   const links = new Map<string, Awaited<ReturnType<typeof connectBridge>>>();
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
+  async function connection(computerId: string, assistantId: string) {
+    let link = links.get(computerId);
+    if (!link || link.socket.readyState !== link.socket.OPEN) {
+      let connecting = opening.get(computerId);
+      if (!connecting) {
+        connecting = (async () => {
+          const token = await resumeComputer(options.store, tokens, options.silo, assistantId);
+          await kube.credentials(computerId, token, true);
+          const connected = await connectBridge(options, { computerId, assistantId, bearer: token.value,
+            url: `${proxyUrl.replace('http:', 'ws:')}/api/v1/namespaces/${kube.namespace}/pods/${computerId}:8081/proxy/bridge` }, tokens);
+          connected.socket.once('close', () => {
+            if (!connected.rejection) return;
+            refused.add(computerId);
+            logger.error({ computerId, reason: connected.rejection }, 'Bridge recovery stopped; report rejected');
+          });
+          links.set(computerId, connected); return connected;
+        })().finally(() => opening.delete(computerId));
+        opening.set(computerId, connecting);
+      }
+      link = await connecting;
+    }
+    return link;
+  }
   try {
     while (!signal.aborted) {
       const conversations = await listConversations(options.db, options.silo);
@@ -85,38 +129,19 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
             .map(row => z.object({ turnId: z.string() }).parse(row.event.data).turnId));
           if (!current) return;
           const computer = z.object({ computerId: z.string() }).parse(current.data);
-          // Recover a server crash between a terminal report and its separate lifecycle command.
-          for (const row of rows) {
-            if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) continue;
-            const terminal = z.object({ turnId: z.string() }).parse(row.event.data);
-            if (closed.has(terminal.turnId)) continue;
-            await turnCommand(options.store, { silo: options.silo, ...computer, assistantId: conversation.assistantId },
-              { ...terminal, conversationId: conversation.conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
-          }
-          if (!message) return;
+          if (rows.some(row => row.event.type === 'conversation.closed')) return;
+          await recoverTerminalTurns(options, computer.computerId, conversation.assistantId, conversation.conversationId, rows, closed);
+          const uploads = rows.filter(row => row.event.type === 'file.uploaded').map(row => fileUploadedDataSchema.parse(row.event.data));
+          const pendingUpload = uploads.some(file => !rows.some(row => row.event.type === 'file.delivered' && z.object({ fileId: z.string(), computerId: z.string() }).parse(row.event.data).fileId === file.fileId && z.object({ computerId: z.string() }).parse(row.event.data).computerId === computer.computerId));
+          if (!message && !pendingUpload) return;
           if (current.type === 'computer.suspended') { await resumeComputer(options.store, tokens, options.silo, conversation.assistantId); return; }
           if (current.type !== 'computer.ready') return;
           if (refused.has(computer.computerId)) return;
-          let link = links.get(computer.computerId);
-          if (!link || link.socket.readyState !== link.socket.OPEN) {
-            let connecting = opening.get(computer.computerId);
-            if (!connecting) {
-              connecting = (async () => {
-            const token = await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
-            await kube.credentials(computer.computerId, token, true);
-            const connected = await connectBridge(options, { ...computer, assistantId: conversation.assistantId, bearer: token.value,
-              url: `${proxyUrl.replace('http:', 'ws:')}/api/v1/namespaces/${kube.namespace}/pods/${computer.computerId}:8081/proxy/bridge` }, tokens);
-            connected.socket.once('close', () => {
-              if (!connected.rejection) return;
-              refused.add(computer.computerId);
-              logger.error({ computerId: computer.computerId, reason: connected.rejection }, 'Bridge recovery stopped; report rejected');
-            });
-            links.set(computer.computerId, connected); return connected;
-              })().finally(() => opening.delete(computer.computerId));
-              opening.set(computer.computerId, connecting);
-            }
-            link = await connecting;
+          const link = await connection(computer.computerId, conversation.assistantId);
+          if (options.objects) for (const file of uploads) {
+            if (!link.delivered.has(file.fileId)) await link.deliver(file, await promotedBytes(options.objects, file));
           }
+          if (!message) return;
           link.socket.send(JSON.stringify({ type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
             assistantId: conversation.assistantId, text: options.keys.decrypt(options.silo, conversation.conversationId, message.event.data), token: 'preparing', expiresAt: Date.now() + 120_000 }));
           sendStop(link.socket, rows, message.event.id, conversation.conversationId);
@@ -131,5 +156,27 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
 function sendStop(socket: WebSocket, rows: Awaited<ReturnType<typeof chatHistory>>, turnId: string, conversationId: string) {
   if (rows.some(row => row.event.type === 'agent.turn_stop_requested' && z.object({ turnId: z.string() }).parse(row.event.data).turnId === turnId)) {
     socket.send(JSON.stringify({ type: 'stop', turnId, conversationId }));
+  }
+}
+
+async function promotedBytes(objects: Client, file: z.infer<typeof fileUploadedDataSchema>) {
+  const stream = await objects.getObject('files', file.objectKey), parts: Buffer[] = [];
+  let size = 0;
+  for await (const part of stream) {
+    const bytes = z.instanceof(Buffer).parse(part); size += bytes.length;
+    if (size > file.size) { stream.destroy(); throw new Error('Stored file size mismatch'); }
+    parts.push(bytes);
+  }
+  return Buffer.concat(parts);
+}
+
+async function recoverTerminalTurns(options: Pick<ChatOptions, 'silo' | 'store'>, computerId: string, assistantId: string, conversationId: string, rows: Awaited<ReturnType<typeof chatHistory>>, closed: Set<string>) {
+  // Recover a server crash between a terminal report and its separate lifecycle command.
+  for (const row of rows) {
+    if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) continue;
+    const terminal = z.object({ turnId: z.string() }).parse(row.event.data);
+    if (closed.has(terminal.turnId)) continue;
+    await turnCommand(options.store, { silo: options.silo, computerId, assistantId },
+      { ...terminal, conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
   }
 }

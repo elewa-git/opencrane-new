@@ -1,3 +1,4 @@
+import { filePackets, type WorkspaceFile } from './files.ts';
 import type { Server, IncomingMessage } from 'node:http';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { timingSafeEqual, createHash } from 'node:crypto';
@@ -10,6 +11,7 @@ export interface BridgeReport {
   type: string; commandDigest?: string; exitCode?: number; threadId?: string; messageId?: string; text?: string;
 }
 interface Driver {
+  file?(file: WorkspaceFile, bytes: Buffer): Promise<void>;
   rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
   credential(): { value: string; expiresAt: number };
@@ -130,6 +132,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
   } });
   wss.on('connection', next => {
     socket?.terminate(); socket = next; resumed = false;
+    const receive = filePackets(driver.file ? (file, bytes) => driver.file!(file, bytes) : (() => Promise.reject(new Error('File receiver unavailable'))));
     const expiry = setTimeout(() => next.close(4001, 'Credential expired'), Math.max(1, driver.credential().expiresAt - Date.now()));
     next.once('close', () => clearTimeout(expiry)); next.on('error', () => next.terminate());
     next.on('message', bytes => {
@@ -138,6 +141,9 @@ export function bridgeChannel(server: Server, driver: Driver) {
         const input = record(JSON.parse((Buffer.isBuffer(bytes) ? bytes : Buffer.concat(Array.isArray(bytes) ? bytes : [Buffer.from(bytes)])).toString()) as unknown);
         if (input['type'] === 'resume') resume(input['since']);
         else if (input['type'] === 'ack') acknowledge(input['sequence'], input);
+        else if (typeof input['type'] === 'string' && input['type'].startsWith('file_') && resumed) {
+          void receive(input).then(receipt => { if (receipt && next.readyState === next.OPEN) next.send(JSON.stringify(receipt)); }).catch(() => next.close(1008, 'File delivery refused'));
+        }
         else if (input['type'] === 'turn' && resumed) void start(turn(input));
         else if (input['type'] === 'stop' && resumed) void interrupt(input).catch(() => next.close(1011, 'Interrupt unavailable'));
         else throw new Error('Invalid message');

@@ -1,3 +1,5 @@
+import { issueMinioLease } from './minio-tokens.ts';
+import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { open, readFile, rm, stat } from 'node:fs/promises';
@@ -14,7 +16,7 @@ import { envelope } from '@opencrane/models';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'audit', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
+const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -207,7 +209,7 @@ async function up(fresh: boolean) {
   const settings = { ...defaultPorts, ...await readEnv('settings') };
   await checkPorts(settings, await Promise.all(names.map(processId)), project);
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
-  await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio');
+  await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio', 'clamav');
   const computer = await provisionComputers(settings);
   await initialiseDatabase();
   await compose('up', '-d', 'openfga');
@@ -216,6 +218,13 @@ async function up(fresh: boolean) {
   // Repeated up runs must also keep decision services and event writers out of the migration.
   await stopProcesses(['server', 'dispatcher', 'models']);
   if (secondary) await compose('stop', 'models');
+  const minio = await readEnv('minio');
+  const credentials = { accessKey: minio['MINIO_ROOT_USER']!, secretKey: minio['MINIO_ROOT_PASSWORD']! };
+  const objects = new Client({ endPoint: '127.0.0.1', port: Number(settings['MINIO_PORT']), useSSL: false, ...credentials });
+  for (const bucket of ['quarantine', 'files']) if (!await objects.bucketExists(bucket)) await objects.makeBucket(bucket);
+  await issueMinioLease();
+  await start('minio-tokens', ['--experimental-strip-types', 'infra/dev-stack/minio-tokens.ts'], { DEV_STACK_DIR: directory });
+  await objects.setBucketLifecycle('quarantine', { Rule: [{ ID: 'abandoned-uploads', Status: 'Enabled', Filter: { Prefix: '' }, Expiration: { Days: 1 } }] });
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
   if (secondary) {
     // Stop keeps uncertain reservations; the stub fixture needs room for repeated journeys.
@@ -243,7 +252,7 @@ async function up(fresh: boolean) {
       OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
   }
   const binding = await readEnv('binding');
-  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'audit']) {
+  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit']) {
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
   }
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
@@ -280,6 +289,7 @@ async function up(fresh: boolean) {
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
+      MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');

@@ -23,4 +23,18 @@ export const bridgeEvents = [
     { assistantId: 'asst_1', computerId: 'computer_1', conversationId: 'conv_1', turnId: 'turn_1', threadId: 'thread_1', requesterId: 'mem_1', task: 'chat_turn', status: 'completed' }),
   event('agent.message_delta', 'conversation', 'The bridge reported streamed assistant text.', data.agentMessageCompletedDataSchema,
     { conversationId: 'conv_1', turnId: 'turn_1', messageId: 'msg_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' }),
+  event(
+    'agent.message_completed',
+    'conversation',
+    'The bridge reported a completed assistant message.',
+    data.agentMessageCompletedDataSchema,
+    {
+      conversationId: 'conv_1',
+      turnId: 'turn_1',
+      messageId: 'msg_1',
+      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
+      keyId: 'key:1',
+      contentType: 'text',
+    },
+  ),
 ] as const;

@@ -1,3 +1,4 @@
+import { uploadJourney } from './upload-journey.ts';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -191,6 +192,8 @@ try {
   const replyMs = await chat.message();
   await chat.reconnect();
   console.log(`PASS joined member HTTP message → streamed Codex/stub reply → projection; ${replyMs.completeMs} ms (first token ${replyMs.firstTokenMs} ms); browser reconnect no duplicates`);
+  const uploaded = await uploadJourney(server, headers(member), chat.conversationId);
+  console.log('PASS PDF upload → quarantine/ClamAV → bridge/MarkItDown → Codex/stub reads Willow-47; EICAR refused');
   const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args], { cwd: root, timeout: 180_000 });
   await runKube('exec', computer!.computer_id, '--', 'node', '-e',
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
@@ -219,6 +222,7 @@ try {
     return Number(result.rows[0]?.generation) > previousGeneration;
   }, 'lost computer re-claimed');
   assert.equal((await runKube('exec', computer!.computer_id, '--', 'cat', '/home/agent/workspace/dev-stack-preserved')).stdout.trim(), 'yes');
+  assert((await runKube('exec', computer!.computer_id, '--', 'cat', uploaded.textPath)).stdout.includes('Willow-47'));
   console.log(`PASS assistant/computer lifecycle: join→Ready ${joinReadyMs} ms; resume ${resumeMs} ms; Pod replacement kept disk`);
   const serverId = `journey-${id}`;
   await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: 'https://mcp.example.test/mcp', catalogueRef: 'catalogue:dev' });

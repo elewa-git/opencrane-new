@@ -1,5 +1,6 @@
 import { registerApprovalRoutes } from './chat/approvals.ts';
 import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
+import { registerFileRoutes, type FileOptions } from './files/routes.ts';
 // Builds the Fastify instance. Kept separate from main.ts so tests can
 // build a server without binding a real port.
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -20,6 +21,7 @@ export interface BuildServerOptions {
   membership?: MembershipOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
+  files?: FileOptions;
   integrations?: IntegrationOptions;
   computers?: ComputerOptions;
   liveView?: LiveViewOptions;
@@ -60,6 +62,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerLiveView(app, authConfig, options.liveView);
 
   registerApprovalRoutes(app, authConfig, options.chat);
+  registerFileRoutes(app, authConfig, options.files);
 
   return app;
 }

@@ -1,3 +1,4 @@
+import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
@@ -108,6 +109,7 @@ const server = createServer((req, res) => {
 }).listen(8081, '0.0.0.0');
 
 const channel = bridgeChannel(server, {
+  file: receiveFile,
   journal: '/home/agent/codex/bridge-reports.jsonl',
   credential() {
     const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);

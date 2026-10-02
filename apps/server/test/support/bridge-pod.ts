@@ -26,7 +26,7 @@ COPY node_modules/ws /app/node_modules/ws
 COPY libs/models/package.json /app/libs/models/package.json
 COPY libs/models/src/routing.ts /app/libs/models/src/routing.ts
 RUN mkdir -p /app/node_modules/@opencrane && ln -s ../../libs/models /app/node_modules/@opencrane/models
-COPY apps/computer/src/channel.ts apps/computer/src/http.ts /app/src/
+COPY apps/computer/src/channel.ts apps/computer/src/files.ts apps/computer/src/http.ts /app/src/
 CMD ["node", "--experimental-strip-types", "/driver/driver.mjs"]
 `);
     await run('docker', ['build', '-f', dockerfile, '-t', image, '.'], { timeout: 120_000 });
