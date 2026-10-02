@@ -1,4 +1,3 @@
-export { logoutResponseSchema, type LogoutResponse } from './auth.ts';
 export {
   clientMessageSchema,
   errorMessageSchema,

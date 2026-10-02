@@ -31,7 +31,7 @@ import {
   type AuthConfig,
   type CookieAttributes,
 } from '@opencrane/auth';
-import { logoutResponseSchema, type LogoutResponse } from '@opencrane/protocol';
+import { z } from 'zod';
 
 function cookieAttrs(config: AuthConfig): Pick<CookieAttributes, 'httpOnly' | 'secure' | 'path'> {
   return { httpOnly: true, secure: config.cookieSecure, path: '/' };
@@ -121,20 +121,17 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
     if (config.expectedOrgId && session.orgId !== config.expectedOrgId) {
       return reply.code(403).send({ error: 'wrong organisation' });
     }
-    // The local session is cleared even if the provider cannot be reached;
-    // the endSessionUrl is just what the browser is asked to go to next.
-    // The reply uses the schema from @opencrane/protocol, the one the web app
-    // reads it with. That schema accepts only an http(s) address, so a
-    // provider address of any other kind is dropped here, not sent to the
-    // browser to be rejected (or, worse, followed).
-    const providerAddress = logoutResponseSchema.safeParse({ endSessionUrl: await buildLogoutUrl(config, session.idToken) });
-    const body: LogoutResponse = providerAddress.success ? providerAddress.data : { endSessionUrl: null };
-    if (!providerAddress.success) {
+    // Keep the token in the navigation header; never put it in a response body.
+    const address = await buildLogoutUrl(config, session.idToken);
+    const provider = z.url({ protocol: /^https?$/u }).safeParse(address);
+    if (address !== null && !provider.success) {
       request.log.warn('the identity provider logout address is not an http(s) address, so none was sent');
     }
     reply.header('set-cookie', clearCookie(config.cookieName, cookieAttrs(config)));
-    request.log.info({ providerLogout: body.endSessionUrl !== null }, 'signed out');
-    reply.send(body);
+    reply.header('cache-control', 'no-store');
+    request.log.info({ providerLogout: provider.success }, 'signed out');
+    if (provider.success) return reply.code(303).header('location', provider.data).send();
+    return reply.type('text/plain').send('You are signed out of OpenCrane. Your identity provider session could not be ended.');
   });
 
   app.get('/auth/me', async (request, reply) => {

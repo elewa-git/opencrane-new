@@ -20,7 +20,10 @@ Use `hasRecentAuth` for freshness based on the provider's `auth_time`, not login
 The provider verifies PKCE, state and nonce through openid-client.
 `SessionInvalidError`, `SessionExpiredError`, `FlowInvalidError` and `OidcLoginError`
 identify rejected data. Configuration errors stop startup; callers sanitise public errors.
-Pass the encrypted session’s `idToken` to `buildLogoutUrl` to bind provider logout.
+Pass the encrypted session’s `idToken` to `buildLogoutUrl` for RP-initiated logout.
+The server uses that URL only in a 303 `Location` header after a native form POST;
+never return it in JSON or expose it to page JavaScript or logs.
+Zitadel ends all accounts in the current browser, not just the hinted account.
 Older sessions without a token and provider discovery failures yield `null`.
 The server requires the exact Origin and a valid, correctly pinned session before
 clearing its cookie. `/auth/me` exposes only public identity fields.
@@ -45,4 +48,4 @@ against a disposable loopback provider. The [dev-stack journey](../../infra/dev-
 including logout, a mismatched organisation pin and a short-lived session.
 There is no database state to replay here; rotating the cookie key invalidates old cookies.
 Runtime dependencies are openid-client and Zod. See the [plan](../../plan.md) for
-identity boundaries and [protocol](../protocol/README.md) for the logout response contract.
+identity boundaries and [server](../../apps/server/README.md) for the logout response contract.

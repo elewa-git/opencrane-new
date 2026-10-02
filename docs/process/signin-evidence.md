@@ -1,22 +1,20 @@
 # Zitadel sign-in evidence
 
 Issue #11, 2 October 2026, branch `work/zitadel-signin`.
-The review fixes are based on `4fa0b26`, after rebasing onto the reviewed
-`work/timing-tests` (`61d898d`). The rebase had no conflicts.
-The receipt is committed with the fixes; the final handoff records its HEAD SHA.
+Final findings fixed on top of `747102fc38cf3a4dcfb1d9aa45d48bdad5c8ef98`.
+This receipt is committed with the fixes; the final handoff records its HEAD SHA.
 The dev stack runs from `/home/jente/dev/wt/zitadel-signin` and is left running.
 Resource names, public IDs, redirect URLs and secret-file references are in the
 [dev-stack README](../../infra/dev-stack/README.md). No dependency was added.
 
-## Review findings and checks
+## Final review findings and checks
 
 | Finding | Fix and runnable evidence |
 | --- | --- |
-| 1: logout CSRF | Exact configured Origin and a valid, correctly pinned session are required before clearing anything. `apps/server/test/auth-flow.test.ts` checks missing/hostile Origins, missing/invalid/expired/wrong-org sessions and valid logout. The live journey checks both Origin refusals with a real session and no clearing cookie. |
-| 2: logout binding | The encrypted HttpOnly cookie retains the ID token; `buildLogoutUrl` supplies `id_token_hint`, `client_id` and the registered return URI. `/auth/me` returns only public identity fields. Auth contract tests check the hint and token exclusion; older cookies without a hint get local-only logout. The live journey uses two accounts in one browser context. |
-| 3: handoff Cancel | Focus starts on Cancel; an aria-live five-second countdown precedes redirect. Component tests cover focus, countdown, cancellation and destruction. `npm run visual:signin` drives Enter and Space in Chromium, advances its clock before/after cancellation and verifies the redirect boundary at 4,999/5,000 ms. |
-| 4: reliability | Rebased onto #19's reviewed fixture-port allocation, owned cleanup and real shutdown checks. Three consecutive full suites pass with the PostgreSQL control URL below. |
-| 5: frame fidelity | A dedicated `#2f8d9a` SSO token, configured organisation name, invitation arrival copy, frame footer and 420px desktop cards. Captures crop the design source to the card and capture the live card at 1×. Assertions cover geometry, 56/44px horizontal padding, 14px content gap, colours, copy, overflow and 44px controls at 390px. |
+| ID token exposed to JavaScript | Native form POST to `/auth/logout`; empty **303 See Other** with the provider URL only in `Location`, marked `no-store`. Removed the JSON schema/response and Angular fetch/navigation code. Server tests check the body, redirect parameters, scheme validation and logs. Live probes check manual/follow fetch, XHR, DOM and page cookies without passing the token into page JavaScript. |
+| Unsupported account-specific logout claim | Withdrawn. Zitadel ends all accounts in the browser. The journey uses separate contexts for its two business identities; it does not assert that another account survives logout. Keyboard form submission must return home without a chooser, remove the OpenCrane cookie and be followed by a credential-based sign-in. |
+| “1 seconds” announcement | Template selects “1 second” and plural otherwise. Component and visual-browser countdown checks assert the singular wording. |
+| Existing CSRF boundary | Exact configured Origin and a valid, correctly pinned session remain required before clearing anything. Server tests cover missing/hostile Origins and missing/invalid/expired/wrong-org sessions. Live probes cover hostile/missing Origin and no session. |
 
 The public organisation name is deployment configuration in the `opencrane-org`
 meta tag. A non-empty invitation query parameter selects presentation only;
@@ -30,19 +28,29 @@ Run `infra/dev-stack/up.sh --fresh`, which deletes the local Compose volumes,
 recreates service credentials and runs the journey. Cloud accounts and their
 private credential files survive. The journey uses Chromium, tailnet HTTPS,
 real Zitadel, PostgreSQL, NATS and OpenFGA; no success-path session is minted.
-Only the real login redirect is augmented with standard OIDC prompt/hint
-parameters to exercise multiple accounts; provider responses and logout are
-not replaced. Errors name a fixed stage, never a token or provider error body.
+The sign-in and sign-out flows use the registered application unchanged, with no
+prompt/hint overrides or substituted provider responses. Errors name a fixed
+stage, never a token or provider error body.
 
-The logout check must observe a return navigation without account selection,
-refuse silent login for the ended member, retain silent login for the owner,
-then end the owner and refuse its silent login. Both accounts share the same
-provider cookie jar. CSRF probes leave the real member session usable. The silent
-refusal also recognises the exact `No active session found` JSON response
-from [Zitadel Login V2 issue #12165](https://github.com/zitadel/zitadel/issues/12165);
-when no sessions remain, that bug can instead require credentials. The check
-accepts that explicit credential form, but other provider failures do not count
-as proof of logout. The still-active owner must complete silent login successfully.
+The owner chose browser-wide provider logout. Zitadel documents that its current
+[end-session implementation signs out all users in the browser](https://zitadel.com/docs/guides/integrate/login/oidc/logout).
+The ID-token hint identifies the RP session for logout; it does not promise that
+other browser accounts survive. The earlier two-account PASS and source-readiness
+claims are withdrawn: the final review reproduced both silent member re-entry and
+loss of the owner session. Those results did not qualify account-specific logout.
+
+The replacement test checks the real empty 303 response, then probes page fetch
+with manual and followed redirects and XMLHttpRequest. The probes report only
+booleans and never inject the real ID token into the page. They check the DOM and
+page-visible cookies too. Each probe must receive a real 303 and clear the local
+cookie. Each probe uses its own browser context and real credential-based login.
+Native Enter activation then follows the top-level POST/303 navigation to Zitadel
+and home without provider interaction. No OpenCrane cookie may remain, `/auth/me`
+must report signed out, and another POST with correct Origin must return 401
+without clearing cookies. The next normal sign-in may show a remembered-account selector, but must then present credentials and
+complete with the real password; selecting that identity or returning silently
+cannot pass. “No chooser” is tested during sign-out. The current ID token
+must be absent from all five stack process logs.
 
 Wrong-org proof varies the **server pin**, using a real token from OpenCrane 2 Dev.
 It does not access another cloud organisation. Expiry proof replays a genuine
@@ -69,37 +77,58 @@ progress and focuses Cancel. Physical-device qualification is separate.
 
 ## Gates
 
-Safe gate logs: `/tmp/zitadel-{lint,typecheck,events,suite1,suite2,suite3,web-build,web-tests,stack-typecheck,shellcheck,visual}.log`.
-All full suites used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`
-and ran sequentially; no other Vitest launcher was active at the first start.
+Safe gate logs: `/tmp/zitadel-final-{lint,typecheck,events,suite1,suite2,suite3,auth,web-build,web-tests,stack-typecheck,shellcheck,visual}.log`.
+All full suites use `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`
+and run sequentially.
 
 | Gate | Result |
 | --- | --- |
-| Root lint | PASS — 0 errors, 3 function-length warnings |
+| Root lint | PASS — 0 errors, 3 existing function-length warnings |
 | Workspace typecheck | PASS — 11 workspaces |
 | Event catalogue | PASS — 70 event types agree |
-| Full suite, run 1 | PASS — 890 tests, 48 files, 111.39s |
-| Full suite, run 2 | PASS — 890 tests, 48 files, 97.74s |
-| Full suite, run 3 | PASS — 890 tests, 48 files, 96.28s |
+| Full suite, run 1 | PASS — 881 tests, 47 files, 105.02s |
+| Full suite, run 2 | PASS — 881 tests, 47 files, 104.92s |
+| Full suite, run 3 | PASS — 881 tests, 47 files, 134.91s |
 | Focused auth regressions | PASS — 78 tests, 4 files |
 | Web build | PASS — existing app CSS size warning |
-| Web component tests | PASS — 40 tests, 4 files |
+| Web component tests | PASS — 41 tests, 4 files |
 | Dev-stack TypeScript | PASS |
 | Shellcheck | PASS — 4 shell entrypoints |
-| Visual/browser check | PASS — 6 captures plus focus, Enter/Space cancellation and timing |
-| Fresh journey 1 | PASS — 11 checks, `/tmp/zitadel-fresh1.log` |
-| Fresh journey 2 | PASS — 11 checks, `/tmp/zitadel-fresh2.log` |
+| Visual/browser check | PASS — 6 captures; geometry, colour, copy, 390px/44px controls, Enter/Space Cancel, focus and singular/plural countdown |
+| Fresh journey 1 | PASS — 14 checks, `/tmp/zitadel-final-fresh4.log` |
+| Fresh journey 2 | PASS — 14 checks, `/tmp/zitadel-final-fresh5.log` |
 
-Four earlier fresh attempts failed while correcting the two-account harness:
-login selection/input waits, response-body loss on cross-origin navigation and
-Login V2’s asynchronous refusal pages. These are failed attempts, not passes.
-An intermediate fresh journey passed too; the two final receipts above are
-consecutive passes on the final harness and cover bound logout.
+The first fresh attempt during these fixes failed in the token-exposure harness;
+its receipt is `/tmp/zitadel-final-fresh1.log`. A diagnostic non-fresh journey
+(`/tmp/zitadel-final-debug-journey.log`) located the failure at reauthentication
+after a followed fetch. Such a request can change provider sessions despite CORS
+hiding its response. Each exposure probe now uses an isolated browser context.
+A second fresh start (`/tmp/zitadel-final-fresh2.log`) failed before the journey:
+the server reported `EADDRINUSE` during a concurrent root suite. The final fresh
+runs are sequential with the suites to avoid that port collision.
+The third fresh attempt (`/tmp/zitadel-final-fresh3.log`) passed the logout and
+exposure assertions, then failed while waiting for credentials on the next
+sign-in. A diagnostic rerun (`/tmp/zitadel-final-debug2-journey.log`) and an
+isolated browser probe found a remembered-account selector on that next sign-in.
+No chooser appeared during logout. A further isolated probe proved that selecting
+the remembered identity still requires the real password and leaves `/auth/me`
+unauthenticated until it is supplied. The journey now allows that selection only
+on the next sign-in, and still requires credentials. The original attempt remains
+FAIL; it is not counted towards the two final fresh runs.
+Failed attempts are not passes.
+The component form test initially failed because the async response body had not
+yet settled; waiting for the rendered form corrected the test (41/41 pass).
 
-Source readiness: **PASS** for the listed gates. The requested dev-stack sign-in
-and sign-out capability passed twice from fresh local services. The remaining
-qualification limits below are not claimed as passes.
+Source readiness: **PASS** for the listed gates. Live capability: **PASS** for the
+browser-wide logout contract in two consecutive fresh runs on the final harness.
+Sign-out shows no chooser; the next sign-in may select a remembered account and
+must still require its password. Chooser-free next sign-in is **not** claimed.
+All three full suites passed; no fourth full suite was run. The nine tests of the
+removed JSON logout schema account for the reduction from 890 to 881 root tests.
 
-**NOT RUN:** email/magic-link delivery and screen 1c; the owner's physical devices;
-an account from a second cloud organisation; hosted CI and managed production
-installation. No review pass was run during these fixes, and nothing was pushed.
+**NOT RUN:** email/magic-link delivery and screen 1c; physical devices and a real
+screen reader; an account from a second cloud organisation; hosted CI and managed
+production installation. Native form/button semantics and keyboard activation are
+checked, but do not substitute for screen-reader qualification. No review pass was
+run during these fixes, and nothing was pushed. No Zitadel settings or resources
+were changed.

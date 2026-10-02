@@ -40,8 +40,15 @@ Never put credentials in a URL or event. Fresh-silo qualification remains pendin
 `GET /auth/login` redirects to the provider; `GET /auth/me` reports the session.
 `POST /auth/logout` requires the exact configured Origin and a valid session for
 the pinned organisation. Refusals clear no cookies. Success clears the local cookie
-and returns a validated provider URL bound by the encrypted session’s ID token,
-or `null` if bound provider logout is unavailable. `/auth/me` never returns that token.
+and answers a top-level form POST with **303 See Other**. Its `Location` is the
+provider end-session endpoint with `id_token_hint`, `client_id` and the configured
+`post_logout_redirect_uri`; the response body is empty and marked `no-store`.
+The ID token stays out of JSON, page JavaScript and logs. If provider logout is
+unavailable (including older cookies without an ID token), a plain-text page says
+only the OpenCrane session ended. `/auth/me` never returns the token.
+Zitadel ends **all accounts in that browser**, returns without a chooser and
+requires credentials on the next sign-in (which may first select a remembered
+account); see the [live evidence](../../docs/process/signin-evidence.md).
 Invalid callbacks return 400; `/ws` upgrades require a valid cookie and matching Origin.
 The socket supports resumable members subscriptions, plus the existing hello and event-validation demos; it never appends events.
 See [protocol schemas](../../libs/protocol/README.md) for real request examples.

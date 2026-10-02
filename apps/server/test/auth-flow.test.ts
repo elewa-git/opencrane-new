@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { decodeSession, encodeSession, type AuthConfig } from '@opencrane/auth';
-import { logoutResponseSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { DEFAULT_MOCK_USER, startMockOidcProvider, type MockOidcProvider } from './support/mock-oidc-provider.ts';
 import { replaceInCiphertext, tamperCookie, testAuthConfig, truncateAuthTag } from './support/test-auth-config.ts';
@@ -117,8 +116,9 @@ describe('OIDC login flow (against a local mock provider)', () => {
     expect(me.user?.authTime).toBe(DEFAULT_MOCK_USER.authTime);
 
     const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
-    // The reply is checked with the schema the web app reads it with.
-    expect(logoutResponseSchema.parse(logout.json()).endSessionUrl).toContain(`${stack.provider.url}/endsession`);
+    expect(logout.statusCode).toBe(303);
+    expect(logout.body).toBe('');
+    expect(logout.headers.location).toContain(`${stack.provider.url}/endsession`);
     expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
     expect((await stack.app.inject({ method: 'GET', url: '/auth/me' })).json()).toEqual(NOT_SIGNED_IN);
   });
@@ -324,11 +324,14 @@ describe('OIDC login flow (against a local mock provider)', () => {
       const stack = await startStack({}, { postLogoutRedirectUri: 'http://app.example.test/signed-out' });
       const sessionCookie = cookieValue(await signIn(stack), stack.config.cookieName);
       const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
-      const endSession = new URL(logoutResponseSchema.parse(logout.json()).endSessionUrl!);
+      const endSession = new URL(String(logout.headers.location));
       expect(endSession.origin + endSession.pathname).toBe(`${stack.provider.url}/endsession`);
       expect(endSession.searchParams.get('post_logout_redirect_uri')).toBe('http://app.example.test/signed-out');
       expect(endSession.searchParams.get('client_id')).toBe(stack.provider.clientId);
-      expect(endSession.searchParams.get('id_token_hint')).toBe(decodeSession(stack.config, sessionCookie).idToken);
+      expect(endSession.searchParams.get('id_token_hint') === decodeSession(stack.config, sessionCookie).idToken).toBe(true);
+      expect(logout.statusCode).toBe(303);
+      expect(logout.body).toBe('');
+      expect(logout.headers['cache-control']).toBe('no-store');
     });
 
     it('still clears the local session when the provider cannot be reached', async () => {
@@ -341,7 +344,8 @@ describe('OIDC login flow (against a local mock provider)', () => {
 
       const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
       expect(logout.statusCode).toBe(200);
-      expect(logoutResponseSchema.parse(logout.json())).toEqual({ endSessionUrl: null });
+      expect(logout.body).toContain('Your identity provider session could not be ended.');
+      expect(logout.headers.location).toBeUndefined();
       expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
     });
 
@@ -350,7 +354,8 @@ describe('OIDC login flow (against a local mock provider)', () => {
       const sessionCookie = cookieValue(await signIn(stack), stack.config.cookieName);
       const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
       expect(logout.statusCode).toBe(200);
-      expect(logoutResponseSchema.parse(logout.json())).toEqual({ endSessionUrl: null });
+      expect(logout.body).toContain('Your identity provider session could not be ended.');
+      expect(logout.headers.location).toBeUndefined();
     });
 
     // The browser follows whatever address it is given, so one that is not http(s) must never reach it.
@@ -365,7 +370,8 @@ describe('OIDC login flow (against a local mock provider)', () => {
       const logout = await stack.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: 'http://app.example.test' }, cookies: { [stack.config.cookieName]: sessionCookie } });
 
       expect(logout.statusCode).toBe(200);
-      expect(logout.json()).toEqual({ endSessionUrl: null });
+      expect(logout.body).toContain('Your identity provider session could not be ended.');
+      expect(logout.headers.location).toBeUndefined();
       expect(findCookie(logout, stack.config.cookieName)).toMatchObject({ value: '', maxAge: 0 });
     });
   });

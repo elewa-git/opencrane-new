@@ -34,8 +34,11 @@ Register refresh failures keep old rows and their load time visible. The always-
 refresh button stays in place and keeps keyboard focus while retrying. Non-admins see that the Owner or Admin role is required. Adding an
 MCP server is explicitly unavailable; no setup flow or mutation is simulated.
 Socket closure updates state and schedules reconnect with jitter;
-there is no durable outgoing message queue. Logout posts to the server, then follows
-a validated provider URL when available or returns home. Page navigation ends the
+there is no durable outgoing message queue. Sign out uses a native form POST to
+`/auth/logout`; the server sends a 303 navigation to Zitadel. Page JavaScript never
+reads a logout URL or ID token. Zitadel signs out all accounts in that browser,
+returns home without a chooser and requires credentials on the next sign-in.
+That next sign-in may first show a remembered-account selector. Page navigation ends the
 current socket; the shell does not explicitly disconnect it first. The server checks
 the session and Origin on every WebSocket upgrade.
 

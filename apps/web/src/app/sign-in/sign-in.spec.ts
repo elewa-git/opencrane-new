@@ -31,7 +31,7 @@ describe('sign-in handoff', () => {
     vi.advanceTimersByTime(4000);
     fixture.detectChanges();
     expect(navigate).not.toHaveBeenCalled();
-    expect(element.querySelector('[aria-live=polite]')?.textContent).toContain('1 seconds');
+    expect(element.querySelector('[aria-live=polite]')?.textContent).toContain('1 second…');
     vi.advanceTimersByTime(1000);
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/auth/login?returnTo=/');
   });
@@ -62,5 +62,24 @@ describe('sign-in handoff', () => {
       expect(element.textContent).toContain('You were invited by Example Group. Your work here stays private to you.');
       expect(element.querySelector('footer')?.textContent).toBe('self-hosted · data sovereign');
     } finally { meta.remove(); fetchSpy.mockRestore(); }
+  });
+  it('uses a native sign-out form without a JavaScript submit handler', async () => {
+    globalThis.history.replaceState({}, '', '/');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{"authenticated":true}'));
+    try {
+      const { fixture, element } = create();
+      await vi.waitFor(() => {
+        fixture.detectChanges();
+        expect(element.querySelector('form')).not.toBeNull();
+      });
+      const form = element.querySelector('form');
+      expect(form?.getAttribute('method')).toBe('post');
+      expect(form?.getAttribute('action')).toBe('/auth/logout');
+      expect(form?.querySelector('button[type=submit]')?.textContent).toBe('Sign out');
+      const submit = new Event('submit', { bubbles: true, cancelable: true });
+      form?.dispatchEvent(submit);
+      expect(submit.defaultPrevented).toBe(false);
+      expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/auth/me');
+    } finally { fetchSpy.mockRestore(); }
   });
 });

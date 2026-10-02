@@ -81,7 +81,7 @@ try {
     assert(await cancel.evaluate((element) => element === globalThis.document.activeElement));
     await page.clock.runFor(4000);
     assert.equal(new URL(page.url()).pathname, '/signin/handoff');
-    assert.match(await page.locator('[aria-live=polite]').textContent(), /1 seconds/);
+    assert.match(await page.locator('[aria-live=polite]').textContent(), /1 second…/);
     await page.keyboard.press(key);
     await page.waitForURL(origin + '/');
     await page.clock.runFor(10_000);

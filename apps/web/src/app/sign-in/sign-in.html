@@ -3,7 +3,7 @@
     <div class="folds" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
     <h1>Taking you to your identity provider</h1>
     <p>You will come back here signed in. Your organisation uses Zitadel to verify your account.</p>
-    <oc-shared-state kind="checking" [message]="'Opening single sign-on in ' + seconds() + ' seconds…'" />
+    <oc-shared-state kind="checking" [message]="'Opening single sign-on in ' + seconds() + (seconds() === 1 ? ' second…' : ' seconds…')" />
     <button type="button" class="text-button" #cancelButton (click)="cancel()">Cancel and go back</button>
   } @else {
     <a class="brand" href="/" aria-label="OpenCrane home">
@@ -15,7 +15,9 @@
         <h1>You are signed in</h1>
         <oc-shared-state kind="ready" message="Your workspace session is active" />
         <a class="button secondary" href="/org/integrations">Organisation integrations</a>
-        <button type="button" class="button primary" (click)="signOut()" [disabled]="pending()">{{ pending() ? 'Signing out…' : 'Sign out' }}</button>
+        <form method="post" action="/auth/logout" enctype="text/plain">
+          <button type="submit" class="button primary">Sign out</button>
+        </form>
       } @else {
         <div><p class="eyebrow">{{ organisation }}</p><h1>Sign in to your workspace</h1>
           @if (!rejected) { <p>{{ invited ? 'You were invited by ' + organisation + '. Your work here stays private to you.' : 'Use your organisation’s account to continue to OpenCrane.' }}</p> }

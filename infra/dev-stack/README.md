@@ -105,14 +105,21 @@ checkout must first stop the old stack and deliberately transfer `stack-owner`;
 normal scripts continue to refuse a foreign owner marker.
 
 Open `/` on the tailnet URL and choose **Continue with single sign-on**. Credentials
-are entered only on Zitadel. After **Sign out**, the encrypted session’s ID token binds Zitadel logout to that
-account and returns home without an account chooser. Email-link delivery is not qualified; its shared state
+are entered only on Zitadel. **Sign out** submits a native form POST. The server
+clears the OpenCrane cookie and sends a 303 to Zitadel with the encrypted session’s
+ID token in the `Location` header only. Zitadel signs out **all accounts in that
+browser**, returns home without a chooser, and the next sign-in requires credentials.
+Zitadel may first ask which remembered account to use on that next sign-in.
+The ID token is never returned in JSON or read by page JavaScript. Email-link delivery is not qualified; its shared state
 says unavailable, and no sent-email screen or lockout count is invented.
 
-The journey signs in as both real users in one Playwright browser context at 390px and uses their
-actual encrypted cookies for HTTP and WebSocket requests. It refuses hostile and
-missing logout Origins, then ends the member session without a chooser, proves
-the owner can still sign in silently, and finally ends the owner session. Dev-only bootstrap
+The journey signs in as both real users in separate Playwright browser contexts
+at 390px and uses their actual encrypted cookies for HTTP and WebSocket requests.
+It refuses hostile/missing logout Origins and requests without a session. It checks
+an empty 303 body and probes manual/follow fetch, XHR, the DOM and page cookies for
+ID-token exposure. Native keyboard sign-out returns without a chooser, removes
+the OpenCrane cookie and is followed by a successful sign-in requiring credentials.
+The five process logs are checked for the current ID token without printing it. Dev-only bootstrap
 invitations bind these subjects to stable member IDs; they do not define the
 production first-owner policy. Each run adds a new invitation/join and MCP row.
 Wrong-org and expiry checks run another real server on temporary loopback ports:

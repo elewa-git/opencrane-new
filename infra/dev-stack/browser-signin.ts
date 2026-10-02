@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -13,25 +14,21 @@ export async function testUsers() {
   return setupSchema.parse(JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'))).users;
 }
 type User = z.infer<typeof userSchema>;
-async function prompt(page: Page, config: AuthConfig, user: User, value: 'login' | 'none', idToken?: string) {
-  // Exercise two provider sessions in one cookie jar, without changing the registered app.
-  await page.route(`${new URL(config.redirectUri).origin}/auth/login**`, async (route) => {
-    const response = await route.fetch({ maxRedirects: 0 });
-    const url = new URL(response.headers()['location']!);
-    url.searchParams.set('prompt', value);
-    url.searchParams.set('login_hint', user.login);
-    if (idToken) url.searchParams.set('id_token_hint', idToken);
-    await route.fulfill({ response, headers: { ...response.headers(), location: url.href } });
-  }, { times: 1 });
-}
-async function login(page: Page, origin: string, user: User) {
+async function login(page: Page, origin: string, user: User, selectRememberedAccount = false) {
   let step = 'home';
   try {
     await page.goto(origin);
     step = 'SSO button';
     await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
     step = 'provider input';
-    await page.locator('input[name=loginName]:visible, input[type=password]:visible').first().waitFor();
+    const credentials = page.locator('input[name=loginName]:visible, input[type=password]:visible');
+    if (selectRememberedAccount) {
+      // Zitadel remembers the identity after ending its session; selection must still require a password.
+      const account = page.getByRole('button').filter({ hasText: user.login });
+      await credentials.or(account).first().waitFor();
+      if (await account.isVisible()) await account.click();
+    }
+    await credentials.first().waitFor();
     if (await page.locator('input[name=loginName]').isVisible()) {
       step = 'username';
       await page.locator('input[name=loginName]').fill(user.login);
@@ -39,6 +36,10 @@ async function login(page: Page, origin: string, user: User) {
     }
     step = 'password';
     await page.locator('input[type=password]').waitFor();
+    if (selectRememberedAccount) {
+      const me = z.object({ authenticated: z.boolean() }).parse(await (await page.request.get(`${origin}/auth/me`)).json());
+      assert.equal(me.authenticated, false, 'Remembered account selection must not create a session without credentials');
+    }
     await page.locator('input[type=password]').fill(await readFile(user.passwordFile, 'utf8'));
     await page.getByRole('button', { name: 'Continue', exact: true }).click();
     step = 'return';
@@ -59,13 +60,11 @@ export async function browserSessions(config: AuthConfig, origin: string) {
   try {
     const users = await testUsers();
     const sessions = new Map<string, { sub: string; cookie: string }>();
-    const idTokens = new Map<string, string>();
-    const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
-    const page = await context.newPage();
-    page.setDefaultTimeout(30_000);
+    let page: Page | undefined;
     for (const role of ['owner', 'member'] as const) {
-      await context.clearCookies({ name: config.cookieName });
-      await prompt(page, config, users[role], 'login');
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      page = await context.newPage();
+      page.setDefaultTimeout(30_000);
       stage = `${role} login`;
       await login(page, origin, users[role]);
       stage = `${role} cookie`;
@@ -75,29 +74,30 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       assert.equal(session.sub, users[role].id);
       assert.equal(session.orgId, config.expectedOrgId);
       assert(session.idToken, 'Real login retains its ID token for logout');
-      idTokens.set(role, session.idToken);
       sessions.set(role, { sub: session.sub, cookie: `${config.cookieName}=${value}` });
     }
-    console.log('PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px in one browser');
+    console.log('PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px in separate browser contexts');
+    assert(page);
+    const memberPage = page;
     stage = 'logout CSRF';
     await logoutCsrfChecks(page, origin);
     stage = 'refusal checks';
     await refusalChecks(browser, config, origin, users.member);
     return { sessions, close: async () => {
       try {
-        stage = 'member logout';
-        await boundLogout(page, config, origin);
-        stage = 'member ended';
-        await silentLogin(page, config, origin, users.member, idTokens.get('member')!, false);
-        stage = 'owner retained';
-        await silentLogin(page, config, origin, users.owner, idTokens.get('owner')!, true);
-        idTokens.set('owner', decodeSession(config, await cookie(context, config, origin)).idToken!);
-        stage = 'owner logout';
-        await boundLogout(page, config, origin);
-        stage = 'owner ended';
-        await silentLogin(page, config, origin, users.owner, idTokens.get('owner')!, false);
-        console.log('PASS sign-out: two accounts in one browser; no chooser; member ended, owner retained, then owner ended');
-      } catch { throw new Error(`Real browser logout failed at ${stage}`); }
+        stage = 'token exposure probes';
+        await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });
+        stage = 'form logout';
+        await formLogout(memberPage, config, origin);
+        stage = 'credentials after logout';
+        await login(memberPage, origin, users.member, true);
+        await memberPage.getByRole('heading', { name: 'You are signed in' }).waitFor();
+        assert.equal(decodeSession(config, await cookie(memberPage.context(), config, origin)).sub, users.member.id);
+        console.log('PASS next sign-in: remembered identity still requires credentials; successful reauthentication');
+      } catch (error) {
+        const detail = error instanceof Error && error.message.startsWith('Login did not complete at ') ? `: ${error.message}` : '';
+        throw new Error(`Real browser logout failed at ${stage}${detail}`);
+      }
       finally { await browser.close(); }
     } };
   } catch (error) {
@@ -118,49 +118,93 @@ async function logoutCsrfChecks(page: Page, origin: string) {
   }
   console.log('PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me');
 }
-async function boundLogout(page: Page, config: AuthConfig, origin: string) {
+async function tokenExposureChecks(browser: Browser, config: AuthConfig, origin: string, user: User, stage: (step: string) => void) {
+  for (const transport of ['response body', 'manual fetch', 'fetch', 'XHR'] as const) {
+    // A followed fetch can change provider sessions even when CORS hides its response.
+    const context = await browser.newContext();
+    try {
+      const page = await context.newPage();
+      stage(`login for ${transport}`);
+      await login(page, origin, user);
+      await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+      stage(`${transport} exposure`);
+      const idToken = decodeSession(config, await cookie(context, config, origin)).idToken;
+      assert(idToken);
+      if (transport === 'response body') {
+        const reply = await page.request.post(`${origin}/auth/logout`, { headers: { origin }, maxRedirects: 0 });
+        assert.equal(reply.status(), 303);
+        assert((await reply.body()).length === 0, 'Logout response body must be empty');
+        assert(new URL(reply.headers()['location']!).searchParams.get('id_token_hint') === idToken);
+        assert.equal(reply.headers()['cache-control'], 'no-store');
+      } else {
+        // Return only booleans. Never inject the real token into the page or record response data.
+        const response = page.waitForResponse((reply) => reply.url() === origin + '/auth/logout');
+        const exposed = await page.evaluate(async (transport) => {
+          const containsToken = (value: string) => /eyJ[\w-]+\.[\w-]+\.[\w-]+/u.test(value) || value.includes('id_token_hint');
+          if (transport === 'XHR') return await new Promise<boolean>((resolve) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/auth/logout');
+            xhr.onloadend = () => resolve(containsToken(xhr.responseText + xhr.responseURL + xhr.getAllResponseHeaders()));
+            xhr.send();
+          });
+          try {
+            const reply = await fetch('/auth/logout', { method: 'POST', redirect: transport === 'manual fetch' ? 'manual' : 'follow' });
+            return containsToken(await reply.text()) || containsToken(reply.url + JSON.stringify([...reply.headers]));
+          } catch { return false; } // A cross-origin redirect is not readable without CORS permission.
+        }, transport);
+        assert.equal((await response).status(), 303);
+        assert.equal(exposed, false, `${transport} must not expose the ID token`);
+      }
+      assert(!(await context.cookies(origin)).some((item) => item.name === config.cookieName));
+      const domExposed = await page.evaluate(() => /eyJ[\w-]+\.[\w-]+\.[\w-]+/u.test(document.documentElement.outerHTML + document.cookie)
+        || document.documentElement.outerHTML.includes('id_token_hint'));
+      assert.equal(domExposed, false, 'DOM and page cookies must not expose the ID token');
+      await checkLogs(idToken);
+    } finally { await context.close(); }
+  }
+  console.log('PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token');
+}
+async function checkLogs(idToken: string) {
+  for (const name of ['server', 'web', 'members', 'mcp-catalogue', 'dispatcher']) {
+    assert(!(await readFile(`${directory}/${name}.log`, 'utf8')).includes(idToken), 'Stack logs must not contain the ID token');
+  }
+}
+async function formLogout(page: Page, config: AuthConfig, origin: string) {
   const idToken = decodeSession(config, await cookie(page.context(), config, origin)).idToken;
+  const form = page.locator('form[action="/auth/logout"]');
+  assert.equal(await form.getAttribute('method'), 'post');
   const request = page.waitForRequest((request) => new URL(request.url()).origin === config.issuerUrl
     && new URL(request.url()).pathname === '/oidc/v1/end_session');
-  const returned = page.waitForResponse((reply) => reply.request().isNavigationRequest() && reply.url() === origin + '/');
-  const [logout] = await Promise.all([request, returned,
-    page.getByRole('button', { name: 'Sign out', exact: true }).click()]);
+  const response = page.waitForResponse((reply) => reply.url() === origin + '/auth/logout');
+  let providerPageShown = false;
+  page.on('framenavigated', (frame) => {
+    if (frame === page.mainFrame() && new URL(frame.url()).origin !== origin) providerPageShown = true;
+  });
+  const button = form.getByRole('button', { name: 'Sign out', exact: true });
+  await button.focus();
+  const [logout, reply] = await Promise.all([request, response, button.press('Enter')]);
+  assert.equal(reply.status(), 303);
+  assert.equal(reply.request().method(), 'POST');
+  assert(reply.request().isNavigationRequest() && logout.isNavigationRequest());
+  assert.equal(reply.request().frame(), page.mainFrame());
   const params = new URL(logout.url()).searchParams;
-  assert(idToken && params.get('id_token_hint') === idToken, 'Logout must bind the current provider session');
+  assert(idToken && params.get('id_token_hint') === idToken, 'Logout must carry the current ID token');
   assert.equal(params.get('client_id'), config.clientId);
   assert.equal(params.get('post_logout_redirect_uri'), config.postLogoutRedirectUri);
-  // No account selection or provider interaction is allowed between click and return.
+  // No provider interaction is allowed between keyboard activation and return.
   await page.waitForURL(origin + '/');
   await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).waitFor();
+  assert.equal(providerPageShown, false, 'Logout must not display a provider page or account chooser');
+  assert(!(await page.context().cookies(origin)).some((item) => item.name === config.cookieName));
   const me = z.object({ authenticated: z.boolean() }).parse(await (await page.request.get(`${origin}/auth/me`)).json());
   assert.equal(me.authenticated, false);
-}
-async function silentLogin(page: Page, config: AuthConfig, origin: string, user: User, idToken: string, succeeds: boolean) {
-  await prompt(page, config, user, 'none', idToken);
-  await page.goto(`${origin}/auth/login`);
-  if (succeeds) {
-    await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith('/auth/'));
-  } else {
-    // Login V2 #12165 may redirect in JavaScript to JSON, or present credentials.
-    // Observe the final page, not page.goto's intermediate response.
-    const noSession = page.locator('pre').filter({ hasText: 'No active session found' });
-    const credentials = page.locator('input[name=loginName]:visible, input[type=password]:visible');
-    await noSession.or(credentials).or(page.getByRole('heading', { name: 'Sign in to your workspace', exact: true }))
-      .first().waitFor();
-    if (new URL(page.url()).origin !== origin) {
-      assert.equal(new URL(page.url()).origin, config.issuerUrl);
-      if (await noSession.isVisible()) {
-        z.object({ error: z.literal('No active session found') }).strict().parse(JSON.parse((await noSession.textContent())!));
-      } else await credentials.first().waitFor();
-    }
-  }
-  const me = z.object({ authenticated: z.boolean(), user: z.object({ sub: z.string() }).nullable() })
-    .parse(await (await page.request.get(`${origin}/auth/me`)).json());
-  assert.equal(me.authenticated, succeeds, 'Only the intended provider session must end');
-  if (succeeds) {
-    assert.equal(me.user?.sub, user.id);
-    await page.getByRole('button', { name: 'Sign out', exact: true }).waitFor();
-  }
+  const refused = await page.request.post(`${origin}/auth/logout`, { headers: { origin }, maxRedirects: 0 });
+  assert.equal(refused.status(), 401);
+  assert.equal(refused.headers()['set-cookie'], undefined);
+  assert(idToken);
+  await checkLogs(idToken);
+  console.log('PASS logs: no ID token in the five stack process logs');
+  console.log('PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused');
 }
 async function refusalChecks(browser: Browser, config: AuthConfig, origin: string, user: User) {
   // A second real server varies only the pin / lifetime. No other Zitadel org is accessed.
