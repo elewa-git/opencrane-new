@@ -33,7 +33,12 @@ const configSchema = z
     // (loadAuthConfig refuses to start without OIDC_EXPECTED_ORG_ID). It is
     // optional here only so local development and tests can leave it out.
     expectedOrgId: z.string().min(1).optional(),
-    extraIdentities: z.array(z.object({ issuer: z.string().url(), subject: z.string().min(1) }).strict()),
+    // Matched exactly against token claims, so refuse whitespace that could be
+    // trimmed away between configuration and comparison.
+    extraIdentities: z.array(z.object({
+      issuer: z.string().regex(/^\S+$/).url(),
+      subject: z.string().regex(/^\S+$/),
+    }).strict()),
     stepUpMaxAgeSeconds: z.number().int().positive(),
     // Lets openid-client talk to a provider over plain http://. For local
     // development and tests only; a real deployment leaves it unset.

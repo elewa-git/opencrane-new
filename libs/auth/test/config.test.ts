@@ -45,7 +45,15 @@ describe('loadAuthConfig', () => {
     expect(config.extraIdentities).toEqual(extraIdentities);
   });
 
-  it.each(['not-json', '{}', '[{"issuer":"https://idp.example.test","subject":""}]'])('rejects malformed extra identities: %s', (value) => {
+  it.each([
+    'not-json',
+    '{}',
+    '[{"issuer":"https://idp.example.test","subject":""}]',
+    // The match must be exact, so a value that a parser would trim is refused.
+    '[{"issuer":" https://idp.example.test","subject":"owner-1"}]',
+    '[{"issuer":"https://idp.example.test ","subject":"owner-1"}]',
+    '[{"issuer":"https://idp.example.test","subject":" owner-1"}]',
+  ])('rejects malformed extra identities: %s', (value) => {
     expect(() => loadAuthConfig({ ...requiredEnv, OIDC_EXTRA_IDENTITIES: value })).toThrow();
   });
 
