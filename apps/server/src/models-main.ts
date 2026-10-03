@@ -26,7 +26,7 @@ const jwks = z.object({ keys: z.array(z.object({ kty: z.literal('EC'), kid: z.st
 try {
   await db.db.lock!(`budget-leader:${silo}`, async locked => {
     const actor = new BudgetActor(events.store, silo);
-    await actor.start();
+    await actor.start(2000, 20000, process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default');
     const decision = await startDecision(actor, { jwks, issuer: required('TOKEN_ISSUER') }, { silo, apiUrl: required('OPENFGA_API_URL'),
       storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, Number(required('MODEL_DECISION_PORT')));
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
@@ -40,6 +40,7 @@ try {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.
         if (!gateway.healthy()) throw new Error('Gateway stopped');
         await ingestUsage(actor, `${directory}/usage.jsonl`);
+        await actor.period();
         await actor.expire();
         await delay(100, undefined, { signal: stop.signal });
       }

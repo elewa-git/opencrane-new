@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { once } from 'node:events';
 import { promisify } from "node:util";
 import { expect, it, vi } from "vitest";
 import {
@@ -11,8 +12,61 @@ import { event, natsFixture } from "@opencrane/event-store/testing";
 import { createLogger } from "@opencrane/observability";
 import { mcpCatalogue, pgDb, ProjectionRunner } from "@opencrane/projections";
 import { replay } from "../src/replay.ts";
+import { BudgetActor, budgets, envelope, history, readBudget, totals } from '@opencrane/models';
 
 const exec = promisify(execFile);
+
+it('upgrades pending and settled legacy budget projections to actor totals and keeps them identical after replay', async () => {
+  const dbs = await databases(), nats = await natsFixture(), db = pgDb(dbs.queue);
+  const now = new Date('2026-10-03T12:00:00.000Z');
+  try {
+    const append = async (type: string, payload: unknown) => {
+      const rows = await history(nats.store, 'budget-test', 'test');
+      expect((await nats.store.append({ event: envelope('test', 'budget-test', type, payload, undefined, now),
+        expectedSequence: rows.at(-1)?.sequence ?? 0 })).status).toBe('appended');
+    };
+    await append('budget.ceiling_set', { scope: 'global', dailyCeilingCents: 3210, ceilingCents: 45678, setBy: 'owner' });
+    await append('budget.ceiling_set', { scope: 'paying_group', scopeId: 'sales', ceilingCents: 100, setBy: 'owner' });
+    const modelCall = { model: 'gpt-5-mini', priceTableId: 'openai-2026-10-02-eur95', computerId: 'computer', assistantId: 'assistant',
+      requesterId: 'alice', conversationId: 'chat', turnId: 'turn', threadId: 'thread', contextDigest: '0'.repeat(64) };
+    for (const reservationId of ['pending', 'settled']) await append('budget.reserved', { reservationId, permitId: reservationId,
+      amountCents: 25, payingGroupId: 'sales', assistantId: 'assistant', modelCall });
+    await append('budget.settled', { reservationId: 'settled', permitId: 'settled', settledCents: 9 });
+    const runner = new ProjectionRunner(db, nats.reader, createLogger('budget-upgrade-test', { level: 'silent' }));
+    await runner.initialise(budgets); await runner.run(budgets);
+    // An installed pre-P3-13 row copied modelCall without the envelope's paying group.
+    const legacy = await readBudget(db, 'test');
+    for (const reservation of legacy.reservations) delete reservation.call.payingGroupId;
+    await db.query('UPDATE model_budgets SET state = $1 WHERE silo = $2', [JSON.stringify(legacy), 'test']);
+    const actor = new BudgetActor(nats.store, 'test', () => now); await actor.start();
+    const env = { ...process.env, ...nats.env('projection'), DATABASE_URL: String(dbs.queue.options.connectionString), LOG_LEVEL: 'silent' };
+    const generation = async () => Number((await db.query('SELECT generation FROM projection_generations WHERE name = $1', [budgets.name])).rows[0]?.['generation']);
+    const scope = { scope: 'paying_group' as const, scopeId: 'sales' };
+    for (let restart = 0; restart < 2; restart++) {
+      const child = spawn(process.execPath, ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'budgets'], { env, stdio: 'ignore' });
+      const exited = once(child, 'exit');
+      try {
+        await vi.waitFor(async () => { expect(child.exitCode).toBeNull(); expect(await runner.checkpoint(budgets)).toBe(await nats.store.head()); }, { timeout: 20_000, interval: 100 });
+        // A checkpoint alone is insufficient: the upgraded projection must retain attribution.
+        const projected = await readBudget(db, 'test');
+        expect(totals(projected, now, scope)).toMatchObject({ todayCents: 9, monthCents: 9, reservedCents: 25 });
+        expect(totals(projected, now, scope)).toEqual(totals(actor.state, now, scope));
+        expect(totals(projected, now)).toEqual(totals(actor.state, now));
+        expect(await generation()).toBe(1);
+      } finally { child.kill('SIGTERM'); await exited; }
+      if (restart === 0) {
+        // Force a drain on the second startup without changing any budget totals.
+        await append('budget.period_started', { periodStart: '2026-10-01T00:00:00.000Z' });
+      }
+    }
+    const before = await readBudget(db, 'test');
+    const { stdout } = await exec('npm', ['run', 'replay', '--', 'budgets', '--verify'], { env });
+    expect(stdout).toContain('rebuilt state matched the live projection');
+    expect(await readBudget(db, 'test')).toEqual(before);
+    expect(await generation()).toBe(1);
+    expect(totals(await readBudget(db, 'test'), now, scope)).toEqual(totals(actor.state, now, scope));
+  } finally { await nats.close(); await dbs.close(); }
+}, 60_000);
 
 it("replays with projection credentials and cannot publish events", async () => {
   const nats = await natsFixture();

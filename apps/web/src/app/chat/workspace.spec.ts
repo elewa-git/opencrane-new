@@ -26,8 +26,11 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   message('agent.message_delta', 3, { turnId: 'message', messageId: 'reply', text: 'Hello ' });
   message('agent.message_delta', 4, { turnId: 'message', messageId: 'reply', text: 'there' });
   await fixture.whenStable(); expect(root.textContent).toContain('Hello there');
-  message('agent.turn_stop_requested', 5, { turnId: 'message' });
-  message('agent.message_completed', 6, { turnId: 'message', messageId: 'reply', text: 'Hello there and more' });
+  message('decision.recorded', 5, { turnId: 'message', reason: 'budget_exhausted' });
+  await fixture.whenStable(); expect(root.querySelector('.budget-refusal')?.textContent).toContain('Spending limit reached');
+  expect(root.querySelector('.budget-refusal')?.textContent).toContain('Owner or Admin');
+  message('agent.turn_stop_requested', 6, { turnId: 'message' });
+  message('agent.message_completed', 7, { turnId: 'message', messageId: 'reply', text: 'Hello there and more' });
   await fixture.whenStable(); expect(root.textContent).toContain('Stopped'); expect(root.textContent).not.toContain('and more');
   expect(root.querySelector('[aria-live="polite"]')).not.toBeNull();
 });

@@ -1,6 +1,6 @@
 # Operator replay
 
-`@opencrane/ops` rebuilds the `members`, `mcp-catalogue` and `computers` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `mcp-catalogue`, `computers` and `budgets` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -15,6 +15,7 @@ that every global sequence through the reported stream head can be read:
 npm run replay -- members --dry-run
 npm run replay -- mcp-catalogue --dry-run
 npm run replay -- computers --dry-run
+npm run replay -- budgets --dry-run
 npm run replay -- openfga --dry-run
 ```
 
@@ -31,6 +32,7 @@ Set the same NATS reader settings and `DATABASE_URL`, then run:
 npm run replay -- members --verify
 npm run replay -- mcp-catalogue --verify
 npm run replay -- computers --verify
+npm run replay -- budgets --verify
 ```
 
 The normal projection runner and the tool share a PostgreSQL advisory lock. The
@@ -39,7 +41,7 @@ incremental tables at their checkpoint when `--verify` is present, catches up to
 then locks its tables in reader order and replaces their contents and the
 checkpoint in one transaction. Keeping the live table objects preserves their grants.
 Readers may wait briefly but cannot see partial state. A repair that changes state bumps
-the projection's generation (members and mcp-catalogue), so readers reload; members
+the projection's generation, so readers reload; members
 WebSocket subscribers restart from position 0. An equal verified rebuild does not. Events appended after the captured head are
 processed by the normal runner after the switch. A replay error drops the shadow
 tables and leaves the live projection and checkpoint untouched.
@@ -172,3 +174,28 @@ and assistant grants in OpenFGA before chat.
 The real-gateway regression suite in `libs/models/test/gateway.test.ts` covers
 fresh events, a later member, upgrade/replay and preserved revocations. A live
 fresh dev-stack journey remains unqualified.
+
+## Budget upgrade
+
+The budget decision process repairs an existing stream with no installation
+default paying group at startup under its leadership lease. It appends one
+`budget.ceiling_set` with the current global daily/monthly ceilings and the
+configured `DEFAULT_PAYING_GROUP_ID` (default `installation-default`). Scoped
+ceilings and existing defaults are preserved. With budget writers stopped, the
+same idempotent migration can run separately with command NATS credentials:
+
+```sh
+npm run migrate:budget-default -w apps/ops
+```
+
+Set `SILO_ID` and optionally `DEFAULT_PAYING_GROUP_ID`. The dev stack's `up.sh`
+runs it before decision startup. Fresh empty streams are seeded by the actor.
+
+The budget projection worker checks version 2 before resuming its checkpoint.
+Older projections rebuild from event envelopes, restoring paying-group bindings
+for both pending and settled reservations. It uses the same shadow replay and
+atomic replacement as `npm run replay -- budgets`. Failed replay retains the
+live rows, checkpoint and version so startup can retry. A changed rebuild bumps
+the generation; repeat startup and an equal verified replay leave it unchanged.
+Use `--verify` after upgrade to compare totals; it refuses mismatched legacy rows
+without repairing them. Replay uses reader credentials and publishes no events.

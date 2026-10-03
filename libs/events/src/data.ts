@@ -245,7 +245,7 @@ export const toolsetChangedDataSchema = z
 // --- Conversations and agent activity ----------------------------------
 
 export const conversationCreatedDataSchema = z
-  .object({ conversationId: id, assistantId: id, createdBy: id, mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session') })
+  .object({ conversationId: id, assistantId: id, createdBy: id, mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session'), payingGroupId: id.optional() })
   .strict();
 
 export const participantAddedDataSchema = z
@@ -356,7 +356,7 @@ export const mcpServerDiscoveredDataSchema = z
     connectionId: id.optional(),
     accountMode: z.enum(['none', 'personal', 'company']).optional(),
     tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),
-      readOnly: z.boolean().optional(), destructive: z.boolean().optional() }).strict()).max(500).optional(),
+      readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional() }).strict()).max(500).optional(),
   })
   .strict();
 
@@ -419,7 +419,7 @@ export const connectionRevokedDataSchema = z
 // scopeId" and "global with a scopeId" invalid instead of silently legal.
 const ceilingFields = { ceilingCents: centsSchema, dailyCeilingCents: centsSchema.optional(), setBy: id };
 export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
-  z.object({ scope: z.literal('global'), ...ceilingFields }).strict(),
+  z.object({ scope: z.literal('global'), ...ceilingFields, defaultPayingGroupId: id.optional() }).strict(),
   z.object({ scope: z.literal('paying_group'), scopeId: id, ...ceilingFields }).strict(),
   z.object({ scope: z.literal('assistant'), scopeId: id, ...ceilingFields }).strict(),
 ]);

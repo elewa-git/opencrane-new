@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
-import { effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { budgetCeilingSetDataSchema, effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
 import { applyBudget, costCents, data, emptyBudget, models, totals, type ModelCall } from './state.ts';
 
@@ -19,23 +19,39 @@ export function envelope(silo: string, subject: string, type: string, payload: u
   if (!parsed.success) throw new Error('Invalid model event');
   return parsed.event;
 }
+export class BudgetRefused extends Error {}
+/** Run with budget writers stopped or under the leadership lease; each migration appends once. */
+export async function migrateBudgetDefault(store: EventStore, silo: string, defaultPayingGroupId: string) {
+  z.string().min(1).parse(defaultPayingGroupId);
+  const rows = await history(store, `budget-${silo}`, silo);
+  if (!rows.length) return; // Fresh installations are seeded by the actor.
+  const state = emptyBudget();
+  for (const row of rows) applyBudget(state, row.event, row.sequence);
+  if (state.defaultPayingGroupId) return;
+  const event = envelope(silo, `budget-${silo}`, 'budget.ceiling_set', { scope: 'global',
+    dailyCeilingCents: state.dailyCeilingCents, ceilingCents: state.ceilingCents,
+    defaultPayingGroupId, setBy: 'installation' });
+  const result = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
+  if (result.status !== 'appended') throw new Error('Budget default migration append failed; retry with writers stopped');
+}
 export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
   private queue = Promise.resolve();
   private failed = false;
-  private exhaustedDay: string | undefined;
+  private readonly exhausted = new Set<string>();
   readonly store: EventStore;
   readonly silo: string;
   readonly now: () => Date;
   constructor(store: EventStore, silo: string, now = () => new Date()) { this.store = store; this.silo = silo; this.now = now; }
   // Call only after winning the process leadership lease. A new append fences the old leader.
-  async start(dailyCeilingCents = 2000, ceilingCents = 20000) {
+  async start(dailyCeilingCents = 2000, ceilingCents = 20000, defaultPayingGroupId?: string) {
+    if (defaultPayingGroupId) await migrateBudgetDefault(this.store, this.silo, defaultPayingGroupId);
     for (const row of await history(this.store, `budget-${this.silo}`, this.silo)) {
-      this.apply(row.event); this.sequence = row.sequence;
+      this.sequence = row.sequence; this.apply(row.event);
     }
-    if (!this.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation' });
-    await this.append('budget.period_started', { periodStart: this.now().toISOString() });
+    if (!this.sequence) await this.append('budget.ceiling_set', { scope: 'global', dailyCeilingCents, ceilingCents, setBy: 'installation', ...(defaultPayingGroupId ? { defaultPayingGroupId } : {}) });
+    await this.append('budget.period_started', { periodStart: this.monthStart() });
   }
   private serial<T>(work: () => Promise<T>): Promise<T> {
     const result = this.queue.then(() => {
@@ -45,33 +61,55 @@ export class BudgetActor {
     this.queue = result.then(() => undefined, () => undefined);
     return result;
   }
-  private async append(type: string, payload: unknown) {
-    const event = envelope(this.silo, `budget-${this.silo}`, type, payload, randomUUID(), this.now());
+  private async append(type: string, payload: unknown, id: string = randomUUID()) {
+    const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
     const result = await this.store.append({ event, expectedSequence: this.sequence });
     if (result.status !== 'appended') { this.failed = true; throw new Error('Budget writer lost its fence'); }
     this.sequence = result.sequence;
     this.apply(event);
   }
   private apply(event: EventEnvelope) {
-    applyBudget(this.state, event);
-    // Leadership changes do not reset a refusal; budget changes or a new UTC day do.
-    if (event.type !== 'budget.period_started') {
-      this.exhaustedDay = event.type === 'budget.exhausted' ? event.time.slice(0, 10) : undefined;
+    applyBudget(this.state, event, this.sequence);
+    // Keep refusals across leadership changes; a ceiling change permits a fresh notice.
+    if (event.type === 'budget.ceiling_set') this.exhausted.clear();
+    if (event.type === 'budget.exhausted') {
+      const d = data(event);
+      this.exhausted.add(`${event.time.slice(0, 10)}:${String(d['scope'])}:${z.string().optional().parse(d['scopeId']) ?? ''}`);
     }
+  }
+  configure(raw: unknown, commandId: string = randomUUID(), expectedSequence?: number, fresh?: () => Promise<void>) {
+    return this.serial(async () => {
+      const payload = budgetCeilingSetDataSchema.parse(raw);
+      const prior = (await history(this.store, `budget-${this.silo}`, this.silo)).find(r => r.event.commandId === commandId);
+      if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' };
+      if (expectedSequence !== undefined && expectedSequence !== this.sequence) return { status: 'conflict' };
+      await fresh?.();
+      await this.append('budget.ceiling_set', payload, commandId);
+      return { status: 'appended' };
+    });
   }
   reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>) {
     return this.serial(async () => {
       z.int().positive().parse(amountCents);
-      const t = totals(this.state, this.now());
-      if (t.todayCents + t.reservedCents + amountCents > t.dailyCeilingCents ||
-          t.monthCents + t.reservedCents + amountCents > t.ceilingCents) {
-        if (this.exhaustedDay !== this.now().toISOString().slice(0, 10)) await this.append('budget.exhausted', { scope: 'global' });
-        throw new Error('Silo spending cap reached; wait for the next budget period');
+      if (!models.some(row => row.id === call.model && row.priceTableId === call.priceTableId && !row.retired)) throw new Error('Unknown model tariff');
+      if (!call.payingGroupId) throw new Error('Paying group unavailable');
+      const applicable = [{ scope: 'global' as const, scopeId: '', ...totals(this.state, this.now()) },
+        ...this.state.ceilings.filter(c => (c.scope === 'paying_group' ? call.payingGroupId : call.assistantId) === c.scopeId)
+          .map(c => ({ ...c, ...totals(this.state, this.now(), c) }))];
+      const exceeded = applicable.find(t =>
+        (t.scope === 'global' && BigInt(t.todayCents) + BigInt(t.reservedCents) + BigInt(amountCents) > BigInt(t.dailyCeilingCents)) ||
+        BigInt(t.monthCents) + BigInt(t.reservedCents) + BigInt(amountCents) > BigInt(t.ceilingCents!));
+      if (exceeded) {
+        const key = `${this.now().toISOString().slice(0, 10)}:${exceeded.scope}:${exceeded.scopeId}`;
+        if (!this.exhausted.has(key)) await this.append('budget.exhausted', { scope: exceeded.scope,
+          ...(exceeded.scope === 'global' ? {} : { scopeId: exceeded.scopeId }) });
+        const label = exceeded.scope === 'global' ? 'Silo' : exceeded.scope === 'paying_group' ? 'Paying group' : 'Assistant';
+        throw new BudgetRefused(`${label} spending cap reached; ask an Owner or Admin or wait for the next UTC budget period`);
       }
       await fresh?.();
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
-        payingGroupId: call.payingGroupId ?? this.silo, assistantId: call.assistantId, modelCall: call });
+        payingGroupId: call.payingGroupId, assistantId: call.assistantId, modelCall: call });
       return id;
     });
   }
@@ -115,6 +153,12 @@ export class BudgetActor {
     const result = await this.store.append({ event: envelope(this.silo, `effect-${id}`, type, payload, eventId),
       expectedSequence: rows.at(-1)?.sequence ?? 0 });
     if (result.status !== 'appended') throw new Error('Effect append failed');
+  }
+  private monthStart() { return `${this.now().toISOString().slice(0, 7)}-01T00:00:00.000Z`; }
+  period() {
+    return this.serial(async () => {
+      if (this.state.periodStart !== this.monthStart()) await this.append('budget.period_started', { periodStart: this.monthStart() });
+    });
   }
   async expire() {
     for (const r of this.state.reservations) {

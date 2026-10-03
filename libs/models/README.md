@@ -1,6 +1,6 @@
 # Models and silo spending
 
-Phase 2, issue #29. The decision process verifies the lifecycle computer and
+Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle computer and
 thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
 S0.1c's native streamed usage fields and checksum-verified binary fetcher.
@@ -71,23 +71,67 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   the full reservation. Unknown models or tariffs produce `effect.uncertain`
   with reason `unknown_tariff`, keep the reservation and allow later usage
   lines to be processed. Cap refusals append `budget.exhausted` and a separate admission decision, once per
-  unchanged budget per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
+  unchanged configuration and scope per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
-- `budgets` is a PostgreSQL projection using the existing runner. Rebuild it
-  with `ProjectionRunner.rebuild(budgets)` while reactions are stopped.
+- `budgets` is a PostgreSQL projection using the existing runner. The worker
+  upgrades projection version 2 by replaying legacy rows before resuming.
+  Rebuild online with `npm run replay -- budgets --verify`; a repair changes
+  the generation and preserves the live table's reader grants.
   `GET /api/org/models` uses live owner/admin authorisation and returns models, prices, the task-routing table and context threshold,
   today's/month's settled cents, outstanding reserved cents and both ceilings.
+  Its `budget` field includes each configured group/assistant ceiling and totals.
 
 The prototype stores reservation history in one JSON projection row and rereads
 small entity histories. Large histories need compaction/indexing later; the event
 stream remains the source of truth. Manual resolution of uncertain effects and
 price administration are Phase 3 work; uncertainty never automatically refunds.
 
+## Monthly budgets (P3-13)
+
+`BudgetActor.start(2000, 20000, 'personal-default')` seeds the installation's
+explicit default paying group on a fresh stream. Existing streams keep their
+recorded configuration; an Owner/Admin must configure a missing default before
+new personal work can start. The server binds personal work at turn admission;
+shared work must name its group in `conversation.created.payingGroupId`.
+Decisions only use `computer.turn_started.payingGroupId`. Retries and descendant
+calls retain it; changing the default affects newly admitted work only.
+
+`configure` queues one `budget.ceiling_set` behind the same fence as reservations
+and settlement. A reservation checks global daily/monthly plus any paying-group
+and assistant monthly limits once. It records one charge, attributed to all
+applicable scopes. Totals use BigInt arithmetic and refuse unsafe aggregate
+values. UTC rollover preserves unknown reservations and original settlement
+attribution. The existing process timer records the first of each month at 00:00.
+
+Owner/Admin reads and writes `/api/org/models`; POST accepts `commandId`,
+`expectedSequence`, `scope` and `ceilingCents`, plus `scopeId` for a group or
+assistant. Global writes may set `dailyCeilingCents` and `defaultPayingGroupId`.
+Amounts are non-negative safe integer EUR cents. Zero is a hard stop; scoped
+ceilings are optional until configured. Conflicts return 409; refresh before
+editing again. Origin is checked on writes. The server signs a 30-second command
+capability bound to the exact JSON; `/budgets` verifies it and rechecks live
+Owner/Admin and current membership inside a two-second authority fence before
+queuing the append. Never send a bare asserted member id to the decision process.
+The screen at `/org/models` shows spent/reserved amounts and configures ceilings
+at desktop and 390px. Phase 4 group administration remains separate.
+
+Model multiplicity stays one, with a positive bounded output limit and the
+existing conservative prompt bound. Unknown tariffs, overflowing/fractional
+money and provider tools with unreviewed cost are refused before dispatch.
+Reviewed non-metered MCP tools, including Odoo fixture calls, must explicitly
+carry `costCents: 0` in discovery. Monetary uncertainty is never refunded by time.
+P3-14/P3-15 own hard-stop cascades and evidence-based uncertainty resolution.
+
 ## Run and test
 
 `apps/server/src/models-main.ts` is the supervised process entrypoint; the dev
 stack supplies its NATS command credentials, projection database, silo/OpenFGA
-binding, lifecycle public JWKS file, `TOKEN_ISSUER`, state directory and three ports.
+binding, lifecycle public JWKS file, `TOKEN_ISSUER`, state directory and three ports. On a fresh stream, the model process explicitly
+records `installation-default` as the personal paying group; installation may
+override it with `DEFAULT_PAYING_GROUP_ID`. Replay never replaces a stored default.
+`MODEL_DECISION_URL` and the existing `TOKEN_SIGNING_KEY_FILE`/`TOKEN_ISSUER`
+enable the server configuration route. In development its URL defaults to the
+existing loopback decision listener, `http://127.0.0.1:43001`; the decision process only needs public JWKS.
 `MODEL_UPSTREAM` and `MODEL_KEY_FILE` select the dev-stack stub; the default
 production upstream remains OpenAI. Dev-stack startup always selects the stub. Only the public JWKS
 is read by this process. The issuer's private signing key stays with the issuer.
@@ -135,7 +179,7 @@ not an installer or arbitrary remote-URL interface. ext_authz accepts only bound
 MCP `tools/call` for 2026-07-28 with matching method/tool/version headers and
 required `_meta` version and empty client capabilities. The route strips caller
 headers and never injects an invented credential. Only explicitly credential-free,
-non-metered reviewed fixtures can run until the credential/budget tickets land.
+non-metered reviewed fixtures priced at zero can run until the credential/budget tickets land.
 Ask records `approval_required` without dispatch; approval creation/consumption
 belongs to P3-2. Lossless approval argument binding belongs there too.
 
@@ -164,3 +208,5 @@ Existing silos must run the [upgrade command](../../apps/ops/README.md#model-gra
 before rebuilding OpenFGA with the updated model and enabling decisions.
 The dev-stack startup hook belongs to the separate dev-stack change; no shared
 stack files or processes were changed here.
+
+[P3-13 evidence](../../docs/process/p3-13-budgets-evidence.md) records isolated real-service races, replay and UI checks.

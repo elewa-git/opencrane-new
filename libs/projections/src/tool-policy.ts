@@ -12,11 +12,11 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
   if (event.type === 'mcp.server_registered') next = { ...emptyToolPolicy(), sequence };
   if (event.type === 'mcp.server_discovered') {
     const tools = z.array(z.object({ name: z.string(), revision: z.string(), reviewed: z.boolean(),
-      readOnly: z.boolean().optional(), destructive: z.boolean().optional() })).parse(d['tools'] ?? []);
+      readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: z.literal(0).optional() })).parse(d['tools'] ?? []);
     if (new Set(tools.map(t => t.name)).size !== tools.length) throw new Error('Duplicate tool names');
     next = { ...next, published: false, connectionId: typeof d['connectionId'] === 'string' ? d['connectionId'] : null,
       accountMode: null, tools: tools.map(t => ({ name: t.name, revision: t.revision, reviewed: t.reviewed,
-        readOnly: t.readOnly === true && t.destructive !== true, mode: 'block',
+        readOnly: t.readOnly === true && t.destructive !== true, ...(t.costCents === 0 ? { costCents: 0 as const } : {}), mode: 'block',
         suggestion: t.readOnly === true && t.destructive !== true ? 'allow' : 'ask' })) };
     next.accountMode = z.enum(['none', 'personal', 'company']).nullable().parse(d['accountMode'] ?? null);
   }

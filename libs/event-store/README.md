@@ -51,6 +51,7 @@ read optimisation that preserves this guarantee.
 
 `readStream(subject, fromSequence)` is a finite snapshot through the head
 observed on entry; `fromSequence` is an inclusive global position.
+Read subjects may select a category, such as `member-*`; appends still require an entity.
 `subscribe(fromSequence, signal)` reads exact global sequences from the caller's
 SQL checkpoint, with no durable consumer cursor. It polls the live tail every 100 ms;
 break or abort to stop it. Read-ahead cannot change the next subscription's position.

@@ -215,6 +215,9 @@ async function up(fresh: boolean) {
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
   await run('npm', ['run', 'migrate:model-grants', '-w', 'apps/ops'],
     { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']! });
+  await run('npm', ['run', 'migrate:budget-default', '-w', 'apps/ops'],
+    { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']!,
+      DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default' });
   if (!(await exists(`${directory}/binding.env`))) {
     const binding = await createStore(settings['OPENFGA_API_URL']!, settings['SILO_ID']!);
     await writeEnv('binding', { SILO_ID: binding.silo, OPENFGA_API_URL: binding.apiUrl,
@@ -232,6 +235,7 @@ async function up(fresh: boolean) {
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-tools-${process.getuid!()}.lock`, 'bash', 'spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
   const models = {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
+    DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
@@ -254,6 +258,7 @@ async function up(fresh: boolean) {
     { ...base, DEV_STACK_DIR: directory })).trim());
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
+      MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');

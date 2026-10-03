@@ -251,3 +251,11 @@ one `agent.turn_stop_requested` event; retries retain their event id. The bridge
 skips an unstarted stopped turn or interrupts its active Codex turn. The browser
 freezes displayed text at the stop event's position, including after reload;
 late reports remain in durable history without replacing that displayed partial.
+
+Owner/Admin budget configuration uses POST `/api/org/models`, forwarded to the
+single-writer actor with a short-lived signed command. Set `MODEL_DECISION_URL`
+and the existing `TOKEN_SIGNING_KEY_FILE`/`TOKEN_ISSUER`. In development, the URL
+defaults to `http://127.0.0.1:43001`. On a fresh stream the model process records
+`installation-default` as its explicit personal paying group; installation can
+override that seed with `DEFAULT_PAYING_GROUP_ID`. Stored defaults always win.
+See the [budget contract](../../libs/models/README.md#monthly-budgets-p3-13).

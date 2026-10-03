@@ -61,6 +61,7 @@
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text) { <div class="writing"><span class="fold" aria-hidden="true"><i></i><i></i><i></i></span><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><span class="fold" aria-hidden="true"><i></i><i></i><i></i></span> Folding…</div> }
               @for (file of turn.files; track file) { <div class="file-card" [class.created]="turn.author === 'agent'" [class.dogear]="turn.author === 'agent'"><span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span><span class="file-name"><strong>{{ name(file) }}</strong><small>@if (turn.author === 'agent') { <span class="agent-badge">Ag</span> } {{ time(turn.time) }}</small></span><button type="button" (click)="preview.set(file)">Open</button>@if (turn.author === 'agent') { <button type="button" (click)="showFiles()">Files</button> }</div> }
+              @if (turn.refusal) { <p class="budget-refusal" role="alert">{{ turn.refusal }}</p> }
               @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
             </div>
           </article>

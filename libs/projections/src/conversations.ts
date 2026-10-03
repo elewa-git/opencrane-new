@@ -1,3 +1,4 @@
+import { decisionRecordedDataSchema } from '@opencrane/events';
 import type { Projection } from './runner.ts';
 import type { Query } from './db.ts';
 
@@ -11,9 +12,13 @@ export const conversations: Projection = {
   },
   async drop(db) { await db.query('DROP TABLE IF EXISTS conversation_feed'); },
   async apply(db, event, position) {
-    if (!event.subject.startsWith('conversation-')) return;
+    const decision = event.type === 'decision.recorded' ? decisionRecordedDataSchema.parse(event.data) : undefined;
+    const refusal = decision?.route === 'model' && decision.outcome === 'deny' && decision.reason === 'budget_exhausted';
+    const conversationId = refusal ? decision.conversationId : event.subject.startsWith('conversation-') ? event.subject.slice('conversation-'.length) : undefined;
+    if (typeof conversationId !== 'string') return;
+    const data = refusal ? { turnId: decision.turnId, reason: 'budget_exhausted' } : event.data;
     await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
-      [event.silo, event.subject.slice('conversation-'.length), position, event.id, event.type, JSON.stringify(event.data), event.time]);
+      [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };

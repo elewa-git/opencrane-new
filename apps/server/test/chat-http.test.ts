@@ -42,6 +42,28 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect(personal.statusCode).toBe(200);
     expect(personal.json()).toMatchObject({ memberId: 'alice', assistantId: 'assistant', displayName: 'Alice' });
     expect((await app.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(403);
+    for (const [subject, type, data] of [
+      ['team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }],
+      ['team-sales', 'team.member_added', { teamId: 'sales', memberId: 'alice', addedBy: 'alice' }],
+      ['team-finance', 'team.created', { teamId: 'finance', name: 'Finance', createdBy: 'alice' }],
+      ['assistant-shared', 'assistant.created', { assistantId: 'shared', ownerId: 'sales', kind: 'team' }],
+    ] as const) {
+      const event = envelope('test', subject, type, data);
+      expect((await nats.store.append({ event, expectedSequence: (await history(nats.store, subject, 'test')).at(-1)?.sequence ?? 0 })).status).toBe('appended');
+      await auth.handler.handle(event, db);
+    }
+    expect((await nats.store.append({ expectedSequence: 0, event: envelope('other', 'team-foreign', 'team.created', {
+      teamId: 'foreign', name: 'Other installation', createdBy: 'alice',
+    }) })).status).toBe('appended');
+    for (const payingGroupId of ['invented', 'foreign', 'finance']) {
+      const response = await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(),
+        payload: { id: `create-${payingGroupId}`, conversationId: payingGroupId, assistantId: 'shared', payingGroupId } });
+      expect(response.statusCode).toBe(403); expect(response.body).toContain('Paying group');
+      expect(await history(nats.store, `conversation-${payingGroupId}`, 'test')).toEqual([]);
+    }
+    expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: {
+      id: 'create-sales', conversationId: 'sales', assistantId: 'shared', payingGroupId: 'sales',
+    } })).statusCode).toBe(200);
     const conversationId = randomUUID(), create = { id: randomUUID(), conversationId, assistantId: 'assistant' };
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers('wrong'), payload: create })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: { ...headers(), origin: 'https://wrong.test' }, payload: create })).statusCode).toBe(403);

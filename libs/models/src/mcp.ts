@@ -16,8 +16,12 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   if (!policy.published || policy.connectionId !== connection || policy.accountMode !== 'none') throw new Error('MCP context unavailable');
   // A reviewed, credential-free fixture is explicit. Never invent a personal profile or memory grant.
   const tool = new Map(policy.tools.map(t => [t.name, t])).get(call.params.name);
+  return { ...toolDecision(tool), policy, revision: tool?.revision, name: call.params.name };
+}
+function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][number] | undefined) {
   const mode = tool?.reviewed ? tool.mode : 'block';
+  if (mode === 'allow' && tool?.costCents !== 0) return { outcome: 'deny', reason: 'unknown_cost' } as const;
   const outcome = mode === 'block' ? 'deny' : mode;
   const reason = mode === 'ask' ? 'approval_required' : mode === 'allow' ? 'policy_allow' : 'policy_block';
-  return { outcome, reason, policy, revision: tool?.revision, name: call.params.name } as const;
+  return { outcome, reason } as const;
 }

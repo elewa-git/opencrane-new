@@ -4,7 +4,7 @@ export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
   state: 'working' | 'done' | 'failed' | 'stopped';
   tools: { id: string; label: string; detail: string; failed: boolean; time: string }[];
-  files: string[];
+  files: string[]; refusal?: string;
 }
 
 /** Rendering is a replay of server rows. Stop freezes only its turn, at the recorded position. */
@@ -24,6 +24,7 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     const turn = agents.get(data.turnId ?? '');
     if (!turn || turn.state === 'stopped') continue;
     if (row.type === 'agent.turn_stop_requested') { turn.state = 'stopped'; turn.endedAt = row.time; continue; }
+    if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') turn.refusal = 'Spending limit reached. Ask an Owner or Admin to raise the budget, or wait for the next budget period.';
     updateTurn(turn, row, messages.get(turn.id)!);
   }
   return turns;

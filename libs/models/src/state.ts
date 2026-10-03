@@ -52,7 +52,7 @@ export function costCents(model: string, inputTokens: number, outputTokens: numb
 // ponytail: full supported context is the safe bound until we measure server-side tokenisation.
 export function reservationCents(model: string, outputBound: number, inputBound = 1_050_000): number {
   if (models.some(row => row.id === model && row.retired)) throw new Error('Retired model');
-  if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0)) throw new Error('Invalid bound');
+  if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0) || outputBound === 0) throw new Error('Invalid bound');
   const price = priceFor(model, inputBound);
   return roundedCents(BigInt(inputBound) * BigInt(Math.max(price.inputCents, price.cacheWriteCents ?? 0)) +
     BigInt(outputBound) * BigInt(price.outputCents));
@@ -65,37 +65,64 @@ const callSchema = z.object({ model: z.string(), priceTableId: z.string().min(1)
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   call: callSchema, settledCents: z.int().nonnegative().optional() });
+const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
 const stateSchema = z.object({ dailyCeilingCents: z.int().nonnegative(), ceilingCents: z.int().nonnegative(),
+  periodStart: z.string().optional(), defaultPayingGroupId: z.string().optional(), ceilings: ceilingsSchema.default([]), sequence: z.int().nonnegative().default(0),
   reservations: z.array(reservationSchema) });
 export type BudgetState = z.infer<typeof stateSchema>;
-export const emptyBudget = (): BudgetState => ({ dailyCeilingCents: 0, ceilingCents: 0, reservations: [] });
-export function applyBudget(state: BudgetState, event: EventEnvelope): void {
+export const emptyBudget = (): BudgetState => ({ dailyCeilingCents: 0, ceilingCents: 0, ceilings: [], sequence: 0, reservations: [] });
+export function applyBudget(state: BudgetState, event: EventEnvelope, sequence = state.sequence): void {
   if (!event.type.startsWith('budget.')) return;
+  state.sequence = sequence;
   const d = data(event);
-  if (event.type === 'budget.ceiling_set') {
-    if (d['scope'] !== 'global' || d['dailyCeilingCents'] === undefined) throw new Error('Unsupported budget ceiling');
-    state.dailyCeilingCents = z.int().nonnegative().parse(d['dailyCeilingCents']);
-    state.ceilingCents = z.int().nonnegative().parse(d['ceilingCents']);
-  } else if (event.type === 'budget.reserved') {
+  if (event.type === 'budget.ceiling_set') applyCeiling(state, d);
+  else if (event.type === 'budget.period_started') state.periodStart = z.string().parse(d['periodStart']);
+  else if (event.type === 'budget.reserved') {
+    // Older calls did not repeat the group in modelCall; the envelope already bound it.
     state.reservations.push({ id: z.string().parse(d['reservationId']), time: event.time,
-      amountCents: z.int().nonnegative().parse(d['amountCents']), call: callSchema.parse(d['modelCall']) });
+      amountCents: z.int().nonnegative().parse(d['amountCents']),
+      call: callSchema.parse({ ...data({ ...event, data: d['modelCall'] }), payingGroupId: d['payingGroupId'] }) });
   } else if (event.type === 'budget.settled') {
     const reservation = state.reservations.find(r => r.id === d['reservationId']);
     if (!reservation) throw new Error('Unknown reservation');
     reservation.settledCents = z.int().nonnegative().parse(d['settledCents']);
   }
 }
-export function totals(state: BudgetState, now = new Date()) {
+function applyCeiling(state: BudgetState, d: Record<string, unknown>) {
+  const ceilingCents = z.int().nonnegative().parse(d['ceilingCents']);
+  if (d['scope'] === 'global') {
+    state.ceilingCents = ceilingCents;
+    if (d['dailyCeilingCents'] !== undefined) state.dailyCeilingCents = z.int().nonnegative().parse(d['dailyCeilingCents']);
+    if (d['defaultPayingGroupId'] !== undefined) state.defaultPayingGroupId = z.string().parse(d['defaultPayingGroupId']);
+    return;
+  }
+  const scope = z.enum(['paying_group', 'assistant']).parse(d['scope']), scopeId = z.string().parse(d['scopeId']);
+  state.ceilings = state.ceilings.filter(c => c.scope !== scope || c.scopeId !== scopeId);
+  state.ceilings.push({ scope, scopeId, ceilingCents });
+}
+export function totals(state: BudgetState, now = new Date(), scope?: { scope: 'paying_group' | 'assistant'; scopeId: string }) {
   const day = now.toISOString().slice(0, 10), month = day.slice(0, 7);
-  let todayCents = 0, monthCents = 0, reservedCents = 0;
+  let today = 0n, monthly = 0n, reserved = 0n;
   for (const r of state.reservations) {
-    if (r.settledCents === undefined) reservedCents += r.amountCents;
+    if (scope && (scope.scope === 'paying_group' ? r.call.payingGroupId : r.call.assistantId) !== scope.scopeId) continue;
+    if (r.settledCents === undefined) reserved += BigInt(r.amountCents);
     else {
-      if (r.time.startsWith(day)) todayCents += r.settledCents;
-      if (r.time.startsWith(month)) monthCents += r.settledCents;
+      if (r.time.startsWith(day)) today += BigInt(r.settledCents);
+      if (r.time.startsWith(month)) monthly += BigInt(r.settledCents);
     }
   }
-  return { todayCents, monthCents, reservedCents, dailyCeilingCents: state.dailyCeilingCents, ceilingCents: state.ceilingCents };
+  const todayCents = safeTotal(today), monthCents = safeTotal(monthly), reservedCents = safeTotal(reserved);
+  return { todayCents, monthCents, reservedCents, dailyCeilingCents: state.dailyCeilingCents,
+    ceilingCents: scope ? state.ceilings.find(c => c.scope === scope.scope && c.scopeId === scope.scopeId)?.ceilingCents : state.ceilingCents };
+}
+function safeTotal(value: bigint) {
+  const result = Number(value);
+  if (!Number.isSafeInteger(result)) throw new Error('Budget total overflow');
+  return result;
+}
+export function budgetSummary(state: BudgetState, now = new Date()) {
+  return { ...totals(state, now), sequence: state.sequence, defaultPayingGroupId: state.defaultPayingGroupId ?? null,
+    periodStart: state.periodStart ?? null, ceilings: state.ceilings.map(c => ({ ...c, ...totals(state, now, c) })) };
 }
 export async function readBudget(db: Query, silo: string): Promise<BudgetState> {
   const result = await db.query<{ state: unknown }>('SELECT state FROM model_budgets WHERE silo = $1', [silo]);
@@ -103,16 +130,18 @@ export async function readBudget(db: Query, silo: string): Promise<BudgetState> 
   return stateSchema.parse(result.rows[0].state);
 }
 // ponytail: one JSON row holds Phase 2 history; split reservations into rows when volume demands it.
-export const budgets: Projection = {
-  name: 'model-budgets',
-  async create(db) { await db.query('CREATE TABLE IF NOT EXISTS model_budgets (silo TEXT PRIMARY KEY, state JSONB NOT NULL)'); },
-  async drop(db) { await db.query('DROP TABLE IF EXISTS model_budgets'); },
-  async apply(db, event) {
+function budgetProjection(name: string, table: string): Projection { return {
+  name,
+  async create(db) { await db.query(`CREATE TABLE IF NOT EXISTS ${table} (silo TEXT PRIMARY KEY, state JSONB NOT NULL)`); },
+  async drop(db) { await db.query(`DROP TABLE IF EXISTS ${table}`); },
+  async apply(db, event, position) {
     if (!event.type.startsWith('budget.')) return;
     if (!parseEventByType(event).success) throw new Error('Invalid budget event');
-    const rows = await db.query<{ state: unknown }>('SELECT state FROM model_budgets WHERE silo = $1', [event.silo]);
+    const rows = await db.query<{ state: unknown }>(`SELECT state FROM ${table} WHERE silo = $1`, [event.silo]);
     const state = rows.rows[0] ? stateSchema.parse(rows.rows[0].state) : emptyBudget();
-    applyBudget(state, event);
-    await db.query('INSERT INTO model_budgets VALUES ($1, $2) ON CONFLICT (silo) DO UPDATE SET state = $2', [event.silo, JSON.stringify(state)]);
+    applyBudget(state, event, position);
+    await db.query(`INSERT INTO ${table} VALUES ($1, $2) ON CONFLICT (silo) DO UPDATE SET state = $2`, [event.silo, JSON.stringify(state)]);
   },
-};
+}; }
+export const budgets = budgetProjection('model-budgets', 'model_budgets');
+export const replayBudgets = budgetProjection('model-budgets-replay', 'model_budgets_replay');

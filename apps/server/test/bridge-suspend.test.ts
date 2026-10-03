@@ -1,3 +1,4 @@
+import { BudgetActor, envelope } from '@opencrane/models';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -55,6 +56,8 @@ it.each(process.env['BRIDGE_SUSPEND_K3D'] === '1' ? ['local', 'k3d'] : ['local']
     expect(await executions()).toBe(0);
     socket.terminate(); await channel.close(); await pod?.replace(); // Pod replacement retains the journal.
     channel = bridgeChannel(server, driver);
+    await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
+    await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' }) });
     sequence = 6;
     await append('computer.resumed', { generation: 1, tokenId: 'token:second' });
     const replacement = await append('computer.ready', { generation: 1, podUid: 'second' });

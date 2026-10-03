@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { rebuildBudgetProjection } from '@opencrane/models';
 import {
   deleteStoreById,
   listRebuildStores,
@@ -17,7 +18,7 @@ import {
 } from "@opencrane/projections";
 
 const usage =
-  "Usage: npm run replay -- <members|mcp-catalogue|computers|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
+  "Usage: npm run replay -- <members|mcp-catalogue|computers|budgets|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
@@ -25,6 +26,12 @@ const replayOptions = {
   "list-stores": { type: "boolean", default: false },
   "delete-store": { type: "string" },
 } as const;
+const postgresRebuilds = new Map([
+  ['members', rebuildMemberProjection],
+  ['mcp-catalogue', rebuildMcpCatalogueProjection],
+  ['computers', rebuildComputersProjection],
+  ['budgets', rebuildBudgetProjection],
+]);
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name]?.trim();
@@ -115,7 +122,7 @@ export async function replay(
     options: replayOptions,
   });
   const projection = parsed.positionals[0];
-  if (!projection || parsed.positionals.length !== 1 || !["members", "mcp-catalogue", "computers", "openfga"].includes(projection)) {
+  if (!projection || parsed.positionals.length !== 1 || ![...postgresRebuilds.keys(), "openfga"].includes(projection)) {
     throw new Error(usage);
   }
   const listStores = parsed.values["list-stores"];
@@ -145,8 +152,7 @@ export async function replay(
         (error) => console.error(`PostgreSQL pool error: ${error.message}`),
       );
       try {
-        const rebuild = projection === "members" ? rebuildMemberProjection
-          : projection === 'mcp-catalogue' ? rebuildMcpCatalogueProjection : rebuildComputersProjection;
+        const rebuild = postgresRebuilds.get(projection)!;
         const result = await rebuild(
           database.db,
           nats.store,

@@ -81,7 +81,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 
 | Event | Producer | Projections | Reactions |
 | --- | --- | --- | --- |
-| `decision.recorded` | ext_authz | audit | none; admission is not an observed effect |
+| `decision.recorded` | ext_authz | audit; verified model budget refusals also feed conversations with only turn id and reason | none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,
@@ -260,10 +260,42 @@ expiry and replay preserve that settlement.
 `settle-budget` retries a recorded
 observation through the decision process; duplicate settlement is a no-op.
 The budget projection can be rebuilt with reactions disabled. Cap refusals append
-`budget.exhausted` once per unchanged budget per UTC day, including across
+`budget.exhausted` once per unchanged configuration and scope per UTC day, including across
 actor recovery. P3-1 records every admission separately as `decision.recorded`.
 Legacy model refusals used `security.alert_raised` with an optional `decision` record:
 verified requester/assistant ids when available and a context digest, never tokens.
+
+P3-13 extends `budget.ceiling_set` in the same stream: `scope: global`
+holds the monthly `ceilingCents`, optional `dailyCeilingCents` and optional
+`defaultPayingGroupId`; `paying_group` and `assistant` name `scopeId` and a
+monthly `ceilingCents`. All amounts are safe integer EUR cents. A zero ceiling
+blocks spending; an absent scoped ceiling adds no limit. Changing a ceiling
+never erases usage or outstanding reservations. Global defaults remain 20,000
+monthly and 2,000 daily cents. Installation explicitly configures its personal
+paying group; there is no silo-id fallback.
+
+`conversation.created` may hold an explicitly selected shared `payingGroupId`.
+At work admission, the server binds that group, or the installation's configured
+default for personal work, into `computer.turn_started.payingGroupId`. Retries
+keep the admitted value; descendants must carry the inherited value. Missing
+shared attribution refuses admission. Every model call reads the admitted turn,
+never a client-supplied group. One `budget.reserved` checks global, paying-group
+and optional assistant ceilings and counts the same charge against them all.
+The outer reservation group also restores legacy nested calls during replay.
+Late settlement retains the original reservation timestamp, group and tariff.
+
+`budget.period_started.periodStart` is the first day of the UTC month at 00:00.
+The elected actor records rollover on its existing timer and fences old leaders
+on acquisition. Reads and reservations derive periods from UTC timestamps, so
+reset is exact even while the timer is catching up. Unknown reservations count
+against every applicable current ceiling until settled. `budget.exhausted`
+names the refused scope and is deduplicated per unchanged configuration/scope/day.
+Hard-stop cascades and manual uncertainty resolution belong to P3-14/P3-15.
+
+`mcp.server_discovered.tools[].costCents` may be explicitly zero for a reviewed
+non-metered tool such as the Odoo fixture. An allowed tool with absent cost is
+refused as `unknown_cost`. Discovery hints alone never establish price or access;
+hosted provider tools with unknown prices remain disabled.
 
 ### Memory
 

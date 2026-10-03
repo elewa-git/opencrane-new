@@ -1,4 +1,4 @@
-import { budgets, settlementHandler, modelGrantHandler } from '@opencrane/models';
+import { budgets, settlementHandler, modelGrantHandler, initialiseBudgetProjection } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
@@ -56,6 +56,7 @@ try {
     const projection = mode === 'conversations' ? conversations : mode === 'members' ? members : mode === 'budgets' ? budgets : mode === 'computers' ? computers : mcpCatalogue;
     const runner = new ProjectionRunner(db.db, store, logger);
     await db.db.lock!('initialise', (locked) => new ProjectionRunner(locked, store, logger).initialise(projection));
+    if (mode === 'budgets') await initialiseBudgetProjection(db.db, store, logger);
     while (!stop.signal.aborted) {
       await runner.run(projection, { signal: stop.signal });
       await delay(100, undefined, { signal: stop.signal });

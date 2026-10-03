@@ -82,6 +82,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
     const users = await testUsers();
     const sessions = new Map<string, { sub: string; cookie: string }>();
     let page: Page | undefined;
+    let ownerPage: Page | undefined;
     const memberPages: Page[] = [];
     for (const [role, width] of [['owner', 390], ['member', 390], ['member', 1280]] as const) {
       const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
@@ -100,6 +101,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       assert.equal(session.orgId, config.expectedOrgId);
       assert(session.idToken, 'Real login retains its ID token for logout');
       if (role === 'member') memberPages.push(page);
+      else ownerPage = page;
       sessions.set(role, { sub: session.sub, cookie: `${config.cookieName}=${value}` });
     }
     console.log('PASS sign-in: owner and member via Zitadel + PKCE at the selected stack origin at 390px, and member at 1280px, in separate browser contexts');
@@ -109,7 +111,8 @@ export async function browserSessions(config: AuthConfig, origin: string) {
     await logoutCsrfChecks(page, origin);
     stage = 'refusal checks';
     await refusalChecks(browser, config, origin, users.member);
-    return { sessions, memberPages, close: async () => {
+    assert(ownerPage);
+    return { sessions, memberPages, ownerPage, close: async () => {
       try {
         stage = 'token exposure probes';
         await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });

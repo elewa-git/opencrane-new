@@ -28,6 +28,11 @@ import {
   type StoredEvent,
 } from "./contract.ts";
 
+function readSubject(subject: string): string {
+  const category = /^([a-z]+)-\*$/u.exec(subject);
+  return category ? `ev.${category[1]}.*` : wireSubject(subject);
+}
+
 const streamName = "EVENTS";
 const requestMs = 250;
 const appendMs = 10_000;
@@ -281,7 +286,7 @@ export class EventStore {
     fromSequence = 1,
     deadline = Infinity,
   ): AsyncGenerator<StoredEvent> {
-    const wire = wireSubject(subject);
+    const wire = readSubject(subject);
     const head = (await this.manager.streams.info(streamName)).state.last_seq;
     let sequence = Math.max(1, fromSequence);
     while (sequence <= head) {
@@ -333,8 +338,7 @@ export class EventStore {
   /** Latest global sequence, or latest entity/category sequence (for example team-*). */
   async head(subject?: string): Promise<number> {
     if (subject !== undefined) {
-      const category = /^([a-z]+)-\*$/u.exec(subject);
-      const wire = category ? `ev.${category[1]}.*` : wireSubject(subject);
+      const wire = readSubject(subject);
       return (await this.manager.streams.getMessage(streamName, { last_by_subj: wire }))?.seq ?? 0;
     }
     return (await this.manager.streams.info(streamName)).state.last_seq;

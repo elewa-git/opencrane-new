@@ -16,7 +16,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, rebuildMembers, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
-import { pgDb, ProjectionRunner } from '@opencrane/projections';
+import { conversations, readConversation, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { modelGrantHandler, BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
 
@@ -57,7 +57,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
   await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
   await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
-  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', ...(team ? { payingGroupId: 'sales' } : {}) });
+  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: team ? 'sales' : 'personal-default' });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
   const issuer = 'https://lifecycle.test/';
@@ -82,7 +82,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
     await auth.handler.handle(event, db);
   }
   let clock = Date.now();
-  const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly);
+  const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly, 'personal-default');
   const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer }, binding);
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [];
@@ -178,7 +178,7 @@ it('a new member and assistant receive Phase 2 chat grants after installation', 
     await f.append('computer-bob-assistant', 'computer.claimed', { assistantId: 'bob-assistant', computerId: 'bob', tokenId: 'token:bob', generation: 1 });
     await f.append('computer-bob-assistant', 'computer.ready', { assistantId: 'bob-assistant', computerId: 'bob', generation: 1, podUid: 'bob' });
     await f.append('conversation-bob', 'conversation.created', { conversationId: 'bob', assistantId: 'bob-assistant', createdBy: 'bob', mode: 'agent_session' });
-    await f.append('computer-bob-assistant', 'computer.turn_started', { assistantId: 'bob-assistant', computerId: 'bob', conversationId: 'bob', turnId: 'bob', threadId: 'bob', requesterId: 'bob', task: 'chat_turn' });
+    await f.append('computer-bob-assistant', 'computer.turn_started', { assistantId: 'bob-assistant', computerId: 'bob', conversationId: 'bob', turnId: 'bob', threadId: 'bob', requesterId: 'bob', task: 'chat_turn', payingGroupId: 'personal-default' });
     await waitForModelGrants(f.auth, 'bob', 'bob-assistant');
     const headers = {
       authorization: `Bearer ${await f.sign({ ...f.c, computer: 'bob', assistant: 'bob-assistant', jti: 'token:bob' }, 'agentgateway')}`,
@@ -214,9 +214,9 @@ it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants',
 }, 40_000);
 
 it.each([
-  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 100, revoke: true },
+  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 2100, revoke: true },
   { name: 'revocation during a history read within the freshness budget', pauseMs: 10, revoke: true },
-  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 100, revoke: false },
+  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 2100, revoke: false },
 ])('does not dispatch a running decision: $name', async ({ pauseMs, revoke }) => {
   const f = await fixture();
   try {
@@ -225,14 +225,14 @@ it.each([
     let captured!: () => void, resume!: () => void;
     const capturing = new Promise<void>(resolve => { captured = resolve; });
     const resuming = new Promise<void>(resolve => { resume = resolve; });
-    const subscribe = f.nats.store.subscribe.bind(f.nats.store);
-    const slowHistory = vi.spyOn(f.nats.store, 'subscribe').mockImplementation(async function* (...args) {
-      captured();
-      await resuming;
-      for await (const row of subscribe(...args)) {
+    const readStream = f.nats.store.readStream.bind(f.nats.store);
+    const slowHistory = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
+      if (args[0] === 'member-alice') {
+        captured();
+        await resuming;
         await delay(pauseMs);
-        yield row;
       }
+      yield* readStream(...args);
     });
     try {
       const pending = f.call();
@@ -243,7 +243,7 @@ it.each([
       const revoked = performance.now();
       resume();
       const response = await pending;
-      if (pauseMs === 100) expect(performance.now() - revoked).toBeGreaterThan(2000);
+      if (pauseMs > 2000) expect(performance.now() - revoked).toBeGreaterThan(2000);
       expect(f.received()).toBe(1);
       expect(response.status).toBe(403);
       expect(f.actor.state.reservations).toHaveLength(1);
@@ -414,6 +414,12 @@ it.each([[25, 2000], [2000, 25]])('admits one last reservation under daily %i / 
     expect(replies.filter(r => r.status === 200)).toHaveLength(1); expect(f.received()).toBe(1);
     expect(replies.filter(r => r.status === 402)).toHaveLength(7); await f.settled();
     expect((await f.call()).text).toContain('spending cap reached');
+    await f.runner.initialise(conversations); await f.runner.run(conversations);
+    const feed = await readConversation(f.db, 'test', 'conversation');
+    expect(feed.rows.filter(row => row.type === 'decision.recorded')).toHaveLength(8);
+    for (const row of feed.rows.filter(row => row.type === 'decision.recorded')) expect(row.data).toEqual({ turnId: 'turn', reason: 'budget_exhausted' });
+    await f.runner.rebuild(conversations);
+    expect((await readConversation(f.db, 'test', 'conversation')).rows).toEqual(feed.rows);
   } finally { await f.close(); }
 }, 40_000);
 it('retains an in-flight reservation across gateway kill and actor recovery, recording uncertainty after timeout', async () => {
@@ -697,8 +703,9 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
   const f = await fixture();
   try {
     await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
-    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 3,
-      tools: [ { name: 'write', revision: 'a'.repeat(64), reviewed: true }, { name: 'read', revision: 'b'.repeat(64), reviewed: true, readOnly: true },
+    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 4,
+      tools: [ { name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0 }, { name: 'read', revision: 'b'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
+        { name: 'unpriced', revision: 'a'.repeat(64), reviewed: true },
         { name: 'new', revision: 'c'.repeat(64), reviewed: false } ] });
     await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
     for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
@@ -715,6 +722,9 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(0);
     const mode = (name: string, mode: string, revision = 'a'.repeat(64)) => f.append('mcp-fixture', 'mcp.tool_mode_set', {
       serverId: 'fixture', connectionId: 'installed', toolName: name, toolRevision: revision, mode, setBy: 'alice' });
+    await mode('unpriced', 'allow');
+    const unpriced = await call('unpriced');
+    expect(unpriced.status).toBe(403); expect(unpriced.text).toContain('unknown_cost');
     await mode('write', 'allow');
     expect((await call('write')).status).toBe(200); expect(f.received()).toBe(1);
     await mode('read', 'ask', 'b'.repeat(64));
@@ -799,5 +809,84 @@ it('uses the current requester on a team assistant and refuses removed team memb
     expect((await f.call()).status).toBe(403);
     await f.auth.handler.handle(removed, f.db);
     expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+// P3-13: all ceilings share the existing actor and the real dispatch path.
+it.each(['global', 'paying_group', 'assistant'] as const)('serialises concurrent reservations at the %s monthly ceiling and replays one charge', async scope => {
+  const f = await fixture(2000, 2000);
+  try {
+    await f.actor.configure({ scope, ...(scope === 'global' ? {} : { scopeId: scope === 'paying_group' ? 'personal-default' : 'assistant' }), ceilingCents: 25, setBy: 'alice' });
+    const replies = await Promise.all(Array.from({ length: 2 }, () => f.call()));
+    expect(replies.filter(r => r.status === 200), JSON.stringify(replies)).toHaveLength(1);
+    expect(replies.filter(r => r.status === 402)).toHaveLength(1);
+    expect(replies.find(r => r.status === 402)?.text).toContain(scope === 'global' ? 'Silo' : scope === 'paying_group' ? 'Paying group' : 'Assistant');
+    expect(f.received()).toBe(1);
+    await f.settled();
+    expect(f.actor.state.reservations).toHaveLength(1);
+    expect(f.actor.state.reservations[0]?.call.payingGroupId).toBe('personal-default');
+    await f.runner.rebuild(budgets);
+    expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('resets at the exact UTC month boundary, holds unknown money and attributes late usage to the original group and month', async () => {
+  const f = await fixture(2000, 2000);
+  try {
+    await f.actor.configure({ scope: 'paying_group', scopeId: 'personal-default', ceilingCents: 25, setBy: 'alice' });
+    f.advance(Date.parse('2026-10-31T23:59:59.999Z') - f.actor.now().getTime());
+    await f.runtime.stop();
+    expect((await f.call()).status).toBe(200);
+    const reservation = f.actor.state.reservations[0]!;
+    f.advance(1);
+    await f.actor.period();
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 25 });
+    expect((await f.call()).status).toBe(402);
+    await f.actor.effect(reservation.id, { inputTokens: 1000, outputTokens: 120 });
+    await f.actor.settleRecorded(reservation.id, `${reservation.id}:effect.observed`);
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 0 });
+    expect((await f.call()).status).toBe(200);
+    f.advance(); await f.actor.expire();
+    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(25);
+    const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now); await recovered.start();
+    expect(recovered.state.reservations[0]?.call).toEqual(reservation.call);
+    await expect(f.actor.releaseUndispatched(recovered.state.reservations[1]!.id)).rejects.toThrow('lost its fence');
+    await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
+    const periods = (await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.period_started');
+    expect(periods.at(-1)?.event.data).toEqual({ periodStart: '2026-11-01T00:00:00.000Z' });
+    expect(f.received()).toBe(2);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('fixes multiplicity at one and gives a clear reason for absent, fractional, conflicting and unsupported bounds before dispatch', async () => {
+  const f = await fixture();
+  try {
+    expect((await f.call({}, { n: 1 })).status).toBe(200); await f.settled();
+    for (const patch of [{ n: 0 }, { n: 1.5 }, { n: 2 }, { max_output_tokens: undefined }, { max_output_tokens: -1 },
+      { max_output_tokens: 0 }, { max_output_tokens: 1.5 }, { max_output_tokens: Number.MAX_SAFE_INTEGER + 1 },
+      { max_tokens: 128 }, { input_tokens: 1 }, { tools: [{ type: 'web_search' }] }]) {
+      const refused = await f.call({}, patch);
+      expect(refused.status).toBe(403); expect(refused.text).toContain('output bound');
+    }
+    expect(f.received()).toBe(1); expect(f.actor.state.reservations).toHaveLength(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('resets the daily safety cap at UTC midnight within a month while keeping outstanding reservations', async () => {
+  const f = await fixture(25, 2000);
+  try {
+    f.advance(Date.parse('2026-10-03T23:59:59.999Z') - f.actor.now().getTime());
+    expect((await f.call()).status).toBe(200); await f.settled();
+    expect((await f.call()).status).toBe(402);
+    f.advance(1); await f.actor.period();
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1 });
+    await f.runtime.stop();
+    expect((await f.call()).status).toBe(200);
+    f.advance(86400_000); await f.actor.expire();
+    expect((await f.call()).status).toBe(402);
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1, reservedCents: 25 });
+    await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
+    expect(f.received()).toBe(2);
   } finally { await f.close(); }
 }, 40_000);

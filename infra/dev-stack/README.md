@@ -352,3 +352,13 @@ delta, ending the wait when cancelled. This makes the real browser Stop check
 predictable under concurrent load; the same partial-text assertion still applies. Their overall journey timeout is ten minutes, with 90 seconds for event and
 computer readiness under concurrent load (owner: 30 seconds). No OpenAI credentials are read.
 The receipt is [chat UI evidence](../../docs/process/chat-ui-evidence.md).
+
+Secondary journeys also prove monthly budgets through the real owner and member
+sessions. At 1280px and 390px, the owner saves paying-group and assistant ceilings
+in Models & budgets; each zero-cent ceiling refuses a stub chat call with an
+explanation retained after reload and no reservation. Repeated default-group
+migration preserves existing ceilings without another installation event.
+Screenshots for fresh and repeat runs go to `docs/process/p3-13-live/`. The journey
+restores usable group and assistant ceilings before the next plain startup.
+It also sets the daily safety cap to 5,000 cents through the owner UI, retaining
+unconfirmed Stop reservations while leaving enough headroom for the repeat run.

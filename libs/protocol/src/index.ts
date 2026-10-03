@@ -28,3 +28,5 @@ export { computerRowSchema, computersResponseSchema, type ComputerRow, type Comp
 export { sessionSlug, chatSubscribeSchema, chatMessageSchema, chatRowSchema, chatFeedSchema, chatListSchema, chatContextSchema, type ChatRow, type ChatConversation } from './chat.ts';
 
 export { toolPolicySchema, type ToolPolicy } from './integrations.ts';
+
+export { budgetCommandSchema, budgetSummarySchema, type BudgetSummary } from './budgets.ts';
