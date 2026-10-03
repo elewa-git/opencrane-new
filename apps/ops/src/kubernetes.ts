@@ -82,20 +82,49 @@ export class SandboxClient {
     const deadline = Date.now() + 60_000;
     while (Date.now() < deadline) {
       const claim = await this.get('sandboxclaim', name);
-      const sandboxName = value(claim, 'status', 'sandbox', 'name');
+      const sandboxName = value(claim, 'status', 'sandbox', 'name') ?? name;
       if (typeof sandboxName === 'string') {
         const sandbox = await this.get('sandbox', sandboxName);
         const uid = value(sandbox, 'metadata', 'uid');
-        if (typeof uid === 'string' && await this.get('pvc', `home-${sandboxName}`)) return uid;
+        if (typeof uid === 'string' && await this.get('pvc', `home-${sandboxName}`)) {
+          await this.bindClaim(name, assistantId, claim, sandbox);
+          return uid;
+        }
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error('Timed out waiting for Sandbox and PVC');
   }
 
+  private async bindClaim(name: string, assistantId: string, claim: unknown, sandbox: unknown) {
+    const uid = value(claim, 'metadata', 'uid');
+    if (typeof uid !== 'string') throw new Error('Claim has no UID');
+    const owners = value(sandbox, 'metadata', 'ownerReferences');
+    const references: unknown[] = Array.isArray(owners) ? owners : [];
+    if (references.some(owner => value(owner, 'controller') === true && value(owner, 'uid') === uid)) return;
+    if (value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels', 'sandbox.users.io/assistant') !== assistantId
+      || value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels', 'sandbox.users.io/computer') !== name) {
+      throw new Error('Retained Sandbox belongs to another computer or assistant');
+    }
+    // A recreated claim must own its retained Sandbox before the controller can bind it.
+    await this.input(['patch', `sandbox/${name}`, '--type=merge', '-p', JSON.stringify({ metadata: {
+      resourceVersion: value(sandbox, 'metadata', 'resourceVersion'),
+      ownerReferences: [...references.filter(owner => value(owner, 'controller') !== true), {
+        apiVersion: 'extensions.agents.x-k8s.io/v1beta1', kind: 'SandboxClaim', name, uid,
+        controller: true, blockOwnerDeletion: true,
+      }],
+    } })], {});
+  }
+
   async state(name: string): Promise<SandboxState | undefined> {
-    const sandbox = await this.get('sandbox', name);
-    if (!sandbox) return undefined;
+    // Check both bindings in one kubectl process; either missing needs claim repair.
+    const output = await this.run('get', `sandbox/${name}`, `sandboxclaim/${name}`, '--ignore-not-found', '-o', 'json');
+    if (!output) return undefined;
+    const resources: unknown = JSON.parse(output);
+    const bindings = value(resources, 'items');
+    if (!Array.isArray(bindings)) throw new Error('Invalid Kubernetes bindings response');
+    const sandbox: unknown = bindings.find((item: unknown) => value(item, 'kind') === 'Sandbox');
+    if (!sandbox || !bindings.some((item: unknown) => value(item, 'kind') === 'SandboxClaim')) return undefined;
     const conditions = value(sandbox, 'status', 'conditions');
     const list: unknown[] = Array.isArray(conditions) ? conditions : [];
     const condition = (type: string) => list.find((item) => value(item, 'type') === type);

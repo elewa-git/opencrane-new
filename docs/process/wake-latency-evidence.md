@@ -1,15 +1,127 @@
 # Wake latency evidence — 3 October 2026
 
-**PASS for the stub wake latency budget:** five runs before and five after.
-Median `message.posted` → first Codex token fell from **11.462 s** to
-**8.944 s** (22.0% lower), with an after spread of **7.816–10.079 s**.
-This is faster than the owner's accepted 10–14 s target.
+**PASS for the stub wake latency budget after repair:** five repeated runs.
+Median `message.posted` → first Codex token was **9.120 s**, spread
+**8.981–10.597 s**. The original optimised median was **8.944 s**; the repair
+batch is 0.176 s higher (2.0%), and 20.4% below the original **11.462 s** baseline.
+The median remains faster than the owner's accepted 10–14 s target.
 Real-provider latency is **NOT RUN**.
 
-## Source and environment
+## Missing-resource repair
+
+Follow-up base: `ebd0891`, on the same branch. The reviewer's deletion
+reproduction failed first for both `computer.ready` and `computer.resumed`:
+`kube.mode()` raised NotFound and terminated the watcher. The watcher now
+checks Sandbox and claim presence in one kubectl process, follows
+`computer.lost` when either binding is missing, and lets the existing loss
+reaction re-claim with a new generation and token id. Healthy Ready and Resumed
+computers still skip `claim()`; the state read adds one claim HTTP lookup, with
+no additional kubectl process or PVC read on that path.
+
+Normal cascading deletion also removes the Sandbox-owned PVC. Those cases
+must record loss and recover with generation 2. Separate orphan-deletion cases
+retain the PVC, remove the old Pod, and assert the same PVC UID and preserved
+workspace file after recovery. Deleting only the claim exposed the controller's
+refusal to adopt an orphaned Sandbox; claim reconciliation now checks computer
+and assistant labels and repairs ownership to the recreated same-name claim,
+using the Sandbox resource version to reject races. Admission permits that
+ownership repair while retaining the existing Pod, label and configuration
+restrictions. Other claim names and owner kinds remain denied. These policies
+were installed only in disposable test namespaces; the shared dev stack was
+not changed.
+
+The surviving old Ready Pod must also be fenced after re-claim. A further live
+regression first failed by reusing its Pod UID; `computer.claimed` now uses the
+same old-Pod suspend fence as `computer.resumed` before delivering credentials.
+Per-computer reconciliation errors are logged and retried on the next poll.
+The state- and mode-error regressions first failed with NotFound, then passed
+with both NotFound and transient errors on one computer while another receives
+credentials across repeated polls.
+
+### Repeated five-run measurement and final checks
+
+The unchanged runner used the same pinned base image, stub, probe settings,
+conversation, suspension method and cached layers. It ran after the full suite
+and live checks finished, in namespace `wake-latency-0a292b91`, which was deleted.
+The new timestamp-only derivative's digest is recorded beside the new samples;
+the pinned computer base and computer source are unchanged.
+The dev host and cluster were reused; host load was not controlled. These five
+samples do not establish the cause of the small median difference or a tail
+latency guarantee. Real-provider and fresh full-install qualification remain
+**NOT RUN**.
+
+The raw receipt retains every original batch. The new `repair` sample/image
+entries and `repairSourceBlobs` identify this follow-up's measured code; the
+runner logged its parent `ebd0891` while the working-tree repair was present.
+
+| Stage | Original after: median (min–max), s | Repair: median (min–max), s |
+| --- | --- | --- |
+| message.posted → resume intent | 0.420 (0.173–0.574) | 0.394 (0.156–0.412) |
+| Resume intent → Running patch acknowledged | 1.221 (0.724–1.338) | 0.897 (0.682–1.157) |
+| Running acknowledgement → Pod scheduled | 0.015 (-0.013–0.899) | 0.024 (0.012–0.508) |
+| Pod scheduled → image ready | 0.709 (0.619–0.813) | 0.674 (0.617–0.822) |
+| Image ready → image/volume ready | 0.045 (0.023–0.071) | 0.039 (0.033–0.064) |
+| Image/volume ready → container started | 0.279 (0.260–0.330) | 0.328 (0.310–0.359) |
+| Container started → computer HTTP listening | 1.205 (1.033–1.609) | 1.638 (1.150–1.884) |
+| Computer HTTP listening → Codex initialised | 0.940 (0.464–1.191) | 0.797 (0.562–1.690) |
+| Codex initialised → computer health ready | 0.609 (0.027–0.965) | 0.355 (0.176–0.774) |
+| Computer health ready → Pod Ready | 0.027 (0.022–0.049) | 0.030 (0.025–0.041) |
+| Pod Ready → credential delivered | 0.828 (0.530–1.661) | 1.299 (1.209–1.513) |
+| Credential delivered → WebSocket connected | 0.434 (0.317–0.696) | 0.411 (0.277–0.662) |
+| WebSocket connected → turn/start | 1.714 (1.276–2.102) | 1.814 (1.570–2.163) |
+| turn/start → first token | 0.473 (0.399–0.690) | 0.506 (0.414–0.875) |
+| First token → committed delta | 0.096 (0.064–0.140) | 0.085 (0.039–0.126) |
+| **Wake → first token** | 8.944 (7.816–10.079) | 9.120 (8.981–10.597) |
+
+| Run | Repair wake → first token, s |
+| --- | --- |
+| 1 | 10.190 |
+| 2 | 9.120 |
+| 3 | 10.597 |
+| 4 | 8.981 |
+| 5 | 9.059 |
+
+| Command / qualification | Follow-up result |
+| --- | --- |
+| `npm run lint` | PASS; five existing function-length warnings |
+| `npm run typecheck` | PASS; all workspaces |
+| `npm run check:events` | PASS; 73 event types |
+| `PG_TEST_URL=… npm test -- --maxWorkers=2` | PASS; 1,021 passed, 10 opt-in skips; 390.24 s |
+| Watcher fast-path and error regressions | PASS; three tests; 10.84 s; also passed in the final suite |
+| Live lifecycle batch with worker RBAC/admission | PASS; seven tests; 432.17 s |
+| Final claim-only fence regressions, Ready and Resumed | PASS; two tests; 112.33 s; cover the new re-claim fence |
+| Unchanged five-run wake runner | PASS; five suspended wakes in the same conversation |
+| `tsc --noEmit -p infra/dev-stack/tsconfig.json` | PASS |
+| Namespace and admission-policy cleanup | PASS; no test namespaces or admission policies remain |
+| Independent verification of this follow-up | NOT RUN |
+
+The first full suite run was **FAIL**: the existing authorisation test
+`cleans a rebuild store when the create response is lost at the HTTP boundary`
+hit its five-second budget; 1,020 tests passed, nine skipped, 392.58 s. It passed
+when rerun alone (10.03 s for the invocation), without code or timeout changes.
+The final full suite then passed as recorded above.
+
+The original two deletion regressions failed with NotFound before the fix.
+An intermediate direct-repair attempt recovered computers but failed the PVC
+UID assertions after normal cascading deletion; it was replaced by the explicit
+loss path. The claim-only test then exposed failed Sandbox adoption. A
+Sandbox-only absence assertion also raced with successful controller repair;
+the final test accepts that recovery and still checks the retained disk and
+replacement Pod. Every failed fixture namespace was deleted.
+
+All eight distinct live scenarios passed across the seven-test batch and the
+focused fence rerun: both resources missing at Ready and Resumed, normal and
+retained-disk deletion, claim-only loss at Ready and Resumed, Sandbox-only loss
+at Resumed, and the original full lifecycle journey. The final fence rerun
+requires a new Pod UID after claim-only loss at both Ready and Resumed.
+Only disposable namespaces and their own admission policies were changed.
+No dependency or licence changed, no real provider was called, and nothing was
+pushed. Reproduce the new batch with the existing runner label `after-repair`.
+
+## Original source and environment
 
 Base: `113854436bc4b4caaae595ac222b5c45d5834cd3`, branch `work/wake-latency`.
-After means the lifecycle and bridge changes in this receipt's commit; exact
+After means the original lifecycle and bridge changes in `ebd0891`; exact
 source blobs, image digests and timestamp samples are in the
 [raw receipt](wake-latency-samples.json).
 
@@ -41,7 +153,7 @@ network policy allowed only that labelled gateway on port 3000. Model admission,
 agentgateway, OIDC and browser delivery were outside this measurement.
 **No real OpenAI call was made.** No dependency or licence changed.
 
-## Method and stage measurements
+## Original method and stage measurements
 
 [The runner](../../infra/dev-stack/wake-latency.ts) uses the public chat command,
 `watchBridges`, `watchComputers` and `suspendComputer`. Commands still append
@@ -100,8 +212,9 @@ not controlled. Five samples on a busy dev host do not establish a tail-latency 
 
 ## Changes and test-first evidence
 
-1. Reconcile a claim only for `computer.claimed`. Resumed and ready computers
-   already have a binding and retained PVC. This removes four serial kubectl
+1. The original optimisation reconciled a claim only for `computer.claimed`.
+   The repair above checks that Resumed and Ready bindings still exist before
+   skipping reconciliation. The original change removed four serial kubectl
    reads per reconciliation: claim twice, Sandbox and PVC. State observation,
    the old-Pod suspend fence, Running patch and delivery-before-Ready ordering
    remain. The regression first failed with `Claim endpoint unavailable`, then
@@ -126,7 +239,7 @@ already 1 s. A watch/proxy rewrite, changed readiness meaning, a new image,
 credential-handshake overlap and keeping suspended processes alive were not
 needed for this measured budget.
 
-## Checks and safety qualification
+## Original checks and safety qualification
 
 | Command / qualification | Result |
 | --- | --- |
@@ -139,7 +252,7 @@ needed for this measured budget.
 | `LIFECYCLE_K3D=1 PG_TEST_URL=… vitest run apps/ops/test/lifecycle-k3d.test.ts` | PASS; one live test; 110.71 s |
 | `tsc --noEmit -p infra/dev-stack/tsconfig.json` | PASS |
 | Runner context/namespace-collision guards | PASS; fake kubectl confirmed no deletion on either refusal |
-| Independent review, passes 1 and 2 | PASS; no blockers; source hashes and every table statistic verified |
+| Original independent review, passes 1 and 2 | Originally reported PASS; superseded by the reproduced missing-resource blocker above |
 
 The first full `npm test` run overlapped lint, typecheck and the live lifecycle
 qualification: **FAIL**, two existing five-second bridge tests timed out;
@@ -169,7 +282,7 @@ Reproduce after a local `npm ci` and the root pretest tool fetch:
 
 ```sh
 export PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres
-node --experimental-strip-types infra/dev-stack/wake-latency.ts after
+node --experimental-strip-types infra/dev-stack/wake-latency.ts after-repair
 LIFECYCLE_K3D=1 npx vitest run apps/ops/test/lifecycle-k3d.test.ts
 npm run lint
 npm run typecheck
