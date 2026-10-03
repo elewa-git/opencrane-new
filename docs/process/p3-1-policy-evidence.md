@@ -215,3 +215,48 @@ stack was neither run nor restarted. No push, paid provider call or new dependen
 The aggregate run had no timing failures to rerun. Paid-provider and live-cluster
 opt-in tests remain skipped; hosted CI and live fresh-stack qualification remain
 **NOT RUN**.
+
+## CI keyboard-save race
+
+3 October 2026, base `01ec79c`, Node 22.23.3, Chromium from the pinned
+Playwright package. The shared dev stack was not touched. A separate PostgreSQL
+17.6 Alpine container supplied the workflow's `PG_TEST_URL` on loopback port 5432.
+
+Hosted CI failed waiting for the policy-save **POST**, after the integrations
+list and tools **GET** requests had succeeded through the dev proxy. The initial
+local workflow run used a fresh `npm ci`, deleted Angular caches, `CI=true`,
+`NO_COLOR=1` and `FORCE_COLOR=0`. Its browser journey passed; the aggregate run
+failed three existing gateway assertions under load (two concurrent budget
+admissions and the two-second revocation bound). Five further cold-cache browser
+runs also passed, so environment flags alone did not reproduce the browser race.
+
+Temporary browser diagnostics delayed Angular's render callbacks by 250ms after
+the radio change. This reproduced the same 30-second save-response timeout:
+Save was still disabled, and Enter reached the radio input instead of the button.
+Playwright's `press()` does not wait for an enabled control. Requiring an enabled
+Save button in the locator passed the identical delayed-render reproduction:
+Enter reached Save and the real proxied POST returned 200. The diagnostic code
+and artificial delay were then removed. Neither the expected request nor the
+keyboard journey is obsolete; no assertion or timeout was relaxed.
+
+Red/green diagnostic logs and event traces are on the builder host under
+`/tmp/p3-1-policy-delayed-{red,green}*`. Final workflow validation uses two-CPU
+process affinity to limit local contention, the same CI variables, another fresh
+install and deleted Angular caches. Commands are unchanged from
+`.github/workflows/ci.yml`. The complete sequence passed, ending at 11:39 UTC;
+logs are under `/tmp/p3-1-policy-final-*.log`.
+
+| Command | Result |
+| --- | --- |
+| `npm ci`, pinned Lychee/NATS/Chromium setup and `docker info` | PASS |
+| `npm run lint` | PASS, existing warnings only |
+| `npm run typecheck` | PASS, all workspaces |
+| `npm test` | PASS, 66 files / 1,042 tests; 2 files / 10 tests skipped; 937.96 seconds |
+| `npm run check:events` | PASS, 75 event types |
+| `npm run build -w apps/web` | PASS, existing stylesheet-size warnings |
+| `npm run test -w apps/web` | PASS, 7 files / 45 tests |
+
+This aggregate pass includes the Chromium proxy journey and the unchanged gateway
+assertions that failed in the first run. Existing opt-in skips remain unqualified.
+Hosted CI for this fix is pending push; no shared-stack or live-install journey
+was run for this test-only correction.

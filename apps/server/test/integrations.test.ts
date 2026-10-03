@@ -239,7 +239,8 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('heading', { name: 'Tools & access' }).waitFor();
     await page.getByRole('group', { name: 'write' }).getByLabel('Allow automatically').check();
     const saved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/odoo/tools'));
-    await page.getByRole('button', { name: 'Save write' }).press('Enter');
+    // Angular enables Save after rendering the choice; press() does not wait for enabled controls.
+    await page.getByRole('button', { name: 'Save write', disabled: false }).press('Enter');
     expect((await saved).status()).toBe(200);
     await page.getByText('✓ Saved').waitFor();
     for (const width of [1280, 390]) {
