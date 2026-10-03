@@ -2,12 +2,15 @@ import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { chmod, mkdir, readFile, readdir, realpath, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { resolve } from 'node:path';
+import { stackId, secondary, ports, localOrigin } from './identity.ts';
 import { certificates } from '../../libs/event-store/test/certificates.ts';
 
 process.umask(0o077);
 export const root = resolve(import.meta.dirname, '../..');
-export const directory = resolve(process.env['DEV_STACK_DIR'] ?? `${homedir()}/.config/opencrane/dev-stack`);
-export const base = { PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: homedir(), NODE_ENV: 'development' };
+const defaultDirectory = `${homedir()}/.config/opencrane/dev-stack${secondary ? `-${stackId}` : ''}`;
+export const directory = resolve(process.env['DEV_STACK_DIR'] ?? defaultDirectory);
+if (secondary && directory !== resolve(defaultDirectory)) throw new Error('Secondary stack directories are fixed by id');
+export const base = { PATH: process.env['PATH'] ?? '/usr/bin:/bin', HOME: homedir(), NODE_ENV: 'development', DEV_STACK_ID: stackId };
 export async function exists(file: string) {
   try { await readFile(file); return true; } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
@@ -28,6 +31,7 @@ export async function writeEnv(name: string, env: Record<string, string>) {
 export async function prepareDirectory() {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const actual = await realpath(directory);
+  if (secondary && actual !== directory) throw new Error('Secondary stack directory must not be a symlink');
   if (actual === root || actual.startsWith(`${root}/`) || actual === homedir() || actual === '/') {
     throw new Error('DEV_STACK_DIR must be a dedicated directory outside the repository');
   }
@@ -44,13 +48,6 @@ export async function generate(origin: string) {
   // Reuse the real NATS test issuer; local certificates expire after 30 days.
   await certificates(directory, 30);
   const secret = () => randomBytes(32).toString('hex');
-  const ports = Object.fromEntries(Object.entries({ PG_PORT: '55433', NATS_PORT: '44222', FGA_PORT: '48080',
-    MINIO_PORT: '49000', MINIO_CONSOLE_PORT: '49001', SERVER_PORT: '48000', WEB_PORT: '44200' })
-    .map(([name, fallback]) => {
-      const port = process.env[name] ?? fallback;
-      if (!/^\d+$/u.test(port) || Number(port) < 1024 || Number(port) > 65535) throw new Error(`Invalid ${name}`);
-      return [name, port];
-    }));
   const passwords = { postgres: secret(), projection: secret(), server: secret(), dispatcher: secret(), openfga: secret() };
   await save('passwords.json', JSON.stringify(passwords));
   const signingKey = generateKeyPairSync('ec', { namedCurve: 'P-256',
@@ -75,11 +72,12 @@ export async function generate(origin: string) {
     issuer: string; orgId: string; clientId: string; origin: string;
     extraIdentities: Array<{ issuer: string; subject: string }>;
   };
-  if (origin !== oidc.origin) throw new Error('Tailnet origin does not match the registered OIDC redirects');
+  if (origin !== (secondary ? localOrigin : oidc.origin)) throw new Error('Tailnet origin does not match the registered OIDC redirects');
   if (!(await exists(`${directory}/zitadel-client-secret`))) throw new Error('Run zitadel-setup.ts first');
   await writeEnv('auth', { OIDC_ISSUER_URL: oidc.issuer, OIDC_CLIENT_ID: oidc.clientId,
     OIDC_REDIRECT_URI: `${origin}/auth/callback`, OIDC_POST_LOGOUT_REDIRECT_URI: `${origin}/`,
-    OIDC_COOKIE_SECRET: secret(), OIDC_EXPECTED_ORG_ID: oidc.orgId, OIDC_COOKIE_SECURE: 'true',
+    OIDC_COOKIE_SECRET: secret(), OIDC_EXPECTED_ORG_ID: oidc.orgId, OIDC_COOKIE_SECURE: secondary ? 'false' : 'true',
+    ...(secondary ? { OIDC_COOKIE_NAME: `oc_session_${stackId}`, OIDC_FLOW_COOKIE_NAME: `oc_auth_flow_${stackId}` } : {}),
     OIDC_CLIENT_SECRET_FILE: `${directory}/zitadel-client-secret`,
     OIDC_ORG_CLAIM: 'urn:zitadel:iam:user:resourceowner:id', OIDC_ROLES_CLAIM: 'urn:zitadel:iam:org:project:roles',
     OIDC_SCOPES: 'openid profile email urn:zitadel:iam:user:resourceowner',
@@ -90,7 +88,7 @@ export async function generate(origin: string) {
     [path, { target: `http://127.0.0.1:${ports['SERVER_PORT']}`, ws: path === '/ws' }]))));
   for (const file of await readdir(directory)) await chmod(`${directory}/${file}`, 0o600);
   // Written last: an interrupted generator is safe to rerun.
-  await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory, SILO_ID: 'dev', ORIGIN: origin,
+  await writeEnv('settings', { ...ports, DEV_STACK_DIR: directory, ...(secondary ? { DEV_STACK_ROOT: root, DEV_STACK_UID: String(process.getuid!()), DEV_STACK_GID: String(process.getgid!()) } : {}), SILO_ID: 'dev', ORIGIN: origin,
     OPENFGA_API_URL: `http://127.0.0.1:${ports['FGA_PORT']}` });
 }
 

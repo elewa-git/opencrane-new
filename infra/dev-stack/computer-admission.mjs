@@ -57,5 +57,5 @@ for (const [suffix, group, resources, expression, expressions] of policies) {
   const binding = { apiVersion: policy.apiVersion, kind: 'ValidatingAdmissionPolicyBinding', metadata: { name }, spec: {
     policyName: name, validationActions: ['Deny'], matchResources: { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': namespace } } },
   } };
-  for (const object of [policy, binding]) execFileSync('kubectl', ['apply', '-f', '-'], { input: JSON.stringify(object), stdio: ['pipe', 'inherit', 'inherit'] });
+  for (const object of [policy, binding]) execFileSync('kubectl', ['--context=k3d-ocn', 'apply', '-f', '-'], { input: JSON.stringify(object), stdio: ['pipe', 'inherit', 'inherit'] });
 }

@@ -71,7 +71,8 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
 async function cookie(context: BrowserContext, config: AuthConfig, origin: string) {
   const session = (await context.cookies(origin)).find((item) => item.name === config.cookieName);
   assert(session, 'Real login must issue a session');
-  assert(session.secure && session.httpOnly && session.sameSite === 'Lax');
+  assert.equal(session.secure, config.cookieSecure);
+  assert(session.httpOnly && session.sameSite === 'Lax');
   return session.value;
 }
 export async function browserSessions(config: AuthConfig, origin: string) {
@@ -101,7 +102,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
       if (role === 'member') memberPages.push(page);
       sessions.set(role, { sub: session.sub, cookie: `${config.cookieName}=${value}` });
     }
-    console.log('PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px, and member at 1280px, in separate browser contexts');
+    console.log('PASS sign-in: owner and member via Zitadel + PKCE at the selected stack origin at 390px, and member at 1280px, in separate browser contexts');
     assert(page);
     const memberPage = page;
     stage = 'logout CSRF';

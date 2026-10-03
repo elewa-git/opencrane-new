@@ -1,26 +1,28 @@
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { open, readFile, rm } from 'node:fs/promises';
+import { open, readFile, rm, stat } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { tokenIssuer } from '@opencrane/auth';
+import { stackId, secondary, project, namespace, ports as defaultPorts, localOrigin } from './identity.ts';
+import { checkPorts } from './ports.ts';
 import { modelFirewall } from './model-network.ts';
 import { createStore } from '@opencrane/authz';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'];
+const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
-  try { return (await exec(command, args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
+  try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
   catch (error) {
     await save('last-error.log', String(error));
     throw new Error(`${command} failed; see the private last-error.log`);
   }
 }
 async function compose(...args: string[]) {
-  return run('docker', ['compose', '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...args]);
+  return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args]);
 }
 async function wait(check: () => Promise<boolean>, name: string) {
   for (let i = 0; i < 120; i++) {
@@ -52,7 +54,7 @@ async function start(name: string, args: string[], env: Record<string, string>) 
   if (await processId(name)) return;
   const log = await open(`${directory}/${name}.log`, 'a', 0o600);
   try {
-    const child = spawn(process.execPath, args, { cwd: name === 'web' ? `${root}/apps/web` : root, env: { ...base, ...env }, detached: true,
+    const child = spawn(process.execPath, args, { cwd: name === 'web' ? `${root}/apps/web` : root, env: { ...base, ...(secondary ? { NODE_OPTIONS: `--max-old-space-size=${name === 'web' ? 768 : 256}` } : {}), ...env }, detached: true,
       stdio: ['ignore', log.fd, log.fd] });
     await once(child, 'spawn');
     const pid = child.pid!;
@@ -75,7 +77,7 @@ async function serveOwnership(settings: Record<string, string>) {
     && handler?.Proxy === expected && Object.keys(handler).length === 1 ? 'owned' : 'foreign';
 }
 async function stop() {
-  if (await exists(`${directory}/settings.env`)) {
+  if (!secondary && await exists(`${directory}/settings.env`)) {
     const settings = await readEnv('settings');
     const ownership = await serveOwnership(settings);
     if (ownership === 'foreign') throw new Error(`Refusing to remove HTTPS :443 Serve handler: expected ${settings['ORIGIN']} to map to 127.0.0.1:${settings['WEB_PORT']}`);
@@ -83,7 +85,7 @@ async function stop() {
   }
   await rm(`${directory}/serve-owned`, { force: true });
   await stopProcesses([...names].reverse());
-  await modelFirewall(false);
+  if (!secondary) await modelFirewall(false);
   if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
 }
 async function stopProcesses(processes: string[]) {
@@ -128,9 +130,13 @@ function prefixed(values: Record<string, string>, prefix: string) {
   return Object.fromEntries(Object.entries(values).map(([name, value]) => [`${prefix}${name}`, value]));
 }
 async function provisionComputers(settings: Record<string, string>) {
-  const namespace = `opencrane-${settings['SILO_ID']}`;
   if (!(await run('kubectl', ['get', 'namespace', namespace, '--ignore-not-found', '-o', 'name'])).trim()) {
     await run('kubectl', ['create', 'namespace', namespace]);
+  }
+  if (secondary) {
+    await save('quota.json', JSON.stringify({ apiVersion: 'v1', kind: 'ResourceQuota', metadata: { name: 'journey-limit', namespace },
+      spec: { hard: { pods: '4', 'limits.memory': '2Gi', persistentvolumeclaims: '4', 'requests.storage': '4Gi' } } }));
+    await run('kubectl', ['apply', '-f', `${directory}/quota.json`]);
   }
   await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'infra/dev-stack/computer-worker-rbac.yaml']);
@@ -142,7 +148,16 @@ async function provisionComputers(settings: Record<string, string>) {
   if (!(await run('kubectl', ['get', 'namespace', gatewayNamespace, '--ignore-not-found', '-o', 'name'])).trim()) {
     await run('kubectl', ['create', 'namespace', gatewayNamespace]);
   }
-  await run('kubectl', ['-n', gatewayNamespace, 'apply', '-f', 'infra/dev-stack/gateway.yaml']);
+  let modelHost = `host.k3d.internal:${settings['MODEL_GATEWAY_PORT'] ?? '43000'}`;
+  if (secondary) {
+    const container = (await compose('ps', '-q', 'nats')).trim();
+    const address = (await run('docker', ['inspect', '--format', '{{(index .NetworkSettings.Networks "k3d-ocn").IPAddress}}', container])).trim();
+    if (!/^\d+\.\d+\.\d+\.\d+$/u.test(address)) throw new Error('Missing private model address');
+    modelHost = `${address}:${settings['MODEL_GATEWAY_PORT']}`;
+  }
+  await save('gateway.yaml', (await readFile(`${root}/infra/dev-stack/gateway.yaml`, 'utf8'))
+    .replace('host.k3d.internal:43000', modelHost));
+  await run('kubectl', ['-n', gatewayNamespace, 'apply', '-f', `${directory}/gateway.yaml`]);
   await run('kubectl', ['-n', gatewayNamespace, 'rollout', 'status', 'deployment/gateway', '--timeout=120s']);
   const address = (await run('kubectl', ['-n', gatewayNamespace, 'get', 'service/gateway', '-o', 'jsonpath={.spec.clusterIP}'])).trim();
   await save('computer-runtime.json', JSON.stringify({ apiVersion: 'v1', kind: 'ConfigMap',
@@ -162,22 +177,32 @@ async function provisionComputers(settings: Record<string, string>) {
     contexts: [{ name: 'ocn', context: { cluster: 'ocn', user: 'lifecycle', namespace } }], 'current-context': 'ocn' }));
   return { namespace, kubeconfig: `${directory}/computer-kubeconfig.json` };
 }
+async function removeComputers() {
+  await run('kubectl', ['delete', 'namespace', namespace, `${namespace}-gateway`, '--ignore-not-found', '--wait=true', '--timeout=180s']);
+  if (secondary) for (const kind of ['validatingadmissionpolicybindings', 'validatingadmissionpolicies']) {
+    await run('kubectl', ['delete', kind, ...['sandbox', 'pod', 'claim'].map(suffix => `${namespace}-computer-${suffix}`), '--ignore-not-found']);
+  }
+}
 async function up(fresh: boolean) {
-  const tail = JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
-  const origin = `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
+  const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
+  const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
+  if (secondary) await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
+    process.execPath, '--experimental-strip-types', 'infra/dev-stack/zitadel-setup.ts'],
+  { ...base, ...(process.env['ZITADEL_KEY_FILE'] ? { ZITADEL_KEY_FILE: process.env['ZITADEL_KEY_FILE'] } : {}) });
   await generate(origin);
+  if (secondary && !await exists(`${directory}/models.env`)) await writeEnv('models', {});
   if (fresh) {
     await stop();
     await compose('down', '--volumes', '--remove-orphans');
-    const oldSettings = await readEnv('settings');
-    await run('kubectl', ['delete', 'namespace', `opencrane-${oldSettings['SILO_ID']}`, `opencrane-${oldSettings['SILO_ID']}-gateway`, '--ignore-not-found',
-      '--wait=true', '--timeout=180s']);
+    await removeComputers();
     // The ownership marker fences this directory to this worktree.
     const files = await import('node:fs/promises').then((fs) => fs.readdir(directory));
     for (const file of files) if (file !== 'stack-owner' && !file.startsWith('zitadel-') && file !== 'zitadel.json') await rm(`${directory}/${file}`, { recursive: true });
     await generate(origin);
+    if (secondary) await writeEnv('models', {});
   }
-  const settings = await readEnv('settings');
+  const settings = { ...defaultPorts, ...await readEnv('settings') };
+  await checkPorts(settings, await Promise.all(names.map(processId)), project);
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
   await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio');
   const computer = await provisionComputers(settings);
@@ -202,21 +227,28 @@ async function up(fresh: boolean) {
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
   await save('model-stub-key', 'dev-stack-stub-only');
-  await modelFirewall(true);
-  await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'], {});
-  await run('bash', ['spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
-  await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], {
+  if (!secondary) await modelFirewall(true);
+  if (!secondary) await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'], { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']! });
+  await run('flock', ['--close', `/tmp/opencrane-dev-stack-tools-${process.getuid!()}.lock`, 'bash', 'spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
+  const models = {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
-    MODEL_UPSTREAM: '127.0.0.1:43003', MODEL_KEY_FILE: `${directory}/model-stub-key`,
+    MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
-    MODEL_DECISION_PORT: '43001', MODEL_GATEWAY_PORT: '43000', MODEL_READINESS_PORT: '43002',
-  });
-  await wait(() => healthy('http://127.0.0.1:43002/healthz/ready'), 'model gateway');
+    MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
+  };
+  if (secondary) {
+    const database = new URL(models.DATABASE_URL); database.hostname = 'postgres'; database.port = '5432';
+    await writeEnv('models', { ...base, ...models, DATABASE_URL: database.href, NATS_URL: 'tls://127.0.0.1:4222',
+      OPENFGA_API_URL: 'http://openfga:8080', MODEL_STUB_PAUSE_ON_STOP: '1', NODE_OPTIONS: '--max-old-space-size=256' });
+    await compose('up', '-d', 'models');
+  } else await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], models);
+  await wait(() => healthy(`http://127.0.0.1:${settings['MODEL_READINESS_PORT']}/healthz/ready`), 'model gateway');
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
-    { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: 'http://127.0.0.1:43001', ...prefixed(await readEnv('command'), 'COMMAND_'),
+    { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
       KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
+      ...(secondary ? { COMPUTER_STORAGE: '1Gi' } : {}),
       COMPUTER_IDLE_MS: process.env['COMPUTER_IDLE_MS'] ?? '900000' });
   console.log((await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/owner-bootstrap.ts'],
     { ...base, DEV_STACK_DIR: directory })).trim());
@@ -226,21 +258,23 @@ async function up(fresh: boolean) {
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
-    '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname });
+    '--port', settings['WEB_PORT']!, '--proxy-config', `${directory}/proxy.json`], { __VITE_ADDITIONAL_SERVER_ALLOWED_HOSTS: new URL(origin).hostname, ...(secondary ? { NG_BUILD_MAX_WORKERS: '2' } : {}) });
   await wait(() => healthy(`http://127.0.0.1:${settings['WEB_PORT']}/org/integrations`), 'web');
-  const ownership = await serveOwnership(settings);
-  if (ownership === 'foreign') throw new Error(`Refusing to replace HTTPS :443 Serve handler: expected ${origin} to map to 127.0.0.1:${settings['WEB_PORT']}`);
-  if (ownership === 'absent') {
-    await run('sudo', ['-n', 'tailscale', 'serve', '--bg', '--https=443', `http://127.0.0.1:${settings['WEB_PORT']}`]);
+  if (!secondary) {
+    const ownership = await serveOwnership(settings);
+    if (ownership === 'foreign') throw new Error(`Refusing to replace HTTPS :443 Serve handler: expected ${origin} to map to 127.0.0.1:${settings['WEB_PORT']}`);
+    if (ownership === 'absent') {
+      await run('sudo', ['-n', 'tailscale', 'serve', '--bg', '--https=443', `http://127.0.0.1:${settings['WEB_PORT']}`]);
+    }
   }
-  await wait(() => healthy(`${origin}/org/integrations`), 'tailnet HTTPS');
+  await wait(() => healthy(`${origin}/org/integrations`), 'web origin');
   await journey();
   const after = await run('ss', ['-H', '-ltnp']);
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));
   for (let i = 0; i < names.length; i++) if (!pids[i]) throw new Error(`${names[i]} stopped`);
-  const ports = new Set(['443', '43000', '43001', '43002', '43003', ...['PG_PORT', 'NATS_PORT', 'FGA_PORT', 'MINIO_PORT', 'MINIO_CONSOLE_PORT', 'SERVER_PORT', 'WEB_PORT']
-    .map((name) => settings[name]!)]);
+  const ports = new Set(Object.entries(settings).filter(([name]) => name.endsWith('_PORT')).map(([, port]) => port));
+  if (!secondary) ports.add('443');
   const allowed = new Set(['127.0.0.1', '::1', ...tail.Self.TailscaleIPs]);
   for (const line of after.trim().split('\n')) {
     const address = line.trim().split(/\s+/u)[3]!;
@@ -248,18 +282,19 @@ async function up(fresh: boolean) {
     const ownedProcess = pids.some((pid) => line.includes(`pid=${pid},`));
     if (ownedProcess && !match) throw new Error(`Cannot verify stack listener address: ${address}`);
     // The verified IPv4/IPv6 firewall restricts this wildcard listener to loopback, tailnet and k3d.
-    if (match?.[3] === '43000') continue;
+    if (!secondary && match?.[3] === settings['MODEL_GATEWAY_PORT']) continue;
     if ((ownedProcess || ports.has(match?.[3] ?? '')) && !allowed.has(match?.[1] ?? match?.[2] ?? '')) {
       throw new Error(`Stack listener is not on loopback or Tailscale: ${address}`);
     }
   }
-  await modelFirewall(true);
-  console.log('PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d');
+  if (!secondary) await modelFirewall(true);
+  console.log(secondary ? 'PASS listener check: all secondary host ports on loopback'
+    : 'PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d');
   console.log(`Stack ready: ${origin}/org/integrations (Zitadel sign-in)`);
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory }, 300_000);
+    { ...base, DEV_STACK_DIR: directory }, secondary ? 600_000 : 300_000);
   console.log(output.trim());
 }
 async function status() {
@@ -274,24 +309,38 @@ async function status() {
     const settings = await readEnv('settings');
     for (const url of [`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`,
       `${settings['OPENFGA_API_URL']}/healthz`, `http://127.0.0.1:${settings['MINIO_PORT']}/minio/health/live`,
-      `${settings['ORIGIN']}/org/integrations`]) {
+      `${settings['ORIGIN']}/org/integrations`,
+      ...(secondary ? [`http://127.0.0.1:${settings['MODEL_READINESS_PORT']}/healthz/ready`] : [])]) {
       const up = await healthy(url);
       console.log(`${up ? 'healthy' : 'unavailable'}: ${url}`);
       if (!up) ok = false;
     }
   }
-  console.log(await run('tailscale', ['serve', 'status']));
+  if (!secondary) console.log(await run('tailscale', ['serve', 'status']));
   if (!ok) process.exitCode = 1;
 }
 let prepared = false;
 try {
+  if (process.argv[2] === 'claim') {
+    if (!secondary || await stat(directory).then(() => true, () => false)) process.exit(1);
+    await prepareDirectory();
+    console.log(stackId);
+    process.exit(0);
+  }
   await prepareDirectory();
   prepared = true;
   const [action, flag, extra] = process.argv.slice(2);
   if (extra || (flag && !(action === 'up' && flag === '--fresh'))) throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
   switch (action) {
     case 'up': await up(flag === '--fresh'); break;
-    case 'down': await stop(); break;
+    case 'down':
+      await stop();
+      if (secondary) {
+        if (await exists(`${directory}/settings.env`)) await compose('down', '--volumes', '--remove-orphans');
+        await removeComputers();
+        await rm(directory, { recursive: true });
+      }
+      break;
     case 'status': await status(); break;
     case 'journey': await journey(); break;
     default: throw new Error('Unknown stack action');

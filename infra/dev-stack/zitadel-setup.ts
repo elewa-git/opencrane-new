@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
+import { homedir } from 'node:os';
+import { secondary, localOrigin } from './identity.ts';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { directory, exists, root, save, prepareDirectory } from './config.ts';
@@ -13,10 +15,10 @@ const identity = z.object({ issuer: z.string(), subject: z.string() });
 const userGrant = z.object({ id: z.string(), userId: z.string(), projectId: z.string(), roleKeys: z.array(z.string()),
   state: z.string(), details: z.object({ resourceOwner: z.string() }) });
 let orgId: string | undefined;
-async function api(path: string, body?: unknown) {
+async function api(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST') {
   const response = await fetch(`${issuer}${path}`, {
-    method: body === undefined ? 'GET' : 'POST', redirect: 'error', signal: AbortSignal.timeout(30_000),
-    headers: { Authorization: `Bearer ${(await readFile(`${root}/.keys/.zitadel-key`, 'utf8')).trim()}`,
+    method, redirect: 'error', signal: AbortSignal.timeout(30_000),
+    headers: { Authorization: `Bearer ${(await readFile(process.env['ZITADEL_KEY_FILE'] ?? `${root}/.keys/.zitadel-key`, 'utf8')).trim()}`,
       'content-type': 'application/json', ...(orgId ? { 'x-zitadel-orgid': orgId } : {}) },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
@@ -27,8 +29,41 @@ async function list(path: string, queries: unknown[] = []) {
   return z.object({ result: z.array(object).default([]) }).parse(await api(path, { queries })).result;
 }
 const exactName = (value: string) => [{ nameQuery: { name: value, method: 'TEXT_QUERY_METHOD_EQUALS' } }];
+async function secondarySetup() {
+  // Only this existing app in this pinned organisation may change. Never run owner provisioning here.
+  orgId = '393311211338337681';
+  const projectId = '393311211539664273', appId = '393311211707436433';
+  const org = z.object({ org: object }).parse(await api('/management/v1/orgs/me')).org;
+  assert(org.id === orgId && org.name === name, 'Refusing another organisation');
+  const path = `/management/v1/projects/${projectId}/apps/${appId}`;
+  const app = z.object({ app: z.object({ name: z.literal('OpenCrane 2 Dev Web'),
+    oidcConfig: z.object({ clientId: z.literal('393311211707501969'), redirectUris: z.array(z.string()),
+      postLogoutRedirectUris: z.array(z.string()), devMode: z.boolean().optional() }).passthrough(),
+    details: z.object({ resourceOwner: z.literal('393311211338337681') }) }) }).parse(await api(path)).app;
+  const origins = ['http://127.0.0.1:25106', 'http://127.0.0.1:25206'];
+  const config = app.oidcConfig;
+  const redirectUris = [...new Set([...config.redirectUris, ...origins.map(origin => `${origin}/auth/callback`)])];
+  const postLogoutRedirectUris = [...new Set([...config.postLogoutRedirectUris, ...origins.map(origin => `${origin}/`)])];
+  if (!config.devMode || redirectUris.length !== config.redirectUris.length || postLogoutRedirectUris.length !== config.postLogoutRedirectUris.length) {
+    // Preserve all existing mutable OIDC settings; omit response-only fields.
+    const { clientId: _clientId, complianceProblems: _problems, isCompliance: _compliance, ...settings } = config;
+    await api(`${path}/oidc_config`, { ...settings, redirectUris, postLogoutRedirectUris, devMode: true }, 'PUT');
+  }
+  const ownerDirectory = `${homedir()}/.config/opencrane/dev-stack`;
+  const setup = z.object({ issuer: z.literal(issuer), orgId: z.literal('393311211338337681'),
+    clientId: z.literal('393311211707501969'), users: z.record(z.string(), z.object({ id: z.string(), login: z.string(), passwordFile: z.string() })) })
+    .passthrough().parse(JSON.parse(await readFile(`${ownerDirectory}/zitadel.json`, 'utf8')));
+  for (const role of ['owner', 'member']) {
+    await save(`zitadel-${role}-password`, await readFile(`${ownerDirectory}/zitadel-${role}-password`, 'utf8'));
+    setup.users[role]!.passwordFile = `${directory}/zitadel-${role}-password`;
+  }
+  await save('zitadel-client-secret', await readFile(`${ownerDirectory}/zitadel-client-secret`, 'utf8'));
+  await save('zitadel.json', JSON.stringify({ ...setup, origin: localOrigin }));
+  console.log('Secondary redirects ready in OpenCrane 2 Dev; shared app and identities retained');
+}
 try {
   await prepareDirectory();
+  if (secondary) { await secondarySetup(); process.exit(0); }
   const pinned = z.object({ orgId: z.string().optional(), extraIdentities: z.array(identity).length(1) })
     .parse(JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')));
   const externalOwner = pinned.extraIdentities[0]!;

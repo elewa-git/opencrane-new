@@ -1,0 +1,41 @@
+# The owner keeps its existing limits. Two journey stacks share the remaining box.
+services:
+  postgres:
+    cpus: 0.5
+    mem_limit: 384m
+  nats:
+    cpus: 0.5
+    mem_limit: 256m
+    networks: [default, computers]
+    ports:
+      - "127.0.0.1:${MODEL_GATEWAY_PORT}:${MODEL_GATEWAY_PORT}"
+      - "127.0.0.1:${MODEL_DECISION_PORT}:${MODEL_DECISION_PORT}"
+      - "127.0.0.1:${MODEL_READINESS_PORT}:${MODEL_READINESS_PORT}"
+      - "127.0.0.1:${MODEL_STUB_PORT}:${MODEL_STUB_PORT}"
+  openfga-migrate:
+    cpus: 0.5
+    mem_limit: 256m
+  openfga:
+    cpus: 0.5
+    mem_limit: 256m
+  minio:
+    cpus: 0.5
+    mem_limit: 512m
+  models:
+    # Same OSI-licensed Node image already pinned by apps/computer/Dockerfile.
+    image: node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
+    user: "${DEV_STACK_UID}:${DEV_STACK_GID}"
+    working_dir: ${DEV_STACK_ROOT}
+    command: [node, --experimental-strip-types, infra/dev-stack/secondary-models.ts]
+    network_mode: service:nats
+    env_file: ${DEV_STACK_DIR}/models.env
+    volumes:
+      - ${DEV_STACK_ROOT}:${DEV_STACK_ROOT}:ro
+      - ${DEV_STACK_DIR}:${DEV_STACK_DIR}
+    cpus: 1
+    mem_limit: 768m
+    init: true
+networks:
+  computers:
+    external: true
+    name: k3d-ocn
