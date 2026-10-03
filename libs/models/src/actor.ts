@@ -75,6 +75,14 @@ export class BudgetActor {
       return id;
     });
   }
+  releaseUndispatched(id: string) {
+    return this.serial(async () => {
+      const r = this.state.reservations.find(r => r.id === id);
+      if (!r) throw new Error('Unmatched reservation');
+      if (r.settledCents !== undefined) throw new Error('Reservation already settled');
+      await this.append('budget.settled', { reservationId: id, permitId: id, settledCents: 0, outcome: 'not_dispatched' });
+    });
+  }
   settle(event: EventEnvelope) {
     return this.serial(async () => {
       if (event.silo !== this.silo || event.type !== 'effect.observed') throw new Error('Wrong effect');

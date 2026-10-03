@@ -221,7 +221,7 @@ retry with a fresh grant after reconnect or Pod replacement.
 | --- | --- | --- | --- |
 | `budget.ceiling_set` | admin | budgets | — |
 | `budget.reserved` | budget actor (inside `ext_authz`) | budgets | — |
-| `budget.settled` | budget actor (on `effect.observed`) | budgets, usage | — |
+| `budget.settled` | budget actor (on `effect.observed` or admission rejected before dispatch) | budgets, usage | — |
 | `budget.period_started` | timer (00:00 UTC on the 1st) | budgets | — |
 | `budget.exhausted` | budget actor | budgets | notify admins; stop affected work (hard stop cascades) |
 
@@ -253,6 +253,10 @@ period boundary. Observed provider rejections without usage produce
 `effect.observed` with `outcome: error` and `costCents: 0`, releasing the unused
 reservation. Ambiguous outcomes (including timeouts and lost connections) produce
 `effect.uncertain` after three minutes and keep the full reservation.
+If the audit or final authority fence rejects before a permit is returned, the
+actor instead appends `budget.settled` with `settledCents: 0` and
+`outcome: not_dispatched`. This releases the reservation without an effect;
+expiry and replay preserve that settlement.
 `settle-budget` retries a recorded
 observation through the decision process; duplicate settlement is a no-op.
 The budget projection can be rebuilt with reactions disabled. Cap refusals append

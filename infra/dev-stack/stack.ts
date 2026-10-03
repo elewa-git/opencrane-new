@@ -82,7 +82,12 @@ async function stop() {
     if (ownership === 'owned') await run('sudo', ['-n', 'tailscale', 'serve', '--https=443', 'off']);
   }
   await rm(`${directory}/serve-owned`, { force: true });
-  for (const name of [...names].reverse()) {
+  await stopProcesses([...names].reverse());
+  await modelFirewall(false);
+  if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
+}
+async function stopProcesses(processes: string[]) {
+  for (const name of processes) {
     const pid = await processId(name);
     if (pid) {
       process.kill(-pid, 'SIGTERM');
@@ -90,8 +95,6 @@ async function stop() {
     }
     await rm(`${directory}/${name}.pid`, { force: true });
   }
-  await modelFirewall(false);
-  if (await exists(`${directory}/settings.env`)) await compose('down', '--remove-orphans');
 }
 async function initialiseDatabase() {
   if (await exists(`${directory}/database-ready`)) return;
@@ -182,7 +185,11 @@ async function up(fresh: boolean) {
   await compose('up', '-d', 'openfga');
   await wait(() => healthy(`${settings['OPENFGA_API_URL']}/healthz`), 'OpenFGA');
   await wait(() => healthy(`http://127.0.0.1:${settings['MINIO_PORT']}/minio/health/live`), 'MinIO');
+  // Repeated up runs must also keep decision services and event writers out of the migration.
+  await stopProcesses(['server', 'dispatcher', 'models']);
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
+  await run('npm', ['run', 'migrate:model-grants', '-w', 'apps/ops'],
+    { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']! });
   if (!(await exists(`${directory}/binding.env`))) {
     const binding = await createStore(settings['OPENFGA_API_URL']!, settings['SILO_ID']!);
     await writeEnv('binding', { SILO_ID: binding.silo, OPENFGA_API_URL: binding.apiUrl,

@@ -164,3 +164,50 @@ fixture race was fixed and rerun in isolation, then passed in the full suite.
 The three opt-in tests (paid provider and live cluster suites), hosted CI and the
 shared-stack startup hook/live journey remain **NOT RUN**. No paid provider calls,
 shared-stack operations, new dependencies or additional independent review pass.
+
+## Owner-default fix after the second follow-up review
+
+3 October 2026, base `70faa8e`, same disposable services and PostgreSQL URL.
+The owner authorised this fix round after review pass two found a new blocker.
+No further independent review pass was started.
+
+The regression first failed at the real gateway with a grant revocation injected
+immediately after each allow audit: two **503** responses, zero upstream calls,
+**50 cents** still reserved after expiry and actor restart, two
+`effect.uncertain` events, and **402** on the next authorised call.
+
+The final authority fence remains after the audit. A failed audit or fence now
+releases the known undispatched reservation through one conditional
+`budget.settled` append, with `settledCents: 0` and `outcome: not_dispatched`.
+The event schema requires zero cost for that outcome. The regression now passes:
+no effects on the rejected calls, no reserved money after expiry/restart, a
+**200** on the next authorised call, one cent of observed usage, unchanged daily
+and monthly caps, and matching PostgreSQL state after projection rebuild.
+
+Every dev-stack `up`, including `--fresh`, now runs the migration CLI after NATS
+provisioning and before decision startup. Repeated startup stops its server,
+dispatcher and models processes before migration. The journey checks grant
+history for existing members/assistants and waits for new member/assistant grants
+in OpenFGA before chat. The disposable upgrade test now invokes the actual npm
+command twice, proves the second run appends nothing, and verifies replay retains
+revocations while restoring authorised chat. Older membership-only silos still
+require the documented OpenFGA model and dispatcher subscription upgrade.
+
+Focused race and migration CLI tests: **PASS**, two tests, 19.51 seconds.
+The race also passed after the final lint adjustment (10.14 seconds).
+The startup and journey TypeScript files pass Node syntax checks without execution.
+Live `up`, `up --fresh` and journey qualification: **NOT RUN**; the shared dev
+stack was neither run nor restarted. No push, paid provider call or new dependency.
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | PASS, all five checks; existing warnings only |
+| `npm run typecheck` | PASS, all workspaces; models rechecked after the final lint adjustment |
+| `npm run check:events` | PASS, 74 event types |
+| `npm test -- --maxWorkers=2` with `PG_TEST_URL` above | PASS, 62 files / 1,030 tests; 2 files / 3 tests skipped; 450.07 seconds |
+| `npm run build -w apps/web` | PASS, existing app.css size warning |
+| `npm run test -w apps/web -- --watch=false` | PASS, 5 files / 43 tests |
+
+The aggregate run had no timing failures to rerun. Paid-provider and live-cluster
+opt-in tests remain skipped; hosted CI and live fresh-stack qualification remain
+**NOT RUN**.

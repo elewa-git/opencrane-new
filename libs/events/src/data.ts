@@ -434,8 +434,9 @@ export const budgetReservedDataSchema = z
   .strict();
 
 export const budgetSettledDataSchema = z
-  .object({ reservationId: id, permitId: id, settledCents: centsSchema })
-  .strict();
+  .object({ reservationId: id, permitId: id, settledCents: centsSchema, outcome: z.literal('not_dispatched').optional() })
+  .strict()
+  .refine(data => data.outcome !== 'not_dispatched' || data.settledCents === 0, 'Undispatched calls have no cost');
 
 export const budgetPeriodStartedDataSchema = z
   .object({ periodStart: z.iso.datetime({ offset: true }) })

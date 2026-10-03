@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { promisify } from 'node:util';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,7 +18,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { migrateModelGrants, modelGrantHandler, BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
+import { modelGrantHandler, BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
 
 let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
@@ -196,9 +197,12 @@ it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants',
     await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
       resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
     });
-    await migrateModelGrants(f.nats.store, 'test');
+    const migrate = () => promisify(execFile)('npm', ['run', 'migrate:model-grants', '-w', 'apps/ops'], {
+      env: { ...process.env, ...f.nats.env('command'), SILO_ID: 'test' }, timeout: 10_000,
+    });
+    await migrate();
     const head = await f.nats.store.head();
-    await migrateModelGrants(f.nats.store, 'test');
+    await migrate();
     expect(await f.nats.store.head()).toBe(head);
     const rebuilt = await rebuildMembers(fga.apiUrl, 'test', f.nats.store);
     Object.assign(f.binding, rebuilt.binding);
@@ -245,6 +249,59 @@ it.each([
       expect(f.actor.state.reservations).toHaveLength(1);
     } finally { resume(); slowHistory.mockRestore(); }
   } finally { await f.close(); }
+}, 40_000);
+
+it('releases undispatched reservations when authority is revoked after the allow audit', async () => {
+  const f = await fixture(50, 50);
+  let replacement: Awaited<ReturnType<typeof startDecision>> | undefined;
+  const append = f.nats.store.append.bind(f.nats.store);
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const race = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
+        const result = await append(command);
+        if (typeof command.event === 'object' && command.event !== null && 'type' in command.event &&
+            command.event.type === 'decision.recorded' && 'data' in command.event &&
+            z.object({ outcome: z.literal('allow') }).safeParse(command.event.data).success) {
+          const revoked = await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+            resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
+          });
+          await f.auth.handler.handle(revoked, f.db);
+        }
+        return result;
+      });
+      try { expect((await f.call()).status).toBe(503); }
+      finally { race.mockRestore(); }
+      const restored = await f.append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+        resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', granteeKind: 'member', grantedBy: 'alice',
+      });
+      await f.auth.handler.handle(restored, f.db);
+    }
+    expect(f.received()).toBe(0);
+    const settlements = (await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.settled');
+    expect(settlements.map(r => r.event.data)).toEqual(f.actor.state.reservations.map(r => ({
+      reservationId: r.id, permitId: r.id, settledCents: 0, outcome: 'not_dispatched',
+    })));
+    f.advance(); await f.actor.expire();
+    expect.soft(totals(f.actor.state)).toMatchObject({ reservedCents: 0, todayCents: 0, monthCents: 0 });
+    for (const r of f.actor.state.reservations) {
+      expect.soft(await history(f.nats.store, `effect-${r.id}`, 'test')).toEqual([]);
+    }
+    await f.decisionDown();
+    const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now); await recovered.start();
+    replacement = await startDecision(recovered, f.identity, f.binding, Number(new URL(f.options.decisionUrl).port));
+    await recovered.expire();
+    expect.soft(totals(recovered.state)).toEqual({ reservedCents: 0, todayCents: 0, monthCents: 0,
+      dailyCeilingCents: 50, ceilingCents: 50 });
+    expect((await f.call()).status).toBe(200);
+    await until(async () => {
+      await ingestUsage(recovered, f.options.usageFile);
+      return recovered.state.reservations.every(r => r.settledCents !== undefined);
+    });
+    expect(f.received()).toBe(1);
+    expect(totals(recovered.state)).toMatchObject({ reservedCents: 0, todayCents: 1, monthCents: 1,
+      dailyCeilingCents: 50, ceilingCents: 50 });
+    await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
+  } finally { await replacement?.close(); await f.close(); }
 }, 40_000);
 
 it('refuses gpt-5.5 for a chat turn before reserving or reaching the provider', async () => {
