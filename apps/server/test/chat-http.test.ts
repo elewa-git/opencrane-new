@@ -35,9 +35,13 @@ it('serves private chat commands and reads to joined members, refusing other org
       expect((await nats.store.append({ event, expectedSequence: (await history(nats.store, subject, 'test')).at(-1)?.sequence ?? 0 })).status).toBe('appended');
       if (type !== 'member.invited') await auth.handler.handle(event, db);
     }
-    await runner.initialise(members); await runner.run(members); await runner.initialise(conversations); await runner.initialise(computers);
+    await runner.initialise(members); await runner.run(members); await runner.initialise(conversations); await runner.initialise(computers); await runner.run(computers);
     const headers = (orgId = 'org-test') => ({ origin: new URL(config.redirectUri).origin,
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId, roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+60 })}` });
+    const personal = await app.inject({ url: '/api/chat', headers: headers() });
+    expect(personal.statusCode).toBe(200);
+    expect(personal.json()).toMatchObject({ memberId: 'alice', assistantId: 'assistant', displayName: 'Alice' });
+    expect((await app.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(403);
     const conversationId = randomUUID(), create = { id: randomUUID(), conversationId, assistantId: 'assistant' };
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers('wrong'), payload: create })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: { ...headers(), origin: 'https://wrong.test' }, payload: create })).statusCode).toBe(403);
@@ -50,9 +54,17 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: { id: randomUUID(), text: 'Hello computer' } })).statusCode).toBe(200);
     await runner.run(conversations);
     const list = await app.inject({ url: '/api/conversations', headers: headers() });
-    expect(list.statusCode).toBe(200); expect(list.body).toContain(conversationId); expect(list.body).toContain('agent_session');
+    expect(list.statusCode).toBe(200); expect(list.body).toContain(conversationId); expect(list.body).toContain('agent_session'); expect(list.json<{ rows: { title: string }[] }>().rows[0]?.title).toBe('hello-computer');
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(messages.statusCode).toBe(200); expect(messages.body).toContain('Hello computer');
+    const turnId = messages.json<{ rows: { id: string; type: string }[] }>().rows.find(row => row.type === 'message.posted')!.id;
+    const stop = { id: randomUUID(), stopTurnId: turnId };
+    expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: stop })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: stop })).statusCode).toBe(200);
+    await runner.run(conversations);
+    expect((await app.inject({ url: '/api/conversations', headers: headers() })).json<{ rows: { status: string }[] }>().rows[0]?.status).toBe('stopped');
+    const stopped = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
+    expect(stopped.json<{ rows: { type: string }[] }>().rows.filter(row => row.type === 'agent.turn_stop_requested')).toHaveLength(1);
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const wss = attachWebSocketServer(app.server, app.log, config, { feed, binding, chat: { silo: 'test', store: nats.store, db, keys, binding, feed } });
     const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];

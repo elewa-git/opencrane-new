@@ -56,7 +56,7 @@ sign-in journey on a fresh silo is not qualified by these tests.
 The build produces static assets in `apps/web/dist/web/browser`; serve them with
 same-origin `/auth` and `/ws` routing and TLS in a deployment. The app needs no server
 filesystem or database permission. Reload discards local UI state and reconnects;
-durable history and event replay belong to the future server implementation.
+the chat workspace reloads durable history from the bridge projection.
 
 Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-hosted
 DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
@@ -80,3 +80,29 @@ and 1× card comparisons cropped from the design source in `/home/jente/.fleet/s
 controls. Browser-clock checks exercise focus, Enter/Space cancellation and timing. The live journey uses normal
 timers, real Zitadel and both test accounts; see the
 [sign-in evidence](../../docs/process/signin-evidence.md).
+
+## Chat workspace
+
+After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
+use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`
+feed. Only `agent_session` rows are shown. A new draft creates a conversation at
+first send; message ids stay stable across explicit retries. Pending messages are
+kept only on this page and the UI warns that reload discards an unsent draft.
+No conversation content or credentials are stored in browser persistent storage.
+
+Stop records `agent.turn_stop_requested`, interrupts the computer and keeps text
+through that position on replay. HTTP reads page through history; realtime consumes
+every validated envelope, including several deltas in one zoneless render. Access
+refusal clears protected content. The computer state announces wake progress.
+
+Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
+Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel
+and preview dialogs use Escape and focus restoration. Phones use a top-bar menu,
+a docked composer and 44px targets. The panel starts closed below 1100px.
+
+Run `NO_COLOR=1 npm test -- apps/web/test` for Chromium plus replay tests, and
+`NO_COLOR=1 npm run test -w apps/web -- --watch=false` for Angular's unit suite.
+`npm run visual:chat` regenerates the [comparison page](../../docs/design/chat/comparison/index.html).
+[Reuse and deferred file transport](../../docs/design/chat/IMPLEMENTATION.md) records
+attribution and the scope limits. The live dev-stack journey uses only the stub
+provider and includes streamed text, Stop and reload through the shipped UI.

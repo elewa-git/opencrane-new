@@ -14,6 +14,7 @@
       @if (authenticated()) {
         <h1>You are signed in</h1>
         <oc-shared-state kind="ready" message="Your workspace session is active" />
+        <a class="button primary" href="/workspace">Open workspace</a>
         <a class="button secondary" href="/org/integrations">Organisation integrations</a>
         <form method="post" action="/auth/logout" enctype="text/plain">
           <button type="submit" class="button primary">Sign out</button>

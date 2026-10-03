@@ -24,6 +24,11 @@ against the [event catalogue package](../events/README.md) before accepting it.
 `integrationsResponseSchema` defines MCP register rows and their shared state kinds;
 `integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
 
+`chatContextSchema` includes the authorised member’s optional display name and
+personal assistant id. `sessionSlug` formats the first message consistently for
+the server list, rail and header. Conversation list status distinguishes `stopped` from
+`done`; both are derived from events, never a separate stored status.
+
 Use `safeParse` when rejected input is expected, or handle the Zod error from `parse`.
 Strict message schemas reject unknown fields, wrong discriminants and malformed values.
 A matching static type does not guarantee a successful request or authorisation.
@@ -41,3 +46,8 @@ runtime socket boundary; Angular tests cover client handling. This skeleton is n
 live-qualified chat or command protocol and stores no recoverable state.
 The only runtime dependency is Zod; the package is usable by browser and Node code.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
+
+Chat HTTP response schemas (`chatContextSchema`, `chatListSchema`,
+`chatFeedSchema`, `chatRowSchema`) validate browser reads. Known display fields
+are typed; unrendered event fields stay opaque. `WebSocketService.received` in the
+web app delivers each validated envelope without Angular signal coalescing.

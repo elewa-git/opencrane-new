@@ -38,7 +38,8 @@ Never put credentials in a URL or event. Fresh-silo qualification remains pendin
 
 ## Contract and verification
 
-`GET /auth/login` redirects to the provider; `GET /auth/me` reports the session.
+`GET /auth/login` redirects to the provider; `GET /auth/me` reports the session,
+including the optional signed-in profile `user.name` for display.
 `POST /auth/logout` requires the exact configured Origin and a valid session for
 the pinned organisation. Refusals clear no cookies. Success clears the local cookie
 and answers a top-level form POST with **303 See Other**. Its `Location` is the
@@ -235,3 +236,18 @@ other computers continue. Resolve the refused report before restarting the serve
 Transient persistence failures still close with 1011 and retry from durable history.
 Credential expiry closes with 4001 and reconnects with a fresh credential; only a
 recorded report refusal stops automatic recovery.
+
+### Chat UI reads and Stop
+
+`GET /api/chat` returns the authenticated member id and their personal assistant
+id (null while provisioning). It requires live silo membership and `acts_for`;
+it does not expose the organisation computer register. Conversation list rows
+include an event-derived title and status, computed only after per-conversation
+read permission. No administrative bypass grants access to private sessions.
+
+`POST /api/conversations/:conversationId/messages` also accepts
+`{id, stopTurnId}`. Only the original message author can stop that turn. It appends
+one `agent.turn_stop_requested` event; retries retain their event id. The bridge
+skips an unstarted stopped turn or interrupts its active Codex turn. The browser
+freezes displayed text at the stop event's position, including after reload;
+late reports remain in durable history without replacing that displayed partial.

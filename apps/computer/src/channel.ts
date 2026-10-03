@@ -46,6 +46,8 @@ export function bridgeChannel(server: Server, driver: Driver) {
   const executions = new Set(existsSync(`${driver.journal}.executions`) ? readFileSync(`${driver.journal}.executions`, 'utf8').trim().split('\n') : []);
   let socket: WebSocket | undefined, resumed = false;
   const active = new Map<string, Turn>();
+  const cancelled = new Set<string>();
+  const codexTurns = new Map<string, string>();
   const waiting = new Map<number, (grant: { token: string; expiresAt: number }) => void>();
   const send = (report: BridgeReport) => {
     if (resumed && socket && socket.readyState === socket.OPEN) {
@@ -80,13 +82,25 @@ export function bridgeChannel(server: Server, driver: Driver) {
         waiting.set(sequence, resolve); if (previousStart) send(previousStart);
       });
       await driver.grant(thread, input.conversationId, grant.token, grant.expiresAt);
+      if (cancelled.has(input.id)) {
+        report(input, 'agent.turn_failed'); active.delete(thread);
+        await driver.grant(thread, input.conversationId, '', 0); return;
+      }
       appendFileSync(`${driver.journal}.executions`, input.id + '\n', { mode: 0o600, flush: true });
       executions.add(input.id);
-      await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: input.text, text_elements: [] }] });
+      const result = record(await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: input.text, text_elements: [] }] }));
+      await rememberTurn(input, thread, result);
     } catch {
       report(input, 'agent.turn_failed');
       for (const [id, t] of active) if (t.id === input.id) active.delete(id);
     }
+  }
+  async function rememberTurn(input: Turn, thread: string, result: Record<string, unknown>) {
+    if (!result['turn'] || !active.has(thread)) return;
+    const id = string(record(result['turn']), 'id'); codexTurns.set(input.id, id);
+    // An interrupt failure says nothing about execution. Reconnect and retry Stop with the active turn intact.
+    if (cancelled.has(input.id)) await driver.rpc('turn/interrupt', { threadId: thread, turnId: id })
+      .catch(() => socket?.close(1011, 'Interrupt unavailable'));
   }
   function acknowledge(sequence: unknown, value?: Record<string, unknown>) {
     if (typeof sequence !== 'number' || !Number.isSafeInteger(sequence) || sequence < 1 || sequence > reports.length) throw new Error('Invalid ack');
@@ -94,6 +108,14 @@ export function bridgeChannel(server: Server, driver: Driver) {
     if (resolve && typeof value?.['token'] === 'string' && typeof value['expiresAt'] === 'number' && value['expiresAt'] > Date.now()) {
       waiting.delete(sequence); resolve({ token: value['token'], expiresAt: value['expiresAt'] });
     }
+  }
+  async function interrupt(value: Record<string, unknown>) {
+    const id = string(value, 'turnId'), conversationId = string(value, 'conversationId');
+    const entry = [...active].find(([, input]) => input.id === id && input.conversationId === conversationId);
+    if (!entry) return;
+    cancelled.add(id);
+    const turnId = codexTurns.get(id);
+    if (turnId) await driver.rpc('turn/interrupt', { threadId: entry[0], turnId });
   }
   function resume(since: unknown) {
     if (typeof since !== 'number' || !Number.isSafeInteger(since) || since < 0 || since > reports.length) throw new Error('Sequence gap');
@@ -117,6 +139,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
         if (input['type'] === 'resume') resume(input['since']);
         else if (input['type'] === 'ack') acknowledge(input['sequence'], input);
         else if (input['type'] === 'turn' && resumed) void start(turn(input));
+        else if (input['type'] === 'stop' && resumed) void interrupt(input).catch(() => next.close(1011, 'Interrupt unavailable'));
         else throw new Error('Invalid message');
       } catch { next.close(1008, 'Invalid bridge message'); }
     });
@@ -138,6 +161,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
       if (event['method'] === 'turn/completed') {
         report(input, record(params['turn'])['status'] === 'completed' ? 'agent.turn_completed' : 'agent.turn_failed');
         active.delete(thread); void driver.grant(thread, input.conversationId, '', 0).catch(() => undefined);
+        codexTurns.delete(input.id); cancelled.delete(input.id);
       }
     },
     close: () => new Promise<void>(resolve => { for (const client of wss.clients) client.terminate(); wss.close(() => resolve()); }),

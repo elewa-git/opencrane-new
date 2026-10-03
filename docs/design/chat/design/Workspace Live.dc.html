@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #eceff0; color: #16191a; -webkit-font-smoothing: antialiased; }
+  input, select, button, textarea { font-family: inherit; }
+  a { color: #0a94a7; text-decoration: none; }
+  a:hover { color: #0d8ba0; }
+  ::placeholder { color: #a7aeaf; }
+  .oc-rice::before { content:""; position:absolute; inset:0; opacity:.42; filter:brightness(1.06) contrast(1.08); background-image:url(data:image/jpeg;base64,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); background-size:280px; pointer-events:none; border-radius:inherit; }
+  @keyframes oc-unroll { from { transform: perspective(1400px) rotate3d(1,-.6,0,46deg) translate(20px,-20px); opacity: 0; } 55% { opacity: 1; } to { transform: none; opacity: 1; } }
+  @keyframes oc-deal { from { transform: perspective(1400px) rotateX(12deg) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes oc-flutter { 0%, 100% { opacity: .18; transform: rotateY(0); } 50% { opacity: .55; transform: rotateY(38deg); } }
+  @keyframes oc-crease-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes oc-caret { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
+  @keyframes ocFold { 0%, 12% { transform: rotateX(0); filter: brightness(1); } 42%, 55% { transform: rotateX(-178deg); filter: brightness(.72); } 88%, 100% { transform: rotateX(0); filter: brightness(1); } }
+  @keyframes oc-land { from { transform: perspective(900px) translateY(16px) rotateX(22deg) scale(.97); opacity: 0; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
+  @keyframes oc-ink { from { opacity: 0; filter: blur(3px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: none; } }
+  @keyframes oc-dogear { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes oc-hinge { from { transform: perspective(1200px) rotateY(-26deg) translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes oc-settle { from { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } to { transform: none; opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+</style>
+</helmet>
+
+<div data-screen-label="Workspace — live" style="height:100vh;min-height:640px;display:flex;background:#eceff0;overflow:hidden">
+
+  <aside style="width:236px;flex-shrink:0;background:#eef1f2;border-right:1px solid #d9dfe0;display:flex;flex-direction:column">
+    <div style="height:56px;padding:0 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid #e6eaeb">
+      <svg width="23" height="17" viewBox="0 0 32 24"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"></polygon><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"></polygon><polygon points="11,15 16,3 19,15" fill="#22c7dd"></polygon><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"></polygon><polygon points="19,15 30,7 22,20" fill="#66d7e6"></polygon></svg>
+      <span style="font-size:15px;font-weight:600;letter-spacing:-.2px">Open<span style="color:#0a94a7">Crane</span></span>
+      <span style="flex:1"></span>
+      <span style="font-family:'DM Mono',monospace;font-size:10px;color:#91989a;border:1px solid #dee3e4;border-radius:4px;padding:2px 6px;background:#fff">⌘K</span>
+    </div>
+    <div style="padding:10px 8px;flex:1;overflow:auto;display:flex;flex-direction:column;gap:1px">
+      <div style="padding:7px 10px;font-size:13px;color:#f47920;display:flex;align-items:center;gap:8px;border-radius:6px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .05s backwards" style-hover="background:#e5eaeb">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 2v8M2 6h8"></path></svg>
+        <span style="flex:1">New session</span>
+        <span style="font-family:'DM Mono',monospace;font-size:9.5px;color:#91989a;border:1px solid #dee3e4;border-radius:3px;padding:0 4px;background:#fff">⌘N</span>
+      </div>
+      <div style="position:relative;overflow:hidden;padding:7px 10px;margin:2px 0 4px;font-size:13px;display:flex;align-items:center;gap:8px;border:1px dashed #9fdde8;border-radius:6px;background:#eefafc;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .084s backwards" style-hover="background:#e4f6f9">
+        <span style="position:absolute;top:0;right:0;width:9px;height:9px;background:linear-gradient(225deg,#eef1f2 0%,#eef1f2 50%,#9fdde8 50%,#d4f0f5 100%);border-bottom-left-radius:3px;transform-origin:100% 0;animation:oc-dogear .26s cubic-bezier(.32,.72,0,1) .5s backwards"></span>
+        <span style="width:8px;height:7px;display:inline-block;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0db5cc;flex-shrink:0"></span>
+        <span style="flex:1;font-weight:500">Ask your agent</span>
+        <span style="font-family:'DM Mono',monospace;font-size:9.5px;color:#0a94a7;border:1px solid #cdeef3;border-radius:3px;padding:0 4px;background:#fff">⌘⇧A</span>
+      </div>
+
+      <div style="padding:10px 10px 4px;font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#91989a">Projects</div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;background:#e1e7e8;box-shadow:inset 2px 0 0 #0db5cc;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .12s backwards">
+        <span style="font-family:'DM Mono',monospace;font-size:11.5px;color:#0a94a7;width:9px">#</span>
+        <span style="flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">board-pack-q3</span>
+        <sc-if value="{{ waiting }}" hint-placeholder-val="{{ true }}"><span style="width:6px;height:6px;border-radius:50%;background:#f47920"></span></sc-if>
+      </div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .154s backwards" style-hover="background:#e5eaeb">
+        <span style="width:9px;height:8px;display:inline-block;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0db5cc;animation:oc-flutter 1.6s ease-in-out infinite"></span>
+        <span style="flex:1;font-size:13px;color:#16191a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">county-rollout</span>
+        <span style="font-size:10px;color:#81888a">Agent working</span>
+      </div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .188s backwards" style-hover="background:#e5eaeb">
+        <span style="font-family:'DM Mono',monospace;font-size:11.5px;color:#91989a;width:9px">#</span>
+        <span style="flex:1;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">hiring-plan</span>
+        <span style="font-size:10px;font-weight:600;background:#16191a;color:#fff;border-radius:8px;padding:1px 6px">3</span>
+      </div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .222s backwards" style-hover="background:#e5eaeb">
+        <span style="font-family:'DM Mono',monospace;font-size:11.5px;color:#91989a;width:9px">#</span>
+        <span style="flex:1;font-size:13px;color:#454d4f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">nova-pitch</span>
+      </div>
+
+      <div style="padding:12px 10px 4px;font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#91989a">Personal</div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .256s backwards" style-hover="background:#e5eaeb">
+        <span style="font-family:'DM Mono',monospace;font-size:11.5px;color:#91989a;width:9px">#</span>
+        <span style="flex:1;font-size:13px;color:#454d4f">weekly-notes</span>
+      </div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .29s backwards" style-hover="background:#e5eaeb">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#2a7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"></path></svg>
+        <span style="flex:1;font-size:13px;color:#81888a">welcome</span>
+      </div>
+      <div style="padding:6px 10px;border-radius:6px;display:flex;align-items:center;gap:8px;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .324s backwards" style-hover="background:#e5eaeb">
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#91989a" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="10" height="7" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+        <span style="flex:1;font-size:13px;color:#81888a">salary-review</span>
+      </div>
+      <div style="padding:8px 10px;font-size:12px;color:#91989a;cursor:pointer" style-hover="color:#16191a">Archived · 14</div>
+    </div>
+    <div style="border-top:1px solid #e6eaeb;padding:9px 16px;display:flex;align-items:center;gap:8px;color:#616a6c;font-size:13px;cursor:pointer" style-hover="color:#16191a">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="2.2"></circle><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"></path></svg>
+      Settings
+    </div>
+    <div style="border-top:1px solid #e6eaeb;padding:10px 14px;display:flex;align-items:center;gap:9px">
+      <div style="width:28px;height:28px;border-radius:50%;background:#0db5cc;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">JR</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12.5px;font-weight:500">Jente Rosseel</div>
+        <div style="font-size:10.5px;color:#81888a">Elewa · Tech</div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="oc-rice" style="position:relative;flex:1;min-width:0;display:flex;flex-direction:column;background:#f7f9f9">
+    <header style="position:relative;height:56px;flex-shrink:0;padding:0 20px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #dee3e4;background:rgba(251,252,252,.85)">
+      <span style="font-family:'DM Mono',monospace;font-size:14px;color:#91989a">#</span>
+      <span style="font-size:15px;font-weight:600;white-space:nowrap;min-width:0;overflow:hidden;text-overflow:ellipsis">board-pack-q3</span>
+      <sc-if value="{{ working }}" hint-placeholder-val="{{ false }}">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#0a94a7;font-weight:500;white-space:nowrap;flex-shrink:0;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) backwards"><span style="width:9px;height:8px;display:inline-block;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0db5cc;animation:oc-flutter 1.6s ease-in-out infinite"></span>Agent working</span>
+      </sc-if>
+      <sc-if value="{{ waitingOnly }}" hint-placeholder-val="{{ true }}">
+        <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#9a6b2a;font-weight:500;white-space:nowrap;flex-shrink:0;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) backwards"><span style="width:6px;height:6px;border-radius:50%;background:#f47920"></span>Waiting on you</span>
+      </sc-if>
+      <span style="flex:1"></span>
+      <span style="display:inline-flex;align-items:center">
+        <span style="width:24px;height:24px;border-radius:50%;background:#0db5cc;color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:2px solid #fbfcfc">JR</span>
+        <span style="width:24px;height:24px;border-radius:50%;background:#2a5c9a;color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:2px solid #fbfcfc;margin-left:-7px">AK</span>
+        <span style="width:24px;height:24px;border-radius:50%;background:#7a5a9a;color:#fff;font-size:9px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;border:2px solid #fbfcfc;margin-left:-7px">WM</span>
+      </span>
+      <button onClick="{{ togglePanel }}" style="width:30px;height:30px;border:1px solid #d9dfe0;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;background:#fff;cursor:pointer" style-hover="background:#eef1f2" style-active="transform:translateY(1px)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#5a6264" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"></rect><path d="M10 3v10"></path></svg>
+      </button>
+    </header>
+
+    <div ref="{{ scrollRef }}" style="position:relative;flex:1;overflow-y:auto">
+      <div style="max-width:780px;margin:0 auto;padding:28px 28px 20px;display:flex;flex-direction:column;gap:22px">
+
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="flex:1;height:1px;background:#dee3e4;animation:oc-crease-in .6s cubic-bezier(.32,.72,0,1) .1s backwards"></span>
+          <span style="font-size:11px;color:#91989a">Today</span>
+          <span style="flex:1;height:1px;background:#dee3e4;animation:oc-crease-in .6s cubic-bezier(.32,.72,0,1) .1s backwards"></span>
+        </div>
+
+        <div style="display:flex;gap:11px;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) .15s backwards">
+          <div style="width:30px;height:30px;border-radius:50%;background:#2a5c9a;color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">AK</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600">Amina Kariuki</span><span style="font-size:11px;color:#a7aeaf">09:12</span></div>
+            <div style="font-size:14px;line-height:1.6;color:#2b3133;text-wrap:pretty">Finance sent the final Q3 numbers this morning. Can we get the revenue section of the board pack drafted today? Board meets Tuesday.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end">
+          <div style="max-width:78%;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <div style="background:#eef1f2;border:1px solid #e1e6e7;border-radius:14px 14px 3px 14px;padding:10px 14px;font-size:14px;line-height:1.6;box-shadow:inset 0 1px 0 rgba(255,255,255,.7);transform-origin:100% 100%;animation:oc-land .34s cubic-bezier(.32,.72,0,1) .35s backwards;text-wrap:pretty"><span style="color:#0a94a7;font-weight:500">@agent</span> pull the Q3 actuals from the Finance folder and draft the revenue section against the FY26 plan. Flag any line more than 5% off.</div>
+            <span style="font-size:11px;color:#a7aeaf">09:14</span>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:11px">
+          <div style="width:30px;height:30px;border-radius:8px;background:#e4f6f9;border:1px solid #cdeef3;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+            <span style="width:12px;height:10px;display:inline-block;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0db5cc"></span>
+          </div>
+          <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600">Agent</span><span style="font-size:11px;color:#a7aeaf">09:14 · 48s</span></div>
+
+            <div style="display:flex;flex-direction:column;gap:3px">
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#81888a;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .55s backwards" style-hover="color:#16191a">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#2a7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"></path></svg>
+                Searched Finance / Q3 · 12 files<span style="color:#b3babb">›</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#81888a;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .59s backwards" style-hover="color:#16191a">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#2a7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"></path></svg>
+                Read Q3-actuals-final.xlsx · 4 sheets<span style="color:#b3babb">›</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#81888a;cursor:pointer;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .63s backwards" style-hover="color:#16191a">
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#2a7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"></path></svg>
+                Compared against FY26 plan<span style="color:#2a7d4f;font-weight:500">after retry</span><span style="color:#b3babb">›</span>
+              </div>
+            </div>
+
+            <div style="font-size:14.5px;line-height:1.7;color:#2b3133;text-wrap:pretty;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) .75s backwards">Q3 revenue closed at <strong style="font-weight:600;color:#16191a">KES 48.2M</strong>, 3.1% above plan. Two lines moved more than 5%:</div>
+
+            <div style="display:flex;flex-direction:column;gap:8px;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) .9s backwards">
+              <div style="display:flex;gap:10px;font-size:14.5px;line-height:1.65;color:#2b3133">
+                <span style="color:#a7aeaf;font-family:'DM Mono',monospace;font-size:12px;padding-top:3px">1</span>
+                <span style="text-wrap:pretty"><strong style="font-weight:600;color:#16191a">Training services, 11.4% below plan</strong> (KES 6.1M vs 6.9M). The September cohort moved to October, so the revenue shifts rather than disappears.</span>
+              </div>
+              <div style="display:flex;gap:10px;font-size:14.5px;line-height:1.65;color:#2b3133">
+                <span style="color:#a7aeaf;font-family:'DM Mono',monospace;font-size:12px;padding-top:3px">2</span>
+                <span style="text-wrap:pretty"><strong style="font-weight:600;color:#16191a">Platform licences, 8.2% above plan</strong>, driven by two county contracts signed in August.</span>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-wrap:wrap;gap:6px;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) 1.05s backwards">
+              <span style="position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #e1e6e7;border-radius:6px;padding:4px 16px 4px 8px;font-size:12px;color:#454d4f;cursor:pointer" style-hover="border-color:#9fdde8">
+                <span style="position:absolute;top:0;right:0;width:10px;height:10px;background:linear-gradient(225deg,#f7f9f9 0%,#f7f9f9 50%,#d9dfe0 50%,#e8eced 100%);border-bottom-left-radius:3px;transform-origin:100% 0;animation:oc-dogear .26s cubic-bezier(.32,.72,0,1) 1.3s backwards"></span>
+                <span style="font:600 10px 'DM Mono',monospace;color:#a7aeaf">1</span>Q3-actuals-final.xlsx · Revenue
+              </span>
+              <span style="position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #e1e6e7;border-radius:6px;padding:4px 16px 4px 8px;font-size:12px;color:#454d4f;cursor:pointer" style-hover="border-color:#9fdde8">
+                <span style="position:absolute;top:0;right:0;width:10px;height:10px;background:linear-gradient(225deg,#f7f9f9 0%,#f7f9f9 50%,#d9dfe0 50%,#e8eced 100%);border-bottom-left-radius:3px;transform-origin:100% 0;animation:oc-dogear .26s cubic-bezier(.32,.72,0,1) 1.36s backwards"></span>
+                <span style="font:600 10px 'DM Mono',monospace;color:#a7aeaf">2</span>FY26-plan-v3.xlsx
+              </span>
+              <span style="position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid #e1e6e7;border-radius:6px;padding:4px 16px 4px 8px;font-size:12px;color:#454d4f;cursor:pointer" style-hover="border-color:#9fdde8">
+                <span style="position:absolute;top:0;right:0;width:10px;height:10px;background:linear-gradient(225deg,#f7f9f9 0%,#f7f9f9 50%,#d9dfe0 50%,#e8eced 100%);border-bottom-left-radius:3px;transform-origin:100% 0;animation:oc-dogear .26s cubic-bezier(.32,.72,0,1) 1.42s backwards"></span>
+                <span style="font:600 10px 'DM Mono',monospace;color:#a7aeaf">3</span>Cohort schedule — Sept
+              </span>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #d9dfe0;border-radius:10px;padding:11px 13px;max-width:420px;transform-origin:0 100%;animation:oc-unroll .52s cubic-bezier(.32,.72,0,1) 1.2s backwards;cursor:pointer" style-hover="border-color:#9fdde8">
+              <div style="width:34px;height:40px;border-radius:4px;background:#2a5c9a;display:flex;align-items:flex-end;justify-content:center;padding-bottom:5px;font:700 8.5px 'DM Mono',monospace;color:#fff;flex-shrink:0">DOCX</div>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:13px;font-weight:500">Board pack — Revenue (draft)</div>
+                <div style="font-size:11.5px;color:#81888a">2 pages · saved to Q3 board pack</div>
+              </div>
+              <span style="font-size:12px;color:#0a94a7;font-weight:500">Open</span>
+            </div>
+
+            <div style="position:relative;overflow:hidden;background:#fff;border:1px solid #e6eaeb;border-left:2.5px solid #f47920;border-radius:0 10px 10px 0;padding:13px 15px;display:flex;flex-direction:column;gap:10px;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) 1.5s backwards">
+              <div style="display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:500;color:#9a6b2a">
+                <sc-if value="{{ askOpen }}" hint-placeholder-val="{{ true }}"><span style="width:6px;height:6px;border-radius:50%;background:#f47920"></span>Needs your answer</sc-if>
+                <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}"><span style="display:inline-flex;align-items:center;gap:6px;color:#2a7d4f;animation:oc-settle .26s cubic-bezier(.32,.72,0,1) backwards"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#2a7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"></path></svg>Answered by you</span></sc-if>
+              </div>
+              <div style="font-size:14px;line-height:1.55;color:#16191a;text-wrap:pretty">Should the section add a forward-looking note on the October cohort, so the Training dip doesn't read as a loss?</div>
+              <sc-if value="{{ askOpen }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-wrap:wrap;gap:8px">
+                  <button onClick="{{ answerYes }}" style="border:none;background:#0db5cc;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;box-shadow:0 1px 0 #0a94a7;cursor:pointer" style-hover="background:#0bc0d8" style-active="transform:translateY(1px);box-shadow:0 0 0 rgba(0,0,0,0)">Yes, add the note</button>
+                  <button onClick="{{ answerNo }}" style="border:1px solid #d3d9da;background:#fff;color:#16191a;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:500;cursor:pointer" style-hover="background:#f3f6f6" style-active="transform:translateY(1px)">No, keep to Q3</button>
+                  <span style="font-size:12px;color:#91989a;align-self:center;margin-left:4px">or reply below</span>
+                </div>
+              </sc-if>
+              <sc-if value="{{ askDone }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:13px;color:#454d4f;animation:oc-ink .42s cubic-bezier(.4,0,.2,1) backwards">{{ askAnswer }}</div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+
+        <sc-for list="{{ extra }}" as="m" hint-placeholder-count="0">
+          <sc-if value="{{ m.mine }}">
+            <div style="display:flex;justify-content:flex-end">
+              <div style="max-width:78%;display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+                <div style="background:#eef1f2;border:1px solid #e1e6e7;border-radius:14px 14px 3px 14px;padding:10px 14px;font-size:14px;line-height:1.6;box-shadow:inset 0 1px 0 rgba(255,255,255,.7);transform-origin:100% 100%;animation:oc-land .34s cubic-bezier(.32,.72,0,1) backwards;white-space:pre-wrap;text-wrap:pretty">{{ m.text }}</div>
+                <span style="font-size:11px;color:#a7aeaf">{{ m.time }}</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ m.agent }}">
+            <div style="display:flex;gap:11px;transform-origin:0 100%;animation:oc-unroll .52s cubic-bezier(.32,.72,0,1) backwards">
+              <div style="width:30px;height:30px;border-radius:8px;background:#e4f6f9;border:1px solid #cdeef3;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                <span style="width:12px;height:10px;display:inline-block;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0db5cc"></span>
+              </div>
+              <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:baseline;gap:8px"><span style="font-size:13px;font-weight:600">Agent</span><span style="font-size:11px;color:#a7aeaf">{{ m.time }}</span></div>
+                <sc-if value="{{ m.folding }}">
+                  <div style="display:flex;align-items:center;gap:10px;height:24px">
+                    <span style="display:inline-flex;align-items:flex-end;perspective:200px">
+                      <span style="width:11px;height:9px;opacity:.5;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0db5cc;transform-origin:50% 100%;animation:ocFold 1.6s ease-in-out 0s infinite"></span>
+                      <span style="width:11px;height:9px;opacity:.5;margin-left:-4px;clip-path:polygon(0 0,100% 0,50% 100%);background:#22c7dd;transform-origin:50% 0;animation:ocFold 1.6s ease-in-out .16s infinite"></span>
+                      <span style="width:11px;height:9px;opacity:.5;margin-left:-4px;clip-path:polygon(50% 0,100% 100%,0 100%);background:#0d8ba0;transform-origin:50% 100%;animation:ocFold 1.6s ease-in-out .32s infinite"></span>
+                      <span style="width:11px;height:9px;opacity:.5;margin-left:-4px;clip-path:polygon(0 0,100% 0,50% 100%);background:#66d7e6;transform-origin:50% 0;animation:ocFold 1.6s ease-in-out .48s infinite"></span>
+                      <span style="width:11px;height:9px;opacity:.5;margin-left:-4px;clip-path:polygon(50% 0,100% 100%,0 100%);background:#f47920;transform-origin:50% 100%;animation:ocFold 1.6s ease-in-out .64s infinite"></span>
+                    </span>
+                    <span style="font-size:13px;color:#a7aeaf;font-style:italic">{{ m.status }}</span>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ m.hasTool }}">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:#81888a;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) backwards">
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#2a7d4f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.2l2 2L8 3"></path></svg>{{ m.tool }}<span style="color:#b3babb">›</span>
+                  </div>
+                </sc-if>
+                <div style="font-size:14.5px;line-height:1.7;color:#2b3133;white-space:pre-wrap;text-wrap:pretty">{{ m.text }}<sc-if value="{{ m.streaming }}"><span style="display:inline-block;width:2px;height:15px;background:#0db5cc;vertical-align:-2px;margin-left:2px;animation:oc-caret 1s step-end infinite"></span></sc-if></div>
+              </div>
+            </div>
+          </sc-if>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="position:relative;flex-shrink:0;padding:0 28px 18px">
+      <div style="max-width:724px;margin:0 auto;background:#fff;border:1px solid #d3d9da;border-radius:12px;padding:11px 13px 9px;box-shadow:0 1px 2px rgba(22,25,26,.04),0 6px 20px rgba(22,25,26,.05)" style-focus-within="border-color:#9fdde8">
+        <textarea value="{{ draft }}" onChange="{{ onDraft }}" onKeyDown="{{ onKey }}" rows="2" placeholder="{{ placeholder }}" style="width:100%;border:none;outline:none;resize:none;font-size:14px;line-height:1.55;color:#16191a;background:transparent"></textarea>
+        <div style="display:flex;align-items:center;gap:4px;margin-top:4px">
+          <span style="padding:5px;color:#81888a;display:inline-flex;border-radius:6px;cursor:pointer" style-hover="background:#eef1f2;color:#16191a"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 3v10M3 8h10"></path></svg></span>
+          <span style="padding:5px;color:#81888a;display:inline-flex;border-radius:6px;cursor:pointer" style-hover="background:#eef1f2;color:#16191a"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="4" height="7" rx="2"></rect><path d="M3.5 7.5a4.5 4.5 0 0 0 9 0M8 12v2"></path></svg></span>
+          <span style="flex:1"></span>
+          <span style="font-size:11px;color:#a7aeaf;margin-right:8px">Type @agent to hand it a task</span>
+          <sc-if value="{{ working }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ stop }}" style="display:inline-flex;align-items:center;gap:6px;border:1px solid #d3d9da;background:#fff;border-radius:8px;padding:6px 11px;font-size:12px;color:#16191a;cursor:pointer" style-active="transform:translateY(1px)"><span style="width:8px;height:8px;border-radius:2px;background:#c1392b"></span>Stop</button>
+          </sc-if>
+          <sc-if value="{{ idle }}" hint-placeholder-val="{{ true }}">
+            <button onClick="{{ send }}" style="border:none;background:{{ sendBg }};border-radius:8px;padding:7px 10px;display:inline-flex;box-shadow:{{ sendShadow }};cursor:pointer" style-active="transform:translateY(1px);box-shadow:0 0 0 rgba(0,0,0,0)"><svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7H2M8 3l4 4-4 4"></path></svg></button>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <sc-if value="{{ panelOpen }}" hint-placeholder-val="{{ true }}">
+    <aside style="width:300px;flex-shrink:0;background:#f3f6f6;border-left:1px solid #d9dfe0;display:flex;flex-direction:column;transform-origin:100% 50%;animation:oc-hinge .42s cubic-bezier(.32,.72,0,1) .1s backwards">
+      <div style="height:56px;padding:0 18px;display:flex;align-items:center;border-bottom:1px solid #e1e6e7">
+        <span style="font-size:13.5px;font-weight:600;flex:1">Session</span>
+        <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#5a6264"><svg width="8" height="10" viewBox="0 0 8 10"><rect x="1.5" y="0" width="5" height="1.6" rx=".8" fill="#c9d0d1"></rect><rect x="1.5" y="2.7" width="5" height="1.6" rx=".8" fill="#c9d0d1"></rect><rect x="0" y="5.4" width="8" height="1.6" rx=".8" fill="#16191a"></rect><rect x="1.5" y="8.1" width="5" height="1.6" rx=".8" fill="#c9d0d1"></rect></svg>project</span>
+      </div>
+      <div style="flex:1;overflow:auto;padding:16px 18px;display:flex;flex-direction:column;gap:22px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#91989a">Files · 4</div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .3s backwards"><div style="width:22px;height:26px;border-radius:3px;background:#2a5c9a;flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Board pack — Revenue (draft)</div><div style="font-size:11px;color:#91989a">Agent · 09:15</div></div></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .334s backwards"><div style="width:22px;height:26px;border-radius:3px;background:#2a7d4f;flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Q3-actuals-final.xlsx</div><div style="font-size:11px;color:#91989a">Amina · 08:50</div></div></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .368s backwards"><div style="width:22px;height:26px;border-radius:3px;background:#2a7d4f;flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">FY26-plan-v3.xlsx</div><div style="font-size:11px;color:#91989a">Finance · Jul</div></div></div>
+          <div style="display:flex;align-items:center;gap:10px;padding:6px 0;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .402s backwards"><div style="width:22px;height:26px;border-radius:3px;background:#c1392b;flex-shrink:0"></div><div style="flex:1;min-width:0"><div style="font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Board pack — Q2 (final).pdf</div><div style="font-size:11px;color:#91989a">Wanjiru · Jul</div></div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#91989a">Decisions · {{ decisionCount }}</div>
+          <div style="font-size:12.5px;line-height:1.5;color:#454d4f;display:flex;gap:8px;animation:oc-deal .38s cubic-bezier(.32,.72,0,1) .44s backwards"><span style="color:#a7aeaf">—</span><span style="text-wrap:pretty">Flag threshold is 5% against FY26 plan v3</span></div>
+          <sc-for list="{{ decisions }}" as="d" hint-placeholder-count="0">
+            <div style="font-size:12.5px;line-height:1.5;color:#454d4f;display:flex;gap:8px;animation:oc-settle .26s cubic-bezier(.32,.72,0,1) backwards"><span style="color:#a7aeaf">—</span><span style="text-wrap:pretty">{{ d }}</span></div>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <div style="font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#91989a">People · 3</div>
+          <div style="font-size:12.5px;color:#454d4f;display:flex;flex-direction:column;gap:7px">
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:50%;background:#2a5c9a;color:#fff;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">AK</span>Amina Kariuki<span style="flex:1"></span><span style="font-size:11px;color:#91989a">Finance</span></span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:50%;background:#7a5a9a;color:#fff;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">WM</span>Wanjiru Mwangi<span style="flex:1"></span><span style="font-size:11px;color:#91989a">Ops</span></span>
+            <span style="display:flex;align-items:center;gap:8px"><span style="width:20px;height:20px;border-radius:50%;background:#0db5cc;color:#fff;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center">JR</span>You<span style="flex:1"></span><span style="font-size:11px;color:#91989a">Tech</span></span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showPanel&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;agentSpeed&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;natural&quot;,&quot;fast&quot;],&quot;default&quot;:&quot;natural&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { draft: '', extra: [], ask: null, decisions: [], panel: null, wide: window.innerWidth >= 1100 };
+  onResize = () => { const w = window.innerWidth >= 1100; if (w !== this.state.wide) this.setState({ wide: w }); };
+  componentDidMount() { window.addEventListener('resize', this.onResize); }
+  scrollRef = React.createRef();
+  timers = [];
+  componentWillUnmount() { this.clear(); window.removeEventListener('resize', this.onResize); }
+  componentDidUpdate() { const el = this.scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }
+  clear() { this.timers.forEach(clearTimeout); this.timers.forEach(clearInterval); this.timers = []; }
+  now() { const d = new Date(); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  speed() { return (this.props.agentSpeed ?? 'natural') === 'fast' ? 14 : 34; }
+  agentReply(text, tool, status) {
+    const id = Date.now() + Math.random();
+    const words = text.split(/(\s+)/);
+    this.setState(s => ({ extra: [...s.extra, { id, agent: true, time: this.now(), folding: true, status: status || 'Folding…', tool, hasTool: false, text: '', streaming: false }] }));
+    const upd = f => this.setState(s => ({ extra: s.extra.map(m => m.id === id ? { ...m, ...f(m) } : m) }));
+    this.timers.push(setTimeout(() => {
+      upd(() => ({ folding: false, hasTool: !!tool, streaming: true }));
+      let i = 0;
+      const iv = setInterval(() => {
+        i += 2;
+        upd(() => ({ text: words.slice(0, i).join('') }));
+        if (i >= words.length) { clearInterval(iv); upd(() => ({ streaming: false })); }
+      }, this.speed());
+      this.timers.push(iv);
+    }, 1400));
+  }
+  answer(yes) {
+    if (this.state.ask) return;
+    this.setState(s => ({ ask: yes ? 'Yes, add the note' : 'No, keep to Q3', decisions: [...s.decisions, yes ? 'Add a forward note on the October cohort' : 'Keep the section to Q3 only'] }));
+    this.agentReply(yes
+      ? 'Added under Training services:\n\n"The September cohort of 140 learners moved to 6 October. KES 0.8M of Q3 plan revenue will land in Q4; full-year Training remains on plan."\n\nThe draft is updated. Want me to share it with Wanjiru for the ops figures?'
+      : 'Kept to Q3. The Training line now just states the variance and cites the cohort schedule. The draft is updated.',
+      'Edited Board pack — Revenue (draft) · 1 paragraph', 'Updating the draft…');
+  }
+  send() {
+    const text = this.state.draft.trim();
+    if (!text) return;
+    const mine = { id: Date.now(), mine: true, text, time: this.now() };
+    const toAgent = /@agent/i.test(text) || this.state.extra.length > 0 || !!this.state.ask;
+    this.setState(s => ({ draft: '', extra: [...s.extra, mine] }));
+    if (!this.state.ask && /\b(yes|add)\b/i.test(text)) { this.timers.push(setTimeout(() => this.answer(true), 300)); return; }
+    if (toAgent) this.agentReply('On it. I\'ll share Board pack — Revenue (draft) with Wanjiru and ask her to confirm the ops headcount figures by Monday. I\'ll post here when she replies.', 'Shared Board pack — Revenue (draft) with Wanjiru Mwangi', 'Folding…');
+  }
+  renderVals() {
+    const working = this.state.extra.some(m => m.agent && (m.folding || m.streaming));
+    const askOpen = !this.state.ask;
+    const panelOpen = this.state.panel ?? ((this.props.showPanel ?? true) && this.state.wide);
+    const hasDraft = this.state.draft.trim().length > 0;
+    return {
+      extra: this.state.extra,
+      draft: this.state.draft,
+      working, idle: !working,
+      waiting: askOpen, waitingOnly: askOpen && !working,
+      askOpen, askDone: !askOpen, askAnswer: this.state.ask ? '“' + this.state.ask + '”' : '',
+      decisions: this.state.decisions, decisionCount: 1 + this.state.decisions.length,
+      panelOpen,
+      placeholder: askOpen ? 'Answer the Agent, or message board-pack-q3…' : 'Message board-pack-q3…',
+      sendBg: hasDraft ? '#0db5cc' : '#c9d1d2',
+      sendShadow: hasDraft ? '0 1px 0 #0a94a7' : 'none',
+      scrollRef: this.scrollRef,
+      onDraft: e => this.setState({ draft: e.target.value }),
+      onKey: e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); } },
+      send: () => this.send(),
+      stop: () => { this.clear(); this.setState(s => ({ extra: s.extra.map(m => m.agent ? { ...m, folding: false, streaming: false, text: m.text || 'Stopped.' } : m) })); },
+      answerYes: () => this.answer(true),
+      answerNo: () => this.answer(false),
+      togglePanel: () => this.setState({ panel: !panelOpen })
+    };
+  }
+}
+</script>
+</body>
+</html>

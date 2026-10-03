@@ -25,4 +25,4 @@ export {
   type SharedStateKind,
 } from './integrations.ts';
 export { computerRowSchema, computersResponseSchema, type ComputerRow, type ComputersResponse } from './computers.ts';
-export { chatSubscribeSchema, chatMessageSchema } from './chat.ts';
+export { sessionSlug, chatSubscribeSchema, chatMessageSchema, chatRowSchema, chatFeedSchema, chatListSchema, chatContextSchema, type ChatRow, type ChatConversation } from './chat.ts';

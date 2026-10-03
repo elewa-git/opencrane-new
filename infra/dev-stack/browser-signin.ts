@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type Page, type Request as BrowserRequest } from 'playwright';
 import { z } from 'zod';
 import { decodeSession, type AuthConfig } from '@opencrane/auth';
 import { buildServer } from '../../apps/server/src/server.ts';
@@ -15,8 +15,14 @@ export async function testUsers() {
 }
 type User = z.infer<typeof userSchema>;
 async function login(page: Page, origin: string, user: User, selectRememberedAccount = false) {
-  let step = 'home';
+  let step = 'home', transport = '';
+  const failed = (request: BrowserRequest) => {
+    const code = request.failure()?.errorText ?? '';
+    if (/^net::[A-Z_]+$/.test(code)) transport = code;
+  };
+  page.on('requestfailed', failed);
   try {
+    await page.bringToFront();
     await page.goto(origin);
     step = 'SSO button';
     await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).click();
@@ -45,8 +51,10 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     step = 'return';
     await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith('/auth/'));
   } catch {
-    throw new Error(`Login did not complete at ${step}`);
-  }
+    await page.screenshot({ path: `${directory}/signin-failure.png` });
+    const location = new URL(page.url());
+    throw new Error(`Login did not complete at ${step} (${location.origin}${location.pathname}; ${transport})`);
+  } finally { page.off('requestfailed', failed); }
 }
 async function cookie(context: BrowserContext, config: AuthConfig, origin: string) {
   const session = (await context.cookies(origin)).find((item) => item.name === config.cookieName);
@@ -61,32 +69,38 @@ export async function browserSessions(config: AuthConfig, origin: string) {
     const users = await testUsers();
     const sessions = new Map<string, { sub: string; cookie: string }>();
     let page: Page | undefined;
-    for (const role of ['owner', 'member'] as const) {
-      const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const memberPages: Page[] = [];
+    for (const [role, width] of [['owner', 390], ['member', 390], ['member', 1280]] as const) {
+      const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 } });
       page = await context.newPage();
       page.setDefaultTimeout(30_000);
-      stage = `${role} login`;
+      stage = `${role} ${width}px login`;
       await login(page, origin, users[role]);
-      stage = `${role} cookie`;
+      stage = `${role} signed-in screen`;
       await page.getByRole('heading', { name: 'You are signed in' }).waitFor();
+      stage = `${role} cookie`;
       const value = await cookie(page.context(), config, origin);
+      stage = `${role} session decoding`;
       const session = decodeSession(config, value);
+      stage = `${role} identity`;
       assert.equal(session.sub, users[role].id);
       assert.equal(session.orgId, config.expectedOrgId);
       assert(session.idToken, 'Real login retains its ID token for logout');
+      if (role === 'member') memberPages.push(page);
       sessions.set(role, { sub: session.sub, cookie: `${config.cookieName}=${value}` });
     }
-    console.log('PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px in separate browser contexts');
+    console.log('PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px, and member at 1280px, in separate browser contexts');
     assert(page);
     const memberPage = page;
     stage = 'logout CSRF';
     await logoutCsrfChecks(page, origin);
     stage = 'refusal checks';
     await refusalChecks(browser, config, origin, users.member);
-    return { sessions, close: async () => {
+    return { sessions, memberPages, close: async () => {
       try {
         stage = 'token exposure probes';
         await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });
+        await memberPage.goto(origin);
         stage = 'form logout';
         await formLogout(memberPage, config, origin);
         stage = 'credentials after logout';
@@ -102,7 +116,7 @@ export async function browserSessions(config: AuthConfig, origin: string) {
     } };
   } catch (error) {
     await browser.close();
-    if (error instanceof Error && error.message.startsWith('Login did not complete at ')) throw error;
+    if (error instanceof Error && error.message.startsWith('Login did not complete at ')) throw new Error(`Real browser sign-in failed at ${stage}: ${error.message}`);
     throw new Error(`Real browser sign-in failed at ${stage}`);
   }
 }

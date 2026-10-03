@@ -1,0 +1,20 @@
+/* Motion definitions from the owner’s chat handoff. One entrance chain is capped at 1.74s. */
+  @keyframes oc-unroll { from { transform: perspective(1400px) rotate3d(1,-.6,0,46deg) translate(20px,-20px); opacity: 0; } 55% { opacity: 1; } to { transform: perspective(1400px) rotate3d(1,-.6,0,0deg) translate(0,0); opacity: 1; } }
+  @keyframes oc-deal { from { transform: perspective(1400px) rotateX(12deg) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes oc-flutter { 0%, 100% { opacity: .18; transform: rotateY(0); } 50% { opacity: .55; transform: rotateY(38deg); } }
+  @keyframes oc-crease-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes oc-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+  @keyframes oc-caret { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
+  @keyframes ocFold { 0%, 12% { transform: rotateX(0); filter: brightness(1); } 42%, 55% { transform: rotateX(-178deg); filter: brightness(.72); } 88%, 100% { transform: rotateX(0); filter: brightness(1); } }
+  @keyframes oc-land { from { transform: perspective(900px) translateY(16px) rotateX(22deg) scale(.97); opacity: 0; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
+  @keyframes oc-ink { from { opacity: 0; filter: blur(3px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: none; } }
+  @keyframes oc-dogear { from { transform: scale(0); } to { transform: scale(1); } }
+  @keyframes oc-hinge { from { transform: perspective(1200px) rotateY(-26deg) translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes oc-settle { from { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } to { transform: none; opacity: 1; } }
+  @keyframes oc-flick { 0%, 100% { transform: none; } 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
+  @keyframes oc-press { 0%, 30%, 70%, 100% { transform: none; box-shadow: 0 1px 0 #0a94a7; } 42%, 58% { transform: translateY(1px); box-shadow: 0 0 0 #0a94a7; } }
+.sr-only { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap; }
+oc-workspace button:active, oc-workspace a:active, oc-workspace summary:active { transform: translateY(1px); transition: transform 90ms var(--oc-ease-standard); }
+@media(prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; }
+}

@@ -1,0 +1,29 @@
+<!-- Adapted from OpenCrane 1 10abd0ef6. Layout follows Workspace Live and the compact frame. -->
+<form class="composer" [class.disabled]="!!reason()" (submit)="$event.preventDefault(); submit()">
+  @if (reason()) {
+    <div id="composer-reason" class="disabled-field"><oc-icon name="closed" /><span>{{ reason() }}</span></div>
+  }
+  <label class="sr-only" for="message">Message your agent</label>
+  <textarea id="message" rows="1" maxlength="32000" placeholder="Message your agent…" [value]="draft()" [disabled]="!!reason()" [readOnly]="busy() || queued()" [attr.aria-describedby]="reason() ? 'composer-reason' : null" (input)="change($event)" (keydown)="keydown($event)"></textarea>
+  @if (!reason()) {
+    <div class="toolbar">
+      <button id="attach-toggle" type="button" aria-label="Attach" aria-controls="attach-menu" [class.selected]="attachOpen()" [attr.aria-expanded]="attachOpen()" (click)="attachOpen.set(!attachOpen())"><oc-icon name="plus" /></button>
+      <span class="mode"><oc-icon name="agent" /> Agent session</span>
+      <span class="spacer"></span><span class="hint"><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline @if (working()) { · <kbd>esc</kbd> stop reply }</span>
+      @if (working()) {
+        <button type="button" class="stop" [disabled]="busy()" (click)="stopped.emit()"><oc-icon name="stop" /> Stop</button>
+      } @else {
+        <button type="submit" class="send" [disabled]="!draft().trim() || busy()" [attr.aria-label]="queued() ? 'Retry queued message' : 'Send message'"><oc-icon name="send" /><span class="sr-only">{{ queued() ? 'Retry' : 'Send' }}</span></button>
+      }
+    </div>
+  }
+  @if (attachOpen() && !reason()) {
+    <div id="attach-menu" class="attach-menu" aria-label="Attach menu" (keydown.escape)="closeAttach()">
+      <button type="button" (click)="notice.set('File uploads are not available yet.')"><oc-icon name="upload" /> Upload from computer <small>Coming soon</small></button>
+      <button type="button" (click)="notice.set('Workspace file attachments are not available yet.')"><oc-icon name="folder" /> Workspace files <small>Coming soon</small></button>
+      <span class="mobile-mode"><oc-icon name="agent" /> Agent session</span>
+      <p>Attachments and connectors are not available yet.</p>
+    </div>
+  }
+</form>
+@if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
