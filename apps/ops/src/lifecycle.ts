@@ -134,7 +134,8 @@ async function reconcileComputer(store: EventStore, kube: SandboxClient,
     return;
   }
   if (['computer.lost', 'computer.retired'].includes(state.latest.type)) return;
-  await kube.claim(state.computerId, state.assistantId);
+  // A resumed or ready computer already has its claim and retained PVC.
+  if (state.latest.type === 'computer.claimed') await kube.claim(state.computerId, state.assistantId);
   const sandbox = await kube.state(state.computerId);
   if (state.latest.type === 'computer.resumed' && sandbox?.podUid && sandbox.podUid === readyPodUid(state)) {
     await kube.mode(state.computerId, 'Suspended');

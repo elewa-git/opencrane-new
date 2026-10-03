@@ -7,7 +7,7 @@ import { listConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
-import { resumeComputer } from '../../../ops/src/lifecycle.ts';
+import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { recordReport, reportPosition, ReportRejected } from './reports.ts';
@@ -77,14 +77,17 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
           const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
           const message = rows.find(r => r.event.type === 'message.posted' && !rows.some(t =>
             ['agent.turn_completed', 'agent.turn_failed'].includes(t.event.type) && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id));
-          let current;
-          for await (const row of options.store.readStream(`computer-${conversation.assistantId}`)) if (!row.event.type.startsWith('computer.turn_')) current = row.event;
+          const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
+          const current = lifecycle.findLast(row => !row.event.type.startsWith('computer.turn_'))?.event;
+          const closed = new Set(lifecycle.filter(row => row.event.type === 'computer.turn_closed' && row.event.silo === options.silo)
+            .map(row => z.object({ turnId: z.string() }).parse(row.event.data).turnId));
           if (!current) return;
           const computer = z.object({ computerId: z.string() }).parse(current.data);
           // Recover a server crash between a terminal report and its separate lifecycle command.
           for (const row of rows) {
             if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) continue;
             const terminal = z.object({ turnId: z.string() }).parse(row.event.data);
+            if (closed.has(terminal.turnId)) continue;
             await turnCommand(options.store, { silo: options.silo, ...computer, assistantId: conversation.assistantId },
               { ...terminal, conversationId: conversation.conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
           }
