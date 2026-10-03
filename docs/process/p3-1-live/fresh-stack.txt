@@ -1,0 +1,23 @@
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS existing members/assistants have model grant history, including explicit revocations
+PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px, and member at 1280px, in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
+PASS new member and assistant model grants reach OpenFGA before chat
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 3877 ms, completion 5526 ms, browser journey 10506 ms; screenshot docs/design/chat/live/workspace-390.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 2375 ms, completion 4550 ms, browser journey 11088 ms; screenshot docs/design/chat/live/workspace-1280.png
+PASS joined member HTTP message → streamed Codex/stub reply → projection; 4267 ms (first token 2573 ms); browser reconnect no duplicates
+PASS suspended computer wakes on HTTP message and completes Codex reply; 17940 ms; wake-to-first-token 16038 ms
+PASS assistant/computer lifecycle: join→Ready 18882 ms; resume 17973 ms; Pod replacement kept disk
+PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused
+PASS npm run replay -- members --verify
+PASS npm run replay -- mcp-catalogue --verify
+PASS tailnet HTTPS web page
+PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token
+PASS logs: no ID token in the five stack process logs
+PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused
+PASS next sign-in: remembered identity still requires credentials; successful reauthentication
+PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d
+Stack ready: https://ocn-dev.tail00285e.ts.net/org/integrations (Zitadel sign-in)

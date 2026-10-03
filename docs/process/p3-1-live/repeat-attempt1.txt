@@ -1,0 +1,4 @@
+FAIL first plain up.sh attempt: Login did not complete at provider input.
+The journey failed in browserSessions; the stack continued to serve HTTP 200.
+A separate new browser reached the normal Zitadel login-name form.
+No code or timeout change preceded the successful plain up.sh retry.

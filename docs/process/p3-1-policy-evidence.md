@@ -1,5 +1,9 @@
 # P3-1 — Per-tool policy evidence
 
+The [final live qualification](p3-1-live/README.md) records the rebased branch,
+fresh/repeat startup, policy screenshots, Block refusal and shared-stack restoration.
+Earlier results below are retained as the review history.
+
 3 October 2026; branch `work/p3-1-policy`, base main `e897361` plus the change
 containing this receipt. Linux x86-64, Node 22.23.3. Disposable NATS/OpenFGA/gateway
 fixtures and isolated PostgreSQL databases on

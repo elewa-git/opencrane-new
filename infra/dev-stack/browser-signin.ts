@@ -14,6 +14,19 @@ export async function testUsers() {
   return setupSchema.parse(JSON.parse(await readFile(`${directory}/zitadel.json`, 'utf8'))).users;
 }
 type User = z.infer<typeof userSchema>;
+export async function enterLoginName(page: Page, name: string) {
+  const field = page.locator('input[name=loginName]');
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await field.fill(name);
+    try {
+      await page.getByRole('button', { name: 'Continue', exact: true }).click({ timeout: 5000 });
+      return;
+    } catch (error) {
+      // The provider can replace an early-filled input while its page becomes interactive.
+      if (attempt === 1 || !await field.isVisible() || await field.inputValue() !== '') throw error;
+    }
+  }
+}
 async function login(page: Page, origin: string, user: User, selectRememberedAccount = false) {
   let step = 'home', transport = '';
   const failed = (request: BrowserRequest) => {
@@ -37,8 +50,7 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     await credentials.first().waitFor();
     if (await page.locator('input[name=loginName]').isVisible()) {
       step = 'username';
-      await page.locator('input[name=loginName]').fill(user.login);
-      await page.getByRole('button', { name: 'Continue', exact: true }).click();
+      await enterLoginName(page, user.login);
     }
     step = 'password';
     await page.locator('input[type=password]').waitFor();

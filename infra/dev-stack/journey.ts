@@ -152,15 +152,15 @@ try {
     return Boolean(computer);
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
-  if (browser) for (const page of browser.memberPages) {
-    try { await browserChatJourney(page, origin); }
-    catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
-  }
   const namespace = `opencrane-${silo}`;
   await until(async () => (await Promise.all(models.filter(model => !model.retired).flatMap(model => [
     authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
+  if (browser) for (const page of browser.memberPages) {
+    try { await browserChatJourney(page, origin); }
+    catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
+  }
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();

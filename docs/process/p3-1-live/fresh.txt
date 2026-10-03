@@ -1,0 +1,4 @@
+PASS grant migration CLI twice leaves all 66 model grant event IDs unchanged
+PASS live policy screen 1280px: HTTP 200, saved Block, no horizontal overflow, controls at least 44px
+PASS live policy screen 390px: HTTP 200, saved Block, no horizontal overflow, controls at least 44px
+PASS real gateway + live decision: authenticated tools/call refused with HTTP 403 policy_block, zero upstream calls and durable deny audit
