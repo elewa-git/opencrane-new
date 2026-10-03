@@ -8,3 +8,6 @@ export { modelGrantHandler, migrateModelGrants } from './grants.ts';
 
 export { payingGroupAuthority, PayingGroupRefused } from './paying-group.ts';
 export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.ts';
+
+export { approvalCards, readApproval, decideApproval } from './approvals.ts';
+export { authorityFence, currentAuthority } from './authority.ts';

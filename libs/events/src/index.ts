@@ -34,3 +34,5 @@ export { handlerSubscriptions, type HandlerName } from './handlers.ts';
 export { memberInvitedDataSchema } from './data.ts';
 
 export { budgetCeilingSetDataSchema, decisionRecordedDataSchema } from './data.ts';
+
+export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema } from './data.ts';

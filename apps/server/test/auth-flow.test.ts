@@ -387,3 +387,33 @@ describe('OIDC login flow (against a local mock provider)', () => {
     });
   });
 });
+
+it('binds a fresh OIDC step-up to this approval, requester and existing session', async () => {
+  const stack = await startStack({ user: { ...DEFAULT_MOCK_USER, authTime: Math.floor(Date.now() / 1000) } });
+  const session = cookieValue(await signIn(stack), stack.config.cookieName), approval = 'a'.repeat(64);
+  const login = await stack.app.inject({ url: `/auth/login?approval=${approval}&returnTo=/workspace`, cookies: { [stack.config.cookieName]: session } });
+  const address = new URL(String(login.headers.location));
+  expect(address.searchParams.get('max_age')).toBe('0');
+  const provider = await fetch(address, { redirect: 'manual' });
+  const callback = new URL(provider.headers.get('location')!);
+  const cookies = { [stack.config.flowCookieName]: cookieValue(login, stack.config.flowCookieName), [stack.config.cookieName]: session };
+  const reply = await stack.app.inject({ url: callback.pathname + callback.search, cookies });
+  expect(reply.statusCode).toBe(302);
+  expect(decodeSession(stack.config, cookieValue(reply, stack.config.cookieName))).toMatchObject({ stepUpApproval: approval });
+});
+
+it.each(['missing', 'old', 'future', 'swapped_session', 'different_requester'])('refuses %s OIDC step-up evidence', async failure => {
+  const authTime = Math.floor(Date.now() / 1000);
+  const user: typeof DEFAULT_MOCK_USER = { ...DEFAULT_MOCK_USER, authTime: failure === 'old' ? authTime - 301 : failure === 'future' ? authTime + 60 : authTime };
+  if (failure === 'missing') delete user.authTime;
+  const stack = await startStack({ user });
+  const original = encodeSession(stack.config, { sub: failure === 'different_requester' ? 'someone-else' : user.sub, orgId: user.orgId!, roles: [], authTime: 0, exp: authTime + 600 });
+  const login = await stack.app.inject({ url: `/auth/login?approval=${'a'.repeat(64)}`, cookies: { [stack.config.cookieName]: original } });
+  const authorise = await fetch(String(login.headers.location), { redirect: 'manual' });
+  const callback = new URL(authorise.headers.get('location')!);
+  const reply = await stack.app.inject({ url: callback.pathname + callback.search, cookies: {
+    [stack.config.flowCookieName]: cookieValue(login, stack.config.flowCookieName),
+    [stack.config.cookieName]: failure === 'swapped_session' ? encodeSession(stack.config, decodeSession(stack.config, original)) : original,
+  } });
+  expect(reply.statusCode).toBe(400);
+});

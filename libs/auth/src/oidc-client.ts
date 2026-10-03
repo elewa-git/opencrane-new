@@ -50,13 +50,14 @@ export interface LoginRedirect {
 }
 
 /** Starts a login: picks PKCE/state/nonce values and builds the redirect URL. */
-export async function buildLoginRedirect(config: AuthConfig): Promise<LoginRedirect> {
+export async function buildLoginRedirect(config: AuthConfig, stepUp = false): Promise<LoginRedirect> {
   const discovered = await discover(config);
   const codeVerifier = client.randomPKCECodeVerifier();
   const codeChallenge = await client.calculatePKCECodeChallenge(codeVerifier);
   const state = client.randomState();
   const nonce = client.randomNonce();
   const url = client.buildAuthorizationUrl(discovered, {
+    ...(stepUp ? { max_age: '0', prompt: 'login' } : {}),
     redirect_uri: config.redirectUri,
     scope: config.scopes,
     code_challenge: codeChallenge,

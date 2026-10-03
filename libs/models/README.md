@@ -221,3 +221,27 @@ The gateway has no retry policy: a lost upstream reply stays uncertain and does
 not cause another upstream attempt. The real gateway → recording upstream audit,
 JWT/outage, missing observation and replay cases run in
 `PG_TEST_URL=… npx vitest run libs/models/test/gateway.test.ts`.
+
+P3-2 adds event-backed single-use approvals at the MCP decision seam. The
+`lossless-json-v1` reader preserves number text, sorts UTF-16 keys and refuses
+ambiguous keys and malformed Unicode. The original HTTP body is forwarded unchanged.
+A reviewed tool's `review` descriptor declares its action, consequence, target field
+and complete list of safe scalar fields; missing, extra or nested fields refuse.
+Reviews use the conversation's encrypted-content/key-reference convention. Neither
+the model nor browser supplies approval authority or replacement review text.
+
+`approvalCards`, `readApproval` and `decideApproval` replay approval streams; reads
+record expiry/cancellation through conditional appends. A request is bound to silo,
+requester, conversation, logical turn, assistant, server, tool/schema revision,
+policy sequence, connection/profile and argument/review digests. Only the original
+requester can decide. A current authority fence precedes consumption; audit and a
+final fence precede forwarding. A lost acknowledgement burns authority. Consumption
+means outcome unknown until a later feature supplies trusted effect evidence.
+
+The P3-1 credential-free connection is the supported fixture here (`profile: none`).
+No credential or tool-charge stage is invented: P3-8 owns those, and must reserve
+before consumption and audit credential release before forwarding. P3-5 owns native
+Codex waiting, grant renewal, notification and continuation; this slice never
+redispatches from replay. `CONVERSATION_KEYS_DIR` must identify the same secret-store
+adapter for the server and decision process; unavailable keys refuse Ask admission.
+The shared gateway fixture is exported as `@opencrane/models/testing` for API tests.

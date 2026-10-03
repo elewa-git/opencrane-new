@@ -11,6 +11,7 @@ export const sessionSchema = z
   .object({
     /** Used only for provider logout; optional for existing and dev-only sessions. */
     idToken: z.string().min(1).optional(),
+    stepUpApproval: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
     /** Display only; never used for authorisation. */
     name: z.string().optional(),
     /** Stable subject identifier from the identity provider. */

@@ -66,6 +66,7 @@
             </div>
           </article>
         }
+        @if (chat.selected() && !chat.denied()) { <oc-approval-cards [conversationId]="chat.selected()" /> }
       </div>
     </section>
     <div class="composer-dock">

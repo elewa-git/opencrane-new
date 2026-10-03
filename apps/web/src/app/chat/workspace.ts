@@ -1,3 +1,4 @@
+import { ApprovalCards } from './approvals';
 // Workspace grid and message structure adapted from OpenCrane 1 10abd0ef6 (AGPL-3.0-or-later).
 // Presentation follows the owner's Workspace Live; all state comes from the P2 bridge.
 import { ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal, viewChild, type OnInit } from '@angular/core';
@@ -9,7 +10,7 @@ import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
 import { FilePreview } from './file-preview';
 
-@Component({ selector: 'oc-workspace', imports: [ChatComposer, FilePreview, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
+@Component({ selector: 'oc-workspace', imports: [ApprovalCards, ChatComposer, FilePreview, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
   templateUrl: './workspace.html', styleUrls: ['./workspace.css', './transcript.css', './panel.css'], changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'shortcut($event)' } })
 export class Workspace implements OnInit {

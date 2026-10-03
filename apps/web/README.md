@@ -120,3 +120,12 @@ configured paying-group/assistant monthly ceilings, current charges and held
 reservations, and edits safe integer EUR cents. Conflicts or an unknown save
 outcome require a status read before another edit; access loss clears the details.
 The authenticated browser journey covers 1280px and 390px.
+
+The chat's 8g approval cards restore from the authenticated approval endpoint above
+the composer. Requested cards show every reviewed field, expiry and conditional
+sign-in; decided, expired, cancelled and consumed cards collapse. A consumed card
+says outcome unknown, not success. Submitting disables both actions; uncertain
+transport offers Check status before any safe retry. No arguments or authority are
+sent back by the browser. Polling every three seconds restores updates without
+introducing another business-state store. Chromium qualification and images are in
+[the P3-2 receipt](../../docs/process/p3-2-approvals.md).

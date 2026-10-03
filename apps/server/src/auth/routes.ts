@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // The four browser-facing auth routes: start a login, finish it, log out,
 // and report who (if anyone) is signed in. All the OIDC and cookie logic
 // lives in @opencrane/auth; this file just wires it to Fastify.
@@ -30,6 +31,7 @@ import {
   SessionExpiredError,
   SessionInvalidError,
   type AuthConfig,
+  type SessionData,
   type CookieAttributes,
 } from '@opencrane/auth';
 import { z } from 'zod';
@@ -60,10 +62,17 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
         ? query.returnTo : undefined,
     );
 
+    const approval = z.object({ approval: z.string().regex(/^[a-f0-9]{64}$/u).optional() }).safeParse(query);
+    if (!approval.success) return reply.code(400).send({ error: 'Invalid sign-in request' });
+    const session = sessionFor(request, config, new Date());
+    if (approval.data.approval && !session) return reply.code(401).send({ error: 'No session' });
+    const stepUp = approval.data.approval && session ? { approvalId: approval.data.approval, sub: session.sub,
+      sessionDigest: createHash('sha256').update(readCookie(request, config.cookieName) ?? '').digest('hex') } : undefined;
     let redirect;
-    try { redirect = await buildLoginRedirect(config); }
+    try { redirect = await buildLoginRedirect(config, !!stepUp); }
     catch { return rejectLogin(request, reply, config, 'identity provider unavailable'); }
     const flowCookie = encodeFlow(config, {
+      ...(stepUp ? { stepUp } : {}),
       state: redirect.state,
       nonce: redirect.nonce,
       codeVerifier: redirect.codeVerifier,
@@ -104,6 +113,14 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
       return rejectLogin(request, reply, config, reason);
     }
 
+    if (flow.stepUp) {
+      const previous = sessionFor(request, config, new Date());
+      const digest = createHash('sha256').update(readCookie(request, config.cookieName) ?? '').digest('hex');
+      if (!validStepUp(previous, result.session, flow.stepUp, digest)) {
+        return rejectLogin(request, reply, config, 'Recent sign-in for the same requester is required');
+      }
+      result.session.stepUpApproval = flow.stepUp.approvalId;
+    }
     const sessionCookie = encodeSession(config, result.session);
     reply.header('set-cookie', [
       serializeCookie(config.cookieName, sessionCookie, { ...cookieAttrs(config), maxAgeSeconds: config.sessionMaxAgeSeconds }),
@@ -156,4 +173,10 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
       throw err;
     }
   });
+}
+
+function validStepUp(previous: SessionData | undefined, current: SessionData, step: { sub: string; sessionDigest: string }, digest: string) {
+  const age = Date.now() / 1000 - current.authTime;
+  return previous && digest === step.sessionDigest && previous.sub === step.sub && current.sub === step.sub &&
+    current.orgId === previous.orgId && current.authTime > 0 && age >= 0 && age <= 300;
 }

@@ -1,5 +1,7 @@
 import { payingGroupAuthority, PayingGroupRefused } from './paying-group.ts';
 import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
+import { approvalDecision, type ReviewKeys } from './approvals.ts';
+import { losslessJson } from './lossless-json.ts';
 import { authorityFence, currentAuthority } from './authority.ts';
 import { mcpPolicy } from './mcp.ts';
 import { createHash, randomUUID } from 'node:crypto';
@@ -51,21 +53,7 @@ async function readBody(req: IncomingMessage) {
     if (length > 1_048_576) throw new Error('Request too large');
     chunks.push(bytes);
   }
-  const text = Buffer.concat(chunks).toString('utf8');
-  const value: unknown = JSON.parse(text);
-  // S0.2's duplicate-key rule; let the standard parser validate the grammar.
-  const objects: Set<string>[] = [];
-  for (const token of text.matchAll(/"(?:\\.|[^"\\])*"|[{}[\]]/gu)) {
-    const part = token[0];
-    if (part === '{' || part === '[') objects.push(new Set());
-    else if (part === '}' || part === ']') objects.pop();
-    else if (text.slice(token.index + part.length).trimStart().startsWith(':')) {
-      const key = z.string().parse(JSON.parse(part)), keys = objects.at(-1);
-      if (!keys || keys.has(key) || ['__proto__', 'constructor'].includes(key)) throw new Error('Ambiguous JSON key');
-      keys.add(key);
-    }
-  }
-  return value;
+  return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
 }
 async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(t.requester, 'member');
@@ -94,7 +82,7 @@ async function activeTurn(actor: BudgetActor, c: z.infer<typeof computerSchema>,
       data(turn.event)['requesterId'] !== t.requester || data(turn.event)['task'] !== t.task) throw new Error('Turn is not active');
   return turn;
 }
-export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0) {
+export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0, keys?: ReviewKeys) {
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     const started = performance.now();
@@ -130,14 +118,18 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         const policy = await mcpPolicy(actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers);
         const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!);
         contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
-        const { outcome, reason } = policy;
+        const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo, {
+          requesterId: t.requester, assistantId: c.assistant, conversationId: t.conversation, turnId: t.turn,
+          serverId: match[1]!, connectionId: match[2]!,
+        }, policy, keys, actor.now, fresh, requestId);
         await fresh();
         await audit(outcome, reason);
         await fresh();
         res.setHeader('x-request-id', requestId);
-        res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId })); return;
+        res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
       }
-      const parsed = requestSchema.safeParse(raw);
+      losslessJson(raw);
+      const parsed = requestSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
       const body = parsed.data;
       if (body.model !== t.model) throw new Error('Model does not match turn grant');
@@ -175,7 +167,7 @@ async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: 
   if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return true; }
   if (req.url === '/budgets' && req.method === 'POST') {
     try {
-      const result = await configureBudget(actor, binding, identity, await readBody(req), req.headers.authorization);
+      const result = await configureBudget(actor, binding, identity, JSON.parse(await readBody(req)), req.headers.authorization);
       res.writeHead(result.status === 'appended' ? 200 : 409); res.end(JSON.stringify(result));
     } catch (error) {
       res.writeHead(error instanceof BudgetAccessRefused ? 403 : error instanceof z.ZodError ? 400 : 503); res.end('{"status":"refused"}');
@@ -183,7 +175,7 @@ async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: 
     return true;
   }
   if (req.url === '/settle' && req.method === 'POST') {
-    const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(await readBody(req));
+    const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
     await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return true;
   }
   return false;

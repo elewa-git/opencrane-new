@@ -18,6 +18,7 @@ export const flowSchema = z
     /** Sanitised local path to return to after login. */
     returnTo: z.string(),
     /** Unix seconds: when `/auth/login` started this flow. */
+    stepUp: z.object({ approvalId: z.string().regex(/^[a-f0-9]{64}$/u), sub: z.string(), sessionDigest: z.string() }).strict().optional(),
     createdAt: z.number().int().nonnegative(),
   })
   .strict();
