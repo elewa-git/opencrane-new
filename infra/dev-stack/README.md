@@ -164,6 +164,14 @@ The app uses code + S256 PKCE and client-secret POST authentication, with redire
 `https://ocn-dev.tail00285e.ts.net/` after logout. The server pins the resource-owner
 claim to this organisation, requesting `urn:zitadel:iam:user:resourceowner`.
 
+Every owner `up` runs `zitadel-setup.ts --restore-owner-app` under the shared
+Zitadel setup lock. This idempotent guard restores development mode to `false`
+and permits only the two owner HTTPS URIs above, preserving other OIDC settings.
+The same command can repair the pinned owner app without starting services or
+reading owner credentials; its output contains only ids and before/after redirects
+and development mode. It requires the management PAT via `ZITADEL_KEY_FILE`
+(default `.keys/.zitadel-key`), as secondary setup does.
+
 The setup adds one role-free external user grant for subject `378127409465593948`
 to the OpenCrane project. It does not create or change that user, grant the project to
 the WeOwnAI organisation, or change either organisation. The login request remains

@@ -186,8 +186,8 @@ async function removeComputers() {
 async function up(fresh: boolean) {
   const tail = secondary ? { Self: { DNSName: '', TailscaleIPs: [] } } : JSON.parse(await run('tailscale', ['status', '--json'])) as { Self: { DNSName: string, TailscaleIPs: string[] } };
   const origin = secondary ? localOrigin : `https://${tail.Self.DNSName.replace(/\.$/u, '')}`;
-  if (secondary) await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
-    process.execPath, '--experimental-strip-types', 'infra/dev-stack/zitadel-setup.ts'],
+  await run('flock', ['--close', `/tmp/opencrane-dev-stack-zitadel-${process.getuid!()}.lock`,
+    process.execPath, '--experimental-strip-types', 'infra/dev-stack/zitadel-setup.ts', ...(secondary ? [] : ['--restore-owner-app'])],
   { ...base, ...(process.env['ZITADEL_KEY_FILE'] ? { ZITADEL_KEY_FILE: process.env['ZITADEL_KEY_FILE'] } : {}) });
   await generate(origin);
   if (secondary && !await exists(`${directory}/models.env`)) await writeEnv('models', {});

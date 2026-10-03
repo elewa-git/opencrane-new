@@ -27,7 +27,11 @@ globalThis.fetch = async (url, options) => {
   } else if (path.startsWith(`${appBase}/`) && options.method === 'GET') {
     result = { app: state.apps[path.split('/').at(-1)] };
   } else if (path.endsWith('/oidc_config') && options.method === 'PUT') {
-    state.apps[path.split('/').at(-2)].oidcConfig = body;
+    assert.equal(state.updates ?? 0, 0, 'An unchanged owner app must not be updated again');
+    const app = state.apps[path.split('/').at(-2)];
+    assert.ok(!('clientId' in body || 'isCompliance' in body || 'complianceProblems' in body || 'allowedOrigins' in body));
+    app.oidcConfig = { ...app.oidcConfig, ...body };
+    state.updates = (state.updates ?? 0) + 1;
     result = {};
   } else if (path === '/management/v1/users/_search') {
     const userName = body.queries[0].userNameQuery.userName;

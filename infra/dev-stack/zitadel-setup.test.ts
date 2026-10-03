@@ -6,6 +6,56 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
+test('owner restore removes secondary redirects, preserves other settings, and refuses a foreign app', async () => {
+  const home = await mkdtemp(`${tmpdir()}/dev-stack-owner-restore-`);
+  const providerFile = `${home}/provider.json`;
+  const desired = { devMode: false, redirectUris: ['https://ocn-dev.tail00285e.ts.net/auth/callback'],
+    postLogoutRedirectUris: ['https://ocn-dev.tail00285e.ts.net/'] };
+  const ownerApp = { id: '393311211707436433', name: 'OpenCrane 2 Dev Web',
+    details: { resourceOwner: '393311211338337681' }, oidcConfig: {
+      clientId: '393311211707501969', isCompliance: true, complianceProblems: [], allowedOrigins: [],
+      responseTypes: ['OIDC_RESPONSE_TYPE_CODE'], grantTypes: ['OIDC_GRANT_TYPE_AUTHORIZATION_CODE'],
+      authMethodType: 'OIDC_AUTH_METHOD_TYPE_POST', idTokenUserinfoAssertion: true, clockSkew: '0s',
+      devMode: true,
+      redirectUris: [...desired.redirectUris, 'http://127.0.0.1:25106/auth/callback', 'http://127.0.0.1:25206/auth/callback'],
+      postLogoutRedirectUris: [...desired.postLogoutRedirectUris, 'http://127.0.0.1:25106/', 'http://127.0.0.1:25206/'],
+    } };
+  const initial = { apps: { [ownerApp.id]: ownerApp, secondary: { name: 'untouched' } }, users: {} };
+  const env = { PATH: process.env['PATH'], HOME: home, DEV_STACK_ID: 'owner',
+    ZITADEL_KEY_FILE: `${home}/pat`, MOCK_ZITADEL_FILE: providerFile };
+  const restore = (stack = 'owner') => exec(process.execPath, ['--experimental-strip-types', '--import',
+    './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts', '--restore-owner-app'],
+  { env: { ...env, DEV_STACK_ID: stack } });
+  try {
+    await writeFile(providerFile, JSON.stringify(initial));
+    await writeFile(`${home}/pat`, 'fake-test-pat');
+    const first = await restore();
+    const expected = { ...initial, apps: { ...initial.apps,
+      [ownerApp.id]: { ...ownerApp, oidcConfig: { ...ownerApp.oidcConfig, ...desired } } }, updates: 1 };
+    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), expected);
+    const receipt = JSON.parse(first.stdout);
+    assert.equal(receipt.changed, true);
+    assert.deepEqual(receipt.after, desired);
+    assert.ok(!`${first.stdout}${first.stderr}`.includes('fake-test-pat'));
+    assert.equal(JSON.parse((await restore()).stdout).changed, false);
+    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), expected);
+    // Owner repair needs neither stack ownership nor stored client/user credentials.
+    await assert.rejects(stat(`${home}/.config/opencrane/dev-stack`));
+    await assert.rejects(restore('1'));
+    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), expected);
+    for (const foreign of [
+      { ...ownerApp, details: { resourceOwner: 'another-org' } },
+      { ...ownerApp, oidcConfig: { ...ownerApp.oidcConfig, clientId: 'another-client' } },
+    ]) {
+      const state = { ...initial, apps: { ...initial.apps, [ownerApp.id]: foreign } };
+      await writeFile(providerFile, JSON.stringify(state));
+      await assert.rejects(restore());
+      assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), state);
+    }
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
 test('secondary setup keeps the owner app unchanged and reuses its own private credentials after teardown', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-zitadel-`);
   const directory = `${home}/.config/opencrane/dev-stack-1`;

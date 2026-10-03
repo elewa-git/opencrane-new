@@ -146,3 +146,108 @@ and its own private retained OIDC credential directory remain for later reuse.
 The full repository test suite and a second concurrent secondary were **NOT RUN**
 in this fix qualification; the earlier results above belong to the original run.
 No builds or repository test suite ran alongside this live journey.
+
+## Final blocker: restore the owner app
+
+Source: `029ba2d1c1e7f41e5d99b95970c47dc9850e57c5` plus this fix, 3 October
+2026, host `ocn-dev`, Node 22.23.3. Existing installation; not a fresh stack.
+This corrects the drift intentionally retained by the previous fix qualification.
+
+The pre-parallel setup at `ed21e0b` created the owner app with only the owner
+HTTPS callback/logout URIs and did not enable development mode. Neither the
+repository history nor the earlier `docs/process` receipts establish that it was
+true before the first parallel run. Commit `08d200a` explicitly enabled it while
+adding secondary redirects. The restored value is therefore `false`.
+
+The scoped restore uses the existing `zitadel-setup.ts` API helper and verifies
+the pinned organisation, app and client before any update. It runs before service
+changes on every owner `up`, under the existing shared Zitadel setup lock.
+Secondary setup still leaves the owner app alone. The standalone restore avoids
+owner provisioning and does not access client secrets or user passwords.
+
+Private artefacts: `/tmp/parallel-stacks-owner-restore-evidence/`, containing
+`restore.json`, `repeat.json`, `readback.json` and check logs. The live restore
+ran at approximately **13:06 UTC**. Its non-secret receipt is:
+
+```json
+{
+  "orgId": "393311211338337681",
+  "projectId": "393311211539664273",
+  "appId": "393311211707436433",
+  "changed": true,
+  "before": {
+    "devMode": true,
+    "redirectUris": [
+      "https://ocn-dev.tail00285e.ts.net/auth/callback",
+      "http://127.0.0.1:25106/auth/callback",
+      "http://127.0.0.1:25206/auth/callback"
+    ],
+    "postLogoutRedirectUris": [
+      "https://ocn-dev.tail00285e.ts.net/",
+      "http://127.0.0.1:25106/",
+      "http://127.0.0.1:25206/"
+    ]
+  },
+  "after": {
+    "devMode": false,
+    "redirectUris": [
+      "https://ocn-dev.tail00285e.ts.net/auth/callback"
+    ],
+    "postLogoutRedirectUris": [
+      "https://ocn-dev.tail00285e.ts.net/"
+    ]
+  }
+}
+```
+
+Command (under `/tmp/opencrane-dev-stack-zitadel-$(id -u).lock`):
+
+```sh
+DEV_STACK_ID=owner ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key \
+  node --experimental-strip-types infra/dev-stack/zitadel-setup.ts --restore-owner-app
+```
+
+The first run reports `changed: true`; the second reports `changed: false`.
+Readback at **13:08:39 UTC** confirms the same app and client, with unchanged
+response/grant types, authentication method, ID-token user-info assertion and
+clock skew. Zitadel's derived `allowedOrigins` also contracted from the three
+origins to only `https://ocn-dev.tail00285e.ts.net`; it is a response-only field,
+not an additional mutable setting. The initial comparison flagged that derived
+field; the corrected comparison excludes it and checks its expected value
+separately. See the provider's [OIDC configuration fields](https://pkg.go.dev/github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/application/v2#OIDCConfiguration).
+
+All live API requests were scoped to organisation `393311211338337681`.
+The only write was the pinned owner's OIDC configuration update in project
+`393311211539664273`; no users, grants, other apps or other organisations changed.
+No secrets were printed or added to this receipt.
+
+`flock -n ~/.fleet/devstack.lock true` returned **1**: the owner lock was busy.
+As instructed, validation used API readback and unit tests. Owner browser sign-in
+and owner `up.sh`: **NOT RUN**. This receipt does not claim live sign-in success
+or a fresh-install qualification. No owner services were restarted.
+
+The regression test covers both secondary URIs being removed, preservation of
+other settings, a repeated restore without another PUT, refusal from a secondary
+stack, and refusal of a foreign resource owner or client. Existing secondary
+credential-isolation/reuse and occupied-port tests also run.
+
+| Check | Result |
+| --- | --- |
+| Live owner restore and independent scoped readback | PASS |
+| Repeat live restore | PASS: `changed: false` |
+| `node --experimental-strip-types --test infra/dev-stack/*.test.ts` | PASS: all three tests |
+| `npx tsc -p infra/dev-stack/tsconfig.json` | PASS |
+| `npm run typecheck` | PASS |
+| `npm run check:events` | PASS: 74 event types |
+| `shellcheck infra/dev-stack/*.sh` / `git diff --check` | PASS |
+| Lint components | PASS: code, dependencies and unused checks passed; after fixing a receipt blank line, docs, links and fixtures passed |
+| `npm test` | FAIL / incomplete: five reported failures; interrupted with exit 130 after no further progress |
+| Owner browser sign-in / full owner bring-up | NOT RUN: fleet lock occupied |
+
+The broad test run reported two failures in `apps/server/test/bridge-replay.test.ts`
+and one each in `apps/server/test/integrations.test.ts`,
+`libs/projections/test/legacy-conversation.test.ts` and
+`apps/web/test/chat-browser.test.ts`. `PG_TEST_URL` was unset; the legacy projection
+test requires it. The remaining failures were not qualified or repaired by this
+scoped fix. Its focused tests pass, but this receipt does **not** claim all required
+repository gates are green. No additional independent review pass was started.

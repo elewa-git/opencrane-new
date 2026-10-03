@@ -29,6 +29,32 @@ async function list(path: string, queries: unknown[] = []) {
   return z.object({ result: z.array(object).default([]) }).parse(await api(path, { queries })).result;
 }
 const exactName = (value: string) => [{ nameQuery: { name: value, method: 'TEXT_QUERY_METHOD_EQUALS' } }];
+async function restoreOwnerApp() {
+  assert(!secondary, 'Only the owner stack may restore the owner app');
+  orgId = '393311211338337681';
+  const projectId = '393311211539664273', appId = '393311211707436433';
+  const org = z.object({ org: object }).parse(await api('/management/v1/orgs/me')).org;
+  assert(org.id === orgId && org.name === name, 'Refusing another organisation');
+  const path = `/management/v1/projects/${projectId}/apps/${appId}`;
+  const schema = z.object({ app: z.object({ id: z.literal(appId), name: z.literal('OpenCrane 2 Dev Web'),
+    details: z.object({ resourceOwner: z.literal(orgId) }),
+    oidcConfig: z.object({ clientId: z.literal('393311211707501969'), devMode: z.boolean().default(false),
+      redirectUris: z.array(z.string()), postLogoutRedirectUris: z.array(z.string()) }).passthrough() }) });
+  const before = schema.parse(await api(path)).app.oidcConfig;
+  const desired = { devMode: false, redirectUris: [`${origin}/auth/callback`], postLogoutRedirectUris: [`${origin}/`] };
+  const summary = (config: typeof before) => ({ devMode: config.devMode,
+    redirectUris: config.redirectUris, postLogoutRedirectUris: config.postLogoutRedirectUris });
+  const changed = JSON.stringify(summary(before)) !== JSON.stringify(desired);
+  if (changed) {
+    // Preserve other OIDC settings, omitting response-only fields from the update.
+    const { clientId: _clientId, complianceProblems: _problems, isCompliance: _compliance,
+      allowedOrigins: _origins, ...settings } = before;
+    await api(`${path}/oidc_config`, { ...settings, ...desired }, 'PUT');
+  }
+  const after = schema.parse(await api(path)).app.oidcConfig;
+  assert.deepEqual(summary(after), desired, 'Owner app restoration did not persist');
+  console.log(JSON.stringify({ orgId, projectId, appId, changed, before: summary(before), after: summary(after) }));
+}
 async function secondarySetup() {
   // All secondary resources belong to this existing organisation and project.
   orgId = '393311211338337681';
@@ -105,6 +131,7 @@ async function secondarySetup() {
   console.log('Secondary app and test users ready in OpenCrane 2 Dev; owner resources unchanged');
 }
 try {
+  if (process.argv[2] === '--restore-owner-app') { await restoreOwnerApp(); process.exit(0); }
   await prepareDirectory();
   if (secondary) { await secondarySetup(); process.exit(0); }
   const pinned = z.object({ orgId: z.string().optional(), extraIdentities: z.array(identity).length(1) })
