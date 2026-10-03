@@ -17,8 +17,10 @@ This emits a JSON log line. `LOG_LEVEL` defaults to `info`.
 Use `runWithContext` for safe request/entity identifiers, and `runHandler` to record
 handler start/completion/failure and duration. Handler failures are rethrown; callers
 own retry deadlines and duplicate-delivery behaviour. Never log personal content.
-The logger redacts sensitive field names and URL query values after serialisation,
-including child bindings and Error properties. Redaction is not permission to log secrets.
+The logger redacts sensitive field names and drops entire URL queries and fragments
+after serialisation, including child bindings and Error properties. Text following
+a query is dropped too; Fastify route messages retain their fixed `not found` suffix.
+Conversation history paths mask the conversation id. Redaction is not permission to log secrets.
 An invalid log line is replaced with a fixed error record instead of being emitted raw.
 
 `startTelemetry` defaults to disabled unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
@@ -33,7 +35,7 @@ npm test -- libs/observability
 npm run typecheck -w libs/observability
 ```
 
-Tests cover nested/encoded credential redaction, context isolation, span identifiers,
+Tests cover nested credential redaction and whole-query removal, context isolation, span identifiers,
 handler success/failure and telemetry shutdown. No live collector is qualified here.
 Runtime dependencies are pino and OpenTelemetry API, Node SDK and OTLP exporter.
 Only the telemetry adapter imports the SDK/exporter; tests may inject disposable providers.

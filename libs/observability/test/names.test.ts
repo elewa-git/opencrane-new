@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSensitiveFieldName, isSensitiveQueryName } from '../src/names.ts';
+import { isSensitiveFieldName } from '../src/names.ts';
 
 describe('isSensitiveFieldName', () => {
   it.each([
@@ -31,14 +31,5 @@ describe('isSensitiveFieldName', () => {
     // A number under a name that is not a plural count is still a secret.
     expect(isSensitiveFieldName('token', 123456)).toBe(true);
     expect(isSensitiveFieldName('password', 123456)).toBe(true);
-  });
-});
-
-describe('isSensitiveQueryName', () => {
-  it('also treats the OAuth callback parameters code and state as sensitive, which are ordinary log field names', () => {
-    expect(isSensitiveQueryName('code')).toBe(true);
-    expect(isSensitiveQueryName('STATE')).toBe(true);
-    expect(isSensitiveQueryName('access_token')).toBe(true);
-    expect(isSensitiveQueryName('page')).toBe(false);
   });
 });

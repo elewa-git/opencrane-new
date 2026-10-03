@@ -43,14 +43,14 @@ describe('sanitizeLogFields', () => {
     });
   });
 
-  it('blanks sensitive query-string parameters in any string, and walks every element of an array, at any depth', () => {
+  it('drops entire queries in any string, and walks every element of an array, at any depth', () => {
     const out = sanitizeLogFields({
       msg: 'Route GET:/nope?token=SECRET_A&code=SECRET_B not found',
       nested: { list: ['/cb?access_token=SECRET_C&keep=1', { token: 'b' }, { safe: 'c' }] },
     });
     expect(out).toEqual({
-      msg: 'Route GET:/nope?token=[Redacted]&code=[Redacted] not found',
-      nested: { list: ['/cb?access_token=[Redacted]&keep=1', { token: '[Redacted]' }, { safe: 'c' }] },
+      msg: 'Route GET:/nope not found',
+      nested: { list: ['/cb', { token: '[Redacted]' }, { safe: 'c' }] },
     });
   });
 
@@ -84,7 +84,7 @@ describe('sanitizeLogLine', () => {
     const out = sanitizeLogLine(`${line}\n`);
 
     expect(out.endsWith('\n')).toBe(true);
-    expect(JSON.parse(out)).toEqual({ level: 30, msg: 'hi', headers: { authorization: '[Redacted]' }, url: '/x?token=[Redacted]&ok=1' });
+    expect(JSON.parse(out)).toEqual({ level: 30, msg: 'hi', headers: { authorization: '[Redacted]' }, url: '/x' });
   });
 
   it('drops a line that is not valid JSON and never writes its text', () => {

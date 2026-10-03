@@ -2,13 +2,12 @@
 // tracing shared by every OpenCrane 2 service.
 //
 // - createLogger() builds a pino logger that writes JSON to stdout, with
-//   sensitive fields and sensitive URL query parameters redacted on every
+//   sensitive fields redacted and entire URL queries removed on every
 //   line (children and error properties included) and the active
 //   request/trace id attached to every line.
 // - runWithContext()/getContext() carry per-request fields through async
 //   work without threading a logger or an id through every function.
-// - redactUrl() blanks the value of sensitive query-string parameters (token,
-//   code, state, access_token, refresh_token, password, api_key, ...) in a URL.
+// - redactUrl() drops entire URL queries and fragments, including in messages.
 // - runHandler() is the "logs and traces per handler" helper from plan.md:
 //   wraps one projection/reaction run in a span and a fixed set of log
 //   fields (handler, event_id, event_type, stream, attempt, trace_id).

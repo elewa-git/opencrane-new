@@ -72,7 +72,7 @@ describe('main.ts under the real Node runtime', () => {
 
     // Wait until the last request shows up in redacted form before judging the output.
     const running = server;
-    for (let tries = 0; tries < 60 && !loggedUrls(running.stdout()).includes('//[x?token=[Redacted]'); tries += 1) {
+    for (let tries = 0; tries < 60 && !loggedUrls(running.stdout()).includes('//[x'); tries += 1) {
       await sleep(50);
     }
 
@@ -82,10 +82,10 @@ describe('main.ts under the real Node runtime', () => {
     const messages = lines.map((line) => line['msg']);
     // Every line the server wrote is JSON, and the redacted forms are what was logged.
     expect(lines).toHaveLength(stdout.split('\n').filter(Boolean).length);
-    expect(loggedUrls(stdout)).toEqual(expect.arrayContaining(['/healthz?token=[Redacted]', '/nope?token=[Redacted]&code=[Redacted]', '/auth/callback?code=[Redacted]&state=[Redacted]', '//[x?token=[Redacted]']));
+    expect(loggedUrls(stdout)).toEqual(expect.arrayContaining(['/healthz', '/nope', '/auth/callback', '//[x']));
     expect(messages).toContain('sign-in callback refused: login flow cookie is invalid');
-    expect(messages).toContain('Route GET:/nope?token=[Redacted]&code=[Redacted] not found');
-    expect(messages).toContain('Route GET:/ws?token=[Redacted] not found');
+    expect(messages).toContain('Route GET:/nope not found');
+    expect(messages).toContain('Route GET:/ws not found');
     // The request id is called request_id everywhere.
     expect(lines.some((line) => typeof line['request_id'] === 'string')).toBe(true);
     expect(lines.some((line) => 'reqId' in line)).toBe(false);

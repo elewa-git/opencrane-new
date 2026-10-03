@@ -107,7 +107,7 @@ describe('createLogger', () => {
       logger.error(new Error('fetch failed for https://x.test/y?refresh_token=SECRET_ERR'));
 
       expect(text()).not.toMatch(/SECRET_/u);
-      expect(text()).toContain('Route GET:/nope?token=[Redacted]&code=[Redacted] not found');
+      expect(text()).toContain('Route GET:/nope not found');
     });
   });
 

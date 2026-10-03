@@ -28,8 +28,8 @@ export interface CreateLoggerOptions {
  * `opts.destination`), with:
  * - every line carrying the active request id and OpenTelemetry trace/span
  *   id, via {@link contextMixin};
- * - sensitive fields and sensitive query-string parameters replaced by
- *   `[Redacted]` at any depth, on every line and for every child logger, so a
+ * - sensitive fields replaced by `[Redacted]` and entire URL queries removed
+ *   at any depth, on every line and for every child logger, so a
  *   call site cannot forget to redact (see {@link sanitizeLogLine}).
  *
  * @param name Service/component name stamped on every record (pino's `name` option).

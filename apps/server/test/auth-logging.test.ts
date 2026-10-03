@@ -109,7 +109,7 @@ describe('auth routes and the log', () => {
     // The flow cookie is not a real one, so the callback is refused.
     expect(response.statusCode).toBe(400);
     expect(stack.text()).not.toMatch(/SECRET_/u);
-    expect(loggedRequestUrls(stack)).toEqual(['/auth/callback?code=[Redacted]&state=[Redacted]']);
+    expect(loggedRequestUrls(stack)).toEqual(['/auth/callback']);
     // The route says why it refused, in words, and keeps its own line free of the cookie.
     expect(stack.lines().some((line) => line['level'] === 40 && line['msg'] === 'sign-in callback refused: login flow cookie is invalid')).toBe(true);
   });
@@ -121,7 +121,7 @@ describe('auth routes and the log', () => {
 
     expect(response.statusCode).toBe(400);
     expect(stack.text()).not.toMatch(/SECRET_/u);
-    expect(loggedRequestUrls(stack)).toEqual(['/auth/callback?code=[Redacted]&state=[Redacted]']);
+    expect(loggedRequestUrls(stack)).toEqual(['/auth/callback']);
     expect(stack.lines().some((line) => line['level'] === 40 && line['msg'] === 'sign-in callback refused: no login is in progress')).toBe(true);
   });
 
@@ -145,7 +145,7 @@ describe('auth routes and the log', () => {
     for (const [name, secret] of [['code', code], ['state', state], ['flow cookie', flowCookie], ['session cookie', sessionCookie]] as const) {
       expect(text, `the ${name} must not be in the log`).not.toContain(secret);
     }
-    expect(loggedRequestUrls(stack)).toContain('/auth/callback?code=[Redacted]&state=[Redacted]');
+    expect(loggedRequestUrls(stack)).toContain('/auth/callback');
     const messages = stack.lines().map((line) => line['msg']);
     expect(messages).toContain('sign-in completed');
     expect(messages).toContain('signed out');

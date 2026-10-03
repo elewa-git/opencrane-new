@@ -1,3 +1,5 @@
+import { request } from 'node:http';
+import { record } from './record.ts';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogDestination } from '@opencrane/observability';
 import { createServerLogger, redactedRequestSerializer } from '../src/logging.ts';
@@ -9,7 +11,7 @@ afterEach(() => {
 });
 
 describe('redactedRequestSerializer', () => {
-  it('keeps the method, host and port, drops everything else, and redacts the url by itself (the logger would redact it too, so this is checked here, not through the logger)', () => {
+  it('keeps the method, host and port, and drops the entire URL query', () => {
     const request = {
       method: 'GET',
       url: '/healthz?token=SECRET_REQ&keep=1',
@@ -20,7 +22,7 @@ describe('redactedRequestSerializer', () => {
 
     expect(redactedRequestSerializer(request)).toEqual({
       method: 'GET',
-      url: '/healthz?token=[Redacted]&keep=1',
+      url: '/healthz',
       host: 'localhost:8080',
       remotePort: 51234,
     });
@@ -32,24 +34,54 @@ describe('redactedRequestSerializer', () => {
 });
 
 describe('createServerLogger', () => {
-  it('withholds history paths and every query filter in all HTTP log lines, including fallback methods and trailing slashes', async () => {
-    vi.stubEnv('LOG_LEVEL', 'info');
-    const chunks: string[] = [];
-    const app = buildServer(testAuthConfig(), { logDestination: { write: (line: string) => void chunks.push(line) } });
-    try {
-      for (const path of ['/api/org/history', '/api/conversations/private-conversation-canary/history']) {
-        for (const suffix of ['', '/']) {
-          for (const method of ['GET', 'POST', 'OPTIONS'] as const) {
-            const response = await app.inject({ method,
-              url: `${path}${suffix}?requestId=private-request-canary&turnId=private-turn-canary&unknown=private-filter-canary` });
-            expect(response.statusCode).toBe(method === 'GET' && suffix === '' ? 401 : 404);
+  const queries = [
+    "?requestId=prefix'private-request-canary",
+    '?requestId=prefix"private-request-canary',
+    '?%72equestId=prefix%27private-request-canary%22',
+    '?requestId=prefix#private-request-canary',
+    '?requestId=prefix?unknown=private-request-canary',
+    '?unknown=private-filter-canary&turnId=private-turn-canary',
+  ];
+  it.each(['GET', 'POST', 'OPTIONS'].flatMap(method => queries.map(query => ({ method, query }))))(
+    'logs paths only over real HTTP for $method $query, including fallbacks and trailing slashes', async ({ method, query }) => {
+      vi.stubEnv('LOG_LEVEL', 'info');
+      const chunks: string[] = [];
+      const app = buildServer(testAuthConfig(), { logDestination: { write: (line: string) => void chunks.push(line) } });
+      try {
+        await app.listen({ port: 0, host: '127.0.0.1' });
+        const address = app.server.address();
+        if (address === null || typeof address === 'string') throw new Error('expected a network address');
+        for (const [path, loggedPath] of [
+          ['/api/org/history', '/api/org/history'],
+          ['/healthz', '/healthz'],
+          ['/nope', '/nope'],
+          ['/api/conversations/private-conversation-canary/history', '/api/conversations/:conversationId/history'],
+        ] as const) {
+          for (const slash of ['', '/', '//']) {
+            chunks.length = 0;
+            const status = await new Promise<number | undefined>((resolve, reject) => {
+              const req = request({ host: '127.0.0.1', port: address.port, method, path: `${path}${slash}${query}` }, res => {
+                res.resume();
+                res.on('end', () => resolve(res.statusCode));
+              });
+              req.on('error', reject);
+              req.end();
+            });
+            const expectedStatus = method === 'GET' && slash === '' && path !== '/nope'
+              ? path === '/healthz' ? 200 : 401
+              : 404;
+            expect(status).toBe(expectedStatus);
+            const lines = chunks.flatMap(chunk => chunk.trim().split('\n')).map(line => record(JSON.parse(line)));
+            const incoming = lines.find(line => line['msg'] === 'incoming request');
+            expect.soft(record(incoming?.['req'])['url']).toBe(`${loggedPath}${slash}`);
+            if (status === 404) {
+              expect.soft(lines.map(line => line['msg'])).toContain(`Route ${method}:${loggedPath}${slash} not found`);
+            }
+            expect.soft(chunks.join('')).not.toMatch(/canary|requestId=|unknown=|turnId=|%72equestId=/u);
           }
         }
-      }
-      expect(chunks.length).toBeGreaterThan(12);
-      for (const line of chunks) expect(line).not.toContain('canary');
-    } finally { await app.close(); }
-  });
+      } finally { await app.close(); }
+    });
 
   it('takes its level from LOG_LEVEL, and falls back to info', () => {
     vi.stubEnv('LOG_LEVEL', 'warn');
