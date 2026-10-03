@@ -1,8 +1,9 @@
 // Adapted from OpenCrane 1, 10abd0ef6, conversation-composer.component.ts (AGPL-3.0-or-later).
 // Retains parent-owned draft and outputs; native controls and the handoff's Enter/Stop behaviour replace PrimeNG.
+import { ChatIcon } from './icon';
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
-@Component({ selector: 'oc-chat-composer', templateUrl: './composer.html', styleUrl: './composer.css', changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: 'oc-chat-composer', imports: [ChatIcon], templateUrl: './composer.html', styleUrl: './composer.css', changeDetection: ChangeDetectionStrategy.OnPush })
 export class ChatComposer {
   readonly draft = input('');
   readonly working = input(false);
@@ -19,7 +20,10 @@ export class ChatComposer {
     if (event.target instanceof HTMLTextAreaElement) this.draftChange.emit(event.target.value);
   }
   protected keydown(event: KeyboardEvent): void {
-    if (event.key === 'Escape') this.attachOpen.set(false);
+    if (event.key === 'Escape') {
+      if (this.attachOpen()) this.closeAttach();
+      else if (this.working()) this.stopped.emit();
+    }
     if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
     event.preventDefault(); this.submit();
   }

@@ -1,5 +1,5 @@
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
-import { chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
+import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { transcript } from './chat-state';
 
@@ -15,9 +15,15 @@ export class ChatSession implements OnDestroy {
   readonly rows = signal<ChatRow[]>([]);
   readonly selected = signal('');
   readonly memberId = signal('');
+  readonly displayName = signal('You');
   readonly assistantId = signal<string | null>(null);
   readonly computer = signal('ready');
   readonly loading = signal(true);
+  readonly railLoading = signal(true);
+  readonly railUnavailable = signal(false);
+  readonly retryIn = signal(6);
+  readonly waitSeconds = signal(0);
+  readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
   readonly busy = signal(false);
   readonly error = signal('');
   readonly denied = signal(false);
@@ -32,21 +38,37 @@ export class ChatSession implements OnDestroy {
   private subscription = this.socket.received.subscribe(message => this.receive(message));
 
   constructor() {
+    effect(onCleanup => {
+      if (!this.railUnavailable()) return;
+      this.retryIn.set(6);
+      const timer = setInterval(() => {
+        this.retryIn.update(value => value - 1);
+        if (this.retryIn() === 0) void this.load();
+      }, 1000);
+      onCleanup(() => clearInterval(timer));
+    });
+    effect(onCleanup => {
+      const waiting = this.waiting();
+      this.waitSeconds.set(0);
+      if (!waiting) return;
+      const timer = setInterval(() => this.waitSeconds.update(value => value + 1), 1000);
+      onCleanup(() => clearInterval(timer));
+    });
     effect(() => {
       if (this.socket.state() === 'open') this.socket.send({ type: 'subscribe', topic: 'conversation', conversationId: this.selected(), since: this.position, generation: this.generation });
     });
   }
   async load(): Promise<void> {
-    this.error.set(''); this.loading.set(true);
+    this.error.set(''); this.loading.set(true); this.railLoading.set(true); this.railUnavailable.set(false);
     try {
       const context = chatContextSchema.parse(await this.request('/api/chat'));
-      this.memberId.set(context.memberId); this.assistantId.set(context.assistantId); this.denied.set(false);
+      this.memberId.set(context.memberId); this.displayName.set(context.displayName || 'You'); this.assistantId.set(context.assistantId); this.denied.set(false);
       await this.list();
       const id = new URL(location.href).searchParams.get('conversation');
       if (id) await this.select(id);
       else if (this.conversations()[0]) await this.select(this.conversations()[0]!.conversationId);
-    } catch (error) { this.fail(error); }
-    finally { this.loading.set(false); }
+    } catch (error) { this.fail(error); this.railUnavailable.set(!this.denied()); }
+    finally { this.loading.set(false); this.railLoading.set(false); }
   }
   async select(id: string): Promise<void> {
     if (this.busy() || this.pending) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
@@ -63,7 +85,7 @@ export class ChatSession implements OnDestroy {
   newSession(): void {
     if (this.busy() || this.pending) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     ++this.revision; this.socket.disconnect(); this.selected.set(''); this.rows.set([]); this.error.set('');
-    this.position = 0; this.generation = 0; this.computer.set('ready');
+    this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
     history.replaceState({}, '', '/workspace');
   }
   async send(text: string): Promise<boolean> {
@@ -75,6 +97,7 @@ export class ChatSession implements OnDestroy {
     } catch (error) { this.queued.set(true); this.fail(error); return false; }
     finally { this.busy.set(false); }
   }
+  reconnect(): void { this.socket.connect(); }
   async stop(): Promise<void> {
     const turn = this.active(); if (!turn || this.busy()) return;
     this.busy.set(true); this.error.set('');
@@ -88,7 +111,7 @@ export class ChatSession implements OnDestroy {
 
   private async list(): Promise<void> {
     const value = chatListSchema.parse(await this.request('/api/conversations'));
-    this.conversations.set(value.rows.filter(row => row.mode === 'agent_session'));
+    this.conversations.set(value.rows.filter(row => row.mode === 'agent_session').map(row => ({ ...row, title: row.title ? sessionSlug(row.title) : 'New session' })));
   }
   private async deliver(): Promise<void> {
     const command = this.pending!;
@@ -143,9 +166,9 @@ export class ChatSession implements OnDestroy {
   }
   private updateSummary(): void {
     const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
-    const title = turns.find(turn => turn.author === 'you' || turn.author === 'person')?.text.slice(0, 60);
-    const status = this.rows().some(row => row.type === 'conversation.closed') ? 'closed' : latest?.state === 'stopped' ? 'done' : latest?.state ?? 'open';
-    this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title } : {}), status } : row));
+    const title = turns.find(turn => turn.author === 'you' || turn.author === 'person')?.text;
+    const status = this.rows().some(row => row.type === 'conversation.closed') ? 'closed' : latest?.state ?? 'open';
+    this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title: sessionSlug(title) } : {}), status } : row));
   }
   private async request(path: string, body?: unknown): Promise<unknown> {
     const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });

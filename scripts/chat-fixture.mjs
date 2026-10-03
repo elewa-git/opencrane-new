@@ -1,15 +1,15 @@
 // Protocol fixtures for visual qualification only; never imported into the product.
 export async function chatFixture(page, scenario = 'live') {
-  let rows = [], socket, offline = scenario === 'queued';
+  let rows = [], socket, offline = ['queued', 'rail-offline'].includes(scenario);
   const add = (type, data) => {
-    const row = { id: `event-${rows.length + 1}`, position: rows.length + 1, type, data, time: '2026-10-02T10:42:00Z' };
+    const row = { id: `event-${rows.length + 1}`, position: rows.length + 1, type, data, time: type === 'agent.turn_completed' ? '2026-10-02T10:42:48Z' : '2026-10-02T10:42:00Z' };
     rows.push(row);
     socket?.send(JSON.stringify({ version: 1, type: 'event', topic: 'conversation', conversationId: 'chat', generation: 1, position: row.position, row }));
     return row;
   };
   add('conversation.created', {});
   if (!['draft', 'attach', 'no-agent', 'queued'].includes(scenario)) {
-    const human = add('message.posted', { text: 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
+    const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
     if (scenario !== 'folding') {
       add('agent.command_ran', { turnId: human.id, exitCode: scenario === 'tools' ? 1 : 0, commandDigest: 'a'.repeat(64) });
@@ -32,7 +32,9 @@ export async function chatFixture(page, scenario = 'live') {
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
     const fulfil = body => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
-    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', assistantId: scenario === 'no-agent' ? null : 'assistant' });
+    if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
+    if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
+    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Jente Roels', assistantId: scenario === 'no-agent' ? null : 'assistant' });
     if (url.pathname.endsWith('/files/view')) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
     if (request.method() === 'POST') {
       const command = request.postDataJSON(); commands.push(command);

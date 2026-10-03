@@ -15,8 +15,13 @@ export const chatRowSchema = z.object({ id: z.string(), position: z.int().nonneg
 });
 export const chatFeedSchema = z.object({ rows: z.array(chatRowSchema), position: z.int().nonnegative(), generation: z.int().nonnegative(), computerState: z.string() });
 export const chatListSchema = z.object({ rows: z.array(z.object({ conversationId: z.string(), assistantId: z.string(), createdBy: z.string(),
-  title: z.string().optional(), status: z.enum(['open', 'working', 'done', 'closed', 'failed']).optional(),
+  title: z.string().optional(), status: z.enum(['open', 'working', 'done', 'closed', 'failed', 'stopped']).optional(),
   mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session'), createdAt: z.string() })) });
-export const chatContextSchema = z.object({ memberId: z.string(), assistantId: z.string().nullable() });
+export const chatContextSchema = z.object({ memberId: z.string(), displayName: z.string().nullable().optional(), assistantId: z.string().nullable() });
 export type ChatRow = z.infer<typeof chatRowSchema>;
 export type ChatConversation = z.infer<typeof chatListSchema>['rows'][number];
+
+/** A title is a display of the first message, never separately stored business state. */
+export function sessionSlug(text: string): string {
+  return text.toLowerCase().match(/[\p{L}\p{N}]+/gu)?.slice(0, 4).join('-').slice(0, 24).replace(/-+$/, '') || 'personal-session';
+}

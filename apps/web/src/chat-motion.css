@@ -15,8 +15,6 @@
   @keyframes oc-press { 0%, 30%, 70%, 100% { transform: none; box-shadow: 0 1px 0 #0a94a7; } 42%, 58% { transform: translateY(1px); box-shadow: 0 0 0 #0a94a7; } }
 .sr-only { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap; }
 oc-workspace button:active, oc-workspace a:active, oc-workspace summary:active { transform: translateY(1px); transition: transform 90ms var(--oc-ease-standard); }
-oc-workspace .panel-section { position: relative; }
-oc-workspace .panel-section::after { content: ''; position: absolute; bottom: 0; left: 18px; right: 18px; height: 1px; background: #e1e6e7; transform-origin: left; animation: oc-crease-in 600ms var(--oc-ease-fold); }
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; }
 }

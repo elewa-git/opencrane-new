@@ -1,9 +1,9 @@
 import type { ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
-  id: string; author: 'you' | 'person' | 'agent'; text: string; time: string;
+  id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
   state: 'working' | 'done' | 'failed' | 'stopped';
-  tools: { id: string; label: string; detail: string; failed: boolean }[];
+  tools: { id: string; label: string; detail: string; failed: boolean; time: string }[];
   files: string[];
 }
 
@@ -23,7 +23,7 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     }
     const turn = agents.get(data.turnId ?? '');
     if (!turn || turn.state === 'stopped') continue;
-    if (row.type === 'agent.turn_stop_requested') { turn.state = 'stopped'; continue; }
+    if (row.type === 'agent.turn_stop_requested') { turn.state = 'stopped'; turn.endedAt = row.time; continue; }
     updateTurn(turn, row, messages.get(turn.id)!);
   }
   return turns;
@@ -31,10 +31,12 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
 
 function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>): void {
   const data = row.data;
+    if (['agent.turn_completed', 'agent.turn_failed'].includes(row.type)) turn.endedAt = row.time;
+    if (row.type === 'agent.turn_failed') turn.tools.push({ id: row.id, label: 'Reply failed', detail: 'Run interrupted', failed: true, time: row.time });
     if (row.type === 'agent.turn_completed') turn.state = 'done';
     if (row.type === 'agent.turn_failed') turn.state = 'failed';
     if (row.type === 'agent.command_ran') turn.tools.push({ id: row.id, label: data.exitCode === 0 ? 'Command completed' : 'Command failed',
-      detail: `Exit code ${data.exitCode ?? 'unknown'} · digest ${data.commandDigest ?? 'unavailable'}`, failed: data.exitCode !== 0 });
+      detail: `Exit code ${data.exitCode ?? 'unknown'}`, failed: data.exitCode !== 0, time: row.time });
     if (row.type === 'agent.file_changed' && data.path) turn.files.push(data.path);
     if (['agent.message_delta', 'agent.message_completed'].includes(row.type)) {
       const id = data.messageId ?? row.id;

@@ -58,3 +58,30 @@ The fenced A2UI placeholder and attach menu are present.
 Motion definitions cover the fourteen specified motions, with a maximum row
 entrance chain of 1.74 seconds. Reduced motion removes animations and leaves the
 caret solid. Native dialogs trap focus, close with Escape and restore the trigger.
+
+## Review and visual fix round
+
+The [visual fix list](visual-fix-list.md) records each disposition; the
+[receipt](fix-round-evidence.md) records tests, screenshot inspection and gates.
+The shared SVG set supplies control and state icons without an icon dependency.
+Voice input is absent because it is unavailable. **Connectors are deferred**:
+there is no scoped chat connector API, so the 1j menu and comparison caption
+state that limitation. Groups, projects, ask cards and agent threads remain
+outside issue #30. The Activity panel indexes recorded tool lines and run failures.
+Provider responses and retries are marked unavailable when the bridge does not
+supply them. The footer's member name is read from the authorised member
+projection; team/department metadata is not supplied, so it shows personal scope.
+
+Production CSS stays in external stylesheets (`inlineCritical: false`). The
+serving layer must generate a fresh nonce per HTML response, put it on
+`<app-root ngCspNonce="…">`, and include it in `style-src 'self' 'nonce-…'`.
+Scripts require only `script-src 'self'`. The production Playwright harness
+serves the real build with this enforcing policy and asserts no CSP violations.
+Zod **4.6.5, MIT** was already bundled through the protocol package; it is now
+an explicit web dependency to configure `jitless` before schemas are imported.
+Its installed LICENSE was checked. No new package version or icon package was added.
+
+The browser harness disables dependency prebundling so workspace protocol edits
+are included in each qualification run. Live reload and HMR are disabled so an
+editor change cannot interrupt an in-progress page assertion. Each invocation owns an ephemeral web
+server. It never starts, stops or reconfigures the shared dev stack.

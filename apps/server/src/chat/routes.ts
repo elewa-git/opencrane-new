@@ -1,3 +1,4 @@
+import { sessionSlug } from '@opencrane/protocol';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { AuthConfig } from '@opencrane/auth';
@@ -55,7 +56,8 @@ async function read(request: FastifyRequest, reply: FastifyReply, options: ChatO
           const result = await options.db.query<{ assistant_id: string }>(
             "SELECT assistant_id FROM computers WHERE silo = $1 AND owner_id = $2 AND kind = 'personal'", [options.silo, memberId]);
           const assistantId = result.rows[0]?.assistant_id;
-          return reply.send({ memberId, assistantId: assistantId && (await auth.actsFor(memberId, assistantId)).allowed ? assistantId : null });
+          const member = await options.db.query<{ display_name: string | null }>('SELECT display_name FROM members WHERE silo = $1 AND member_id = $2', [options.silo, memberId]);
+          return reply.send({ memberId, displayName: member.rows[0]?.display_name ?? null, assistantId: assistantId && (await auth.actsFor(memberId, assistantId)).allowed ? assistantId : null });
         }
         if (conversationId) {
           const { since } = z.object({ since: z.coerce.number().int().nonnegative().default(0) }).parse(request.query);
@@ -75,9 +77,9 @@ async function summary(options: ChatOptions, conversationId: string) {
     'SELECT type, data FROM conversation_feed WHERE silo = $1 AND conversation_id = $2 ORDER BY position', [options.silo, conversationId]);
   const first = result.rows.find(row => row.type === 'message.posted');
   const last = result.rows.findLast(row => ['message.posted', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested', 'conversation.closed'].includes(row.type));
-  const title = first ? options.keys.decrypt(options.silo, conversationId, first.data).slice(0, 60) : 'New session';
+  const title = first ? sessionSlug(options.keys.decrypt(options.silo, conversationId, first.data)) : 'New session';
   const status = last?.type === 'conversation.closed' ? 'closed' : last?.type === 'agent.turn_failed' ? 'failed'
-    : last?.type === 'agent.turn_completed' || last?.type === 'agent.turn_stop_requested' ? 'done'
+    : last?.type === 'agent.turn_stop_requested' ? 'stopped' : last?.type === 'agent.turn_completed' ? 'done'
       : last ? 'working' : 'open';
   return { title, status };
 }

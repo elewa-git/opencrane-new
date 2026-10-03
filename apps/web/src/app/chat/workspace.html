@@ -1,66 +1,99 @@
 <!-- Message and workspace structure adapted from OpenCrane 1 10abd0ef6; visual values from the chat handoff. -->
 <div class="workspace" [class.panel-open]="panel()">
-  <header class="mobile-bar"><button type="button" id="navigation-toggle" aria-label="Open session navigation" [attr.aria-expanded]="rail()" (click)="rail.set(!rail())">☰</button><strong>Open<span>Crane</span></strong><button type="button" aria-label="New session" (click)="newSession()">＋</button></header>
   <nav class="rail" aria-label="Sessions" [class.mobile-open]="rail()">
     <div class="brand"><svg width="23" height="17" viewBox="0 0 32 24" aria-hidden="true"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"/><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"/><polygon points="11,15 16,3 19,15" fill="#22c7dd"/><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"/><polygon points="19,15 30,7 22,20" fill="#66d7e6"/></svg><strong>Open<span>Crane</span></strong><button type="button" aria-label="Find a session" (click)="searchDialog.showModal()"><kbd>⌘K</kbd></button></div>
     <div class="rail-content">
-      <button type="button" class="new-session" (click)="newSession()"><span aria-hidden="true">＋</span> New session <kbd>⌘N</kbd></button>
-      <button type="button" class="ask" (click)="newSession()"><span aria-hidden="true">△</span> Ask your agent <kbd>⌘⇧A</kbd></button>
+      <button type="button" class="new-session" [class.active]="!chat.selected()" (click)="newSession()"><oc-icon name="plus" /> New session <kbd>⌘N</kbd></button>
+      <button type="button" class="ask" (click)="newSession()"><oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd></button>
       <h2>Projects</h2><p class="empty-rail">No project sessions</p>
       <h2>Personal</h2>
+      @if (chat.railLoading()) {
+        <div class="rail-card rail-loading" role="status"><h2>Loading</h2><i></i><i></i><i></i><span class="sr-only">Loading sessions</span></div>
+      } @else if (chat.railUnavailable()) {
+        <div class="rail-card"><strong><span class="offline-dot"></span> Can't reach your pod</strong><p>Your conversations are safe.</p><p class="retry-countdown">Retrying in {{ chat.retryIn() }}s</p><button type="button" (click)="chat.load()">Retry now</button></div>
+      } @else if (!chat.assistantId() && !chat.denied()) {
+        <div class="rail-card"><strong>No assistant assigned</strong><p>Your account is in, but no agent is provisioned yet.</p><small>pod: … · waiting</small></div>
+      } @else if (!chat.conversations().length && !chat.denied()) {
+        <div class="rail-card rail-empty"><svg width="36" height="28" viewBox="0 0 32 24" aria-hidden="true"><path d="m3 5 10 10 3-12 3 12 11-8-8 13-5 1-6-5Z" fill="#9fdde8"/><path d="m3 5-3 3h5" fill="#f47920"/></svg><strong>No conversations yet</strong><p>Start one and it will live here.</p><button type="button" (click)="newSession()">New session</button></div>
+      }
       @for (conversation of chat.conversations(); track conversation.conversationId; let index = $index) {
         <button type="button" class="session-row" [class.active]="chat.selected() === conversation.conversationId" [attr.aria-current]="chat.selected() === conversation.conversationId ? 'page' : null" [style.--row]="index > 40 ? 40 : index" (click)="select(conversation.conversationId)">
-          <span [class.flutter]="rowStatus(conversation.conversationId, conversation.status) === 'working'" aria-hidden="true">{{ glyph(rowStatus(conversation.conversationId, conversation.status)) }}</span><span class="slug">{{ chat.selected() === conversation.conversationId ? title() : conversation.title || 'session-' + conversation.conversationId.slice(0, 8) }}</span><span class="row-status">{{ words(rowStatus(conversation.conversationId, conversation.status)) }}</span>
+          <oc-icon class="state-mark" [attr.data-state]="rowStatus(conversation.conversationId, conversation.status)" [class.flutter]="rowStatus(conversation.conversationId, conversation.status) === 'working'" [name]="rowStatus(conversation.conversationId, conversation.status)" /><span class="slug">{{ chat.selected() === conversation.conversationId ? title() : conversation.title || 'session-' + conversation.conversationId.slice(0, 8) }}</span><span class="row-status">{{ words(rowStatus(conversation.conversationId, conversation.status)) }}</span>
         </button>
       }
-      @if (!chat.conversations().length) { <p class="empty-rail">Your sessions will appear here</p> }
       <button type="button" class="archive" [attr.aria-expanded]="archived()" (click)="archived.set(!archived())">{{ archived() ? '⌄' : '›' }} Archived · 0</button>
       @if (archived()) { <p class="empty-rail">No archived sessions</p> }
     </div>
-    <footer class="rail-footer"><a href="/org/integrations">⚙ Organisation settings</a><a href="/">◯ Your account</a></footer>
+    <footer class="rail-footer"><a href="/org/integrations"><oc-icon name="settings" /> Settings</a><a class="current-user" href="/account"><span class="avatar user">{{ initials() }}</span><span><strong>{{ chat.displayName() }}</strong><small>{{ organisation }} · Personal</small></span></a></footer>
   </nav>
   <main class="main oc-rice">
-    <header class="workspace-header"><span class="hash" aria-hidden="true">#</span><h1>{{ title() }}</h1>
-      <span class="header-status" aria-live="polite">@if (chat.active()) { <span class="flutter" aria-hidden="true">△</span> Agent working }</span>
-      <span class="avatar agent" aria-label="Personal agent">△</span><button id="panel-toggle" type="button" aria-label="Session panel" [attr.aria-expanded]="panel()" (click)="togglePanel()">◫</button>
+    <header class="workspace-header"><button class="navigation-toggle" type="button" id="navigation-toggle" aria-label="Open session navigation" [attr.aria-expanded]="rail()" (click)="rail.set(!rail())"><oc-icon name="menu" /></button>@if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }<h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>@if (!chat.selected()) { <span class="draft-label">Draft</span> }
+      <span class="header-status" aria-live="polite">@if (chat.active()) { <oc-icon name="agent" /> Agent working }</span>
+      <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span><button id="panel-toggle" type="button" aria-label="Session panel" [attr.aria-expanded]="panel()" (click)="togglePanel()"><oc-icon name="panel" /></button>
     </header>
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages">
       <div class="transcript-inner">
         @if (chat.loading()) { <p class="skeleton" role="status">▱ Loading conversation…</p> }
-        @if (chat.error()) { <div class="error" role="alert">{{ chat.error() }} @if (!chat.queued()) { <button type="button" (click)="chat.load()">Retry</button> } @if (chat.denied()) { <a href="/">Sign in</a> }</div> }
-        @if (!chat.selected() && !chat.loading()) {
-          <section class="draft"><span class="draft-mark" aria-hidden="true">△</span><h2>What shall we work on?</h2><p>Start a session with your personal Agent.</p><div class="to-line">To <span>△ Your agent</span><small>Only you and your agent</small></div><p class="draft-note">Agent session · fixed when you send your first message</p></section>
+        @if (chat.error() && !chat.queued()) { <div class="error" role="alert">{{ chat.error() }} @if (!chat.queued()) { <button type="button" (click)="chat.load()">Retry</button> } @if (chat.denied()) { <a href="/">Sign in</a> }</div> }
+        @if (!chat.selected() && !chat.loading() && !chat.railUnavailable() && !chat.denied()) {
+          <section class="draft" [class.no-agent]="!chat.assistantId()" aria-label="Session recipients">
+            <div class="to-line"><span class="to-label">To:</span>
+              @if (!chat.assistantId()) { <span class="recipient unavailable"><oc-icon name="agent" /> Your agent</span> }
+              @else if (recipient()) { <span class="recipient dogear"><oc-icon name="agent" /> Your agent <button type="button" aria-label="Remove agent recipient" (click)="recipient.set(false)"><oc-icon name="close" /></button></span> }
+              @else { <button class="recipient" type="button" (click)="recipient.set(true)"><oc-icon name="plus" /> Add your agent</button> }
+            </div>
+            <p class="draft-note">@if (!chat.assistantId()) { No personal agent yet. Your agent is being prepared. } @else if (recipient()) { <oc-icon name="agent" /> Agent session — every message starts a governed run. Locks when you send. } @else { Choose your agent to start a session. }</p>
+          </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
           <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
-            @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true">{{ turn.author === 'agent' ? '△' : '◯' }}</span> }
+            @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true"><oc-icon [name]="turn.author === 'agent' ? 'agent' : 'open'" /></span> }
             <div class="message-content">
-              @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}</time></header> }
+              @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}@if (turn.endedAt) { · {{ duration(turn.time, turn.endedAt) }}s }</time></header> }
               @for (tool of turn.tools; track tool.id) {
-                <details class="tool-line" [class.failed]="tool.failed"><summary>{{ tool.failed ? '×' : '✓' }} {{ tool.label }} <span aria-hidden="true">›</span></summary><p>{{ tool.detail }}</p></details>
+                <details class="tool-line" [id]="'tool-' + tool.id" #details>
+                  <summary [attr.aria-expanded]="details.open" (click)="$event.preventDefault(); details.open = !details.open"><oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'" [name]="tool.failed ? 'failed' : 'done'" /> {{ tool.label }} <oc-icon class="chevron" name="chevron" /></summary>
+                  <div class="tool-drawer"><dl><dt>tool</dt><dd>{{ tool.label === 'Reply failed' ? 'agent run' : 'computer command' }}</dd><dt>error</dt><dd>{{ tool.failed ? 'execution · ' + tool.detail : 'none · ' + tool.detail }}</dd><dt>provider</dt><dd>Not reported</dd><dt>time</dt><dd>{{ time(tool.time) }} · retries not reported</dd></dl><footer>Details are sanitised — tokens, cookies and headers are never shown. @if (tool.failed) { <button type="button" (click)="focusComposer()">Retry in a new message</button> }</footer></div>
+                </details>
               }
-              @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (part of textParts(turn.text); track $index) { @switch (part.kind) { @case ('bold') { <strong>{{ part.text }}</strong> } @case ('citation') { <button type="button" class="citation" (click)="preview.set('Citation ' + part.text)">{{ part.text }}</button> } @case ('a2ui') { <div class="a2ui">▧ Interactive content <p>This interface is not available yet.</p></div> } @default { {{ part.text }} } } }@if (turn.author === 'agent' && turn.state === 'working') { <span class="caret" aria-hidden="true"></span> }</div> }
+              @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)">{{ part.text.slice(1, -1) }}</button>}@case ('a2ui') {<div class="a2ui dogear"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
+              @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
+              @if (turn.author === 'agent' && turn.state === 'working' && turn.text) { <div class="writing"><span class="fold" aria-hidden="true"><i></i><i></i><i></i></span><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><span class="fold" aria-hidden="true"><i></i><i></i><i></i></span> Folding…</div> }
-              @for (file of turn.files; track file) { <button type="button" class="file-card" (click)="preview.set(file)"><span class="file-type">{{ type(file) }}</span><span><strong>{{ name(file) }}</strong><small>Agent · {{ time(turn.time) }}</small></span><span aria-hidden="true">↗</span></button> }
-              @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.failed]="turn.state === 'failed'" role="status">{{ turn.state === 'stopped' ? '■ Stopped · partial reply kept' : turn.state === 'failed' ? '× Reply interrupted · partial reply kept' : '✓ Done' }}</p> }
+              @for (file of turn.files; track file) { <div class="file-card" [class.created]="turn.author === 'agent'" [class.dogear]="turn.author === 'agent'"><span class="file-type">{{ type(file) }}</span><span class="file-name"><strong>{{ name(file) }}</strong><small>@if (turn.author === 'agent') { <span class="agent-badge">Ag</span> } {{ time(turn.time) }}</small></span><button type="button" (click)="preview.set(file)">Open</button>@if (turn.author === 'agent') { <button type="button" (click)="showFiles()">Files</button> }</div> }
+              @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
             </div>
           </article>
         }
       </div>
     </section>
     <div class="composer-dock">
-      <div class="progress" role="status" aria-live="polite">@if (chat.active() && chat.computer() !== 'ready') { <span class="flutter" aria-hidden="true">△</span> Starting your computer… } @else if (chat.selected() && !chat.connected() && !chat.loading()) { ↻ Reconnecting — your conversation is saved. }</div>
+      <div class="progress" role="status" aria-live="polite">@if (chat.waiting()) { <div class="connection-strip" [class.waking]="chat.waiting() === 'starting'"><oc-icon [name]="chat.waiting() === 'starting' ? 'agent' : 'working'" /><span>@if (chat.waiting() === 'queued') { Queued on this page — Retry sends once. Reload discards this unsent draft. } @else if (chat.waiting() === 'starting') { Starting your computer… Your message is saved and will run when it is ready. } @else { Reconnecting — your conversation is saved. Unsent text stays on this page. }</span><small>{{ chat.waitSeconds() }}s</small>@if (chat.waiting() === 'queued') { <button type="button" [disabled]="chat.busy()" (click)="send(draft())">Retry</button> } @else if (chat.waiting() === 'reconnecting') { <button type="button" (click)="chat.reconnect()">Retry</button> }</div> }</div>
       <oc-chat-composer [draft]="draft()" [working]="!!chat.active()" [busy]="chat.busy()" [reason]="reason()" [queued]="chat.queued()" (draftChange)="draft.set($event)" (submitted)="send($event)" (stopped)="chat.stop()" />
       <p class="composer-footnote">Your personal Agent · private to you</p>
     </div>
   </main>
   @if (panel()) { <aside class="session-panel desktop-panel" aria-label="Session panel"><ng-container [ngTemplateOutlet]="panelContent" /></aside> }
-  <dialog class="panel-dialog" #panelDialog aria-label="Session panel"><button type="button" class="close-panel" (click)="panelDialog.close()" aria-label="Close session panel">×</button><ng-container [ngTemplateOutlet]="panelContent" /></dialog>
-  <ng-template #panelContent>
-    <header class="panel-header"><span class="scope" aria-label="Personal scope">▱<br>▱<br>▱<br><b>▬</b></span> personal <span>Session</span></header>
-    <section class="panel-section"><h2>Files <span>({{ files().length }})</span></h2><p class="folder">▰ workspace</p>@for (file of files(); track file) { <button type="button" class="panel-file" (click)="preview.set(file)"><span class="file-type">{{ type(file) }}</span><span>{{ name(file) }}<small>Agent · this session</small></span></button> } @if (!files().length) { <p>Files created in this session will appear here.</p> }</section>
-    <section class="panel-section"><h2>Decisions <span>(0)</span></h2><p>No decisions yet.</p></section>
-    <section class="panel-section"><h2>People <span>(1)</span></h2><div class="person"><span class="avatar">Y</span><span>You<small>Only participant</small></span></div><div class="person"><span class="avatar agent">△</span><span>Your agent<small>Personal assistant</small></span></div></section>
+  <dialog class="panel-dialog" #panelDialog aria-label="Session panel"><ng-container [ngTemplateOutlet]="panelContent" [ngTemplateOutletContext]="{ mobile: true }" /></dialog>
+  <ng-template #panelContent let-mobile="mobile">
+    <header class="panel-header"><strong>Session</strong><span class="panel-scope"><span class="scope" aria-hidden="true">▱<br>▱<br>▱<br><b>▬</b></span> personal</span>@if (mobile) { <button type="button" class="close-panel" (click)="panelDialog.close()" aria-label="Close session panel"><oc-icon name="close" /></button> }</header>
+    <div class="panel-tabs" role="tablist" aria-label="Session views"><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'" (click)="panelTab.set('files')">Files<small>{{ files().length }}</small></button><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'activity'" (click)="panelTab.set('activity')">Activity<small>{{ activity().length }}</small></button></div>
+    @if (panelTab() === 'files') {
+      <section class="panel-section" role="tabpanel" aria-label="Files">
+        @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
+        @for (file of files(); track file) { <button type="button" class="panel-file created dogear" (click)="preview.set(file)"><span class="file-type">{{ type(file) }}</span><span class="file-name">{{ name(file) }}</span><small>saved</small></button> }
+        @if (!files().length) { <p>Files created in this session will appear here.</p> }
+      </section>
+      <section class="panel-section"><h2>Decisions · 0</h2><p>No decisions yet.</p></section>
+      <section class="panel-section"><h2>People · 1</h2><div class="person"><span class="avatar user">{{ initials() }}</span><span>{{ chat.displayName() }}</span><small>Personal</small></div></section>
+      <footer class="panel-footnote">Saved files remain in the transcript after retries and session close.</footer>
+    } @else {
+      <section class="panel-section" role="tabpanel" aria-label="Activity">
+        @for (tool of activity(); track tool.id) { <button type="button" class="activity-row" (click)="jumpToTool(tool.id)"><time>{{ time(tool.time) }}</time><span>{{ tool.label }}<small>{{ tool.detail }}</small></span><oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'" [name]="tool.failed ? 'failed' : 'done'" /></button> }
+        @if (!activity().length) { <p>No activity yet.</p> }
+      </section>
+      <footer class="panel-footnote">An index of the transcript, not a copy — every row jumps to its message.</footer>
+    }
   </ng-template>
   <dialog class="search-dialog" #searchDialog aria-label="Find a session"><form method="dialog"><button type="submit" aria-label="Close session search">×</button></form><label for="session-search">Find a session</label><input id="session-search" type="search" placeholder="Session id" (input)="searchChanged($event)">@for (conversation of chat.conversations(); track conversation.conversationId) { @if (conversation.conversationId.includes(search())) { <button type="button" (click)="select(conversation.conversationId)"># session-{{ conversation.conversationId.slice(0, 8) }}</button> } }</dialog>
   @if (preview()) { <oc-file-preview [path]="preview()" [conversationId]="chat.selected()" (closed)="preview.set('')" /> }

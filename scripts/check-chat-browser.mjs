@@ -12,7 +12,7 @@ const output = resolve('docs/design/chat/comparison');
 let web, exited, origin = process.env['CHAT_BASE_URL'];
 if (!origin) {
   let logs = '';
-  web = spawn(process.execPath, ['--experimental-strip-types', '--import', resolve('apps/server/test/support/ephemeral-ports.ts'), resolve('node_modules/@angular/cli/bin/ng.js'), 'serve', '--host', '127.0.0.1', '--port', '0'],
+  web = spawn(process.execPath, ['--experimental-strip-types', '--import', resolve('apps/server/test/support/ephemeral-ports.ts'), resolve('node_modules/@angular/cli/bin/ng.js'), 'serve', '--prebundle=false', '--live-reload=false', '--hmr=false', '--host', '127.0.0.1', '--port', '0'],
     { cwd: resolve('apps/web'), stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } });
   exited = once(web, 'exit');
   web.stdout.on('data', chunk => { logs += chunk.toString(); }); web.stderr.on('data', chunk => { logs += chunk.toString(); });
@@ -33,11 +33,76 @@ const stable = async page => {
 };
 async function open(scenario, width = 390) {
   const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: 'reduce' });
+  if (scenario === 'rail-offline') await page.clock.install();
   const fixture = await chatFixture(page, scenario);
-  await page.goto(`${origin}/workspace${['draft', 'attach', 'no-agent', 'queued'].includes(scenario) ? '' : '?conversation=chat'}`);
-  await stable(page); return { page, fixture };
+  await page.goto(`${origin}/workspace${['draft', 'attach', 'no-agent', 'queued', 'rail-offline', 'rail-loading'].includes(scenario) ? '' : '?conversation=chat'}`);
+  if (scenario === 'rail-loading') { await page.locator('.rail-card').waitFor({ state: 'attached' }); await page.evaluate(() => globalThis.document.fonts.ready); }
+  else await stable(page); return { page, fixture };
 }
 try {
+  // Regression: constrain each column and its controls, even with an unbroken first message.
+  const long = await open('long-title');
+  for (const selector of ['.workspace-header', '.transcript', '.composer-dock', '#panel-toggle', '.send']) {
+    const bounds = await long.page.locator(selector).boundingBox();
+    assert(bounds.x >= 0 && bounds.x + bounds.width <= 390, `${selector} remains inside the phone: ${JSON.stringify(bounds)}`);
+  }
+  for (const selector of ['.main', '.workspace-header', '.transcript', '.composer-dock']) {
+    assert(await long.page.locator(selector).evaluate(node => node.scrollWidth <= node.clientWidth), `${selector} contains its overflow`);
+  }
+  await long.page.close();
+  // Regression: leaving a pending history read must give the draft a usable composer.
+  const racing = await open('live', 1280);
+  assert.equal(await racing.page.locator('.current-user strong').innerText(), 'Jente Roels');
+  let releaseHistory;
+  const historyStarted = new Promise(resolve => {
+    racing.page.route('**/api/conversations/research/messages?*', async route => {
+      resolve();
+      await new Promise(release => { releaseHistory = release; });
+      await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ rows: [], position: 0, generation: 1, computerState: 'ready' }) });
+    });
+  });
+  await racing.page.getByRole('button', { name: /county-rollout/ }).click();
+  await historyStarted;
+  await racing.page.getByRole('button', { name: /New session/ }).click();
+  await racing.page.waitForFunction(() => !globalThis.document.querySelector('textarea').disabled, undefined, { timeout: 5000 });
+  assert.equal(await racing.page.getByRole('textbox', { name: 'Message your agent' }).isEnabled(), true, 'Draft composer is enabled before old history returns');
+  await racing.page.getByRole('textbox', { name: 'Message your agent' }).fill('Send from the new draft');
+  await racing.page.getByRole('button', { name: 'Send message' }).click();
+  await racing.page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: 'Send from the new draft' }).waitFor();
+  const oldHistory = racing.page.waitForResponse('**/api/conversations/research/messages?*');
+  releaseHistory(); await (await oldHistory).finished(); await stable(racing.page);
+  assert((await racing.page.locator('.transcript').innerText()).includes('Send from the new draft'));
+  await racing.page.close();
+  const unreachable = await open('rail-offline', 1280);
+  await unreachable.page.getByText("Can't reach your pod", { exact: true }).waitFor({ timeout: 3000 });
+  const countdown = await unreachable.page.locator('.retry-countdown').innerText();
+  await unreachable.page.clock.runFor(1000);
+  assert.notEqual(await unreachable.page.locator('.retry-countdown').innerText(), countdown);
+  unreachable.fixture.online();
+  await unreachable.page.getByRole('button', { name: 'Retry now' }).click();
+  await unreachable.page.locator('.session-row').first().waitFor();
+  await unreachable.page.close();
+  const draft = await open('draft');
+  await draft.page.getByRole('button', { name: 'Remove agent recipient' }).click({ timeout: 3000 });
+  await draft.page.locator('#composer-reason').waitFor();
+  assert.equal(await draft.page.getByRole('textbox', { name: 'Message your agent' }).isVisible(), false);
+  await draft.page.getByRole('button', { name: 'Add your agent' }).click();
+  await draft.page.getByRole('textbox', { name: 'Message your agent' }).fill('Draft recipient restored');
+  await draft.page.getByRole('button', { name: 'Send message' }).click();
+  await draft.page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: 'Draft recipient restored' }).waitFor();
+  await draft.page.close();
+  console.log('PASS draft recipient selection');
+  const activity = await open('tools', 1280);
+  await activity.page.locator('.tool-line summary').first().click();
+  assert(!(await activity.page.locator('.tool-line').first().innerText()).includes('a'.repeat(64)), 'Failure drawer never exposes a raw digest');
+  await activity.page.getByRole('tab', { name: /Activity/ }).click();
+  await activity.page.locator('.desktop-panel .activity-row').first().waitFor();
+  assert.equal(await activity.page.locator('.desktop-panel .activity-row').count(), 2);
+  await activity.page.locator('.desktop-panel .activity-row').first().click();
+  assert.equal(await activity.page.locator('.tool-line').first().getAttribute('open'), '');
+  activity.fixture.add('agent.turn_failed', { turnId: 'event-2', reason: 'provider failed' });
+  await activity.page.locator('.desktop-panel .activity-row').filter({ hasText: 'Reply failed' }).waitFor();
+  await activity.page.close();
   // Keyboard, streaming, Stop and replay all cross the rendered UI and the wire protocol.
   for (const width of [1280, 390]) {
     const { page, fixture } = await open('streaming', width);
@@ -48,7 +113,7 @@ try {
     assert.equal(ring.width, '2px'); assert.equal(ring.colour, 'rgb(10, 132, 151)');
     await page.getByRole('region', { name: 'Conversation messages' }).focus();
     assert.equal(await page.locator(':focus').getAttribute('aria-label'), 'Conversation messages');
-    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
     await page.getByText('Stopped · partial reply kept', { exact: false }).waitFor();
     fixture.add('agent.message_completed', { turnId: 'event-2', messageId: 'reply', text: 'SHOULD NOT REPLACE PARTIAL' });
     await page.reload(); await stable(page);
@@ -57,7 +122,7 @@ try {
     assert.equal(await page.locator('.progress').getAttribute('aria-live'), 'polite');
     assert.equal(await page.locator('[aria-label="Participants"]').count(), 0);
     await page.keyboard.press('Control+n'); await stable(page);
-    await page.getByRole('heading', { name: 'What shall we work on?' }).waitFor();
+    await page.getByText('Draft', { exact: true }).waitFor();
     await composer.fill('Keyboard'); await stable(page); await page.keyboard.press('Shift+Enter'); await stable(page); await page.keyboard.type('message'); await stable(page); assert.equal(await composer.inputValue(), 'Keyboard\nmessage'); await page.keyboard.press('Enter');
     await page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: 'Keyboard' }).waitFor();
     assert(fixture.commands.some(command => command.text === 'Keyboard\nmessage'));
@@ -76,6 +141,7 @@ try {
     await page.close();
   }
   const rail = await open('streaming', 1280);
+  assert.equal(await rail.page.locator('h1').innerText(), 'pull-the-q3-board');
   rail.fixture.add('agent.turn_completed', { turnId: 'event-2' });
   await rail.page.locator('.session-row.active').filter({ hasText: 'Done' }).waitFor();
   await rail.page.getByRole('button', { name: /county-rollout/ }).click();
@@ -99,22 +165,44 @@ try {
   await waking.page.emulateMedia({ reducedMotion: 'reduce' });
   assert.equal(await waking.page.locator('.caret').evaluate(node => globalThis.getComputedStyle(node).animationName), 'none');
   await waking.page.close();
-  const frames = [ ['workspace-live', 'live'], ['7h', 'live'], ['8b', 'live'], ['8c', 'streaming'], ['8d', 'queued'], ['8e', 'assets'], ['8f', 'tools'], ['8h', 'a2ui'], ['8i', 'panel'], ['8j', 'compact'], ['12a', 'draft'], ['12b', 'draft'], ['1j', 'attach'], ['8c-fold', 'folding'], ['8d-disabled', 'closed'] ];
+  const frames = [ ['workspace-live', 'live'], ['7h', 'live'], ['8b', 'live'], ['8c', 'streaming'], ['8d', 'queued'], ['8e', 'assets'], ['8f', 'tools'], ['8h', 'a2ui'], ['8i', 'panel'], ['8j', 'compact'], ['12a', 'draft'], ['12b', 'no-agent'], ['1j', 'attach'], ['8c-fold', 'folding'], ['8d-disabled', 'closed'], ['8b-empty', 'draft'], ['8b-loading', 'rail-loading'], ['8b-offline', 'rail-offline'], ['8b-no-agent', 'no-agent'], ['8i-activity', 'tools'] ];
   if (capture) await mkdir(output, { recursive: true });
   const comparisons = [];
   for (const [frame, scenario] of frames) {
     const source = (await readdir('docs/design/chat/wireframes')).find(name => name.includes(`-${frame.split('-')[0]}-`));
     for (const width of [1280, 390]) {
       const { page } = await open(scenario, width);
+      if (frame.startsWith('8b-') && width === 390) await page.getByRole('button', { name: 'Open session navigation' }).click();
+      if (frame === '8i-activity') { if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click(); await page.getByRole('tab', { name: /Activity/ }).click(); }
       if (scenario === 'attach') await page.getByRole('button', { name: 'Attach', exact: true }).click();
       if (scenario === 'queued') { await page.getByRole('textbox', { name: 'Message your agent' }).fill('Compare this brief against what we promised.'); await page.getByRole('button', { name: 'Send message' }).click(); await page.getByRole('button', { name: 'Retry queued message' }).waitFor(); }
       if (scenario === 'panel' && width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-      if (scenario === 'tools') await page.locator('.tool-line summary').first().click();
-      if (scenario === 'assets') { await page.locator('.file-card').click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
+      if (scenario === 'tools' && frame !== '8i-activity') await page.locator('.tool-line summary').first().click();
+      if (scenario === 'assets') { await page.locator('.file-card').getByRole('button', { name: 'Open', exact: true }).click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
+      await page.evaluate(() => new Promise(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))));
+      for (const selector of ['.workspace-header', '.transcript', '.composer-dock']) {
+        const box = await page.locator(selector).boundingBox();
+        assert(box.x >= 0 && box.x + box.width <= width, `${frame} ${selector} stays in the column`);
+      }
+      if (width === 390) {
+        const header = await page.locator('.workspace-header').boundingBox(), transcript = await page.locator('.transcript').boundingBox(), dock = await page.locator('.composer-dock').boundingBox();
+        assert(transcript.y >= header.y + header.height && transcript.y + transcript.height <= dock.y + 1, 'Transcript stays between header and dock');
+        for (const target of await page.locator('button:visible, summary:visible, textarea:visible').all()) {
+          if (await target.evaluate(node => node.classList.contains('citation'))) {
+            assert(await target.evaluate(node => { const hit = globalThis.getComputedStyle(node, '::before'); return hit.width === '44px' && hit.height === '44px'; }), 'Citation has a 44px invisible target');
+          } else {
+            const box = await target.boundingBox(); assert(box.width >= 44 && box.height >= 44, `${frame} target is 44px: ${await target.getAttribute('aria-label') || await target.innerText()}`);
+          }
+        }
+      }
+      if (scenario === 'attach') {
+        const menu = await page.locator('.attach-menu').boundingBox(), card = await page.locator('.composer').boundingBox();
+        assert(menu.y + menu.height <= card.y - 8 && Math.abs(menu.x - card.x) <= 1, 'Attach menu sits above and aligns with the composer');
+      }
       assert(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth), `${frame} ${width} fits`);
       if (capture) {
         await page.screenshot({ path: `${output}/${frame}-${width}.jpg`, type: 'jpeg', quality: 82 });
-        comparisons.push(`<section><h2>${frame} · ${width}px</h2><div class="pair"><figure><figcaption>Owner reference</figcaption><img src="${source ? '../wireframes/' + source : 'reference-live.png'}" alt="${frame} owner design"></figure><figure><figcaption>Built · protocol fixture</figcaption><img src="${frame}-${width}.jpg" alt="Built ${frame} at ${width}px"></figure></div></section>`);
+        comparisons.push(`<section><h2>${frame} · ${width}px</h2><div class="pair"><figure><figcaption>Owner reference</figcaption><img src="${source ? '../wireframes/' + source : 'reference-live.png'}" alt="${frame} owner design"></figure><figure><figcaption>Built · protocol fixture${frame === '1j' ? ' · Connectors deferred; no scoped connector API.' : ''}</figcaption><img src="${frame}-${width}.jpg" alt="Built ${frame} at ${width}px"></figure></div></section>`);
       }
       await page.close();
     }

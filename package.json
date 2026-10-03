@@ -26,7 +26,8 @@
     "provision": "node --experimental-strip-types libs/handlers/src/provision.ts",
     "visual:signin": "node scripts/capture-signin.mjs",
     "lint:fixtures": "python3 infra/odoo/boundary.py",
-    "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture"
+    "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture",
+    "test:chat:production": "NO_COLOR=1 node scripts/check-chat-production.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
