@@ -1,0 +1,7 @@
+**
+!apps/
+!apps/computer/
+!apps/computer/collect-licences.py
+!infra/
+!infra/odoo/
+!infra/odoo/Dockerfile

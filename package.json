@@ -11,7 +11,7 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links",
+    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures",
     "typecheck": "npm run typecheck --workspaces",
     "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
@@ -24,7 +24,8 @@
     "lint:docs": "markdownlint-cli2",
     "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'",
     "provision": "node --experimental-strip-types libs/handlers/src/provision.ts",
-    "visual:signin": "node scripts/capture-signin.mjs"
+    "visual:signin": "node scripts/capture-signin.mjs",
+    "lint:fixtures": "python3 infra/odoo/boundary.py"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
