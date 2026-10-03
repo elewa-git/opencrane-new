@@ -39,3 +39,11 @@ export const integrationsRefusalSchema = z.object({
 export type SharedStateKind = z.infer<typeof sharedStateKindSchema>;
 export type IntegrationRow = z.infer<typeof integrationRowSchema>;
 export type IntegrationsResponse = z.infer<typeof integrationsResponseSchema>;
+
+export const toolPolicySchema = z.object({
+  connectionId: z.string().nullable(), accountMode: z.enum(['none', 'personal', 'company']).nullable(),
+  published: z.boolean(), sequence: z.int().nonnegative(),
+  tools: z.array(z.object({ name: z.string(), revision: z.string(), reviewed: z.boolean(),
+    readOnly: z.boolean(), mode: z.enum(['allow', 'ask', 'block']), suggestion: z.enum(['allow', 'ask']) })),
+});
+export type ToolPolicy = z.infer<typeof toolPolicySchema>;

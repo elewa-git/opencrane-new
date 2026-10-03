@@ -202,6 +202,14 @@ The decision process only reads the public keys. The dev stack always sets
 `MODEL_UPSTREAM=127.0.0.1:43003` and uses a disposable placeholder key; it neither
 loads `.keys/.openai-key` nor calls OpenAI.
 
+Every `up.sh`, including `--fresh`, runs the idempotent model grant migration
+with the command connection and silo id before decision services start. A
+repeat startup stops the server, dispatcher and model services first to keep
+event writers out of the migration. The journey checks existing model grant
+history and waits for new member/assistant grants in OpenFGA before chat.
+Older silos still need the controlled OpenFGA and dispatcher subscription
+upgrade described in the [ops instructions](../../apps/ops/README.md#model-grant-upgrade).
+
 The joined member's Ready computer receives a lifecycle turn credential. The
 journey installs it over the private control socket, then runs as the Codex UID
 through the authenticated local proxy, k3d relay, model gateway and decision.

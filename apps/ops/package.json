@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node --experimental-strip-types src/replay.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "worker": "node --experimental-strip-types src/worker.ts"
+    "worker": "node --experimental-strip-types src/worker.ts",
+    "migrate:model-grants": "node --experimental-strip-types src/migrate-model-grants.ts"
   },
   "dependencies": {
     "@opencrane/auth": "0.1.0",

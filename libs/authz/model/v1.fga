@@ -5,7 +5,7 @@ type person
 
 type assistant
   relations
-    define acts_for: [person]
+    define acts_for: [person, team#member]
 
 type silo
   relations
@@ -27,3 +27,12 @@ type conversation
     define participant: [person]
     define read: participant and member from silo
     define post: read
+
+# Explicit resource grants never follow from installation or ownership.
+type resource
+  relations
+    define use: [person, assistant, team#member]
+
+type team
+  relations
+    define member: [person]

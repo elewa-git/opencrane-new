@@ -64,7 +64,7 @@ const secretRefSchema = z
 
 // An MCP server is registered as a URL or as an image (plan.md, "Installing
 // an MCP server"), and `locator` means something different for each, so the
-// two are separate shapes keyed on `kind`. Neither may hold a credential: that
+// two are separate shapes keyed on `kind`. Neither may hold a accountMode: that
 // goes in the secret store, referenced later by a connection's `secretRef`.
 //
 // A remote locator is a plain http(s) URL: a scheme other than http or https
@@ -165,7 +165,8 @@ export const assistantSettingsChangedDataSchema = z
   .object({
     assistantId: id,
     changedBy: id,
-    changedFields: z.array(z.enum(['model', 'persona', 'tools'])).min(1),
+    active: z.boolean().optional(),
+    changedFields: z.array(z.enum(['model', 'persona', 'tools', 'active'])).min(1),
   })
   .strict();
 
@@ -352,6 +353,10 @@ export const mcpServerDiscoveredDataSchema = z
     toolCount: z.int().nonnegative(),
     schemaDigest: digestSchema,
     serverInfo: z.object({ name: id, version: id }).strict().optional(),
+    connectionId: id.optional(),
+    accountMode: z.enum(['none', 'personal', 'company']).optional(),
+    tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),
+      readOnly: z.boolean().optional(), destructive: z.boolean().optional() }).strict()).max(500).optional(),
   })
   .strict();
 
@@ -360,7 +365,7 @@ export const mcpServerRejectedDataSchema = z
   .strict();
 
 export const mcpToolModeSetDataSchema = z
-  .object({ serverId: id, toolName: id, mode: z.enum(['allow', 'ask', 'block']), setBy: id })
+  .object({ serverId: id, toolName: id, connectionId: id.optional(), toolRevision: digestSchema.optional(), mode: z.enum(['allow', 'ask', 'block']), setBy: id })
   .strict();
 
 export const mcpServerPublishedDataSchema = z
@@ -425,12 +430,13 @@ export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
 export const budgetReservedDataSchema = z
   .object({ reservationId: id, permitId: id, amountCents: centsSchema, payingGroupId: id, assistantId: id,
     modelCall: z.object({ model: id, priceTableId: id, computerId: id, assistantId: id, requesterId: id, conversationId: id,
-      turnId: id, threadId: id, contextDigest: digestSchema }).strict().optional() })
+      turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema }).strict().optional() })
   .strict();
 
 export const budgetSettledDataSchema = z
-  .object({ reservationId: id, permitId: id, settledCents: centsSchema })
-  .strict();
+  .object({ reservationId: id, permitId: id, settledCents: centsSchema, outcome: z.literal('not_dispatched').optional() })
+  .strict()
+  .refine(data => data.outcome !== 'not_dispatched' || data.settledCents === 0, 'Undispatched calls have no cost');
 
 export const budgetPeriodStartedDataSchema = z
   .object({ periodStart: z.iso.datetime({ offset: true }) })
@@ -511,6 +517,14 @@ export const securityAlertRaisedDataSchema = z
 
 // Server-owned admission and suspend fence; reports never carry this authority.
 export const computerTurnStartedDataSchema = z.object({
-  assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id, requesterId: id, task: z.literal('chat_turn'),
+  assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id, requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
 }).strict();
 export const computerTurnClosedDataSchema = computerTurnStartedDataSchema.extend({ threadId: id.optional(), status: z.enum(['completed', 'failed']) });
+
+// Admission is separate from the later observed outcome. Unverified callers have no asserted identity.
+export const decisionRecordedDataSchema = z.object({
+  requestId: id, requesterId: id.optional(), assistantId: id.optional(),
+  conversationId: id.optional(), turnId: id.optional(), permitId: id.optional(),
+  route: z.enum(['model', 'mcp', 'egress']), outcome: z.enum(['allow', 'ask', 'deny']),
+  reason: reasonCodeSchema, contextDigest: digestSchema,
+}).strict();

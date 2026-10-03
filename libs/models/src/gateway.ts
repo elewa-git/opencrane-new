@@ -11,7 +11,25 @@ function logNumber(line: string, field: string): number | undefined {
   const value = new RegExp(`\\b${field}=(\\d+)`, 'u').exec(line)?.[1];
   return value === undefined ? undefined : Number(value);
 }
-function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string) {
+interface McpRoute { serverId: string; connectionId: string; upstream: string }
+function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
+  const segment = z.string().regex(/^[\w-]{1,200}$/u);
+  segment.parse(route.serverId); segment.parse(route.connectionId);
+  const path = `/mcp/${route.serverId}/${route.connectionId}`;
+  return { name: `mcp-${route.serverId}-${route.connectionId}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
+    policies: {
+      retry: { attempts: 1, codes: [] },
+      jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
+        location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
+      extAuthz: { host: new URL(decisionUrl).host,
+        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-tool-name'],
+        includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
+        protocol: { http: { path: JSON.stringify(`/authorize${path}`), includeResponseHeaders: ['x-request-id'] } },
+        failureMode: { denyWithStatus: 503 } },
+      transformations: { request: { replace: '{"content-type":"application/json", "accept":"application/json", "mcp-protocol-version":request.headers["mcp-protocol-version"], "mcp-method":request.headers["mcp-method"], "mcp-tool-name":request.headers["mcp-tool-name"], "x-request-id":request.headers["x-request-id"]}' } },
+    }, backends: [{ host: route.upstream }] };
+}
+function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string, mcpRoutes: McpRoute[] = []) {
   const decision = new URL(decisionUrl);
   return {
     config: { adminAddr: 'off', statsAddr: 'off', readinessAddr: `127.0.0.1:${readinessPort}` },
@@ -20,16 +38,16 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
       inputTokens: 'llm.inputTokens', outputTokens: 'llm.outputTokens',
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
       cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)' } } },
-    routes: [{ name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
+    routes: [...mcpRoutes.map(route => mcpRoute(route, decisionUrl, issuer)), { name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
       policies: {
         retry: { attempts: 1, codes: [] },
         jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
           location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
         extAuthz: { host: decision.host, includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id'],
           includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
-          protocol: { http: { path: '"/authorize"', includeResponseHeaders: ['x-reservation-id'],
+          protocol: { http: { path: '"/authorize"', includeResponseHeaders: ['x-reservation-id', 'x-request-id'],
             metadata: { reservationId: 'response.headers["x-reservation-id"]' } } }, failureMode: { denyWithStatus: 503 } },
-        transformations: { request: { replace: '{"content-type":"application/json", "accept":"text/event-stream"}' } },
+        transformations: { request: { replace: '{"content-type":"application/json", "accept":"text/event-stream", "x-request-id":request.headers["x-request-id"]}' } },
       }, backends: [{ ai: { name: 'openai', provider: { openAI: {} }, ...(upstream ? { hostOverride: upstream } : {}) },
         policies: { backendAuth: { key: { file: keyFile } }, ai: { routes: { '/v1/responses': 'responses' }, overrides: { service_tier: 'default' } } } }],
     }],
@@ -54,11 +72,11 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
   }
 }
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
-  port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string }) {
+  port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string; mcpRoutes?: McpRoute[] }) {
   const expected = process.platform === 'linux' ? 'daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b'
     : 'da432d35bd696da0564f7b2b6bbc783542b6b9c616d6c0c4d4c3daef9dfa11a1';
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
-  await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream)), { mode: 0o600 });
+  await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream, options.mcpRoutes)), { mode: 0o600 });
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });

@@ -14,7 +14,9 @@
   </nav>
 
   <main>
-    @if (statesPage) {
+    @if (toolServer) {
+      <oc-tool-policy [serverId]="toolServer" />
+    } @else if (statesPage) {
       <div class="page-heading"><div><h1>Shared state vocabulary</h1><p>Every state uses a glyph and words, never colour alone.</p></div></div>
       <div class="state-table" role="table" aria-label="Shared state vocabulary">
         <div class="state-header" role="row"><span>State</span><span>How it reads</span><span>What the person needs</span><span>Interaction</span></div>
@@ -73,7 +75,7 @@
               <div class="register-row" role="row">
                 <div class="server"><span class="tile">{{ row.name.slice(0, 2).toUpperCase() }}</span><span><strong>{{ row.name }}</strong><small>{{ row.source.label }} · {{ row.version }} · {{ row.source.detail }}</small></span></div>
                 <span class="account" data-label="Account">{{ row.accountModel }}</span>
-                <span class="tools" data-label="Tools">{{ tools(row) }}</span>
+                <span class="tools" data-label="Tools">{{ tools(row) }} <a [href]="'/org/integrations/' + row.serverId + '/tools'" [attr.aria-label]="'Manage tools for ' + row.name">Manage tools</a></span>
                 <oc-shared-state [kind]="row.status.kind" [message]="row.status.label" [detail]="row.status.detail" [safeToRetry]="row.status.safeToRetry ?? false" />
               </div>
             }

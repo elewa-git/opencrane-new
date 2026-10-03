@@ -1,5 +1,5 @@
 import { Pool as PgPool, type Pool } from "pg";
-import { memberStateSchema } from "@opencrane/protocol";
+import { toolPolicySchema, memberStateSchema } from "@opencrane/protocol";
 import type { Db } from "./db.ts";
 import { mapMcpCatalogueRows, type McpCatalogueRow } from './mcp-catalogue.ts';
 import { mapComputerRows, type ComputerDbRow } from './computers.ts';
@@ -161,6 +161,10 @@ export function connectMcpCatalogue(connectionString: string) {
   const pool = new PgPool({ connectionString, connectionTimeoutMillis: 1000, query_timeout: 1000 });
   pool.on('error', () => undefined);
   return {
+    async tools(silo: string, serverId: string) {
+      const result = await pool.query<{ policy: unknown }>('SELECT policy FROM mcp_catalogue WHERE silo = $1 AND server_id = $2', [silo, serverId]);
+      return toolPolicySchema.parse(result.rows[0]?.policy);
+    },
     async rows(silo: string) {
       const result = await pool.query<McpCatalogueRow>(`SELECT c.*,
         ARRAY_REMOVE(ARRAY_AGG(m.mode), NULL) AS modes

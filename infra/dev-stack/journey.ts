@@ -10,7 +10,8 @@ import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
-import { connectProjectionDb } from '@opencrane/projections';
+import { connectProjectionDb, readEvents } from '@opencrane/projections';
+import { models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { browserChatJourney } from './browser-chat.ts';
 import { chatJourney } from './chat-journey.ts';
@@ -83,7 +84,32 @@ async function computerEvents(assistantId: string) {
   for await (const stored of events.store.readStream(`computer-${assistantId}`)) result.push(stored.event);
   return result;
 }
+async function modelGrantsRecorded() {
+  const grantees = new Map<string, string>();
+  const grants = new Set<string>();
+  const head = await events.store.head();
+  if (head) for await (const { event } of readEvents(events.store, 1, head)) {
+    assert.equal(event.silo, silo);
+    const data = event.data as Record<string, unknown>;
+    if (event.type === 'member.joined' || event.type === 'assistant.created') {
+      const grantee = data[event.type === 'member.joined' ? 'memberId' : 'assistantId'];
+      assert(typeof grantee === 'string');
+      grantees.set(event.subject, grantee);
+    }
+    if (event.type === 'member.removed') grantees.delete(event.subject);
+    // An explicit revocation also counts: migration must preserve that decision.
+    if (data['resourceType'] === 'model' && ['grant.given', 'grant.revoked'].includes(event.type)) {
+      grants.add(JSON.stringify([data['resourceId'], data['granteeId']]));
+    }
+  }
+  for (const grantee of grantees.values()) for (const model of models.filter(model => !model.retired)) {
+    if (!grants.has(JSON.stringify([model.id, grantee]))) return false;
+  }
+  return true;
+}
 try {
+  await until(modelGrantsRecorded, 'model grant history for existing members/assistants');
+  console.log('PASS existing members/assistants have model grant history, including explicit revocations');
   assert.equal((await fetch(`${server}/api/org/integrations`)).status, 401);
   if (process.env['DEV_STACK_OFFLINE_FALLBACK'] === '1') {
     let unreachable = false;
@@ -126,11 +152,15 @@ try {
     return Boolean(computer);
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
+  const namespace = `opencrane-${silo}`;
+  await until(async () => (await Promise.all(models.filter(model => !model.retired).flatMap(model => [
+    authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
+  ]))).every(result => result.allowed), 'new member and assistant model grants');
+  console.log('PASS new member and assistant model grants reach OpenFGA before chat');
   if (browser) for (const page of browser.memberPages) {
     try { await browserChatJourney(page, origin); }
     catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
   }
-  const namespace = `opencrane-${silo}`;
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();

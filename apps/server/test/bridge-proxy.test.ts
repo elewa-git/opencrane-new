@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { tokenIssuer, computerCredentials } from '@opencrane/auth';
-import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { openfga } from '@opencrane/authz/testing';
 import { BudgetActor, startDecision, history, envelope } from '@opencrane/models';
 import { proxy } from '../../computer/src/proxy.ts';
@@ -27,7 +27,12 @@ it('passes the actual proxy thread to admission even when a grant is installed w
   ] as const) {
     const event = { ...envelope('test', subject, type, data), source: 'opencrane-server' };
     expect((await nats.store.append({ event, expectedSequence: (await history(nats.store, subject, 'test')).at(-1)?.sequence ?? 0 })).status).toBe('appended');
-    if (type === 'member.joined') await memberAuthorisation(binding).handler.handle(event, { query: () => Promise.resolve({ rows: [] }) });
+    if (['member.joined', 'assistant.created', 'conversation.created'].includes(type)) await memberAuthorisation(binding).handler.handle(event, { query: () => Promise.resolve({ rows: [] }) });
+  }
+  for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
+    const event = envelope('test', grantStream('model', 'gpt-6.1-sol'), 'grant.given', { resourceType: 'model', resourceId: 'gpt-6.1-sol', granteeId, granteeKind, grantedBy: 'alice' });
+    expect((await nats.store.append({ event, expectedSequence: (await history(nats.store, event.subject, 'test')).at(-1)?.sequence ?? 0 })).status).toBe('appended');
+    await memberAuthorisation(binding).handler.handle(event, { query: () => Promise.resolve({ rows: [] }) });
   }
   const actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000);
   const decision = await startDecision(actor, { jwks: tokens.jwks, issuer }, binding);

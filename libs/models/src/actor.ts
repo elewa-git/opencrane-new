@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import { effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
@@ -23,7 +23,6 @@ export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
   private queue = Promise.resolve();
-  private auditQueue = Promise.resolve();
   private failed = false;
   private exhaustedDay: string | undefined;
   readonly store: EventStore;
@@ -60,7 +59,7 @@ export class BudgetActor {
       this.exhaustedDay = event.type === 'budget.exhausted' ? event.time.slice(0, 10) : undefined;
     }
   }
-  reserve(call: ModelCall, amountCents: number) {
+  reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>) {
     return this.serial(async () => {
       z.int().positive().parse(amountCents);
       const t = totals(this.state, this.now());
@@ -69,10 +68,19 @@ export class BudgetActor {
         if (this.exhaustedDay !== this.now().toISOString().slice(0, 10)) await this.append('budget.exhausted', { scope: 'global' });
         throw new Error('Silo spending cap reached; wait for the next budget period');
       }
+      await fresh?.();
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
-        payingGroupId: this.silo, assistantId: call.assistantId, modelCall: call });
+        payingGroupId: call.payingGroupId ?? this.silo, assistantId: call.assistantId, modelCall: call });
       return id;
+    });
+  }
+  releaseUndispatched(id: string) {
+    return this.serial(async () => {
+      const r = this.state.reservations.find(r => r.id === id);
+      if (!r) throw new Error('Unmatched reservation');
+      if (r.settledCents !== undefined) throw new Error('Reservation already settled');
+      await this.append('budget.settled', { reservationId: id, permitId: id, settledCents: 0, outcome: 'not_dispatched' });
     });
   }
   settle(event: EventEnvelope) {
@@ -112,25 +120,6 @@ export class BudgetActor {
     for (const r of this.state.reservations) {
       if (r.settledCents === undefined && this.now().getTime() - Date.parse(r.time) > 180_000) await this.effect(r.id);
     }
-  }
-  refuse(context?: { requesterId: string; assistantId: string; claims: unknown }) {
-    const result = this.auditQueue.then(() => this.appendRefusal(context));
-    this.auditQueue = result.catch(() => undefined);
-    return result;
-  }
-  private async appendRefusal(context?: { requesterId: string; assistantId: string; claims: unknown }) {
-    const id = randomUUID();
-    const event = envelope(this.silo, `security-${this.silo}`, 'security.alert_raised', { alertId: id,
-      severity: 'low', reason: 'model_request_refused', decision: { outcome: 'deny',
-        ...(context ? { requesterId: context.requesterId, assistantId: context.assistantId } : {}),
-        contextDigest: createHash('sha256').update(JSON.stringify(context?.claims ?? 'unverified')).digest('hex') } }, id);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const rows = await history(this.store, event.subject, this.silo);
-      const result = await this.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
-      if (result.status === 'appended') return;
-      if (result.status !== 'conflict') break;
-    }
-    throw new Error('Decision audit unavailable');
   }
   async settleRecorded(id: string, eventId: string) {
     const row = (await history(this.store, `effect-${id}`, this.silo)).find(row => row.event.id === eventId);

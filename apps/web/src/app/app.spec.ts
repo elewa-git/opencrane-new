@@ -118,7 +118,7 @@ describe('MCP register', () => {
   it('labels unsupported actions instead of rendering inert row controls', async () => {
     const fixture = create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
-    expect(root(fixture).textContent).not.toContain('Manage');
+    expect(root(fixture).querySelector<HTMLAnchorElement>('a[aria-label="Manage tools for Odoo"]')?.getAttribute('href')).toBe('/org/integrations/odoo/tools');
     expect(root(fixture).textContent).not.toContain('Set up again');
     button(root(fixture), 'Add MCP server').click();
     await fixture.whenStable();

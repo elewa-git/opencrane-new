@@ -22,6 +22,7 @@ export const handlerSubscriptions = {
     "grant.given",
     "grant.revoked",
   ],
+  "seed-model-grants": ["member.joined", "assistant.created"],
   "create-assistant": ["member.joined"],
   "claim-computer": ["assistant.created", "computer.lost"],
 } as const;

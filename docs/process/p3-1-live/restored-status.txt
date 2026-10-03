@@ -1,0 +1,22 @@
+members: running (4189345)
+mcp-catalogue: running (4189348)
+computers: running (4189353)
+conversations: running (4189359)
+budgets: running (4189365)
+model-stub: running (4189617)
+models: running (4189891)
+dispatcher: running (4189977)
+server: running (4190181)
+web: running (4190667)
+NAME                       IMAGE                                                                                                               COMMAND                  SERVICE    CREATED         STATUS                   PORTS
+opencrane-dev-minio-1      alpine/minio:RELEASE.2025-10-15T17-29-55Z@sha256:cf23643a6cf9ce159c57643ceb88279e431262282428c9e0bf3a7ef1a97e84b4   "minio server /data …"   minio      4 minutes ago   Up 4 minutes             127.0.0.1:49000->9000/tcp, 127.0.0.1:49001->9001/tcp
+opencrane-dev-nats-1       nats:2.15.0-alpine@sha256:ac8f88a6494bffc2c2a5289a0ca61cb28a9145c11ba5677cf24265d07f46d8d4                          "docker-entrypoint.s…"   nats       4 minutes ago   Up 4 minutes             6222/tcp, 8222/tcp, 127.0.0.1:44222->4222/tcp
+opencrane-dev-openfga-1    openfga/openfga:v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55                     "/openfga run --http…"   openfga    3 minutes ago   Up 3 minutes             127.0.0.1:48080->8080/tcp
+opencrane-dev-postgres-1   postgres:17@sha256:d74eeac9a635390a49bc21bd49fccd973de707e2a53a76ac49b552b8712ec46f                                 "docker-entrypoint.s…"   postgres   4 minutes ago   Up 4 minutes (healthy)   127.0.0.1:55433->5432/tcp
+
+healthy: http://127.0.0.1:48000/healthz
+healthy: http://127.0.0.1:48080/healthz
+healthy: http://127.0.0.1:49000/minio/health/live
+healthy: https://ocn-dev.tail00285e.ts.net/org/integrations
+https://ocn-dev.tail00285e.ts.net (tailnet only)
+|-- / proxy http://127.0.0.1:44200

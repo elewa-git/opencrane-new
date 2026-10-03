@@ -50,7 +50,7 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   fail closed. The caller supplies `stream: true` and `max_output_tokens` from
   16 (the [API minimum](https://developers.openai.com/api/reference/java/resources/beta/subresources/responses/methods/create))
   to 2,000. The gateway fixes the service tier to standard pricing.
-- IAM is Phase 2 personal-assistant ownership ∩ live OpenFGA membership.
+- IAM uses current requester ∩ assistant resource grants in live OpenFGA.
   The claimed computer generation, ready state, conversation and active turn
   are read from events on every call. JWTs are ES256, with strict expiry;
   turn claims include `thread` matching the actual Codex `session-id`, signed `conversation`, `requester`, `task` and allowed `model` and the current
@@ -60,7 +60,7 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   Both use `libs/auth` and the configured `TOKEN_ISSUER`; the gateway verifies
   the same public keys. Computer tokens include the claim generation, and
   only a matching Ready event permits model admission. Delegation
-  currently contains only the requester; group/delegated grants are deferred.
+  currently contains only the requester; multi-hop delegation is deferred.
 - Only reservation ids, token counts and a fixed error outcome survive the gateway log filter.
   Observations are appended as `effect.observed`; the existing handler runtime
   delivers `settle-budget` to the decision process. Its settlement endpoint
@@ -70,9 +70,8 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   missing outcomes produce `effect.uncertain` after three minutes and retain
   the full reservation. Unknown models or tariffs produce `effect.uncertain`
   with reason `unknown_tariff`, keep the reservation and allow later usage
-  lines to be processed. Cap refusals append only `budget.exhausted`, once per
-  unchanged budget per UTC day, including across actor recovery. Other refusals
-  before a budget command become `security.alert_raised` with a digest of the
+  lines to be processed. Cap refusals append `budget.exhausted` and a separate admission decision, once per
+  unchanged budget per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
 - `budgets` is a PostgreSQL projection using the existing runner. Rebuild it
   with `ProjectionRunner.rebuild(budgets)` while reactions are stopped.
@@ -119,3 +118,49 @@ selection, parallel calls and cache/client metadata. Native Sol text turns also
 carry strictly checked tool declarations (including namespaces and Lark custom
 tools), `all_turns` reasoning context and text verbosity. These fields do not relax
 the output limit or admit media, hosted tools or stored-history references.
+
+## Per-tool policy (P3-1)
+
+`readToolPolicy` folds the installed server stream; `setToolPolicy` checks live
+Owner/Admin plus current event membership and performs one conditional append.
+Discovery hints suggest choices, never grant access. Modes bind `connectionId`
+and `toolRevision`; changed discovery resets to Block. The existing catalogue
+projection replays the same fold. Org settings links each register row to its
+Tools & access screen, using the authenticated GET/POST
+`/api/org/integrations/:serverId/tools` interface with Origin checks on writes.
+
+`startGateway({ ..., mcpRoutes: [{ serverId, connectionId, upstream }] })` adds a
+fixed, operator-reviewed fixture route `/mcp/:serverId/:connectionId`. This is
+not an installer or arbitrary remote-URL interface. ext_authz accepts only bounded
+MCP `tools/call` for 2026-07-28 with matching method/tool/version headers and
+required `_meta` version and empty client capabilities. The route strips caller
+headers and never injects an invented credential. Only explicitly credential-free,
+non-metered reviewed fixtures can run until the credential/budget tickets land.
+Ask records `approval_required` without dispatch; approval creation/consumption
+belongs to P3-2. Lossless approval argument binding belongs there too.
+
+Model and MCP admission share `currentAuthority`: current member/role, team
+membership, assistant activity, conversation, explicit requester and assistant
+resource grants, lifecycle tokens and delegation. OpenFGA is queried at higher
+consistency on every call. Relevant event receipts must exist before a projection
+can authorise; lag denies. A two-second freshness budget starts when the decision
+request arrives. Cheap authority-category head reads fence the snapshot before
+reservation (inside the budget queue) and again after the audit, before admission.
+Any change or expired budget denies. Category heads conservatively refuse
+unrelated IAM changes too; budget and audit traffic do not invalidate them. Memory scopes are empty. Personal work retains the
+installation's paying group; team turns require an explicit paying-group binding; there is no fabricated credential/profile.
+The simple event-head scan has linear history cost; replace it with a fenced IAM
+projection before high-volume operation. Egress can reuse this resource check.
+Each allow/ask/deny appends `decision.recorded` before forwarding; append failure
+denies. A decision is admission, not proof of an observed effect.
+
+`seed-model-grants` reacts to `member.joined` and `assistant.created`, appending
+one `grant.given` per active model and grantee. Each command does one conditional
+append; conflicts fail for ordered retry. Existing grant history, including a
+revocation, takes precedence. Duplicate delivery cannot restore revoked access.
+OpenFGA only projects these events; rebuild never manufactures grants.
+
+Existing silos must run the [upgrade command](../../apps/ops/README.md#model-grant-upgrade)
+before rebuilding OpenFGA with the updated model and enabling decisions.
+The dev-stack startup hook belongs to the separate dev-stack change; no shared
+stack files or processes were changed here.

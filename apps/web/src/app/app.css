@@ -74,3 +74,5 @@ h1, h2, p { margin: 0; } h1 { font: var(--oc-type-page); letter-spacing: var(--o
 }
 
 :host(.workspace-root) { padding: 0; min-height: 0; height: 100dvh; overflow: hidden; }
+
+.tools a { display: inline-flex; align-items: center; min-height: 44px; color: var(--oc-accent-dark); }

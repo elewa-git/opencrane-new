@@ -19,6 +19,10 @@
             "directly_related_user_types": [
               {
                 "type": "person"
+              },
+              {
+                "type": "team",
+                "relation": "member"
               }
             ]
           }
@@ -151,11 +155,11 @@
               },
               {
                 "tupleToUserset": {
-                  "tupleset": {
-                    "relation": "silo"
-                  },
                   "computedUserset": {
                     "relation": "member"
+                  },
+                  "tupleset": {
+                    "relation": "silo"
                   }
                 }
               }
@@ -189,6 +193,51 @@
           },
           "post": {
             "directly_related_user_types": []
+          }
+        }
+      }
+    },
+    {
+      "type": "resource",
+      "relations": {
+        "use": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "use": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              },
+              {
+                "type": "assistant"
+              },
+              {
+                "type": "team",
+                "relation": "member"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "type": "team",
+      "relations": {
+        "member": {
+          "this": {}
+        }
+      },
+      "metadata": {
+        "relations": {
+          "member": {
+            "directly_related_user_types": [
+              {
+                "type": "person"
+              }
+            ]
           }
         }
       }

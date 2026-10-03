@@ -127,7 +127,8 @@ it("projects membership, promotions, demotions and removal; refuses other people
   if (!future.success) {
     throw new Error("Invalid future fixture");
   }
-  await expect(apply(p, [future.event])).rejects.toThrow("not implemented");
+  await apply(p, [future.event]);
+  expect(await p.applied(future.event.id)).toBe(true);
 });
 
 it("survives a committed write with a lost reply, redelivery and complete replay without restoring old roles", async () => {
@@ -498,3 +499,34 @@ it("preserves a rebuild store created by an earlier run", async () => {
     await new OpenFgaClient(rebuilt.binding).deleteStore();
   }
 });
+
+it('rejects alternate grant streams and keeps grant then revoke denied through the real ordered worker and replay', async () => {
+  const p = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
+  const subject = `grant-${Buffer.from(JSON.stringify(['model', 'gpt-6-luna'])).toString('base64url')}`;
+  const given: EventEnvelope = { ...event('resource-given', subject, 'grant.given'), principal: { kind: 'human', id: 'alice' }, correlation: {}, data: {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', granteeKind: 'member', grantedBy: 'alice' } };
+  const revoked: EventEnvelope = { ...event('resource-revoked', subject, 'grant.revoked'), principal: { kind: 'human', id: 'alice' }, correlation: {}, data: {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice' } };
+  await expect(apply(p, [{ ...given, subject: 'grant-alternate' }])).rejects.toThrow('Grant subject mismatch');
+  expect(await p.applied(given.id)).toBe(false);
+  const nats = await natsFixture(), controller = new AbortController();
+  const isolated = await databases();
+  const runtime = new HandlerRuntime({ db: pgDb(isolated.queue), silo: 'test', handlers: [p.handler], logger: createLogger('grant-order', { level: 'silent' }) });
+  let task: Promise<void> | undefined;
+  try {
+    expect((await nats.store.append({ event: given, expectedSequence: 0 })).status).toBe('appended');
+    expect((await nats.store.append({ event: revoked, expectedSequence: 1 })).status).toBe('appended');
+    await runtime.start(); await provisionDispatcher(nats.connection);
+    task = dispatch(nats.dispatcherConnection, runtime, controller.signal); void task.catch(() => undefined);
+    await runtime.work();
+    await until(() => p.applied(revoked.id));
+    expect(await p.applied(given.id)).toBe(true);
+    expect((await p.use('person', 'alice', 'model', 'gpt-6-luna')).allowed).toBe(false);
+    await apply(p, [given]); // A late redelivery cannot restore the old grant.
+    expect((await p.use('person', 'alice', 'model', 'gpt-6-luna')).allowed).toBe(false);
+    const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader, { verifyAgainst: p.binding });
+    expect((await rebuilt.use('person', 'alice', 'model', 'gpt-6-luna')).allowed).toBe(false);
+  } finally {
+    controller.abort(); await task?.catch(() => undefined); await runtime.stop(); await nats.close(); await isolated.close();
+  }
+}, 40_000);

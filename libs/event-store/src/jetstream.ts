@@ -330,7 +330,13 @@ export class EventStore {
     }
   }
 
-  async head(): Promise<number> {
+  /** Latest global sequence, or latest entity/category sequence (for example team-*). */
+  async head(subject?: string): Promise<number> {
+    if (subject !== undefined) {
+      const category = /^([a-z]+)-\*$/u.exec(subject);
+      const wire = category ? `ev.${category[1]}.*` : wireSubject(subject);
+      return (await this.manager.streams.getMessage(streamName, { last_by_subj: wire }))?.seq ?? 0;
+    }
     return (await this.manager.streams.info(streamName)).state.last_seq;
   }
 }
