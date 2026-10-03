@@ -1,4 +1,4 @@
-import { budgets, settlementHandler } from '@opencrane/models';
+import { budgets, settlementHandler, modelGrantHandler } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
@@ -45,7 +45,7 @@ try {
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
     runtime = new HandlerRuntime({ db: db.db, logger, silo,
-      handlers: [authorisation.handler, ...lifecycleHandlers(commands.store), ...(process.env['MODEL_DECISION_URL'] ? [settlementHandler(process.env['MODEL_DECISION_URL'])] : [])] });
+      handlers: [authorisation.handler, modelGrantHandler(commands.store), ...lifecycleHandlers(commands.store), ...(process.env['MODEL_DECISION_URL'] ? [settlementHandler(process.env['MODEL_DECISION_URL'])] : [])] });
     await runtime.start();
     await runtime.work();
     const idleMs = Number(process.env['COMPUTER_IDLE_MS'] ?? 900_000);

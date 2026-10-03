@@ -96,7 +96,7 @@ to P3-19. No raw arguments, tokens or credential values appear in this event.
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
 | `member.invited` | admin command | invitations, members (pending) | send the invitation |
-| `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal) |
+| `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.role_changed` | admin command | members | OpenFGA role tuples |
 | `member.removed` | admin command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
 | `team.created` / `team.member_added` / `team.member_removed` | admin command | teams | OpenFGA team tuples |
@@ -125,7 +125,7 @@ SSO membership path. Invitation creation and identity binding are separate work.
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `assistant.created` | reaction or admin | assistants (owner, kind, scope) | OpenFGA `acts_for`; claim a computer |
+| `assistant.created` | reaction or admin | assistants (owner, kind, scope) | OpenFGA `acts_for`; claim a computer; seed model `grant.given` |
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
@@ -210,7 +210,7 @@ retry with a fresh grant after reconnect or Pod replacement.
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
-| `grant.given` / `grant.revoked` | admin or owner | grants | OpenFGA tuples |
+| `grant.given` / `grant.revoked` | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | person | connections (secret *reference* only) | — (the credential is written to the secret store inside the command, before the append; a clean-up job removes orphaned secrets) |
 | `connection.refreshed` | reaction (OAuth refresh) | connections | — |
 | `connection.revoked` | person, admin or reaction | connections | delete the secret |
@@ -305,6 +305,7 @@ explicitly until implemented (scope promotion remains deferred).
 | `settle-budget` | `effect.observed` |
 | `update-members` | `member.invited`, `member.joined`, `member.role_changed`, `member.removed` |
 | `update-openfga` | `member.joined`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `seed-model-grants` | `member.joined`, `assistant.created` |
 | `create-assistant` | `member.joined` |
 | `claim-computer` | `assistant.created`, `computer.lost` |
 

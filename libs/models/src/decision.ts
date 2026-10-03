@@ -1,4 +1,4 @@
-import { currentAuthority } from './authority.ts';
+import { authorityFence, currentAuthority } from './authority.ts';
 import { mcpPolicy } from './mcp.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage } from 'node:http';
@@ -93,6 +93,7 @@ async function activeTurn(actor: BudgetActor, c: z.infer<typeof computerSchema>,
 export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0) {
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
+    const started = performance.now();
     let auditedContext: { requesterId: string; assistantId: string } | undefined;
     let auditAttempted = false;
     const requestId = randomUUID(), route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
@@ -115,6 +116,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return;
       }
       if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
+      const fresh = await authorityFence(actor.store, started);
       const checked = await credentials.check(req.headers);
       const c = computerSchema.parse(checked.computer), t = turnSchema.parse(checked.turn);
       auditedContext = { requesterId: t.requester, assistantId: c.assistant };
@@ -129,7 +131,9 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!);
         contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
         const { outcome, reason } = policy;
+        await fresh();
         await audit(outcome, reason);
+        await fresh();
         res.setHeader('x-request-id', requestId);
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId })); return;
       }
@@ -138,8 +142,9 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model);
       contextDigest = call.contextDigest;
       // No client token count is trusted; reserve the full supported context at long rates.
-      const reservation = await actor.reserve(call, reservationCents(body.model, body.max_output_tokens));
+      const reservation = await actor.reserve(call, reservationCents(body.model, body.max_output_tokens), fresh);
       await audit('allow', 'model_allowed', reservation);
+      await fresh();
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {

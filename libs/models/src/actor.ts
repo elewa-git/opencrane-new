@@ -59,7 +59,7 @@ export class BudgetActor {
       this.exhaustedDay = event.type === 'budget.exhausted' ? event.time.slice(0, 10) : undefined;
     }
   }
-  reserve(call: ModelCall, amountCents: number) {
+  reserve(call: ModelCall, amountCents: number, fresh?: () => Promise<void>) {
     return this.serial(async () => {
       z.int().positive().parse(amountCents);
       const t = totals(this.state, this.now());
@@ -68,6 +68,7 @@ export class BudgetActor {
         if (this.exhaustedDay !== this.now().toISOString().slice(0, 10)) await this.append('budget.exhausted', { scope: 'global' });
         throw new Error('Silo spending cap reached; wait for the next budget period');
       }
+      await fresh?.();
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
         payingGroupId: call.payingGroupId ?? this.silo, assistantId: call.assistantId, modelCall: call });

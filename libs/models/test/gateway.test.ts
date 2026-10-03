@@ -1,8 +1,10 @@
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
+import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
@@ -10,12 +12,12 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
+import { createStore, rebuildMembers, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
+import { migrateModelGrants, modelGrantHandler, BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
 
 let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
@@ -25,7 +27,12 @@ async function freePort() {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
 }
-async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false) {
+async function waitForModelGrants(auth: ReturnType<typeof memberAuthorisation>, memberId: string, assistantId: string) {
+  await until(async () => (await Promise.all(models.filter(m => !m.retired).flatMap(model => [
+    auth.use('person', memberId, 'model', model.id), auth.use('assistant', assistantId, 'model', model.id),
+  ]))).every(result => result.allowed));
+}
+async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false, grants: 'manual' | 'reactions' | 'legacy' = 'manual') {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture();
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
@@ -69,7 +76,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
     'session-id': 'thread', 'content-type': 'application/json',
   });
   const headers = await issue();
-  for (const model of models.filter(m => !m.retired)) for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
+  if (grants === 'manual') for (const model of models.filter(m => !m.retired)) for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
     const event = await append(grantStream('model', model.id), 'grant.given', { resourceType: 'model', resourceId: model.id, granteeId, granteeKind, grantedBy: 'alice' });
     await auth.handler.handle(event, db);
   }
@@ -112,10 +119,11 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
   let gateway = await startGateway(options);
   const runner = new ProjectionRunner(db, nats.store, logger); await runner.initialise(budgets);
   await provisionDispatcher(nats.connection);
-  const runtime = new HandlerRuntime({ db, logger, silo: 'test', handlers: [settlementHandler(decision.url)], retryDelay: 1 });
+  const runtime = new HandlerRuntime({ db, logger, silo: 'test', handlers: [settlementHandler(decision.url), ...(grants === 'reactions' ? [modelGrantHandler(nats.store), auth.handler] : [])], retryDelay: 1 });
   await runtime.start(); await runtime.work();
   const abort = new AbortController(); const dispatching = dispatch(nats.connection, runtime, abort.signal);
   void dispatching.catch(() => undefined);
+  if (grants === 'reactions') await waitForModelGrants(auth, 'alice', 'assistant');
   const body = { model: allowedModel, input: 'Say OK.', max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
   return { actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
@@ -131,6 +139,20 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
       await until(async () => { await ingestUsage(actor, options.usageFile); return actor.state.reservations.every(r => r.settledCents !== undefined); });
       await runner.run(budgets);
     },
+    async slowDecisions() {
+      await gateway.stop();
+      // Keep the real gateway, but let the decision's own freshness fence end this request.
+      const config = (await readFile(options.configFile, 'utf8')).replaceAll('"extAuthz":{',
+        '"extAuthz":{"policies":{"http":{"requestTimeout":"10s"}},');
+      await writeFile(options.configFile, config);
+      const child = spawn(options.binary, ['-f', options.configFile], { stdio: 'ignore' });
+      const exited = once(child, 'exit');
+      gateway = { healthy: () => child.exitCode === null, stop: async () => { child.kill(); await exited; } };
+      await until(async () => {
+        try { return (await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok; }
+        catch { return false; }
+      });
+    },
     async restart() { await gateway.stop('SIGKILL'); gateway = await startGateway(options); },
     async close() {
       await gateway.stop(); await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
@@ -139,6 +161,92 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
     },
   };
 }
+it('fresh installation grants Phase 2 chat through reactions', async () => {
+  const f = await fixture(20000, 20000, false, 'gpt-6.1-sol', false, 'reactions');
+  try {
+    expect((await f.call()).status).toBe(200);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('a new member and assistant receive Phase 2 chat grants after installation', async () => {
+  const f = await fixture(20000, 20000, false, 'gpt-6.1-sol', false, 'reactions');
+  try {
+    await f.append('member-bob', 'member.joined', { memberId: 'bob', email: 'bob@example.test', displayName: 'Bob', role: 'member' });
+    await f.append('assistant-bob-assistant', 'assistant.created', { assistantId: 'bob-assistant', ownerId: 'bob', kind: 'personal' });
+    await f.append('computer-bob-assistant', 'computer.claimed', { assistantId: 'bob-assistant', computerId: 'bob', tokenId: 'token:bob', generation: 1 });
+    await f.append('computer-bob-assistant', 'computer.ready', { assistantId: 'bob-assistant', computerId: 'bob', generation: 1, podUid: 'bob' });
+    await f.append('conversation-bob', 'conversation.created', { conversationId: 'bob', assistantId: 'bob-assistant', createdBy: 'bob', mode: 'agent_session' });
+    await f.append('computer-bob-assistant', 'computer.turn_started', { assistantId: 'bob-assistant', computerId: 'bob', conversationId: 'bob', turnId: 'bob', threadId: 'bob', requesterId: 'bob', task: 'chat_turn' });
+    await waitForModelGrants(f.auth, 'bob', 'bob-assistant');
+    const headers = {
+      authorization: `Bearer ${await f.sign({ ...f.c, computer: 'bob', assistant: 'bob-assistant', jti: 'token:bob' }, 'agentgateway')}`,
+      'x-turn-token': (await f.credentials.turn({ assistantId: 'bob-assistant', conversationId: 'bob', turnId: 'bob', requesterId: 'bob', threadId: 'bob', task: 'chat_turn', model: 'gpt-6.1-sol' })).value,
+      'session-id': 'bob',
+    };
+    expect((await f.call(headers)).status).toBe(200);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants', async () => {
+  const f = await fixture(20000, 20000, false, 'gpt-6.1-sol', false, 'legacy');
+  try {
+    expect((await f.call()).status).toBe(403);
+    await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
+    });
+    await migrateModelGrants(f.nats.store, 'test');
+    const head = await f.nats.store.head();
+    await migrateModelGrants(f.nats.store, 'test');
+    expect(await f.nats.store.head()).toBe(head);
+    const rebuilt = await rebuildMembers(fga.apiUrl, 'test', f.nats.store);
+    Object.assign(f.binding, rebuilt.binding);
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-luna' }, 'decision-service') },
+      { model: 'gpt-6-luna' })).status).toBe(403);
+    expect((await f.call()).status).toBe(200);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it.each([
+  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 100, revoke: true },
+  { name: 'revocation during a history read within the freshness budget', pauseMs: 10, revoke: true },
+  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 100, revoke: false },
+])('does not dispatch a running decision: $name', async ({ pauseMs, revoke }) => {
+  const f = await fixture();
+  try {
+    expect((await f.call()).status).toBe(200); await f.settled();
+    await f.slowDecisions();
+    let captured!: () => void, resume!: () => void;
+    const capturing = new Promise<void>(resolve => { captured = resolve; });
+    const resuming = new Promise<void>(resolve => { resume = resolve; });
+    const subscribe = f.nats.store.subscribe.bind(f.nats.store);
+    const slowHistory = vi.spyOn(f.nats.store, 'subscribe').mockImplementation(async function* (...args) {
+      captured();
+      await resuming;
+      for await (const row of subscribe(...args)) {
+        await delay(pauseMs);
+        yield row;
+      }
+    });
+    try {
+      const pending = f.call();
+      await capturing;
+      if (revoke) await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+        resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
+      });
+      const revoked = performance.now();
+      resume();
+      const response = await pending;
+      if (pauseMs === 100) expect(performance.now() - revoked).toBeGreaterThan(2000);
+      expect(f.received()).toBe(1);
+      expect(response.status).toBe(403);
+      expect(f.actor.state.reservations).toHaveLength(1);
+    } finally { resume(); slowHistory.mockRestore(); }
+  } finally { await f.close(); }
+}, 40_000);
+
 it('refuses gpt-5.5 for a chat turn before reserving or reaching the provider', async () => {
   const f = await fixture(20000, 20000, false, 'gpt-6.1-sol');
   try {

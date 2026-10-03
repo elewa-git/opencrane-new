@@ -40,3 +40,17 @@ function relevant(e: EventEnvelope, requester: string, assistant: string, conver
       (d['conversationId'] === conversation && ['conversation.created', 'participant.added', 'participant.removed'].includes(e.type)) ||
       (e.type.startsWith('grant.') && d['resourceType'] === resourceType && d['resourceId'] === resourceId);
 }
+
+/** Fence every authority source, including changes while credentials/policy were being read. */
+export async function authorityFence(store: EventStore, started: number) {
+  // ponytail: category heads can refuse unrelated IAM changes; narrow to entity heads if contention warrants it.
+  const subjects = ['member-*', 'team-*', 'assistant-*', 'conversation-*', 'computer-*', 'grant-*', 'mcp-*'];
+  const heads = await Promise.all(subjects.map(subject => store.head(subject)));
+  return async () => {
+    if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
+    const current = await Promise.all(subjects.map(subject => store.head(subject)));
+    if (current.some((head, index) => head !== heads[index]) || performance.now() - started > 2000) {
+      throw new Error('Authority changed or snapshot expired');
+    }
+  };
+}

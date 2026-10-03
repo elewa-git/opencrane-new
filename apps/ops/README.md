@@ -2,7 +2,7 @@
 
 `@opencrane/ops` rebuilds the `members`, `mcp-catalogue` and `computers` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
-`EVENTS` stream. It never publishes events or runs reactions. Run it from the
+`EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
 
 ## Inspect without changing state
@@ -144,3 +144,27 @@ Server-owned `computer.turn_started` and `computer.turn_closed` events share the
 computer stream with suspension. A live turn prevents suspension; competing
 start/suspend commands use that stream's conditional append. An unexecuted message
 whose delivery loses to suspension is delivered again after wake.
+
+## Model grant upgrade
+
+With decision services and event writers stopped, use the silo's NATS command
+connection environment (`NATS_URL`, TLS files, `NATS_NKEY_SEED_FILE`) and `SILO_ID`:
+
+```sh
+npm run migrate:model-grants -w apps/ops
+```
+
+This one-off, restartable migration reads existing members and assistants from
+events and appends missing initial model grants. Removed members are skipped;
+recorded grants and revocations are preserved. Each grant command does one
+conditional append. An append conflict or outage fails the run; rerunning safely
+continues. No SQL or OpenFGA state is written by this command.
+
+The dev-stack owner must invoke this command in the `up.sh` startup path after
+NATS is available and before OpenFGA rebuild and decision startup. Rebuild
+OpenFGA with the updated model afterwards, and perform the existing controlled
+dispatcher subscription rebuild to enable `seed-model-grants`. Reactions then
+cover new members and assistants. This change leaves `infra/dev-stack` untouched.
+The real-gateway regression suite in `libs/models/test/gateway.test.ts` covers
+fresh events, a later member, upgrade/replay and preserved revocations. A live
+fresh dev-stack journey remains unqualified.

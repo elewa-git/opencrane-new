@@ -143,14 +143,24 @@ Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activity, conversation, explicit requester and assistant
 resource grants, lifecycle tokens and delegation. OpenFGA is queried at higher
 consistency on every call. Relevant event receipts must exist before a projection
-can authorise; lag denies. Memory scopes are empty. Personal work retains the
+can authorise; lag denies. A two-second freshness budget starts when the decision
+request arrives. Cheap authority-category head reads fence the snapshot before
+reservation (inside the budget queue) and again after the audit, before admission.
+Any change or expired budget denies. Category heads conservatively refuse
+unrelated IAM changes too; budget and audit traffic do not invalidate them. Memory scopes are empty. Personal work retains the
 installation's paying group; team turns require an explicit paying-group binding; there is no fabricated credential/profile.
 The simple event-head scan has linear history cost; replace it with a fenced IAM
 projection before high-volume operation. Egress can reuse this resource check.
 Each allow/ask/deny appends `decision.recorded` before forwarding; append failure
 denies. A decision is admission, not proof of an observed effect.
 
-Existing silos must rebuild OpenFGA with the updated model and explicitly project
-model grants for requester and assistant before enabling this decision version.
-Old membership-only grants no longer admit model traffic. The shared dev stack
-is deliberately unchanged; its Phase 3 setup and fresh-install journey are later.
+`seed-model-grants` reacts to `member.joined` and `assistant.created`, appending
+one `grant.given` per active model and grantee. Each command does one conditional
+append; conflicts fail for ordered retry. Existing grant history, including a
+revocation, takes precedence. Duplicate delivery cannot restore revoked access.
+OpenFGA only projects these events; rebuild never manufactures grants.
+
+Existing silos must run the [upgrade command](../../apps/ops/README.md#model-grant-upgrade)
+before rebuilding OpenFGA with the updated model and enabling decisions.
+The dev-stack startup hook belongs to the separate dev-stack change; no shared
+stack files or processes were changed here.

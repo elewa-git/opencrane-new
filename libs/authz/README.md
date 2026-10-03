@@ -88,8 +88,9 @@ The fixture pins the server image by digest; no new dependency is used by apps/w
 P3-1 adds explicit `resource#use` grants for people, assistants and team members,
 plus team membership and assistant ownership relations. `use` and `applied` support
 live admission and event-receipt freshness checks. The existing rebuild includes
-these grant/team events; installation never grants access. Rebuild into a new
-OpenFGA store/model binding before switching a running silo to this version.
+these grant/team events; replay only restores recorded access. Initial model
+grants come from the [model-grant reaction and upgrade](../models/README.md#per-tool-policy-p3-1).
+Rebuild into a new OpenFGA store/model binding before switching a running silo.
 
 Use `grantStream(resourceType, resourceId)` for both grant and revoke commands.
 The reaction refuses any other subject. This gives the existing worker one

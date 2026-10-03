@@ -105,3 +105,62 @@ group ceilings and audit UI remain their owning Phase 3 tickets.
 Existing silos need a rebuilt OpenFGA model and explicit model grants before
 switching decision versions. The event-head scan is intentionally simple and has
 linear history cost; high-volume qualification requires a fenced IAM projection.
+
+## Bootstrap and in-flight revocation follow-up
+
+3 October 2026, base `b9d709f` plus this follow-up commit, same disposable
+services and PostgreSQL URL as above. This addresses the two further review
+blockers without touching the shared dev stack.
+
+Red-first reproductions used the real model gateway and a recording SSE upstream:
+
+- Fresh member/assistant events without manually inserted grants returned **403**
+  where Phase 2 chat required **200**.
+- Upgrading a membership-only silo and rebuilding OpenFGA still returned **403**.
+- Injecting 100ms delay per authority-history row, then revoking the requester
+  grant after the snapshot head was captured, dispatched a second upstream call
+  more than two seconds after revocation. The fixture raises only its gateway
+  callout timeout to ten seconds so that the decision fence itself is tested.
+
+The event-backed `seed-model-grants` reaction and restartable migration now cover
+members and assistants. Each grant command does one conditional append; existing
+revocations win. Repeating the migration appends nothing. Replaying into a new
+OpenFGA store restores chat while preserving a recorded revocation. Fresh-install,
+later-member and upgrade/replay tests each require a model-gateway **200**.
+
+Authority category heads are captured before reading credentials or policy and
+reread inside the reservation queue and after audit, immediately before admission.
+Changed heads or a decision older than two seconds deny. Relevant OpenFGA event
+receipts remain mandatory. Long-history revocation, short-history revocation and
+an expired decision with unchanged authority all leave the upstream count at one
+and append no second reservation. The category fence can conservatively refuse
+unrelated IAM changes; budget/audit traffic is excluded.
+
+The first combined regression run caught the later-member fixture sending chat
+while other initial grants were still being appended. Waiting for all initial
+grants to project fixed that fixture; the test then passed in isolation. No
+production deadline was increased.
+
+The migration entrypoint is `npm run migrate:model-grants -w apps/ops` using the
+silo's command connection environment. The dev-stack owner still needs to invoke
+it from the `up.sh` startup path before OpenFGA rebuild and decision startup,
+and rebuild dispatcher subscriptions for the new reaction. See the
+[upgrade instructions](../../apps/ops/README.md#model-grant-upgrade).
+Startup-hook integration and live fresh-stack qualification are **NOT RUN** here.
+
+Follow-up validation (logs on the builder host at `/tmp/p3-1-*.log`):
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | PASS; existing function-size warnings only; final changed test and docs checks also pass |
+| `npm run typecheck` | PASS, all workspaces; final model test changes rechecked |
+| `npm run check:events` | PASS, 74 event types |
+| `npm test -- --maxWorkers=2` with `PG_TEST_URL` above | PASS, 62 files / 1,029 tests; 2 files / 3 tests skipped; 473.55 seconds |
+| `npm run build -w apps/web` | PASS; existing app.css size warning |
+| `npm run test -w apps/web` | PASS, 5 files / 43 tests |
+
+The final aggregate run had no timing failures to rerun. The earlier later-member
+fixture race was fixed and rerun in isolation, then passed in the full suite.
+The three opt-in tests (paid provider and live cluster suites), hosted CI and the
+shared-stack startup hook/live journey remain **NOT RUN**. No paid provider calls,
+shared-stack operations, new dependencies or additional independent review pass.
