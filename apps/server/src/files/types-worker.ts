@@ -94,6 +94,7 @@ function inspectWorkbook(bytes: Buffer) {
   }
 }
 
+parentPort!.postMessage('ready');
 const input = z.object({ name: z.string(), bytes: z.instanceof(Uint8Array) }).parse(workerData as unknown);
 void inspectFile(input.name, Buffer.from(input.bytes)).then(
   mime => parentPort!.postMessage(mime),

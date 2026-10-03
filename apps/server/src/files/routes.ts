@@ -1,7 +1,8 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { Client } from 'minio/dist/esm/minio.mjs';
 import { z } from 'zod';
+import { fileUploadedDataSchema } from '@opencrane/events';
 import type { AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { listFiles } from '@opencrane/projections';
@@ -16,6 +17,23 @@ export interface FileOptions extends Omit<ChatOptions, 'keys'> {
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const limit = 20 * 1024 * 1024;
 export function registerFileRoutes(app: FastifyInstance, config: AuthConfig, options?: FileOptions) {
+  app.get('/api/conversations/:conversationId/files/view', async (request, reply) => {
+    if (!options) return reply.code(503).send({ status: 'unavailable' });
+    try {
+      const { memberId, conversationId } = await authorise(options, config, request);
+      const { path, preview } = z.object({ path: z.string(), preview: z.string().optional() }).parse(request.query);
+      const rows = await ownConversation(options.store, options.silo, conversationId, memberId);
+      const file = rows.filter(row => row.event.type === 'file.uploaded')
+        .map(row => fileUploadedDataSchema.parse(row.event.data))
+        .find(file => path === `uploads/${conversationId}/${file.fileId}/${file.name}`);
+      if (!file) return reply.code(404).send({ status: 'not_found' });
+      const stream = await options.objects.getObject('files', file.objectKey);
+      return reply.header('Content-Type', file.mime).header('Content-Length', file.size)
+        .header('Cache-Control', 'private, no-store').header('X-Content-Type-Options', 'nosniff')
+        .header('Content-Security-Policy', "default-src 'none'; sandbox")
+        .header('Content-Disposition', `${preview === 'true' ? 'inline' : 'attachment'}; filename="${file.name}"`).send(stream);
+    } catch (error) { return refuse(reply, error); }
+  });
   // A raw body keeps this seam small: one file per request, no multipart parser or presigned credentials.
   void app.register((scope, _settings, done) => {
     scope.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: limit }, (_request, body, done) => done(null, body));
@@ -73,14 +91,10 @@ async function uploadFile(options: FileOptions, memberId: string, conversationId
     return previous.event.type === 'file.rejected' ? { status: 'infected' as const, error: 'File rejected: malware detected', fileId } : { status: 'appended' as const, sequence: previous.sequence, fileId };
   }
   const objectKey = `${options.silo}/${conversationId}/${fileId}/${sha256}`;
-  const quarantineKey = `${objectKey}/${randomUUID()}`;
-  await options.objects.putObject('quarantine', quarantineKey, bytes);
-  try {
-    const verdict = await options.scan(bytes);
-    const type = verdict === 'clean' ? 'file.uploaded' : 'file.rejected';
-    if (verdict === 'clean') await options.objects.putObject('files', objectKey, bytes, bytes.length, { 'Content-Type': mime });
-    const result = await fileCommand(options.store, options.silo, memberId, `file-upload-${fileId}`, type,
-      verdict === 'clean' ? { ...data, mime, objectKey } : { ...data, reason: 'infected' });
-    return result.status === 'appended' && verdict === 'infected' ? { status: 'infected' as const, error: 'File rejected: malware detected', fileId } : { ...result, fileId };
-  } finally { await options.objects.removeObject('quarantine', quarantineKey); }
+  const verdict = await options.scan(bytes);
+  const type = verdict === 'clean' ? 'file.uploaded' : 'file.rejected';
+  if (verdict === 'clean') await options.objects.putObject('files', objectKey, bytes, bytes.length, { 'Content-Type': mime });
+  const result = await fileCommand(options.store, options.silo, memberId, `file-upload-${fileId}`, type,
+    verdict === 'clean' ? { ...data, mime, objectKey } : { ...data, reason: 'infected' });
+  return result.status === 'appended' && verdict === 'infected' ? { status: 'infected' as const, error: 'File rejected: malware detected', fileId } : { ...result, fileId };
 }

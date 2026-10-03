@@ -4,10 +4,10 @@ import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, comput
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 
 @Component({ selector: 'oc-file-preview', changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<dialog #dialog aria-label="File preview" (close)="closed.emit()"><header><div><small>▰ workspace</small><h2>{{ path() }}</h2></div><button type="button" aria-label="Close file preview" (click)="dialog.close()">×</button></header>
+  template: `<dialog #dialog aria-label="File preview" (close)="closed.emit()"><header><div><small>▰ workspace</small><h2>{{ path().split('/').at(-1) }}</h2></div><button type="button" aria-label="Close file preview" (click)="dialog.close()">×</button></header>
     <p role="status" aria-live="polite">{{ status() }}</p>
     @if (kind() === 'image') { <img [src]="url()" [alt]="path()"> }
-    @if (kind() === 'pdf') { <iframe [src]="safeUrl()" sandbox title="Document preview"></iframe> }
+    @if (kind() === 'pdf') { <iframe [src]="safeUrl()" title="Document preview" referrerpolicy="no-referrer"></iframe> }
     @if (text()) { <pre>{{ text() }}</pre> }
     @if (url()) { <a [href]="originalUrl()" [download]="path().split('/').at(-1)">↓ Download original file</a> }
   </dialog>`,
@@ -38,7 +38,7 @@ export class FilePreview implements OnDestroy {
       const blob = new Blob(chunks, { type });
       this.url.set(URL.createObjectURL(blob));
       if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(type)) this.kind.set('image');
-      else if (type === 'application/pdf') { this.kind.set('pdf'); this.safeUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(this.url())); }
+      else if (type === 'application/pdf') { this.kind.set('pdf'); this.safeUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(`${this.url()}#toolbar=0&navpanes=0&view=FitH`)); }
       else if (type.startsWith('text/') && type !== 'text/html') this.text.set(await blob.text());
       this.status.set(this.kind() || this.text() ? '✓ Preview ready' : '▤ No rendered preview — download the original file.');
     } catch { if (!this.abort.signal.aborted) this.status.set('⊘ Preview unavailable. File access is not available for this session yet.'); }

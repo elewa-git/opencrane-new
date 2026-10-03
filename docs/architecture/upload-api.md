@@ -1,6 +1,6 @@
 # Conversation uploads
 
-P2-6 back end, for the attach menu after P2-5 lands. No UI is included here.
+P2-6: the workspace attach menu sends one file at a time with progress, refusal reasons and retry. Attachments replay in the transcript and session panel.
 
 ## HTTP interface
 
@@ -40,7 +40,7 @@ GIF, WebP, BMP and TIFF. Signatures, binary Office streams and Office ZIP entrie
 are inspected; HTTP MIME claims are ignored. Executables, scripts, SVG/HTML,
 archives, macro-bearing/encrypted/embedded Office content are refused. All
 inspection (including CFB, ZIP and XML) runs in a separate worker with a
-1.5-second hard deadline, a 64 MiB old-generation heap limit, a 16 MiB
+five-second startup deadline, a separate 1.5-second inspection deadline, a 64 MiB old-generation heap limit, a 16 MiB
 young-generation limit and a 4 MiB stack limit. A timeout, worker error or limit
 terminates the worker and gives a clear 415 refusal. Office
 containers also have entry and expanded-size limits; ClamAV also refuses scan limits
@@ -51,19 +51,31 @@ third-party document parser will accept every damaged document.
 replayable projection. A row has `conversationId`, `fileId`, `uploadedBy`, `name`,
 `mime`, integer `size` in bytes, `sha256`, `status` (`uploaded` or `delivered`) and
 `path` relative to `/workspace`. A PDF also has `textPath` for its MarkItDown text.
-Rejected and quarantined uploads never appear. The list may lag the POST until
+Rejected and unscanned uploads never appear. The list may lag the POST until
 the projection catches up. Poll until `delivered` before posting a request that
 mentions the file, and include its `path`/`textPath` in the message. Original and
 converted PDF paths are ready for the later file-view/preview integration.
 
+`GET /api/conversations/:conversationId/files/view?path=<listed path>` downloads
+only an original named by a committed `file.uploaded` event. `&preview=true`
+uses inline disposition. The same session, membership and ownership checks apply;
+arbitrary workspace paths and rejected files return 404. Bytes come from the
+server's promoted MinIO object, never from the computer. Responses use the inspected
+MIME, `nosniff` and private/no-store caching. The existing Open Terminal-style modal
+renders PDF, text and browser-supported images; other formats offer a download.
+
+The composer waits for delivery before sending. The bridge adds attachment paths
+(PDF MarkItDown text paths where available) to Codex context without changing the
+stored user message or its length limit. Retrying an upload
+retains its key and bytes on the page; reloading discards an uncommitted selection.
+
 ## Flow and recovery
 
-The HTTP module checks identity, ownership, size and content, writes a unique
-quarantine object, then submits the complete bytes to clamd. On a clean verdict
-it writes an immutable promoted object before invoking the upload command. An
-infected verdict invokes the rejection command. Each command makes one conditional
-append to the conversation stream. Quarantine is deleted on success or failure;
-the bucket's one-day lifecycle removes abandoned uploads after a process crash.
+The HTTP module checks identity, ownership, size and content, then submits the
+bounded in-memory bytes to clamd. Nothing is written to object storage before a
+clean verdict. A clean verdict writes an immutable promoted object before invoking
+the upload command. An infected verdict invokes the rejection command without
+storing bytes. Each command makes one conditional append to the conversation stream.
 An orphan promoted object after an ambiguous append is private and cannot be
 listed or delivered without `file.uploaded`; retention cleanup is a later task.
 
@@ -104,4 +116,4 @@ offline engine/database pin and dev-box refresh procedure.
 [Upload evidence](../process/upload-evidence.md) records the repeatable service
 checks and remaining fresh-install journey. Office-to-PDF rendering/LibreOffice,
 image-size and Pod-ready measurements for that preview work are outside this back
-end change. No rendered-preview endpoint or attach menu is introduced.
+end change. Office rendering is not included.

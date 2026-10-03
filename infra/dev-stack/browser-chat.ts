@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import { browserUploadJourney } from './browser-upload.ts';
 import assert from 'node:assert/strict';
 import { directory } from './config.ts';
 import { secondary } from './identity.ts';
@@ -52,5 +53,6 @@ export async function browserChatJourney(page: Page, origin: string, prompt = 'S
   const screenshots = secondary ? directory : 'docs/design/chat/live';
   await mkdir(screenshots, { recursive: true });
   await page.screenshot({ path: `${screenshots}/workspace-${width}.png`, fullPage: true });
+  await browserUploadJourney(page, origin, screenshots);
   console.log(`PASS browser chat ${width}px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token ${firstTokenMs} ms, completion ${completeMs} ms, browser journey ${Math.round(performance.now() - start)} ms; screenshot ${screenshots}/workspace-${width}.png`);
 }

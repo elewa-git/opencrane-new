@@ -8,7 +8,8 @@ export function inspectFile(name: string, bytes: Buffer): Promise<string> {
       resourceLimits: { maxOldGenerationSizeMb: 64, maxYoungGenerationSizeMb: 16, stackSizeMb: 4 },
     });
     let finished = false;
-    const timer = setTimeout(() => finish(new Error('File inspection timed out or exceeded limits')), 1500);
+    // Loading parser modules is separate from the deadline for inspecting untrusted bytes.
+    let timer = setTimeout(() => finish(new Error('File inspection timed out or exceeded limits')), 5000);
     function finish(result: string | Error) {
       if (finished) return;
       finished = true; clearTimeout(timer);
@@ -20,7 +21,11 @@ export function inspectFile(name: string, bytes: Buffer): Promise<string> {
         if (result instanceof Error) reject(result); else resolve(result);
       }).catch((error: unknown) => reject(new Error('File inspection failed', { cause: error })));
     }
-    worker.once('message', (result: unknown) => finish(typeof result === 'string' || result instanceof Error ? result : new Error('File inspection failed')));
+    worker.on('message', (result: unknown) => {
+      if (result === 'ready') {
+        clearTimeout(timer); timer = setTimeout(() => finish(new Error('File inspection timed out or exceeded limits')), 1500);
+      } else finish(typeof result === 'string' || result instanceof Error ? result : new Error('File inspection failed'));
+    });
     worker.once('error', error => finish(new Error('File inspection failed or exceeded limits', { cause: error })));
     worker.once('exit', () => finish(new Error('File inspection failed')));
   });

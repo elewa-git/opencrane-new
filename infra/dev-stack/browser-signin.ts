@@ -28,7 +28,7 @@ export async function enterLoginName(page: Page, name: string) {
     }
   }
 }
-async function login(page: Page, origin: string, user: User, selectRememberedAccount = false, retryNetworkChange = true) {
+async function login(page: Page, origin: string, user: User, selectRememberedAccount = false, attempt = 0): Promise<void> {
   let step = 'home', transport = '';
   const failed = (request: BrowserRequest) => {
     const code = request.failure()?.errorText ?? '';
@@ -66,10 +66,14 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     step = 'return';
     await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith('/auth/'));
   } catch {
-    // Container/network changes can invalidate Chromium's connection during the journey.
-    if (retryNetworkChange && transport === 'net::ERR_NETWORK_CHANGED') {
+    if (transport === 'net::ERR_NETWORK_CHANGED' && attempt < 2) {
+      console.log('Retry sign-in after browser network change');
+      await delay(1000);
+      const me = z.object({ authenticated: z.boolean() }).parse(await (await page.request.get(`${origin}/auth/me`)).json());
+      // Credentials may have succeeded before the browser lost the return navigation.
+      if (step === 'return' && me.authenticated) { await page.goto(origin); return; }
       page.off('requestfailed', failed);
-      return login(page, origin, user, selectRememberedAccount, false);
+      return login(page, origin, user, selectRememberedAccount, attempt + 1);
     }
     await page.screenshot({ path: `${directory}/signin-failure.png` });
     const location = new URL(page.url());
@@ -84,7 +88,7 @@ async function cookie(context: BrowserContext, config: AuthConfig, origin: strin
   return session.value;
 }
 export async function browserSessions(config: AuthConfig, origin: string) {
-  const browser = await chromium.launch({ headless: true });
+  const browser = await chromium.launch({ headless: true, channel: 'chromium' });
   let stage = 'launch';
   try {
     const users = await testUsers();
@@ -133,7 +137,8 @@ export async function browserSessions(config: AuthConfig, origin: string) {
         assert.equal(decodeSession(config, await cookie(memberPage.context(), config, origin)).sub, users.member.id);
         console.log('PASS next sign-in: remembered identity still requires credentials; successful reauthentication');
       } catch (error) {
-        const detail = error instanceof Error && (error.message.startsWith('Login did not complete at ') || error instanceof AssertionError) ? `: ${error.message}` : '';
+        const detail = error instanceof Error && (error.message.startsWith('Login did not complete at ') || error instanceof AssertionError) ? `: ${error.message}`
+          : error instanceof Error ? ` (${error.name}; ${/browser-signin\.ts:\d+:\d+/u.exec(error.stack ?? '')?.[0] ?? 'no test location'})` : '';
         throw new Error(`Real browser logout failed at ${stage}${detail}`);
       }
       finally { await browser.close(); }

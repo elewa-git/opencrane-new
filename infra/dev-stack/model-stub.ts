@@ -29,6 +29,7 @@ const server = createServer((req, res) => {
     const prompt = JSON.stringify(input[user]?.content ?? '');
     const pdf = prompt.includes('UPLOAD_PDF_PROOF');
     const output = input.slice(user+1).filter(item => item.type === 'function_call_output').map(item => item.output ?? '').join('\n');
+    const customOutput = input.slice(user+1).some(item => item.type === 'custom_tool_call_output');
     const path = /\/workspace\/uploads\/[\w/-]+\/project\.pdf\.md/u.exec(prompt)?.[0];
     const answer = pdf ? (output.includes('Project code: Willow-47.') ? 'The project code is Willow-47.' : 'PDF reading failed.') : 'Hello from your computer.';
     const stopped = new AbortController();
@@ -37,7 +38,11 @@ const server = createServer((req, res) => {
     const id = `resp_${randomUUID()}`, message = `msg_${randomUUID()}`;
     const emit = (event: { type: string; [name: string]: unknown }) => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
     emit({ type: 'response.created', response: { id } });
-    if (pdf && path && !output) {
+    if (pdf && path && !output && !customOutput) {
+      // Exercise the routed model's custom-call history before its shell fallback.
+      emit({ type: 'response.output_item.done', item: { type: 'custom_tool_call', id: `ct_${randomUUID()}`, status: 'completed', name: 'exec', call_id: `call_${randomUUID()}`, input: `text(await tools.exec_command({cmd: "cat ${path}"}))` } });
+    } else if (pdf && path && !output) {
+      emit({ type: 'response.output_item.done', item: { type: 'reasoning', id: `rs_${randomUUID()}`, summary: [], encrypted_content: 'stub-continuation-state' } });
       emit({ type: 'response.output_item.done', item: { type: 'function_call', name: 'exec_command', call_id: `call_${randomUUID()}`, arguments: JSON.stringify({ cmd: `cat ${path}`, max_output_tokens: 1000 }) } });
     } else {
     emit({ type: 'response.output_item.added', item: { id: message, type: 'message', role: 'assistant', content: [] } });

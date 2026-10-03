@@ -21,7 +21,9 @@ export async function uploadComputer() {
     relay = await tcpProxy(() => ({ host: '127.0.0.1', port: Number(/Stub ready (\d+)/u.exec(output)![1]) }), gateway);
     let url = '';
     const start = async () => {
+      // Match the silo's capabilities; Docker's defaults include CAP_KILL.
       container = await docker('run', '-d', '--name', `upload-computer-${randomUUID()}`, '-p', '127.0.0.1::8081',
+        '--cap-drop=ALL', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
         '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', `GATEWAY=http://${gateway}:${relay!.port}`, 'ocn-computer-runtime');
       const port = Number((await docker('port', container, '8081/tcp')).split(':')[1]);
       url = `http://127.0.0.1:${port}`;

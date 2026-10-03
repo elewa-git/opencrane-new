@@ -67,7 +67,8 @@ if (process.argv[2] === 'connect') {
     if (!child.stdin || !child.stdout) throw new Error('Missing executor pipes');
     socket.pipe(child.stdin); child.stdout.pipe(socket);
     child.stdin.on('error', () => socket.destroy());
-    socket.on('error', () => child.kill()); socket.on('close', () => child.kill());
+    // EOF shuts down the executor without signalling across UIDs (CAP_KILL is dropped).
+    socket.on('error', () => child.stdin?.destroy()); socket.on('close', () => child.stdin?.destroy());
   });
   // Only UID 1000 can traverse this root-owned directory. No path-based socket chmod/chown.
   process.umask(0o111);

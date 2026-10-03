@@ -13,9 +13,17 @@ export class ChatComposer {
   readonly draftChange = output<string>();
   readonly submitted = output<string>();
   readonly stopped = output<void>();
+  readonly attached = output<File>();
   protected readonly attachOpen = signal(false);
   protected readonly notice = signal('');
   protected closeAttach(): void { this.attachOpen.set(false); document.getElementById('attach-toggle')?.focus(); }
+  protected choose(event: Event): void {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const file = input.files?.[0];
+    if (file) this.attached.emit(file);
+    input.value = ''; this.closeAttach();
+  }
   protected change(event: Event): void {
     if (event.target instanceof HTMLTextAreaElement) this.draftChange.emit(event.target.value);
   }

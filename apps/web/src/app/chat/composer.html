@@ -1,5 +1,6 @@
 <!-- Adapted from OpenCrane 1 10abd0ef6. Layout follows Workspace Live and the compact frame. -->
 <form class="composer" [class.disabled]="!!reason()" (submit)="$event.preventDefault(); submit()">
+  <input #upload type="file" hidden aria-label="Choose a file" (change)="choose($event)">
   @if (reason()) {
     <div id="composer-reason" class="disabled-field"><oc-icon name="closed" /><span>{{ reason() }}</span></div>
   }
@@ -19,10 +20,10 @@
   }
   @if (attachOpen() && !reason()) {
     <div id="attach-menu" class="attach-menu" aria-label="Attach menu" (keydown.escape)="closeAttach()">
-      <button type="button" (click)="notice.set('File uploads are not available yet.')"><oc-icon name="upload" /> Upload from computer <small>Coming soon</small></button>
+      <button type="button" [disabled]="busy() || queued()" (click)="upload.click()"><oc-icon name="upload" /> Upload from computer</button>
       <button type="button" (click)="notice.set('Workspace file attachments are not available yet.')"><oc-icon name="folder" /> Workspace files <small>Coming soon</small></button>
       <span class="mobile-mode"><oc-icon name="agent" /> Agent session</span>
-      <p>Attachments and connectors are not available yet.</p>
+      <p>Documents, text and images · up to 20 MiB. Scanned before saving.</p>
     </div>
   }
 </form>

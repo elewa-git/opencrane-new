@@ -55,7 +55,7 @@ it('refuses a cyclic FAT chain quickly while other HTTP requests stay responsive
   expect(result.healthMs).toBeLessThan(500);
 }, 12_000);
 
-it('quarantines a member upload, publishes only clean files and rebuilds its list from events', async () => {
+it('scans before storage, publishes only clean files and rebuilds its list from events', async () => {
   const { natsFixture } = await import('@opencrane/event-store/testing');
   const { databases, openfga } = await import('@opencrane/authz/testing');
   const { createStore, memberAuthorisation } = await import('@opencrane/authz');
@@ -105,17 +105,27 @@ it('quarantines a member upload, publishes only clean files and rebuilds its lis
     await runner.run(files);
     const list = await app.inject({ url, headers });
     expect(list.statusCode).toBe(200); expect(list.json()).toMatchObject({ rows: [{ name: 'notes.txt', status: 'uploaded', size: 15 }] });
+    const path = (list.json<{ rows: { path: string }[] }>().rows[0]!).path;
+    const previewUrl = `${url}/view?path=${encodeURIComponent(path)}&preview=true`;
+    const preview = await app.inject({ url: previewUrl, headers });
+    expect(preview.statusCode).toBe(200);
+    expect(preview.body).toBe('Meeting at ten.');
+    expect(preview.headers['content-type']).toContain('text/plain');
+    expect(preview.headers['x-content-type-options']).toBe('nosniff');
+    expect((await app.inject({ url: previewUrl, headers: { ...headers, cookie: '' } })).statusCode).toBe(401);
+    expect((await app.inject({ url: `${url}/view?path=../../private`, headers })).statusCode).toBe(404);
+    expect((await app.inject({ url: `/api/conversations/other/files/view?path=${encodeURIComponent(path)}`, headers })).statusCode).toBe(403);
     await runner.rebuild(files);
     expect((await app.inject({ url, headers })).json()).toEqual(list.json());
-    expect(await services.client.listObjectsV2('quarantine').toArray()).toEqual([]);
+    expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
     const eicar = Buffer.from('X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*');
     const infected = await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'infected' }, payload: eicar });
     expect(infected.statusCode).toBe(422); expect(infected.body).toContain('malware detected');
     expect((await history(nats.store, 'conversation-conversation', 'test')).filter(row => row.event.type === 'file.rejected')).toHaveLength(1);
     await runner.run(files);
     expect((await app.inject({ url, headers })).json()).toEqual(list.json());
-    expect(await services.client.listObjectsV2('quarantine').toArray()).toEqual([]);
-    expect(await services.client.listObjectsV2('files').toArray()).toHaveLength(1);
+    expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
+    expect(await services.client.listObjectsV2('files', '', true).toArray()).toHaveLength(1);
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.from('Meeting at ten.') })).statusCode).toBe(201);
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.from('Different') })).statusCode).toBe(409);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, cookie: '' }, payload: Buffer.from('test') })).statusCode).toBe(401);
@@ -125,14 +135,19 @@ it('quarantines a member upload, publishes only clean files and rebuilds its lis
     const { until: wait } = await import('@opencrane/authz/testing');
     let release: () => void = () => {};
     const gate = new Promise<void>(resolve => { release = resolve; });
-    options.scan = async bytes => { await gate; return services.scan(bytes); };
+    let scanning = false;
+    options.scan = async bytes => { scanning = true; await gate; return services.scan(bytes); };
     const pending = app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'pending' }, payload: Buffer.from('Held until scan') });
-    await wait(async () => (await services.client.listObjectsV2('quarantine').toArray()).length === 1);
+    await wait(() => Promise.resolve(scanning));
+    try {
+      expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
+      expect(await services.client.listObjectsV2('files', '', true).toArray()).toHaveLength(1);
+    } finally { release(); }
     expect((await app.inject({ url, headers })).json()).toEqual(list.json());
     release(); expect((await pending).statusCode).toBe(201);
     options.scan = () => Promise.reject(new Error('Scanner unavailable'));
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'offline' }, payload: Buffer.from('No scan means no file') })).statusCode).toBe(503);
-    expect(await services.client.listObjectsV2('quarantine').toArray()).toEqual([]);
+    expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
     options.scan = services.scan;
     const concurrent = await Promise.all(['Left', 'Right'].map(text => app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'race' }, payload: Buffer.from(text) })));
     expect(concurrent.map(reply => reply.statusCode).sort()).toEqual([201, 409]);

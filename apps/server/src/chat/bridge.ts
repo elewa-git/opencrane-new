@@ -152,7 +152,7 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
           }
           if (!message) return;
           link.socket.send(JSON.stringify({ type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
-            assistantId: conversation.assistantId, text: options.keys.decrypt(options.silo, conversation.conversationId, message.event.data), token: 'preparing', expiresAt: Date.now() + 120_000 }));
+            assistantId: conversation.assistantId, text: withAttachments(options.keys.decrypt(options.silo, conversation.conversationId, message.event.data), rows), token: 'preparing', expiresAt: Date.now() + 120_000 }));
           sendStop(link.socket, rows, message.event.id, conversation.conversationId);
         } catch { /* Dependency failures retry from the recorded message; no turn is invented. */ }
       }));
@@ -188,4 +188,12 @@ async function recoverTerminalTurns(options: Pick<ChatOptions, 'silo' | 'store'>
     await turnCommand(options.store, { silo: options.silo, computerId, assistantId },
       { ...terminal, conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
   }
+}
+
+function withAttachments(text: string, rows: Awaited<ReturnType<typeof chatHistory>>) {
+  const paths = rows.filter(row => row.event.type === 'file.uploaded').map(row => {
+    const file = fileUploadedDataSchema.parse(row.event.data);
+    return `/workspace/uploads/${file.conversationId}/${file.fileId}/${file.name}${file.mime === 'application/pdf' ? '.md' : ''}`;
+  });
+  return text + (paths.length ? `\n\nAttached files (PDFs have adjacent MarkItDown text):\n${paths.join('\n')}` : '');
 }

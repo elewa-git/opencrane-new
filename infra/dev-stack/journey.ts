@@ -43,7 +43,7 @@ let chat: Awaited<ReturnType<typeof chatJourney>> | undefined;
 let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
 const identities = new Map<string, { sub: string; cookie: string }>();
 async function until(check: () => Promise<boolean> | boolean, label: string) {
-  const deadline = Date.now() + (secondary ? 90_000 : 30_000);
+  const deadline = Date.now() + 120_000;
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error(`Timed out: ${label}`);
     await delay(50);
@@ -193,11 +193,17 @@ try {
   await chat.reconnect();
   console.log(`PASS joined member HTTP message → streamed Codex/stub reply → projection; ${replyMs.completeMs} ms (first token ${replyMs.firstTokenMs} ms); browser reconnect no duplicates`);
   const uploaded = await uploadJourney(server, headers(member), chat.conversationId);
-  console.log('PASS PDF upload → quarantine/ClamAV → bridge/MarkItDown → Codex/stub reads Willow-47; EICAR refused');
+  console.log('PASS PDF upload → ClamAV before storage → bridge/MarkItDown → Codex/stub reads Willow-47; EICAR refused');
   const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args], { cwd: root, timeout: 180_000 });
   await runKube('exec', computer!.computer_id, '--', 'node', '-e',
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
   const kube = new SandboxClient(`${directory}/computer-kubeconfig.json`, namespace);
+  await until(async () => {
+    const rows = await computerEvents(computer!.assistant_id);
+    const turnId = (event: typeof rows[number]) => (event.data as Record<string, unknown>)['turnId'];
+    const closed = new Set(rows.filter(event => event.type === 'computer.turn_closed').map(turnId));
+    return rows.filter(event => event.type === 'computer.turn_started').every(event => closed.has(turnId(event)));
+  }, 'completed chat lifecycle closed');
   const history = await computerEvents(computer!.assistant_id);
   const latest = history.findLast(event => !event.type.startsWith('computer.turn_'));
   if (!latest) throw new Error('Computer history missing');

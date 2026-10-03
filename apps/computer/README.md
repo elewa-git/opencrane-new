@@ -6,11 +6,12 @@ Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
 The checked template pins the tested release image at
-`sha256:09bc88153ccc6e72fee754dd171235f1aecf988e3b0df62bf7f278d6155df4ac`.
+`sha256:24298d7546b149db86b1ce26828576add20a96842b6d35084beeba3a3e2c2916`.
 This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
 credential through the Kubernetes Pod proxy; the bridge atomically stores it in
 `/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
-proxy control socket accepts per-thread grants. The OS layer is unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
+proxy control socket accepts per-thread grants. Model requests have a 2,000-token
+output ceiling, including reasoning and tool-call syntax. The OS layer is unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
 names the earlier image. The lifecycle k3d test checks delivery on the current digest. P2-3 adds the reviewed MIT `ws` package for the bridge channel.
 
 ## Build and check

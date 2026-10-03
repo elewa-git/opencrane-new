@@ -243,6 +243,17 @@ async function up(fresh: boolean) {
   }
   await run('npm', ['run', 'migrate:model-grants', '-w', 'apps/ops'],
     { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']! });
+  const events = await connectEventStore(await readEnv('command'));
+  try {
+    const silo = settings['SILO_ID']!, subject = `budget-${silo}`;
+    // Seed before the budget writer starts. Stop retains reservations; fresh and warm runs need room.
+    if (!await events.store.head(subject)) {
+      const event = envelope(silo, subject, 'budget.ceiling_set', {
+        scope: 'global', dailyCeilingCents: 4000, ceilingCents: 20000, setBy: 'dev-stack-stub',
+      });
+      if ((await events.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Stub budget seed failed');
+    }
+  } finally { await events.close(); }
   await run('npm', ['run', 'migrate:budget-default', '-w', 'apps/ops'],
     { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']!,
       DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default' });
@@ -330,7 +341,7 @@ async function up(fresh: boolean) {
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory }, secondary ? 600_000 : 300_000);
+    { ...base, DEV_STACK_DIR: directory }, 900_000);
   console.log(output.trim());
 }
 async function status() {
