@@ -73,8 +73,10 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   lines to be processed. Cap refusals append `budget.exhausted` and a separate admission decision, once per
   unchanged configuration and scope per UTC day for exhaustion, including across actor recovery. All decisions use `decision.recorded` with a digest of the
   verified context when available; gateway JWT failures occur before ext_authz.
-- `budgets` is a PostgreSQL projection using the existing runner. Rebuild it
-  with `ProjectionRunner.rebuild(budgets)` while reactions are stopped.
+- `budgets` is a PostgreSQL projection using the existing runner. The worker
+  upgrades projection version 2 by replaying legacy rows before resuming.
+  Rebuild online with `npm run replay -- budgets --verify`; a repair changes
+  the generation and preserves the live table's reader grants.
   `GET /api/org/models` uses live owner/admin authorisation and returns models, prices, the task-routing table and context threshold,
   today's/month's settled cents, outstanding reserved cents and both ceilings.
   Its `budget` field includes each configured group/assistant ceiling and totals.

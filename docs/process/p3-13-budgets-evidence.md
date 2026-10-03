@@ -48,7 +48,7 @@ explicit tool prices. Focused green runs exercise the same public interfaces.
 | `npm run lint` | PASS, all checks; existing warnings only |
 | `npm run typecheck` | PASS, all workspaces |
 | `npm run build -w apps/web` | PASS, existing size warnings |
-| Independent source review | PASS after two passes; shared-group authority, launcher compatibility and refusal display verified |
+| Independent source review | PARTIAL: latest pass 1 found two upgrade blockers; fixes below, independent pass 2 NOT RUN |
 | Authenticated configuration and chat refusal display in Chromium, 1280/390px | PASS in full root run |
 | `PG_TEST_URL=… npm test -- --maxWorkers=2` | PASS, 66 files / 1,051 tests; 2 files and 10 opt-in tests skipped |
 | Earlier gateway timing failures, rerun in isolation | PASS, both cap races and reviewed-tool revocation; 3 tests |
@@ -65,6 +65,47 @@ timing cases are also rerun alone; the gate table records their outcome.
 The Chromium journey checks authenticated configuration, no horizontal overflow
 and 44px controls. Screenshots show [1280px](evidence/p3-13/budgets-desktop.png)
 and [390px](evidence/p3-13/budgets-390.png). Screenshots come from the final authenticated Chromium journey.
+
+## Upgrade blockers from independent review pass 1
+
+3 October 2026; base `65b0ff5` plus this corrective change, same disposable
+fixture environment and PostgreSQL test URL as above. No shared-stack operation,
+paid provider call, dependency addition, push or deployment.
+
+Each blocker had its failing upgrade test run before its fix:
+
+- Existing budget startup: the recovered actor had no default paying group.
+  The fix makes one conditional `budget.ceiling_set` append using the existing
+  global ceilings, at startup under leadership and through the migration
+  command wired into `up.sh`. Startup and command tests preserve daily, monthly,
+  group and assistant ceilings, retain an existing default, append the default
+  once across restarts and admit a personal chat turn.
+- Legacy projection attribution: the running projection showed 0 reserved and
+  0 settled group cents against the actor's 25 reserved and 9 settled cents.
+  The budget worker now checks projection version 2 and rebuilds from events
+  using the replay runner and an atomic shadow-table replacement. The test
+  checks actor/projection global and group totals before and after verified
+  operator replay, one generation increase for the repair and none on restart
+  or equal replay. Both pending and settled legacy calls omit the paying group
+  inside `modelCall`, as they did before this feature.
+
+Focused validation: **PASS**, 13 tests across
+`apps/server/test/models-main.test.ts` and `apps/ops/test/replay.test.ts`.
+
+| Corrective-change check | Result |
+| --- | --- |
+| `npm run lint` | PASS, existing warnings only; final docs/link checks repeated after this receipt |
+| `npm run typecheck` | PASS, all workspaces; ops repeated after the replay dispatch cleanup |
+| `npm run check:events` | PASS, 75 matching event types |
+| `PG_TEST_URL=… npm test -- --maxWorkers=2` | PASS, 66 files / 1,054 tests; 2 files and 10 opt-in tests skipped; 560 seconds |
+| `npm run build -w apps/web` | PASS, existing size warnings |
+| `npm run test -w apps/web -- --watch=false` | PASS, 8 files / 46 tests |
+| Timing failures requiring isolated reruns | None in this run |
+
+Safe local logs are `/tmp/p3-13-upgrade-{lint,typecheck,test,web-build,web-test}.log`
+and `/tmp/p3-13-upgrade-ops-typecheck.log`. The first lint run rejected a CLI
+complexity of 16; a command map replaced the dispatch chain and the rerun passed.
+Independent review pass 2 and live fresh-silo upgrade qualification: **NOT RUN**.
 
 ## Not in this change
 

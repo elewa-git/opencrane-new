@@ -20,6 +20,20 @@ export function envelope(silo: string, subject: string, type: string, payload: u
   return parsed.event;
 }
 export class BudgetRefused extends Error {}
+/** Run with budget writers stopped or under the leadership lease; each migration appends once. */
+export async function migrateBudgetDefault(store: EventStore, silo: string, defaultPayingGroupId: string) {
+  z.string().min(1).parse(defaultPayingGroupId);
+  const rows = await history(store, `budget-${silo}`, silo);
+  if (!rows.length) return; // Fresh installations are seeded by the actor.
+  const state = emptyBudget();
+  for (const row of rows) applyBudget(state, row.event, row.sequence);
+  if (state.defaultPayingGroupId) return;
+  const event = envelope(silo, `budget-${silo}`, 'budget.ceiling_set', { scope: 'global',
+    dailyCeilingCents: state.dailyCeilingCents, ceilingCents: state.ceilingCents,
+    defaultPayingGroupId, setBy: 'installation' });
+  const result = await store.append({ event, expectedSequence: rows.at(-1)!.sequence });
+  if (result.status !== 'appended') throw new Error('Budget default migration append failed; retry with writers stopped');
+}
 export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
@@ -32,6 +46,7 @@ export class BudgetActor {
   constructor(store: EventStore, silo: string, now = () => new Date()) { this.store = store; this.silo = silo; this.now = now; }
   // Call only after winning the process leadership lease. A new append fences the old leader.
   async start(dailyCeilingCents = 2000, ceilingCents = 20000, defaultPayingGroupId?: string) {
+    if (defaultPayingGroupId) await migrateBudgetDefault(this.store, this.silo, defaultPayingGroupId);
     for (const row of await history(this.store, `budget-${this.silo}`, this.silo)) {
       this.sequence = row.sequence; this.apply(row.event);
     }

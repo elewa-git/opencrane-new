@@ -130,16 +130,18 @@ export async function readBudget(db: Query, silo: string): Promise<BudgetState> 
   return stateSchema.parse(result.rows[0].state);
 }
 // ponytail: one JSON row holds Phase 2 history; split reservations into rows when volume demands it.
-export const budgets: Projection = {
-  name: 'model-budgets',
-  async create(db) { await db.query('CREATE TABLE IF NOT EXISTS model_budgets (silo TEXT PRIMARY KEY, state JSONB NOT NULL)'); },
-  async drop(db) { await db.query('DROP TABLE IF EXISTS model_budgets'); },
+function budgetProjection(name: string, table: string): Projection { return {
+  name,
+  async create(db) { await db.query(`CREATE TABLE IF NOT EXISTS ${table} (silo TEXT PRIMARY KEY, state JSONB NOT NULL)`); },
+  async drop(db) { await db.query(`DROP TABLE IF EXISTS ${table}`); },
   async apply(db, event, position) {
     if (!event.type.startsWith('budget.')) return;
     if (!parseEventByType(event).success) throw new Error('Invalid budget event');
-    const rows = await db.query<{ state: unknown }>('SELECT state FROM model_budgets WHERE silo = $1', [event.silo]);
+    const rows = await db.query<{ state: unknown }>(`SELECT state FROM ${table} WHERE silo = $1`, [event.silo]);
     const state = rows.rows[0] ? stateSchema.parse(rows.rows[0].state) : emptyBudget();
     applyBudget(state, event, position);
-    await db.query('INSERT INTO model_budgets VALUES ($1, $2) ON CONFLICT (silo) DO UPDATE SET state = $2', [event.silo, JSON.stringify(state)]);
+    await db.query(`INSERT INTO ${table} VALUES ($1, $2) ON CONFLICT (silo) DO UPDATE SET state = $2`, [event.silo, JSON.stringify(state)]);
   },
-};
+}; }
+export const budgets = budgetProjection('model-budgets', 'model_budgets');
+export const replayBudgets = budgetProjection('model-budgets-replay', 'model_budgets_replay');
