@@ -1,0 +1,68 @@
+name: opencrane-odoo-fixture
+services:
+  database:
+    build:
+      context: ../..
+      dockerfile: infra/odoo/Dockerfile
+      target: database
+    image: opencrane-odoo-database:p3-11
+    user: "${ODOO_OPERATOR_UID}:${ODOO_OPERATOR_GID}"
+    volumes:
+      - database:/var/lib/postgresql
+      - .:/fixture:ro
+      - ${ODOO_PRIVATE_DIR}/database.password:/run/database.password:ro
+    networks: [database]
+    healthcheck:
+      test: [CMD, /usr/lib/postgresql/17/bin/pg_isready, -h, 127.0.0.1, -U, odoo, -d, opencrane_fixture]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  odoo:
+    build:
+      context: ../..
+      dockerfile: infra/odoo/Dockerfile
+      target: odoo
+    image: opencrane-odoo-community:p3-11
+    user: "${ODOO_OPERATOR_UID}:${ODOO_OPERATOR_GID}"
+    depends_on:
+      database:
+        condition: service_healthy
+    volumes:
+      - .:/fixture:ro
+      - filestore:/var/lib/odoo
+      - ${ODOO_PRIVATE_DIR}:/run/fixture:ro
+    tmpfs: ["/tmp:uid=${ODOO_OPERATOR_UID},gid=${ODOO_OPERATOR_GID},mode=700"]
+    networks:
+      database: {}
+      upstream:
+        ipv4_address: 172.30.52.2
+        aliases: [odoo]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    command: [-c, /run/fixture/odoo.conf, --no-database-list, --without-demo=True]
+  operator:
+    build:
+      context: ../..
+      dockerfile: infra/odoo/Dockerfile
+      target: operator
+    image: opencrane-odoo-operator:p3-11
+    network_mode: host
+    command: ["TCP4-LISTEN:18069,bind=127.0.0.1,reuseaddr,fork", "TCP4:172.30.52.2:8069"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+
+networks:
+  database:
+    internal: true
+  # Reserved only for P3-12's hosted opencrane-odoo-mcp workload.
+  upstream:
+    name: opencrane-odoo-mcp-upstream
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.52.0/28
+volumes:
+  database:
+  filestore:

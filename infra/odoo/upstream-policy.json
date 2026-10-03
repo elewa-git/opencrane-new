@@ -1,0 +1,8 @@
+{
+  "operator": "http://127.0.0.1:18069",
+  "futureWorkload": "opencrane-odoo-mcp",
+  "network": "opencrane-odoo-mcp-upstream",
+  "upstream": "http://odoo:8069",
+  "allowedAddresses": ["172.30.52.2"],
+  "allowRemoteRegistration": false
+}
