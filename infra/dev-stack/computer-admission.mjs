@@ -37,8 +37,8 @@ const policies = [
   ['sandbox', 'agents.x-k8s.io', ['sandboxes'], 'object.spec.podTemplate.spec', [
     `variables.p == ${cel(spec)}`,
     `variables.labels['app'] == 'computer'`,
-    // RBAC has no field permissions or operatingMode subresource. CEL supplies that boundary.
-    `request.userInfo.username != 'system:serviceaccount:${namespace}:computer-lifecycle' || (oldObject != null && object.spec.all(k, k == 'operatingMode' || (k in oldObject.spec && object.spec[k] == oldObject.spec[k])) && oldObject.spec.all(k, k == 'operatingMode' || k in object.spec) && object.metadata.labels == oldObject.metadata.labels && object.metadata.ownerReferences == oldObject.metadata.ownerReferences && has(object.metadata.annotations) == has(oldObject.metadata.annotations) && (!has(object.metadata.annotations) || object.metadata.annotations == oldObject.metadata.annotations) && has(object.metadata.finalizers) == has(oldObject.metadata.finalizers) && (!has(object.metadata.finalizers) || object.metadata.finalizers == oldObject.metadata.finalizers))`,
+    // Keep Pod settings fixed; allow mode changes and ownership by the same-name claim.
+    `request.userInfo.username != 'system:serviceaccount:${namespace}:computer-lifecycle' || (oldObject != null && object.spec.all(k, k == 'operatingMode' || (k in oldObject.spec && object.spec[k] == oldObject.spec[k])) && oldObject.spec.all(k, k == 'operatingMode' || k in object.spec) && object.metadata.labels == oldObject.metadata.labels && ((has(object.metadata.ownerReferences) == has(oldObject.metadata.ownerReferences) && (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences == oldObject.metadata.ownerReferences)) || (has(object.metadata.ownerReferences) && size(object.metadata.ownerReferences) == 1 && object.metadata.ownerReferences.all(o, o.apiVersion == 'extensions.agents.x-k8s.io/v1beta1' && o.kind == 'SandboxClaim' && o.name == object.metadata.name && o.controller && o.blockOwnerDeletion))) && has(object.metadata.annotations) == has(oldObject.metadata.annotations) && (!has(object.metadata.annotations) || object.metadata.annotations == oldObject.metadata.annotations) && has(object.metadata.finalizers) == has(oldObject.metadata.finalizers) && (!has(object.metadata.finalizers) || object.metadata.finalizers == oldObject.metadata.finalizers))`,
   ]],
   ['pod', '', ['pods', 'pods/ephemeralcontainers'], 'object.spec', security],
   ['claim', 'extensions.agents.x-k8s.io', ['sandboxclaims'], 'object.spec', [
@@ -52,7 +52,7 @@ for (const [suffix, group, resources, expression, expressions] of policies) {
   const name = `${namespace}-computer-${suffix}`;
   const policy = { apiVersion: 'admissionregistration.k8s.io/v1', kind: 'ValidatingAdmissionPolicy', metadata: { name }, spec: {
     failurePolicy: 'Fail', matchConstraints: { resourceRules: [{ apiGroups: [group], apiVersions: ['*'], operations: ['CREATE', 'UPDATE'], resources }] },
-    variables: [{ name: 'p', expression }, ...(suffix === 'claim' ? [] : [{ name: 'labels', expression: suffix === 'pod' ? 'object.metadata.labels' : 'object.spec.podTemplate.metadata.labels' }])], validations: expressions.map(expression => ({ expression, message: 'Computer must use the checked template; worker may only change operatingMode' })),
+    variables: [{ name: 'p', expression }, ...(suffix === 'claim' ? [] : [{ name: 'labels', expression: suffix === 'pod' ? 'object.metadata.labels' : 'object.spec.podTemplate.metadata.labels' }])], validations: expressions.map(expression => ({ expression, message: 'Computer must use the checked template; worker may only change operatingMode or repair same-name claim ownership' })),
   } };
   const binding = { apiVersion: policy.apiVersion, kind: 'ValidatingAdmissionPolicyBinding', metadata: { name }, spec: {
     policyName: name, validationActions: ['Deny'], matchResources: { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': namespace } } },

@@ -5,6 +5,7 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
 import { readEvents } from '@opencrane/projections';
 import { registerHandler } from '@opencrane/handlers';
+import { createLogger } from '@opencrane/observability';
 import type { SandboxClient, SandboxState } from './kubernetes.ts';
 
 type Store = Pick<EventStore, 'readStream' | 'append'>;
@@ -134,15 +135,20 @@ async function reconcileComputer(store: EventStore, kube: SandboxClient,
     return;
   }
   if (['computer.lost', 'computer.retired'].includes(state.latest.type)) return;
-  await kube.claim(state.computerId, state.assistantId);
+  if (state.latest.type === 'computer.claimed') await kube.claim(state.computerId, state.assistantId);
   const sandbox = await kube.state(state.computerId);
-  if (state.latest.type === 'computer.resumed' && sandbox?.podUid && sandbox.podUid === readyPodUid(state)) {
+  // Missing bindings follow the loss reaction, which re-claims and rotates the grant.
+  if (!sandbox) {
+    await observeReady(store, state, events, sandbox, tokens, sink, idleMs);
+    return;
+  }
+  if (['computer.claimed', 'computer.resumed'].includes(state.latest.type) && sandbox.podUid && sandbox.podUid === readyPodUid(state)) {
     await kube.mode(state.computerId, 'Suspended');
     return;
   }
   await kube.mode(state.computerId, 'Running');
-  if (state.latest.type === 'computer.claimed' || state.latest.type === 'computer.resumed') {
-    if (sandbox?.ready && sandbox.podUid) {
+  if (['computer.claimed', 'computer.resumed'].includes(state.latest.type)) {
+    if (sandbox.ready && sandbox.podUid) {
       await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, ...data, generation: generation(events),
         tokenId: field(state.latest.data, 'tokenId') }));
       await append(store, state.latest, events, 'computer.ready', subject,
@@ -187,10 +193,15 @@ async function observeReady(store: EventStore, state: ComputerState, events: Sto
 
 export function watchComputers(store: EventStore, kube: SandboxClient,
   tokens: Tokens, sink: CredentialSink, silo: string, idleMs: number, signal: AbortSignal) {
+  const logger = createLogger('computer-lifecycle');
   return (async () => {
     while (!signal.aborted) {
       for (const state of await states(store, silo)) {
-        await reconcileComputer(store, kube, state, tokens, sink, idleMs);
+        try {
+          await reconcileComputer(store, kube, state, tokens, sink, idleMs);
+        } catch (error) {
+          logger.error({ err: error, computerId: state.computerId }, 'Computer reconciliation failed; retrying next poll');
+        }
       }
       await delay(250, undefined, { signal }).catch((error: unknown) => {
         if (!(error instanceof Error && error.name === 'AbortError')) throw error;

@@ -19,6 +19,7 @@ import { recordReport } from '../src/chat/reports.ts';
 import { bridgeChannel } from '../../computer/src/channel.ts';
 import { reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
+import { history, suspendComputer } from '../../ops/src/lifecycle.ts';
 
 async function replayFixture(conversationIds = ['alice', 'bob']) {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-replay-`);
@@ -200,4 +201,54 @@ it('surfaces a permanent report rejection and stops automatic reconnect attempts
     expect(loggerLines.join('')).toContain('Report sequence gap');
     expect(loggerLines.join('')).not.toContain('Private rejected content');
   } finally { stop.abort(); await work; await fixture.close(); await dbs.close(); }
+});
+
+it('wakes another conversation without rereading the archive of an already closed turn', async () => {
+  const fixture = await replayFixture(), dbs = await databases(), stop = new AbortController();
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${fixture.directory}/key.pem`, key.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: `${fixture.directory}/key.pem`, issuer: 'https://bridge.test/' });
+  const db = pgDb(dbs.queue), runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-wake'));
+  await runner.initialise(conversations); await runner.run(conversations);
+  for (const [type, extra] of [
+    ['computer.claimed', { tokenId: 'token:initial', generation: 1 }],
+    ['computer.ready', { generation: 1, podUid: 'old-pod' }],
+  ] as const) {
+    const result = await fixture.store.append({ expectedSequence: (await history(fixture.store, 'computer-assistant')).at(-1)?.sequence ?? 0,
+      event: { id: type, commandId: type, type, silo: 'test', subject: 'computer-assistant', source: 'test', time: new Date().toISOString(),
+        principal: { kind: 'system', id: 'test' }, data: { computerId: 'computer', assistantId: 'assistant', ...extra } } });
+    if (result.status !== 'appended') throw new Error('Computer fixture failed');
+  }
+  const ready = (await history(fixture.store, 'computer-assistant')).at(-1)!.event;
+  const started = { sequence: 1, previousSequence: 0, conversationId: 'alice', turnId: 'message-alice', assistantId: 'assistant', type: 'agent.turn_started', threadId: 'alice-thread' };
+  const completed = { ...started, sequence: 2, previousSequence: 1, type: 'agent.turn_completed' };
+  await recordReport(fixture.store, fixture.keys, fixture.context, started);
+  await recordReport(fixture.store, fixture.keys, fixture.context, completed);
+  await turnCommand(fixture.store, fixture.context, { ...completed, status: 'completed' });
+  await suspendComputer(fixture.store, { ...fixture.context, latest: ready, ready });
+  let release!: () => void;
+  const archiveBlocked = new Promise<void>(resolve => { release = resolve; });
+  let archiveRead = false;
+  const read = fixture.store.readStream.bind(fixture.store);
+  // The first snapshot is available; later archive reads are stalled at the NATS boundary.
+  const reading = vi.spyOn(fixture.store, 'readStream').mockImplementation(async function* (...args) {
+    if (args[0] === 'conversation-alice') {
+      if (archiveRead) await archiveBlocked;
+      archiveRead = true;
+    }
+    yield* read(...args);
+  });
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
+  const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db }, tokens, kube, fixture.url, stop.signal);
+  try {
+    await until(async () => (await history(fixture.store, 'computer-assistant')).at(-1)?.event.type === 'computer.resumed', 3000);
+    const result = await fixture.store.append({ expectedSequence: (await history(fixture.store, 'computer-assistant')).at(-1)!.sequence,
+      event: { ...ready, id: 'new-ready', commandId: 'new-ready', data: { computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'new-pod' } } });
+    expect(result.status).toBe('appended');
+    await until(() => fixture.messages.some(message => typeof message === 'object' && message !== null && Reflect.get(message, 'id') === 'message-bob'), 3000);
+    expect((await history(fixture.store, 'computer-assistant')).filter(row => row.event.type === 'computer.turn_closed')).toHaveLength(1);
+  } finally {
+    release(); stop.abort(); await work; reading.mockRestore(); vi.restoreAllMocks(); await fixture.close(); await dbs.close();
+  }
 });

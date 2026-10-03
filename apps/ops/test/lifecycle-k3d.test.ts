@@ -13,7 +13,7 @@ import { createLogger } from '@opencrane/observability';
 import { computers, ProjectionRunner, readEvents, rebuildComputersProjection } from '@opencrane/projections';
 import { database } from '../../../libs/projections/test/database.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
-import { lifecycleHandlers, resumeComputer, suspendComputer, watchComputers } from '../src/lifecycle.ts';
+import { field, history, lifecycleHandlers, resumeComputer, suspendComputer, watchComputers } from '../src/lifecycle.ts';
 
 const execFile = promisify(execFileCallback);
 const live = process.env['LIFECYCLE_K3D'] === '1' && Boolean(process.env['PG_TEST_URL']);
@@ -22,6 +22,116 @@ function nested(input: unknown, name: string): unknown {
   const result: unknown = Reflect.get(input, name);
   return result;
 }
+
+it.skipIf(!live).each([
+  ['computer.ready', 'both', false], ['computer.resumed', 'both', false],
+  ['computer.ready', 'both', true], ['computer.resumed', 'both', true],
+  ['computer.ready', 'sandboxclaim', true], ['computer.resumed', 'sandbox', true],
+  ['computer.resumed', 'sandboxclaim', true],
+] as const)(
+  'recovers deleted resources while %s (delete: %s, retain disk: %s)', async (latestType, deleted, retainDisk) => {
+    const namespace = `p22-repair-${randomUUID().slice(0, 8)}`;
+    const directory = await mkdtemp(join(tmpdir(), 'opencrane-repair-'));
+    const k = async (...args: string[]) => (await execFile('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args],
+      { timeout: 180_000 })).stdout.trim();
+    const nats = await natsFixture(), storage = await database('pg');
+    let stop = new AbortController(), work: Promise<void> | undefined, watcherError: unknown, created = false;
+    const until = async (check: () => Promise<boolean>) => {
+      const deadline = Date.now() + 120_000;
+      while (!await check()) {
+        if (watcherError instanceof Error) throw watcherError;
+        expect(Date.now(), 'computer must recover without restarting the watcher').toBeLessThan(deadline);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    };
+    try {
+      expect((await execFile('kubectl', ['config', 'current-context'])).stdout.trim()).toBe('k3d-ocn');
+      expect(await k('get', 'namespace', namespace, '--ignore-not-found', '-o', 'name')).toBe('');
+      await k('create', 'namespace', namespace);
+      created = true;
+      await execFile('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
+      await k('create', 'configmap', 'computer-runtime', '--from-literal=gateway=http://127.0.0.1:3000');
+      await k('apply', '-f', 'apps/computer/sandbox-template.json');
+      await k('apply', '-f', 'apps/computer/network-policy.json');
+      await k('apply', '-f', 'infra/dev-stack/computer-pool.json');
+      await k('apply', '-f', 'infra/dev-stack/computer-worker-rbac.yaml');
+      const config = await execFile('kubectl', ['--context=k3d-ocn', 'config', 'view', '--raw', '--minify', '--flatten', '-o', 'json']);
+      const raw: unknown = JSON.parse(config.stdout), clusters = nested(raw, 'clusters');
+      const cluster: unknown = Array.isArray(clusters) ? nested(clusters[0], 'cluster') : undefined;
+      if (typeof cluster !== 'object' || cluster === null) throw new Error('Missing test cluster');
+      const serviceToken = await k('create', 'token', 'computer-lifecycle', '--duration=1h');
+      await writeFile(join(directory, 'kubeconfig'), JSON.stringify({ apiVersion: 'v1', kind: 'Config',
+        clusters: [{ name: 'test', cluster }], users: [{ name: 'worker', user: { token: serviceToken } }],
+        contexts: [{ name: 'test', context: { cluster: 'test', user: 'worker', namespace } }], 'current-context': 'test' }), { mode: 0o600 });
+      const key = generateKeyPairSync('ec', { namedCurve: 'P-256',
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+      await writeFile(join(directory, 'key.pem'), key.privateKey, { mode: 0o600 });
+      const tokens = await tokenIssuer({ privateKeyPath: join(directory, 'key.pem'), issuer: 'https://repair.test/' });
+      const kube = new SandboxClient(join(directory, 'kubeconfig'), namespace, 'computer', '1Gi');
+      const assistantId = 'repair-assistant', subject = `computer-${assistantId}`;
+      await lifecycleHandlers(nats.store)[1].handle({
+        id: randomUUID(), commandId: randomUUID(), type: 'assistant.created', subject: `assistant-${assistantId}`, silo: 'test', source: 'test',
+        time: new Date().toISOString(), correlation: {}, principal: { kind: 'system', id: 'test' },
+        data: { assistantId, ownerId: 'alice', kind: 'personal' },
+      }, storage.db);
+      const computerId = field((await history(nats.store, subject)).at(-1)!.event.data, 'computerId');
+      const start = () => {
+        work = watchComputers(nats.store, kube, tokens, (id, token) => kube.credentials(id, token), 'test', 600_000, stop.signal)
+          .catch((error: unknown) => { watcherError = error; });
+      };
+      const latest = async () => (await history(nats.store, subject)).at(-1)!.event;
+      start();
+      await until(async () => (await latest()).type === 'computer.ready');
+      stop.abort(); await work;
+      const ready = await latest();
+      const pvcUid = await k('get', `pvc/home-${computerId}`, '-o', 'jsonpath={.metadata.uid}');
+      await k('exec', computerId, '--', 'node', '-e', "require('fs').writeFileSync('/home/agent/workspace/preserved','yes')");
+      if (latestType === 'computer.resumed') {
+        await suspendComputer(nats.store, { assistantId, computerId, latest: ready, ready });
+        await resumeComputer(nats.store, tokens, 'test', assistantId);
+      }
+      const before = await latest();
+      expect(before.type).toBe(latestType);
+      const resources = deleted === 'both' ? [`sandboxclaim/${computerId}`, `sandbox/${computerId}`] : [`${deleted}/${computerId}`];
+      await k('delete', ...resources, '--wait=true',
+        `--cascade=${retainDisk ? 'orphan' : 'background'}`);
+      // Orphan deletion retains the disk and Pod; remove the old Pod before repair.
+      if (retainDisk && deleted !== 'sandboxclaim') await k('delete', `pod/${computerId}`, '--wait=true');
+      // A surviving claim may already have recreated its Sandbox.
+      if (deleted !== 'sandbox') {
+        expect(await k('get', ...resources, '--ignore-not-found', '-o', 'name')).toBe('');
+        await expect(kube.state(computerId)).resolves.toBeUndefined();
+      }
+      stop = new AbortController(); start();
+      await until(async () => {
+        const event = await latest();
+        // Exercise the existing loss reaction if repair replaces the ready Pod.
+        if (event.type === 'computer.lost') await lifecycleHandlers(nats.store)[1].handle(event, storage.db);
+        return event.type === 'computer.ready' && event.id !== before.id;
+      });
+      expect(watcherError).toBeUndefined();
+      expect(nested((await latest()).data, 'podUid')).not.toBe(nested(ready.data, 'podUid'));
+      if (deleted !== 'sandbox') {
+        expect((await history(nats.store, subject)).some(row => row.event.type === 'computer.lost')).toBe(true);
+        expect((await latest()).data).toMatchObject({ generation: 2 });
+      }
+      expect(await k('get', `sandboxclaim/${computerId}`, '-o', 'jsonpath={.metadata.name}')).toBe(computerId);
+      if (retainDisk) {
+        expect(await k('get', `pvc/home-${computerId}`, '-o', 'jsonpath={.metadata.uid}')).toBe(pvcUid);
+        expect(await k('exec', computerId, '--', 'cat', '/home/agent/workspace/preserved')).toBe('yes');
+      }
+    } finally {
+      stop.abort(); await work;
+      await nats.close(); await storage.close();
+      if (created) {
+        for (const suffix of ['sandbox', 'pod', 'claim']) await k('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
+          `${namespace}-computer-${suffix}`, '--ignore-not-found');
+        await k('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=180s');
+      }
+      await rm(directory, { recursive: true, force: true });
+    }
+  }, 240_000,
+);
 
 it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () => {
   expect(suspendComputer).toBeTypeOf('function');
@@ -128,6 +238,14 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
 
     const readyEvent = (await allEvents()).findLast(event => event.type === 'computer.ready')!;
     const restricted = (...args: string[]) => run('--kubeconfig', kubeconfig, '-n', namespace, ...args);
+    for (const owner of [
+      { apiVersion: 'extensions.agents.x-k8s.io/v1beta1', kind: 'SandboxClaim', name: 'another-computer' },
+      { apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox', name: computerId },
+    ]) {
+      await expect(restricted('patch', `sandbox/${computerId}`, '--type=merge', '--dry-run=server', '-p',
+        JSON.stringify({ metadata: { ownerReferences: [{ ...owner, uid: randomUUID(), controller: true, blockOwnerDeletion: true }] } })))
+        .rejects.toThrow(/denied/);
+    }
     const hostile: Record<string, unknown>[] = [
       { runtimeClassName: null }, { hostNetwork: true }, { hostPID: true }, { hostIPC: true },
       { volumes: [{ name: 'escape', hostPath: { path: '/' } }] },
