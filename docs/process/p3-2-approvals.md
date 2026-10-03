@@ -72,12 +72,45 @@ Agentgateway SHA-256: `daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d1
 NATS binary SHA-256: `387ce54e7a0a249d877a579ed641d715bab047d7e061bfa42b4d07f6a0401341`.
 OpenFGA image: `v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c000540f645c1dbc1e55`.
 
+## Review pass 1 fixes
+
+Receipt date: 3 October 2026. Source: the commit containing this section, based on
+`2c70fc2`. Same isolated fixture environment and `PG_TEST_URL` as above; no dev-stack
+changes, rebase or push. These are source checks, not fresh-install qualification.
+
+Both regressions were written and run before their fixes:
+
+- Real NATS/API/gateway: each older-turn stop, completion and failure incorrectly
+  cancelled the current requested approval (3 expected failures). With terminal
+  events checked against the bound turn id, all 3 cases pass: unrelated events
+  preserve requested and approved cards, while closing the bound turn cancels the
+  card and refuses forwarding with zero upstream calls.
+- Built app in Chromium: the new `stepUp=true`, 390px case failed on “Sign in again”
+  at 40.796875px high. The link now has a 44px minimum width and height. The browser
+  journey passes with width and height assertions for every button and link,
+  including step-up, plus the existing desktop/mobile decision and reload checks.
+
+Red/green logs: `/tmp/p3-2-r1-{turn,browser}-{red,green}.log`.
+
+| Check | Result |
+| --- | --- |
+| `npm run lint` | PASS; 5 existing warnings, no errors |
+| `npm run typecheck` | PASS across all workspaces |
+| `npm run check:events` | PASS; 76 event types agree |
+| `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2` | PASS; 67 files passed, 2 skipped; 1,100 tests passed, 11 skipped; no timing failures to rerun |
+| `npm run build -w apps/web` | PASS; existing bundle/style budget warnings |
+| `npm run test -w apps/web -- --watch=false` | PASS; 8 files, 50 tests |
+| Chromium approval journey with `APPROVAL_BROWSER=1` | PASS; 390px step-up plus 1280px/390px decision and reload cases |
+
+The browser case skipped by the root run passed separately above. Gated live tests
+remain unrun. Check logs: `/tmp/p3-2-r1-{lint,typecheck,events,test,build,web-tests}.log`.
+
 ## Not run
 
 Fresh shared-stack and k3d lifecycle/bridge qualification, paid model calls, live
 OIDC-provider sign-in, native Codex MCP
 continuation (P3-5), credential release and charged tools (P3-8), Odoo write/readback,
-managed-cluster behaviour, independent review and post-rebase/main CI. The real
+managed-cluster behaviour, review pass 2 and post-rebase/main CI. The real
 fixture uses a credential-free connection and profile `none`; it makes no personal
 credential-custody claim. Browser step-up navigation and local OIDC tests do not
 claim a live-provider journey. No paid calls, push, merge or deployment occurred.

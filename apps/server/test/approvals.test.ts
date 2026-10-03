@@ -76,6 +76,28 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
   } finally { await f.close(); }
 }, 40_000);
 
+it.each([
+  ['agent.turn_stop_requested', { requestedBy: 'alice' }],
+  ['agent.turn_completed', {}],
+  ['agent.turn_failed', { reason: 'model_error' }],
+])('keeps the current approval after an older turn emits %s, but refuses forwarding when the bound turn closes', async (type, details) => {
+  const f = await approvalFixture();
+  try {
+    expect((await f.call()).status).toBe(403);
+    const approvalId = (await f.read()).cards[0]!.approvalId;
+    const closeTurn = (turnId: string) => f.append('conversation-conversation', type, { conversationId: 'conversation', turnId, ...details });
+    await closeTurn('old-turn');
+    expect((await f.read()).cards).toMatchObject([{ approvalId, state: 'requested', canDecide: true }]);
+    expect((await f.decide()).statusCode).toBe(200);
+    await closeTurn('old-turn');
+    expect((await f.read()).cards).toMatchObject([{ approvalId, state: 'approved' }]);
+    await closeTurn('turn');
+    expect((await f.read()).cards).toMatchObject([{ approvalId, state: 'cancelled', canDecide: false }]);
+    expect((await f.call()).status).toBe(403);
+    expect(f.received()).toBe(0);
+  } finally { await f.close(); }
+}, 40_000);
+
 it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed', 'revoked', 'lost_ack', 'fence'])('refuses %s approval with zero upstream effects', async reason => {
   const f = await approvalFixture();
   try {
@@ -150,13 +172,13 @@ it('refuses hidden or ambiguous arguments and does not use an approval for chang
   } finally { await f.close(); }
 }, 40_000);
 
-it.runIf(process.env['APPROVAL_BROWSER'] === '1')('decides the real gateway card in Chromium at 1280 and 390px and restores terminal states', async () => {
+it.runIf(process.env['APPROVAL_BROWSER'] === '1')('sizes every control including step-up at 390px, decides the real gateway card and restores terminal states', async () => {
   const { chromium } = await import('playwright');
   const { members, computers, conversations } = await import('@opencrane/projections');
   const browser = await chromium.launch();
   try {
-    for (const width of [1280, 390]) {
-      const f = await approvalFixture();
+    for (const [width, stepUp] of [[390, true], [1280, false], [390, false]] as const) {
+      const f = await approvalFixture(stepUp);
       const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: 'reduce' });
       try {
         for (const projection of [members, computers, conversations]) { await f.runner.initialise(projection); await f.runner.run(projection); }
@@ -175,8 +197,16 @@ it.runIf(process.env['APPROVAL_BROWSER'] === '1')('decides the real gateway card
         await page.evaluate('document.fonts.ready');
         expect(await page.locator('.approval-ledger').innerText()).toContain('9007199254740993');
         expect(await page.evaluate<boolean>("document.querySelector('.approval').scrollWidth <= document.querySelector('.approval').clientWidth")).toBe(true);
-        for (const button of await page.locator('.approval button').all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+        expect(await page.getByRole('link', { name: 'Sign in again' }).count()).toBe(stepUp ? 1 : 0);
+        const controls = await page.locator('.approval button, .approval a[href]').all();
+        expect(controls).toHaveLength(stepUp ? 3 : 2);
+        for (const control of controls) {
+          const box = (await control.boundingBox())!;
+          expect(box.width, await control.innerText()).toBeGreaterThanOrEqual(44);
+          expect(box.height, await control.innerText()).toBeGreaterThanOrEqual(44);
+        }
         if (width === 390) expect((await page.locator('.approve').boundingBox())!.width).toBeGreaterThan(280);
+        if (stepUp) continue;
         await mkdir('docs/design/chat/comparison/p3-2', { recursive: true });
         await page.screenshot({ path: `docs/design/chat/comparison/p3-2/requested-${width}.png`, fullPage: true });
         await page.reload(); await page.getByRole('button', { name: 'Approve', exact: true }).waitFor();

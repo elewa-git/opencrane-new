@@ -69,7 +69,10 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
 async function invalidated(store: EventStore, silo: string, request: Request) {
   const rows = await history(store, `conversation-${request.conversationId}`, silo);
   const start = rows.findIndex(r => r.event.type === 'agent.turn_started' && z.object({ turnId: z.string() }).parse(r.event.data).turnId === request.turnId);
-  if (start < 0 || rows.slice(start + 1).some(r => ['conversation.closed', 'message.posted', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested'].includes(r.event.type))) return true;
+  if (start < 0 || rows.slice(start + 1).some(({ event }) =>
+    ['conversation.closed', 'message.posted', 'agent.turn_started'].includes(event.type) ||
+    (['agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested'].includes(event.type) &&
+      z.object({ turnId: z.string() }).parse(event.data).turnId === request.turnId))) return true;
   const policy = await readToolPolicy(store, silo, request.serverId);
   return !policy.published || policy.sequence !== request.policySequence || policy.connectionId !== request.connectionId;
 }

@@ -7,7 +7,7 @@ h2 { font-size: 14px; margin: 10px 0 16px; }
 dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 9px 12px; line-height: 1.5; }
 dt { color: #616a6c; } dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .step-up { padding: 12px; border: 1px solid #f6cc9e; border-radius: 6px; background: #fdf8ef; color: #72531e; line-height: 1.6; }
-a { display: inline-block; color: inherit; padding: 10px 0; }
+a { display: inline-block; min-width: 44px; min-height: 44px; color: inherit; padding: 10px 0; }
 .actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } small { margin-left: auto; color: #616a6c; }
 button { min-height: 44px; padding: 10px 18px; border: 1px solid #c9d1d2; border-radius: 7px; background: white; font: inherit; cursor: pointer; }
 button.approve { background: #16191a; color: white; border-color: #16191a; } button:disabled { opacity: .55; cursor: default; }
