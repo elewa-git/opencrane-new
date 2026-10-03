@@ -11,6 +11,7 @@ import { createLogger } from "@opencrane/observability";
 import {
   connectProjectionDb,
   readEvents,
+  rebuildAuditProjection,
   rebuildMemberProjection,
   rebuildMcpCatalogueProjection,
   rebuildComputersProjection,
@@ -18,7 +19,7 @@ import {
 } from "@opencrane/projections";
 
 const usage =
-  "Usage: npm run replay -- <members|mcp-catalogue|computers|budgets|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
+  "Usage: npm run replay -- <members|mcp-catalogue|computers|budgets|audit|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },
@@ -31,6 +32,7 @@ const postgresRebuilds = new Map([
   ['mcp-catalogue', rebuildMcpCatalogueProjection],
   ['computers', rebuildComputersProjection],
   ['budgets', rebuildBudgetProjection],
+  ['audit', rebuildAuditProjection],
 ]);
 
 function required(env: NodeJS.ProcessEnv, name: string): string {

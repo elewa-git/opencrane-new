@@ -12,7 +12,7 @@ import { createStore } from '@opencrane/authz';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
-const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
+const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'audit', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
   try { return (await exec(command, command === 'kubectl' ? ['--context=k3d-ocn', ...args] : args, { cwd: root, env, timeout, maxBuffer: 8 * 1024 * 1024 })).stdout; }
@@ -224,7 +224,7 @@ async function up(fresh: boolean) {
       OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
   }
   const binding = await readEnv('binding');
-  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets']) {
+  for (const name of ['members', 'mcp-catalogue', 'computers', 'conversations', 'budgets', 'audit']) {
     await start(name, ['--experimental-strip-types', 'apps/ops/src/worker.ts', name], await readEnv('projection'));
   }
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });

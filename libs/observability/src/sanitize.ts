@@ -1,7 +1,7 @@
 // Copied from OpenCrane 1 (10abd0ef6) libs/backend/observability/src/sanitize.ts;
 // changed: (1) sensitive names are matched by the words in them (names.ts), not
-// an exact list; (2) every string is also scrubbed for sensitive query-string
-// parameters (redact.ts), so a URL inside a message or an error text is covered;
+// an exact list; (2) entire URL queries are dropped from every string
+// (redact.ts), so a URL inside a message or an error text is covered;
 // (3) this runs on the finished JSON line (sanitizeLogLine), not as pino's `log`
 // and `bindings` formatters. Those run before serializers and are reset on every
 // `logger.child()`, so they never saw an Error's own properties or child
@@ -39,8 +39,8 @@ function sanitizeValue(value: unknown, depth: number): unknown {
 
 /**
  * Copy an object with sensitive fields (headers, secrets, tokens, passwords,
- * API keys: see names.ts) replaced by `[Redacted]` and sensitive query-string
- * parameters in any string blanked too, at any depth. Meant for plain data such
+ * API keys: see names.ts) replaced by `[Redacted]` and entire URL queries
+ * removed from strings too, at any depth. Meant for plain data such
  * as parsed JSON. Fails closed: if walking throws, the result is one redacted
  * marker.
  */

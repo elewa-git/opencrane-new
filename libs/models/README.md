@@ -210,3 +210,14 @@ The dev-stack startup hook belongs to the separate dev-stack change; no shared
 stack files or processes were changed here.
 
 [P3-13 evidence](../../docs/process/p3-13-budgets-evidence.md) records isolated real-service races, replay and UI checks.
+
+P3-19 binds model reservations to `requestId`. The decision's permit joins gateway
+usage and budget settlement without reading log timestamps. Normalised gateway
+JSONL contains only UUID correlation and usage or bounded failure codes, including
+pre-ext_authz JWT failures without an asserted identity. Ingest is idempotent;
+event-store failure preserves safe gateway evidence and denies dispatch. Unmatched
+model effects raise one security alert rather than charge an unrelated reservation.
+The gateway has no retry policy: a lost upstream reply stays uncertain and does
+not cause another upstream attempt. The real gateway → recording upstream audit,
+JWT/outage, missing observation and replay cases run in
+`PG_TEST_URL=… npx vitest run libs/models/test/gateway.test.ts`.

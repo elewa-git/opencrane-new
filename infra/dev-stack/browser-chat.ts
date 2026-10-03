@@ -6,7 +6,7 @@ import { mkdir } from 'node:fs/promises';
 import type { Page } from 'playwright';
 
 /** The real signed-in member uses the shipped UI, HTTP commands and realtime bridge. */
-export async function browserChatJourney(page: Page, origin: string): Promise<void> {
+export async function browserChatJourney(page: Page, origin: string, prompt = 'Say hello briefly.'): Promise<void> {
   await page.bringToFront();
   const start = performance.now();
   const width = page.viewportSize()!.width;
@@ -22,7 +22,7 @@ export async function browserChatJourney(page: Page, origin: string): Promise<vo
   await page.getByText('Draft', { exact: true }).waitFor();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   const rendered = () => page.evaluate(() => new Promise<void>(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(() => resolve()))));
-  await composer.fill('Say hello briefly.'); await rendered();
+  await composer.fill(prompt); await rendered();
   const sentAt = performance.now();
   await composer.press('Enter');
   await page.locator('.caret').waitFor();
@@ -34,7 +34,7 @@ export async function browserChatJourney(page: Page, origin: string): Promise<vo
   const url = page.url(); assert(new URL(url).searchParams.get('conversation'));
   await page.reload();
   await reply.filter({ hasText: 'Hello from your computer.' }).waitFor();
-  await page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: 'Say hello briefly.' }).waitFor();
+  await page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: prompt }).waitFor();
   assert.equal(await reply.count(), 1, 'Reload has one completed reply');
   await composer.fill('Say hello again.'); await rendered(); await composer.press('Enter');
   await page.locator('.caret').waitFor();

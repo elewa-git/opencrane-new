@@ -16,6 +16,6 @@ svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width:
 [data-state='failed'] { color: var(--oc-danger-admin); }
 [data-state='failed'] svg { width: 11px; height: 11px; }
 [data-state='not_configured'], [data-state='access_changed'], [data-state='disabled'] { color: var(--oc-ink-admin-muted); }
-.state-action { color: var(--oc-accent-dark); font-size: 13px; font-weight: 500; text-align: left; }
+.state-action { min-height: 44px; min-width: 44px; color: var(--oc-accent-dark); font-size: 13px; font-weight: 500; text-align: left; }
 @keyframes oc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }

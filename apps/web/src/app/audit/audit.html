@@ -1,0 +1,29 @@
+<section class="history" aria-label="Audit history">
+  <header><div><h1>{{ conversationId() ? 'Action history' : 'Change history' }}</h1><p>{{ conversationId() ? 'Your requests in this conversation.' : 'Safe organisation metadata.' }} Decisions and observed outcomes are shown separately.</p></div>
+    <button class="refresh" type="button" (click)="load()" [attr.aria-disabled]="state() === 'loading'">Refresh history</button></header>
+  @if (conversationId()) { <a class="back" href="/workspace">‹ Back to workspace</a> }
+  <form (submit)="filter($event)" aria-label="History filters">
+    <label>Decision<select aria-label="Decision filter" [value]="decision" (change)="decision = $any($event.target).value"><option value="">All decisions</option><option value="allow">Allow</option><option value="ask">Ask</option><option value="deny">Deny</option></select></label>
+    <label>Request id<input aria-label="Request id filter" type="search" [value]="requestId" (input)="requestId = $any($event.target).value" maxlength="300"></label>
+    <label>Turn id<input aria-label="Turn id filter" type="search" [value]="turnId" (input)="turnId = $any($event.target).value" maxlength="300"></label>
+    <button id="apply-audit-filters" type="submit" [attr.aria-disabled]="state() === 'loading'">Apply filters</button>
+  </form>
+  <div role="status" aria-live="polite">
+    @if (state() === 'loading') { <oc-shared-state kind="checking" message="Loading history…" /> }
+    @else if (state() === 'unavailable') { <oc-shared-state kind="failed" message="History unavailable" detail="We could not read the audit trail. Refresh to check status." [showAction]="false" /> }
+    @else if (state() === 'access') { <oc-shared-state kind="access_changed" message="Access changed" detail="Sign in or ask for access. Protected details have been cleared." [showAction]="false" /> }
+    @else if (!rows().length) { <oc-shared-state kind="not_configured" message="No history matches" detail="There are no records for this selection. Try another filter." [showAction]="false" /> }
+  </div>
+  @for (row of rows(); track row.id) {
+    <article tabindex="0" [attr.aria-label]="'Audit record ' + row.id">
+      <h2>{{ row.requestId ? 'Request ' + row.requestId : 'Organisation change' }}</h2>
+      <div class="results"><strong>Decision: {{ row.decision === 'not_recorded' ? 'Not recorded' : row.decision }}</strong><strong>Observed outcome: {{ outcome(row) }}</strong></div>
+      @if (row.outcome === 'unknown') { <oc-shared-state kind="unknown" message="Outcome unknown" detail="Observation missing. Check status before repeating an external action." (action)="load()" /> }
+      <dl>@if (row.permitId) { <div><dt>Permit</dt><dd>{{ row.permitId }}</dd></div> } @if (row.conversationId) { <div><dt>Conversation</dt><dd>{{ row.conversationId }}</dd></div> } @if (row.turnId) { <div><dt>Turn</dt><dd>{{ row.turnId }}</dd></div> }
+        @if (row.contextDigest) { <div><dt>Context digest</dt><dd>{{ row.contextDigest }}</dd></div> }
+        @if (row.reservedCents !== undefined) { <div><dt>Reserved</dt><dd>{{ row.reservedCents }} euro cents</dd></div> } @if (row.settledCents !== undefined) { <div><dt>Settled</dt><dd>{{ row.settledCents }} euro cents</dd></div> }</dl>
+      <ol aria-label="Audit evidence">@for (record of row.records; track record.eventId) { <li><strong>{{ record.type }}</strong><span>{{ record.source }} · {{ record.status }}</span>@if (record.reason) { <p>{{ record.reason }}</p> }</li> }</ol>
+    </article>
+  }
+  @if (nextBefore()) { <button type="button" (click)="load(nextBefore())">Older history</button> }
+</section>

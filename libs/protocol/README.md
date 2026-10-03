@@ -51,3 +51,9 @@ Chat HTTP response schemas (`chatContextSchema`, `chatListSchema`,
 `chatFeedSchema`, `chatRowSchema`) validate browser reads. Known display fields
 are typed; unrendered event fields stay opaque. `WebSocketService.received` in the
 web app delivers each validated envelope without Angular signal coalescing.
+
+Audit history uses `auditFilterSchema` and `auditResponseSchema`: request/permit/
+conversation/turn ids, separate decision and observed outcome, integer cents and
+fixed readable reasons. Strict metadata schemas reject private payload fields.
+The Angular history views use this same contract; no event payload is passed to
+browser rendering. See the [HTTP contract](../../apps/server/README.md#permission-scoped-audit-p3-19).

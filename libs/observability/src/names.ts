@@ -1,5 +1,4 @@
-// Decides whether a field name (or a URL query-string parameter name) holds
-// something secret, for log fields (sanitize.ts) and URLs (redact.ts) alike.
+// Decides whether a log field name holds something secret (sanitize.ts).
 //
 // This replaces the exact-name list in OpenCrane 1's sanitize.ts (10abd0ef6
 // libs/backend/observability/src/sanitize.ts) with a rule on the words in the
@@ -15,9 +14,6 @@ const SENSITIVE_PARTS = ['secret', 'password', 'passwd', 'token', 'apikey', 'mas
 
 /** A sensitive-looking name ending in one of these words holds a reference or a count, not the secret: `secretRef`, `secret_id`, `tokenCount`, `tokenType`. */
 const REFERENCE_WORDS = new Set(['ref', 'id', 'name', 'count', 'type']);
-
-/** OAuth callback parameters: secret in a URL, but ordinary field names in a log record (`code: 404`, `state: 'running'`). */
-const SENSITIVE_QUERY_ONLY = new Set(['code', 'state']);
 
 /** Split a name into lower-case words: `accessToken`, `access_token` and `ACCESS-TOKEN` all give `access`, `token`. */
 function splitWords(name: string): string[] {
@@ -49,9 +45,4 @@ export function isSensitiveFieldName(name: string, value?: unknown): boolean {
   }
   const words = splitWords(name);
   return !REFERENCE_WORDS.has(words[words.length - 1] ?? '');
-}
-
-/** Return whether a URL query-string parameter called `name` must have its value redacted: every sensitive field name, plus the OAuth `code` and `state`. */
-export function isSensitiveQueryName(name: string): boolean {
-  return SENSITIVE_QUERY_ONLY.has(name.toLowerCase()) || isSensitiveFieldName(name);
 }

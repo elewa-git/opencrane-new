@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import assert from 'node:assert/strict';
+import { AssertionError } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { chromium, type Browser, type BrowserContext, type Page, type Request as BrowserRequest } from 'playwright';
@@ -118,14 +119,14 @@ export async function browserSessions(config: AuthConfig, origin: string) {
         await tokenExposureChecks(browser, config, origin, users.member, (step) => { stage = step; });
         await memberPage.goto(origin);
         stage = 'form logout';
-        await formLogout(memberPage, config, origin);
+        await formLogout(memberPage, config, origin, step => { stage = `form logout: ${step}`; });
         stage = 'credentials after logout';
         await login(memberPage, origin, users.member, true);
         await memberPage.getByRole('heading', { name: 'You are signed in' }).waitFor();
         assert.equal(decodeSession(config, await cookie(memberPage.context(), config, origin)).sub, users.member.id);
         console.log('PASS next sign-in: remembered identity still requires credentials; successful reauthentication');
       } catch (error) {
-        const detail = error instanceof Error && error.message.startsWith('Login did not complete at ') ? `: ${error.message}` : '';
+        const detail = error instanceof Error && (error.message.startsWith('Login did not complete at ') || error instanceof AssertionError) ? `: ${error.message}` : '';
         throw new Error(`Real browser logout failed at ${stage}${detail}`);
       }
       finally { await browser.close(); }
@@ -199,7 +200,8 @@ async function checkLogs(idToken: string) {
     assert(!(await readFile(`${directory}/${name}.log`, 'utf8')).includes(idToken), 'Stack logs must not contain the ID token');
   }
 }
-async function formLogout(page: Page, config: AuthConfig, origin: string) {
+async function formLogout(page: Page, config: AuthConfig, origin: string, stage: (step: string) => void) {
+  stage('native form');
   const idToken = decodeSession(config, await cookie(page.context(), config, origin)).idToken;
   const form = page.locator('form[action="/auth/logout"]');
   assert.equal(await form.getAttribute('method'), 'post');
@@ -212,7 +214,9 @@ async function formLogout(page: Page, config: AuthConfig, origin: string) {
   });
   const button = form.getByRole('button', { name: 'Sign out', exact: true });
   await button.focus();
+  stage('navigation events');
   const [logout, reply] = await Promise.all([request, response, button.press('Enter')]);
+  stage('redirect response');
   assert.equal(reply.status(), 303);
   assert.equal(reply.request().method(), 'POST');
   assert(reply.request().isNavigationRequest() && logout.isNavigationRequest());
@@ -222,16 +226,21 @@ async function formLogout(page: Page, config: AuthConfig, origin: string) {
   assert.equal(params.get('client_id'), config.clientId);
   assert.equal(params.get('post_logout_redirect_uri'), config.postLogoutRedirectUri);
   // No provider interaction is allowed between keyboard activation and return.
+  stage('provider return');
   await page.waitForURL(origin + '/');
   await page.getByRole('button', { name: 'Continue with single sign-on', exact: true }).waitFor();
+  stage('no provider page');
   assert.equal(providerPageShown, false, 'Logout must not display a provider page or account chooser');
+  stage('session cleared');
   assert(!(await page.context().cookies(origin)).some((item) => item.name === config.cookieName));
   const me = z.object({ authenticated: z.boolean() }).parse(await (await page.request.get(`${origin}/auth/me`)).json());
   assert.equal(me.authenticated, false);
+  stage('second logout refusal');
   const refused = await page.request.post(`${origin}/auth/logout`, { headers: { origin }, maxRedirects: 0 });
   assert.equal(refused.status(), 401);
   assert.equal(refused.headers()['set-cookie'], undefined);
   assert(idToken);
+  stage('logs');
   await checkLogs(idToken);
   console.log('PASS logs: no ID token in the five stack process logs');
   console.log('PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused');

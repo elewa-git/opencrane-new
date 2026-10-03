@@ -11,10 +11,11 @@ import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
 import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb, readEvents } from '@opencrane/projections';
-import { models } from '@opencrane/models';
+import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney } from './browser-budgets.ts';
+import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary } from './identity.ts';
@@ -161,7 +162,7 @@ try {
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
   if (browser) for (const page of browser.memberPages) {
-    try { await browserChatJourney(page, origin); }
+    try { await browserChatJourney(page, origin, secondary ? auditPrompt : undefined); }
     catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
   }
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
@@ -211,7 +212,23 @@ try {
   }, 'typed integration rows');
   assert.equal((await fetch(`${server}/api/org/integrations`, { headers: headers(member) })).status, 403);
   console.log('PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused');
-  if (secondary && browser) await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store, silo, computer!.assistant_id);
+  if (secondary && browser) {
+    // Dev-only signed session; this second member tests resource authority, not identity-provider login.
+    const other = 'audit-other-member', sub = 'dev-audit-other-member';
+    const now = Math.floor(Date.now() / 1000);
+    identities.set(other, { sub, cookie: `${config.cookieName}=${encodeSession(config, {
+      sub, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 300,
+    })}` });
+    await invite(other, 'member');
+    await join(other);
+    await until(async () => (await authz.check(other, 'member')).allowed, 'other audit member OpenFGA');
+    await until(async () => (await fetch(`${origin}/api/chat`, { headers: headers(other) })).status === 200,
+      'other audit member authenticated live chat access');
+    const ceilings = await modelHistory(events.store, `budget-${silo}`, silo);
+    const run = ceilings.some(row => row.event.type === 'budget.ceiling_set' && (row.event.data as { setBy: string }).setBy !== 'installation') ? 'repeat' : 'fresh';
+    await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, member, identities.get(other)!.cookie, run);
+    await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store, silo, computer!.assistant_id);
+  }
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });

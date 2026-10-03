@@ -207,7 +207,7 @@ describe('server logging', () => {
 
     expect(logs.text()).not.toContain('SECRET_INJECT');
     const incoming = logs.lines().find((line) => line['msg'] === 'incoming request');
-    expect(asRecord(incoming?.['req'])['url']).toBe('/healthz?token=[Redacted]&keep=1');
+    expect(asRecord(incoming?.['req'])['url']).toBe('/healthz');
     expect(incoming?.['request_id']).toBe('req-1');
     expect(incoming?.['reqId']).toBeUndefined();
   });
@@ -219,7 +219,7 @@ describe('server logging', () => {
 
     expect(response.statusCode).toBe(404);
     expect(logs.text()).not.toMatch(/SECRET_/u);
-    expect(logs.lines().some((line) => line['msg'] === 'Route GET:/nope?token=[Redacted]&code=[Redacted] not found')).toBe(true);
+    expect(logs.lines().some((line) => line['msg'] === 'Route GET:/nope not found')).toBe(true);
   });
 
   it('redacts a secret carried on an error a route throws', async () => {

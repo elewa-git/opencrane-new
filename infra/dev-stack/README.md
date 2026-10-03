@@ -362,3 +362,13 @@ Screenshots for fresh and repeat runs go to `docs/process/p3-13-live/`. The jour
 restores usable group and assistant ceilings before the next plain startup.
 It also sets the daily safety cap to 5,000 cents through the owner UI, retaining
 unconfirmed Stop reservations while leaving enough headroom for the repeat run.
+
+Secondary journeys also read each member's completed stub turn in Action history,
+with the permission decision and observed outcome shown separately. The owner reads
+safe organisation changes; another joined member is refused private history, and
+members are refused organisation history. Owner/member sessions use real Zitadel
+sign-in; the extra member uses a dev-only signed session to test resource authority.
+Both views and the refusal screen are checked at 1280px and 390px. Private chat,
+query, conversation-id and bearer canaries must be absent from live process and
+model/gateway logs. Fresh/repeat screenshots go to `docs/process/p3-19-live/`;
+the [audit receipt](../../docs/process/p3-19-audit-evidence.md) records qualification.

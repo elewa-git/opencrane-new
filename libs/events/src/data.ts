@@ -429,7 +429,7 @@ export const budgetCeilingSetDataSchema = z.discriminatedUnion('scope', [
 // per-assistant) in the one append that records the charge.
 export const budgetReservedDataSchema = z
   .object({ reservationId: id, permitId: id, amountCents: centsSchema, payingGroupId: id, assistantId: id,
-    modelCall: z.object({ model: id, priceTableId: id, computerId: id, assistantId: id, requesterId: id, conversationId: id,
+    modelCall: z.object({ requestId: id.optional(), model: id, priceTableId: id, computerId: id, assistantId: id, requesterId: id, conversationId: id,
       turnId: id, threadId: id, payingGroupId: id.optional(), contextDigest: digestSchema }).strict().optional() })
   .strict();
 

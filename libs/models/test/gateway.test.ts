@@ -16,7 +16,7 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { createStore, rebuildMembers, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
-import { conversations, readConversation, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { auditTrail, readAudit, conversations, readConversation, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
 import { modelGrantHandler, BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, settlementHandler, startDecision, startGateway, totals } from '../src/index.ts';
 
@@ -260,7 +260,7 @@ it('releases undispatched reservations when authority is revoked after the allow
       const race = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
         const result = await append(command);
         if (typeof command.event === 'object' && command.event !== null && 'type' in command.event &&
-            command.event.type === 'decision.recorded' && 'data' in command.event &&
+            z.object({ type: z.literal('decision.recorded') }).safeParse(command.event).success && 'data' in command.event &&
             z.object({ outcome: z.literal('allow') }).safeParse(command.event.data).success) {
           const revoked = await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
             resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
@@ -483,7 +483,7 @@ it('records exhaustion once even when decision audit appends fail and callers re
   const f = await fixture(0, 0);
   const append = f.nats.store.append.bind(f.nats.store);
   const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command => {
-    if (typeof command.event === 'object' && command.event !== null && 'type' in command.event && command.event.type === 'decision.recorded') {
+    if (typeof command.event === 'object' && command.event !== null && 'type' in command.event && z.object({ type: z.literal('decision.recorded') }).safeParse(command.event).success) {
       return Promise.resolve({ status: 'unavailable', cause: new Error('Scripted decision audit outage') });
     }
     return append(command);
@@ -888,5 +888,155 @@ it('resets the daily safety cap at UTC midnight within a month while keeping out
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1, reservedCents: 25 });
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
     expect(f.received()).toBe(2);
+  } finally { await f.close(); }
+}, 40_000);
+
+
+it('explains a real model call by ids and rebuilds the same decision, outcome and charge', async () => {
+  const f = await fixture();
+  try {
+    await f.runner.initialise(auditTrail);
+    expect((await f.call({}, { input: 'private-audit-canary', instructions: 'bearer-audit-canary' })).status).toBe(200);
+    await f.settled();
+    await until(() => f.admitted.length === 1);
+    await f.runner.run(auditTrail);
+    const before = await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
+    expect(before.rows).toHaveLength(1);
+    expect(before.rows[0]).toMatchObject({ requestId: f.admitted[0], conversationId: 'conversation', turnId: 'turn',
+      decision: 'allow', outcome: 'success', reservedCents: 25, settledCents: 1,
+      permitId: f.actor.state.reservations[0]?.id });
+    expect(before.rows[0]?.records.map(r => r.type)).toEqual(expect.arrayContaining([
+      'decision.recorded', 'budget.reserved', 'effect.observed', 'budget.settled']));
+    expect(JSON.stringify(before)).not.toContain('audit-canary');
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.rebuild(auditTrail);
+    expect(await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' })).toEqual(before);
+    expect(f.received()).toBe(1);
+    expect(f.actor.state.reservations).toHaveLength(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('keeps forged JWT failures distinct from a caller-selected request through ingestion and replay', async () => {
+  const f = await fixture();
+  try {
+    await f.runner.initialise(auditTrail);
+    expect((await f.call()).status).toBe(200);
+    await f.settled();
+    await until(() => f.admitted.length === 1);
+    const requestId = f.admitted[0]!;
+    await f.runner.run(auditTrail);
+    const request = await readAudit(f.db, 'test', { requestId });
+    for (let i = 0; i < 2; i++) {
+      expect((await f.call({ authorization: 'Bearer forged-secret-canary', 'x-audit-id': requestId,
+        'x-request-id': requestId }, { input: 'private-secret-canary' })).status).toBe(401);
+    }
+    await f.restart();
+    const evidence = z.array(z.object({ id: z.uuid(), reason: z.string().optional() }))
+      .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown))
+      .filter(row => row.reason === 'jwt_failed');
+    expect(evidence).toHaveLength(2);
+    expect(new Set(evidence.map(row => row.id)).size).toBe(2);
+    expect(evidence.map(row => row.id)).not.toContain(requestId);
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.run(auditTrail);
+    expect(await readAudit(f.db, 'test', { requestId })).toEqual(request);
+    const before = await readAudit(f.db, 'test');
+    for (const row of evidence) {
+      const failure = before.rows.filter(entry => entry.requestId === row.id);
+      expect(failure).toHaveLength(1);
+      expect(failure[0]).toMatchObject({ decision: 'not_recorded', outcome: 'error' });
+      expect(failure[0]?.requesterId).toBeUndefined();
+      expect(failure[0]?.records).toHaveLength(1);
+    }
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.rebuild(auditTrail);
+    expect(await readAudit(f.db, 'test')).toEqual(before);
+    expect(await readFile(f.options.usageFile, 'utf8')).not.toContain('secret-canary');
+  } finally { await f.close(); }
+}, 40_000);
+
+it('keeps the trusted decision id on authenticated refusals through gateway ingestion and replay', async () => {
+  const f = await fixture();
+  const forged = randomUUID();
+  try {
+    await f.runner.initialise(auditTrail);
+    const requestIds: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const response = await f.call({ 'x-audit-id': forged, 'x-request-id': forged }, { max_output_tokens: 0 });
+      expect(response.status).toBe(403);
+      const { requestId } = z.object({ requestId: z.uuid() }).parse(JSON.parse(response.text));
+      requestIds.push(requestId);
+      expect(requestId).not.toBe(forged);
+    }
+    expect(new Set(requestIds).size).toBe(2);
+    await f.restart();
+    const evidence = z.array(z.object({ id: z.uuid(), outcome: z.literal('error'), reason: z.literal('dispatch_denied') }))
+      .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown));
+    expect(evidence.map(row => row.id)).toEqual(requestIds);
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.run(auditTrail);
+    const before = await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
+    expect(before.rows).toHaveLength(2);
+    for (const row of before.rows) {
+      expect(requestIds).toContain(row.requestId);
+      expect(row).toMatchObject({ decision: 'deny', outcome: 'not_dispatched' });
+      expect(row.records.map(record => record.type)).toEqual(['decision.recorded', 'gateway.observation_recorded']);
+    }
+    expect(f.received()).toBe(0);
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.rebuild(auditTrail);
+    expect(await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' })).toEqual(before);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('retains safe JWT correlation, denies an audit outage and alerts once for unmatched gateway effects', async () => {
+  const f = await fixture();
+  const correlation = randomUUID(), unmatched = randomUUID();
+  try {
+    await f.runner.initialise(auditTrail);
+    expect((await f.call({ authorization: 'Bearer forged-secret-canary', 'x-audit-id': correlation }, { input: 'private-secret-canary' })).status).toBe(401);
+    await f.restart();
+    const evidence = z.object({ id: z.uuid(), reason: z.literal('jwt_failed') }).parse(JSON.parse((await readFile(f.options.usageFile, 'utf8')).trim()));
+    expect(evidence.id).not.toBe(correlation);
+    await ingestUsage(f.actor, f.options.usageFile);
+    const failure = await history(f.nats.store, `gateway-${evidence.id}`, 'test');
+    expect(failure[0]?.event.data).toEqual({ requestId: evidence.id, outcome: 'error', reason: 'jwt_failed' });
+    expect(JSON.stringify(failure)).not.toContain('requesterId');
+    await f.actor.effect(unmatched, { inputTokens: 1, outputTokens: 1 });
+    await f.actor.effect(unmatched, { inputTokens: 1, outputTokens: 1 });
+    const alerts = await history(f.nats.store, `security-${unmatched}`, 'test');
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]?.event.type).toBe('security.alert_raised');
+    expect(alerts[0]?.event.data).toMatchObject({ reason: 'effect_without_permit' });
+    const append = f.nats.store.append.bind(f.nats.store);
+    const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command =>
+      z.object({ type: z.literal('decision.recorded') }).safeParse(command.event).success ? Promise.resolve({ status: 'unavailable', cause: new Error('secret-error-canary') }) : append(command));
+    try { expect((await f.call()).status).toBe(503); } finally { fault.mockRestore(); }
+    expect(f.received()).toBe(0);
+    const unaudited = f.actor.state.reservations.at(-1)!;
+    await f.actor.effect(unaudited.id, { inputTokens: 1, outputTokens: 1 });
+    expect((await history(f.nats.store, `security-${unaudited.id}`, 'test'))[0]?.event.data).toMatchObject({ reason: 'effect_without_permit' });
+    expect(unaudited.settledCents).toBe(0);
+    await f.runner.run(auditTrail);
+    const rows = await readAudit(f.db, 'test');
+    expect(rows.rows.some(row => row.outcome === 'success')).toBe(false);
+    expect(JSON.stringify(rows)).not.toContain('secret-canary');
+    expect(await readFile(f.options.usageFile, 'utf8')).not.toContain('secret-canary');
+  } finally { await f.close(); }
+}, 40_000);
+
+it('keeps an admitted model call uncertain when the recording upstream loses its reply', async () => {
+  const f = await fixture();
+  try {
+    await f.runner.initialise(auditTrail);
+    f.reject(-1);
+    expect((await f.call()).status).toBeGreaterThanOrEqual(400);
+    f.advance(); await f.actor.expire();
+    await f.runner.run(auditTrail);
+    const trail = await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
+    expect(trail.rows[0]).toMatchObject({ decision: 'allow', outcome: 'unknown', reservedCents: 25 });
+    expect(trail.rows[0]?.settledCents).toBeUndefined();
+    expect(trail.rows[0]?.records.map(r => r.type)).toContain('effect.uncertain');
+    expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);

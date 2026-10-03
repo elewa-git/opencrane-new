@@ -488,3 +488,13 @@ it.each(['inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens']
   }
   expect(definition.dataSchema.safeParse({ ...asRecord(definition.example), usage }).success).toBe(true);
 });
+
+describe('audit contracts reject secret canaries', () => {
+  for (const type of ['decision.recorded', 'credential.released', 'egress.observed', 'gateway.observation_recorded']) {
+    for (const field of ['bearer', 'arguments', 'review', 'text']) {
+      it(`${type} refuses ${field} even beside valid audit metadata`, () => {
+        expect(rejectedFields(type, { [field]: 'private-secret-canary' })).toEqual([field]);
+      });
+    }
+  }
+});

@@ -9,12 +9,14 @@ import { registerMemberRoutes, type MembershipOptions } from './members/routes.t
 import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
 import { registerComputerRoutes, type ComputerOptions } from './computers/routes.ts';
 
+import { registerAuditRoutes, type AuditOptions } from './audit/routes.ts';
 import { registerChatRoutes, type ChatOptions } from './chat/routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
+  audit?: AuditOptions;
   chat?: ChatOptions;
   integrations?: IntegrationOptions;
   computers?: ComputerOptions;
@@ -24,7 +26,7 @@ export interface BuildServerOptions {
 
 export function buildServer(authConfig: AuthConfig, options: BuildServerOptions = {}): FastifyInstance {
   // Structured logging via @opencrane/observability: one JSON line per event
-  // to stdout, secrets and URL tokens redacted. LOG_LEVEL sets the level
+  // to stdout, secrets redacted and whole URL queries removed. LOG_LEVEL sets the level
   // (vitest.config.ts sets "silent"). Typed as FastifyBaseLogger so Fastify
   // infers its default generics, matching the plain `FastifyInstance` return.
   const logger: FastifyBaseLogger = createServerLogger(options.logDestination);
@@ -45,12 +47,13 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   });
 
   // The auth routes log through app.log, the observability logger above, so
-  // the callback URL's `code` and `state` are redacted like any other secret.
+  // the callback URL's entire query is dropped from logs.
   registerAuthRoutes(app, authConfig);
   registerMemberRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
+  registerAuditRoutes(app, authConfig, options.audit);
 
   return app;
 }

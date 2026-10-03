@@ -1,3 +1,4 @@
+import { auditEvents } from './audit-events.ts';
 import { mcpEvents } from './mcp-events.ts';
 import { decisionEvents } from './decision-events.ts';
 // The event-type registry: every event type named in
@@ -27,6 +28,7 @@ const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 export const eventRegistry: readonly EventDefinition[] = [
   ...identityEvents,
   ...decisionEvents,
+  ...auditEvents,
 
   ...bridgeEvents,
   // Assistants and computers
