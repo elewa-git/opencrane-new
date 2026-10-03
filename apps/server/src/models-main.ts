@@ -36,6 +36,8 @@ try {
         usageFile: `${directory}/usage.jsonl`, keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'), port: Number(required('MODEL_GATEWAY_PORT')),
         readinessPort: Number(required('MODEL_READINESS_PORT')), decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
         ...(process.env['MODEL_UPSTREAM'] ? { upstream: process.env['MODEL_UPSTREAM'] } : {}),
+        mcpRoutes: z.array(z.object({ serverId: z.string(), connectionId: z.string(), upstream: z.string() }).strict())
+          .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]')),
       });
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.

@@ -305,3 +305,10 @@ After building the web app, set `APPROVAL_BROWSER=1` for the same command to inc
 Chromium at 1280/390px.
 These fixtures create disposable NATS/OpenFGA instances and private Postgres databases.
 They do not use the shared dev stack or a paid upstream.
+
+The model process accepts optional `MODEL_MCP_ROUTES`, a JSON array of
+`{serverId, connectionId, upstream}` records, to configure the existing gateway
+MCP routes. The default is empty. Deployment configuration owns these destinations;
+callers cannot supply them. Set `CONVERSATION_KEYS_DIR` to the same private directory
+as the server so the decision process can encrypt and verify approval reviews.
+The dev stack routes its credential-free recording fixture to its loopback stub.

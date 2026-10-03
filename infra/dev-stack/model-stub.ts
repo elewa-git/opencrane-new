@@ -2,7 +2,24 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+const calls: Array<{ body: string; requestId: string }> = [];
 const server = createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/approval-calls') {
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(calls)); return;
+  }
+  if (req.method === 'POST' && req.url === '/mcp/approval-journey/installed') {
+    void (async () => {
+      let body = '';
+      for await (const chunk of req) {
+        body += String(chunk);
+        if (body.length > 1_048_576) { res.writeHead(413); res.end(); return; }
+      }
+      calls.push({ body, requestId: String(req.headers['x-request-id']) });
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end('{"jsonrpc":"2.0","id":1,"result":{"content":[]}}');
+    })().catch(() => res.destroy());
+    return;
+  }
   if (process.env['MODEL_STUB_PAUSE_ON_STOP'] !== '1') req.resume();
   if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
   void (async () => {

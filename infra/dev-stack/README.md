@@ -372,3 +372,22 @@ Both views and the refusal screen are checked at 1280px and 390px. Private chat,
 query, conversation-id and bearer canaries must be absent from live process and
 model/gateway logs. Fresh/repeat screenshots go to `docs/process/p3-19-live/`;
 the [audit receipt](../../docs/process/p3-19-audit-evidence.md) records qualification.
+
+## Browser approval qualification
+
+Every journey also configures the credential-free `approval-journey` MCP route
+against the local recording stub. It seeds reviewed Ask policy, grants and an active
+tool turn through events, then calls the running gateway with lifecycle credentials.
+The signed-in requester sees the 8g card, approves in the browser and retries the tool once.
+A refused or ambiguous decision submission uses Check status before a safe retry,
+with at most three submissions and three status reads per submission; the journey
+records the submission counts. A failed status read never authorises a retry.
+The stub must record exactly one call with unchanged bytes and an allowed decision;
+a second retry and a denied call must produce no additional upstream effects.
+Requested, approved, used (outcome unknown) and denied cards survive reload at
+1280px and 390px. Screenshots go to `docs/process/p3-2-live/`.
+This qualifies browser approval and gateway admission, not native Codex MCP
+continuation or an external tool's final outcome. No OpenAI call is made.
+Fresh stacks seed a stub-only budget of 20,000 cents daily and 200,000 cents monthly
+through an event before the budget writer starts. Repeated Stop journeys retain
+their conservative cost; repeated `up.sh` preserves that history and ceiling.

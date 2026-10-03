@@ -248,27 +248,29 @@ it("retries through a real restart, then reports unavailable at the ten-second b
   // covers fixture setup (a CA and seven certificates) and NATS restarts on a busy machine.
 }, 45_000);
 
-it("subscribes in global order from the requested sequence and stops on abort", async () => {
+it("keeps global order across read-ahead, aborts mid-history and resumes from the caller's checkpoint", async () => {
   fixture = await natsFixture();
-  for (const id of ["a", "b", "c"]) {
-    await fixture.store.append({
-      event: event(id, `member-${id}`),
-      expectedSequence: 0,
-    });
+  for (let id = 1; id <= 129; id++) {
+    await fixture.store.append({ event: event(String(id), `member-${id}`), expectedSequence: 0 });
   }
   const abort = new AbortController();
   const sequences: number[] = [];
   for await (const stored of fixture.store.subscribe(2, abort.signal)) {
     sequences.push(stored.sequence);
-    if (stored.sequence === 3) {
-      break;
-    }
+    if (stored.sequence === 66) abort.abort();
   }
-  expect(sequences).toEqual([2, 3]);
-  const pending = fixture.store.subscribe(4, abort.signal).next();
-  abort.abort();
+  expect(sequences).toEqual(Array.from({ length: 65 }, (_, i) => i + 2));
+  const resumed: number[] = [];
+  for await (const stored of fixture.store.subscribe(67)) {
+    resumed.push(stored.sequence);
+    if (stored.sequence === 129) break;
+  }
+  expect(resumed).toEqual(Array.from({ length: 63 }, (_, i) => i + 67));
+  const tailAbort = new AbortController();
+  const pending = fixture.store.subscribe(130, tailAbort.signal).next();
+  tailAbort.abort();
   expect((await pending).done).toBe(true);
-});
+}, 15_000); // Includes TLS setup and 129 real appends on the shared dev host.
 
 it("retries no-responder failures through recovery and the full deadline", async () => {
   fixture = await natsFixture();

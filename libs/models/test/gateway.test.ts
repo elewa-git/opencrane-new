@@ -267,7 +267,7 @@ it.each([[25, 2000], [2000, 25]])('admits one last reservation under daily %i / 
   try {
     const replies = await Promise.all(Array.from({ length: 8 }, () => f.call()));
     expect(replies.filter(r => r.status === 200)).toHaveLength(1); expect(f.received()).toBe(1);
-    expect(replies.filter(r => r.status === 402)).toHaveLength(7); await f.settled();
+    expect(replies.filter(r => r.status === 402), JSON.stringify(replies.map(r => r.status))).toHaveLength(7); await f.settled();
     expect((await f.call()).text).toContain('spending cap reached');
     await f.runner.initialise(conversations); await f.runner.run(conversations);
     const feed = await readConversation(f.db, 'test', 'conversation');

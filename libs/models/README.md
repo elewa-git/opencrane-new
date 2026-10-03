@@ -186,7 +186,8 @@ belongs to P3-2. Lossless approval argument binding belongs there too.
 Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activity, conversation, explicit requester and assistant
 resource grants, lifecycle tokens and delegation. OpenFGA is queried at higher
-consistency on every call. Relevant event receipts must exist before a projection
+consistency on every call. Receipt reads run in groups of at most 16; every relevant
+event receipt must exist before a projection
 can authorise; lag denies. A two-second freshness budget starts when the decision
 request arrives. Cheap authority-category head reads fence the snapshot before
 reservation (inside the budget queue) and again after the audit, before admission.

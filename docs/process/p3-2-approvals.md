@@ -1,6 +1,6 @@
 # P3-2 — Bound approval evidence
 
-Receipt date: 3 October 2026. Source: the commit containing this receipt, stacked on
+Receipt date: 3 October 2026. Original source: `2c70fc2`, stacked on
 `b63234cb65548e6d839ae8a99241af5c2b0aea84` (P3-1). Environment: Linux, Node 22, disposable NATS and OpenFGA, isolated databases
 under `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`, real agentgateway,
 recording credential-free upstream. The shared dev stack was not changed.
@@ -74,8 +74,7 @@ OpenFGA image: `v1.21.0@sha256:2113c664a486b5da8d7a2cdab479e0d4e30639c80fd2c0005
 
 ## Review pass 1 fixes
 
-Receipt date: 3 October 2026. Source: the commit containing this section, based on
-`2c70fc2`. Same isolated fixture environment and `PG_TEST_URL` as above; no dev-stack
+Receipt date: 3 October 2026. Source: `228ac08`, based on `2c70fc2`. Same isolated fixture environment and `PG_TEST_URL` as above; no dev-stack
 changes, rebase or push. These are source checks, not fresh-install qualification.
 
 Both regressions were written and run before their fixes:
@@ -105,12 +104,140 @@ Red/green logs: `/tmp/p3-2-r1-{turn,browser}-{red,green}.log`.
 The browser case skipped by the root run passed separately above. Gated live tests
 remain unrun. Check logs: `/tmp/p3-2-r1-{lint,typecheck,events,test,build,web-tests}.log`.
 
+## Rebase and secondary qualification
+
+On 3 October 2026, review pass 2 was reported **LAND** at `228ac08`.
+Rebased with `git rebase --onto origin/main b63234c`: only the two P3-2
+commits remain above main `cc8d8c0` (P3-1 #68 and parallel stacks #69).
+`git range-diff b63234c..228ac08 origin/main..HEAD` confirmed both rebased
+commits have unchanged patches before the qualification changes.
+The rebased feature tip is `0e35526`; the commit containing this section adds
+the repeatable live journey and its evidence. No push or merge was performed.
+The requested live harness and evidence take the whole feature to roughly 1,800
+non-generated changed lines; the qualification belongs with the feature in one PR.
+
+The journey uses real Zitadel sign-in in organisation `393311211338337681`,
+the running server, projections, OpenFGA, event store and gateway, and a local
+recording MCP upstream. Only the reviewed fixture policy, grants and active tool
+turn are seeded through events; browser decisions use the shipped API and UI.
+The model process shares the server's review-key directory and configures the
+existing MCP gateway route. No dependency was added.
+
+The inherited journey locally replaced the selected namespace with
+`opencrane-dev`; removing that local variable keeps lifecycle operations in the
+selected secondary namespace. Completed viewport journeys return to the signed-in
+page so old workspace polling does not compete with the next browser proof.
+
+Fresh stacks now seed a stub-only budget of 20,000 cents daily and 200,000 cents
+monthly through an event before the budget writer starts. Repeated Stop journeys
+retain their conservative cost; the default daily ceiling previously stopped the
+second journey with `budget_exhausted`. Repeat preserves history and the fixture
+ceiling. Production defaults and conservative settlement are unchanged.
+
+Two bounded read optimisations were needed for the longer repeat history:
+
+- Historical event reads fetch at most 64 messages concurrently, then yield in log
+  order. The real event-store regression crosses the batch boundary, aborts midway
+  and resumes from an explicit checkpoint without skipping events.
+- Current-authority checks read OpenFGA event receipts in groups of at most 16.
+  Every receipt is still required; captured history, facts order, permission checks
+  and the two-second freshness fence are unchanged.
+
+**These production read changes postdate review pass 2 at `228ac08`.** That LAND
+receipt does not review them; no third independent review was requested or claimed.
+The owner must account for this additional scope before landing.
+
+The browser journey uses the existing Check status action after a refused or
+ambiguous decision. Only explicit safe-retry confirmation allows another decision
+submission, with at most three submissions and three status reads per submission.
+Submission counts are logged. Tool checks remain strict: exactly one approved
+forward, a refused repeat and no additional forward after denial.
+
+Earlier attempts are not counted as passing receipts. They exposed authority-fence
+refusals under host contention, the fixture budget exhaustion described above, and
+an incomplete status-read recovery in the harness. Other attempts stopped in the
+inherited chat journey or Chromium sign-in (`ERR_NETWORK_CHANGED`). Each claimed
+secondary stack was torn down, including failed and interrupted runs. The owner
+stack and owner marker were never changed.
+
+Full-suite attempts also exposed timing failures under contention. The 64-message
+implementation passed 1,101 tests with 11 skips before receipt batching. Two full runs after receipt batching each had 1,100 passes, one budget-response
+assertion failure and 11 skips: one call reached upstream, but some refusals were
+HTTP 403 instead of 402. Both budget cases also passed in isolation without changing
+assertions or production code. Those failed full runs are not green final gates.
+A diagnostic then reproduced dependency timeouts during the eight concurrent
+requests. A smaller 16-message read-ahead passed 74 focused tests and fresh startup,
+but repeat approval reads exceeded the freshness fence while host load reached
+31 on eight cores. The final bound remains 64. Live qualification starts in a
+lower-load window; our full-suite tests run after teardown rather than alongside
+browser sign-in. The final full-suite command allows the test runner 15 seconds
+per test; production freshness fences and explicit timing tests remain unchanged. The 129-event
+regression also allows 15 seconds for TLS setup and real appends.
+
+### Final secondary receipt
+
+3 October 2026, secondary stack 1, `http://127.0.0.1:25106`, Node 22.23.3 host
+and the pinned Node 22.23.1 model container. The stack was claimed with `claim.sh`;
+`DEV_STACK_ID=1` and the requested `ZITADEL_KEY_FILE` path selected the secondary
+stack and permitted organisation. Only loopback ports were exposed.
+
+| Command | Result |
+| --- | --- |
+| `infra/dev-stack/up.sh --fresh` | **PASS**, completed 20:41 UTC; [receipt](p3-2-live/fresh/journey.txt) |
+| `infra/dev-stack/up.sh` | **PASS**, completed 20:45 UTC on the same history; [receipt](p3-2-live/repeat/journey.txt) |
+| `infra/dev-stack/down.sh --id 1` | **PASS**, exit 0 at 20:47 UTC; both secondary namespaces absent |
+
+Both up commands exited 0. The wrapper exited 143 during cleanup; the explicit
+down command above then completed successfully. The owner stack and its marker
+were untouched throughout. No real OpenAI call was made.
+
+In **each** run, at **each** width, Ask produced the live 8g card with zero
+upstream calls. The requester approved once; exactly one call followed with the
+approved bytes and matching durable allow audit. A second retry was refused.
+The denied call was refused with no additional upstream call. Requested, approved,
+used (outcome unknown) and denied states were restored after reload. Every decision
+needed one submission; no status-recovery retries were needed in this final pair.
+
+| Run / state after reload | 390px | 1280px |
+| --- | --- | --- |
+| fresh / requested | [image](p3-2-live/fresh/requested-390.png) | [image](p3-2-live/fresh/requested-1280.png) |
+| fresh / approved | [image](p3-2-live/fresh/approved-390.png) | [image](p3-2-live/fresh/approved-1280.png) |
+| fresh / used | [image](p3-2-live/fresh/used-390.png) | [image](p3-2-live/fresh/used-1280.png) |
+| fresh / denied | [image](p3-2-live/fresh/denied-390.png) | [image](p3-2-live/fresh/denied-1280.png) |
+| repeat / requested | [image](p3-2-live/repeat/requested-390.png) | [image](p3-2-live/repeat/requested-1280.png) |
+| repeat / approved | [image](p3-2-live/repeat/approved-390.png) | [image](p3-2-live/repeat/approved-1280.png) |
+| repeat / used | [image](p3-2-live/repeat/used-390.png) | [image](p3-2-live/repeat/used-1280.png) |
+| repeat / denied | [image](p3-2-live/repeat/denied-390.png) | [image](p3-2-live/repeat/denied-1280.png) |
+
+### Final-source gates
+
+The final full suite passed on 3 October 2026: **68 files passed, two skipped;
+1,101 tests passed, 11 skipped, exit 0**, in 1,059 seconds. Command:
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=1 --testTimeout=15000`.
+This was the complete suite without a test filter, after secondary teardown.
+
+| Gate | Result |
+| --- | --- |
+| `npm ci` after rebase | PASS; no added third-party dependencies |
+| `npm run lint` | PASS; existing warnings remain non-blocking |
+| `npm run typecheck` | PASS across all workspaces |
+| `npm run check:events` | PASS; 76 event types agree |
+| `npx tsc -p infra/dev-stack/tsconfig.json --noEmit` | PASS |
+| Full `npm test` command above | PASS; 1,101 passed, 11 skipped |
+| `npm run build -w apps/web` | PASS; existing bundle/style budget warnings |
+| `npm run test -w apps/web -- --watch=false` | PASS; 8 files, 50 tests |
+
+[Safe gate receipt](p3-2-live/gates.txt). Raw local gate logs are under
+`/tmp/p3-2-live-logs/`; private stack logs and credentials are not included here.
+The shared `origin/main` ref advanced during qualification; this receipt describes
+the recorded `cc8d8c0` base plus the P3-2 commits and this qualification commit.
+
 ## Not run
 
-Fresh shared-stack and k3d lifecycle/bridge qualification, paid model calls, live
-OIDC-provider sign-in, native Codex MCP
-continuation (P3-5), credential release and charged tools (P3-8), Odoo write/readback,
-managed-cluster behaviour, review pass 2 and post-rebase/main CI. The real
+Owner-stack qualification (deliberately untouched), paid model calls, native Codex
+MCP continuation (P3-5), credential release and charged tools (P3-8), Odoo write/readback,
+managed-cluster behaviour and main CI. The real
 fixture uses a credential-free connection and profile `none`; it makes no personal
 credential-custody claim. Browser step-up navigation and local OIDC tests do not
-claim a live-provider journey. No paid calls, push, merge or deployment occurred.
+claim live-provider step-up. Normal sign-in uses the live provider in the permitted
+organisation. No paid calls, push, merge or production deployment occurred.

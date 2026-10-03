@@ -13,6 +13,7 @@ import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
+import { approvalJourney } from './approval-journey.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
@@ -45,11 +46,11 @@ async function until(check: () => Promise<boolean> | boolean, label: string) {
     await delay(50);
   }
 }
-async function append(type: string, subject: string, data: Record<string, unknown>) {
+async function append(type: string, subject: string, data: Record<string, unknown>, source = 'dev-stack-journey') {
   const example = getEventDefinition(type)?.example;
   assert(example && typeof example === 'object');
   const eventId = randomUUID();
-  const parsed = parseEventByType({ id: eventId, commandId: eventId, type, subject, silo, source: 'dev-stack-journey',
+  const parsed = parseEventByType({ id: eventId, commandId: eventId, type, subject, silo, source,
     time: new Date().toISOString(), principal: { kind: 'human', id: 'dev-only-bootstrap' }, data: { ...example, ...data } });
   assert(parsed.success);
   let expectedSequence = 0;
@@ -162,9 +163,11 @@ try {
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
   if (browser) for (const page of browser.memberPages) {
-    try { await browserChatJourney(page, origin, secondary ? auditPrompt : undefined); }
+    try { await browserChatJourney(page, origin, secondary ? auditPrompt : undefined); await page.goto(origin); }
     catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
   }
+  if (browser) await approvalJourney(browser.memberPages, events.store, authz, append, { silo, origin, requesterId: member,
+    assistantId: computer!.assistant_id, computerId: computer!.computer_id, generation: Number(computer!.generation) });
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();
