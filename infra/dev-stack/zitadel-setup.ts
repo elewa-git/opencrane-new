@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
-import { secondary, localOrigin } from './identity.ts';
-import { readFile } from 'node:fs/promises';
+import { secondary, stackId, localOrigin } from './identity.ts';
+import { chmod, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { directory, exists, root, save, prepareDirectory } from './config.ts';
 
@@ -30,36 +30,79 @@ async function list(path: string, queries: unknown[] = []) {
 }
 const exactName = (value: string) => [{ nameQuery: { name: value, method: 'TEXT_QUERY_METHOD_EQUALS' } }];
 async function secondarySetup() {
-  // Only this existing app in this pinned organisation may change. Never run owner provisioning here.
+  // All secondary resources belong to this existing organisation and project.
   orgId = '393311211338337681';
-  const projectId = '393311211539664273', appId = '393311211707436433';
+  const projectId = '393311211539664273';
   const org = z.object({ org: object }).parse(await api('/management/v1/orgs/me')).org;
   assert(org.id === orgId && org.name === name, 'Refusing another organisation');
-  const path = `/management/v1/projects/${projectId}/apps/${appId}`;
-  const app = z.object({ app: z.object({ name: z.literal('OpenCrane 2 Dev Web'),
-    oidcConfig: z.object({ clientId: z.literal('393311211707501969'), redirectUris: z.array(z.string()),
-      postLogoutRedirectUris: z.array(z.string()), devMode: z.boolean().optional() }).passthrough(),
-    details: z.object({ resourceOwner: z.literal('393311211338337681') }) }) }).parse(await api(path)).app;
-  const origins = ['http://127.0.0.1:25106', 'http://127.0.0.1:25206'];
-  const config = app.oidcConfig;
-  const redirectUris = [...new Set([...config.redirectUris, ...origins.map(origin => `${origin}/auth/callback`)])];
-  const postLogoutRedirectUris = [...new Set([...config.postLogoutRedirectUris, ...origins.map(origin => `${origin}/`)])];
-  if (!config.devMode || redirectUris.length !== config.redirectUris.length || postLogoutRedirectUris.length !== config.postLogoutRedirectUris.length) {
-    // Preserve all existing mutable OIDC settings; omit response-only fields.
-    const { clientId: _clientId, complianceProblems: _problems, isCompliance: _compliance, ...settings } = config;
-    await api(`${path}/oidc_config`, { ...settings, redirectUris, postLogoutRedirectUris, devMode: true }, 'PUT');
+  z.object({ project: z.object({ id: z.literal(projectId), name: z.literal(name),
+    details: z.object({ resourceOwner: z.literal(orgId) }) }) })
+    .parse(await api(`/management/v1/projects/${projectId}`));
+  // Retain only this slot's OIDC credentials when down removes its disposable stack.
+  const credentials = `${homedir()}/.config/opencrane/dev-stack-ci-${stackId}`;
+  await mkdir(credentials, { recursive: true, mode: 0o700 });
+  assert(await realpath(credentials) === credentials, 'Credential directory must not be a symlink');
+  await chmod(credentials, 0o700);
+  async function retain(file: string, value: string) {
+    await writeFile(`${credentials}/${file}`, value, { mode: 0o600 });
+    await chmod(`${credentials}/${file}`, 0o600);
   }
-  const ownerDirectory = `${homedir()}/.config/opencrane/dev-stack`;
-  const setup = z.object({ issuer: z.literal(issuer), orgId: z.literal('393311211338337681'),
-    clientId: z.literal('393311211707501969'), users: z.record(z.string(), z.object({ id: z.string(), login: z.string(), passwordFile: z.string() })) })
-    .passthrough().parse(JSON.parse(await readFile(`${ownerDirectory}/zitadel.json`, 'utf8')));
+  const appName = `OpenCrane 2 Dev CI ${stackId}`;
+  const apps = await list(`/management/v1/projects/${projectId}/apps/_search`, exactName(appName));
+  assert(apps.length <= 1, 'Duplicate secondary apps');
+  let appId = apps[0]?.id;
+  let clientId: string;
+  if (appId) {
+    assert(appId !== '393311211707436433', 'Refusing the owner app');
+    const app = z.object({ app: z.object({ name: z.literal(appName),
+      details: z.object({ resourceOwner: z.literal(orgId) }),
+      oidcConfig: z.object({ clientId: z.string(), devMode: z.literal(true),
+        redirectUris: z.array(z.string()), postLogoutRedirectUris: z.array(z.string()) }) }) })
+      .parse(await api(`/management/v1/projects/${projectId}/apps/${appId}`)).app;
+    assert.deepEqual(app.oidcConfig.redirectUris, [`${localOrigin}/auth/callback`], 'Unexpected secondary redirects');
+    assert.deepEqual(app.oidcConfig.postLogoutRedirectUris, [`${localOrigin}/`], 'Unexpected secondary logout redirects');
+    clientId = app.oidcConfig.clientId;
+    assert(await exists(`${credentials}/zitadel-client-secret`), 'Existing secondary app secret missing');
+  } else {
+    const app = z.object({ appId: z.string(), clientId: z.string(), clientSecret: z.string() }).parse(
+      await api(`/management/v1/projects/${projectId}/apps/oidc`, { name: appName,
+        redirectUris: [`${localOrigin}/auth/callback`], postLogoutRedirectUris: [`${localOrigin}/`],
+        responseTypes: ['OIDC_RESPONSE_TYPE_CODE'], grantTypes: ['OIDC_GRANT_TYPE_AUTHORIZATION_CODE'],
+        appType: 'OIDC_APP_TYPE_WEB', authMethodType: 'OIDC_AUTH_METHOD_TYPE_POST', version: 'OIDC_VERSION_1_0',
+        idTokenUserinfoAssertion: true, devMode: true }));
+    await retain('zitadel-client-secret', app.clientSecret);
+    appId = app.appId;
+    clientId = app.clientId;
+  }
+  const users: Record<string, { id: string; login: string; passwordFile: string }> = {};
   for (const role of ['owner', 'member']) {
-    await save(`zitadel-${role}-password`, await readFile(`${ownerDirectory}/zitadel-${role}-password`, 'utf8'));
-    setup.users[role]!.passwordFile = `${directory}/zitadel-${role}-password`;
+    const userName = `opencrane2-dev-ci-${stackId}-${role}`;
+    const file = `zitadel-${role}-password`;
+    const found = await list('/management/v1/users/_search', [{ userNameQuery: { userName, method: 'TEXT_QUERY_METHOD_EQUALS' } }]);
+    assert(found.length <= 1, 'Duplicate secondary users');
+    let userId = found[0]?.id;
+    if (!userId) {
+      if (!await exists(`${credentials}/${file}`)) await retain(file, `Oc2!${randomBytes(24).toString('base64url')}a9`);
+      userId = z.object({ userId: z.string() }).parse(await api('/management/v1/users/human/_import', {
+        userName, profile: { firstName: 'OpenCrane CI', lastName: role, preferredLanguage: 'en' },
+        email: { email: `${userName}@example.test`, isEmailVerified: true },
+        password: await readFile(`${credentials}/${file}`, 'utf8'), passwordChangeRequired: false,
+      })).userId;
+    }
+    assert(await exists(`${credentials}/${file}`), 'Existing secondary user password missing');
+    const user = z.object({ user: z.object({ userName: z.literal(userName), preferredLoginName: z.string(),
+      details: z.object({ resourceOwner: z.literal(orgId) }) }) })
+      .parse(await api(`/management/v1/users/${userId}`)).user;
+    users[role] = { id: userId, login: user.preferredLoginName, passwordFile: `${directory}/${file}` };
   }
-  await save('zitadel-client-secret', await readFile(`${ownerDirectory}/zitadel-client-secret`, 'utf8'));
-  await save('zitadel.json', JSON.stringify({ ...setup, origin: localOrigin }));
-  console.log('Secondary redirects ready in OpenCrane 2 Dev; shared app and identities retained');
+  for (const file of ['zitadel-client-secret', 'zitadel-owner-password', 'zitadel-member-password']) {
+    await save(file, await readFile(`${credentials}/${file}`, 'utf8'));
+    await chmod(`${directory}/${file}`, 0o600);
+  }
+  const { extraIdentities } = z.object({ extraIdentities: z.array(identity) })
+    .parse(JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')));
+  await save('zitadel.json', JSON.stringify({ issuer, orgId, projectId, appId, clientId, origin: localOrigin, users, extraIdentities }));
+  console.log('Secondary app and test users ready in OpenCrane 2 Dev; owner resources unchanged');
 }
 try {
   await prepareDirectory();

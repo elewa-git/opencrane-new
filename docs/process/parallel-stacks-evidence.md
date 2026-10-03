@@ -2,12 +2,14 @@
 
 Source: `work/parallel-stacks`, base `ed21e0b42a7930401aedb48d4cbfe7aeadd00901`
 plus the change containing this receipt. Host: `ocn-dev`, eight cores, 16 GiB RAM,
-Node 22.23.3, existing k3d `ocn`. Both secondary installs are fresh and use the
+Node 22.23.3, existing k3d `ocn`. The original two secondary installs are fresh and use the
 same worktree with ids `1` and `2`. No paid model provider is used.
 
 Private run artefacts are under `/tmp/parallel-stacks-evidence/` on the dev box.
 They include command logs, concurrency timestamps, credential-isolation booleans,
 owner configuration/process fingerprints and five-second HTTPS availability samples.
+The initial shared OIDC configuration below was rejected in review; see the
+[blocker-fix qualification](#blocker-fix-qualification) for the replacement.
 Credential values are never printed or committed. Secondary screenshots are copied
 there before teardown; generated stack directories are removed by `down --id`.
 
@@ -60,7 +62,7 @@ this is one measured sample, not a worst-case capacity guarantee.
 - All 22 secondary host listeners were `127.0.0.1`; neither secondary touched
   Tailscale Serve or the owner’s model firewall. The model containers use the
   already-pinned Node runtime image and private k3d relay addresses.
-- The existing shared OIDC app contains exactly the owner origin and
+- At the initial qualification, the shared OIDC app contained the owner origin and
   `http://127.0.0.1:25106` / `http://127.0.0.1:25206` callbacks and logout redirects.
   It remains in organisation `393311211338337681`. No other organisation, users,
   grants or instance settings were changed. Experimental redirects added during
@@ -94,3 +96,53 @@ mismatch: the dispatcher now requests 1 GiB per computer, leaving the owner defa
 unchanged. Final live fixes are described above. This is local dev-stack
 qualification, not production capacity, R3, failover or disaster-recovery evidence.
 The documented ceiling is the stable owner plus two secondary journey stacks.
+
+## Blocker-fix qualification
+
+Source: `08d200a` plus the fix commit containing this receipt, 3 October 2026.
+The fix addresses occupied-port claims and replaces shared owner OIDC credentials
+with one app and two test users per secondary id, inside the existing OpenCrane
+organisation and project. The owner app is never updated. Its configuration at the
+start of this run is retained exactly, including settings left by the earlier run.
+
+Regression checks use the CLI with a temporary home directory. A real listener on
+25110 makes `claim.sh` return id 2 without creating id 1's directory. The setup CLI
+uses a fake provider boundary and no owner credential files; it verifies exact
+redirects, its own client ID in generated auth settings, private credential modes,
+reuse after teardown, and refusal of broad redirects or missing saved credentials.
+The original code failed the occupied-port and isolated-setup tests; the generated
+client-ID check also failed before its fix.
+
+Private artefacts: `/tmp/parallel-stacks-fix-evidence/` (`report.json`, scoped
+owner app snapshots, owner file fingerprints, HTTPS samples, command logs and
+both workspace screenshots). No credential values are in this receipt.
+
+| Check | Result |
+| --- | --- |
+| `node --experimental-strip-types --test infra/dev-stack/*.test.ts` | PASS: held-port claim and isolated OIDC setup/generation/reuse/refusals |
+| `shellcheck infra/dev-stack/*.sh` | PASS |
+| `npx tsc -p infra/dev-stack/tsconfig.json` | PASS |
+| `npm run lint` / `npm run typecheck` / `npm run check:events` | PASS |
+| `claim.sh`, then `up.sh --id 1 --fresh` | PASS: exactly one secondary, 20 PASS checks |
+| Own app/client/users, distinct credentials, files at 0600 | PASS |
+| Repeat scoped setup without recreating identities or rotating secrets | PASS |
+| Owner app before/after, including OIDC configuration | PASS: byte-identical serialised application responses |
+| Owner settings, credentials, PID files and ownership marker | PASS: identical file fingerprints |
+| Owner `https://ocn-dev.tail00285e.ts.net/` throughout | PASS: 59 HTTP 200 samples, zero failures |
+| `down.sh --id 1` and cleanup inspection | PASS |
+
+The guarded window was **12:51:29–12:56:23 UTC**. The owner lifecycle lock was
+held throughout. The fresh journey used real login by
+`opencrane2-dev-ci-1-owner` and `opencrane2-dev-ci-1-member`, the secondary app's
+client secret, exact loopback redirects, and no offline fallback. It covered
+sign-in/out, wrong-org/expiry/CSRF refusals, both chat viewports and Stop, computer
+wake/resume/replacement, disk retention, admin permissions and replay verification.
+The owner app was read only; all provider writes stayed inside organisation
+`393311211338337681` and existing project `393311211539664273`.
+
+No secondary containers, volumes, networks, namespaces, admission policies,
+listeners or disposable directory remained. Only the secondary's cloud app/users
+and its own private retained OIDC credential directory remain for later reuse.
+The full repository test suite and a second concurrent secondary were **NOT RUN**
+in this fix qualification; the earlier results above belong to the original run.
+No builds or repository test suite ran alongside this live journey.

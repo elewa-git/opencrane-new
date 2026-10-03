@@ -66,6 +66,7 @@ signing key. Compose prefixes its networks and volumes with the selected project
 Secondary directories and ports are fixed by id; conflicting overrides are refused.
 The fixed secondary blocks are below this box’s ephemeral range (32768–60999),
 so outgoing Kubernetes/database sockets cannot claim a future listener.
+Claims probe the whole port block on IPv4 and IPv6 and skip occupied slots.
 Startup checks every port before starting services and refuses foreign listeners.
 Existing listeners are reused only when owned by this stack’s recorded process
 groups or running Compose containers.
@@ -234,17 +235,24 @@ It checks discovery reachability, uses minted five-minute **dev-only** cookies,
 prints **FAIL sign-in** and exits non-zero even if the service checks pass.
 `up.sh` and `journey.sh` always use real login; they never silently take this path.
 
-For secondary bring-up, `zitadel-setup.ts` follows a separate existing-app path:
-it checks organisation `393311211338337681`, project `393311211539664273`, app
-`393311211707436433` and client `393311211707501969`. Under a shared setup lock,
-it preserves existing OIDC settings and redirects and adds exactly the two
-loopback callback and post-logout URIs from the table above. Development mode
-allows HTTP, as required by [Zitadel’s app settings](https://zitadel.com/docs/guides/manage/console/applications-overview).
-No users, grants, other organisations or instance settings are changed. The app
-secret and test-user passwords are read from the owner’s private directory into
-the secondary directory without changing the owner’s files or rotating secrets.
-These OIDC identities are deliberately shared; service credentials and session
-keys are generated independently. Redirect registration remains after teardown.
+For secondary bring-up, `zitadel-setup.ts` checks organisation
+`393311211338337681` and existing project `393311211539664273`. Under a shared
+setup lock, each id creates or reuses its own app, `OpenCrane 2 Dev CI <id>`, and
+users `opencrane2-dev-ci-<id>-owner` and `opencrane2-dev-ci-<id>-member`.
+The owner app and users are never modified, and no owner credentials are read.
+Secondary users need no Zitadel administration role; product roles come from events.
+Each secondary app permits only its id's exact callback and logout URIs from the
+table above, with no globs. Development mode allows HTTP, as required by
+[Zitadel’s app settings](https://zitadel.com/docs/guides/manage/console/applications-overview).
+Existing secondary apps with unexpected redirects are refused without mutation.
+
+The secondary app secret and randomly generated user passwords persist in
+`~/.config/opencrane/dev-stack-ci-<id>/` (0700), with files at 0600. Setup copies
+only those credentials to its disposable secondary directory (also 0600), and
+configuration uses the secondary client ID. `down --id` removes the disposable
+stack but retains these private credentials and cloud identities for reuse.
+Missing retained credentials fail closed; setup never rotates existing secrets.
+No other organisation, project, grant or instance setting is changed.
 
 ## Qualification
 
@@ -269,6 +277,7 @@ npm run check:events
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test
 npm run build -w apps/web
 npm run test -w apps/web -- --watch=false
+node --experimental-strip-types --test infra/dev-stack/*.test.ts
 npx tsc -p infra/dev-stack/tsconfig.json
 shellcheck infra/dev-stack/*.sh
 infra/dev-stack/up.sh --fresh

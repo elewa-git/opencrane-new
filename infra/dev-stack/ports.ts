@@ -5,10 +5,10 @@ import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
 /** Refuse occupied ports unless their listener belongs to this stack's running processes or Compose project. */
-export async function checkPorts(settings: Record<string, string>, pids: Array<number | undefined>, project: string) {
+export async function checkPorts(settings: Record<string, string>, pids: Array<number | undefined> = [], project?: string) {
   const ports = Object.entries(settings).filter(([name]) => name.endsWith('_PORT')).map(([, port]) => port);
   if (new Set(ports).size !== ports.length) throw new Error('Stack ports must be distinct');
-  const containers = (await exec('docker', ['ps', '--filter', `label=com.docker.compose.project=${project}`, '--format', '{{.ID}}'])).stdout.trim().split('\n').filter(Boolean);
+  const containers = project ? (await exec('docker', ['ps', '--filter', `label=com.docker.compose.project=${project}`, '--format', '{{.ID}}'])).stdout.trim().split('\n').filter(Boolean) : [];
   const published = new Set<string>();
   if (containers.length) {
     const inspected = JSON.parse((await exec('docker', ['inspect', ...containers])).stdout) as Array<{

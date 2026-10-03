@@ -323,6 +323,7 @@ let prepared = false;
 try {
   if (process.argv[2] === 'claim') {
     if (!secondary || await stat(directory).then(() => true, () => false)) process.exit(1);
+    await checkPorts(defaultPorts);
     await prepareDirectory();
     console.log(stackId);
     process.exit(0);

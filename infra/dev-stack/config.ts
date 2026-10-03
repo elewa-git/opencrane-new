@@ -68,7 +68,7 @@ export async function generate(origin: string) {
       NATS_NKEY_SEED_FILE: `${directory}/${role}.seed`, NATS_INBOX_PREFIX: `_INBOX.${role}`, NATS_REPLICAS: '1',
       ...(role === 'command' ? {} : { DATABASE_URL: database(role as 'projection' | 'dispatcher', role === 'projection' ? 'projections' : 'handlers') }) });
   }
-  const oidc = JSON.parse(await readFile(`${root}/infra/dev-stack/zitadel.json`, 'utf8')) as {
+  const oidc = JSON.parse(await readFile(secondary ? `${directory}/zitadel.json` : `${root}/infra/dev-stack/zitadel.json`, 'utf8')) as {
     issuer: string; orgId: string; clientId: string; origin: string;
     extraIdentities: Array<{ issuer: string; subject: string }>;
   };
