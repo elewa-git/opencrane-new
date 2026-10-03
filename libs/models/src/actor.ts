@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import { effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
@@ -23,7 +23,6 @@ export class BudgetActor {
   readonly state = emptyBudget();
   private sequence = 0;
   private queue = Promise.resolve();
-  private auditQueue = Promise.resolve();
   private failed = false;
   private exhaustedDay: string | undefined;
   readonly store: EventStore;
@@ -71,7 +70,7 @@ export class BudgetActor {
       }
       const id = randomUUID();
       await this.append('budget.reserved', { reservationId: id, permitId: id, amountCents,
-        payingGroupId: this.silo, assistantId: call.assistantId, modelCall: call });
+        payingGroupId: call.payingGroupId ?? this.silo, assistantId: call.assistantId, modelCall: call });
       return id;
     });
   }
@@ -112,25 +111,6 @@ export class BudgetActor {
     for (const r of this.state.reservations) {
       if (r.settledCents === undefined && this.now().getTime() - Date.parse(r.time) > 180_000) await this.effect(r.id);
     }
-  }
-  refuse(context?: { requesterId: string; assistantId: string; claims: unknown }) {
-    const result = this.auditQueue.then(() => this.appendRefusal(context));
-    this.auditQueue = result.catch(() => undefined);
-    return result;
-  }
-  private async appendRefusal(context?: { requesterId: string; assistantId: string; claims: unknown }) {
-    const id = randomUUID();
-    const event = envelope(this.silo, `security-${this.silo}`, 'security.alert_raised', { alertId: id,
-      severity: 'low', reason: 'model_request_refused', decision: { outcome: 'deny',
-        ...(context ? { requesterId: context.requesterId, assistantId: context.assistantId } : {}),
-        contextDigest: createHash('sha256').update(JSON.stringify(context?.claims ?? 'unverified')).digest('hex') } }, id);
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const rows = await history(this.store, event.subject, this.silo);
-      const result = await this.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
-      if (result.status === 'appended') return;
-      if (result.status !== 'conflict') break;
-    }
-    throw new Error('Decision audit unavailable');
   }
   async settleRecorded(id: string, eventId: string) {
     const row = (await history(this.store, `effect-${id}`, this.silo)).find(row => row.event.id === eventId);

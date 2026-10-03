@@ -94,7 +94,9 @@ beforeEach(async () => {
   await mcp('odoo', 'mcp.server_registered', { kind: 'remote', locator: 'https://odoo.example.test/mcp',
     catalogueRef: 'catalogue:odoo' });
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 14, schemaDigest: 'a'.repeat(64),
-    serverInfo: { name: 'Odoo Accounting', version: '1.4.2' } });
+    serverInfo: { name: 'Odoo Accounting', version: '1.4.2' }, connectionId: 'installed-odoo', accountMode: 'none',
+    tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true },
+      { name: 'write', revision: 'b'.repeat(64), reviewed: true }, { name: 'new', revision: 'c'.repeat(64), reviewed: false }] });
   await mcp('odoo', 'mcp.tool_mode_set', { toolName: 'read', mode: 'allow', setBy: 'alice' });
   await mcp('odoo', 'mcp.tool_mode_set', { toolName: 'write', mode: 'ask', setBy: 'alice' });
   await mcp('odoo', 'mcp.tool_mode_set', { toolName: 'delete', mode: 'block', setBy: 'alice' });
@@ -128,7 +130,7 @@ beforeEach(async () => {
   feed = await connectMemberFeed(connectionString);
   catalogue = connectMcpCatalogue(connectionString);
   computerRows = connectComputers(connectionString);
-  app = buildServer(config, { integrations: { silo: 'test', feed, catalogue, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
+  app = buildServer(config, { integrations: { silo: 'test', store: nats.store, feed, catalogue, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
     now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
 }, 30_000);
@@ -150,7 +152,7 @@ it('returns the event-derived register and rebuilds to the same rows', async () 
     ['odoo', 'ready'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'needs_input'], ['review', 'needs_input'],
     ['retired', 'disabled'],
   ]);
-  expect(body.rows[0]).toMatchObject({ name: 'Odoo Accounting', version: '1.4.2', toolsAllowed: 2, toolsTotal: 14,
+  expect(body.rows[0]).toMatchObject({ name: 'Odoo Accounting', version: '1.4.2', toolsAllowed: 0, toolsTotal: 14,
     source: { kind: 'catalogue', label: 'Catalogue', detail: 'catalogue:odoo' }, accountModel: 'Not provided' });
   expect(body.rows.find((row) => row.serverId === 'pricing')).toMatchObject({
     name: 'Pricing', version: 'Version not provided', source: { kind: 'remote_url' }, accountModel: 'Not provided',
@@ -202,13 +204,14 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
   let output = '';
   const cli = resolve('node_modules/@angular/cli/bin/ng.js');
   const web = spawn(process.execPath, ['--experimental-strip-types', '--import',
-    resolve('apps/server/test/support/ephemeral-ports.ts'), cli, 'serve', '--host', '127.0.0.1', '--port', '0', '--proxy-config', proxy],
+    resolve('apps/server/test/support/ephemeral-ports.ts'), cli, 'serve', '--prebundle=false', '--host', '127.0.0.1', '--port', '0', '--proxy-config', proxy],
     // CI=true makes Angular colour its output; ask for plain text and strip any codes anyway.
     { cwd: resolve('apps/web'), stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } });
   web.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   web.stderr.on('data', (chunk: Buffer) => { output += chunk.toString(); });
   const webExited = once(web, 'exit');
   let base = '';
+  const originalRedirect = config.redirectUri;
   const browser = await chromium.launch({ headless: true });
   try {
     await vi.waitFor(async () => {
@@ -219,6 +222,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       expect(base, output).not.toBe('');
       expect(await fetch(base).then((response) => response.ok, () => false), output).toBe(true);
     }, { timeout: 60_000, interval: 200 });
+    config.redirectUri = `${base}/auth/callback`;
     const context = await browser.newContext({ viewport: { width: 390, height: 900 } });
     await context.addCookies([{ name: config.cookieName, value: encodeSession(config,
       { sub: 'oidc-alice', orgId: 'org-acme', roles: [], authTime: 0, exp: 2_000_000_000 }), url: base }]);
@@ -228,6 +232,25 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     expect((await apiResponse).status()).toBe(200);
     await page.locator('.register-row').first().waitFor();
     expect(await page.locator('.register-row').count()).toBe(6);
+
+    const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
+    await page.getByRole('link', { name: 'Manage tools for Odoo Accounting' }).click();
+    expect((await toolsLoaded).status()).toBe(200);
+    await page.getByRole('heading', { name: 'Tools & access' }).waitFor();
+    await page.getByRole('group', { name: 'write' }).getByLabel('Allow automatically').check();
+    const saved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/odoo/tools'));
+    await page.getByRole('button', { name: 'Save write' }).press('Enter');
+    expect((await saved).status()).toBe(200);
+    await page.getByText('✓ Saved').waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+      const controls = page.locator('.tool-policy label, .tool-policy button');
+      for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: `/tmp/p3-1-tools-${width}.png`, fullPage: true });
+    }
+    await page.getByRole('link', { name: 'Back to integrations' }).click();
+    await page.locator('.register-row').first().waitFor();
 
     const allTab = page.getByRole('tab', { name: /^All/ });
     await allTab.focus();
@@ -315,6 +338,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     }
     await context.close();
   } finally {
+    config.redirectUri = originalRedirect;
     await browser.close();
     web.kill('SIGTERM');
     const hardKill = setTimeout(() => web.kill('SIGKILL'), 5_000);
@@ -348,4 +372,42 @@ it('restricts the model and spending read to projected owners and admins', async
   }
   expect((await app.inject({ method: 'GET', url: '/api/org/models' })).statusCode).toBe(401);
   expect((await app.inject({ method: 'GET', url: '/api/org/models', headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);
+});
+
+it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
+  await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: 'a'.repeat(64),
+    connectionId: 'installed-odoo', accountMode: 'none', tools: [
+      { name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true },
+      { name: 'write', revision: 'b'.repeat(64), reviewed: true, readOnly: false },
+    ] });
+  await runner.run(mcpCatalogue);
+  const url = '/api/org/integrations/odoo/tools';
+  const read = await app.inject({ url, headers: headers('oidc-alice') });
+  expect(read.statusCode).toBe(200);
+  const state = read.json<{ sequence: number; tools: { name: string; mode: string; suggestion: string }[] }>();
+  expect(state.tools).toMatchObject([{ name: 'read', mode: 'block', suggestion: 'allow' }, { name: 'write', mode: 'block', suggestion: 'ask' }]);
+  const payload = { commandId: 'policy-write', expectedSequence: state.sequence, connectionId: 'installed-odoo', toolName: 'write', toolRevision: 'b'.repeat(64), mode: 'allow' };
+  for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url,
+    headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
+  const save = () => app.inject({ method: 'POST', url, headers: { ...headers('oidc-amina'), origin: new URL(config.redirectUri).origin }, payload });
+  expect((await save()).statusCode).toBe(200);
+  expect((await save()).statusCode).toBe(200);
+  await runner.run(mcpCatalogue);
+  const before = await catalogue.tools('test', 'odoo');
+  expect(before.tools[1]?.mode).toBe('allow');
+  await runner.rebuild(mcpCatalogue);
+  expect(await catalogue.tools('test', 'odoo')).toEqual(before);
+  const events = [];
+  for await (const row of nats.store.readStream('mcp-odoo')) if (row.event.commandId === 'policy-write') events.push(row);
+  expect(events).toHaveLength(1);
+  const race = await Promise.all(['ask', 'block'].map((mode, i) => app.inject({ method: 'POST', url,
+    headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin },
+    payload: { ...payload, commandId: `policy-race-${i}`, expectedSequence: before.sequence, mode } })));
+  expect(race.map(r => r.statusCode).sort()).toEqual([200, 409]);
+  const latest = race.find(r => r.statusCode === 200)!.json<{ policy: { sequence: number } }>().policy.sequence;
+  for (const patch of [{ connectionId: 'foreign' }, { toolRevision: 'c'.repeat(64) }, { toolName: '__proto__' }]) {
+    expect((await app.inject({ method: 'POST', url, headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin },
+      payload: { ...payload, commandId: 'bad-policy', expectedSequence: latest, ...patch } })).statusCode).toBe(409);
+  }
+  expect((await app.inject({ method: 'POST', url, headers: { ...headers('oidc-alice'), origin: 'https://foreign.test' }, payload })).statusCode).toBe(403);
 });

@@ -58,7 +58,7 @@ const app = buildServer(authConfig, {
   ...(chat ? { chat } : {}),
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
-    catalogue, ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
+    catalogue, ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
   ...(realtime && computers ? { computers: { silo: realtime.binding.silo, feed: realtime.feed,
     computers, binding: realtime.binding } } : {}),
 });

@@ -1,0 +1,11 @@
+:host { display: block; min-width: 0; }
+h1 { font-size: 24px; margin: 16px 0 8px; } h2 { font-size: 16px; }
+p { color: var(--oc-ink-secondary); font-size: 14px; line-height: 1.5; }
+a { display: inline-flex; align-items: center; min-height: 44px; color: var(--oc-accent-dark); }
+fieldset { min-width: 0; border: 1px solid var(--oc-border-default); border-radius: 8px; padding: 16px; margin: 16px 0; background: white; }
+legend { overflow-wrap: anywhere; font-weight: 600; } .modes { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+label { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--oc-border-input); border-radius: 6px; font-size: 14px; }
+label:has(input:checked) { background: var(--oc-accent-tint); border-color: var(--oc-accent-dark); }
+button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--oc-border-input); border-radius: 6px; background: var(--oc-accent); color: var(--oc-ink-strong); font: inherit; }
+button:disabled, fieldset:disabled { opacity: .65; } :focus-visible { outline: 2px solid var(--oc-accent-dark); outline-offset: 3px; }
+@media (max-width: 600px) { .modes { display: grid; } label { min-height: 44px; } button { width: 100%; } }

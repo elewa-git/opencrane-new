@@ -84,3 +84,13 @@ are Apache-2.0 (source/npm metadata and installed LICENSE files).
 The transformer is dev-only. Axios is overridden to **1.20.0 (MIT)** because the
 SDK pins vulnerable 1.19.0. The real-service tests exercise the overridden SDK.
 The fixture pins the server image by digest; no new dependency is used by apps/web.
+
+P3-1 adds explicit `resource#use` grants for people, assistants and team members,
+plus team membership and assistant ownership relations. `use` and `applied` support
+live admission and event-receipt freshness checks. The existing rebuild includes
+these grant/team events; installation never grants access. Rebuild into a new
+OpenFGA store/model binding before switching a running silo to this version.
+
+Use `grantStream(resourceType, resourceId)` for both grant and revoke commands.
+The reaction refuses any other subject. This gives the existing worker one
+ordering key per resource; splitting a permission across streams is unsafe.

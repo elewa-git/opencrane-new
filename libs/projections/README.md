@@ -94,3 +94,8 @@ Never supply the command identity to a reader process.
 Projection readers do not create, reset or bind consumers. They read exact
 sequences from their SQL checkpoints as defined in
 [ADR 0005](../../docs/adr/0005-nats-access.md).
+
+The MCP catalogue also stores the reviewed connection/tool revision policy. Its
+TypeScript fold is shared with decision reads; SQL only stores the result.
+Legacy name-only modes never grant execution. Both ordinary and online catalogue
+rebuilds retain this policy; replay does not dispatch tools.

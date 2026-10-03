@@ -64,10 +64,11 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `toolset-<profile>` | computer profile (an image plus Codex built-in tool settings) | changed |
 | `conversation-<id>` | conversation | participants, messages, agent activity |
 | `approval-<id>` | approval request | requested, decided, used, expired |
+| `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
 | `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
-| `grant-<resource>` | shared resource | given, revoked |
+| `grant-<resource>` | shared resource (type and id) | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
 | `scope-<id>` | brain permission scope | memory written, corrected, forgotten, consolidated, promoted |
 | `routine-<id>` | scheduled routine | created, due, paused, retired |
@@ -75,6 +76,19 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `security-<silo>` | silo | alerts |
 
 ## Catalogue
+
+### Gateway decisions
+
+| Event | Producer | Projections | Reactions |
+| --- | --- | --- | --- |
+| `decision.recorded` | ext_authz | audit | none; admission is not an observed effect |
+
+Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
+`reason` and `contextDigest`. Verified callers also carry `requesterId`,
+`assistantId`, `conversationId` and `turnId`; model allows include `permitId`.
+Unverified identities are omitted. A failed append denies dispatch. Gateway JWT
+refusals before ext_authz have no decision event; observation reconciliation belongs
+to P3-19. No raw arguments, tokens or credential values appear in this event.
 
 ### Organisation, members and teams
 
@@ -193,7 +207,7 @@ retry with a fresh grant after reconnect or Pod replacement.
 | `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
 | `mcp.server_discovered` | reaction | catalogue (tools, schema digests, optional server name and version) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
-| `mcp.tool_mode_set` | admin | tool modes (Allow / Ask / Block) | regenerate gateway config |
+| `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
 | `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
 | `grant.given` / `grant.revoked` | admin or owner | grants | OpenFGA tuples |
@@ -242,9 +256,9 @@ reservation. Ambiguous outcomes (including timeouts and lost connections) produc
 `settle-budget` retries a recorded
 observation through the decision process; duplicate settlement is a no-op.
 The budget projection can be rebuilt with reactions disabled. Cap refusals append
-only `budget.exhausted`, once per unchanged budget per UTC day, including across
-actor recovery. Other model refusals before a budget command emit
-`security.alert_raised` with an optional `decision` record:
+`budget.exhausted` once per unchanged budget per UTC day, including across
+actor recovery. P3-1 records every admission separately as `decision.recorded`.
+Legacy model refusals used `security.alert_raised` with an optional `decision` record:
 verified requester/assistant ids when available and a context digest, never tokens.
 
 ### Memory
@@ -301,3 +315,32 @@ explicitly until implemented (scope promotion remains deferred).
 3. **When the shadow catches up to live, switch reads over** and drop the old tables.
 
 The same procedure recovers from a corrupted projection, adds a new read model, or restores a silo from event-store backups. **Content tables never need their own backup to be correct**; they are backed up only to shorten restore time.
+
+### P3-1 tool policy bindings
+
+`mcp.server_discovered` may carry an installed `connectionId`, explicit `accountMode` (`none`, `personal`, `company`) and a bounded tool list with `name`, schema
+`revision`, `reviewed` and optional `readOnly`/`destructive` hints. Legacy discovery
+remains replayable but grants no execution. Duplicate names fail closed. Discovery
+resets modes to Block; hints only suggest a choice. Drift/unpublish/rejection
+quarantines execution. A new publication cannot restore a changed tool's old mode.
+
+`mcp.tool_mode_set` adds `connectionId` and `toolRevision`; both must match the
+current reviewed tool for execution. Legacy name-only events remain readable but
+do not grant execution. Commands check live Owner/Admin and event membership,
+require the current stream sequence and conditionally append once to `mcp-<server>`.
+The catalogue stores the same TypeScript-folded policy and rebuilds it by replay.
+
+`assistant.settings_changed` accepts `active` and the `active` changed field.
+An explicit inactive assistant cannot dispatch; later activation restores eligibility
+only after all current checks pass. Existing events retain their meaning.
+
+`computer.turn_started` and the nested `budget.reserved.modelCall` may carry
+`payingGroupId`. Team work requires this explicit turn binding; personal work
+uses the installation default. Group ceilings remain P3-13 work.
+
+Grant commands use `grantStream(resourceType, resourceId)` from `libs/authz`: the
+suffix is base64url of the UTF-8 JSON pair `[resourceType, resourceId]`. Every grant
+and revocation for that resource uses the same stream, across all grantees. The
+OpenFGA reaction rejects other subjects, so the existing per-stream worker order
+prevents a delayed grant from overtaking revocation. Event receipts make later
+redelivery harmless; chronological replay produces the same denied state.

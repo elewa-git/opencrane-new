@@ -1,3 +1,5 @@
+import { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
+import { toolPolicySchema } from '@opencrane/protocol';
 import { getEventDefinition } from '@opencrane/events';
 import type { IntegrationRow, SharedStateKind } from '@opencrane/protocol';
 import type { Projection } from './runner.ts';
@@ -59,6 +61,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       tool_count INTEGER, lifecycle TEXT NOT NULL,
       changed_at TEXT NOT NULL, position BIGINT NOT NULL,
       PRIMARY KEY (silo, server_id))`);
+      await db.query(`ALTER TABLE ${tables.catalogue} ADD COLUMN IF NOT EXISTS policy JSONB`);
       await db.query(`CREATE TABLE IF NOT EXISTS ${tables.toolModes} (
       silo TEXT NOT NULL, server_id TEXT NOT NULL, tool_name TEXT NOT NULL, mode TEXT NOT NULL,
       PRIMARY KEY (silo, server_id, tool_name))`);
@@ -73,17 +76,19 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       const serverId = field(data, 'serverId');
       if (event.subject !== `mcp-${serverId}`) throw new Error('MCP subject mismatch');
       if (event.type === 'mcp.server_registered') {
-        await db.query(`INSERT INTO ${tables.catalogue} VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, 'registered', $6, $7)
+        await db.query(`INSERT INTO ${tables.catalogue} (silo, server_id, source_kind, locator, catalogue_ref, server_name, server_version, tool_count, lifecycle, changed_at, position, policy) VALUES ($1, $2, $3, $4, $5, NULL, NULL, NULL, 'registered', $6, $7, $8)
         ON CONFLICT (silo, server_id) DO UPDATE SET source_kind = $3, locator = $4,
         catalogue_ref = $5, server_name = NULL, server_version = NULL,
-        tool_count = NULL, lifecycle = 'registered', changed_at = $6, position = $7`,
+        tool_count = NULL, policy = $8, lifecycle = 'registered', changed_at = $6, position = $7`,
         [event.silo, serverId, field(data, 'kind'), field(data, 'locator'), optionalField(data, 'catalogueRef'),
-          event.time, position]);
+          event.time, position, JSON.stringify({ ...emptyToolPolicy(), sequence: position })]);
         return;
       }
-      const existing = await db.query(`SELECT server_id FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
+      const existing = await db.query(`SELECT server_id, policy FROM ${tables.catalogue} WHERE silo = $1 AND server_id = $2`,
         [event.silo, serverId]);
       if (!existing.rows.length) throw new Error('MCP event requires a registered server');
+      const policy = applyToolPolicy(existing.rows[0]?.['policy'] ? toolPolicySchema.parse(existing.rows[0]['policy']) : emptyToolPolicy(), event, position);
+      await db.query(`UPDATE ${tables.catalogue} SET policy = $3 WHERE silo = $1 AND server_id = $2`, [event.silo, serverId, JSON.stringify(policy)]);
       if (event.type === 'mcp.tool_mode_set') {
         await db.query(`INSERT INTO ${tables.toolModes} VALUES ($1, $2, $3, $4)
         ON CONFLICT (silo, server_id, tool_name) DO UPDATE SET mode = $4`,
@@ -151,7 +156,9 @@ function status(lifecycle: string, changedAt: string): IntegrationRow['status'] 
 export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
   return rows.map((row) => {
     const total = row.tool_count === null ? null : Number(row.tool_count);
-    const allowed = (row.modes ?? []).filter((mode) => mode === 'allow' || mode === 'ask').length;
+    const policy = toolPolicySchema.safeParse(row['policy']);
+    const modes = policy.success && policy.data.tools.length ? policy.data.tools.map(t => t.mode) : row.modes ?? [];
+    const allowed = modes.filter((mode) => mode === 'allow' || mode === 'ask').length;
     return {
       serverId: row.server_id,
       name: row.server_name ?? words(row.server_id),

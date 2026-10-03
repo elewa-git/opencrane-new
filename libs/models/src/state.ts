@@ -61,7 +61,7 @@ export function data(event: EventEnvelope): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);
 }
 const callSchema = z.object({ model: z.string(), priceTableId: z.string().min(1), computerId: z.string(),
-  assistantId: z.string(), requesterId: z.string(), conversationId: z.string(), turnId: z.string(), threadId: z.string(), contextDigest: z.string() }).strict();
+  assistantId: z.string(), requesterId: z.string(), conversationId: z.string(), turnId: z.string(), threadId: z.string(), payingGroupId: z.string().optional(), contextDigest: z.string() }).strict();
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
   call: callSchema, settledCents: z.int().nonnegative().optional() });

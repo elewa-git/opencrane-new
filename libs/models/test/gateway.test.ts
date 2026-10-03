@@ -10,7 +10,7 @@ import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { createStore, memberAuthorisation } from '@opencrane/authz';
+import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -25,7 +25,7 @@ async function freePort() {
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
 }
-async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna') {
+async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel = 'gpt-6-luna', team = false) {
   const directory = await mkdtemp(`${tmpdir()}/oc-models-`);
   const dbs = await databases(), nats = await natsFixture();
   const db = pgDb(dbs.queue), logger = createLogger('models-test', { level: 'silent' });
@@ -35,16 +35,21 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
     const event = { ...envelope('test', subject, type, payload), source: 'opencrane-server' };
     const rows = await history(nats.store, subject, 'test');
     expect((await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status).toBe('appended');
+    if (['assistant.created', 'conversation.created', 'team.created', 'team.member_added'].includes(type)) await auth.handler.handle(event, db);
     return event;
   };
   const joined = await append('member-alice', 'member.joined', { memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'owner' });
   await db.transaction(tx => auth.handler.handle(joined, tx));
-  await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' });
+  if (team) {
+    await append('team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' });
+    await append('team-sales', 'team.member_added', { teamId: 'sales', memberId: 'alice', addedBy: 'alice' });
+  }
+  await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: team ? 'sales' : 'alice', kind: team ? 'team' : 'personal' });
   await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:initial', generation: 1 });
   await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
   await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
-  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn' });
+  await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', ...(team ? { payingGroupId: 'sales' } : {}) });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });
   const jwk = { ...await exportJWK(publicKey), kid: 'lifecycle' };
   const issuer = 'https://lifecycle.test/';
@@ -64,16 +69,26 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
     'session-id': 'thread', 'content-type': 'application/json',
   });
   const headers = await issue();
+  for (const model of models.filter(m => !m.retired)) for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
+    const event = await append(grantStream('model', model.id), 'grant.given', { resourceType: 'model', resourceId: model.id, granteeId, granteeKind, grantedBy: 'alice' });
+    await auth.handler.handle(event, db);
+  }
   let clock = Date.now();
   const actor = new BudgetActor(nats.store, 'test', () => new Date(clock)); await actor.start(daily, monthly);
   const decision = await startDecision(actor, { jwks: { keys: [jwk] }, issuer }, binding);
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
+  const admitted: string[] = [];
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
+    const requestId = String(req.headers['x-request-id']);
+    void history(nats.store, `decision-${requestId}`, 'test').then(rows => {
+      if (rows.some(r => r.event.type === 'decision.recorded' && z.object({ outcome: z.literal('allow') }).safeParse(r.event.data).success)) admitted.push(requestId);
+    });
     received++; providerHeaders = Object.keys(req.headers);
     providerAuthHash = createHash('sha256').update(req.headers.authorization ?? '').digest('hex');
     req.resume();
+    if (req.url?.startsWith('/mcp/')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"jsonrpc":"2.0","id":1,"result":{"content":[]}}'); return; }
     if (rejection === -1) { req.socket.destroy(); return; }
     if (rejection) {
       res.writeHead(rejection, { 'content-type': 'application/json' });
@@ -92,6 +107,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
   const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
+    mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed', upstream: `127.0.0.1:${address.port}` }],
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }) };
   let gateway = await startGateway(options);
   const runner = new ProjectionRunner(db, nats.store, logger); await runner.initialise(budgets);
@@ -106,7 +122,7 @@ async function fixture(daily = 2000, monthly = 20000, real = false, allowedModel
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
     reject: (status: number) => { rejection = status; },
-    received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
+    admitted, received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}) {
       const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
       return { status: response.status, text: await response.text() };
@@ -292,18 +308,18 @@ it('recovers old-tariff usage after an upgrade and continues past an unknown mod
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
   } finally { await replacement?.close(); await f.close(); }
 }, 40_000);
-it('records cap refusals once in the budget stream even when security appends fail and callers retry', async () => {
+it('records exhaustion once even when decision audit appends fail and callers retry', async () => {
   const f = await fixture(0, 0);
   const append = f.nats.store.append.bind(f.nats.store);
   const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command => {
-    if (typeof command.event === 'object' && command.event !== null && 'subject' in command.event && command.event.subject === 'security-test') {
-      return Promise.resolve({ status: 'unavailable', cause: new Error('Scripted security outage') });
+    if (typeof command.event === 'object' && command.event !== null && 'type' in command.event && command.event.type === 'decision.recorded') {
+      return Promise.resolve({ status: 'unavailable', cause: new Error('Scripted decision audit outage') });
     }
     return append(command);
   });
   try {
-    expect((await f.call()).status).toBe(402);
-    expect((await f.call()).status).toBe(402);
+    expect((await f.call()).status).toBe(503);
+    expect((await f.call()).status).toBe(503);
     expect((await history(f.nats.store, 'budget-test', 'test')).map(r => r.event.type))
       .toEqual(['budget.ceiling_set', 'budget.period_started', 'budget.exhausted']);
     expect(await history(f.nats.store, 'security-test', 'test')).toEqual([]);
@@ -509,5 +525,114 @@ it('admits routed Sol tool declarations and settings while refusing malformed or
       { ...body, text: { verbosity: 'low', unknown: true } },
     ]) expect((await f.call({}, invalid)).status).toBe(403);
     expect(f.actor.state.reservations).toHaveLength(1); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('enforces reviewed tool modes at the real gateway, including the first automatic write', async () => {
+  const f = await fixture();
+  try {
+    await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
+    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 3,
+      tools: [ { name: 'write', revision: 'a'.repeat(64), reviewed: true }, { name: 'read', revision: 'b'.repeat(64), reviewed: true, readOnly: true },
+        { name: 'new', revision: 'c'.repeat(64), reviewed: false } ] });
+    await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
+    for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
+      const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
+      await f.auth.handler.handle(event, f.db);
+    }
+    const call = async (name: string, extra = {}, patch = {}) => {
+      const response = await fetch(`http://127.0.0.1:${f.options.port}/mcp/fixture/installed`, { method: 'POST', headers: { ...f.headers,
+        'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': name, ...extra }, body: JSON.stringify({ jsonrpc: '2.0', id: 1,
+        method: 'tools/call', params: { name, arguments: { note: 'secret-canary' } },
+        _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28', 'io.modelcontextprotocol/client-capabilities': {} }, ...patch }) });
+      return { status: response.status, text: await response.text() };
+    };
+    expect((await call('write')).status).toBe(403); expect(f.received()).toBe(0);
+    const mode = (name: string, mode: string, revision = 'a'.repeat(64)) => f.append('mcp-fixture', 'mcp.tool_mode_set', {
+      serverId: 'fixture', connectionId: 'installed', toolName: name, toolRevision: revision, mode, setBy: 'alice' });
+    await mode('write', 'allow');
+    expect((await call('write')).status).toBe(200); expect(f.received()).toBe(1);
+    await mode('read', 'ask', 'b'.repeat(64));
+    const asked = await call('read');
+    expect(asked.status).toBe(403); expect(asked.text).toContain('approval_required');
+    await mode('write', 'block');
+    for (const name of ['write', 'new', 'unknown', '__proto__', 'constructor', 'toString']) expect((await call(name)).status).toBe(403);
+    expect(f.received()).toBe(1);
+    expect(f.providerHeaders()).not.toContain('authorization');
+    expect(f.providerHeaders()).not.toContain('x-turn-token');
+    await until(() => f.admitted.length === 1);
+    await mode('write', 'allow');
+    for (const extra of [{ authorization: '' }, { 'x-turn-token': '' }, { 'session-id': 'other' }, { 'mcp-method': 'tools/list' },
+      { 'x-turn-token': await f.sign({ ...f.t, requester: 'bob' }, 'decision-service') },
+      { 'x-turn-token': await f.sign({ ...f.t, conversation: 'other' }, 'decision-service') },
+      { 'x-turn-token': await f.sign({ ...f.t, silo: 'other' }, 'decision-service') },
+      { 'x-turn-token': await f.sign(f.t, 'decision-service', -1) },
+      { authorization: `Bearer ${await f.sign({ ...f.c, generation: 2 }, 'agentgateway')}` }]) {
+      expect((await call('write', extra)).status).toBeGreaterThanOrEqual(400);
+      if (!('mcp-method' in extra)) expect((await f.call(extra)).status).toBeGreaterThanOrEqual(400);
+    }
+    for (const patch of [{ _meta: {} }, { method: 'Tools/Call' }, { method: 'resources/read' }, { params: { name: 'read', arguments: {} } }]) {
+      expect((await call('write', {}, patch)).status).toBe(403);
+    }
+    expect(f.received()).toBe(1);
+    for (const [resourceType, resourceId, granteeId] of [['model', 'gpt-6-luna', 'alice'], ['model', 'gpt-6-luna', 'assistant'],
+      ['mcp_server', 'fixture', 'alice'], ['mcp_server', 'fixture', 'assistant']]) {
+      const start = performance.now();
+      const revoke = await f.append(grantStream(resourceType!, resourceId!), 'grant.revoked', { resourceType, resourceId, granteeId, revokedBy: 'alice' });
+      const invoke = resourceType === 'model' ? () => f.call() : () => call('write');
+      expect((await invoke()).status).toBe(403); // Refuse while OpenFGA lags too.
+      await f.auth.handler.handle(revoke, f.db);
+      expect((await invoke()).status).toBe(403);
+      expect(performance.now() - start).toBeLessThan(2000);
+      expect(f.received()).toBe(1);
+      const restore = await f.append(grantStream(resourceType!, resourceId!), 'grant.given', { resourceType, resourceId, granteeId,
+        granteeKind: granteeId === 'alice' ? 'member' : 'assistant', grantedBy: 'alice' });
+      await f.auth.handler.handle(restore, f.db);
+    }
+    await f.append('assistant-assistant', 'assistant.settings_changed', { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: false });
+    expect((await call('write')).status).toBe(403); expect((await f.call()).status).toBe(403);
+    expect(f.received()).toBe(1);
+    await f.append('assistant-assistant', 'assistant.settings_changed', { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: true });
+    await fga.pause();
+    try { expect((await call('write')).status).toBe(403); } finally { await fga.resume(); }
+    const events = [];
+    for await (const row of f.nats.store.subscribe()) {
+      if (row.event.type === 'decision.recorded') events.push(row.event.data);
+      if (row.sequence === await f.nats.store.head()) break;
+    }
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ outcome: 'allow', reason: 'policy_allow', requesterId: 'alice', assistantId: 'assistant' }),
+      expect.objectContaining({ outcome: 'ask', reason: 'approval_required' }), expect.objectContaining({ outcome: 'deny', reason: 'policy_block' })]));
+    expect(JSON.stringify(events)).not.toContain('secret-canary');
+    const append = f.nats.store.append.bind(f.nats.store);
+    const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command => {
+      if (z.object({ type: z.literal('decision.recorded') }).safeParse(command.event).success) return Promise.resolve({ status: 'unavailable', cause: new Error('Audit outage') });
+      return append(command);
+    });
+    try {
+      expect((await call('write')).status).toBe(503);
+      expect((await f.call()).status).toBe(503); expect(f.received()).toBe(1);
+    } finally { fault.mockRestore(); }
+    await f.append('mcp-fixture', 'mcp.tools_changed', { serverId: 'fixture', previousSchemaDigest: 'a'.repeat(64), newSchemaDigest: 'd'.repeat(64) });
+    expect((await call('write')).status).toBe(403); expect(f.received()).toBe(1);
+    await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
+    expect((await call('write')).status).toBe(403); expect(f.received()).toBe(1);
+    await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'personal', schemaDigest: 'd'.repeat(64), toolCount: 1,
+      tools: [{ name: 'write', revision: 'd'.repeat(64), reviewed: true }] });
+    await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
+    await mode('write', 'allow', 'd'.repeat(64));
+    expect((await call('write')).status).toBe(403); expect(f.received()).toBe(1); // No fabricated personal profile.
+    await f.append('member-alice', 'member.removed', { memberId: 'alice', removedBy: 'owner' });
+    expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('uses the current requester on a team assistant and refuses removed team membership before OpenFGA catches up', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  try {
+    expect((await f.call()).status).toBe(200); await f.settled();
+    const removed = await f.append('team-sales', 'team.member_removed', { teamId: 'sales', memberId: 'alice', removedBy: 'owner' });
+    expect((await f.call()).status).toBe(403);
+    await f.auth.handler.handle(removed, f.db);
+    expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);

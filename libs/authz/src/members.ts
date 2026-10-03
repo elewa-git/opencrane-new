@@ -27,6 +27,11 @@ function same(a: Tuple, b: Tuple): boolean {
   );
 }
 
+/** All grantees of one resource share the worker's ordering key. */
+export function grantStream(resourceType: string, resourceId: string): string {
+  return `grant-${Buffer.from(JSON.stringify([resourceType, resourceId])).toString('base64url')}`;
+}
+
 export function memberAuthorisation(binding: Binding) {
   const client = new TupleClient(binding);
   const object = objectId("silo", binding.silo);
@@ -44,13 +49,46 @@ export function memberAuthorisation(binding: Binding) {
       exists && event.type === 'participant.removed' ? [participant] : []);
   }
 
+  async function applyTeam(event: EventEnvelope, receipt: Tuple) {
+    const teamId = field(event.data, 'teamId');
+    if (event.subject !== `team-${teamId}`) throw new Error('Team subject mismatch');
+    const target = objectId('team', binding.silo, teamId);
+    if (event.type === 'team.created') { await client.write([receipt], []); return; }
+    const tuple = { user: objectId('person', binding.silo, field(event.data, 'memberId')), relation: 'member', object: target };
+    const exists = (await client.read(tuple)).length > 0;
+    await client.write([receipt, ...(!exists && event.type === 'team.member_added' ? [tuple] : [])],
+      exists && event.type === 'team.member_removed' ? [tuple] : []);
+    return;
+  }
+
+  async function applyGrant(event: EventEnvelope, receipt: Tuple) {
+    const resourceType = field(event.data, 'resourceType'), resourceId = field(event.data, 'resourceId');
+    if (event.subject !== grantStream(resourceType, resourceId)) throw new Error('Grant subject mismatch');
+    const target = objectId('resource', binding.silo, resourceType, resourceId);
+    const grantee = field(event.data, 'granteeId');
+    const existing = (await client.read({ object: target, relation: 'use' }))
+      .filter(t => ['person', 'assistant', 'team'].some(kind => t.user === objectId(kind, binding.silo, grantee) + (kind === 'team' ? '#member' : '')));
+    const kind = event.type === 'grant.given' ? field(event.data, 'granteeKind') : undefined;
+    const desired = kind ? [{ object: target, relation: 'use', user: objectId(kind === 'member' ? 'person' : kind, binding.silo, grantee) + (kind === 'team' ? '#member' : '') }] : [];
+    await client.write([receipt, ...desired.filter(t => !existing.some(e => same(t, e)))], existing.filter(t => !desired.some(d => same(t, d))));
+    return;
+  }
+
+  async function applyAssistant(event: EventEnvelope, receipt: Tuple) {
+    const assistantId = field(event.data, 'assistantId');
+    const ownerId = field(event.data, 'ownerId');
+    if (event.subject !== `assistant-${assistantId}`) throw new Error('Assistant subject mismatch');
+    await client.write([{ user: field(event.data, 'kind') === 'team' ? `${objectId('team', binding.silo, ownerId)}#member` : objectId('person', binding.silo, ownerId), relation: 'acts_for',
+      object: objectId('assistant', binding.silo, assistantId) }, receipt], []);
+  }
+
   async function apply(input: EventEnvelope): Promise<void> {
     const parsed = parseEventByType(input);
     if (!parsed.success || parsed.event.silo !== binding.silo) {
       throw new Error("Invalid authorisation event or silo");
     }
     const event = parsed.event;
-    if (!["member.joined", "member.role_changed", "member.removed", "assistant.created", "conversation.created", "participant.added", "participant.removed"].includes(event.type)) {
+    if (!["member.joined", "member.role_changed", "member.removed", "assistant.created", "conversation.created", "participant.added", "participant.removed", "grant.given", "grant.revoked", "team.created", "team.member_added", "team.member_removed"].includes(event.type)) {
       throw new Error(`OpenFGA event not implemented: ${event.type}`);
     }
     const receipt = {
@@ -59,17 +97,14 @@ export function memberAuthorisation(binding: Binding) {
       object: objectId("projection_event", binding.silo, event.id),
     };
     if ((await client.read(receipt)).length) return;
+    if (event.type.startsWith('team.')) return applyTeam(event, receipt);
+    if (event.type.startsWith('grant.')) return applyGrant(event, receipt);
     if (['conversation.created', 'participant.added', 'participant.removed'].includes(event.type)) {
       await applyConversation(event, receipt);
       return;
     }
     if (event.type === 'assistant.created') {
-      const assistantId = field(event.data, 'assistantId');
-      const ownerId = field(event.data, 'ownerId');
-      if (event.subject !== `assistant-${assistantId}`) throw new Error('Assistant subject mismatch');
-      await client.write([{ user: objectId('person', binding.silo, ownerId), relation: 'acts_for',
-        object: objectId('assistant', binding.silo, assistantId) }, receipt], []);
-      return;
+      return applyAssistant(event, receipt);
     }
     const memberId = field(event.data, "memberId");
     if (event.subject !== `member-${memberId}`) {
@@ -104,6 +139,12 @@ export function memberAuthorisation(binding: Binding) {
 
   return {
     binding,
+    async applied(eventId: string) {
+      return (await client.check({ user: object, relation: 'applied', object: objectId('projection_event', binding.silo, eventId) })).allowed;
+    },
+    use(kind: 'person' | 'assistant', id: string, resourceType: string, resourceId: string) {
+      return client.check({ user: objectId(kind, binding.silo, id), relation: 'use', object: objectId('resource', binding.silo, resourceType, resourceId) });
+    },
     handler: registerHandler("update-openfga", apply),
     check(memberId: string, relation: "member" | "admin" | "owner") {
       return client.check({

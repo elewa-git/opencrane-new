@@ -106,3 +106,9 @@ Run `NO_COLOR=1 npm test -- apps/web/test` for Chromium plus replay tests, and
 [Reuse and deferred file transport](../../docs/design/chat/IMPLEMENTATION.md) records
 attribution and the scope limits. The live dev-stack journey uses only the stub
 provider and includes streamed text, Stop and reload through the shipped UI.
+
+P3-1 adds Tools & access at `/org/integrations/:serverId/tools`, linked from the
+existing register. Native radio groups offer Allow automatically, Ask and Block
+for reads and writes. Pending saves disable edits; uncertain replies require Check
+status; 401/403 clears protected tool details. Desktop and 390px browser evidence
+comes from `apps/server/test/integrations.test.ts` with real API dependencies.

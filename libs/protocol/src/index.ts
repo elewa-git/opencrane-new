@@ -26,3 +26,5 @@ export {
 } from './integrations.ts';
 export { computerRowSchema, computersResponseSchema, type ComputerRow, type ComputersResponse } from './computers.ts';
 export { sessionSlug, chatSubscribeSchema, chatMessageSchema, chatRowSchema, chatFeedSchema, chatListSchema, chatContextSchema, type ChatRow, type ChatConversation } from './chat.ts';
+
+export { toolPolicySchema, type ToolPolicy } from './integrations.ts';
