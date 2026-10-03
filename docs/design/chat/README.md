@@ -107,7 +107,7 @@ Participant avatars and the panel toggle sit on the right. No pills in the heade
 | Settle | 260ms, 12% overshoot | a state becoming final |
 | Flick | 320ms, once | failure or invalid input, never loops |
 | Press | 90ms translateY(1px) | every button and chip |
-| Fold | 1.6s loop | "Folding…" while the Agent works |
+| Fold | 1.6s loop | Shared hinged paper loader for "Folding…", "Writing…" and the sign-in handoff; [motion evidence](../motion/fold-loader/README.md) |
 | Flutter | 1.6s loop | rail row with a run in flight |
 | Caret | 1s steps | streaming text |
 | Grain | 1.4s loop | skeletons |

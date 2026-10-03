@@ -24,20 +24,18 @@ describe('sign-in handoff', () => {
     if (!cancel) throw new Error('Missing Cancel');
     return { fixture, element, cancel };
   }
-  it('focuses Cancel and announces five seconds before redirecting', () => {
-    const { fixture, element, cancel } = create();
+  it('focuses Cancel and opens single sign-on after 2.5 seconds', () => {
+    const { element, cancel } = create();
     expect(document.activeElement).toBe(cancel);
-    expect(element.querySelector('[aria-live=polite]')?.textContent).toContain('5 seconds');
-    vi.advanceTimersByTime(4000);
-    fixture.detectChanges();
+    expect(element.querySelector('[aria-live=polite]')?.textContent).toContain('Opening single sign-on…');
+    vi.advanceTimersByTime(2499);
     expect(navigate).not.toHaveBeenCalled();
-    expect(element.querySelector('[aria-live=polite]')?.textContent).toContain('1 second…');
-    vi.advanceTimersByTime(1000);
+    vi.advanceTimersByTime(1);
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/auth/login?returnTo=/');
   });
   it('cancels from the focused native button and never redirects afterwards', () => {
     const { cancel } = create();
-    vi.advanceTimersByTime(2500);
+    vi.advanceTimersByTime(2400);
     // Native keyboard activation generates click; the live browser tests Enter and Space.
     cancel.click();
     vi.advanceTimersByTime(10_000);

@@ -164,7 +164,7 @@ try {
   await queued.page.close();
   const waking = await open('folding'); await waking.page.getByText('Starting your computer…', { exact: false }).waitFor();
   await waking.page.emulateMedia({ reducedMotion: 'no-preference' });
-  assert.equal(await waking.page.locator('.fold i').first().evaluate(node => globalThis.getComputedStyle(node).animationName), 'ocFold');
+  assert(await waking.page.locator('oc-fold-loader').evaluate(node => node.getAnimations({ subtree: true }).length > 0), 'Fold animates while the agent works');
   waking.fixture.add('agent.message_delta', { turnId: 'event-2', messageId: 'reply', text: 'Streaming' });
   await waking.page.locator('.caret').waitFor();
   assert.equal(await waking.page.locator('.agent-turn').evaluate(node => globalThis.getComputedStyle(node).animationName), 'oc-unroll');

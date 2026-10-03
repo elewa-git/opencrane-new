@@ -11,3 +11,8 @@ it('serves the production chat under an enforcing script and style CSP', async (
   const result = await promisify(execFile)(process.execPath, ['scripts/check-chat-production.mjs'], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }, timeout: 180_000 });
   expect(result.stdout).toContain('PASS production Chromium');
 }, 190_000);
+
+it('qualifies shared folding motion and the cancellable 2.5-second handoff in Chromium', async () => {
+  const result = await promisify(execFile)(process.execPath, ['scripts/check-fold-loader.mjs'], { env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' }, timeout: 180_000 });
+  expect(result.stdout).toContain('PASS fold loader Chromium');
+}, 190_000);

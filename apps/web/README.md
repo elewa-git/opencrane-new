@@ -65,7 +65,7 @@ See the [repository architecture](../../README.md) and [plan](../../plan.md).
 ## Sign-in
 
 `/` shows the SSO-first sign-in screen or the current session and sign-out action.
-`/signin/handoff` focuses Cancel and announces a five-second countdown before
+`/signin/handoff` focuses Cancel and announces “Opening single sign-on…” for 2.5 seconds before
 opening the existing server login route; Cancel returns home and stops the timer.
 `/signin/rejected` shows fixed, safe failure copy with an SSO recovery action.
 Set the public `opencrane-org` meta tag in `src/index.html` for the deployment’s
