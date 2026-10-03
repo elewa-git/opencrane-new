@@ -5,7 +5,8 @@ containing this receipt. Node 22.23.3, Linux x86-64. Fixtures use fresh disposab
 NATS streams, PostgreSQL databases, OpenFGA stores and agentgateway state with a
 scripted SSE provider. PostgreSQL uses
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
-The shared dev stack was not changed. No paid calls, new dependency, push or deployment.
+The initial source checks below used disposable fixtures; final secondary-stack
+qualification is recorded at the end. No paid calls, new dependency or push.
 
 ## Why and functional outcome
 
@@ -111,5 +112,112 @@ Independent review pass 2 and live fresh-silo upgrade qualification: **NOT RUN**
 
 Phase 4 group administration, descendant/delegation orchestration, P3-14 hard-stop
 cascades and P3-15 evidence-based uncertainty resolution remain separate. Existing
-unknown reservations stay held. This receipt makes no shared live-stack or
+unknown reservations stay held. This receipt makes no owner-stack or
 managed-cluster qualification claim.
+
+## Final PR qualification
+
+3 October 2026; review pass 2 was **LAND** at `86be76f`. A clean rebase onto
+`origin/main` (`cc8d8c0`) completed without conflicts; the product changes are now
+`f2e4e40` and `1a6e43e`, plus the journey fixes and evidence in this commit.
+The live fixes below follow that reviewed revision; no third independent review
+pass was run.
+Environment: Linux x86-64, Node 22.23.3, k3d `ocn`, claimed secondary stacks only.
+Zitadel management stayed within organisation `393311211338337681`. Model traffic
+used the local SSE stub; no OpenAI key was loaded and no paid call was made.
+
+| Final source check | Result |
+| --- | --- |
+| `npm run lint` | PASS, all checks; existing warnings only |
+| `npm run typecheck` | PASS, every workspace |
+| `npm run check:events` | PASS, 75 matching event types |
+| `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --testTimeout=20000 --retry=1 --reporter=verbose` | PASS, 66 files / 1,058 tests; 2 files / 10 opt-in tests skipped; 629 seconds; no retries used |
+| `npm run build -w apps/web` | PASS, existing size warnings |
+| `npm run test -w apps/web -- --watch=false` | PASS, 8 files / 46 tests |
+| Infra TypeScript and shellcheck | PASS |
+| Final secondary `up.sh --fresh`, then plain `up.sh` | PASS, claimed secondary stack 1; both complete browser journeys and successful `down.sh --id 1` |
+
+The first two-worker root run failed both eight-caller cap races on the loaded
+host. Both passed in isolation, then the complete single-worker run passed.
+No production freshness limit or test assertion was relaxed.
+During authority optimisation, the focused gateway suite passed its safety cases
+but the existing reviewed-tool revocation timing check failed under host load,
+including an isolated rerun. A diagnostic isolated run then passed all four
+revocation cycles in roughly 0.9–1.5 seconds. Final complete-suite results are
+recorded above.
+Two later full runs each passed 1,057 tests but failed the existing gateway
+credential fixture because my gate wrapper used `umask 077`. The container runs
+as UID 65532 and could not read its generated mode-0600 configuration. An isolated
+run reproduced the failure with that mask and passed with the normal `umask 022`;
+the wrapper was corrected, while diagnostics remain in a private directory.
+The normal-mask full run passed 1,056 tests but hit the default five-second Vitest
+timeout in the existing authorisation recovery and legacy conversation tests.
+The recovery case also timed out in isolation; measured PostgreSQL-backed OpenFGA
+startup alone took 4.3 seconds on the busy shared host. A subsequent run with a
+20-second harness timeout was interrupted after a monthly eight-caller cap race
+failed; both cap races then passed unchanged in isolation. The final full rerun
+uses two workers, a 20-second Vitest harness timeout and one retry for failed tests,
+keeps explicit test timeouts and assertions, and leaves the production two-second
+authority expiry unchanged.
+The initial retry-enabled run was stopped early to enable the verbose reporter
+and capture any retries in the final run.
+The final full run passed every enabled test without a retry, including both
+eight-caller cap races and the new category-read and budget-edit regressions.
+The additional infra claim test could not bind port 25110 while another stack
+owned it; its live shared-host run was **FAIL** for that environment condition.
+The two isolated Zitadel setup tests passed. Paid-provider and managed-cluster
+opt-in conditions remain **NOT RUN**.
+
+Live attempts exposed two launcher defects, one fixture limit and a slow authority read:
+
+- The inherited journey shadowed the selected namespace with `opencrane-dev`.
+  This was repaired before the first startup. The journey now checks the selected
+  namespace against its provisioned kubeconfig before issuing Kubernetes commands.
+- The server lacked the selected decision URL. One failed budget save attempted
+  the owner decision port and returned 503. The launcher now explicitly supplies
+  the secondary decision port. No owner lifecycle command was run.
+- The corrected fresh journey passed, but its unconfirmed Stop reservations
+  left insufficient daily headroom for the complete plain journey. The owner UI
+  now sets the daily cap to 5,000 cents after the fresh checks, keeping reservations
+  and the 20,000-cent monthly ceilings. Plain startup checks that these settings
+  survive migration.
+
+- With enough budget headroom, the repeat Stop turn was allowed and audited but
+  its reservation was released as not dispatched when the final authority fence
+  expired. Authority checks read the entire growing journal one row at a time.
+  They now read only the existing member, assistant, team, conversation and grant
+  histories concurrently, keep the captured global head and event ordering, and
+  check every IAM projection marker concurrently. Permission checks and the
+  two-second freshness fence are unchanged. A real JetStream test covers category
+  ordering, inclusive positions, empty results and wildcard-write refusal.
+
+The first fresh run with the authority optimisation passed all checks. One plain
+startup passed both browser chat/Stop checks, then timed out waiting for the
+suspended-computer wake reply. Private failure capture now includes all computer
+lifecycle events; the next attempt also keeps a private Kubernetes state snapshot.
+
+The next plain run passed wake and all four required budget cases, then an extra
+post-check ceiling restoration returned 503. Restoration is now done only after
+the fresh checks, where it supplies the plain journey’s headroom; teardown deletes
+the final plain fixture. The required ceiling saves/refusals and their assertions
+are unchanged.
+
+A further plain attempt returned 503 on a required ceiling save. A failing real
+HTTP/JetStream/OpenFGA regression test reproduced the cause: closing an unrelated
+computer turn changed the shared model-decision fence during a budget edit.
+Budget edits now fence only the editing owner's membership stream, retain current
+Owner/Admin checks against both OpenFGA and membership history, and keep the
+same two-second expiry from command entry. Model/MCP decision fences are unchanged.
+Companion regression cases refuse an edit after a role change during the command
+and after expiry, without appending a ceiling.
+
+Every completed attempt ended with successful `down.sh --id` for its claimed id.
+Private diagnostics remain outside the repository under `/tmp/p3-13-final/`.
+
+Final live evidence: **PASS**, 21 screenshots and sanitised startup/teardown
+receipts in the [screenshot index](p3-13-live/README.md). Both complete journeys
+prove normal stub chat and Stop at 1280px/390px, one installation default,
+unchanged ceilings on repeated migration, owner group/assistant edits at both
+widths, durable clear refusals after reload and no reservation for refused calls.
+Plain startup preserves the owner’s 5,000-cent daily cap and 20,000-cent group
+and assistant ceilings. No real OpenAI call was made.

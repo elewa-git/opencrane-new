@@ -258,6 +258,7 @@ async function up(fresh: boolean) {
     { ...base, DEV_STACK_DIR: directory })).trim());
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
+      MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');

@@ -1,7 +1,6 @@
 import type { EventEnvelope } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { readEvents } from '@opencrane/projections';
 import type { EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
 
@@ -10,13 +9,23 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   conversation: string, resourceType: string, resourceId: string) {
   const auth = memberAuthorisation(binding);
   const head = await store.head(), facts = [];
+  const applied: string[] = [];
   let active = true;
-  // ponytail: scan the captured event head for freshness; replace with a fenced IAM projection when histories grow.
-  for await (const row of readEvents(store, 1, head)) {
+  // ponytail: scan relevant history; use a fenced IAM projection when these histories grow.
+  const subjects = [`member-${requester}`, `assistant-${assistant}`, 'team-*', 'conversation-*', 'grant-*'];
+  const histories = await Promise.all(subjects.map(async subject => {
+    const rows = [];
+    for await (const row of store.readStream(subject)) {
+      if (row.sequence > head) break;
+      rows.push(row);
+    }
+    return rows;
+  }));
+  for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
     const e = row.event, d = data(e);
     if (e.silo !== binding.silo) continue;
     if (relevant(e, requester, assistant, conversation, resourceType, resourceId)) {
-      if (!await auth.applied(e.id)) throw new Error('IAM projection behind');
+      applied.push(e.id);
       facts.push([e.id, row.sequence, d]);
     }
     if (e.subject === `assistant-${assistant}` && e.type === 'assistant.settings_changed') {
@@ -24,6 +33,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
       if (typeof d['active'] === 'boolean') active = d['active'];
     }
   }
+  if ((await Promise.all(applied.map(id => auth.applied(id)))).some(value => !value)) throw new Error('IAM projection behind');
   if (!active) throw new Error('Assistant inactive');
   const permissions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
@@ -42,9 +52,9 @@ function relevant(e: EventEnvelope, requester: string, assistant: string, conver
 }
 
 /** Fence every authority source, including changes while credentials/policy were being read. */
-export async function authorityFence(store: EventStore, started: number) {
-  // ponytail: category heads can refuse unrelated IAM changes; narrow to entity heads if contention warrants it.
-  const subjects = ['member-*', 'team-*', 'assistant-*', 'conversation-*', 'computer-*', 'grant-*', 'mcp-*'];
+export async function authorityFence(store: EventStore, started: number,
+  subjects = ['member-*', 'team-*', 'assistant-*', 'conversation-*', 'computer-*', 'grant-*', 'mcp-*']) {
+  // ponytail: model decisions use category heads; narrow further if unrelated IAM changes cause contention.
   const heads = await Promise.all(subjects.map(subject => store.head(subject)));
   return async () => {
     if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');

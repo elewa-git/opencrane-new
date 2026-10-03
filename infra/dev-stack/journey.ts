@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
@@ -14,6 +14,7 @@ import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { browserChatJourney } from './browser-chat.ts';
+import { browserBudgetJourney } from './browser-budgets.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary } from './identity.ts';
@@ -153,7 +154,8 @@ try {
     return Boolean(computer);
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
-  const namespace = `opencrane-${silo}`;
+  const kubeconfig = JSON.parse(await readFile(`${directory}/computer-kubeconfig.json`, 'utf8')) as { contexts: Array<{ context: { namespace: string } }> };
+  assert.equal(namespace, kubeconfig.contexts[0]?.context.namespace, 'Journey uses the provisioned stack namespace');
   await until(async () => (await Promise.all(models.filter(model => !model.retired).flatMap(model => [
     authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'new member and assistant model grants');
@@ -209,6 +211,7 @@ try {
   }, 'typed integration rows');
   assert.equal((await fetch(`${server}/api/org/integrations`, { headers: headers(member) })).status, 403);
   console.log('PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused');
+  if (secondary && browser) await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store, silo, computer!.assistant_id);
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });
@@ -219,6 +222,14 @@ try {
   assert.equal(page.status, 200);
   assert((await page.text()).includes('<app-root'));
   console.log(secondary ? 'PASS loopback HTTP web page' : 'PASS tailnet HTTPS web page');
+} catch (error) {
+  const head = await events.store.head();
+  const diagnostic = [];
+  if (head) for await (const { event } of readEvents(events.store, 1, head)) {
+    if (event.type.startsWith('budget.') || event.type === 'decision.recorded' || event.type.startsWith('computer.')) diagnostic.push(event);
+  }
+  await writeFile(`${directory}/qualification-failure.log`, JSON.stringify(diagnostic), { mode: 0o600 });
+  throw error;
 } finally {
   ws?.terminate();
   chat?.close();

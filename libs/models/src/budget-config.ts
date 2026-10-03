@@ -11,8 +11,9 @@ export class BudgetAccessRefused extends Error {}
 const claims = z.object({ typ: z.literal('budget-admin'), silo: z.string(), memberId: z.string(), commandDigest: z.string() });
 /** The server signs the exact command after session/Origin checks; identity alone is never authority. */
 export async function configureBudget(actor: BudgetActor, binding: Binding, identity: { jwks: JSONWebKeySet; issuer: string }, raw: unknown, authorization?: string) {
-  const fresh = await authorityFence(actor.store, performance.now());
+  const started = performance.now();
   const checked = await verifyCommand(identity, authorization);
+  const fresh = await authorityFence(actor.store, started, [`member-${checked.memberId}`]);
   if (checked.silo !== actor.silo || binding.silo !== actor.silo || checked.commandDigest !== createHash('sha256').update(JSON.stringify(raw)).digest('hex')) throw new BudgetAccessRefused('Access changed');
   const permission = await memberAuthorisation(binding).check(checked.memberId, 'admin');
   if (permission.status === 'unavailable') throw new Error('Budget authority unavailable');

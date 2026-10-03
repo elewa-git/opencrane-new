@@ -94,6 +94,7 @@ it("rejects malformed events without writing; races have exactly one winner", as
     {},
     { ...event("bad"), commandId: "" },
     { ...event("bad"), subject: "member-a.*" },
+    { ...event("bad"), subject: "member-*" },
     { ...event("bad"), principal: undefined },
     { ...event("bad"), data: {} },
   ]) {
@@ -163,6 +164,30 @@ it("recognises concurrent and old commands by principal and subject, not event i
       (stored) => stored.sequence,
     ),
   ).toEqual([2, 3]);
+});
+
+it("reads a category across entities in global order without unrelated events", async () => {
+  fixture = await natsFixture();
+  for (const [id, subject, type] of [
+    ["category-a", "member-alice", "member.joined"],
+    ["category-b", "budget-first", "budget.ceiling_set"],
+    ["category-c", "member-bob", "member.joined"],
+    ["category-d", "budget-second", "budget.ceiling_set"],
+  ] as const) {
+    const input = type === "budget.ceiling_set"
+      ? { ...event(id, subject, type), data: { scope: "global", ceilingCents: 20000, setBy: "admin" } }
+      : event(id, subject, type);
+    expect(
+      await fixture.store.append({ event: input, expectedSequence: 0 }),
+    ).toMatchObject({ status: "appended" });
+  }
+  expect(
+    (await Array.fromAsync(fixture.store.readStream("member-*"))).map(row => row.sequence),
+  ).toEqual([1, 3]);
+  expect(
+    (await Array.fromAsync(fixture.store.readStream("member-*", 2))).map(row => row.event.subject),
+  ).toEqual(["member-bob"]);
+  expect(await Array.fromAsync(fixture.store.readStream("assistant-*"))).toEqual([]);
 });
 
 it("refuses a stream-wide duplicate acknowledgement for another subject or command", async () => {

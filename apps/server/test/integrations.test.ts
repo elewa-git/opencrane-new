@@ -2,6 +2,7 @@ import { budgets, BudgetActor, readBudget, startDecision } from '@opencrane/mode
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -471,4 +472,24 @@ it('lets Owner and Admin configure the one budget actor, refuses others and repl
   expect((await save('oidc-alice', { ...payload, commandId: 'stale-admin', expectedSequence: actor.state.sequence })).statusCode).toBe(403);
   expect(await nats.store.head()).toBe(eventHead + 1);
 
+});
+
+
+it.each(['computer', 'membership', 'expired'] as const)('keeps budget edit authority scoped and fresh during %s changes', async change => {
+  const configure = actor.configure.bind(actor);
+  const intercepted = vi.spyOn(actor, 'configure').mockImplementation(async (...args) => {
+    if (change === 'computer') await append(fixture('computer.turn_closed', 'computer-personal-alice', { assistantId: 'personal-alice', computerId: 'computer-alice' }));
+    if (change === 'membership') await append(fixture('member.role_changed', 'member-alice', { memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'amina' }));
+    if (change === 'expired') await delay(2100);
+    return configure(...args);
+  });
+  try {
+    const budgetHead = await nats.store.head('budget-test');
+    const reply = await app.inject({ method: 'POST', url: '/api/org/models',
+      headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin },
+      payload: { commandId: `budget-during-${change}`, expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000 } });
+    expect(reply.statusCode).toBe(change === 'computer' ? 200 : 503);
+    expect(actor.state.ceilingCents).toBe(change === 'computer' ? 30000 : 20000);
+    if (change !== 'computer') expect(await nats.store.head('budget-test')).toBe(budgetHead);
+  } finally { intercepted.mockRestore(); }
 });

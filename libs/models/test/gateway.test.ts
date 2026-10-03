@@ -214,9 +214,9 @@ it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants',
 }, 40_000);
 
 it.each([
-  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 100, revoke: true },
+  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 2100, revoke: true },
   { name: 'revocation during a history read within the freshness budget', pauseMs: 10, revoke: true },
-  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 100, revoke: false },
+  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 2100, revoke: false },
 ])('does not dispatch a running decision: $name', async ({ pauseMs, revoke }) => {
   const f = await fixture();
   try {
@@ -225,14 +225,14 @@ it.each([
     let captured!: () => void, resume!: () => void;
     const capturing = new Promise<void>(resolve => { captured = resolve; });
     const resuming = new Promise<void>(resolve => { resume = resolve; });
-    const subscribe = f.nats.store.subscribe.bind(f.nats.store);
-    const slowHistory = vi.spyOn(f.nats.store, 'subscribe').mockImplementation(async function* (...args) {
-      captured();
-      await resuming;
-      for await (const row of subscribe(...args)) {
+    const readStream = f.nats.store.readStream.bind(f.nats.store);
+    const slowHistory = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
+      if (args[0] === 'member-alice') {
+        captured();
+        await resuming;
         await delay(pauseMs);
-        yield row;
       }
+      yield* readStream(...args);
     });
     try {
       const pending = f.call();
@@ -243,7 +243,7 @@ it.each([
       const revoked = performance.now();
       resume();
       const response = await pending;
-      if (pauseMs === 100) expect(performance.now() - revoked).toBeGreaterThan(2000);
+      if (pauseMs > 2000) expect(performance.now() - revoked).toBeGreaterThan(2000);
       expect(f.received()).toBe(1);
       expect(response.status).toBe(403);
       expect(f.actor.state.reservations).toHaveLength(1);
