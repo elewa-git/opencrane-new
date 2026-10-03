@@ -40,7 +40,8 @@
     "apps/web": {
       "entry": [
         "src/**/*.spec.ts",
-        "test/**/*.test.ts"
+        "test/**/*.test.ts",
+        "test/live-view-main.ts"
       ],
       "project": [
         "src/**/*.ts",

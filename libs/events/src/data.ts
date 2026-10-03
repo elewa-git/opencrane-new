@@ -532,3 +532,12 @@ export const decisionRecordedDataSchema = z.object({
   route: z.enum(['model', 'mcp', 'egress']), outcome: z.enum(['allow', 'ask', 'deny']),
   reason: reasonCodeSchema, contextDigest: digestSchema,
 }).strict();
+
+// A view is a lease, never permission to control the desktop.
+export const computerViewDataSchema = z.object({ sessionId: id, conversationId: id, computerId: id,
+  assistantId: id, memberId: id, generation: z.int().positive(), expiresAt: z.iso.datetime({ offset: true }) }).strict();
+export const computerViewStoppedDataSchema = computerViewDataSchema.extend({ reason: z.enum([
+  'disconnected', 'access_changed', 'expired', 'protocol', 'slow_viewer', 'upstream', 'shutdown',
+]) });
+
+export const computerViewRefusedDataSchema = z.object({ attemptId: id, reason: z.enum(['admission', 'upgrade', 'capacity']), conversationId: id.optional() }).strict();

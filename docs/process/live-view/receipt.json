@@ -1,0 +1,114 @@
+{
+  "date": "2026-10-03T09:01:41.784Z",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:afb9835f5ed42662307e4826f76efd47abb02a23d86180af877b8a11947b0597",
+  "namespace": "p316-view-3758274b",
+  "hashes": [
+    "828bc6d7a10a757304d6976585b675b1a1cc1eaf986bc09edf15db55bbf29212",
+    "828bc6d7a10a757304d6976585b675b1a1cc1eaf986bc09edf15db55bbf29212"
+  ],
+  "revokedMs": 297.4088899999988,
+  "framebuffer": {
+    "pixels": 480000,
+    "hash": "1da2045d29e9c2f7479da7062624c622369d55ad2d64663357651c4c98b60589"
+  },
+  "audit": [
+    {
+      "sequence": 11,
+      "id": "11cf5828-ed82-4222-8825-7be8d084529f",
+      "type": "computer.view_started",
+      "principal": {
+        "id": "alice",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "bde776c9-a7fe-46a5-b4b7-5bab2f1278b2",
+        "conversationId": "chat",
+        "computerId": "desktop",
+        "assistantId": "assistant",
+        "memberId": "alice",
+        "generation": 1,
+        "expiresAt": "2026-10-03T09:03:05.194Z"
+      }
+    },
+    {
+      "sequence": 30,
+      "id": "102de9c4-3dbb-474b-924e-ee9012f6d3f8",
+      "type": "computer.view_stopped",
+      "principal": {
+        "id": "alice",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "bde776c9-a7fe-46a5-b4b7-5bab2f1278b2",
+        "conversationId": "chat",
+        "computerId": "desktop",
+        "assistantId": "assistant",
+        "memberId": "alice",
+        "generation": 1,
+        "expiresAt": "2026-10-03T09:03:05.194Z",
+        "reason": "disconnected"
+      }
+    }
+  ],
+  "slowViewer": {
+    "frames": 32,
+    "rssBefore": 286912512,
+    "peakRss": 333377536,
+    "code": 1013
+  },
+  "expiry": "PASS",
+  "wrongOrigin": "PASS",
+  "directNetwork": "PASS",
+  "serverReadOnly": "PASS",
+  "protocolAttacks": "PASS",
+  "status": "PASS",
+  "baseSha": "e727898fcdb67b4e019da8e438f59e252fd7dd11",
+  "sourceSha256": {
+    "apps/computer/network-policy.json": "b8a60a903ea77997bdf61499602a4717c0dc12d22d2122eba7ff7255619318b5",
+    "apps/computer/sandbox-template.json": "c27d315792d71e0806314b06d8992186c7ed4af9d2bd75471e667209ab0360fd",
+    "apps/server/src/computers/desktop.ts": "7ff327e5383539b9d513b8060af763d5b6493dd16c09bc84d8c1aedafb463b9d",
+    "apps/server/src/computers/rfb.ts": "aad9eb4c6a8422236f245f09ebae1342ba6d8909735b6864781f792422107e15",
+    "apps/server/src/computers/view-access.ts": "3da093a98bf84ebf81919935b4fbade8119727287191f50c328ca0f92b0df84b",
+    "apps/server/src/computers/view.ts": "8269c6c725c9a3208310d994fe55fbfa3343edaee5737f4468d352f03aab3822",
+    "apps/server/src/main.ts": "da680d54fbe21bf161876587b121357e21ff51697dd098eb0682e30d40700487",
+    "apps/server/src/server.ts": "93a8e070f1e85b1d6b896307e3bf54c8bf86a0dbcecac6438a391958ddd42d1c",
+    "apps/server/src/websocket.ts": "781ce0ef5c2209fd8571bf46c230cfffbee537a844c7d740f9e9a595a7323192",
+    "apps/server/test/live-view-k3d.test.ts": "e3062ea821cb7015c287437b4a9fc66eb4fc9ff6d5bcd440a79ef0fc748ab483",
+    "apps/server/test/live-view.test.ts": "eaea9d05f916e9727e41b1bef554fef7e384160337f45ec3c44a7f29832fcbff",
+    "apps/server/test/support/desktop-pod.ts": "4a24e6b82df8cbf3c7677b8bd803f61912fa9bf0eaa9531472693c1efb498d91",
+    "apps/server/test/support/rfb-viewer.ts": "04f9486f11834a3278d2687c6e5366d01812530369b35b2966b8cd451cb77f43",
+    "apps/server/test/support/view-fixture.ts": "1704836d64187e3ab1f7c13200644988954cf720a959a58fc52accd0ad732953",
+    "apps/server/test/websocket-auth.test.ts": "50231a579a67408effcac274c6259bab859f9c00cffd5cf839c9a6cfc5bb1547",
+    "apps/web/package.json": "e3af55373483f58417ce2e672128a5684335163a408fe736c21cdb5c5ba7a22c",
+    "apps/web/src/app/live-view/live-view.spec.ts": "c2d457d8eb8a0eb159616e473482c60ece7ac47da3ad0a841b8641fb606645e6",
+    "apps/web/src/app/live-view/live-view.ts": "d737ee2957131d104fed9aa2dbaae01a907c36c07f99cbbc8949bc5a9ecb8b7b",
+    "apps/web/src/app/live-view/novnc.d.ts": "6ef9426fa434effcd913b0f894b6f1d14013403c5be029a5c916963bb37e5fdc",
+    "apps/web/src/app/live-view/viewer.ts": "d85a284644a3818a46eb94a81e1043b15554bc9bf7a314baefe7964e25ea3ebc",
+    "apps/web/test/live-view-main.ts": "866087bb27148d3f04ae0192f7cf912a485aa90cd207e1dc7090c6ad22b698f1",
+    "apps/web/test/tsconfig.json": "615cad0f73e6fab9ea146839254efab23032593a9b95d3f3b25618a57216afbc",
+    "apps/web/test/tsconfig.live-view.json": "a09f941c5bbd5be7a8af4cc0f1408f10eb596822ca41afee28ec6bb9eaabc425",
+    "knip.json": "22c35eaa72b9c67a8e29f768c87eb1198d2449966b40370c4843424be768b284",
+    "libs/authz/model/v1.fga": "26a3ae443268ff6404caad0461960dac7a64d530c9d1ff9a274d21b4b75ca961",
+    "libs/authz/model/v1.json": "75a0bf54b23e24801d087d525d9747f36c4b3bcfd30536e04fe5e983b319db3b",
+    "libs/authz/src/members.ts": "d19f022deb0925358600f3f20fb2ee23d28d3c5975f7117a77ba66cfaf7b1860",
+    "libs/events/src/bridge-events.ts": "aa0193f751855049dada083f3d976fedb2a7d9b77cc54a56dc19bdcaa6058087",
+    "libs/events/src/data.ts": "20437f83699277f7825ac7c9a60b97ea4bc5d4a229a1e2481ec10f3fccbfffef",
+    "package-lock.json": "4701c912919f91aa70a9e508c4566f1cc83c596449fd27cfed4f51a88ac5aa05"
+  },
+  "command": "LIVE_VIEW_K3D=1 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/live-view-k3d.test.ts --maxWorkers=1",
+  "environment": "Fresh desktop Pod and namespace on existing k3d-ocn; CRI confirms runsc. Tracked image, desktop-only command. Disposable NATS/OpenFGA, isolated PostgreSQL databases; encrypted test sessions, real Chromium. Shared dev stack untouched.",
+  "node": "22.23.3",
+  "cleanup": "PASS: all p316-view-* namespaces absent after finally cleanup; no PVCs created.",
+  "notRun": [
+    "P2-5 product chat/session-panel mounting",
+    "Real OIDC sign-in",
+    "Observation of an actual assistant turn",
+    "Full fresh silo / Phase 3 journey",
+    "Managed-cluster TLS/HA",
+    "Takeover/control, clipboard and screenshots as conversation files",
+    "Paid model",
+    "Unrelated lifecycle and bridge k3d suites",
+    "Full computer image rebuild and licence suite (runtime image unchanged)",
+    "Hosted CI (branch not pushed)"
+  ]
+}

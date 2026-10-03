@@ -129,3 +129,16 @@ transport offers Check status before any safe retry. No arguments or authority a
 sent back by the browser. Polling every three seconds restores updates without
 introducing another business-state store. Chromium qualification and images are in
 [the P3-2 receipt](../../docs/process/p3-2-approvals.md).
+
+The self-contained `LiveView` component lives in `src/app/live-view/live-view.ts`.
+P2-5 will mount it in the session panel after `work/chat-ui` lands: import
+`LiveView` into the panel's component imports and render
+`<oc-live-view [conversationId]="conversationId" />`. Changing the input or destroying the component
+closes the old connection and clears its pixels.
+It offers fit/actual-size viewing and Connecting, Viewing, Disconnected and
+Access changed states, using only noVNC's OSI-licensed core and the authenticated
+proxy. There is no chat stub or product route in this change.
+
+`npm run build:live-view-test -w apps/web` builds a separate browser qualification
+host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
+[Licence and live evidence](../../docs/process/live-view-evidence.md).

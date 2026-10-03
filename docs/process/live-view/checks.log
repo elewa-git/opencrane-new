@@ -1,0 +1,193 @@
+COMMAND RECEIPT: lint-final
+npm notice run lint
+npm notice run npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links
+npm notice run lint:code
+npm notice run eslint .
+
+/home/jente/dev/wt/p3-16-liveview/apps/computer/src/channel.ts
+  43:8  warning  Function 'bridgeChannel' has too many lines (100). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/p3-16-liveview/apps/server/src/auth/routes.ts
+  55:8  warning  Function 'registerAuthRoutes' has too many lines (93). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/p3-16-liveview/apps/server/src/computers/view.ts
+  26:8  warning  Function 'registerLiveView' has too many lines (131). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/p3-16-liveview/apps/server/src/realtime.ts
+  17:8  warning  Function 'memberSubscription' has too many lines (82). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/p3-16-liveview/apps/server/src/websocket.ts
+  51:8  warning  Function 'attachWebSocketServer' has too many lines (119). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/p3-16-liveview/libs/authz/src/members.ts
+  30:8  warning  Function 'memberAuthorisation' has too many lines (106). Maximum allowed is 80  max-lines-per-function
+
+✖ 6 problems (0 errors, 6 warnings)
+
+npm notice run lint:deps
+npm notice run depcruise apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs
+
+✔ no dependency violations found (204 modules, 670 dependencies cruised)
+
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+npm notice run lint:docs
+npm notice run markdownlint-cli2
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: *.md docs/**/*.md apps/*/README.md libs/*/README.md
+Linting: 54 files
+Summary: 0 issues in 0 files
+npm notice run lint:links
+npm notice run sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'
+🔍 253 Total (in 0s) ✅ 197 OK 🚫 0 Errors 👻 56 Excluded
+
+
+COMMAND RECEIPT: typecheck-final
+npm notice run typecheck
+npm notice run npm run typecheck --workspaces
+npm notice run typecheck
+npm notice run tsc --noEmit
+npm notice run @opencrane/ops@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run @opencrane/server@0.1.0 typecheck
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck
+
+COMMAND RECEIPT: npm-test-final
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/p3-16-liveview
+
+
+ Test Files  64 passed | 3 skipped (67)
+      Tests  1032 passed | 11 skipped (1043)
+   Start at  08:57:54
+   Duration  380.40s (tests 94%, import 5%, transform 1%)
+
+
+COMMAND RECEIPT: web-build-final
+npm notice run @opencrane/web@0.1.0 build
+npm notice run ng build
+❯ Building...
+✔ Building...
+Initial chunk files | Names         |  Raw size | Estimated transfer size
+main-J4RIOIDW.js    | main          | 621.63 kB |               123.45 kB
+styles-FZAJV57K.css | styles        |   8.64 kB |                 1.93 kB
+
+                    | Initial total | 630.26 kB |               125.38 kB
+
+Application bundle generation complete. [10.300 seconds] - 2026-10-03T09:05:46.293Z
+
+▲ [WARNING] src/app/app.css exceeded maximum budget. Budget 4.00 kB was not met by 3.32 kB with a total of 7.32 kB.
+
+
+Output location: /home/jente/dev/wt/p3-16-liveview/apps/web/dist/web
+
+
+COMMAND RECEIPT: web-test
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+spec-app-app.js                       | spec-app-app                       |  62.84 kB |
+chunk-H5UW5DNW.js                     | -                                  |  26.08 kB |
+chunk-2V7F5SNK.js                     | -                                  |  14.13 kB |
+spec-app-live-view-live-view.js       | spec-app-live-view-live-view       |  13.47 kB |
+styles.css                            | styles                             |  10.58 kB |
+spec-app-core-websocket.service.js    | spec-app-core-websocket.service    |   8.30 kB |
+chunk-QNN2NNRE.js                     | -                                  |   6.32 kB |
+chunk-CGZBV6BD.js                     | -                                  |   4.07 kB |
+spec-app-sign-in-sign-in.js           | spec-app-sign-in-sign-in           |   4.00 kB |
+spec-app-shared-state-shared-state.js | spec-app-shared-state-shared-state |   3.42 kB |
+init-testbed.js                       | init-testbed                       |   1.21 kB |
+vitest-mock-patch.js                  | vitest-mock-patch                  | 974 bytes |
+
+                                      | Initial total                      | 155.39 kB
+
+Lazy chunk files                      | Names                              |  Raw size
+chunk-KTNSMZVU.js                     | viewer                             | 202 bytes |
+
+Application bundle generation complete. [10.132 seconds] - 2026-10-03T08:49:02.612Z
+
+
+ RUN  v4.1.11 /home/jente/dev/wt/p3-16-liveview/apps/web
+
+
+ Test Files  5 passed (5)
+      Tests  43 passed (43)
+   Start at  08:49:03
+   Duration  8.96s (transform 1.53s, setup 8.18s, import 2.45s, tests 5.64s, environment 14.31s)
+
+
+COMMAND RECEIPT: k3d-final
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/live-view-k3d.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/p3-16-liveview
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  09:00:43
+   Duration  72.19s (tests 93%, import 4%, transform 3%)
+
+
+CLEAN LOCKFILE INSTALL
+Fresh dependency install: /tmp/p316-install-mrzn_347
+
+added 878 packages, and audited 892 packages in 29s
+
+251 packages are looking for funding
+  run `npm fund` for details
+
+16 vulnerabilities (14 high, 2 critical)
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm warn install-scripts 5 packages had install scripts blocked because they are not covered by allowScripts:
+npm warn install-scripts   @parcel/watcher@2.6.0 (install: node scripts/build-from-source.js)
+npm warn install-scripts   esbuild@0.28.1 (postinstall: node install.js)
+npm warn install-scripts   lmdb@3.5.1 (install: node-gyp-build-optional-packages)
+npm warn install-scripts   msgpackr-extract@3.0.4 (install: node-gyp-build-optional-packages)
+npm warn install-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+Clean install: PASS; temporary directory deleted.
+
+RUNTIME NPM AUDIT
+{
+  "vulnerabilities": {
+    "info": 0,
+    "low": 0,
+    "moderate": 0,
+    "high": 0,
+    "critical": 0,
+    "total": 0
+  },
+  "dependencies": {
+    "prod": 224,
+    "dev": 805,
+    "optional": 167,
+    "peer": 3,
+    "peerOptional": 0,
+    "total": 1029
+  }
+}

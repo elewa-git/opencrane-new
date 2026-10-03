@@ -1,0 +1,192 @@
+import { viewFixture } from './support/view-fixture.ts';
+import { once } from 'node:events';
+import { PassThrough, Duplex } from 'node:stream';
+import { expect, it, vi } from 'vitest';
+import { WebSocket } from 'ws';
+import { encodeSession } from '@opencrane/auth';
+import { until } from '@opencrane/authz/testing';
+import { history } from '@opencrane/models';
+import { parseEventByType } from '@opencrane/events';
+
+it('requires participation and an explicit desktop grant before opening an audited view', async () => {
+  const forwarded: Buffer[] = [];
+  const fixture = await viewFixture(() => { const writable = new PassThrough(); writable.on('data', (b: Buffer) => forwarded.push(b)); return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable })); });
+  const { app, config, append, nats } = fixture;
+  try {
+    const headers = { origin: new URL(config.redirectUri).origin, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+60 })}`, 'x-opencrane-view': '1' };
+    const url = '/api/conversations/chat/view';
+    for (const changed of [{ ...headers, cookie: '' }, { ...headers, cookie: `${config.cookieName}=forged` },
+      { ...headers, 'x-opencrane-view': '' }, { ...headers, origin: '' },
+      { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'wrong', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+60 })}` },
+      { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: 2 })}` }]) {
+      expect((await app.inject({ method: 'POST', url, headers: changed })).statusCode).toBe(403);
+    }
+    expect((await app.inject({ method: 'POST', url: '/api/conversations/guessed/view', headers })).statusCode).toBe(403);
+
+    const refused = await app.inject({ method: 'POST', url, headers }); expect(refused.statusCode).toBe(403);
+    const refusalId = refused.json<{ attemptId: string }>().attemptId;
+    expect((await history(nats.store, `view-${refusalId}`, 'test')).map(r => r.event.type)).toEqual(['computer.view_refused']);
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
+    await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });
+    expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
+    await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' }, true);
+    expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url, headers: { ...headers, origin: 'https://wrong.test' } })).statusCode).toBe(403);
+    const response = await app.inject({ method: 'POST', url, headers });
+    expect(response.statusCode).toBe(200);
+    const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    let ws = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', ticket], { headers });
+    ws.on('error', () => undefined); await once(ws, 'open');
+    await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 1);
+    const attackClosed = once(ws, 'close');
+    ws.send(Buffer.from('RFB 003.')); ws.send(Buffer.concat([Buffer.from('008\n'), Buffer.from([1, 1, 4, 1, 0, 0, 0, 0, 0, 65])]));
+    await Promise.race([attackClosed, new Promise((_, reject) => setTimeout(() => reject(new Error('Input was not refused')), 2000))]);
+    expect(Buffer.concat(forwarded)).toEqual(Buffer.concat([Buffer.from('RFB 003.008\n'), Buffer.from([1, 1])]));
+    for (const attack of [Buffer.from([5]), Buffer.from([6, 0, 0, 0, 255, 255, 255, 255]),
+      Buffer.from([180, 1, 10, ...Buffer.from('text/plain'), 10, 0, 0, 0, 65]), Buffer.from([7]), Buffer.from([255]),
+      Buffer.from([2, 0, 1, 1]), Buffer.alloc(4097, 3)]) {
+      const admission = (await app.inject({ method: 'POST', url, headers })).json<{ ticket: string }>();
+      const attacker = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', admission.ticket], { headers });
+      attacker.on('error', () => undefined); await once(attacker, 'open');
+      const end = once(attacker, 'close'); const before = Buffer.concat(forwarded).length;
+      attacker.send(Buffer.concat([Buffer.from('RFB 003.008\n'), Buffer.from([1, 1])]));
+      attacker.send(attack.subarray(0, 1), { fin: false }); attacker.send(attack.subarray(1), { fin: true });
+      await end;
+      expect(Buffer.concat(forwarded).length - before).toBe(14);
+    }
+    const next = (await app.inject({ method: 'POST', url, headers })).json<{ ticket: string }>();
+    ws = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', next.ticket], { headers });
+    ws.on('error', () => undefined); await once(ws, 'open');
+    const closed = once(ws, 'close'), started = performance.now();
+    await append('conversation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' }, true);
+    expect((await closed)[0]).toBe(4003); expect(performance.now()-started).toBeLessThan(2000);
+    await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 2);
+    const audit = await history(nats.store, `view-${sessionId}`, 'test');
+    expect(audit.map(row => row.event.type)).toEqual(['computer.view_started', 'computer.view_stopped']);
+    expect(audit[0]?.event.principal).toEqual({ id: 'alice', kind: 'human' });
+  } finally { await fixture.close(); }
+}, 120_000);
+
+it('bounds redemption of pre-issued tickets and rejects reuse without opening another desktop', async () => {
+  let opened = 0;
+  const fixture = await viewFixture(() => { opened++; const writable = new PassThrough(); writable.resume(); return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable })); });
+  const { app, config, append } = fixture, sockets: WebSocket[] = [];
+  try {
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const headers = { origin: new URL(config.redirectUri).origin, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}`, 'x-opencrane-view': '1' };
+    const tickets: string[] = [];
+    for (let i = 0; i < 17; i++) {
+      const response = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers }); expect(response.statusCode).toBe(200);
+      tickets.push(response.json<{ ticket: string }>().ticket);
+    }
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    const connect = (ticket: string) => new Promise<number>(resolve => {
+      const ws = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', ticket], { headers }); sockets.push(ws);
+      ws.on('error', () => undefined); ws.on('open', () => resolve(101)); ws.on('unexpected-response', (_request, reply) => { resolve(reply.statusCode!); ws.terminate(); });
+    });
+    expect(await connect(tickets[0]!)).toBe(101); expect(await connect(tickets[0]!)).toBe(403); expect(opened).toBe(1);
+    const statuses = await Promise.all(tickets.slice(1).map(connect));
+    expect(statuses.filter(status => status === 101).length).toBeLessThanOrEqual(15);
+    expect(statuses).toContain(403); expect(opened).toBeLessThanOrEqual(16);
+    const head = await fixture.nats.store.head(), refusals = [];
+    for await (const row of fixture.nats.store.subscribe()) {
+      if (row.event.type === 'computer.view_refused') refusals.push(row.event.data);
+      if (row.sequence >= head) break;
+    }
+    // Some other checks may time out under load; the capacity refusal itself must occur.
+    expect(refusals).toContainEqual(expect.objectContaining({ reason: 'capacity' }));
+  } finally { for (const socket of sockets) socket.terminate(); await fixture.close(); }
+}, 120_000);
+
+
+it('denies delayed grants, revoked tickets and audit outages, and closes viewers when OpenFGA is unavailable', async () => {
+  let opened = 0;
+  const fixture = await viewFixture(() => {
+    opened++;
+    const writable = new PassThrough(); writable.resume();
+    return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable }));
+  });
+  const { app, config, append, fga, nats } = fixture;
+  let paused = false;
+  try {
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const url = '/api/conversations/chat/view';
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' });
+    expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(403);
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    const ticket = async () => {
+      const response = await app.inject({ method: 'POST', url, headers }); expect(response.statusCode).toBe(200);
+      return response.json<{ ticket: string; sessionId: string }>();
+    };
+    const connect = (ticket: string) => new Promise<number>(resolve => {
+      const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', ticket], { headers });
+      socket.on('error', () => undefined);
+      socket.on('unexpected-response', (_request, response) => { resolve(response.statusCode!); socket.terminate(); });
+      socket.on('open', () => { resolve(101); socket.close(); });
+    });
+    const issued = await ticket();
+    await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    expect(await connect(issued.ticket)).toBe(403); expect(opened).toBe(0);
+    expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(403);
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const unaudited = await ticket();
+    const audit = vi.spyOn(nats.store, 'append').mockRejectedValue(new Error('Event store unavailable'));
+    try { expect(await connect(unaudited.ticket)).toBe(403); expect(opened).toBe(0); }
+    finally { audit.mockRestore(); }
+    expect(await history(nats.store, `view-${unaudited.sessionId}`, 'test')).toEqual([]);
+    const valid = await ticket();
+    const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', valid.ticket], { headers });
+    socket.on('error', () => undefined); await once(socket, 'open');
+    const closed = once(socket, 'close'), started = performance.now();
+    await fga.pause(); paused = true;
+    expect((await closed)[0]).toBe(4003); expect(performance.now()-started).toBeLessThan(2000);
+    expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(403);
+    await until(async () => (await history(nats.store, `view-${valid.sessionId}`, 'test')).length === 2);
+    const records = await history(nats.store, `view-${valid.sessionId}`, 'test');
+    expect(records.map(r => r.event.type)).toEqual(['computer.view_started', 'computer.view_stopped']);
+    expect(records[1]?.event.data).toMatchObject({ sessionId: valid.sessionId, memberId: 'alice', conversationId: 'chat', computerId: 'desktop', generation: 1, reason: 'access_changed' });
+  } finally { if (paused) await fga.resume(); await fixture.close(); }
+}, 120_000);
+
+it('rechecks authority after a delayed start audit before opening the desktop', async () => {
+  let opened = 0;
+  const fixture = await viewFixture(() => {
+    opened++;
+    const writable = new PassThrough(); writable.resume();
+    return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable }));
+  });
+  const { app, append, nats, config } = fixture;
+  let release!: () => void, began!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const auditing = new Promise<void>(resolve => { began = resolve; });
+  const persist = nats.store.append.bind(nats.store);
+  const audit = vi.spyOn(nats.store, 'append').mockImplementation(async input => {
+    const parsed = parseEventByType(input.event);
+    if (parsed.success && parsed.event.type === 'computer.view_started') { began(); await gate; }
+    return persist(input);
+  });
+  try {
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const response = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+    expect(response.statusCode).toBe(200);
+    const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    const socket = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', ticket], { headers });
+    socket.on('error', () => undefined); socket.on('open', () => socket.close());
+    const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
+    await auditing;
+    await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    release(); await closed;
+    expect(opened).toBe(0);
+    await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 2);
+    expect((await history(nats.store, `view-${sessionId}`, 'test'))[1]?.event.data).toMatchObject({ reason: 'access_changed' });
+  } finally { release(); audit.mockRestore(); await fixture.close(); }
+}, 120_000);

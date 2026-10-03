@@ -167,6 +167,23 @@ describe('WebSocket upgrade requires a session', () => {
     expect(await health.json()).toEqual({ status: 'ok' });
   });
 
+  it('refuses malformed and unknown upgrade targets without crashing the server', async () => {
+    const started = await startServer(); app = started.app;
+    const port = Number(new URL(started.url).port);
+    for (const target of ['//[', '/unknown']) {
+      const response = await new Promise<string>((resolve, reject) => {
+        const socket = connect(port, '127.0.0.1'); let bytes = '';
+        socket.setTimeout(3000, () => { socket.destroy(); reject(new Error('Upgrade did not close')); });
+        socket.on('connect', () => socket.write(`GET ${target} HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`));
+        socket.on('data', (chunk: Buffer) => { bytes += chunk.toString(); });
+        socket.on('error', reject); socket.on('end', () => resolve(bytes));
+      });
+      expect(response).toContain('404');
+    }
+    expect(await attemptUpgrade(started.url, { Origin: ALLOWED_ORIGIN, Cookie: `${authConfig.cookieName}=${validSessionCookie()}` })).toBe('open');
+    expect((await fetch(`http://127.0.0.1:${port}/healthz`)).status).toBe(200);
+  });
+
   it('contains an unmasked frame while rejecting a session that expired after authentication', async () => {
     const authenticatedAt = new Date('2026-10-01T12:00:00.000Z');
     const expiredAtConnection = new Date('2026-10-01T12:00:01.000Z');

@@ -71,6 +71,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `egress-<request>` | observed egress | observed |
 | `gateway-<request>` | safe gateway evidence | observation recorded |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
+| `view-<session>` | bounded desktop view | started, stopped |
 | `grant-<resource>` | shared resource (type and id) | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
 | `scope-<id>` | brain permission scope | memory written, corrected, forgotten, consolidated, promoted |
@@ -141,6 +142,8 @@ SSO membership path. Invitation creation and identity binding are separate work.
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
+| `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata; no connection. |
+| `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | No replayed connection; start records a maximum two-minute lease and stop records its reason. |
 | `takeover.started` / `takeover.ended` | live-view proxy | computers, audit | pause / resume the agent |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 
@@ -350,7 +353,8 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
 wrap the members projection; [authz](../../libs/authz/README.md) implements
-`update-openfga` for the three member events. Other subscribed events fail
+`update-openfga` for member, assistant and conversation events, plus member
+`shared_desktop` grants. Other subscribed events fail
 explicitly until implemented (scope promotion remains deferred).
 
 | Handler | Subscribed events |
