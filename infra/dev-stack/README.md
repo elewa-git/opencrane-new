@@ -388,6 +388,5 @@ Requested, approved, used (outcome unknown) and denied cards survive reload at
 1280px and 390px. Screenshots go to `docs/process/p3-2-live/`.
 This qualifies browser approval and gateway admission, not native Codex MCP
 continuation or an external tool's final outcome. No OpenAI call is made.
-Fresh stacks seed a stub-only budget of 20,000 cents daily and 200,000 cents monthly
-through an event before the budget writer starts. Repeated Stop journeys retain
-their conservative cost; repeated `up.sh` preserves that history and ceiling.
+Approval tools explicitly cost zero; the journey uses the stored installation
+paying group. The monthly-budget journey above owns the test ceiling changes.

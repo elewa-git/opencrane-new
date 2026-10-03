@@ -5,8 +5,6 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
 import { tokenIssuer } from '@opencrane/auth';
-import { connectEventStore } from '@opencrane/event-store';
-import { envelope } from '@opencrane/models';
 import { stackId, secondary, project, namespace, ports as defaultPorts, localOrigin } from './identity.ts';
 import { checkPorts } from './ports.ts';
 import { modelFirewall } from './model-network.ts';
@@ -215,18 +213,6 @@ async function up(fresh: boolean) {
   // Repeated up runs must also keep decision services and event writers out of the migration.
   await stopProcesses(['server', 'dispatcher', 'models']);
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
-  // Stopped stub turns keep their conservative cost; allow repeated browser journeys.
-  const fixtureEvents = await connectEventStore(await readEnv('command'));
-  try {
-    const subject = `budget-${settings['SILO_ID']}`;
-    if (await fixtureEvents.store.head(subject) === 0) {
-      const result = await fixtureEvents.store.append({ expectedSequence: 0,
-        event: envelope(settings['SILO_ID']!, subject, 'budget.ceiling_set', {
-          scope: 'global', dailyCeilingCents: 20000, ceilingCents: 200000, setBy: 'dev-stack-stub-fixture',
-        }) });
-      if (result.status !== 'appended') throw new Error('Could not initialise stub fixture budget');
-    }
-  } finally { await fixtureEvents.close(); }
   await run('npm', ['run', 'migrate:model-grants', '-w', 'apps/ops'],
     { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']! });
   await run('npm', ['run', 'migrate:budget-default', '-w', 'apps/ops'],

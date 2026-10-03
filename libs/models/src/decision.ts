@@ -53,7 +53,9 @@ async function readBody(req: IncomingMessage) {
     if (length > 1_048_576) throw new Error('Request too large');
     chunks.push(bytes);
   }
-  return new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+  const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
+  losslessJson(text);
+  return text;
 }
 async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(t.requester, 'member');
@@ -118,6 +120,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         const policy = await mcpPolicy(actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers);
         const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!);
         contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
+        // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.
         const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo, {
           requesterId: t.requester, assistantId: c.assistant, conversationId: t.conversation, turnId: t.turn,
           serverId: match[1]!, connectionId: match[2]!,
@@ -128,7 +131,6 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         res.setHeader('x-request-id', requestId);
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
       }
-      losslessJson(raw);
       const parsed = requestSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
       const body = parsed.data;

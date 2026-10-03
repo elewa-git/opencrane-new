@@ -18,7 +18,7 @@ async function approvalFixture(stepUp = false) {
       exp: Math.floor(Date.now() / 1000) + 3600, ...(approval ? { stepUpApproval: approval } : {}) })}` });
   await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
   const discover = (stepUp: boolean) => f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1,
-    tools: [{ name: 'write', revision: 'a'.repeat(64), reviewed: true, review: { action: 'Update order note', consequence: 'The order note changes immediately.', targetArgument: 'order', fields: ['order', 'note', 'amount'], stepUp } }] });
+    tools: [{ name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0, review: { action: 'Update order note', consequence: 'The order note changes immediately.', targetArgument: 'order', fields: ['order', 'note', 'amount'], stepUp } }] });
   await discover(stepUp);
   await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
   await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64), mode: 'ask', setBy: 'alice' });

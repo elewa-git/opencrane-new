@@ -162,8 +162,9 @@ try {
     authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
+  const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
-    try { await browserChatJourney(page, origin, secondary ? auditPrompt : undefined); await page.goto(origin); }
+    try { await browserChatJourney(page, origin, secondary ? auditPrompt : undefined); memberChatUrls.push(page.url()); await page.goto(origin); }
     catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
   }
   if (browser) await approvalJourney(browser.memberPages, events.store, authz, append, { silo, origin, requesterId: member,
@@ -216,6 +217,7 @@ try {
   assert.equal((await fetch(`${server}/api/org/integrations`, { headers: headers(member) })).status, 403);
   console.log('PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused');
   if (secondary && browser) {
+    for (const [index, page] of browser.memberPages.entries()) await page.goto(memberChatUrls[index]!);
     // Dev-only signed session; this second member tests resource authority, not identity-provider login.
     const other = 'audit-other-member', sub = 'dev-audit-other-member';
     const now = Math.floor(Date.now() / 1000);

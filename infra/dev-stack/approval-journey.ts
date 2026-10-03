@@ -16,12 +16,16 @@ type Append = (type: string, subject: string, data: Record<string, unknown>, sou
 export async function approvalJourney(pages: Page[], store: EventStore, auth: ReturnType<typeof memberAuthorisation>, append: Append,
   input: { silo: string; origin: string; requesterId: string; assistantId: string; computerId: string; generation: number }) {
   const settings = await readEnv('settings');
+  const budget = await history(store, `budget-${input.silo}`, input.silo);
+  const { defaultPayingGroupId } = z.object({ defaultPayingGroupId: z.string().min(1) }).parse(
+    budget.findLast(row => row.event.type === 'budget.ceiling_set' &&
+      z.object({ defaultPayingGroupId: z.string() }).safeParse(row.event.data).success)?.event.data);
   const tokens = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${input.origin}/` });
   const serverId = 'approval-journey', connectionId = 'installed', revision = 'a'.repeat(64);
   const upstream = `http://127.0.0.1:${settings['MODEL_STUB_PORT']}`;
   await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: `${upstream}/mcp`, registeredBy: 'zitadel-owner' });
   await append('mcp.server_discovered', `mcp-${serverId}`, { serverId, connectionId, accountMode: 'none', schemaDigest: revision, toolCount: 1,
-    tools: [{ name: 'write', revision, reviewed: true, review: { action: 'Update order note', consequence: 'The recording stub receives this order note once.',
+    tools: [{ name: 'write', revision, reviewed: true, costCents: 0, review: { action: 'Update order note', consequence: 'The recording stub receives this order note once.',
       targetArgument: 'order', fields: ['order', 'note'], stepUp: false } }] });
   await append('mcp.server_published', `mcp-${serverId}`, { serverId, publishedBy: 'zitadel-owner' });
   await append('mcp.tool_mode_set', `mcp-${serverId}`, { serverId, connectionId, toolName: 'write', toolRevision: revision, mode: 'ask', setBy: 'zitadel-owner' });
@@ -50,7 +54,7 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
     assert.equal(response.status(), 200, 'Requester creates the conversation');
     await until(async () => (await auth.conversation(input.requesterId, conversationId, 'post')).allowed);
     await append('agent.turn_started', `conversation-${conversationId}`, { conversationId, turnId, assistantId: input.assistantId });
-    await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn' }, 'opencrane-server');
+    await append('computer.turn_started', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', payingGroupId: defaultPayingGroupId }, 'opencrane-server');
     try {
       const rows = await history(store, `computer-${input.assistantId}`, input.silo);
       const { tokenId } = z.object({ tokenId: z.string() }).parse(rows.findLast(row => ['computer.claimed', 'computer.resumed'].includes(row.event.type))?.event.data);

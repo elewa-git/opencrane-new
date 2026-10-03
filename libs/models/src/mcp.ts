@@ -24,7 +24,7 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
 }
 function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][number] | undefined) {
   const mode = tool?.reviewed ? tool.mode : 'block';
-  if (mode === 'allow' && tool?.costCents !== 0) return { outcome: 'deny', reason: 'unknown_cost' } as const;
+  if (mode !== 'block' && tool?.costCents !== 0) return { outcome: 'deny', reason: 'unknown_cost' } as const;
   const outcome = mode === 'block' ? 'deny' : mode;
   const reason = mode === 'ask' ? 'approval_required' : mode === 'allow' ? 'policy_allow' : 'policy_block';
   return { outcome, reason } as const;
