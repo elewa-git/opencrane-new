@@ -44,25 +44,31 @@ integration assertions. No new dependencies.
 Safe command logs are `/tmp/p3-19-*.log` on the builder host. The committed tests and
 screenshots below are the retained repeatable evidence.
 
-Independent review used two passes with a different model. Pass 1 reproduced missing
-conversation/turn-only takeover evidence. A failing regression proved the gap before
-the indexed join fix. Pass 2 independently reproduced the fix and confirmed exclusion
-of foreign requester, turn and silo evidence: code PASS. All final gates are green.
-The log regression also covers caller-supplied conversation ids as well as filters.
+Independent review pass 1 of `77dc20e` found five blockers. Blockers 1–4 are fixed
+in this branch, each with a failing reproduction before the implementation change.
+The second independent review pass has NOT RUN for these fixes. Blocker 5 is the
+pre-existing model-authority scan in [#70](https://github.com/elewa-git/opencrane-new/issues/70);
+the owner assigned it a dedicated next PR. These fixes do not change those scans.
+
+| Regression | Red reproduction | Green proof |
+| --- | --- | --- |
+| Caller-selected gateway correlation | Two forged-JWT failures reuse the victim's id | Distinct gateway ids; victim history unchanged; duplicate ingestion and replay stable |
+| Fallback history logs | POST fallback message contains filter canaries | Every emitted line excludes conversation and query canaries for GET/POST/OPTIONS, including trailing slashes |
+| Authenticated refusal correlation | Invalid output bounds produce different decision and gateway ids | Server-issued decision ids survive observation, ingestion and replay; caller ids ignored |
+| Egress summary | Confirmed success reads as unknown | Success/error summaries agree with observations; explicit unknown and missing evidence stay uncertain; replay identical |
 
 | Required gate | Result | Evidence |
 | --- | --- | --- |
 | `npm run lint` | PASS | Code, dependency boundaries, unused exports, docs, links and fixture checks |
 | `npm run typecheck` | PASS | All workspaces |
 | `npm run check:events` | PASS | 78 registered and documented types agree |
-| `npm test -- --maxWorkers=2` | PASS | Final source; 1,088 passed, 10 skipped across 70 files; PostgreSQL URL above |
+| `npm test -- --maxWorkers=2` | PASS | Review fixes; 1,092 passed, 10 skipped across 70 files; PostgreSQL URL above |
 | `npm run build -w apps/web` | PASS | Existing bundle/style size warnings remain |
 | `npm run test -w apps/web` | PASS | 49 tests across nine files |
 
-The earlier concurrent daily/monthly budget timing failure passed in isolation.
-The existing chat-browser timing failure also passed when rerun alone. The unknown
-outcome and private history-path regressions were fixed and passed before the final
-full-suite run. No security freshness fence or test expectation was weakened.
+The review-fix full-suite run had no timing failures, so no isolation rerun was
+needed. Earlier feature runs had daily/monthly budget and chat-browser timing
+failures which passed in isolation. No security freshness fence was weakened.
 Source readiness: PASS. Live capability qualification: PARTIAL, with the unrun
 conditions below explicit.
 
@@ -101,6 +107,6 @@ proved separately through real dependency interfaces in the HTTP/gateway tests.
 
 No approvals, credential broker, MCP installer, egress capability or takeover
 implementation; their fixture contracts make later integration explicit. No SIEM,
-export or retention engine. Existing model authority scans remain with their owning
-issue; audit reads do not call them. No deployment or fresh-install claim. Source
+export or retention engine. Existing model authority scans remain in #70 for the
+dedicated next PR; audit reads do not call them. No deployment or fresh-install claim. Source
 readiness is separate from live capability completion.

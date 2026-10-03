@@ -159,6 +159,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         else { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
       }
       catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
+      res.setHeader('x-request-id', requestId);
       res.writeHead(capped ? 402 : 403);
       res.end(JSON.stringify({ requestId, error: capped || error instanceof RequestRefused || error instanceof PayingGroupRefused ? error.message : 'Request refused or decision service unavailable' }));
     });

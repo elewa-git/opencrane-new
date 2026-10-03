@@ -916,15 +916,91 @@ it('explains a real model call by ids and rebuilds the same decision, outcome an
   } finally { await f.close(); }
 }, 40_000);
 
+it('keeps forged JWT failures distinct from a caller-selected request through ingestion and replay', async () => {
+  const f = await fixture();
+  try {
+    await f.runner.initialise(auditTrail);
+    expect((await f.call()).status).toBe(200);
+    await f.settled();
+    await until(() => f.admitted.length === 1);
+    const requestId = f.admitted[0]!;
+    await f.runner.run(auditTrail);
+    const request = await readAudit(f.db, 'test', { requestId });
+    for (let i = 0; i < 2; i++) {
+      expect((await f.call({ authorization: 'Bearer forged-secret-canary', 'x-audit-id': requestId,
+        'x-request-id': requestId }, { input: 'private-secret-canary' })).status).toBe(401);
+    }
+    await f.restart();
+    const evidence = z.array(z.object({ id: z.uuid(), reason: z.string().optional() }))
+      .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown))
+      .filter(row => row.reason === 'jwt_failed');
+    expect(evidence).toHaveLength(2);
+    expect(new Set(evidence.map(row => row.id)).size).toBe(2);
+    expect(evidence.map(row => row.id)).not.toContain(requestId);
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.run(auditTrail);
+    expect(await readAudit(f.db, 'test', { requestId })).toEqual(request);
+    const before = await readAudit(f.db, 'test');
+    for (const row of evidence) {
+      const failure = before.rows.filter(entry => entry.requestId === row.id);
+      expect(failure).toHaveLength(1);
+      expect(failure[0]).toMatchObject({ decision: 'not_recorded', outcome: 'error' });
+      expect(failure[0]?.requesterId).toBeUndefined();
+      expect(failure[0]?.records).toHaveLength(1);
+    }
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.rebuild(auditTrail);
+    expect(await readAudit(f.db, 'test')).toEqual(before);
+    expect(await readFile(f.options.usageFile, 'utf8')).not.toContain('secret-canary');
+  } finally { await f.close(); }
+}, 40_000);
+
+it('keeps the trusted decision id on authenticated refusals through gateway ingestion and replay', async () => {
+  const f = await fixture();
+  const forged = randomUUID();
+  try {
+    await f.runner.initialise(auditTrail);
+    const requestIds: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const response = await f.call({ 'x-audit-id': forged, 'x-request-id': forged }, { max_output_tokens: 0 });
+      expect(response.status).toBe(403);
+      const { requestId } = z.object({ requestId: z.uuid() }).parse(JSON.parse(response.text));
+      requestIds.push(requestId);
+      expect(requestId).not.toBe(forged);
+    }
+    expect(new Set(requestIds).size).toBe(2);
+    await f.restart();
+    const evidence = z.array(z.object({ id: z.uuid(), outcome: z.literal('error'), reason: z.literal('dispatch_denied') }))
+      .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown));
+    expect(evidence.map(row => row.id)).toEqual(requestIds);
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.run(auditTrail);
+    const before = await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
+    expect(before.rows).toHaveLength(2);
+    for (const row of before.rows) {
+      expect(requestIds).toContain(row.requestId);
+      expect(row).toMatchObject({ decision: 'deny', outcome: 'not_dispatched' });
+      expect(row.records.map(record => record.type)).toEqual(['decision.recorded', 'gateway.observation_recorded']);
+    }
+    expect(f.received()).toBe(0);
+    await ingestUsage(f.actor, f.options.usageFile);
+    await f.runner.rebuild(auditTrail);
+    expect(await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' })).toEqual(before);
+  } finally { await f.close(); }
+}, 40_000);
+
 it('retains safe JWT correlation, denies an audit outage and alerts once for unmatched gateway effects', async () => {
   const f = await fixture();
   const correlation = randomUUID(), unmatched = randomUUID();
   try {
     await f.runner.initialise(auditTrail);
     expect((await f.call({ authorization: 'Bearer forged-secret-canary', 'x-audit-id': correlation }, { input: 'private-secret-canary' })).status).toBe(401);
-    await until(async () => { await ingestUsage(f.actor, f.options.usageFile); return (await history(f.nats.store, `gateway-${correlation}`, 'test')).length > 0; });
-    const failure = await history(f.nats.store, `gateway-${correlation}`, 'test');
-    expect(failure[0]?.event.data).toEqual({ requestId: correlation, outcome: 'error', reason: 'jwt_failed' });
+    await f.restart();
+    const evidence = z.object({ id: z.uuid(), reason: z.literal('jwt_failed') }).parse(JSON.parse((await readFile(f.options.usageFile, 'utf8')).trim()));
+    expect(evidence.id).not.toBe(correlation);
+    await ingestUsage(f.actor, f.options.usageFile);
+    const failure = await history(f.nats.store, `gateway-${evidence.id}`, 'test');
+    expect(failure[0]?.event.data).toEqual({ requestId: evidence.id, outcome: 'error', reason: 'jwt_failed' });
     expect(JSON.stringify(failure)).not.toContain('requesterId');
     await f.actor.effect(unmatched, { inputTokens: 1, outputTokens: 1 });
     await f.actor.effect(unmatched, { inputTokens: 1, outputTokens: 1 });

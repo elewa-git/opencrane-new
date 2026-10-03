@@ -37,7 +37,7 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
       inputTokens: 'llm.inputTokens', outputTokens: 'llm.outputTokens',
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
       cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)',
-      auditId: 'request.headers["x-audit-id"]' } } },
+      decisionRequestId: 'response.headers["x-request-id"]' } } },
     routes: [...mcpRoutes.map(route => mcpRoute(route, decisionUrl, issuer)), { name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
       policies: {
           jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
@@ -82,7 +82,9 @@ function gatewayObservation(line: string) {
   const status = logNumber(line, 'http\\.status');
   if (!id) {
     if (status === undefined) return undefined;
-    return { id: z.uuid().safeParse(/\bauditId="([^"]+)"/u.exec(line)?.[1]).data ?? randomUUID(),
+    // JWT failures have no decision. Refusals use the decision's response id, never a request header.
+    const requestId = status === 401 ? undefined : z.uuid().safeParse(/\bdecisionRequestId="([^"]+)"/u.exec(line)?.[1]).data;
+    return { id: requestId ?? randomUUID(),
       outcome: status >= 400 ? 'error' : 'unknown', reason: status === 401 ? 'jwt_failed' : status >= 400 ? 'dispatch_denied' : 'observation_missing' };
   }
   const input = logNumber(line, 'inputTokens'), output = logNumber(line, 'outputTokens');

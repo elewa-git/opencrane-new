@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogDestination } from '@opencrane/observability';
 import { createServerLogger, redactedRequestSerializer } from '../src/logging.ts';
+import { buildServer } from '../src/server.ts';
+import { testAuthConfig } from './support/test-auth-config.ts';
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -30,6 +32,25 @@ describe('redactedRequestSerializer', () => {
 });
 
 describe('createServerLogger', () => {
+  it('withholds history paths and every query filter in all HTTP log lines, including fallback methods and trailing slashes', async () => {
+    vi.stubEnv('LOG_LEVEL', 'info');
+    const chunks: string[] = [];
+    const app = buildServer(testAuthConfig(), { logDestination: { write: (line: string) => void chunks.push(line) } });
+    try {
+      for (const path of ['/api/org/history', '/api/conversations/private-conversation-canary/history']) {
+        for (const suffix of ['', '/']) {
+          for (const method of ['GET', 'POST', 'OPTIONS'] as const) {
+            const response = await app.inject({ method,
+              url: `${path}${suffix}?requestId=private-request-canary&turnId=private-turn-canary&unknown=private-filter-canary` });
+            expect(response.statusCode).toBe(method === 'GET' && suffix === '' ? 401 : 404);
+          }
+        }
+      }
+      expect(chunks.length).toBeGreaterThan(12);
+      for (const line of chunks) expect(line).not.toContain('canary');
+    } finally { await app.close(); }
+  });
+
   it('takes its level from LOG_LEVEL, and falls back to info', () => {
     vi.stubEnv('LOG_LEVEL', 'warn');
     expect(createServerLogger().level).toBe('warn');

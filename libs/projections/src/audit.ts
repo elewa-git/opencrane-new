@@ -89,7 +89,7 @@ function explain(anchor: Entry, entries: Entry[]): AuditRow {
   const records = [...new Map(all.map(e => [e.event_id, auditResponseSchema.shape.rows.element.shape.records.element.parse(e.metadata)])).values()]
     .sort((a, b) => a.position - b.position);
   const decision = z.enum(['allow', 'ask', 'deny']).safeParse(anchor['decision']).data ?? 'not_recorded';
-  const effect = records.findLast(r => r.type === 'effect.observed');
+  const effect = records.findLast(r => r.type === 'effect.observed' || r.type === 'egress.observed');
   const settlement = records.findLast(r => r.type === 'budget.settled');
   const reservation = records.find(r => r.type === 'budget.reserved');
   const outcome = observedOutcome(decision, records, effect, settlement);

@@ -400,12 +400,19 @@ conversation/turn pair: audit reads fetch that indexed pair and associate record
 without another request/permit, refusing a mismatched requester. Owning feature tickets emit those records and add
 integration assertions. P3-19's forthcoming-family records are typed fixtures only.
 
-`gateway.observation_recorded` retains only a generated/validated UUID, a bounded
-outcome and a reason code. JWT failure before ext_authz asserts no requester,
+`gateway.observation_recorded` retains only a server-issued UUID, a bounded
+outcome and a reason code. The decision returns its request id on authenticated
+refusals; gateway evidence retains that id through ingestion and replay. JWT
+failures receive a fresh gateway id per failure, ignoring caller correlation
+headers. JWT failure before ext_authz asserts no requester,
 conversation or turn. Safe JSONL evidence survives an event-store outage for later
 ingest. No raw gateway log, timestamp, token, body or argument enters that file.
 The gateway's fractional timestamp defect is ignored: ids join records and event
 positions show append order, without claiming causal order between streams.
+
+Confirmed `egress.observed` success or error determines the permitted egress
+summary, just as `effect.observed` does for a model call. Missing observations
+remain unknown.
 
 The budget reaction raises one `security.alert_raised` for an unmatched model
 observation, including a reservation without an allowing decision. Missing usage

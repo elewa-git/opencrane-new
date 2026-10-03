@@ -31,7 +31,7 @@ it('joins forthcoming typed families, withholds private details and keeps absent
       ['approval.used', { approvalId: 'approval', permitId: 'permit' }],
       ['approval.expired', { approvalId: 'approval' }],
       ['credential.released', { requestId: 'request', permitId: 'permit' }],
-      ['mcp.tools_changed', {}], ['mcp.server_published', {}], ['egress.observed', {}],
+      ['mcp.tools_changed', {}], ['mcp.server_published', {}], ['egress.observed', { outcome: 'unknown' }],
       ['takeover.started', { requestedBy: 'alice' }], ['takeover.ended', {}],
     ] as const) {
       const record = fixture(type, type, payload);
@@ -87,4 +87,29 @@ it('pages indexed requests without truncating evidence and preserves an unverifi
     expect((await readAudit(db.db, 'test', { requestId: 'request-1' })).rows[0]?.requestId).toBe('request-1');
     expect((await readAudit(db.db, 'test', { decision: 'deny' })).rows).toEqual([]);
   } finally { await db.close(); }
+}, 30_000);
+
+it('summarises confirmed egress success and error while keeping missing observations uncertain through replay', async () => {
+  const db = await database('pg'), nats = await natsFixture();
+  const runner = new ProjectionRunner(db.db, nats.store, createLogger('audit-test', { level: 'silent' }));
+  try {
+    await runner.initialise(auditTrail);
+    for (const outcome of ['success', 'error', 'unknown', 'missing'] as const) {
+      const requestId = `egress-${outcome}`, permitId = `permit-${outcome}`;
+      const events = [fixture('decision.recorded', `decision-${outcome}`, { requestId, permitId, route: 'egress',
+        conversationId: 'conversation', requesterId: 'alice', outcome: 'allow', reason: 'policy_allow' }, false)];
+      if (outcome !== 'missing') events.unshift(fixture('egress.observed', `observation-${outcome}`, {
+        requestId, permitId, channel: outcome === 'error' ? 'desktop' : 'command', outcome }, false));
+      for (const event of events) expect((await nats.store.append({ event, expectedSequence: 0 })).status).toBe('appended');
+    }
+    await runner.run(auditTrail);
+    const before = await readAudit(db.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
+    expect(before.rows).toHaveLength(4);
+    for (const [requestId, outcome] of [['egress-success', 'success'], ['egress-error', 'error'],
+      ['egress-unknown', 'unknown'], ['egress-missing', 'unknown']]) {
+      expect(before.rows.find(row => row.requestId === requestId)).toMatchObject({ decision: 'allow', outcome });
+    }
+    await runner.rebuild(auditTrail);
+    expect(await readAudit(db.db, 'test', { conversationId: 'conversation', requesterId: 'alice' })).toEqual(before);
+  } finally { await nats.close(); await db.close(); }
 }, 30_000);

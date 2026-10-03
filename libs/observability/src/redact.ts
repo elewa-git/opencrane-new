@@ -1,6 +1,6 @@
 // Copied from OpenCrane 1 (10abd0ef6) libs/backend/observability/src/http-trace.ts;
 // changed: that file stripped a URL's whole query string for tracing. This one
-// is for log lines and blanks only the parameters that carry a secret. It works
+// is for log lines and blanks secret parameters and private history filters. It works
 // on plain text and never calls `new URL()`, so a URL the parser cannot read
 // (a stray `[`) is redacted like any other. OpenCrane 1 failed closed on those;
 // the first version here had failed open.
@@ -33,7 +33,10 @@ function decodeName(name: string): string {
  * it over every string it writes (see sanitize.ts).
  */
 export function redactUrl(text: string): string {
-  return text.replace(QUERY_PAIR, (pair, separator: string, name: string) =>
+  // History filters and conversation ids stay private, even inside fallback messages.
+  const history = text.replace(/\/api\/(?:org|conversations\/[^/?\s"'\\]+)\/history(\/*)(?=[?\s"'\\]|$)(?:\?[^\s"'\\]*)?/gu,
+    (path: string, slash: string) => `${path.startsWith('/api/org/') ? '/api/org/history' : '/api/conversations/:conversationId/history'}${slash}`);
+  return history.replace(QUERY_PAIR, (pair, separator: string, name: string) =>
     isSensitiveQueryName(decodeName(name)) ? `${separator}${name}=${REDACTED_VALUE}` : pair,
   );
 }

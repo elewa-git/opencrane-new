@@ -9,7 +9,7 @@ import type { FastifyRequest } from 'fastify';
 export function redactedRequestSerializer(req: Pick<FastifyRequest, 'method' | 'url' | 'host'> & { socket?: { remotePort?: number } }): Record<string, unknown> {
   return {
     method: req.method,
-    url: /\/history(?:\?|$)/u.test(req.url) ? req.url.split('?')[0]?.replace(/^\/api\/conversations\/[^/]+\/history$/u, '/api/conversations/:conversationId/history') : redactUrl(req.url),
+    url: redactUrl(req.url),
     host: req.host,
     remotePort: req.socket?.remotePort,
   };
