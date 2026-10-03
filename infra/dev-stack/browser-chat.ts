@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
 import assert from 'node:assert/strict';
+import { directory } from './config.ts';
+import { secondary } from './identity.ts';
 import { mkdir } from 'node:fs/promises';
 import type { Page } from 'playwright';
 
@@ -47,7 +49,8 @@ export async function browserChatJourney(page: Page, origin: string): Promise<vo
     await document.fonts.ready;
     await Promise.allSettled(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished));
   });
-  await mkdir('docs/design/chat/live', { recursive: true });
-  await page.screenshot({ path: `docs/design/chat/live/workspace-${width}.png`, fullPage: true });
-  console.log(`PASS browser chat ${width}px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token ${firstTokenMs} ms, completion ${completeMs} ms, browser journey ${Math.round(performance.now() - start)} ms; screenshot docs/design/chat/live/workspace-${width}.png`);
+  const screenshots = secondary ? directory : 'docs/design/chat/live';
+  await mkdir(screenshots, { recursive: true });
+  await page.screenshot({ path: `${screenshots}/workspace-${width}.png`, fullPage: true });
+  console.log(`PASS browser chat ${width}px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token ${firstTokenMs} ms, completion ${completeMs} ms, browser journey ${Math.round(performance.now() - start)} ms; screenshot ${screenshots}/workspace-${width}.png`);
 }

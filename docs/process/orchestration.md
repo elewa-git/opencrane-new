@@ -18,7 +18,7 @@ This is how OpenCrane 2 gets built day to day. The [standards](standards.md) say
 ## One change, start to finish
 
 1. **Prompt.** Write a self-contained prompt file: the outcome, the files in scope, the gates, and what the final message must report.
-2. **Worktree.** Parallel builders each get their own worktree and branch with their own `npm ci`; one builder per worktree.
+2. **Worktree.** Parallel builders each get their own worktree and branch with their own `npm ci`; one builder per worktree. For live journeys, claim a secondary id with `infra/dev-stack/claim.sh`, export its output as `DEV_STACK_ID`, and release it with `infra/dev-stack/down.sh` when finished. See the [parallel stack instructions](../../infra/dev-stack/README.md#parallel-journeys). Only two secondary stacks may run beside the stable owner stack; if both are claimed, queue. Never take over or restart the owner stack for a feature task.
 3. **Build.** Run `tools/fleet/codex-task.sh <name> <worktree> <prompt> [effort] [model]`.
 4. **Review.** A different model reviews the diff using [`agents/review.md`](agents/review.md). At most two passes; if blockers remain after the second, hold the change and ask the owner.
 5. **Gates.** `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run check:events`, plus the web build and tests.

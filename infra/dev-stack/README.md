@@ -14,10 +14,88 @@ infra/dev-stack/down.sh
 `up` always runs the core journey. `--fresh` first stops this stack, deletes its
 three Compose volumes, computer namespace and generated service credentials, then provisions
 from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
-Plain `up` reuses data and running processes; `down` retains data and credentials.
+Plain `up` reuses data and running processes; owner `down` retains data and credentials.
+Secondary `down --id` deletes that stack’s volumes, namespaces, admission policies
+and generated directory, releasing its claim. Failed starts retain the claim for diagnosis.
 These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
 own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
-Run one stack per host. The scripts serialise operations with `flock`.
+Run at most three stacks per host: the stable owner and secondary ids `1` and `2`.
+Operations use a separate `flock` per id; different stacks run concurrently.
+
+## Parallel journeys
+
+The default id, `owner`, keeps the existing directory, project, ports, data and
+Tailscale Serve endpoint. Never transfer its ownership marker for a feature journey.
+Use the command interface below from each worktree, after `npm ci`:
+
+```sh
+stack_id=$(infra/dev-stack/claim.sh) || exit 1
+export DEV_STACK_ID="$stack_id"
+# Point to the existing PAT file when this worktree has no .keys directory.
+export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
+infra/dev-stack/up.sh --fresh
+infra/dev-stack/status.sh
+infra/dev-stack/journey.sh
+infra/dev-stack/down.sh
+```
+
+`up` includes the core journey. Every command also accepts `--id 1` or `--id 2`,
+overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
+`claim.sh` prints only a free secondary id, or exits non-zero when both are claimed.
+It reserves the directory and worktree marker while holding that id’s non-blocking
+lock. Claims survive task exits and failed starts; they are released by successful
+`down --id`. Never delete or transfer another worktree’s marker to take its slot.
+Two tasks in the same worktree can claim different ids. After a crash, run `status`
+and `down` from the recorded worktree. Locks close before detached servers start,
+so those servers cannot keep an operation lock held after the command finishes.
+
+| Resource | Owner (default) | Id 1 | Id 2 |
+| --- | --- | --- | --- |
+| Directory below `~/.config/opencrane/` | `dev-stack` | `dev-stack-1` | `dev-stack-2` |
+| Compose project | `opencrane-dev` | `opencrane-dev-1` | `opencrane-dev-2` |
+| Computer namespace | `opencrane-dev` | `opencrane-dev-1` | `opencrane-dev-2` |
+| PostgreSQL / NATS / OpenFGA | 55433 / 44222 / 48080 | 25100 / 25101 / 25102 | 25200 / 25201 / 25202 |
+| MinIO API / console | 49000 / 49001 | 25103 / 25104 | 25203 / 25204 |
+| Server / browser | 48000 / 44200 | 25105 / 25106 | 25205 / 25206 |
+| Model gateway / decision / readiness / stub | 43000–43003 | 25107–25110 | 25207–25210 |
+
+Relay namespaces append `-gateway`. Each stack has its own namespace-only lifecycle
+ServiceAccount and RBAC, NATS CA/certificates/NKeys, PostgreSQL passwords (including
+OpenFGA’s database role), MinIO password, session encryption key and lifecycle
+signing key. Compose prefixes its networks and volumes with the selected project.
+Secondary directories and ports are fixed by id; conflicting overrides are refused.
+The fixed secondary blocks are below this box’s ephemeral range (32768–60999),
+so outgoing Kubernetes/database sockets cannot claim a future listener.
+Claims probe the whole port block on IPv4 and IPv6 and skip occupied slots.
+Startup checks every port before starting services and refuses foreign listeners.
+Existing listeners are reused only when owned by this stack’s recorded process
+groups or running Compose containers.
+
+Secondary model processes share their NATS container’s network namespace. The
+pinned Node runtime image is already used by `apps/computer/Dockerfile`; no new
+runtime package is added. Docker publishes every secondary host port on loopback.
+The relay reaches the gateway through its private `k3d-ocn` container address;
+secondary startup/shutdown never changes host firewall rules. The existing owner
+keeps its host gateway and firewall unchanged.
+
+Secondary browsers use `http://127.0.0.1:25106` or `http://127.0.0.1:25206`.
+They never call Tailscale Serve. Sessions remain HttpOnly/SameSite=Lax; local HTTP
+uses non-Secure cookies with distinct names per id because cookies ignore ports.
+Real Zitadel login, organisation pinning, CSRF checks and PKCE still apply. Browser
+contexts and screenshots are separate; secondary screenshots live in their private
+generated directories. No paid model provider is used.
+
+The limit is **owner plus two journey stacks on the 8-core, 16 GiB box**. Each
+secondary caps Compose services to 0.5 CPU each and 256–512 MiB each (models: one CPU / 768 MiB), Angular to two
+build workers and a 768 MiB JS heap, other Node processes to 256 MiB JS heaps, and
+computers to four Pods / 2 GiB of memory limits / four 1 GiB PVCs. The warm pool
+stays at zero. These are dev qualification limits, not production sizing. Run one
+journey per stack, avoid concurrent repository builds while qualifying, and tear
+down secondaries when finished. Exhausted slots queue instead of creating a fourth
+stack; do not work around the limit with custom directories or ports.
+
+The [parallel qualification receipt](../../docs/process/parallel-stacks-evidence.md)
+records concurrent journeys, owner continuity, failures and teardown evidence.
 
 ## Services and identities
 
@@ -30,7 +108,7 @@ All published ports bind to `127.0.0.1`: PostgreSQL 55433, NATS 44222, OpenFGA
 48080, MinIO 49000/49001, server 48000 and Angular 44200. Container listeners
 are inside the Compose network; no gRPC, metrics or NATS monitoring port is
 published. `pg-test` keeps 55432. Override the corresponding `*_PORT` variables
-when generating a new stack; see `config.ts`. Clients receive URLs via environment
+when generating a new owner stack; secondary port blocks are fixed in `identity.ts`. Clients receive URLs via environment
 and a generated Angular proxy file; application code has no Compose branch.
 
 `npm run provision` uses only the command NKey/TLS identity. The server receives
@@ -86,6 +164,14 @@ The app uses code + S256 PKCE and client-secret POST authentication, with redire
 `https://ocn-dev.tail00285e.ts.net/` after logout. The server pins the resource-owner
 claim to this organisation, requesting `urn:zitadel:iam:user:resourceowner`.
 
+Every owner `up` runs `zitadel-setup.ts --restore-owner-app` under the shared
+Zitadel setup lock. This idempotent guard restores development mode to `false`
+and permits only the two owner HTTPS URIs above, preserving other OIDC settings.
+The same command can repair the pinned owner app without starting services or
+reading owner credentials; its output contains only ids and before/after redirects
+and development mode. It requires the management PAT via `ZITADEL_KEY_FILE`
+(default `.keys/.zitadel-key`), as secondary setup does.
+
 The setup adds one role-free external user grant for subject `378127409465593948`
 to the OpenCrane project. It does not create or change that user, grant the project to
 the WeOwnAI organisation, or change either organisation. The login request remains
@@ -122,7 +208,7 @@ the client secret by `OIDC_CLIENT_SECRET_FILE`; the launcher reads it and uses
 `libs/auth`'s existing environment-variable indirection. Neither the PAT nor test
 passwords are supplied to the server. Run setup before first bring-up. A different
 checkout must first stop the old stack and deliberately transfer `stack-owner`;
-normal scripts continue to refuse a foreign owner marker.
+normal scripts continue to refuse a foreign owner marker. Feature tasks use secondary ids instead.
 
 Open `/` on the tailnet URL and choose **Continue with single sign-on**. Credentials
 are entered only on Zitadel. **Sign out** submits a native form POST. The server
@@ -157,6 +243,25 @@ It checks discovery reachability, uses minted five-minute **dev-only** cookies,
 prints **FAIL sign-in** and exits non-zero even if the service checks pass.
 `up.sh` and `journey.sh` always use real login; they never silently take this path.
 
+For secondary bring-up, `zitadel-setup.ts` checks organisation
+`393311211338337681` and existing project `393311211539664273`. Under a shared
+setup lock, each id creates or reuses its own app, `OpenCrane 2 Dev CI <id>`, and
+users `opencrane2-dev-ci-<id>-owner` and `opencrane2-dev-ci-<id>-member`.
+The owner app and users are never modified, and no owner credentials are read.
+Secondary users need no Zitadel administration role; product roles come from events.
+Each secondary app permits only its id's exact callback and logout URIs from the
+table above, with no globs. Development mode allows HTTP, as required by
+[Zitadel’s app settings](https://zitadel.com/docs/guides/manage/console/applications-overview).
+Existing secondary apps with unexpected redirects are refused without mutation.
+
+The secondary app secret and randomly generated user passwords persist in
+`~/.config/opencrane/dev-stack-ci-<id>/` (0700), with files at 0600. Setup copies
+only those credentials to its disposable secondary directory (also 0600), and
+configuration uses the secondary client ID. `down --id` removes the disposable
+stack but retains these private credentials and cloud identities for reuse.
+Missing retained credentials fail closed; setup never rotates existing secrets.
+No other organisation, project, grant or instance setting is changed.
+
 ## Qualification
 
 The journey uses running services, never mocks: an HTTP join reaches SQL and
@@ -180,6 +285,7 @@ npm run check:events
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test
 npm run build -w apps/web
 npm run test -w apps/web -- --watch=false
+node --experimental-strip-types --test infra/dev-stack/*.test.ts
 npx tsc -p infra/dev-stack/tsconfig.json
 shellcheck infra/dev-stack/*.sh
 infra/dev-stack/up.sh --fresh
@@ -240,5 +346,9 @@ mid-stream and its partial text survives reload. Both 1280px and 390px use real
 sign-in; live screenshots go to `docs/design/chat/live/`. The journey records
 first-token and completion times, including a message sent to a suspended computer.
 The stub spaces deltas by 500ms
-so Chromium can observe intermediate renders. No OpenAI credentials are read.
+so Chromium can observe intermediate renders. For the secondary journey’s cancellation
+prompt (`Say hello again.`), the stub pauses for up to 30 seconds after its first
+delta, ending the wait when cancelled. This makes the real browser Stop check
+predictable under concurrent load; the same partial-text assertion still applies. Their overall journey timeout is ten minutes, with 90 seconds for event and
+computer readiness under concurrent load (owner: 30 seconds). No OpenAI credentials are read.
 The receipt is [chat UI evidence](../../docs/process/chat-ui-evidence.md).

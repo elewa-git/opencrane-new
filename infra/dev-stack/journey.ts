@@ -16,6 +16,7 @@ import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage
 import { browserChatJourney } from './browser-chat.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
+import { namespace, secondary } from './identity.ts';
 import { base, directory, readEnv, root, authEnv } from './config.ts';
 import { SandboxClient } from '../../apps/ops/src/kubernetes.ts';
 import { suspendComputer, type ComputerState } from '../../apps/ops/src/lifecycle.ts';
@@ -36,7 +37,7 @@ let chat: Awaited<ReturnType<typeof chatJourney>> | undefined;
 let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
 const identities = new Map<string, { sub: string; cookie: string }>();
 async function until(check: () => Promise<boolean> | boolean, label: string) {
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + (secondary ? 90_000 : 30_000);
   while (!(await check())) {
     if (Date.now() > deadline) throw new Error(`Timed out: ${label}`);
     await delay(50);
@@ -165,7 +166,7 @@ try {
   const replyMs = await chat.message();
   await chat.reconnect();
   console.log(`PASS joined member HTTP message → streamed Codex/stub reply → projection; ${replyMs.completeMs} ms (first token ${replyMs.firstTokenMs} ms); browser reconnect no duplicates`);
-  const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['-n', namespace, ...args], { cwd: root, timeout: 180_000 });
+  const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args], { cwd: root, timeout: 180_000 });
   await runKube('exec', computer!.computer_id, '--', 'node', '-e',
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
   const kube = new SandboxClient(`${directory}/computer-kubeconfig.json`, namespace);
@@ -217,7 +218,7 @@ try {
   const page = await fetch(`${origin}/org/integrations`, { signal: AbortSignal.timeout(15_000) });
   assert.equal(page.status, 200);
   assert((await page.text()).includes('<app-root'));
-  console.log('PASS tailnet HTTPS web page');
+  console.log(secondary ? 'PASS loopback HTTP web page' : 'PASS tailnet HTTPS web page');
 } finally {
   ws?.terminate();
   chat?.close();
