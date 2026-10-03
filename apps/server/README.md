@@ -259,3 +259,27 @@ defaults to `http://127.0.0.1:43001`. On a fresh stream the model process record
 `installation-default` as its explicit personal paying group; installation can
 override that seed with `DEFAULT_PAYING_GROUP_ID`. Stored defaults always win.
 See the [budget contract](../../libs/models/README.md#monthly-budgets-p3-13).
+
+### Permission-scoped audit (P3-19)
+
+`GET /api/conversations/:conversationId/history` requires live membership,
+conversation read permission and returns only that requester's actions.
+`GET /api/org/history` requires live Owner/Admin membership and returns safe
+organisation metadata. Neither route decrypts text or approval details, nor returns
+credential references, bearer material, raw arguments or gateway diagnostics.
+Membership/conversation stream heads and OpenFGA receipts fence each read; lag,
+outage or a changed scope refuses it. No audit read scans global event history.
+
+Filters: `requestId`, `turnId`, `decision` (`allow`, `ask`, `deny`) and `before`
+(an exclusive event-position cursor). Pages contain at most 50 anchors with all
+relevant evidence; decision and observed outcome are separate. An allowed request
+without an observation reads `unknown`, never success. The
+[shared response contract](../../libs/protocol/src/audit.ts) is strict and permits
+only fixed readable reasons. Run the `audit` ops worker alongside the existing
+projections. API startup enables these reads with the existing event store,
+database, member feed and OpenFGA settings; no conversation encryption key is needed.
+
+Tests: `PG_TEST_URL=… npx vitest run apps/server/test/integrations.test.ts
+apps/server/test/audit-browser.test.ts`. Browser evidence covers 1280/390px and
+Loading/Empty/Unavailable/Outcome unknown with keyboard filters. Fresh-install
+qualification is NOT RUN; this change does not alter or operate a dev stack.

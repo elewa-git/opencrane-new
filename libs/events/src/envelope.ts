@@ -13,6 +13,7 @@ import { z } from 'zod';
 // none are required, because not every event has all five.
 export const correlationIdsSchema = z
   .object({
+    request: z.string().regex(/^[\w:.-]{1,300}$/u).optional(),
     conversation: z.string().min(1).optional(),
     turn: z.string().min(1).optional(),
     permit: z.string().min(1).optional(),

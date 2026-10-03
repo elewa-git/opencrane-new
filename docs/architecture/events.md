@@ -67,6 +67,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
 | `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
+| `credential-<lease>` | request-bound credential release | released |
+| `egress-<request>` | observed egress | observed |
+| `gateway-<request>` | safe gateway evidence | observation recorded |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
 | `grant-<resource>` | shared resource (type and id) | given, revoked |
 | `budget-<silo>` | silo budget (all ceilings) | ceiling set, reserved, settled, period started |
@@ -81,6 +84,9 @@ If a stale read slips past validation, the expected-version check rejects the ap
 
 | Event | Producer | Projections | Reactions |
 | --- | --- | --- | --- |
+| `credential.released` | credential broker (P3-8; fixture contract) | audit lease metadata only | none; never release on replay |
+| `egress.observed` | egress observer (P3-18; fixture contract) | audit | none; never dispatch on replay |
+| `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
 | `decision.recorded` | ext_authz | audit; verified model budget refusals also feed conversations with only turn id and reason | none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
@@ -381,3 +387,28 @@ and revocation for that resource uses the same stream, across all grantees. The
 OpenFGA reaction rejects other subjects, so the existing per-stream worker order
 prevents a delayed grant from overtaking revocation. Event receipts make later
 redelivery harmless; chronological replay produces the same denied state.
+
+### Permission-scoped audit (P3-19)
+
+`decision.recorded` is admission, not an observed outcome. Model reservations carry
+`modelCall.requestId`; the decision maps that request to its permit. Settlement and
+observations join by permit. The optional envelope `correlation.request` lets
+forthcoming approvals, credential releases, MCP publication/drift, egress and
+computer takeover share the request/conversation/turn; approval lifecycle events
+may instead join by `approvalId`. Computer-wide evidence may carry only the
+conversation/turn pair: audit reads fetch that indexed pair and associate records
+without another request/permit, refusing a mismatched requester. Owning feature tickets emit those records and add
+integration assertions. P3-19's forthcoming-family records are typed fixtures only.
+
+`gateway.observation_recorded` retains only a generated/validated UUID, a bounded
+outcome and a reason code. JWT failure before ext_authz asserts no requester,
+conversation or turn. Safe JSONL evidence survives an event-store outage for later
+ingest. No raw gateway log, timestamp, token, body or argument enters that file.
+The gateway's fractional timestamp defect is ignored: ids join records and event
+positions show append order, without claiming causal order between streams.
+
+The budget reaction raises one `security.alert_raised` for an unmatched model
+observation, including a reservation without an allowing decision. Missing usage
+keeps the reservation and outcome uncertain. Projection replay dispatches nothing,
+releases no credential and settles no money. See the
+[audit read contract](../../apps/server/README.md#permission-scoped-audit-p3-19).

@@ -1,0 +1,14 @@
+:host { display: block; }
+.history { max-width: 1100px; margin: auto; padding: 24px; color: #22343a; }
+header, .results { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; }
+h1 { margin: 0; font-size: 28px; } h2 { font-size: 17px; overflow-wrap: anywhere; }
+header p, li span { color: #52646c; } form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 24px 0; }
+label { display: grid; gap: 6px; flex: 1 1 180px; } input, select, button, .back { min-height: 44px; box-sizing: border-box; font: inherit; }
+input, select { width: 100%; padding: 8px; border: 1px solid #8c9ba3; border-radius: 6px; background: white; }
+button { cursor: pointer; padding: 8px 16px; background: #fff; color: #234c58; border: 1px solid #8c9ba3; border-radius: 6px; }
+button[aria-disabled=true] { opacity: .6; cursor: wait; } .back { display: inline-flex; align-items: center; }
+article { margin: 20px 0; padding: 20px; border: 1px solid #ccd6db; border-radius: 8px; background: #fff; }
+dl { margin: 16px 0; } dl div { display: grid; grid-template-columns: 130px 1fr; padding: 5px 0; gap: 10px; }
+dt { color: #52646c; } dd { margin: 0; overflow-wrap: anywhere; } ol { padding-left: 20px; } li { padding: 8px; overflow-wrap: anywhere; } li span { display: block; } li p { margin: 6px 0; }
+:focus-visible { outline: 3px solid #087d94; outline-offset: 3px; }
+@media (max-width: 600px) { .history { padding: 16px; } article { padding: 14px; } dl div { grid-template-columns: 1fr; gap: 2px; } form button, header button { width: 100%; } }

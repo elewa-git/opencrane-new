@@ -99,3 +99,17 @@ The MCP catalogue also stores the reviewed connection/tool revision policy. Its
 TypeScript fold is shared with decision reads; SQL only stores the result.
 Legacy name-only modes never grant execution. Both ordinary and online catalogue
 rebuilds retain this policy; replay does not dispatch tools.
+
+`auditTrail` stores a metadata allowlist in `audit_entries`, indexed by silo,
+request, permit, approval, conversation, requester and turn. `readAudit` reads
+50 indexed anchors then their relevant request/permit/approval and conversation/turn streams; it never
+reads the event store. Decisions and observed outcomes remain separate, including
+unknown outcomes. Private text, approval details, connection material, raw
+arguments, destinations and gateway timestamps are excluded at projection time.
+
+Run `node --experimental-strip-types apps/ops/src/worker.ts audit` with the usual
+projection settings. `npm run replay -- audit --verify` replays metadata under the
+runner's lock in one transaction, preserving table grants and rolling back on
+failure. Ordinary `ProjectionRunner.rebuild(auditTrail)` also supports drop/rebuild
+with readers stopped. Neither path runs reactions. Test:
+`PG_TEST_URL=… npx vitest run libs/projections/test/audit.test.ts`.

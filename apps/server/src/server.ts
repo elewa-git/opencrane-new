@@ -9,12 +9,14 @@ import { registerMemberRoutes, type MembershipOptions } from './members/routes.t
 import { registerIntegrationRoutes, type IntegrationOptions } from './integrations/routes.ts';
 import { registerComputerRoutes, type ComputerOptions } from './computers/routes.ts';
 
+import { registerAuditRoutes, type AuditOptions } from './audit/routes.ts';
 import { registerChatRoutes, type ChatOptions } from './chat/routes.ts';
 
 export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
+  audit?: AuditOptions;
   chat?: ChatOptions;
   integrations?: IntegrationOptions;
   computers?: ComputerOptions;
@@ -51,6 +53,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerIntegrationRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
+  registerAuditRoutes(app, authConfig, options.audit);
 
   return app;
 }

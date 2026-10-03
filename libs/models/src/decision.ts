@@ -144,7 +144,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model);
       contextDigest = call.contextDigest;
       // No client token count is trusted; reserve the full supported context at long rates.
-      const reservation = await actor.reserve(call, reservationCents(body.model, body.max_output_tokens), fresh);
+      const reservation = await actor.reserve({ ...call, requestId }, reservationCents(body.model, body.max_output_tokens), fresh);
       await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {
         // No permit has left this process, so the gateway cannot have dispatched it.
         await actor.releaseUndispatched(reservation);

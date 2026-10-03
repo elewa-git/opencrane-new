@@ -14,7 +14,7 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { computers, connectComputers, connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
+import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { computersResponseSchema, integrationsResponseSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
@@ -86,6 +86,7 @@ beforeEach(async () => {
   streamSequences.clear();
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('integration-test', { level: 'silent' }));
   await runner.initialise(members);
+  await runner.initialise(auditTrail);
   await runner.initialise(budgets);
   actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'personal-default');
   await runner.run(budgets);
@@ -141,7 +142,7 @@ beforeEach(async () => {
   await writeFile(`${keyDirectory}/key.pem`, key.privateKey, { mode: 0o600 });
   tokens = await tokenIssuer({ privateKeyPath: `${keyDirectory}/key.pem`, issuer: 'https://lifecycle.test/' });
   decision = await startDecision(actor, { jwks: tokens.jwks, issuer: 'https://lifecycle.test/' }, authorisation.binding);
-  app = buildServer(config, { integrations: { silo: 'test', store: nats.store, feed, catalogue, budget: { decisionUrl: decision.url, tokens }, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
+  app = buildServer(config, { audit: { silo: 'test', store: nats.store, db: pgDb(dbs.queue), feed, binding: authorisation.binding }, integrations: { silo: 'test', store: nats.store, feed, catalogue, budget: { decisionUrl: decision.url, tokens }, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
     now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
 }, 30_000);
@@ -492,4 +493,55 @@ it.each(['computer', 'membership', 'expired'] as const)('keeps budget edit autho
     expect(actor.state.ceilingCents).toBe(change === 'computer' ? 30000 : 20000);
     if (change !== 'computer') expect(await nats.store.head('budget-test')).toBe(budgetHead);
   } finally { intercepted.mockRestore(); }
+});
+
+
+it('serves safe admin changes and requester actions while refusing foreign users, silos and stale authority', async () => {
+  const created = fixture('conversation.created', 'conversation-private', { conversationId: 'private', assistantId: 'personal-alice', createdBy: 'alice', mode: 'agent_session' });
+  await append(created); await authorisation.handler.handle(created, pgDb(dbs.queue));
+  await append(fixture('decision.recorded', 'decision-safe-request', { requestId: 'safe-request', conversationId: 'private', turnId: 'turn', requesterId: 'alice',
+    outcome: 'deny', reason: 'request_refused' }));
+  await append(fixture('approval.decided', 'approval-private', { reason: 'private-approval-canary' }));
+  await append(fixture('message.posted', 'conversation-private-text', { ciphertext: Buffer.from('private-text-canary').toString('base64') }));
+  await runner.run(auditTrail);
+  const url = '/api/conversations/private/history';
+  for (const [sub, status] of [['oidc-alice', 200], ['oidc-amina', 403], ['oidc-bob', 403], ['oidc-mallory', 403]] as const) {
+    const response = await app.inject({ url, headers: headers(sub) });
+    expect(response.statusCode).toBe(status);
+    expect(response.body).not.toContain('canary');
+    if (status === 200) expect(response.json()).toMatchObject({ rows: [{ requestId: 'safe-request', decision: 'deny', outcome: 'not_dispatched' }] });
+  }
+  for (const [sub, status] of [['oidc-alice', 200], ['oidc-amina', 200], ['oidc-bob', 403]] as const) {
+    const response = await app.inject({ url: '/api/org/history', headers: headers(sub) });
+    expect(response.statusCode).toBe(status); expect(response.body).not.toContain('canary');
+  }
+  expect((await app.inject({ url })).statusCode).toBe(401);
+  expect((await app.inject({ url, headers: headers('oidc-alice', 'foreign') })).statusCode).toBe(403);
+  expect((await app.inject({ url: '/api/org/history?arguments=raw-canary', headers: headers('oidc-alice') })).statusCode).toBe(400);
+  const readStream = nats.store.readStream.bind(nats.store);
+  const scoped = vi.spyOn(nats.store, 'readStream').mockImplementation((subject, ...args) => {
+    expect(subject).not.toMatch(/[* >]/u); return readStream(subject, ...args);
+  });
+  try { expect((await app.inject({ url, headers: headers('oidc-alice') })).statusCode).toBe(200); } finally { scoped.mockRestore(); }
+  await append(fixture('member.removed', 'member-alice', { memberId: 'alice' }));
+  // Refuse without waiting for OpenFGA's projection.
+  expect((await app.inject({ url, headers: headers('oidc-alice') })).statusCode).toBe(403);
+  expect((await app.inject({ url: '/api/org/history', headers: headers('oidc-alice') })).statusCode).toBe(403);
+});
+
+it('never logs private audit filters, tokens or dependency error bodies', async () => {
+  const { Writable } = await import('node:stream');
+  let logs = '';
+  const sink = new Writable({ write(chunk: Buffer, _encoding, callback) { logs += chunk.toString(); callback(); } });
+  vi.stubEnv('LOG_LEVEL', 'info');
+  const logged = buildServer(config, { logDestination: sink, audit: { silo: 'test', store: nats.store, db: pgDb(dbs.queue), feed, binding: authorisation.binding } });
+  const failed = vi.spyOn(nats.store, 'head').mockRejectedValue(new Error('private-dependency-canary'));
+  try {
+    const reply = await logged.inject({ url: '/api/org/history', headers: { ...headers('oidc-alice'), authorization: 'Bearer private-bearer-canary' } });
+    expect(reply.statusCode).toBe(503); expect(reply.body).not.toContain('canary');
+    const invalid = await logged.inject({ url: '/api/org/history?arguments=private-arguments-canary&review=private-review-canary', headers: headers('oidc-alice') });
+    expect(invalid.statusCode).toBe(400);
+    await logged.inject({ url: '/api/conversations/private-conversation-canary/history?requestId=private-request-canary', headers: headers('oidc-alice') });
+    expect(logs).not.toContain('canary');
+  } finally { failed.mockRestore(); await logged.close(); vi.unstubAllEnvs(); }
 });

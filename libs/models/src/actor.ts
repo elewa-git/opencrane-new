@@ -129,7 +129,9 @@ export class BudgetActor {
       const validCost = d.usage ? r && d.usage.priceTableId === r.call.priceTableId &&
         models.some(row => row.id === d.tool && row.priceTableId === r.call.priceTableId) &&
         d.costCents === costCents(d.tool, d.usage.inputTokens, d.usage.outputTokens, d.usage.cachedInputTokens, d.usage.cacheWriteTokens, r.call.priceTableId) : d.outcome === 'error' && d.costCents === 0;
-      if (!r || !validCost || d.computerId !== r.call.computerId || d.tool !== r.call.model) throw new Error('Usage does not match reservation');
+      if (!r || !validCost || d.computerId !== r.call.computerId || d.tool !== r.call.model || !(await this.permitted(d.permitId, r.call.requestId))) {
+        await this.alert(d.permitId); return;
+      }
       if (r.settledCents !== undefined) {
         if (r.settledCents !== d.costCents) throw new Error('Conflicting settlement');
         return;
@@ -138,9 +140,12 @@ export class BudgetActor {
       await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: d.costCents });
     });
   }
-  async effect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
+  effect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
+    return this.serial(() => this.recordEffect(id, usage, outcome));
+  }
+  private async recordEffect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
     const r = this.state.reservations.find(r => r.id === id);
-    if (!r) throw new Error('Unmatched gateway reservation');
+    if (!r || !(await this.permitted(id, r.call.requestId))) { await this.alert(id); return; }
     const knownTariff = models.some(row => row.id === r.call.model && row.priceTableId === r.call.priceTableId);
     const type = knownTariff && (usage || outcome === 'error') ? 'effect.observed' : 'effect.uncertain';
     const eventId = `${id}:${type}`;
@@ -153,6 +158,23 @@ export class BudgetActor {
     const result = await this.store.append({ event: envelope(this.silo, `effect-${id}`, type, payload, eventId),
       expectedSequence: rows.at(-1)?.sequence ?? 0 });
     if (result.status !== 'appended') throw new Error('Effect append failed');
+  }
+  private async permitted(permitId: string, requestId?: string) {
+    if (!requestId) return true; // Reservations before P3-19 did not carry the request id.
+    return (await history(this.store, `decision-${requestId}`, this.silo)).some(row => {
+      const d = data(row.event);
+      return row.event.type === 'decision.recorded' && d['outcome'] === 'allow' && d['permitId'] === permitId;
+    });
+  }
+  private async alert(permitId: string) {
+    const subject = `security-${permitId}`, id = `${permitId}:unmatched`;
+    const rows = await history(this.store, subject, this.silo);
+    if (rows.some(row => row.event.id === id)) return;
+    const event = { ...envelope(this.silo, subject, 'security.alert_raised', {
+      alertId: id, severity: 'high', reason: 'effect_without_permit',
+    }, id), correlation: { permit: permitId } };
+    const result = await this.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
+    if (result.status !== 'appended') throw new Error('Security alert unavailable');
   }
   private monthStart() { return `${this.now().toISOString().slice(0, 7)}-01T00:00:00.000Z`; }
   period() {

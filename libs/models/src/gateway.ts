@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import type { BudgetActor } from './actor.ts';
+import { envelope, history, type BudgetActor } from './actor.ts';
 
 function logNumber(line: string, field: string): number | undefined {
   const value = new RegExp(`\\b${field}=(\\d+)`, 'u').exec(line)?.[1];
@@ -18,7 +18,6 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const path = `/mcp/${route.serverId}/${route.connectionId}`;
   return { name: `mcp-${route.serverId}-${route.connectionId}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
     policies: {
-      retry: { attempts: 1, codes: [] },
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
         location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
       extAuthz: { host: new URL(decisionUrl).host,
@@ -37,11 +36,11 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
     frontendPolicies: { accessLog: { add: { reservation: 'extauthz.reservationId',
       inputTokens: 'llm.inputTokens', outputTokens: 'llm.outputTokens',
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
-      cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)' } } },
+      cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)',
+      auditId: 'request.headers["x-audit-id"]' } } },
     routes: [...mcpRoutes.map(route => mcpRoute(route, decisionUrl, issuer)), { name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
       policies: {
-        retry: { attempts: 1, codes: [] },
-        jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
+          jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
           location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
         extAuthz: { host: decision.host, includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id'],
           includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
@@ -54,6 +53,7 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
   };
 }
 const observation = z.union([
+  z.object({ id: z.uuid(), outcome: z.enum(['error', 'unknown']), reason: z.enum(['jwt_failed', 'dispatch_denied', 'observation_missing']) }).strict(),
   z.object({ id: z.uuid(), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(),
     cachedInputTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional() }).strict(),
   z.object({ id: z.uuid(), outcome: z.literal('error') }).strict(),
@@ -67,9 +67,31 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
   // A killed writer can leave one incomplete final line. Its reservation stays charged.
   for (const line of text.split('\n').slice(0, -1)) {
     const value = observation.parse(JSON.parse(line));
-    if ('outcome' in value) await actor.effect(value.id, undefined, value.outcome);
+    if ('reason' in value) {
+      const subject = `gateway-${value.id}`, rows = await history(actor.store, subject, actor.silo);
+      const eventId = `${value.id}:gateway`;
+      if (rows.some(row => row.event.id === eventId)) continue;
+      const event = envelope(actor.silo, subject, 'gateway.observation_recorded', { requestId: value.id, outcome: value.outcome, reason: value.reason }, eventId);
+      if ((await actor.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status !== 'appended') throw new Error('Gateway evidence unavailable');
+    } else if ('outcome' in value) await actor.effect(value.id, undefined, value.outcome);
     else { const { id, ...usage } = value; await actor.effect(id, usage); }
   }
+}
+function gatewayObservation(line: string) {
+  const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
+  const status = logNumber(line, 'http\\.status');
+  if (!id) {
+    if (status === undefined) return undefined;
+    return { id: z.uuid().safeParse(/\bauditId="([^"]+)"/u.exec(line)?.[1]).data ?? randomUUID(),
+      outcome: status >= 400 ? 'error' : 'unknown', reason: status === 401 ? 'jwt_failed' : status >= 400 ? 'dispatch_denied' : 'observation_missing' };
+  }
+  const input = logNumber(line, 'inputTokens'), output = logNumber(line, 'outputTokens');
+  if (input !== undefined && output !== undefined) return { id, inputTokens: input, outputTokens: output,
+    cachedInputTokens: logNumber(line, 'cachedInputTokens') ?? 0, cacheWriteTokens: logNumber(line, 'cacheWriteTokens') ?? 0 };
+  return definiteRejection(line, status) ? { id, outcome: 'error' } : undefined;
+}
+function definiteRejection(line: string, status?: number) {
+  return status !== undefined && status >= 400 && status < 600 && status !== 408 && status !== 504 && !/\berror=/u.test(line);
 }
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string; mcpRoutes?: McpRoute[] }) {
@@ -84,16 +106,7 @@ export async function startGateway(options: { binary: string; configFile: string
   const lines = createInterface({ input: child.stdout });
   // Adapted from S0.1c: never persist raw gateway diagnostics, credentials or request bodies.
   lines.on('line', line => {
-    const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
-    const input = logNumber(line, 'inputTokens'), output = logNumber(line, 'outputTokens');
-    if (!id) return;
-    const cached = logNumber(line, 'cachedInputTokens'), cacheWrites = logNumber(line, 'cacheWriteTokens');
-    const status = logNumber(line, 'http\\.status') ?? 0;
-    // Gateway transport failures carry an error; timeout responses are ambiguous too.
-    const rejected = status >= 400 && status < 600 && status !== 408 && status !== 504 && !/\berror=/u.test(line);
-    const value = input !== undefined && output !== undefined ? { id, inputTokens: input, outputTokens: output,
-      cachedInputTokens: cached ?? 0, cacheWriteTokens: cacheWrites ?? 0 }
-      : rejected ? { id, outcome: 'error' } : undefined;
+    const value = gatewayObservation(line);
     if (!value) return;
     const parsed = observation.safeParse(value);
     if (!parsed.success) { failed = true; return; }

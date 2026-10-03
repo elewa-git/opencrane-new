@@ -1,6 +1,6 @@
 # Operator replay
 
-`@opencrane/ops` rebuilds the `members`, `mcp-catalogue`, `computers` and `budgets` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `mcp-catalogue`, `computers`, `budgets` and `audit` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -16,6 +16,7 @@ npm run replay -- members --dry-run
 npm run replay -- mcp-catalogue --dry-run
 npm run replay -- computers --dry-run
 npm run replay -- budgets --dry-run
+npm run replay -- audit --dry-run
 npm run replay -- openfga --dry-run
 ```
 
@@ -33,7 +34,13 @@ npm run replay -- members --verify
 npm run replay -- mcp-catalogue --verify
 npm run replay -- computers --verify
 npm run replay -- budgets --verify
+npm run replay -- audit --verify
 ```
+
+Audit replay rebuilds its metadata in a single transaction under the runner lock,
+without shadow tables or reactions. It preserves the table and its grants; failure
+rolls back both data and checkpoints. Run its worker with `node
+--experimental-strip-types apps/ops/src/worker.ts audit`.
 
 The normal projection runner and the tool share a PostgreSQL advisory lock. The
 tool replays the selected projection into shadow tables, compares them with the

@@ -1,3 +1,4 @@
+import { AuditScreen } from './audit/audit';
 import { ModelsScreen } from './models/models';
 import { ToolPolicyScreen } from './tool-policy/tool-policy';
 import { ChangeDetectionStrategy, Component, type OnInit, computed, inject, signal } from '@angular/core';
@@ -23,7 +24,7 @@ const STATE_EXAMPLES: ReadonlyArray<{ kind: SharedStateKind; name: string; messa
 ];
 
 @Component({
-  selector: 'app-root', imports: [SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen], templateUrl: './app.html', styleUrl: './app.css',
+  selector: 'app-root', imports: [SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush, host: { '[class.workspace-root]': 'workspacePage' },
 })
 export class App implements OnInit {
@@ -31,6 +32,8 @@ export class App implements OnInit {
   protected readonly workspacePage = globalThis.location.pathname === '/workspace';
   protected readonly orgPage = globalThis.location.pathname.startsWith('/org');
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(globalThis.location.pathname)?.[1];
+  protected readonly historyPage = globalThis.location.pathname === '/org/history';
+  protected readonly auditConversation = /^\/history\/([\w-]+)$/u.exec(globalThis.location.pathname)?.[1];
   protected readonly modelsPage = globalThis.location.pathname === '/org/models';
   protected readonly statesPage = globalThis.location.pathname.endsWith('/states');
   protected readonly examples = STATE_EXAMPLES;
@@ -49,7 +52,7 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     if (this.orgPage) this.ws.connect();
-    if (this.orgPage && !this.statesPage && !this.toolServer && !this.modelsPage) void this.load();
+    if (this.orgPage && !this.statesPage && !this.toolServer && !this.modelsPage && !this.historyPage) void this.load();
   }
 
   protected select(tab: Tab): void { this.selectedTab.set(tab); }

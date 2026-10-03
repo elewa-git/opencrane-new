@@ -60,7 +60,7 @@ export function reservationCents(model: string, outputBound: number, inputBound 
 export function data(event: EventEnvelope): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);
 }
-const callSchema = z.object({ model: z.string(), priceTableId: z.string().min(1), computerId: z.string(),
+const callSchema = z.object({ requestId: z.string().optional(), model: z.string(), priceTableId: z.string().min(1), computerId: z.string(),
   assistantId: z.string(), requesterId: z.string(), conversationId: z.string(), turnId: z.string(), threadId: z.string(), payingGroupId: z.string().optional(), contextDigest: z.string() }).strict();
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
