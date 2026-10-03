@@ -1,5 +1,8 @@
+import { grantStream } from '@opencrane/authz';
 import { viewFixture } from './support/view-fixture.ts';
 import { once } from 'node:events';
+import { createServer, request as httpRequest } from 'node:http';
+import { setTimeout as delay } from 'node:timers/promises';
 import { PassThrough, Duplex } from 'node:stream';
 import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
@@ -26,8 +29,8 @@ it('requires participation and an explicit desktop grant before opening an audit
     const refused = await app.inject({ method: 'POST', url, headers }); expect(refused.statusCode).toBe(403);
     const refusalId = refused.json<{ attemptId: string }>().attemptId;
     expect((await history(nats.store, `view-${refusalId}`, 'test')).map(r => r.event.type)).toEqual(['computer.view_refused']);
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'bob', granteeKind: 'member', grantedBy: 'owner' }, true);
     const bobHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'bob', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     expect((await app.inject({ method: 'POST', url, headers: bobHeaders })).statusCode).toBe(403);
     await append('conversation-chat', 'participant.added', { conversationId: 'chat', participantId: 'bob', addedBy: 'alice' });
@@ -76,7 +79,7 @@ it('bounds redemption of pre-issued tickets and rejects reuse without opening an
   const fixture = await viewFixture(() => { opened++; const writable = new PassThrough(); writable.resume(); return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable })); });
   const { app, config, append } = fixture, sockets: WebSocket[] = [];
   try {
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const headers = { origin: new URL(config.redirectUri).origin, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}`, 'x-opencrane-view': '1' };
     const tickets: string[] = [];
     for (let i = 0; i < 17; i++) {
@@ -86,7 +89,8 @@ it('bounds redemption of pre-issued tickets and rejects reuse without opening an
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const connect = (ticket: string) => new Promise<number>(resolve => {
       const ws = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket], { headers }); sockets.push(ws);
-      ws.on('error', () => undefined); ws.on('open', () => resolve(101)); ws.on('unexpected-response', (_request, reply) => { resolve(reply.statusCode!); ws.terminate(); });
+      ws.on('error', () => resolve(0)); ws.on('close', () => resolve(0)); ws.on('open', () => resolve(101));
+      ws.on('unexpected-response', (_request, reply) => { resolve(reply.statusCode!); ws.terminate(); });
     });
     expect(await connect(tickets[0]!)).toBe(101); expect(await connect(tickets[0]!)).toBe(403); expect(opened).toBe(1);
     const statuses = await Promise.all(tickets.slice(1).map(connect));
@@ -116,9 +120,9 @@ it('denies delayed grants, revoked tickets and audit outages, and closes viewers
     const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const url = '/api/conversations/chat/view';
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' });
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' });
     expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(403);
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const ticket = async () => {
       const response = await app.inject({ method: 'POST', url, headers }); expect(response.statusCode).toBe(200);
@@ -131,10 +135,10 @@ it('denies delayed grants, revoked tickets and audit outages, and closes viewers
       socket.on('open', () => { resolve(101); socket.close(); });
     });
     const issued = await ticket();
-    await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
     expect(await connect(issued.ticket)).toBe(403); expect(opened).toBe(0);
     expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(403);
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const unaudited = await ticket();
     const audit = vi.spyOn(nats.store, 'append').mockRejectedValue(new Error('Event store unavailable'));
     try { expect(await connect(unaudited.ticket)).toBe(403); expect(opened).toBe(0); }
@@ -172,7 +176,7 @@ it('rechecks authority after a delayed start audit before opening the desktop', 
     return persist(input);
   });
   try {
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const response = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
@@ -183,7 +187,7 @@ it('rechecks authority after a delayed start audit before opening the desktop', 
     socket.on('error', () => undefined); socket.on('open', () => socket.close());
     const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
     await auditing;
-    await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
     release(); await closed;
     expect(opened).toBe(0);
     await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 2);
@@ -199,7 +203,7 @@ it.each([false, true])('closes a ping flood independently of other viewers (paus
   });
   const { app, config, append, nats } = fixture, sockets: WebSocket[] = [];
   try {
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
@@ -234,7 +238,7 @@ it('counts pongs and close frames in the viewer output bound', async () => {
   let transport: Duplex | undefined, socket: WebSocket | undefined;
   app.server.on('upgrade', (_request, stream) => { transport = stream; });
   try {
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
@@ -264,3 +268,131 @@ it('counts pongs and close frames in the viewer output bound', async () => {
     const closed = once(socket, 'close'); transport.uncork(); expect((await closed)[0]).toBe(1013);
   } finally { transport?.uncork(); socket?.terminate(); await fixture.close(); }
 }, 120_000);
+
+it('admits bounded slow authority reads and keeps their desktop stream connected', async () => {
+  const readable = new PassThrough();
+  const fixture = await viewFixture(() => { const writable = new PassThrough(); writable.resume(); return Promise.resolve(Duplex.from({ readable, writable })); });
+  const eventDelay = 400; let socket: WebSocket | undefined;
+  const proxy = createServer((request, response) => {
+    const upstream = httpRequest(`${fixture.fga.apiUrl}${request.url}`, { method: request.method, headers: request.headers }, incoming => {
+      void delay(650).then(() => { response.writeHead(incoming.statusCode ?? 502, incoming.headers); incoming.pipe(response); });
+    });
+    upstream.on('error', () => { response.writeHead(502); response.end(); });
+    request.pipe(upstream);
+  });
+  const read = fixture.nats.store.readStream.bind(fixture.nats.store);
+  try {
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
+    const address = proxy.address(); if (!address || typeof address === 'string') throw new Error('Missing authority proxy');
+    fixture.binding.apiUrl = `http://127.0.0.1:${address.port}`;
+    // Delay the external event-store boundary, while retaining its real authority data.
+    vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(async function* (...args) {
+      if (args[0] === 'computer-assistant') await delay(eventDelay);
+      yield* read(...args);
+    });
+    const headers = { origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const response = await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+    expect(response.statusCode).toBe(200);
+    const server = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
+    socket = new WebSocket(`${server.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', response.json<{ ticket: string }>().ticket], { headers });
+    socket.on('error', () => undefined); await once(socket, 'open');
+    await delay(3500);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    const display = once(socket, 'message'); readable.write(Buffer.from('RFB 003.008\n'));
+    expect((await display)[0]).toEqual(Buffer.from('RFB 003.008\n'));
+  } finally {
+    socket?.terminate(); vi.restoreAllMocks(); proxy.closeAllConnections(); await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();
+  }
+}, 30_000);
+
+it('checks new authority events without replaying an unchanged computer history', async () => {
+  const fixture = await viewFixture(() => Promise.resolve(new PassThrough()));
+  const { app, append, nats, config } = fixture;
+  try {
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    for (let index = 0; index < 12; index++) await append('computer-assistant', 'computer.turn_closed', {
+      assistantId: 'assistant', computerId: 'desktop', conversationId: 'chat', turnId: `past-${index}`, threadId: 'thread',
+      requesterId: 'alice', task: 'chat_turn', status: 'completed',
+    });
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    const read = nats.store.readStream.bind(nats.store);
+    vi.spyOn(nats.store, 'readStream').mockImplementation(async function* (...args) {
+      for await (const row of read(...args)) {
+        if (args[0] === 'computer-assistant') await delay(100);
+        yield row;
+      }
+    });
+    expect((await app.inject(request)).statusCode).toBe(200);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    expect((await app.inject(request)).statusCode).toBe(403);
+  } finally { vi.restoreAllMocks(); await fixture.close(); }
+}, 30_000);
+
+it('refuses access when its previously checked authority history disappears', async () => {
+  const fixture = await viewFixture(() => Promise.resolve(new PassThrough()));
+  const { app, append, nats, config } = fixture;
+  try {
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    const read = nats.store.readStream.bind(nats.store);
+    vi.spyOn(nats.store, 'readStream').mockImplementation(async function* (...args) {
+      if (args[0] !== 'computer-assistant') yield* read(...args);
+    });
+    expect((await app.inject(request)).statusCode).toBe(403);
+  } finally { vi.restoreAllMocks(); await fixture.close(); }
+}, 30_000);
+
+it('does not renew the desktop lease from a delayed authority reply after revocation', async () => {
+  const fixture = await viewFixture(() => {
+    const readable = new PassThrough(), writable = new PassThrough(); writable.resume();
+    readable.write(Buffer.from('RFB 003.008\n'));
+    return Promise.resolve(Duplex.from({ readable, writable }));
+  });
+  let slow = false, sampled!: () => void, release!: () => void, blocked = false;
+  const pending = new Promise<void>(resolve => { sampled = resolve; });
+  const unavailable = new Promise<void>(resolve => { release = resolve; });
+  const proxy = createServer((request, response) => {
+    const upstream = httpRequest(`${fixture.fga.apiUrl}${request.url}`, { method: request.method, headers: request.headers }, incoming => {
+      if (slow) sampled();
+      void delay(slow ? 650 : 0).then(() => { response.writeHead(incoming.statusCode ?? 502, incoming.headers); incoming.pipe(response); });
+    });
+    upstream.on('error', () => { response.writeHead(502); response.end(); });
+    request.pipe(upstream);
+  });
+  const read = fixture.nats.store.readStream.bind(fixture.nats.store);
+  let socket: WebSocket | undefined;
+  try {
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    proxy.listen(0, '127.0.0.1'); await once(proxy, 'listening');
+    const bound = proxy.address(); if (!bound || typeof bound === 'string') throw new Error('Missing authority proxy');
+    fixture.binding.apiUrl = `http://127.0.0.1:${bound.port}`;
+    vi.spyOn(fixture.nats.store, 'readStream').mockImplementation(async function* (...args) {
+      if (blocked && args[0] === 'computer-assistant') await unavailable;
+      yield* read(...args);
+    });
+    const headers = { origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const admitted = await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+    expect(admitted.statusCode).toBe(200);
+    const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admitted.json<{ ticket: string }>().ticket], { headers });
+    socket.on('error', () => undefined); expect((await once(socket, 'message'))[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    slow = true; await pending;
+    const closed = once(socket, 'close'), revokedAt = performance.now();
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    blocked = true;
+    expect((await closed)[0]).toBe(4003);
+    expect(performance.now() - revokedAt).toBeLessThan(2000);
+  } finally {
+    release(); socket?.terminate(); vi.restoreAllMocks(); proxy.closeAllConnections();
+    await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();
+  }
+}, 30_000);

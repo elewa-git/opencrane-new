@@ -1,5 +1,8 @@
 # P3-16 authenticated desktop view
 
+This is the historical source receipt. Product chat mounting and fresh dev-stack
+qualification are covered by [the conversation journey receipt](live-view-chat-evidence.md).
+
 Issue #57, parent #41, D22. Source base: `e727898` (3 October 2026).
 
 ## Architecture

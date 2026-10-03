@@ -6,6 +6,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
+import type { Request as BrowserRequest } from 'playwright';
 import { encodeSession, loadAuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
@@ -17,6 +18,7 @@ import { approvalJourney } from './approval-journey.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
+import { browserLiveViewJourney } from './browser-live-view.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary } from './identity.ts';
@@ -164,8 +166,24 @@ try {
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
   const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
-    try { await browserChatJourney(page, origin, secondary ? auditPrompt : undefined); memberChatUrls.push(page.url()); await page.goto(origin); }
-    catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
+    const failedTransport: string[] = [];
+    const failed = (request: BrowserRequest) => {
+      const code = request.failure()?.errorText ?? '';
+      if (/^net::[A-Z_]+$/.test(code)) failedTransport.push(code);
+    };
+    page.on('requestfailed', failed);
+    try {
+      await browserChatJourney(page, origin, secondary ? auditPrompt : undefined);
+      memberChatUrls.push(page.url());
+      await browserLiveViewJourney(page, origin, computer!, { member, admin, silo, store: events.store, append, until,
+        desktopAllowed: async () => (await authz.desktop(member, computer!.computer_id)).allowed });
+      await page.goto(origin);
+    }
+    catch (error) {
+      await page.screenshot({ path: `${directory}/chat-failure.png` });
+      console.error(`Browser transport failures: ${failedTransport.join(', ') || 'none'}`);
+      throw error;
+    } finally { page.off('requestfailed', failed); }
   }
   if (browser) await approvalJourney(browser.memberPages, events.store, authz, append, { silo, origin, requesterId: member,
     assistantId: computer!.assistant_id, computerId: computer!.computer_id, generation: Number(computer!.generation) });

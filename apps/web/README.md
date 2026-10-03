@@ -130,17 +130,20 @@ sent back by the browser. Polling every three seconds restores updates without
 introducing another business-state store. Chromium qualification and images are in
 [the P3-2 receipt](../../docs/process/p3-2-approvals.md).
 
+## Desktop view
+
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
 `/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.
 
-The self-contained `LiveView` component lives in `src/app/live-view/live-view.ts`.
-P2-5 will mount it in the session panel after `work/chat-ui` lands: import
-`LiveView` into the panel's component imports and render
-`<oc-live-view [conversationId]="conversationId" />`. Changing the input or destroying the component
-closes the old connection and clears its pixels.
-It offers fit/actual-size viewing and Connecting, Viewing, Disconnected and
-Access changed states, using only noVNC's OSI-licensed core and the authenticated
-proxy. There is no chat stub or product route in this change.
+The session panel and its phone overlay offer **Watch your computer** for a saved
+conversation. The self-contained `LiveView` component opens a native dialog with
+fit/actual-size viewing and Connecting, Viewing, Disconnected and Access changed
+states. Participants need an explicit shared-desktop grant; a refused admission
+shows **Not available**. Revocation closes the connection and clears pixels.
+Escape closes the dialog and restores focus to its entry. Changing conversation
+or destroying the component cancels admission and closes the old connection.
+All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed
+core and the authenticated proxy; it provides no control or clipboard path.
 
 `npm run build:live-view-test -w apps/web` builds a separate browser qualification
 host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.

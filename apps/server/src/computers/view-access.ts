@@ -1,13 +1,40 @@
 import { z } from 'zod';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { history } from '@opencrane/models';
 export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
 
 const identity = z.object({ assistantId: z.string() });
 const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
 const participant = z.object({ participantId: z.string() });
 const grant = z.object({ resourceType: z.string(), resourceId: z.string(), granteeId: z.string() });
+const histories = new WeakMap<EventStore, Map<string, StoredEvent[]>>();
+
+function saveHistory(cache: Map<string, StoredEvent[]>, key: string, rows: StoredEvent[]) {
+  // Concurrent replies must not move the saved checkpoint backwards.
+  if ((rows.at(-1)?.sequence ?? 0) < (cache.get(key)?.at(-1)?.sequence ?? 0)) return;
+  // ponytail: keep 64 histories; use compact event projections if histories grow large.
+  if (!cache.has(key) && cache.size >= 64) cache.delete(cache.keys().next().value!);
+  cache.set(key, rows);
+}
+
+async function history(store: EventStore, subject: string, silo: string) {
+  let cache = histories.get(store);
+  if (!cache) { cache = new Map(); histories.set(store, cache); }
+  const key = JSON.stringify([silo, subject]);
+  const rows = [...(cache.get(key) ?? [])];
+  const previous = rows.at(-1); let confirmed = !previous;
+  // Confirm the saved checkpoint before reading its live tail.
+  for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
+    if (row.event.silo !== silo) throw new Error('Wrong silo');
+    if (!confirmed) {
+      if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) break;
+      rows[rows.length - 1] = row; confirmed = true;
+    } else rows.push(row);
+  }
+  if (!confirmed) { cache.delete(key); throw new Error('Authority history changed'); }
+  saveHistory(cache, key, rows);
+  return rows;
+}
 
 /** Check authority as well as its projection: delayed revocations must fail closed. */
 export async function viewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
@@ -22,7 +49,7 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   const assistantId = identity.parse(created.data).assistantId;
   if (!participatesIn(conversation, created.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
-  const grants = await history(store, `grant-${computer.computerId}`, silo);
+  const grants = await history(store, grantStream('shared_desktop', computer.computerId), silo);
   const current = grants.findLast(r => {
     const data = grant.parse(r.event.data);
     return data.resourceType === 'shared_desktop' && data.resourceId === computer.computerId && data.granteeId === memberId;

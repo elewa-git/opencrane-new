@@ -1,3 +1,4 @@
+import { grantStream } from '@opencrane/authz';
 /// <reference lib="dom" />
 import { rfbViewer } from './support/rfb-viewer.ts';
 import { createServer } from 'node:net';
@@ -46,7 +47,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
     closeBrowser = () => browser.close();
     const output = 'apps/computer/.state/p316'; await mkdir(output, { recursive: true });
     await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: pod.uid });
-    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     await expect(desktopConnection(pod.kubeconfig, pod.namespace)({ computerId: 'desktop', generation: 1, podUid: 'wrong-uid' })).rejects.toThrow('Desktop generation changed');
     await pod.k('run', 'direct-probe', `--image=${String(pod.image)}`, '--restart=Never', '--labels=app=opencrane-server',
       '--overrides={"spec":{"runtimeClassName":"gvisor"}}', '--', 'node', '-e',
@@ -124,7 +125,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
       page.on('pageerror', error => browserErrors.push(error.message));
       page.on('console', message => { if (message.type() === 'error') browserErrors.push(message.text()); });
       await page.goto(`${address}/live-view-test`);
-      const button = page.getByRole('button', { name: 'View computer', exact: true }); await button.focus(); await page.keyboard.press('Enter');
+      const button = page.getByRole('button', { name: 'Watch your computer', exact: true }); await button.focus(); await page.keyboard.press('Enter');
       await page.getByText('Viewing', { exact: true }).waitFor({ timeout: 20_000 }).catch(error => { throw new Error(JSON.stringify(browserErrors), { cause: error }); });
       const canvas = page.locator('canvas'); await until(async () => await canvas.evaluate((c: HTMLCanvasElement) => c.width === 800 && c.height === 600)).catch(async error => { throw new Error(JSON.stringify({ browserErrors, body: await page.locator('body').innerText(), canvases: await page.locator('canvas').evaluateAll(cs => cs.map(c => [c.getAttribute('width'), c.getAttribute('height')])) }), { cause: error }); });
       const neighbour = await rfbViewer((await connect()).socket); expect(neighbour.first.pixels).toBe(480000);
@@ -138,12 +139,12 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
       for (const button of await page.getByRole('button').all()) expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       if (width === 390) {
         const revoked = performance.now();
-        await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+        await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
         await page.getByText('Access changed', { exact: true }).waitFor({ timeout: 2000 });
         expect(performance.now() - revoked).toBeLessThan(2000); expect(await page.locator('canvas').count()).toBe(0);
         await page.screenshot({ path: `${output}/access-changed-390.png` });
-        await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
-      } else { await page.getByRole('button', { name: 'Close view' }).click(); await page.getByText('Disconnected', { exact: true }).waitFor(); }
+        await append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+      } else { await page.getByRole('button', { name: 'Close view' }).click(); await page.getByRole('dialog', { name: 'Computer view' }).waitFor({ state: 'hidden' }); }
       await page.close();
     }
 
@@ -151,7 +152,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
     const ws = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket.ticket], { headers });
     ws.on('error', () => undefined); await once(ws, 'open');
     const closed = once(ws, 'close'), start = performance.now();
-    await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
     expect((await closed)[0]).toBe(4003); const revokedMs = performance.now() - start; expect(revokedMs).toBeLessThan(2000);
     await until(async () => (await history(fixture.nats.store, `view-${ticket.sessionId}`, 'test')).length === 2);
     expect(JSON.parse(await pod.k('get', 'pod/desktop', '-o', 'jsonpath={.status.containerStatuses[0].restartCount}'))).toBe(0);

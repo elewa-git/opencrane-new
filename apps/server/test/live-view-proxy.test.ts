@@ -1,3 +1,4 @@
+import { grantStream } from '@opencrane/authz';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:net';
@@ -52,7 +53,7 @@ it.each(['web', 'dev-stack'])('opens the viewer through the configured %s fronte
       if (frontend?.exitCode !== null) throw new Error(`Frontend exited: ${output}`);
       return output.includes(`127.0.0.1:${port}`);
     }, 90_000);
-    await fixture.append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const cookie = encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 });
     const headers = { origin, cookie: `${fixture.config.cookieName}=${cookie}`, 'x-opencrane-view': '1' };
     const response = await fetch(`${origin}/api/conversations/chat/view`, { method: 'POST', headers });

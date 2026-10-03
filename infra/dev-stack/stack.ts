@@ -9,6 +9,8 @@ import { stackId, secondary, project, namespace, ports as defaultPorts, localOri
 import { checkPorts } from './ports.ts';
 import { modelFirewall } from './model-network.ts';
 import { createStore } from '@opencrane/authz';
+import { connectEventStore } from '@opencrane/event-store';
+import { envelope } from '@opencrane/models';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
@@ -25,7 +27,8 @@ async function compose(...args: string[]) {
   return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args]);
 }
 async function wait(check: () => Promise<boolean>, name: string) {
-  for (let i = 0; i < 120; i++) {
+  // Allow two minutes for secondary startup on the shared host.
+  for (let i = 0; i < (secondary ? 240 : 120); i++) {
     if (await check()) return;
     await delay(500);
   }
@@ -212,7 +215,23 @@ async function up(fresh: boolean) {
   await wait(() => healthy(`http://127.0.0.1:${settings['MINIO_PORT']}/minio/health/live`), 'MinIO');
   // Repeated up runs must also keep decision services and event writers out of the migration.
   await stopProcesses(['server', 'dispatcher', 'models']);
+  if (secondary) await compose('stop', 'models');
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
+  if (secondary) {
+    // Stop keeps uncertain reservations; the stub fixture needs room for repeated journeys.
+    const events = await connectEventStore(await readEnv('command'));
+    try {
+      const subject = `budget-${settings['SILO_ID']!}`;
+      let exists = false;
+      for await (const _stored of events.store.readStream(subject)) { exists = true; break; }
+      if (!exists) {
+        const event = envelope(settings['SILO_ID']!, subject, 'budget.ceiling_set',
+          { scope: 'global', ceilingCents: 100000, dailyCeilingCents: 100000, setBy: 'dev-only-stub-journey' });
+        event.source = 'dev-stack-stub-fixture'; event.principal = { kind: 'system', id: 'dev-only-stub-journey' };
+        if ((await events.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Stub budget seed conflict');
+      }
+    } finally { await events.close(); }
+  }
   await run('npm', ['run', 'migrate:model-grants', '-w', 'apps/ops'],
     { ...base, ...await readEnv('command'), SILO_ID: settings['SILO_ID']! });
   await run('npm', ['run', 'migrate:budget-default', '-w', 'apps/ops'],

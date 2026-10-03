@@ -1,5 +1,8 @@
 # P3-16 independent review fixes, blockers 1–4
 
+This is the historical source receipt. Product chat mounting and fresh dev-stack
+qualification are covered by [the conversation journey receipt](live-view-chat-evidence.md).
+
 3 October 2026. Issue #57; source base `290ae4f`, branch `work/p3-16-liveview`.
 Blocker 5 (product chat UI mounting) remains deferred until the chat UI lands.
 This receipt covers the fixes, not completion of the full P3-16 capability.

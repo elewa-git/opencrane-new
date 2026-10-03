@@ -80,6 +80,7 @@
   <ng-template #panelContent let-mobile="mobile">
     @if (chat.selected()) { <a class="audit-link" [href]="'/history/' + chat.selected()">Action history</a> }
     <header class="panel-header"><strong>Session</strong><span class="panel-scope"><span class="scope" aria-hidden="true">▱<br>▱<br>▱<br><b>▬</b></span> personal</span>@if (mobile) { <button type="button" class="close-panel" (click)="panelDialog.close()" aria-label="Close session panel"><oc-icon name="close" /></button> }</header>
+    @if (chat.selected() && !chat.denied()) { <oc-live-view [conversationId]="chat.selected()" /> }
     <div class="panel-tabs" role="tablist" aria-label="Session views"><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'" (click)="panelTab.set('files')">Files<small>{{ files().length }}</small></button><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'activity'" (click)="panelTab.set('activity')">Activity<small>{{ activity().length }}</small></button></div>
     @if (panelTab() === 'files') {
       <section class="panel-section" role="tabpanel" aria-label="Files">

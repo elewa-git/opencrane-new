@@ -21,6 +21,11 @@ These scripts do not touch `pg-test` or the `ocn` registry/MinIO; on `ocn` they
 own the `opencrane-<silo>` computer and `opencrane-<silo>-gateway` relay namespaces.
 Run at most three stacks per host: the stable owner and secondary ids `1` and `2`.
 Operations use a separate `flock` per id; different stacks run concurrently.
+Secondary readiness waits allow two minutes for startup on the shared host.
+Repeated startup stops the secondary model container before migration and starts
+it again afterwards, alongside the restarted server and dispatcher. Fresh secondary
+stacks seed a 100,000-cent daily/monthly budget event for the stub-only journeys.
+Stop leaves uncertain reservations; repeat runs retain them and the same ledger.
 
 ## Parallel journeys
 
@@ -390,3 +395,16 @@ This qualifies browser approval and gateway admission, not native Codex MCP
 continuation or an external tool's final outcome. No OpenAI call is made.
 Approval tools explicitly cost zero; the journey uses the stored installation
 paying group. The monthly-budget journey above owns the test ceiling changes.
+
+## Browser desktop qualification
+
+The chat journey opens **Watch your computer** from the real member's conversation
+at 1280px and through the session overlay at 390px. Without a shared-desktop grant
+it shows **Not available**; a dev-only grant event then allows viewing. The viewer
+decodes the deployed computer's 800×600 framebuffer through the selected stack origin, the
+generated Angular proxy and the server's `computer-lifecycle` service account.
+A known window is fixture activity to make pixels recognisable; a real Codex turn
+also completes through the stub provider while the viewer is open. Revoking the
+grant closes the socket, clears pixels and records the stop audit. Keyboard
+opening, Escape, fit/actual-size and 44px targets are checked. Screenshots and
+receipts go to `docs/process/live-view/conversation-*`.

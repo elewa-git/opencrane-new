@@ -353,9 +353,9 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
 wrap the members projection; [authz](../../libs/authz/README.md) implements
-`update-openfga` for member, assistant and conversation events, plus member
-`shared_desktop` grants. Other subscribed events fail
-explicitly until implemented (scope promotion remains deferred).
+`update-openfga` for member, assistant, conversation, team and resource-grant
+events. Desktop admission additionally requires an explicit member
+`shared_desktop` grant. Scope promotion remains deferred.
 
 | Handler | Subscribed events |
 | --- | --- |
