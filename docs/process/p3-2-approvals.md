@@ -241,3 +241,49 @@ fixture uses a credential-free connection and profile `none`; it makes no person
 credential-custody claim. Browser step-up navigation and local OIDC tests do not
 claim live-provider step-up. Normal sign-in uses the live provider in the permitted
 organisation. No paid calls, push, merge or production deployment occurred.
+
+## Rebased approvals, budgets and fold loader
+
+3 October 2026. Source `07f0e22`, rebased onto `f5e3068` (P3-13 budgets and
+parallel stacks), with the owner's `a8ba6e0` fold loader and 2.5-second sign-in
+handoff cherry-picked as `edb0fa6`. The rebase and cherry-pick both completed.
+The independent review returned LAND on its second and final pass.
+
+The decision service retains explicit paying-group attribution, shared-group
+authority, all global/group/assistant ceilings, budget configuration and the
+default migration. Raw request bytes retain lossless validation; internal budget
+and settlement endpoints receive parsed JSON. Model admission fences inside the
+reservation queue, reserves against every applicable ceiling, audits and fences
+again before forwarding. An audit/final-fence failure releases a known-undispatched
+reservation. MCP Allow and Ask both require explicit `costCents: 0`; unsupported
+costs refuse before approval consumption. The approval path fences, consumes once,
+audits and fences before forwarding. Rejection creates no reservation; lost
+consumption acknowledgement cannot authorise a duplicate effect.
+
+All final gates are **PASS**: lint, workspace and stack typechecks, 76-event catalogue,
+web build, 51 web tests, and the complete root suite with **1,118 passed / 11 skipped**
+(exit 0). The root command used the requested `PG_TEST_URL`, one worker and the
+existing 15-second test timeout. Two budget races failed in the earlier focused
+invocation; their isolated rerun and the full suite passed without weakening
+assertions or freshness limits. See the [gate receipt](p3-2-live/rebased/gates.txt).
+
+The fresh journey is **PASS** on secondary stack **2**, at
+`http://127.0.0.1:25206`, using `up.sh --fresh`. At 390px and 1280px, each approval
+and denial took one submission; approved bytes reached the recording upstream
+exactly once, reuse and denial refused, and requested/approved/used/denied cards
+survived reload. Paying-group and assistant ceiling refusals, default-group
+migration, replay, real Zitadel sign-in and logout also passed. Explicit
+`down.sh --id 2` exited 0 and removed the claimed stack. The owner stack was not
+changed. See the [journey receipt](p3-2-live/rebased/journey.txt),
+[phone review](p3-2-live/rebased/requested-390.png),
+[desktop used card](p3-2-live/rebased/used-1280.png) and
+[budget refusal](p3-2-live/rebased/budget-paying_group-390.png).
+
+Two earlier fresh attempts failed before approval qualification and were torn
+down. The second exposed a stale Angular/Vite protocol bundle missing the new
+budget exports. Moving aside only this worktree's generated cache fixed loading;
+the successful run used unchanged source. Private diagnostic logs stayed outside
+Git; safe local gate/journey logs use `/tmp/p3-2-rebase-*`.
+
+Paid-provider calls, native Codex MCP continuation and charged/credential-bearing
+tools remain **NOT RUN**, as in the original qualification. No push occurred.
