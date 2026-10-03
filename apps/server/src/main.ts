@@ -1,3 +1,4 @@
+import { tokenIssuer } from '@opencrane/auth';
 // Entry point: starts the Fastify server and attaches the WebSocket
 // server to its underlying HTTP server. Run with:
 //   node --experimental-strip-types src/main.ts
@@ -53,12 +54,17 @@ const chat: ChatOptions | undefined = realtime && events && modelDb && keyDirect
 if (realtime && chat) realtime.chat = chat;
 const closeBridges = chat ? await startBridges(chat, process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
   process.env['TOKEN_SIGNING_KEY_FILE']!, process.env['TOKEN_ISSUER']!) : undefined;
+const budgetDecisionUrl = process.env['MODEL_DECISION_URL'] ?? (process.env['NODE_ENV'] === 'development' ? 'http://127.0.0.1:43001' : undefined);
+const budget = budgetDecisionUrl && process.env['TOKEN_SIGNING_KEY_FILE'] && process.env['TOKEN_ISSUER'] ? {
+  decisionUrl: budgetDecisionUrl,
+  tokens: await tokenIssuer({ privateKeyPath: process.env['TOKEN_SIGNING_KEY_FILE'], issuer: process.env['TOKEN_ISSUER'] }),
+} : undefined;
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
   ...(chat ? { chat } : {}),
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
-    catalogue, ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
+    catalogue, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
   ...(realtime && computers ? { computers: { silo: realtime.binding.silo, feed: realtime.feed,
     computers, binding: realtime.binding } } : {}),
 });

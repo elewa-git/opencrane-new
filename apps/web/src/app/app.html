@@ -8,13 +8,16 @@
   <nav class="sidebar" [class.mobile-open]="menuOpen()" aria-label="Organisation settings">
     <a class="back" href="/">‹ Back to chats</a>
     <div class="organisation"><strong>Organisation</strong><span>Organisation settings</span></div>
-    <a class="nav-item active" href="/org/integrations" aria-current="page">Integrations</a>
+    <a class="nav-item" [class.active]="!modelsPage" href="/org/integrations" [attr.aria-current]="!modelsPage ? 'page' : null">Integrations</a>
+    <a class="nav-item" [class.active]="modelsPage" href="/org/models" [attr.aria-current]="modelsPage ? 'page' : null">Models & budgets</a>
     <span class="sidebar-spacer"></span>
     <div class="viewer"><span class="avatar">OA</span><span><strong>Organisation admin</strong><small>Owner or Admin</small></span></div>
   </nav>
 
   <main>
-    @if (toolServer) {
+    @if (modelsPage) {
+      <oc-models />
+    } @else if (toolServer) {
       <oc-tool-policy [serverId]="toolServer" />
     } @else if (statesPage) {
       <div class="page-heading"><div><h1>Shared state vocabulary</h1><p>Every state uses a glyph and words, never colour alone.</p></div></div>

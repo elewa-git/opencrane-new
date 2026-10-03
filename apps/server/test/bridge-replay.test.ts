@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
@@ -23,6 +24,8 @@ import { history, suspendComputer } from '../../ops/src/lifecycle.ts';
 
 async function replayFixture(conversationIds = ['alice', 'bob']) {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-replay-`);
+  await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
+  await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' }) });
   const keys = conversationKeys(directory), server = createServer(), wss = new WebSocketServer({ server });
   const context = { silo: 'test', computerId: 'computer', assistantId: 'assistant' };
   for (const conversationId of conversationIds) {

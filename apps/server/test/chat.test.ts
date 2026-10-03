@@ -132,3 +132,37 @@ it('closes a turn permanently even if its terminal report arrives before server 
     await expect(turnCommand(nats.store, context, { conversationId: 'early', turnId: 'message', threadId: 'forged', status: 'started' })).rejects.toThrow('Turn is closed');
   } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+it('binds personal paying group at admission, keeps it on retries and refuses shared work without a group', async () => {
+  const { turnCommand } = await import('../src/chat/turns.ts');
+  const { BudgetActor, envelope, history } = await import('@opencrane/models');
+  const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/turn-budget-`);
+  try {
+    const actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'personal-default');
+    await nats.store.append({ expectedSequence: 0, event: envelope('test', 'team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }) });
+    const teamHead = (await history(nats.store, 'team-sales', 'test')).at(-1)!.sequence;
+    await nats.store.append({ expectedSequence: teamHead, event: envelope('test', 'team-sales', 'team.member_added', { teamId: 'sales', memberId: 'alice', addedBy: 'alice' }) });
+    const keys = conversationKeys(directory);
+    for (const kind of ['personal', 'team'] as const) {
+      const subject = `assistant-${kind}`;
+      await nats.store.append({ expectedSequence: 0, event: envelope('test', subject, 'assistant.created', { assistantId: kind, ownerId: kind === 'personal' ? 'alice' : 'sales', kind }) });
+      await nats.store.append({ expectedSequence: 0, event: envelope('test', `computer-${kind}`, 'computer.ready', { assistantId: kind, computerId: kind, generation: 1 }) });
+      keys.provision('test', kind);
+      await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `create-${kind}`, conversationId: kind, assistantId: kind });
+      await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `message-${kind}`, conversationId: kind, text: 'Hello' });
+    }
+    const context = { silo: 'test', assistantId: 'personal', computerId: 'personal' };
+    const input = { conversationId: 'personal', turnId: 'message-personal', threadId: 'thread', status: 'started' as const };
+    expect(await turnCommand(nats.store, context, input)).toMatchObject({ payingGroupId: 'personal-default' });
+    await actor.configure({ scope: 'global', ceilingCents: 20000, defaultPayingGroupId: 'new-default', setBy: 'alice' });
+    expect(await turnCommand(nats.store, context, input)).toMatchObject({ payingGroupId: 'personal-default' });
+    expect((await history(nats.store, 'computer-personal', 'test')).filter(r => r.event.type === 'computer.turn_started')).toHaveLength(1);
+    await expect(turnCommand(nats.store, { silo: 'test', assistantId: 'team', computerId: 'team' }, { conversationId: 'team', turnId: 'message-team', threadId: 'team-thread', status: 'started' })).rejects.toThrow('Paying group unavailable');
+    keys.provision('test', 'team-selected');
+    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-selected', conversationId: 'team-selected', assistantId: 'team', payingGroupId: 'sales' });
+    await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message-selected', conversationId: 'team-selected', text: 'Hello' });
+    expect(await turnCommand(nats.store, { silo: 'test', assistantId: 'team', computerId: 'team' }, { conversationId: 'team-selected', turnId: 'message-selected', threadId: 'selected-thread', status: 'started' })).toMatchObject({ payingGroupId: 'sales' });
+    await expect(chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-selected', conversationId: 'team-selected', assistantId: 'team', payingGroupId: 'different' })).rejects.toThrow('Id reused');
+
+  } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
+});

@@ -23,7 +23,7 @@ it('passes the actual proxy thread to admission even when a grant is installed w
     ['computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:computer', generation: 1 }],
     ['computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1 }],
     ['conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' }],
-    ['computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn' }],
+    ['computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: 'installation-default' }],
   ] as const) {
     const event = { ...envelope('test', subject, type, data), source: 'opencrane-server' };
     expect((await nats.store.append({ event, expectedSequence: (await history(nats.store, subject, 'test')).at(-1)?.sequence ?? 0 })).status).toBe('appended');
@@ -52,7 +52,7 @@ it('passes the actual proxy thread to admission even when a grant is installed w
       const req = request({ socketPath: options.controlSocket, path: '/grant', method: 'POST' }, res => { res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error('Grant installation refused'))); });
       req.on('error', reject); req.end(JSON.stringify({ thread, conversation, computer: computer.value, token: turn.value, expires: turn.expiresAt }));
     });
-    const call = (thread: string) => fetch(`${local.url}/v1/responses`, { method: 'POST', headers: { authorization: `Bearer ${local.caller}`, 'session-id': thread }, body: JSON.stringify({ model: 'gpt-6.1-sol', stream: true, input: 'Hello' }) });
+    const call = (thread: string) => fetch(`${local.url}/v1/responses`, { method: 'POST', headers: { authorization: `Bearer ${local.caller}`, 'session-id': thread }, body: JSON.stringify({ model: 'gpt-6.1-sol', stream: true, input: 'Hello', max_output_tokens: 128 }) });
     await install('other-thread', 'thread');
     expect((await call('other-thread')).status).toBe(403); expect(actor.state.reservations).toHaveLength(0);
     await install('thread', 'conversation');

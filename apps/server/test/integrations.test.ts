@@ -1,4 +1,5 @@
-import { budgets, BudgetActor } from '@opencrane/models';
+import { budgets, BudgetActor, readBudget, startDecision } from '@opencrane/models';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { chromium, type Page } from 'playwright';
-import { encodeSession } from '@opencrane/auth';
+import { encodeSession, tokenIssuer } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -27,6 +28,10 @@ let computerRows: ReturnType<typeof connectComputers>;
 let app: ReturnType<typeof buildServer>;
 let runner: ProjectionRunner;
 let authorisation: ReturnType<typeof memberAuthorisation>;
+let actor: BudgetActor;
+let decision: Awaited<ReturnType<typeof startDecision>>;
+let keyDirectory: string;
+let tokens: Awaited<ReturnType<typeof tokenIssuer>>;
 let id = 0;
 const streamSequences = new Map<string, number>();
 
@@ -81,7 +86,7 @@ beforeEach(async () => {
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('integration-test', { level: 'silent' }));
   await runner.initialise(members);
   await runner.initialise(budgets);
-  await new BudgetActor(nats.store, 'test').start();
+  actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'personal-default');
   await runner.run(budgets);
   await runner.initialise(mcpCatalogue);
   await runner.initialise(computers);
@@ -95,8 +100,8 @@ beforeEach(async () => {
     catalogueRef: 'catalogue:odoo' });
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 14, schemaDigest: 'a'.repeat(64),
     serverInfo: { name: 'Odoo Accounting', version: '1.4.2' }, connectionId: 'installed-odoo', accountMode: 'none',
-    tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true },
-      { name: 'write', revision: 'b'.repeat(64), reviewed: true }, { name: 'new', revision: 'c'.repeat(64), reviewed: false }] });
+    tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
+      { name: 'write', revision: 'b'.repeat(64), reviewed: true, costCents: 0 }, { name: 'new', revision: 'c'.repeat(64), reviewed: false }] });
   await mcp('odoo', 'mcp.tool_mode_set', { toolName: 'read', mode: 'allow', setBy: 'alice' });
   await mcp('odoo', 'mcp.tool_mode_set', { toolName: 'write', mode: 'ask', setBy: 'alice' });
   await mcp('odoo', 'mcp.tool_mode_set', { toolName: 'delete', mode: 'block', setBy: 'alice' });
@@ -130,16 +135,22 @@ beforeEach(async () => {
   feed = await connectMemberFeed(connectionString);
   catalogue = connectMcpCatalogue(connectionString);
   computerRows = connectComputers(connectionString);
-  app = buildServer(config, { integrations: { silo: 'test', store: nats.store, feed, catalogue, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
+  keyDirectory = await mkdtemp(`${tmpdir()}/budget-config-`);
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${keyDirectory}/key.pem`, key.privateKey, { mode: 0o600 });
+  tokens = await tokenIssuer({ privateKeyPath: `${keyDirectory}/key.pem`, issuer: 'https://lifecycle.test/' });
+  decision = await startDecision(actor, { jwks: tokens.jwks, issuer: 'https://lifecycle.test/' }, authorisation.binding);
+  app = buildServer(config, { integrations: { silo: 'test', store: nats.store, feed, catalogue, budget: { decisionUrl: decision.url, tokens }, modelDb: pgDb(dbs.queue), binding: authorisation.binding,
     now: () => new Date('2026-10-01T09:40:00Z') }, computers: { silo: 'test', feed,
     computers: computerRows, binding: authorisation.binding, now: () => new Date('2026-10-01T09:40:00Z') } });
 }, 30_000);
 
 afterEach(async () => {
-  const results: PromiseSettledResult<void>[] = await Promise.allSettled([app?.close()]);
+  const results: PromiseSettledResult<void>[] = await Promise.allSettled([app?.close(), decision?.close()]);
   results.push(...await Promise.allSettled([feed?.close(), catalogue?.close(), computerRows?.close(), nats?.close()]));
   results.push(...await Promise.allSettled([dbs?.close()]));
   const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason as unknown);
+  if (keyDirectory) await rm(keyDirectory, { recursive: true, force: true });
   if (errors.length) throw new AggregateError(errors, 'Integration fixture cleanup failed');
 });
 
@@ -253,6 +264,26 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('link', { name: 'Back to integrations' }).click();
     await page.locator('.register-row').first().waitFor();
 
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('link', { name: 'Models & budgets', exact: true }).click();
+    await page.getByRole('heading', { name: 'Models & budgets' }).waitFor();
+    await page.getByLabel('Monthly ceiling (euro cents)').fill('30000');
+    const budgetSaved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/org/models'));
+    await page.getByRole('button', { name: 'Save budget' }).click();
+    expect((await budgetSaved).status()).toBe(200);
+    await page.getByText('✓ Budget saved').waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+      const controls = page.locator('oc-models input, oc-models select, oc-models button');
+      for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: `/tmp/p3-13-budgets-${width}.png`, fullPage: true });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('link', { name: 'Integrations', exact: true }).click();
+    await page.locator('.register-row').first().waitFor();
+
+    await page.setViewportSize({ width: 390, height: 900 });
     const allTab = page.getByRole('tab', { name: /^All/ });
     await allTab.focus();
     await allTab.press('End');
@@ -378,8 +409,8 @@ it('restricts the model and spending read to projected owners and admins', async
 it('saves a reviewed connection revision policy through one conditional event and replays it', async () => {
   await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDigest: 'a'.repeat(64),
     connectionId: 'installed-odoo', accountMode: 'none', tools: [
-      { name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true },
-      { name: 'write', revision: 'b'.repeat(64), reviewed: true, readOnly: false },
+      { name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
+      { name: 'write', revision: 'b'.repeat(64), reviewed: true, readOnly: false, costCents: 0 },
     ] });
   await runner.run(mcpCatalogue);
   const url = '/api/org/integrations/odoo/tools';
@@ -411,4 +442,33 @@ it('saves a reviewed connection revision policy through one conditional event an
       payload: { ...payload, commandId: 'bad-policy', expectedSequence: latest, ...patch } })).statusCode).toBe(409);
   }
   expect((await app.inject({ method: 'POST', url, headers: { ...headers('oidc-alice'), origin: 'https://foreign.test' }, payload })).statusCode).toBe(403);
+});
+
+
+it('lets Owner and Admin configure the one budget actor, refuses others and replays every ceiling', async () => {
+  const url = '/api/org/models';
+  const payload = { commandId: 'budget-global', expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000, dailyCeilingCents: 2000, defaultPayingGroupId: 'personal-default' };
+  for (const sub of ['oidc-bob', 'oidc-mallory']) expect((await app.inject({ method: 'POST', url, headers: { ...headers(sub), origin: new URL(config.redirectUri).origin }, payload })).statusCode).toBe(403);
+  expect((await app.inject({ method: 'POST', url, headers: headers('oidc-alice'), payload })).statusCode).toBe(403);
+  for (const bad of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) expect((await app.inject({ method: 'POST', url, headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin }, payload: { ...payload, ceilingCents: bad } })).statusCode).toBe(400);
+  const save = (sub: string, body: unknown) => app.inject({ method: 'POST', url, payload: JSON.stringify(body), headers: { ...headers(sub), origin: new URL(config.redirectUri).origin, 'content-type': 'application/json' } });
+  expect((await save('oidc-alice', payload)).statusCode).toBe(200);
+  expect((await save('oidc-alice', payload)).statusCode).toBe(200);
+  for (const scope of ['paying_group', 'assistant'] as const) {
+    expect((await save('oidc-amina', { commandId: `budget-${scope}`, expectedSequence: actor.state.sequence, scope, scopeId: scope === 'assistant' ? 'personal-alice' : 'sales', ceilingCents: 1000 })).statusCode).toBe(200);
+  }
+  const before = actor.state;
+  await runner.rebuild(budgets); expect(await readBudget(pgDb(dbs.queue), 'test')).toEqual(before);
+  const reply = await app.inject({ url, headers: headers('oidc-amina') });
+  expect(reply.json()).toMatchObject({ budget: { defaultPayingGroupId: 'personal-default', ceilings: [{ scope: 'paying_group', scopeId: 'sales', ceilingCents: 1000 }, { scope: 'assistant', scopeId: 'personal-alice', ceilingCents: 1000 }] } });
+  const race = await Promise.all(['first', 'second'].map(commandId => save('oidc-alice', { ...payload, commandId, expectedSequence: actor.state.sequence, ceilingCents: 40000 })));
+  expect(race.map(r => r.statusCode).sort()).toEqual([200, 409]);
+  expect((await fetch(`${decision.url}/budgets`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload) })).status).toBe(403);
+  const token = await tokens.budget({ silo: 'test', memberId: 'alice', commandDigest: createHash('sha256').update(JSON.stringify(payload)).digest('hex') });
+  expect((await fetch(`${decision.url}/budgets`, { method: 'POST', headers: { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' }, body: JSON.stringify({ ...payload, ceilingCents: 1 }) })).status).toBe(403);
+  const eventHead = await nats.store.head();
+  await append(fixture('member.role_changed', 'member-alice', { memberId: 'alice', previousRole: 'owner', newRole: 'member', changedBy: 'amina' }));
+  expect((await save('oidc-alice', { ...payload, commandId: 'stale-admin', expectedSequence: actor.state.sequence })).statusCode).toBe(403);
+  expect(await nats.store.head()).toBe(eventHead + 1);
+
 });

@@ -33,5 +33,6 @@ it.each([undefined, { d: 'not-a-private-key' }, { alg: 'ES384' }, { crv: 'P-384'
     expect(result).toContain(patch ? 'ZodError' : 'Gateway digest mismatch');
     expect((await history(nats.store, 'budget-test', 'test')).map(r => r.event.type))
       .toEqual(patch ? [] : ['budget.ceiling_set', 'budget.period_started']);
+    if (!patch) expect((await history(nats.store, 'budget-test', 'test'))[0]?.event.data).toMatchObject({ defaultPayingGroupId: 'installation-default' });
   } finally { await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true }); }
 }, 40_000);

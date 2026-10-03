@@ -157,6 +157,9 @@ export function memberAuthorisation(binding: Binding) {
       return client.check({ user: objectId('person', binding.silo, memberId),
         object: objectId('conversation', binding.silo, conversationId), relation });
     },
+    team(memberId: string, teamId: string) {
+      return client.check({ user: objectId('person', binding.silo, memberId), object: objectId('team', binding.silo, teamId), relation: 'member' });
+    },
     actsFor(memberId: string, assistantId: string) {
       return client.check({ user: objectId('person', binding.silo, memberId),
         object: objectId('assistant', binding.silo, assistantId), relation: 'acts_for' });

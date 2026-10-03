@@ -60,3 +60,5 @@ time { color: #a7aeaf; font-size: 11px; }
 .file-type[data-type=PDF] { background: #c1392b; }
 .file-type[data-type=DOCX] { background: #2a5c9a; }
 .file-type[data-type=XLSX] { background: #2a7d4f; }
+
+.budget-refusal { padding: 12px; border: 1px solid #e0a59c; border-radius: 8px; color: #982a20; background: #fff4f2; }

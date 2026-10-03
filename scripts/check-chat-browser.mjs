@@ -113,6 +113,11 @@ try {
     assert.equal(ring.width, '2px'); assert.equal(ring.colour, 'rgb(10, 132, 151)');
     await page.getByRole('region', { name: 'Conversation messages' }).focus();
     assert.equal(await page.locator(':focus').getAttribute('aria-label'), 'Conversation messages');
+    fixture.add('decision.recorded', { turnId: 'event-2', reason: 'budget_exhausted' });
+    await page.getByRole('alert').filter({ hasText: 'Spending limit reached' }).waitFor();
+    await page.reload(); await stable(page);
+    assert((await page.locator('.budget-refusal').innerText()).includes('Owner or Admin'));
+    assert(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     fixture.conflictNextStop();
     await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
     await page.getByText('Stopped · partial reply kept', { exact: false }).waitFor();

@@ -60,6 +60,10 @@ it('reserves long rates without a proven bound and covers cache writes as well a
   expect(reservationCents('gpt-6-astra', 128)).toBe(2495);
   expect(reservationCents('gpt-6-astra', 2000)).toBe(2508);
   expect(reservationCents('gpt-6-astra', 100_000, 100_000)).toBe(594);
-  expect(reservationCents('gpt-6-astra', 0, 272_000)).toBe(323);
-  expect(reservationCents('gpt-6-astra', 0, 272_001)).toBe(647);
+  expect(reservationCents('gpt-6-astra', 1, 272_000)).toBe(324);
+  expect(reservationCents('gpt-6-astra', 1, 272_001)).toBe(647);
+});
+
+it('requires a positive output bound even for a trusted prompt bound', () => {
+  expect(() => reservationCents('gpt-6-luna', 0, 1000)).toThrow('Invalid bound');
 });

@@ -1,3 +1,4 @@
+import { history, payingGroupAuthority, PayingGroupRefused } from '@opencrane/models';
 import { sessionSlug } from '@opencrane/protocol';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
@@ -87,17 +88,24 @@ async function summary(options: ChatOptions, conversationId: string) {
 async function write(request: FastifyRequest, reply: FastifyReply, options: ChatOptions, memberId: string, conversationId?: string) {
   const auth = memberAuthorisation(options.binding);
       const input = chatInput.parse({ ...z.record(z.string(), z.unknown()).parse(request.body), ...(conversationId ? { conversationId } : {}) });
+      let fresh: (() => Promise<void>) | undefined;
       if ('assistantId' in input) {
         if (conversationId || !(await auth.actsFor(memberId, input.assistantId)).allowed) return reply.code(403).send({ status: 'refused' });
+        const assistant = (await history(options.store, `assistant-${input.assistantId}`, options.silo)).find(r => r.event.type === 'assistant.created');
+        if (z.object({ kind: z.string() }).parse(assistant?.event.data).kind === 'team') {
+          if (!input.payingGroupId) throw new PayingGroupRefused('Paying group required for shared work');
+          fresh = await payingGroupAuthority(options.store, options.silo, memberId, input.payingGroupId, options.binding);
+        }
         options.keys.provision(options.silo, input.conversationId);
       } else if (!conversationId) return reply.code(400).send({ status: 'invalid_request' });
-      const result = await chatCommand(options.store, options.keys, { silo: options.silo, memberId }, input);
+      const result = await chatCommand(options.store, options.keys, { silo: options.silo, memberId }, input, fresh);
       return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : 409)
         .send(result.status === 'appended' ? result : { status: result.status });
 
 }
 
 function chatRefusal(reply: FastifyReply, error: unknown) {
+      if (error instanceof PayingGroupRefused) return reply.code(403).send({ status: 'refused', error: error.message });
       if (error instanceof Error && error.message === 'Phase 2 supports only agent_session conversations') return reply.code(400).send({ status: 'refused', error: error.message });
       return reply.code(error instanceof z.ZodError ? 400 : 409).send({ status: 'refused' });
 }

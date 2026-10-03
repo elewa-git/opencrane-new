@@ -114,3 +114,9 @@ existing register. Native radio groups offer Allow automatically, Ask and Block
 for reads and writes. Pending saves disable edits; uncertain replies require Check
 status; 401/403 clears protected tool details. Desktop and 390px browser evidence
 comes from `apps/server/test/integrations.test.ts` with real API dependencies.
+
+`/org/models` is the Owner/Admin Models & budgets screen. It displays global and
+configured paying-group/assistant monthly ceilings, current charges and held
+reservations, and edits safe integer EUR cents. Conflicts or an unknown save
+outcome require a status read before another edit; access loss clears the details.
+The authenticated browser journey covers 1280px and 390px.

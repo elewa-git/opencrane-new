@@ -1,4 +1,5 @@
 import { generateKeyPairSync } from 'node:crypto';
+import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -85,6 +86,8 @@ it('recovers the server connector from the NATS report sequence without gaps or 
       data: { computerId: 'computer', assistantId: 'assistant', generation: 1, ...(type === 'computer.claimed' ? { tokenId: 'token:test' } : { podUid: 'pod' }) } } });
     if (result.status !== 'appended') throw new Error('Computer fixture failed'); position = result.sequence;
   }
+  await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
+  await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' }) });
   let link = await connectBridge(options, connection, tokens);
   try {
     link.socket.send(JSON.stringify({ type: 'turn', id: 'message', conversationId: 'conversation', assistantId: 'assistant', text: 'Hello', token: 'short-lived-turn', expiresAt: Date.now()+60_000 }));
