@@ -52,7 +52,7 @@ try {
   await long.page.close();
   // Regression: leaving a pending history read must give the draft a usable composer.
   const racing = await open('live', 1280);
-  assert.equal(await racing.page.locator('.current-user strong').innerText(), 'Jente Roels');
+  assert.equal(await racing.page.locator('.current-user strong').innerText(), 'Alex Morgan');
   let releaseHistory;
   const historyStarted = new Promise(resolve => {
     racing.page.route('**/api/conversations/research/messages?*', async route => {
@@ -113,6 +113,7 @@ try {
     assert.equal(ring.width, '2px'); assert.equal(ring.colour, 'rgb(10, 132, 151)');
     await page.getByRole('region', { name: 'Conversation messages' }).focus();
     assert.equal(await page.locator(':focus').getAttribute('aria-label'), 'Conversation messages');
+    fixture.conflictNextStop();
     await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
     await page.getByText('Stopped · partial reply kept', { exact: false }).waitFor();
     fixture.add('agent.message_completed', { turnId: 'event-2', messageId: 'reply', text: 'SHOULD NOT REPLACE PARTIAL' });

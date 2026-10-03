@@ -1,5 +1,8 @@
 # P2-5 chat UI qualification
 
+The [3 October final-round receipt](chat-final-evidence.md) records the rebased
+source, owner defaults and latest stack qualification. The earlier run follows.
+
 Date: 2 October 2026. Branch `work/chat-ui`, based on bridge merge `1138544`.
 The commit containing this receipt records the source and checks.
 No real OpenAI calls: the dev stack uses its loopback scripted provider.

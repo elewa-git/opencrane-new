@@ -93,7 +93,7 @@ const NOT_SIGNED_IN = { authenticated: false, user: null };
 
 describe('OIDC login flow (against a local mock provider)', () => {
   it('completes login, reports the caller on /auth/me, then logs out', async () => {
-    const stack = await startStack();
+    const stack = await startStack({ user: { ...DEFAULT_MOCK_USER, claims: { name: 'Alex Morgan' } } });
     const { login, flowCookie, callbackQuery } = await startLogin(stack);
     expectCookieAttributes(login, stack.config.flowCookieName, false);
 
@@ -111,7 +111,7 @@ describe('OIDC login flow (against a local mock provider)', () => {
     expect(me.authenticated).toBe(true);
     expect(me.user).not.toHaveProperty('idToken');
     expect(decodeSession(stack.config, sessionCookie).idToken).toBeTruthy();
-    expect(me.user).toMatchObject({ sub: 'user-1', orgId: 'org-1', roles: ['member'] });
+    expect(me.user).toMatchObject({ sub: 'user-1', orgId: 'org-1', roles: ['member'], name: 'Alex Morgan' });
     // The provider's own auth_time, not the moment the callback ran.
     expect(me.user?.authTime).toBe(DEFAULT_MOCK_USER.authTime);
 

@@ -1,5 +1,6 @@
 // Protocol fixtures for visual qualification only; never imported into the product.
 export async function chatFixture(page, scenario = 'live') {
+  let stopConflict = false;
   let rows = [], socket, offline = ['queued', 'rail-offline'].includes(scenario);
   const add = (type, data) => {
     const row = { id: `event-${rows.length + 1}`, position: rows.length + 1, type, data, time: type === 'agent.turn_completed' ? '2026-10-02T10:42:48Z' : '2026-10-02T10:42:00Z' };
@@ -29,17 +30,19 @@ export async function chatFixture(page, scenario = 'live') {
   const conversations = ['chat', 'research', 'done', 'closed', 'failed'].map((id, index) => ({ conversationId: id, assistantId: 'assistant', createdBy: 'me', mode: 'agent_session', createdAt: '2026-10-02T10:40:00Z',
     title: ['board-pack-q3', 'county-rollout', 'weekly-review', 'last-quarter', 'finance-export'][index], status: ['open', 'working', 'done', 'closed', 'failed'][index] }));
   const commands = [];
+  await page.route('**/auth/me', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ authenticated: true, user: { name: 'Alex Morgan' } }) }));
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
     const fulfil = body => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
-    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Jente Roels', assistantId: scenario === 'no-agent' ? null : 'assistant' });
+    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant' });
     if (url.pathname.endsWith('/files/view')) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
     if (request.method() === 'POST') {
       const command = request.postDataJSON(); commands.push(command);
       if (offline) return route.abort('connectionfailed');
       if (url.pathname === '/api/conversations') { conversations.unshift({ ...conversations[0], conversationId: command.conversationId }); return fulfil({ status: 'appended', sequence: 1 }); }
+      if (command.stopTurnId && stopConflict) { stopConflict = false; return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'conflict' }) }); }
       if (command.stopTurnId) { add('agent.turn_stop_requested', { turnId: command.stopTurnId }); return fulfil({ status: 'appended', sequence: rows.length }); }
       if (!rows.some(row => row.id === command.id)) {
         const row = add('message.posted', { text: command.text, authorId: 'me' }); row.id = command.id;
@@ -57,5 +60,5 @@ export async function chatFixture(page, scenario = 'live') {
       ws.send(JSON.stringify({ version: 1, type: 'ready', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: rows.length, computerState: scenario === 'folding' ? 'starting your computer' : 'ready' }));
     });
   });
-  return { commands, add, online: () => { offline = false; }, rows: () => rows };
+  return { commands, add, conflictNextStop: () => { stopConflict = true; }, online: () => { offline = false; }, rows: () => rows };
 }

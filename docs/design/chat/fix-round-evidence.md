@@ -1,5 +1,9 @@
 # P2-5 review and visual fix round
 
+The [final-round receipt](../../process/chat-final-evidence.md) supersedes the
+item 33 deferral and records subsequent live qualification. This receipt preserves
+the original fix-round evidence.
+
 Date: 3 October 2026. Source: the commit containing this receipt, based on
 `0925e80972ab1af6fe8da33f561c1932bfbcaede`, branch `work/chat-ui`.
 Environment: Linux, Node 22.23.3, Playwright Chromium, clean `npm ci`.

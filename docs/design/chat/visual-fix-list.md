@@ -8,9 +8,8 @@ Build one shared SVG line-icon set first: 16px in the toolbar, about 10–11px i
 ## Resolution — 3 October 2026
 
 Item 0 is the shared SVG set in `apps/web/src/app/chat/icon.ts`; it was built
-first. Items **1–30, 32 and 34–42 are fixed within issue #30's personal-session
-scope**. Item 31 uses its explicitly allowed documented deferral. Item 33 is
-still an owner design choice. Evidence and limitations are recorded in
+first. Items **1–30 and 32–42 are fixed within issue #30's personal-session
+scope**. Item 31 uses its explicitly allowed documented deferral. Item 33 follows the owner default recorded on #30. Evidence and limitations are recorded in
 [the fix-round receipt](fix-round-evidence.md), with all 40 built screenshots
 in [the comparison page](comparison/index.html).
 
@@ -22,7 +21,7 @@ Scope qualifications:
 - **7:** The bridge supplies exit codes and event times, but no provider response
   or retry count. Those rows say “not reported”. Retry focuses a new message;
   it does not claim to re-run a tool independently.
-- **15, 36:** The member name comes from the authorised member projection.
+- **15, 36:** The member name comes from the signed-in profile returned by `/auth/me`.
   Organisation comes from the existing page metadata. Team/department data is
   not in the contract; the secondary label shows the personal session scope.
 - **17:** Assistant files are grouped, counted and marked saved. Empty attachment
@@ -31,9 +30,9 @@ Scope qualifications:
 - **31 — Deferred:** connector selection has no scoped chat connector API.
   The 1j caption, menu footnote and IMPLEMENTATION.md now say so. No dummy
   toggles are presented as working controls.
-- **33 — Deferred:** the owner must choose between the conflicting file-type
-  palettes. The interim swatch follows 8i's quiet grey mono chip; it replaces
-  the unsupported large teal tile without introducing a third design.
+- **33 — Fixed:** the owner default on #30 selects Workspace Live: PDF red
+  `#c1392b`, DOCX blue `#2a5c9a`, XLSX green `#2a7d4f`, other types grey
+  `#81888a`, in both the transcript and Files panel.
 
 ## High
 
@@ -94,7 +93,7 @@ Scope qualifications:
     - Attach menu: upload and folder icons in a fixed 16px column.
 33. **File type swatch: the designs disagree** (workspace-live, 8i; both). Workspace Live colours the swatch by file type: pdf red, docx blue, xlsx green. 8i uses a small grey mono chip and keeps colour for states. Today's 34px teal tile matches neither, so the owner should pick one.
 
-    Deferred: final file-type colours need the owner's choice between Workspace Live and 8i. The interim card now uses 8i's small grey mono swatch.
+    Fixed: the owner default recorded on #30 selects Workspace Live colours: PDF red, DOCX blue, XLSX green and grey for other types.
 34. **File card text is too small** (8e; both). Set the filename to 13px/500 on one line with an ellipsis, and the meta line to 11.5px #91989a.
 35. **Rail status words are 9px** (8b; 1280). Raise them to 11px. The slug and its status must fit on one line in the 236px rail; if space is tight, shorten the status word, not the slug.
 36. **People rows are heavy and the count is wrong** (workspace-live, 8i, 12a; both). Use one-line rows about 26px tall, with an 18px avatar and the department in grey on the right. Show the current user as a teal initials avatar, not a grey "Y". List people only, so the agent doesn't break the count.

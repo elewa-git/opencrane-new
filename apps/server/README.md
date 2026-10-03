@@ -38,7 +38,8 @@ Never put credentials in a URL or event. Fresh-silo qualification remains pendin
 
 ## Contract and verification
 
-`GET /auth/login` redirects to the provider; `GET /auth/me` reports the session.
+`GET /auth/login` redirects to the provider; `GET /auth/me` reports the session,
+including the optional signed-in profile `user.name` for display.
 `POST /auth/logout` requires the exact configured Origin and a valid session for
 the pinned organisation. Refusals clear no cookies. Success clears the local cookie
 and answers a top-level form POST with **303 See Other**. Its `Location` is the

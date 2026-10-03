@@ -126,12 +126,15 @@ try {
     return Boolean(computer);
   }, 'joined member computer Ready');
   const joinReadyMs = Math.round(performance.now() - joinedAt);
-  if (browser) await browserChatJourney(browser.memberPage, origin);
+  if (browser) for (const page of browser.memberPages) {
+    try { await browserChatJourney(page, origin); }
+    catch (error) { await page.screenshot({ path: `${directory}/chat-failure.png` }); throw error; }
+  }
   const namespace = `opencrane-${silo}`;
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();
-  console.log(`PASS joined member HTTP message → streamed Codex/stub reply → projection; ${replyMs} ms; browser reconnect no duplicates`);
+  console.log(`PASS joined member HTTP message → streamed Codex/stub reply → projection; ${replyMs.completeMs} ms (first token ${replyMs.firstTokenMs} ms); browser reconnect no duplicates`);
   const runKube = (...args: string[]) => promisify(execFile)('kubectl', ['-n', namespace, ...args], { cwd: root, timeout: 180_000 });
   await runKube('exec', computer!.computer_id, '--', 'node', '-e',
     "require('fs').writeFileSync('/home/agent/workspace/dev-stack-preserved','yes')");
@@ -147,7 +150,7 @@ try {
   const resumedAt = performance.now();
   const wakeReplyMs = await chat.message();
   assert(chat.starting(), 'Starting your computer state');
-  console.log(`PASS suspended computer wakes on HTTP message and completes Codex reply; ${wakeReplyMs} ms`);
+  console.log(`PASS suspended computer wakes on HTTP message and completes Codex reply; ${wakeReplyMs.completeMs} ms; wake-to-first-token ${wakeReplyMs.firstTokenMs} ms`);
   await until(async () => (await db.db.query("SELECT 1 FROM computers WHERE assistant_id=$1 AND status='ready'",
     [computer!.assistant_id])).rows.length === 1, 'resumed computer Ready');
   const resumeMs = Math.round(performance.now() - resumedAt);

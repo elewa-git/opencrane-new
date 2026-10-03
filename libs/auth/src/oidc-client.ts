@@ -126,7 +126,7 @@ export async function completeLogin(
   // deployment's configured maximum, whichever is sooner.
   const exp = Math.min(claims.exp, Math.floor(Date.now() / 1000) + config.sessionMaxAgeSeconds);
 
-  return { session: { sub: claims.sub, orgId, roles, authTime, exp, idToken: tokens.id_token! } };
+  return { session: { sub: claims.sub, orgId, roles, authTime, exp, ...(typeof claims['name'] === 'string' ? { name: claims['name'] } : {}), idToken: tokens.id_token! } };
 }
 
 /**

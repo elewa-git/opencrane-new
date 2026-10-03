@@ -29,11 +29,13 @@ export async function chatJourney(server: string, headers: { origin: string; coo
   const message = async () => {
     const start = performance.now(), id = randomUUID();
     await post(`/api/conversations/${conversationId}/messages`, { id, text: 'Say hello briefly.' });
+    await until(() => rows.some(r => r.row?.type === 'agent.message_delta' && (r.row.data as { turnId: string }).turnId === id));
+    const firstTokenMs = Math.round(performance.now() - start);
     await until(() => rows.some(r => r.row?.type === 'agent.turn_completed' && (r.row.data as { turnId: string }).turnId === id));
     assert(rows.some(r => r.row?.type === 'agent.message_delta'));
     const response = await fetch(`${server}/api/conversations/${conversationId}/messages`, { headers });
     assert.equal(response.status, 200); assert((await response.text()).includes('Hello from your computer.'));
-    return Math.round(performance.now() - start);
+    return { firstTokenMs, completeMs: Math.round(performance.now() - start) };
   };
   return {
     message,

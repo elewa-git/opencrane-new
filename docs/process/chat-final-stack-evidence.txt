@@ -1,0 +1,73 @@
+P2-5 final round — 3 October 2026
+Worktree journeys: final application/dev-stack source, measured on base e727898 (#64)
+Final rebase onto 5ca26b6 (#65) leaves that source unchanged; see chat-final-evidence.md
+
+Worktree fresh — PASS, 235.38 seconds
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px, and member at 1280px, in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 3415 ms, completion 5081 ms, browser journey 10062 ms; screenshot docs/design/chat/live/workspace-390.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 1860 ms, completion 3559 ms, browser journey 10094 ms; screenshot docs/design/chat/live/workspace-1280.png
+PASS joined member HTTP message → streamed Codex/stub reply → projection; 3795 ms (first token 1918 ms); browser reconnect no duplicates
+PASS suspended computer wakes on HTTP message and completes Codex reply; 17645 ms; wake-to-first-token 15678 ms
+PASS assistant/computer lifecycle: join→Ready 13670 ms; resume 17703 ms; Pod replacement kept disk
+PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused
+PASS npm run replay -- members --verify
+PASS npm run replay -- mcp-catalogue --verify
+PASS tailnet HTTPS web page
+PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token
+PASS logs: no ID token in the five stack process logs
+PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused
+PASS next sign-in: remembered identity still requires credentials; successful reauthentication
+PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d
+Stack ready: https://ocn-dev.tail00285e.ts.net/org/integrations (Zitadel sign-in)
+
+Worktree plain up — PASS, 193.63 seconds
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px, and member at 1280px, in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
+PASS browser chat 390px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 3906 ms, completion 5593 ms, browser journey 12453 ms; screenshot docs/design/chat/live/workspace-390.png
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 3398 ms, completion 5174 ms, browser journey 12262 ms; screenshot docs/design/chat/live/workspace-1280.png
+PASS joined member HTTP message → streamed Codex/stub reply → projection; 4387 ms (first token 2748 ms); browser reconnect no duplicates
+PASS suspended computer wakes on HTTP message and completes Codex reply; 18908 ms; wake-to-first-token 17313 ms
+PASS assistant/computer lifecycle: join→Ready 220 ms; resume 18937 ms; Pod replacement kept disk
+PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused
+PASS npm run replay -- members --verify
+PASS npm run replay -- mcp-catalogue --verify
+PASS tailnet HTTPS web page
+PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token
+PASS logs: no ID token in the five stack process logs
+PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused
+PASS next sign-in: remembered identity still requires credentials; successful reauthentication
+PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d
+Stack ready: https://ocn-dev.tail00285e.ts.net/org/integrations (Zitadel sign-in)
+
+Original checkout fresh — PASS, 197.52 seconds; source 5ca26b6 (#65)
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+PASS sign-in: owner and member via Zitadel + PKCE over tailnet HTTPS at 390px in separate browser contexts
+PASS logout CSRF: hostile and missing Origin refused, real session retained, no token in /auth/me
+PASS wrong organisation: real Zitadel token refused by a different server org pin; no session
+PASS expired session: real two-second login cookie refused by session and protected API routes
+PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket
+PASS joined member HTTP message → streamed Codex/stub reply → projection; 2515 ms; browser reconnect no duplicates
+PASS suspended computer wakes on HTTP message and completes Codex reply; 9437 ms
+PASS assistant/computer lifecycle: join→Ready 12783 ms; resume 9452 ms; Pod replacement kept disk
+PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused
+PASS npm run replay -- members --verify
+PASS npm run replay -- mcp-catalogue --verify
+PASS tailnet HTTPS web page
+PASS token boundary: empty 303 body; manual/follow fetch, XHR, DOM and page cookies expose no ID token
+PASS logs: no ID token in the five stack process logs
+PASS form sign-out: top-level POST → 303 → Zitadel → home; no chooser, no session cookie; no-session POST refused
+PASS next sign-in: remembered identity still requires credentials; successful reauthentication
+PASS listener check: loopback/Tailscale; model port firewalled to loopback, tailnet and private k3d
+Stack ready: https://ocn-dev.tail00285e.ts.net/org/integrations (Zitadel sign-in)
+
+PASS restoration: owner marker /home/jente/dev/opencrane-new; checkout clean; stack left running
+PASS final HTTPS GET https://ocn-dev.tail00285e.ts.net/: 200; app root present

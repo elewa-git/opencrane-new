@@ -146,8 +146,8 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
       if (!isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })) {
         return reply.send({ authenticated: false, user: null });
       }
-      const { sub, orgId, roles, authTime, exp } = session;
-      reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp } });
+      const { sub, orgId, roles, authTime, exp, name } = session;
+      reply.send({ authenticated: true, user: { sub, orgId, roles, authTime, exp, name } });
     } catch (err) {
       if (err instanceof SessionInvalidError || err instanceof SessionExpiredError) {
         reply.send({ authenticated: false, user: null });

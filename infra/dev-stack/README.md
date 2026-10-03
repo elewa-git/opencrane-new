@@ -228,6 +228,9 @@ fresh/repeat journeys, owner-stack restoration and unqualified conditions.
 
 The joined member opens **Open workspace**, sends through the composer, observes
 streamed stub text, reloads and reads the saved answer. A second turn is stopped
-mid-stream and its partial text survives reload. The stub spaces deltas by 500ms
+mid-stream and its partial text survives reload. Both 1280px and 390px use real
+sign-in; live screenshots go to `docs/design/chat/live/`. The journey records
+first-token and completion times, including a message sent to a suspended computer.
+The stub spaces deltas by 500ms
 so Chromium can observe intermediate renders. No OpenAI credentials are read.
 The receipt is [chat UI evidence](../../docs/process/chat-ui-evidence.md).

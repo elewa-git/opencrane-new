@@ -1,4 +1,5 @@
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
+import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { transcript } from './chat-state';
@@ -62,7 +63,8 @@ export class ChatSession implements OnDestroy {
     this.error.set(''); this.loading.set(true); this.railLoading.set(true); this.railUnavailable.set(false);
     try {
       const context = chatContextSchema.parse(await this.request('/api/chat'));
-      this.memberId.set(context.memberId); this.displayName.set(context.displayName || 'You'); this.assistantId.set(context.assistantId); this.denied.set(false);
+      const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await this.request('/auth/me'));
+      this.memberId.set(context.memberId); this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You'); this.assistantId.set(context.assistantId); this.denied.set(false);
       await this.list();
       const id = new URL(location.href).searchParams.get('conversation');
       if (id) await this.select(id);
@@ -171,9 +173,13 @@ export class ChatSession implements OnDestroy {
     this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title: sessionSlug(title) } : {}), status } : row));
   }
   private async request(path: string, body?: unknown): Promise<unknown> {
-    const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-    if (!response.ok) throw new ReadFailure(response.status);
-    return response.json() as Promise<unknown>;
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+      // Streamed reports can win the append race. Retry the same command id, at most twice.
+      if (body && response.status === 409 && attempt < 2) continue;
+      if (!response.ok) throw new ReadFailure(response.status);
+      return response.json() as Promise<unknown>;
+    }
   }
   private fail(error: unknown): void {
     if (error instanceof ReadFailure && [401, 403].includes(error.status)) {

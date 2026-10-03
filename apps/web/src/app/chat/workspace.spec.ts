@@ -9,7 +9,7 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
     { id: 'message', position: 2, type: 'message.posted', time: '2026-10-02T10:00:00Z', data: { text: 'Hi', authorId: 'me' } }];
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
-    const body = path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path === '/api/conversations' ? { rows: [] }
+    const body = path === '/auth/me' ? { authenticated: true, user: { name: 'Alex Morgan' } } : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path === '/api/conversations' ? { rows: [] }
       : { rows, position: 2, generation: 1, computerState: 'starting your computer' };
     return Promise.resolve(new Response(JSON.stringify(body)));
   });
