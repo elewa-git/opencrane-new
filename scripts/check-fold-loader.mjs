@@ -37,6 +37,8 @@ try {
       const loader = page.locator(before ? (place === 'handoff' ? '.folds' : '.fold') : 'oc-fold-loader');
       await loader.waitFor({ timeout: 10_000 });
       await page.evaluate(() => globalThis.document.fonts.ready);
+      // Wait for entrance transforms to finish before measuring screen-space geometry.
+      await page.evaluate(() => Promise.all(globalThis.document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished)));
       if (!before) {
         assert.equal(await loader.getAttribute('aria-hidden'), 'true');
         assert(await loader.evaluate(node => node.getAnimations({ subtree: true }).length > 0), 'Fold animates');

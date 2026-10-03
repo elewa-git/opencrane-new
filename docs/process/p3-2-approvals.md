@@ -287,3 +287,47 @@ Git; safe local gate/journey logs use `/tmp/p3-2-rebase-*`.
 
 Paid-provider calls, native Codex MCP continuation and charged/credential-bearing
 tools remain **NOT RUN**, as in the original qualification. No push occurred.
+
+## CI fold geometry correction
+
+3 October 2026. Base `83bff0d` plus this correction. Both attempts of
+[CI run 37158386562](https://github.com/elewa-git/opencrane-new/actions/runs/37158386562)
+failed the fold geometry assertion at **50.747px**, against the unchanged
+**less than 50px** requirement. The service-outcome timeout belonged to the
+separate bridge recovery test in attempt one, not the browser test.
+
+The streaming fixture puts the loader inside the reply's 520ms perspective
+entrance animation. Freezing the loader's wings at 850ms does not freeze that
+ancestor: its transform still changes viewport measurements. With the entrance
+held at its start, the folded width was **50.818px** on desktop and **52.318px**
+on mobile; after it finished, the width was **46.522px**. The check now awaits
+finite entrance animations before measuring, using the existing chat browser
+check's pattern. Infinite loader animations remain active. No product behaviour,
+geometry assertion, handoff expectation or timeout was weakened; the bridge
+test is unchanged.
+
+Red/green proof: a temporary streaming-fixture override delayed the original
+entrance animation by two seconds with backwards fill. The old check failed
+at **50.818px**; the corrected check passed both widths, all placements, reduced
+motion, redirect timing and Enter/Space cancellation under the same delay.
+
+Final workflow gates are **PASS**: clean dependency and pinned-tool installation,
+lint, typecheck, Docker verification, root tests, the 76-event catalogue check,
+web build and all **51** Angular tests. Existing lint and build-budget warnings
+remain. The full workflow sequence used Node **22.23.3**,
+npm **10.9.9**, PostgreSQL **17.6**, a fresh `npm ci`, removed Angular caches,
+`CI=true NO_COLOR=1 FORCE_COLOR=0`, and `taskset -c 0,1`, with no worker or timeout
+overrides. Safe local logs and the temporary reproduction scripts are in
+`/tmp/p3-2-ci-debug/`. No development stack was accessed; fresh-silo qualification
+was **NOT RUN** for this browser-check correction.
+
+The first complete root run was **FAIL**: 1,116 passed, two failed and 11 skipped.
+The concurrent daily-budget case returned seven `503` responses instead of
+`402`; the personal paying-group chat test hit its existing five-second timeout.
+All three browser tests and the bridge-channel tests passed. Neither backend test was
+changed. This shared eight-CPU host had a load average around 29 during the run.
+The unchanged full suite passed on repeat: **1,118 passed / 11 skipped**, with
+no failures, followed by the remaining workflow steps. The failed log remains
+in `final-ci.log`; the passing repeat and remaining gates are in `ci-retry.log`.
+One independent review of the correction and receipt was **PASS**, with no
+blocking findings; final check results were still pending at review time.
