@@ -26,7 +26,7 @@ export function desktopConnection(kubeconfig: string, namespace: string): LiveVi
   const args = ['--kubeconfig', kubeconfig, '--namespace', namespace];
   return async computer => {
     if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(computer.computerId) || !computer.podUid) throw new Error('Unbound desktop');
-    const result = await promisify(execFile)('kubectl', [...args, 'get', 'pods', '-o', 'json'], { timeout: 5000, maxBuffer: 2_000_000 });
+    const result = await promisify(execFile)('kubectl', [...args, 'get', 'pods', '-l', 'app=computer', '-o', 'json'], { timeout: 5000, maxBuffer: 2_000_000 });
     const pods = z.object({ items: z.array(z.object({ metadata: z.object({ name: z.string(), uid: z.string(), deletionTimestamp: z.string().optional(), labels: z.record(z.string(), z.string()).optional() }) })) }).parse(JSON.parse(result.stdout) as unknown);
     const pod = pods.items.find(p => p.metadata.name === computer.computerId && p.metadata.uid === computer.podUid && !p.metadata.deletionTimestamp && p.metadata.labels?.['app'] === 'computer');
     if (!pod) throw new Error('Desktop generation changed');

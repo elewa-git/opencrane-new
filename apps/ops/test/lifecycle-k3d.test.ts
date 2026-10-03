@@ -23,6 +23,29 @@ function nested(input: unknown, name: string): unknown {
   return result;
 }
 
+it.skipIf(!live)('admits the checked computer template and rejects a forged Pod identity source', async () => {
+  const namespace = `p22-admission-${randomUUID().slice(0, 8)}`;
+  const directory = await mkdtemp(join(tmpdir(), 'computer-admission-'));
+  const k = async (...args: string[]) => (await execFile('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args])).stdout.trim();
+  try {
+    await k('create', 'namespace', namespace);
+    await execFile('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
+    const template: unknown = JSON.parse(await readFile('apps/computer/sandbox-template.json', 'utf8'));
+    const spec = nested(nested(nested(template, 'spec'), 'podTemplate'), 'spec');
+    const path = join(directory, 'pod.json');
+    const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'legitimate', labels: { app: 'computer' } }, spec };
+    await writeFile(path, JSON.stringify(pod));
+    await k('create', '--dry-run=server', '-f', path);
+    // The desktop helper must read its actual Pod UID, never a caller's literal or another field.
+    await writeFile(path, JSON.stringify(pod).replace('metadata.uid', 'metadata.name'));
+    await expect(k('create', '--dry-run=server', '-f', path)).rejects.toThrow(/denied/u);
+  } finally {
+    for (const suffix of ['sandbox', 'pod', 'claim']) await k('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding', `${namespace}-computer-${suffix}`, '--ignore-not-found');
+    await k('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=120s');
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 120_000);
+
 it.skipIf(!live).each([
   ['computer.ready', 'both', false], ['computer.resumed', 'both', false],
   ['computer.ready', 'both', true], ['computer.resumed', 'both', true],
@@ -344,8 +367,8 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
       .toEqual([{ status: 'ready', generation: 2 }]);
 
     expect(await restricted('auth', 'can-i', 'get', 'sandboxes', '-n', namespace)).toBe('yes');
-    await expect(restricted('auth', 'can-i', 'get', 'pods', '-n', namespace)).rejects.toThrow();
-    await expect(restricted('auth', 'can-i', 'create', 'pods/exec', '-n', namespace)).rejects.toThrow();
+    expect(await restricted('auth', 'can-i', 'get', 'pods', '-n', namespace)).toBe('yes');
+    expect(await restricted('auth', 'can-i', 'create', 'pods', '--subresource=exec', '-n', namespace)).toBe('yes');
     await expect(restricted('auth', 'can-i', 'get', 'secrets', '-n', namespace)).rejects.toThrow();
     await expect(restricted('auth', 'can-i', 'patch', 'pods', '-n', namespace)).rejects.toThrow();
     await expect(restricted('auth', 'can-i', 'get', 'sandboxtemplates', '-n', namespace)).rejects.toThrow();

@@ -6,6 +6,8 @@ import { computerTokenAudience, tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { until } from '@opencrane/authz/testing';
 import { SandboxClient } from '../src/kubernetes.ts';
+import { envelope } from '@opencrane/models';
+import { getEventDefinition } from '@opencrane/events';
 import { history, resumeComputer, watchComputers } from '../src/lifecycle.ts';
 
 it.each(['state', 'mode'] as const)('keeps watching other computers when Kubernetes %s fails', async (operation) => {
@@ -96,6 +98,47 @@ it('resumes a bound computer when the claim endpoint is unavailable, after the o
     await until(() => delivered, 3000);
     expect(await outcome).toBeUndefined();
     expect((await history(nats.store, subject)).at(-1)!.event).toMatchObject({ type: 'computer.ready', data: { podUid: 'new-pod', generation: 1 } });
+  } finally {
+    stop.abort(); await outcome; vi.restoreAllMocks(); await nats.close(); await rm(directory, { recursive: true, force: true });
+  }
+});
+
+
+it('continues reconciliation across all view audits and replays them safely after restart', async () => {
+  const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/view-replay-`);
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${directory}/key.pem`, key.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: `${directory}/key.pem`, issuer: 'https://wake.test/' });
+  const subject = 'computer-asst_1', kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  vi.spyOn(kube, 'state').mockResolvedValue({ uid: 'sandbox', podUid: 'pod', ready: true, suspended: false });
+  vi.spyOn(kube, 'mode').mockResolvedValue();
+  const append = async (subject: string, type: string, data: unknown) => {
+    expect((await nats.store.append({ event: envelope('test', subject, type, data),
+      expectedSequence: (await history(nats.store, subject)).at(-1)?.sequence ?? 0 })).status).toBe('appended');
+  };
+  let stop = new AbortController(), deliveries = 0;
+  const sink = async (_id: string, token: Awaited<ReturnType<typeof tokens.computer>>) => {
+    await expect(tokens.verify(token.value, computerTokenAudience, 'token:test')).resolves.toBeDefined();
+    deliveries++;
+  };
+  let outcome: Promise<unknown> = Promise.resolve();
+  try {
+    await append(subject, 'computer.claimed', { assistantId: 'asst_1', computerId: 'computer_1', generation: 1, tokenId: 'token:test' });
+    await append(subject, 'computer.ready', { assistantId: 'asst_1', computerId: 'computer_1', generation: 1, podUid: 'pod' });
+    outcome = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal).catch((error: unknown) => error);
+    await until(() => deliveries > 0, 3000);
+    for (const type of ['computer.view_started', 'computer.view_stopped', 'computer.view_refused']) {
+      await append(type === 'computer.view_refused' ? 'view-refusal' : 'view-view_1', type, getEventDefinition(type)!.example);
+      const before = deliveries;
+      await until(() => deliveries > before, 3000);
+    }
+    stop.abort(); expect(await outcome).toBeUndefined();
+    // A new worker scans the same durable history, then performs the next lifecycle transition.
+    stop = new AbortController();
+    outcome = watchComputers(nats.store, kube, tokens, sink, 'test', 0, stop.signal).catch((error: unknown) => error);
+    await until(async () => (await history(nats.store, subject)).at(-1)?.event.type === 'computer.suspended', 3000);
+    stop.abort(); expect(await outcome).toBeUndefined();
+    expect((await history(nats.store, subject)).map(row => row.event.type)).toEqual(['computer.claimed', 'computer.ready', 'computer.suspended']);
   } finally {
     stop.abort(); await outcome; vi.restoreAllMocks(); await nats.close(); await rm(directory, { recursive: true, force: true });
   }

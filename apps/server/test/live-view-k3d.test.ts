@@ -14,6 +14,23 @@ import { desktopPod } from './support/desktop-pod.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { desktopConnection } from '../src/computers/desktop.ts';
 
+it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('opens desktop pixels with the deployed service account and refuses permissions outside its namespace', async () => {
+  const pod = await desktopPod();
+  let stream: Awaited<ReturnType<ReturnType<typeof desktopConnection>>> | undefined;
+  try {
+    stream = await desktopConnection(pod.kubeconfig, pod.namespace)({ computerId: 'desktop', generation: 1, podUid: pod.uid });
+    expect((await rfbViewer(stream)).first.pixels).toBe(480000);
+    expect(await pod.restricted('auth', 'can-i', 'get', 'pods')).toBe('yes');
+    expect(await pod.restricted('auth', 'can-i', 'create', 'pods', '--subresource=exec')).toBe('yes');
+    for (const [verb, resource, namespace, subresource] of [
+      ['get', 'pods', 'default'], ['create', 'pods', 'default', '--subresource=exec'],
+      ['get', 'secrets', pod.namespace], ['create', 'pods', pod.namespace], ['patch', 'pods', pod.namespace],
+    ]) await expect(pod.restricted('auth', 'can-i', verb!, resource!, '-n', namespace!, ...(subresource ? [subresource] : []))).rejects.toThrow();
+    await pod.k('label', 'pod/desktop', 'app=other', '--overwrite');
+    await expect(desktopConnection(pod.kubeconfig, pod.namespace)({ computerId: 'desktop', generation: 1, podUid: pod.uid })).rejects.toThrow('Desktop generation changed');
+  } finally { stream?.destroy(); await pod.close(); }
+}, 180_000);
+
 it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at desktop and phone widths through the authenticated proxy', async () => {
   const pod = await desktopPod();
   let closeFixture: (() => Promise<void>) | undefined;
@@ -57,7 +74,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
       const response = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers: custom });
       expect(response.statusCode).toBe(200);
       const ticket = response.json<{ ticket: string; sessionId: string }>();
-      const socket = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', ticket.ticket], { headers: custom });
+      const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket.ticket], { headers: custom });
       socket.on('error', () => undefined); return { socket, sessionId: ticket.sessionId };
     };
     const observed = await connect();
@@ -90,7 +107,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
     expect(normalAudit[0]?.event.data).toMatchObject({ sessionId: observed.sessionId, memberId: 'alice', conversationId: 'chat', computerId: 'desktop', generation: 1 });
     expect(normalAudit[1]?.event.data).toMatchObject({ reason: 'disconnected' });
     const admission = (await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).json<{ ticket: string }>();
-    const wrongOrigin = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', admission.ticket], { headers: { ...headers, origin: 'https://wrong.test' } });
+    const wrongOrigin = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admission.ticket], { headers: { ...headers, origin: 'https://wrong.test' } });
     wrongOrigin.on('error', () => undefined);
     expect(await new Promise<number | undefined>(resolve => wrongOrigin.on('unexpected-response', (_request, response) => { resolve(response.statusCode); wrongOrigin.terminate(); }))).toBe(403);
     const expiringHeaders = { ...headers, cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+5 })}` };
@@ -131,7 +148,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
     }
 
     const ticket = (await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).json<{ ticket: string; sessionId: string }>();
-    const ws = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', ticket.ticket], { headers });
+    const ws = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket.ticket], { headers });
     ws.on('error', () => undefined); await once(ws, 'open');
     const closed = once(ws, 'close'), start = performance.now();
     await append('grant-desktop', 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });

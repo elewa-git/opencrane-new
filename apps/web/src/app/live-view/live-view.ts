@@ -48,7 +48,7 @@ export class LiveView implements OnDestroy, OnChanges {
       if (!result || typeof result !== 'object' || !('ticket' in result) || typeof result.ticket !== 'string') throw new Error('View unavailable');
       const { default: Rfb } = await import('./viewer');
       if (attempt !== this.attempt) return;
-      const address = new URL(url, location.href); address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const address = new URL(`/ws/conversations/${encodeURIComponent(this.conversationId())}/view`, location.href); address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const socket = new WebSocket(address, ['binary', result.ticket]); this.socket = socket;
       socket.addEventListener('close', event => { if (attempt === this.attempt) this.close(event.code === 4003 ? 'Access changed' : 'Disconnected'); });
       const viewer = new Rfb(this.display().nativeElement, socket); this.viewer = viewer;

@@ -39,7 +39,7 @@ it('requires participation and an explicit desktop grant before opening an audit
     expect(response.statusCode).toBe(200);
     const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
-    let ws = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', ticket], { headers });
+    let ws = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', ticket], { headers });
     ws.on('error', () => undefined); await once(ws, 'open');
     await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 1);
     const attackClosed = once(ws, 'close');
@@ -50,7 +50,7 @@ it('requires participation and an explicit desktop grant before opening an audit
       Buffer.from([180, 1, 10, ...Buffer.from('text/plain'), 10, 0, 0, 0, 65]), Buffer.from([7]), Buffer.from([255]),
       Buffer.from([2, 0, 1, 1]), Buffer.alloc(4097, 3)]) {
       const admission = (await app.inject({ method: 'POST', url, headers })).json<{ ticket: string }>();
-      const attacker = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', admission.ticket], { headers });
+      const attacker = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', admission.ticket], { headers });
       attacker.on('error', () => undefined); await once(attacker, 'open');
       const end = once(attacker, 'close'); const before = Buffer.concat(forwarded).length;
       attacker.send(Buffer.concat([Buffer.from('RFB 003.008\n'), Buffer.from([1, 1])]));
@@ -59,7 +59,7 @@ it('requires participation and an explicit desktop grant before opening an audit
       expect(Buffer.concat(forwarded).length - before).toBe(14);
     }
     const next = (await app.inject({ method: 'POST', url, headers })).json<{ ticket: string }>();
-    ws = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', next.ticket], { headers });
+    ws = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', next.ticket], { headers });
     ws.on('error', () => undefined); await once(ws, 'open');
     const closed = once(ws, 'close'), started = performance.now();
     await append('conversation-chat', 'participant.removed', { conversationId: 'chat', participantId: 'alice', removedBy: 'owner' }, true);
@@ -85,7 +85,7 @@ it('bounds redemption of pre-issued tickets and rejects reuse without opening an
     }
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     const connect = (ticket: string) => new Promise<number>(resolve => {
-      const ws = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', ticket], { headers }); sockets.push(ws);
+      const ws = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket], { headers }); sockets.push(ws);
       ws.on('error', () => undefined); ws.on('open', () => resolve(101)); ws.on('unexpected-response', (_request, reply) => { resolve(reply.statusCode!); ws.terminate(); });
     });
     expect(await connect(tickets[0]!)).toBe(101); expect(await connect(tickets[0]!)).toBe(403); expect(opened).toBe(1);
@@ -125,7 +125,7 @@ it('denies delayed grants, revoked tickets and audit outages, and closes viewers
       return response.json<{ ticket: string; sessionId: string }>();
     };
     const connect = (ticket: string) => new Promise<number>(resolve => {
-      const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', ticket], { headers });
+      const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', ticket], { headers });
       socket.on('error', () => undefined);
       socket.on('unexpected-response', (_request, response) => { resolve(response.statusCode!); socket.terminate(); });
       socket.on('open', () => { resolve(101); socket.close(); });
@@ -141,7 +141,7 @@ it('denies delayed grants, revoked tickets and audit outages, and closes viewers
     finally { audit.mockRestore(); }
     expect(await history(nats.store, `view-${unaudited.sessionId}`, 'test')).toEqual([]);
     const valid = await ticket();
-    const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url}`, ['binary', valid.ticket], { headers });
+    const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', valid.ticket], { headers });
     socket.on('error', () => undefined); await once(socket, 'open');
     const closed = once(socket, 'close'), started = performance.now();
     await fga.pause(); paused = true;
@@ -179,7 +179,7 @@ it('rechecks authority after a delayed start audit before opening the desktop', 
     expect(response.statusCode).toBe(200);
     const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
-    const socket = new WebSocket(`${address.replace('http:', 'ws:')}/api/conversations/chat/view`, ['binary', ticket], { headers });
+    const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket], { headers });
     socket.on('error', () => undefined); socket.on('open', () => socket.close());
     const closed = new Promise<void>(resolve => socket.once('close', () => resolve()));
     await auditing;
@@ -189,4 +189,78 @@ it('rechecks authority after a delayed start audit before opening the desktop', 
     await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 2);
     expect((await history(nats.store, `view-${sessionId}`, 'test'))[1]?.event.data).toMatchObject({ reason: 'access_changed' });
   } finally { release(); audit.mockRestore(); await fixture.close(); }
+}, 120_000);
+
+
+it.each([false, true])('closes a ping flood independently of other viewers (paused reader: %s)', async paused => {
+  const fixture = await viewFixture(() => {
+    const writable = new PassThrough(); writable.resume();
+    return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable }));
+  });
+  const { app, config, append, nats } = fixture, sockets: WebSocket[] = [];
+  try {
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    const connect = async () => {
+      const response = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+      expect(response.statusCode).toBe(200);
+      const { ticket, sessionId } = response.json<{ ticket: string; sessionId: string }>();
+      const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket], { headers });
+      sockets.push(socket); socket.on('error', () => undefined); await once(socket, 'open');
+      return { socket, sessionId };
+    };
+    const normal = await connect(), attacker = await connect();
+    let pongs = 0; attacker.socket.on('pong', () => pongs++);
+    const closed = once(attacker.socket, 'close');
+    if (paused) attacker.socket.pause();
+    for (let i = 0; i < 256; i++) attacker.socket.ping(Buffer.alloc(125));
+    await until(async () => (await history(nats.store, `view-${attacker.sessionId}`, 'test')).length === 2, 2000);
+    attacker.socket.resume(); expect((await closed)[0]).toBe(1013);
+    expect(pongs).toBeLessThanOrEqual(16);
+    expect((await history(nats.store, `view-${attacker.sessionId}`, 'test'))[1]?.event.data).toMatchObject({ reason: 'slow_viewer' });
+    const pong = once(normal.socket, 'pong'); normal.socket.ping('still viewing');
+    expect((await pong)[0]).toEqual(Buffer.from('still viewing'));
+    expect(normal.socket.readyState).toBe(WebSocket.OPEN);
+    expect((await history(nats.store, `view-${normal.sessionId}`, 'test')).map(row => row.event.type)).toEqual(['computer.view_started']);
+  } finally { for (const socket of sockets) { socket.resume(); socket.terminate(); } await fixture.close(); }
+}, 120_000);
+
+it('counts pongs and close frames in the viewer output bound', async () => {
+  const readable = new PassThrough(), writable = new PassThrough(); writable.resume();
+  const fixture = await viewFixture(() => Promise.resolve(Duplex.from({ readable, writable })));
+  const { app, config, append, nats } = fixture;
+  let transport: Duplex | undefined, socket: WebSocket | undefined;
+  app.server.on('upgrade', (_request, stream) => { transport = stream; });
+  try {
+    await append('grant-desktop', 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const admission = await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+    expect(admission.statusCode).toBe(200);
+    const { ticket, sessionId } = admission.json<{ ticket: string; sessionId: string }>();
+    const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket], { headers });
+    socket.on('error', () => undefined); await once(socket, 'open');
+    if (!transport) throw new Error('No viewer transport');
+    // Hold TCP writes to make backpressure deterministic, without depending on kernel buffer sizes.
+    transport.cork();
+    const init = Buffer.alloc(24); init.writeUInt16BE(1024); init.writeUInt16BE(1023, 2); init[4] = 32;
+    readable.write(Buffer.concat([Buffer.from('RFB 003.008\n'), Buffer.from([1, 1]), Buffer.alloc(4), init]));
+    const frame = (width: number, height: number) => {
+      const bytes = Buffer.alloc(16 + width * height * 4); bytes.writeUInt16BE(1, 2);
+      bytes.writeUInt16BE(width, 8); bytes.writeUInt16BE(height, 10); return bytes;
+    };
+    readable.write(frame(1024, 1023));
+    await until(() => (transport?.writableLength ?? 0) > 4_190_000);
+    const width = Math.floor((4_194_304 - transport.writableLength - 127 - 14 - 16) / 4);
+    readable.write(frame(width, 1));
+    await until(() => (transport?.writableLength ?? 0) > 4_194_000);
+    socket.ping(Buffer.alloc(125)); // One ping: this must exercise the byte bound, not the rate limit.
+    await until(async () => (await history(nats.store, `view-${sessionId}`, 'test')).length === 2, 800);
+    expect(transport.writableLength).toBeLessThanOrEqual(4_194_304);
+    expect((await history(nats.store, `view-${sessionId}`, 'test'))[1]?.event.data).toMatchObject({ reason: 'slow_viewer' });
+    const closed = once(socket, 'close'); transport.uncork(); expect((await closed)[0]).toBe(1013);
+  } finally { transport?.uncork(); socket?.terminate(); await fixture.close(); }
 }, 120_000);

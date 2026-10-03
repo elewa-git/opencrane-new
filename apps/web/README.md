@@ -130,6 +130,9 @@ sent back by the browser. Polling every three seconds restores updates without
 introducing another business-state store. Chromium qualification and images are in
 [the P3-2 receipt](../../docs/process/p3-2-approvals.md).
 
+Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
+`/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.
+
 The self-contained `LiveView` component lives in `src/app/live-view/live-view.ts`.
 P2-5 will mount it in the session panel after `work/chat-ui` lands: import
 `LiveView` into the panel's component imports and render

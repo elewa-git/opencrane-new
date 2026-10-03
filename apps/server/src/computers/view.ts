@@ -15,7 +15,8 @@ export interface LiveViewOptions extends ViewAccessOptions {
 }
 type Ticket = { cookie: string; memberId: string; conversationId: string; sessionId: string; expires: number; redeemBy: number };
 type StopReason = 'disconnected' | 'access_changed' | 'expired' | 'protocol' | 'slow_viewer' | 'upstream' | 'shutdown';
-export const liveViewPath = /^\/api\/conversations\/([\w-]{1,200})\/view$/u;
+const admissionPath = /^\/api\/conversations\/([\w-]{1,200})\/view$/u;
+export const liveViewPath = /^\/ws\/conversations\/([\w-]{1,200})\/view$/u;
 function deadline<T>(work: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('View check timeout')), 800);
@@ -28,7 +29,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   const tickets = new Map<string, Ticket>();
   const stops = new Set<(reason: StopReason) => void>();
   const audits = new Set<Promise<void>>();
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false,
+  const wss = new WebSocketServer({ noServer: true, maxPayload: 4096, perMessageDeflate: false, autoPong: false,
     handleProtocols: () => 'binary' });
   const origin = new URL(config.redirectUri).origin;
   function authenticate(headers: IncomingHttpHeaders) {
@@ -54,7 +55,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     reply.header('cache-control', 'no-store');
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     let memberId: string | undefined;
-    const conversationId = liveViewPath.exec(request.url)?.[1];
+    const conversationId = admissionPath.exec(request.url)?.[1];
     try {
       const { session, cookie } = authenticate(request.headers);
       if (!conversationId || request.headers['x-opencrane-view'] !== '1') throw new Error('CSRF check failed');
@@ -130,6 +131,16 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         if (stopped || socket.destroyed || upstream.destroyed) { upstream.destroy(); stop('upstream'); return; }
         wss.handleUpgrade(request, socket, head, ws => {
           viewer = ws;
+          // bufferedAmount includes the socket queue and queued WebSocket frames.
+          // Leave room for ws's automatic close reply or protocol-error frame (at most 127 bytes).
+          const room = (frameBytes: number) => !stopped && ws.bufferedAmount + frameBytes + 127 <= 4 * 1024 * 1024;
+          let pingWindow = Date.now(), pings = 0;
+          ws.on('ping', (bytes: Buffer) => {
+            if (stopped) return;
+            if (Date.now() - pingWindow >= 1000) { pingWindow = Date.now(); pings = 0; }
+            if (++pings > 16 || !room(bytes.length + 2)) return stop('slow_viewer');
+            ws.pong(bytes);
+          });
           ws.on('error', () => stop('protocol')); ws.on('close', () => stop('disconnected'));
           upstream!.on('error', () => stop('upstream')); upstream!.on('end', () => stop('upstream')); upstream!.on('close', () => stop('upstream'));
           const accept = viewerStream(bytes => {
@@ -142,7 +153,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
           });
           const display = desktopStream((bytes: Buffer) => {
             if (Date.now() >= validUntil || Date.now() >= ticket.expires) return stop('access_changed');
-            if (ws.bufferedAmount + bytes.length + 14 > 4 * 1024 * 1024) return stop('slow_viewer');
+            if (!room(bytes.length + 14)) return stop('slow_viewer');
             ws.send(bytes);
           }, () => stop('protocol'));
           upstream!.on('data', display);

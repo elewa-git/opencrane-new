@@ -7,6 +7,8 @@ Issue #57, parent #41, D22. Source base: `e727898` (3 October 2026).
 The self-contained conversation viewer requests a one-use, 15-second ticket with its session
 cookie, exact Origin and `x-opencrane-view: 1` header. The WebSocket presents
 that ticket as a subprotocol, bound to the same cookie and conversation.
+Admission uses `POST /api/conversations/:id/view`; the socket uses
+`/ws/conversations/:id/view`, through the frontend’s existing `/ws` proxy.
 Tickets are never URL parameters. The server derives the computer from event
 history; callers cannot choose a computer address, credential or generation.
 
@@ -23,20 +25,28 @@ private `pods/exec` stream into that Pod. A fixed helper drops to UID 1002 and
 connects to loopback Kasm as `viewer`. The ephemeral Kasm password stays inside
 the Pod. There is no Kasm Service, port-forward or browser credential. The
 computer NetworkPolicy admits no Kasm ingress, including from server-labelled
-Pods. The namespace-scoped server role requires `pods/exec` create permission.
-The existing lifecycle role is trusted; this does not grant desktop callers
+Pods. The namespace-scoped server role requires Pod `get`/`list` and
+`pods/exec` `create`. Pod names are assigned dynamically and Kubernetes RBAC
+cannot select labels or name prefixes, so this Role cannot restrict these
+permissions to computer Pods. The adapter lists `app=computer` Pods and checks
+the name, UID and label before exec. The existing lifecycle role is trusted; this does not grant desktop callers
 Kubernetes credentials.
 
 The proxy promotes S0.5's complete-message RFB allowlist across WebSocket
 fragmentation and coalescing. It permits only the shared RFB 3.8/None handshake
 and display requests, forces raw encoding, and rejects input, clipboard, file
 transfer, unknown messages, excessive encoding counts and messages above 4 KiB.
-Both sending directions are bounded to 4 MiB. Admission is capped at 16 opening or active views and 1,024 short-lived tickets. A slow viewer closes independently.
+Both sending directions are bounded to 4 MiB. Outgoing accounting includes
+data and manual pongs, with 127 bytes reserved for an automatic close frame.
+A viewer sending more than 16 pings in one second closes with 1013; automatic
+pongs are disabled. Admission is capped at 16 opening or active views and 1,024 short-lived tickets. A slow viewer closes independently.
 Kasm's read-only account remains a second check.
 
 Each session has a `view-<sessionId>` stream. Start is conditionally appended
 before connecting; stop records its reason with the same person, conversation,
-computer and generation. Replay opens no connection. Start records the expiry:
+computer and generation. Refusals use separate `view-<attemptId>` subjects.
+The lifecycle worker selects only lifecycle event types, including when
+replaying history after restart. Replay opens no connection. Start records the expiry:
 a process crash can leave a start without a stop, and an unavailable event store
 can prevent stop persistence. Those are incomplete audit trails, never claimed
 as successful stop events; the socket still closes and safe metadata is logged.
@@ -98,9 +108,8 @@ The component also cancels a pending view when its conversation input changes.
 Its [mount contract](../../apps/web/README.md) is ready for P2-5; the browser test
 host is separate from the product app, and the stub chat was removed.
 
-Two independent review passes completed. Pass one reproduced stale authority
-being renewed after a delayed audit append. Pass two repeated that attack after
-the fix: zero upstream connections, zero bytes and an `access_changed` stop.
+The earlier focused authority review reproduced stale authority being renewed
+after a delayed audit append. Verification repeated that attack after the fix: zero upstream connections, zero bytes and an `access_changed` stop.
 The API tests also prove that a joined member with a desktop grant but no
 participation is refused, delayed OpenFGA projections fail closed, revoked
 tickets cannot connect, an audit outage opens no desktop, and an OpenFGA outage
@@ -113,6 +122,10 @@ npm dependencies. These tooling advisories were inspected and are not claimed
 fixed by this feature. The production-only `npm audit --omit=dev` reports zero
 vulnerabilities. Safe final command output is retained in
 [checks.log](live-view/checks.log).
+
+The current independent review’s blockers 1–4 and their regression evidence
+are recorded in [the review-fix receipt](live-view-review-fixes-evidence.md).
+Blocker 5, mounting in the product chat UI, remains deferred.
 
 ## Remaining live qualification — NOT RUN
 

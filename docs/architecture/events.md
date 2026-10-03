@@ -142,8 +142,8 @@ SSO membership path. Invitation creation and identity binding are separate work.
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
-| `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata; no connection. |
-| `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | No replayed connection; start records a maximum two-minute lease and stop records its reason. |
+| `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata on `view-<attemptId>`; no connection or lifecycle effect. |
+| `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | Audit on `view-<sessionId>`; no lifecycle effect or replayed connection. Start records a maximum two-minute lease and stop records its reason. |
 | `takeover.started` / `takeover.ended` | live-view proxy | computers, audit | pause / resume the agent |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 
