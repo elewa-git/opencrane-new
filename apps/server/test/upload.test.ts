@@ -4,6 +4,8 @@ import { WebSocket } from 'ws';
 import { uploadPdf } from './support/upload-pdf.ts';
 import { expect, it } from 'vitest';
 import { inspectFile } from '../src/files/types.ts';
+import { uploadFile } from '../src/files/routes.ts';
+import { FileUnavailable } from '../src/files/refusals.ts';
 
 it('accepts document content and refuses a disguised executable or archive', async () => {
   expect(await inspectFile('notes.txt', Buffer.from('Meeting at ten.'))).toBe('text/plain');
@@ -76,6 +78,14 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
   const headers = { origin: new URL(config.redirectUri).origin, 'content-type': 'application/octet-stream', 'x-file-name': 'notes.txt', 'idempotency-key': 'upload',
     cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org', roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+300 })}` };
   const url = '/api/conversations/conversation/files';
+  function uploadRequest(key: string, payload: Buffer, name = 'notes.txt') {
+    const requestHeaders = {
+      ...headers,
+      'idempotency-key': key,
+      'x-file-name': name,
+    };
+    return { method: 'POST' as const, url, headers: requestHeaders, payload };
+  }
   try {
     for (const [subject, type, data] of [
       ['member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' } }],
@@ -132,22 +142,65 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, cookie: '' }, payload: Buffer.from('test') })).statusCode).toBe(401);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, origin: 'https://other.test' }, payload: Buffer.from('test') })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'x-file-name': 'escape.exe' }, payload: Buffer.from('MZbinary') })).statusCode).toBe(415);
+    const malformedRequest = uploadRequest(
+      'malformed', Buffer.from('Meeting at ten.'), 'bad/name.txt',
+    );
+    const malformed = await app.inject(malformedRequest);
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toEqual({ status: 'refused', error: 'Invalid request' });
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.alloc(20 * 1024 * 1024 + 1) })).statusCode).toBe(413);
+    const oversizedBytes = Buffer.alloc(20 * 1024 * 1024 + 1);
+    const expectedSizeRefusal = {
+      kind: 'file_too_large',
+      statusCode: 413,
+      message: 'File too large. Maximum size is 20 MiB.',
+    };
+    const oversizedUpload = uploadFile(
+      options, 'alice', 'conversation', 'oversized-helper', 'notes.txt', oversizedBytes,
+    );
+    await expect(oversizedUpload).rejects.toMatchObject(expectedSizeRefusal);
     const { until: wait } = await import('@opencrane/authz/testing');
     let release: () => void = () => {};
-    const gate = new Promise<void>(resolve => { release = resolve; });
+    function holdScan(resolve: () => void) {
+      release = resolve;
+    }
+    const gate = new Promise<void>(holdScan);
     let scanning = false;
-    options.scan = async bytes => { scanning = true; await gate; return services.scan(bytes); };
-    const pending = app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'pending' }, payload: Buffer.from('Held until scan') });
-    await wait(() => Promise.resolve(scanning));
+    async function heldScan(bytes: Buffer) {
+      scanning = true;
+      await gate;
+      return services.scan(bytes);
+    }
+    options.scan = heldScan;
+    const pendingRequest = uploadRequest('pending', Buffer.from('Held until scan'));
+    const pending = app.inject(pendingRequest);
+    function scanStarted() {
+      return Promise.resolve(scanning);
+    }
+    await wait(scanStarted);
     try {
       expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
       expect(await services.client.listObjectsV2('files', '', true).toArray()).toHaveLength(1);
     } finally { release(); }
     expect((await app.inject({ url, headers })).json()).toEqual(list.json());
     release(); expect((await pending).statusCode).toBe(201);
-    options.scan = () => Promise.reject(new Error('Scanner unavailable'));
-    expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'offline' }, payload: Buffer.from('No scan means no file') })).statusCode).toBe(503);
+    function unexpectedScanFailure() {
+      return Promise.reject(new Error('Scanner failed unexpectedly'));
+    }
+    options.scan = unexpectedScanFailure;
+    const unscannedBytes = Buffer.from('No scan means no file');
+    const unexpectedRequest = uploadRequest('unexpected', unscannedBytes);
+    const unexpected = await app.inject(unexpectedRequest);
+    expect(unexpected.statusCode).toBe(500);
+    expect(unexpected.json()).toEqual({ status: 'failed', error: 'Unexpected failure' });
+    function unavailableScanner() {
+      return Promise.reject(new FileUnavailable('scanner'));
+    }
+    options.scan = unavailableScanner;
+    const unavailableRequest = uploadRequest('offline', unscannedBytes);
+    const unavailable = await app.inject(unavailableRequest);
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toEqual({ status: 'unavailable', error: 'Dependency unavailable' });
     expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
     options.scan = services.scan;
     const concurrent = await Promise.all(['Left', 'Right'].map(text => app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'race' }, payload: Buffer.from(text) })));

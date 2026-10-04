@@ -32,10 +32,16 @@ committed upload do not repeat scanning or create another event.
 | 400 | missing/invalid headers, unsafe basename or empty body |
 | 401 / 403 | missing session / membership, origin or conversation refused |
 | 409 | event-stream contention or key reused for another file |
-| 413 | request exceeds 20 MiB |
+| 413 | request exceeds 20 MiB: `{status:"refused", error:"File too large. Maximum size is 20 MiB."}` |
 | 415 | unsupported or mismatched content/filename; unsafe Office container |
 | 422 | `{status:"infected", error:"File rejected: malware detected", fileId}` |
-| 503 | storage, scanner, authorisation or event store unavailable; no clean verdict is assumed |
+| 500 | unexpected failure or invalid scanner response: `{status:"failed", error:"Unexpected failure"}` |
+| 503 | confirmed storage, scanner or event-store outage; no clean verdict is assumed |
+
+Files refusals carry their kind and HTTP status where detected, including
+`invalid_request` (400) for an empty body or malformed command input. Connection
+refusal, timeout and a dependency's own unavailable status carry a typed 503.
+Unexpected errors stay distinct and expose only the stable 500 response above.
 
 Accepted: PDF; DOC/DOCX, XLS/XLSX and PPT/PPTX; UTF-8 TXT/MD/CSV/JSON; PNG, JPEG,
 GIF, WebP, BMP and TIFF. Signatures, binary Office streams and Office ZIP entries
