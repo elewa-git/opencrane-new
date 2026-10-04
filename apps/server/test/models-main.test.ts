@@ -1,8 +1,12 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { randomUUID, generateKeyPairSync } from 'node:crypto';
+import { once } from 'node:events';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it } from 'vitest';
 import { z } from 'zod';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -11,8 +15,142 @@ import { BudgetActor, envelope, history } from '@opencrane/models';
 import { chatCommand } from '../src/chat/commands.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { turnCommand } from '../src/chat/turns.ts';
-import { generateKeyPairSync } from 'node:crypto';
 import { tokenIssuer } from '@opencrane/auth';
+
+const modelsMain = resolve('apps/server/src/models-main.ts');
+const agentgateway = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
+
+it('keeps running through a slow NATS reply and ingests later usage', async () => {
+  const nats = await natsFixture();
+  const dbs = await databases();
+  const fixture = await runningModelsFixture(nats, await dbs.postgres());
+  const laterUsageId = randomUUID();
+  try {
+    await waitForUsageEvent(nats.store, fixture.initialUsageId);
+    nats.pauseResponses(true);
+    await delay(600);
+    expect(fixture.child.exitCode).toBeNull();
+    const readiness = await fetch(`http://127.0.0.1:${fixture.readinessPort}/healthz/ready`);
+    expect(readiness.status).toBe(200);
+    nats.pauseResponses(false);
+    await appendUsage(fixture.usageFile, { id: laterUsageId, outcome: 'error' });
+    await waitForUsageEvent(nats.store, laterUsageId);
+    expect(fixture.child.exitCode).toBeNull();
+    expect((await fetch(`http://127.0.0.1:${fixture.readinessPort}/healthz/ready`)).status).toBe(200);
+  } finally {
+    nats.pauseResponses(false);
+    await stopModelsFixture(fixture);
+    await nats.close();
+    await dbs.close();
+  }
+}, 60_000);
+
+it('stops with a non-zero exit when a usage line is malformed', async () => {
+  const nats = await natsFixture();
+  const dbs = await databases();
+  const fixture = await runningModelsFixture(nats, await dbs.postgres());
+  try {
+    await waitForUsageEvent(nats.store, fixture.initialUsageId);
+    await appendFile(fixture.usageFile, '{malformed usage line}\n');
+    await waitForProcessExit(fixture.child);
+    expect(fixture.child.exitCode).not.toBe(0);
+  } finally {
+    await stopModelsFixture(fixture);
+    await nats.close();
+    await dbs.close();
+  }
+}, 60_000);
+
+async function runningModelsFixture(nats: Awaited<ReturnType<typeof natsFixture>>, databaseUrl: string) {
+  const directory = await mkdtemp(`${tmpdir()}/oc-models-retry-`);
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${directory}/key.pem`, key.privateKey, { mode: 0o600 });
+  const issuer = await tokenIssuer({ privateKeyPath: `${directory}/key.pem`, issuer: 'https://lifecycle.test/' });
+  await writeFile(`${directory}/jwks.json`, JSON.stringify(issuer.jwks));
+  const usageFile = `${directory}/usage.jsonl`;
+  const initialUsageId = randomUUID();
+  await appendUsage(usageFile, { id: initialUsageId, outcome: 'error' });
+  const decisionPort = await freePort();
+  const gatewayPort = await freePort();
+  const readinessPort = await freePort();
+  const child = spawn(process.execPath, ['--experimental-strip-types', modelsMain], {
+    cwd: resolve('.'),
+    env: {
+      ...process.env,
+      ...nats.env('command'),
+      DATABASE_URL: databaseUrl,
+      SILO_ID: 'test',
+      TOKEN_ISSUER: 'https://lifecycle.test/',
+      MODEL_STATE_DIR: directory,
+      MODEL_JWKS_FILE: `${directory}/jwks.json`,
+      MODEL_DECISION_PORT: String(decisionPort),
+      MODEL_GATEWAY_PORT: String(gatewayPort),
+      MODEL_READINESS_PORT: String(readinessPort),
+      AGENTGATEWAY_BINARY: agentgateway,
+      MODEL_KEY_FILE: `${directory}/key.pem`,
+      MODEL_UPSTREAM: '127.0.0.1:9',
+      OPENFGA_API_URL: 'http://127.0.0.1:9',
+      OPENFGA_STORE_ID: 'test',
+      OPENFGA_MODEL_ID: 'test',
+    },
+    stdio: 'ignore',
+  });
+  await waitForReadiness(child, readinessPort);
+  return { child, directory, usageFile, readinessPort, initialUsageId };
+}
+
+async function freePort() {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No free port');
+  const port = address.port;
+  server.close();
+  await once(server, 'close');
+  return port;
+}
+
+async function waitForReadiness(child: ChildProcess, port: number) {
+  for (let attempt = 0; attempt < 300; attempt++) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`models process exited before readiness: ${child.exitCode}`);
+    }
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/healthz/ready`);
+      if (response.status === 200) return;
+    } catch { /* The gateway is still starting. */ }
+    await delay(100);
+  }
+  throw new Error('models readiness timed out');
+}
+
+async function appendUsage(file: string, usage: { id: string; outcome: 'error' }) {
+  await appendFile(file, `${JSON.stringify(usage)}\n`);
+}
+
+async function waitForUsageEvent(store: Awaited<ReturnType<typeof natsFixture>>['store'], id: string) {
+  const subject = `security-${id}`;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const rows = await history(store, subject, 'test');
+    if (rows.some(row => row.event.type === 'security.alert_raised')) return;
+    await delay(100);
+  }
+  throw new Error('Later usage line was not ingested');
+}
+
+async function waitForProcessExit(child: ChildProcess) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await Promise.race([once(child, 'exit'), delay(5000)]);
+}
+
+async function stopModelsFixture(fixture: { child: ChildProcess; directory: string }) {
+  if (fixture.child.exitCode === null && fixture.child.signalCode === null) {
+    fixture.child.kill('SIGTERM');
+    await Promise.race([once(fixture.child, 'exit'), delay(5000)]);
+  }
+  await rm(fixture.directory, { recursive: true, force: true });
+}
 
 it.each([undefined, { d: 'not-a-private-key' }, { alg: 'ES384' }, { crv: 'P-384' }, { kty: 'RSA' }, { use: 'enc' }])(
   'starts with actual issuer public JWKS and rejects invalid key patch %j', async patch => {

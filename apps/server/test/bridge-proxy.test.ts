@@ -1,4 +1,5 @@
 import { createServer, request } from 'node:http';
+import { connect } from 'node:net';
 import { once } from 'node:events';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -10,6 +11,130 @@ import { createStore, memberAuthorisation, grantStream } from '@opencrane/authz'
 import { openfga } from '@opencrane/authz/testing';
 import { BudgetActor, startDecision, history, envelope } from '@opencrane/models';
 import { proxy } from '../../computer/src/proxy.ts';
+
+it('aborts the client when the model upstream cuts an SSE response short', async () => {
+  const fixture = await proxyStreamFixture(true);
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${fixture.local.url}/v1/responses`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${fixture.local.caller}`, 'session-id': 'thread' },
+      body: JSON.stringify({ stream: true, input: 'Hello' }),
+    });
+    expect(response.status).toBe(200);
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('Model response has no stream');
+    const delta = await reader.read();
+    expect(new TextDecoder().decode(delta.value)).toContain('response.output_text.delta');
+    await expect(reader.read()).rejects.toMatchObject({ name: 'TypeError' });
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  } finally {
+    await fixture.local.close();
+    fixture.gateway.closeAllConnections();
+    await closeServer(fixture.gateway);
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+it('ends a normal completed model response cleanly', async () => {
+  const fixture = await proxyStreamFixture(false);
+  try {
+    const response = await fetch(`${fixture.local.url}/v1/responses`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${fixture.local.caller}`, 'session-id': 'thread' },
+      body: JSON.stringify({ stream: true, input: 'Hello' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('response.completed');
+  } finally {
+    await fixture.local.close();
+    fixture.gateway.closeAllConnections();
+    await closeServer(fixture.gateway);
+    await rm(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+async function proxyStreamFixture(abortResponse: boolean) {
+  const directory = await mkdtemp(`${tmpdir()}/proxy-stream-`);
+  const gateway = createServer((incoming, response) => {
+    incoming.resume();
+    incoming.on('end', () => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.write('data: {"type":"response.output_text.delta","delta":"answer"}\n\n');
+      if (abortResponse) {
+        setTimeout(destroyResponseSocket, 20, response);
+        return;
+      }
+      response.end('data: {"type":"response.completed"}\n\n');
+    });
+  });
+  gateway.listen(0, '127.0.0.1');
+  await once(gateway, 'listening');
+  const address = gateway.address();
+  if (!address || typeof address === 'string') throw new Error('No gateway port');
+  const controlSocket = `${directory}/control.sock`;
+  const local = await proxy(`http://127.0.0.1:${address.port}`, {
+    callerPath: `${directory}/caller`, controlSocket, port: 0,
+  });
+  await installProxyGrant(controlSocket);
+  return { directory, gateway, local };
+}
+
+function destroyResponseSocket(response: import('node:http').ServerResponse) {
+  const socket = response.socket;
+  if (socket) socket.destroy();
+}
+
+async function installProxyGrant(controlSocket: string) {
+  const grant = {
+    thread: 'thread',
+    computer: 'computer-token',
+    token: 'turn-token',
+    expires: Date.now() + 60_000,
+  };
+  const body = JSON.stringify(grant);
+  const lines = [
+    'POST /grant HTTP/1.1',
+    'Host: localhost',
+    'Content-Type: application/json',
+    `Content-Length: ${Buffer.byteLength(body)}`,
+    'Connection: close',
+    '',
+    body,
+  ];
+  const requestText = lines.join('\r\n');
+  await new Promise<void>((resolve, reject) => {
+    const socket = connect(controlSocket);
+    const chunks: Buffer[] = [];
+    socket.once('connect', sendGrant);
+    socket.on('data', collectResponse);
+    socket.once('end', checkGrantResponse);
+    socket.once('error', reject);
+
+    function sendGrant() {
+      socket.end(requestText);
+    }
+
+    function collectResponse(chunk: Buffer) {
+      chunks.push(chunk);
+    }
+
+    function checkGrantResponse() {
+      const responseText = Buffer.concat(chunks).toString();
+      if (!responseText.includes('200 OK')) {
+        reject(new Error('Proxy grant refused'));
+        return;
+      }
+      resolve();
+    }
+  });
+}
+
+async function closeServer(server: ReturnType<typeof createServer>) {
+  await new Promise<void>((resolve, reject) => {
+    server.close(error => error ? reject(error) : resolve());
+  });
+}
 
 it('passes the actual proxy thread to admission even when a grant is installed with a false conversation identity', async () => {
   const directory = await mkdtemp(`${tmpdir()}/proxy-binding-`), nats = await natsFixture(), fga = await openfga();

@@ -3,9 +3,10 @@ import { conversationKeys } from './chat/keys.ts';
 import { readFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
-import { connectEventStore } from '@opencrane/event-store';
+import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { BudgetActor, startDecision, startGateway, ingestUsage } from '@opencrane/models';
+import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
 
@@ -15,6 +16,7 @@ function required(name: string): string {
   return value;
 }
 const stop = new AbortController();
+const logger = createLogger('models');
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => stop.abort());
 const db = connectProjectionDb(required('DATABASE_URL'), () => stop.abort());
 const events = await connectEventStore();
@@ -42,9 +44,14 @@ try {
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.
         if (!gateway.healthy()) throw new Error('Gateway stopped');
-        await ingestUsage(actor, `${directory}/usage.jsonl`);
-        await actor.period();
-        await actor.expire();
+        try {
+          await ingestUsage(actor, `${directory}/usage.jsonl`);
+          await actor.period();
+          await actor.expire();
+        } catch (error) {
+          if (!isEventStoreUnavailable(error)) throw error;
+          logger.warn({ operation: 'models.budget_tick' }, 'Event store unavailable; retrying next tick');
+        }
         await delay(100, undefined, { signal: stop.signal });
       }
     } finally { await gateway?.stop(); await decision.close(); }

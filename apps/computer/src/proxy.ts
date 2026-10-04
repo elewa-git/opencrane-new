@@ -1,5 +1,6 @@
 // Promoted from S0.1b: the capability authenticates Codex; grants stay per thread.
 import { createServer, request } from 'node:http';
+import { pipeline } from 'node:stream';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
@@ -59,8 +60,8 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
         'content-type': 'application/json', authorization: `Bearer ${grant.computer}`,
         'x-turn-token': grant.token, 'session-id': String(thread),
       } }, upstream => {
-        res.writeHead(upstream.statusCode ?? 502, upstream.headers); upstream.pipe(res);
-        res.on('close', () => upstream.destroy());
+        res.writeHead(upstream.statusCode ?? 502, upstream.headers);
+        pipeline(upstream, res, () => undefined);
       });
       outgoing.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => outgoing.destroy());
       outgoing.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
