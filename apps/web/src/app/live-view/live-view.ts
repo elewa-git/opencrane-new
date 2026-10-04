@@ -1,32 +1,17 @@
+import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
-import { ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild, type OnDestroy, type OnChanges, type SimpleChanges } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild,
+  type OnDestroy, type OnChanges, type SimpleChanges,
+} from '@angular/core';
 import type RFB from '@novnc/novnc/lib/rfb.js';
 
 @Component({
-  selector: 'oc-live-view', imports: [SharedState], changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<button class="entry" type="button" (click)="watch()">Watch your computer</button>
-    <dialog #dialog aria-label="Computer view" (close)="close('Disconnected')"><section aria-label="Computer view"><header><div><h2>Computer</h2><span>Read-only · shared desktop</span></div>
-    <button type="button" (click)="dialog.close()">Close view</button></header>
-    @if (state() === 'Not available') { <p>A conversation participant needs a shared-desktop grant and a ready computer to watch. Ask the desktop owner for access.</p> }
-    <div role="status" aria-live="polite">
-      <oc-shared-state [kind]="viewState()" [message]="state()"
-        [evidenceAt]="viewedAt()" [showAction]="false" />
-      @if (captureStatus()) {
-        <oc-shared-state [kind]="captureKind()" [message]="captureStatus()"
-          [evidenceAt]="capturedAt()" [showAction]="false" />
-      }
-    </div>
-    @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
-    <div [attr.aria-busy]="state() === 'Connecting' || capturing()" class="display" #display tabindex="0" aria-label="Read-only computer display" [hidden]="state() !== 'Viewing'"></div>
-    @if (state() === 'Viewing') { <div class="tools"><button type="button" [disabled]="capturing()" (click)="capture()">Screenshot</button><button type="button" [attr.aria-pressed]="fit()" (click)="zoom(true)">Fit</button>
-      <button type="button" [attr.aria-pressed]="!fit()" (click)="zoom(false)">Actual size · zoom</button></div> }
-    </section></dialog>`,
-  styles: `:host{display:block;min-width:0}.entry{margin:12px 18px;width:calc(100% - 36px);text-align:left}
-    dialog{width:min(1000px,94vw);max-height:90dvh;padding:0;border:0;border-radius:12px;color:#12343b}dialog::backdrop{background:#16191a55}section{border:1px solid var(--border,#d9dfe0);border-radius:12px;padding:16px;background:#fbfcfc}
-    header,.tools{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}h2{margin:0 0 4px;font-size:18px}
-    p,span{font-size:14px}button{min-height:44px;min-width:44px;padding:8px 16px;border:1px solid #6d8388;border-radius:6px;background:#fff;color:#12343b;font:inherit;cursor:pointer}
-    button:focus-visible,.display:focus-visible{outline:2px solid #0a8497;outline-offset:2px}.display{height:min(60vh,600px);width:100%;overflow:auto;background:#172a2d}
-    .display[hidden]{display:none}.tools{justify-content:flex-start;margin-top:12px}@media(max-width:500px){header>button{width:100%}section{padding:12px}.display{height:300px}}`,
+  selector: 'oc-live-view',
+  imports: [SharedState, ModalSheet],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './live-view.html',
+  styleUrl: './live-view.css',
 })
 export class LiveView implements OnDestroy, OnChanges {
   readonly conversationId = input.required<string>();
@@ -38,7 +23,7 @@ export class LiveView implements OnDestroy, OnChanges {
   protected readonly viewedAt = signal<string | undefined>(undefined);
   private captureKey = '';
   private captureAbort: AbortController | undefined;
-  private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  protected readonly viewOpen = signal(false);
   private readonly display = viewChild.required<ElementRef<HTMLElement>>('display');
   protected readonly state = signal('Disconnected');
   protected readonly fit = signal(true);
@@ -53,10 +38,21 @@ export class LiveView implements OnDestroy, OnChanges {
     }
     return 'paused';
   }
-  protected watch(): void { this.dialog().nativeElement.showModal(); void this.open(); }
+  protected watch(): void {
+    this.viewOpen.set(true);
+    void this.open();
+  }
+  protected panelClosed(): void {
+    this.viewOpen.set(false);
+    this.close('Disconnected');
+  }
   protected zoom(fit: boolean): void { this.fit.set(fit); if (this.viewer) this.viewer.scaleViewport = fit; }
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['conversationId'] && !changes['conversationId'].firstChange) { this.dialog().nativeElement.close(); this.close('Disconnected'); this.captureKey = ''; this.captureStatus.set(''); }
+    if (changes['conversationId'] && !changes['conversationId'].firstChange) {
+      this.panelClosed();
+      this.captureKey = '';
+      this.captureStatus.set('');
+    }
   }
   ngOnDestroy(): void { this.close('Disconnected'); }
   protected close(state: string): void {

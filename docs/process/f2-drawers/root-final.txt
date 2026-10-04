@@ -1,0 +1,15 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/f2-drawers
+
+
+ Test Files  85 passed | 4 skipped (89)
+      Tests  1448 passed | 15 skipped (1463)
+   Start at  17:31:48
+   Duration  1206.69s (tests 96%, import 3%)
+
+    Isolate  89 workers spawned · ~245ms startup each (spawn + environment, per file)
+             at least ~10.65s faster with isolate: false — reuses workers across files instead of one per file

@@ -2,7 +2,7 @@
 .message { display: flex; gap: 10px; margin-bottom: 24px; font-size: 14px; }
 .message-content { min-width: 0; flex: 1; }
 .message header { display: flex; align-items: baseline; gap: 8px; font-size: 12px; margin: 2px 0 6px; }
-time { color: #a7aeaf; font-size: 11px; }
+time { color: var(--oc-ink-muted); font-size: 11px; }
 .own { justify-content: flex-end; animation: oc-land 340ms var(--oc-ease-fold); }
 .own .message-content { flex: 0 1 auto; max-width: 78%; }
 .own .prose { background: #eef1f2; border-radius: 14px 14px 3px 14px; padding: 10px 14px; }
@@ -11,31 +11,87 @@ time { color: #a7aeaf; font-size: 11px; }
 .prose { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 14.5px; }
 .paragraph + .paragraph { margin-top: 9px; }
 .ink { animation: oc-ink 420ms var(--oc-ease-fold); }
-.tool-line { font-size: 11px; color: #81888a; margin: 8px 0; }
+.tool-line { font-size: 11px; color: var(--oc-ink-muted); margin: 8px 0; }
 .tool-line summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 7px 0; }
 .tool-line .chevron { width: 10px; height: 10px; }.tool-line[open] .chevron { transform: rotate(90deg); }
 .tool-drawer { margin: 4px 0 10px 14px; padding: 12px; border: 1px solid #dee3e4; border-radius: 7px; background: white; }
 .tool-drawer dl { display: grid; grid-template-columns: 54px minmax(0,1fr); gap: 5px 8px; margin: 0; font: 10px/1.5 var(--oc-font-mono); color: #616a6c; }
 .tool-drawer dd { margin: 0; overflow-wrap: anywhere; }.tool-drawer footer { border-top: 1px solid #eef1f2; padding-top: 8px; margin-top: 10px; line-height: 1.5; }
-.tool-drawer button { color: #0a94a7; }
+.tool-drawer button { color: var(--oc-accent-dark); }
 .turn-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #2a7d4f; animation: oc-settle 260ms var(--oc-ease-standard); transform-origin: left; }
-.turn-status.stopped { color: #91989a; }
+.turn-status.stopped { color: var(--oc-ink-muted); }
 .turn-status.failed { color: #c1392b; }
 .citation { position: relative; display: inline-block; vertical-align: baseline; height: 20px; margin: 0 2px; }
-.citation-paper { --oc-dogear-size: 6px; display: inline-block; height: 20px; color: #0a94a7; background: #e4f6f9; padding: 2px 5px; border: 1px solid #cdeef3; border-radius: 3px; font: 10px var(--oc-font-mono); }
+.citation-paper {
+  --oc-dogear-size: 6px;
+  display: inline-block;
+  height: 20px;
+  color: var(--oc-accent-dark);
+  background: #e4f6f9;
+  padding: 2px 5px;
+  border: 1px solid #cdeef3;
+  border-radius: 3px;
+  font: 10px var(--oc-font-mono);
+}
 .citation::before { content: ''; position: absolute; width: 44px; height: 44px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
 .file-card { display: flex; gap: 10px; align-items: center; border: 1px solid #dee3e4; border-radius: 10px; background: white; padding: 12px; margin-top: 14px; text-align: left; max-width: 100%; }
 .file-card.created { border-color: #9fdde8; }.file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-card strong { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-card small { display: block; font-size: 11.5px; color: #91989a; margin-top: 4px; }.file-card button { color: #0a94a7; font-size: 12px; }
-.file-type { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; background: #81888a; color: #fff; border-radius: 3px; padding: 3px; font: 9px var(--oc-font-mono); }
-.agent-badge { display: inline-block; font: 10px var(--oc-font-mono); color: #0a94a7; background: #eefafc; border-radius: 3px; padding: 2px 4px; margin-right: 4px; }
+.file-card small {
+  display: block;
+  font-size: 11.5px;
+  color: var(--oc-ink-muted);
+  margin-top: 4px;
+}
+.file-card button {
+  color: var(--oc-accent-dark);
+  font-size: 12px;
+}
+.file-type {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--oc-ink-muted);
+  color: #fff;
+  border-radius: 3px;
+  padding: 3px;
+  font: 9px var(--oc-font-mono);
+}
+.agent-badge {
+  display: inline-block;
+  font: 10px var(--oc-font-mono);
+  color: var(--oc-accent-dark);
+  background: #eefafc;
+  border-radius: 3px;
+  padding: 2px 4px;
+  margin-right: 4px;
+}
 .a2ui { white-space: normal; border: 1px solid #9fdde8; background: white; border-radius: 10px; padding: 15px; font-size: 13px; }
-.a2ui header { font-size: 11px; color: #81888a; }.a2ui p { font-size: 12px; color: #616a6c; }
+.a2ui header {
+  font-size: 11px;
+  color: var(--oc-ink-muted);
+}
+.a2ui p {
+  font-size: 12px;
+  color: #616a6c;
+}
 .composer-dock { padding: 0 28px 10px; width: 100%; max-width: 836px; margin: auto; }
-.composer-footnote { font-size: 10px; color: #91989a; text-align: center; margin: 8px 0 0; }
-.progress { color: #0a94a7; font-size: 12px; }.progress:empty { display: none; }
-.folding,.writing { display: flex; align-items: center; gap: 10px; min-height: 40px; font-size: 12px; color: #81888a; }
+.composer-footnote {
+  font-size: 10px;
+  color: var(--oc-ink-muted);
+  text-align: center;
+  margin: 8px 0 0;
+}
+.progress { color: var(--oc-accent-dark); font-size: 12px; }.progress:empty { display: none; }
+.folding,.writing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  font-size: 12px;
+  color: var(--oc-ink-muted);
+}
 .writing button { margin-left: auto; min-height: 30px; padding: 4px 10px; border: 1px solid #dee3e4; border-radius: 6px; background: white; }
 .caret { display: inline-block; width: 2px; height: 1em; background: #0db5cc; vertical-align: text-bottom; animation: oc-caret 1s steps(1) infinite; }
 @media(max-width:700px) {
@@ -50,7 +106,16 @@ time { color: #a7aeaf; font-size: 11px; }
 }
 .connection-strip { display: flex; align-items: center; gap: 8px; border: 1px solid #efcf99; border-radius: 9px; padding: 10px; background: #fffaf0; color: #8a6426; margin-bottom: 10px; font-size: 11px; }
 .connection-strip>span { flex: 1; }.connection-strip small { font: 11px var(--oc-font-mono); white-space: nowrap; }
-.connection-strip button { color: #0a94a7; min-height: 44px; min-width: 44px; }.connection-strip.waking { border-color: #9fdde8; background: #eefafc; color: #0a94a7; }
+.connection-strip button {
+  color: var(--oc-accent-dark);
+  min-height: 44px;
+  min-width: 44px;
+}
+.connection-strip.waking {
+  border-color: #9fdde8;
+  background: #eefafc;
+  color: var(--oc-accent-dark);
+}
 
 .file-type[data-type=PDF] { background: #c1392b; }
 .file-type[data-type=DOCX] { background: #2a5c9a; }

@@ -1,0 +1,58 @@
+:host { display: contents; }
+dialog {
+  position: fixed;
+  padding: 0;
+  border: 1px solid var(--oc-border-default);
+  color: var(--oc-ink-default);
+  background: var(--oc-surface-paper);
+  overflow: visible;
+}
+dialog[open] { display: flex; flex-direction: column; }
+dialog::backdrop { background: #16191a55; }
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--oc-border-row);
+  background: var(--oc-surface-raised);
+}
+.heading { flex: 1; min-width: 0; }
+h2 { margin: 0; font: var(--oc-type-card); overflow-wrap: anywhere; }
+p { margin: 4px 0 0; font: var(--oc-type-secondary); color: var(--oc-ink-muted); }
+button { min-width: 44px; min-height: 44px; flex-shrink: 0; }
+.back { color: var(--oc-accent-dark); font-size: 13px; font-weight: 500; padding: 0 10px; }
+.close {
+  font-size: 19px;
+  border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-button);
+}
+.body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  overflow-wrap: anywhere;
+}
+footer {
+  margin-top: auto;
+  padding: 14px 20px;
+  border-top: 1px solid var(--oc-border-row);
+  background: var(--oc-surface-raised);
+}
+footer:empty { display: none; }
+@media (max-width: 600px) {
+  dialog {
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+  .body { flex: 1; padding: 18px 16px; }
+  footer { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}

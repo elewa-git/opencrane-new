@@ -1,5 +1,11 @@
 {
   "extends": "../tsconfig.app.json",
-  "include": ["live-view-main.ts", "../src/app/live-view/*.ts"],
-  "exclude": ["../src/**/*.spec.ts"]
+  "include": [
+    "live-view-main.ts",
+    "../src/app/live-view/*.ts",
+    "overlays-main.ts"
+  ],
+  "exclude": [
+    "../src/**/*.spec.ts"
+  ]
 }
