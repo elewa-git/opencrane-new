@@ -1,0 +1,17 @@
+:host { display: block; min-width: 0; }
+h1 { font-size: 22px; letter-spacing: -.3px; margin: 16px 0 8px; } h2 { font-size: 16px; } h3 { font-size: 14px; }
+p { color: var(--oc-ink-secondary); font-size: 13px; line-height: 1.5; }
+a { display: inline-flex; align-items: center; min-height: 44px; color: var(--oc-accent-dark); }
+.steps, .sources { display: flex; gap: 16px; margin: 22px 0; font-size: 13px; }
+.sources > div { flex: 1; border: 1px solid var(--oc-border-default); padding: 18px; border-radius: 10px; background: white; }
+.sources .selected { border-color: var(--oc-accent-dark); background: var(--oc-accent-tint); }
+.unavailable { color: var(--oc-ink-secondary); }
+form, section { background: white; border: 1px solid var(--oc-border-default); border-radius: 12px; padding: 22px; margin: 18px 0; }
+label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 10px; }
+input { box-sizing: border-box; width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--oc-border-input); border-radius: 7px; font: inherit; }
+button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--oc-border-input); border-radius: 7px; background: var(--oc-accent); color: var(--oc-ink-strong); font: inherit; cursor: pointer; }
+button.secondary { background: white; margin-top: 18px; } button:disabled { opacity: .65; cursor: wait; }
+article { border-top: 1px solid var(--oc-border-default); padding: 14px 0; } code, pre { font-family: monospace; font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
+summary { min-height: 44px; align-content: center; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--oc-accent-dark); outline-offset: 2px; }
+@media (max-width: 600px) { .sources, .steps { flex-direction: column; gap: 10px; } form, section { padding: 16px; } button { width: 100%; } }

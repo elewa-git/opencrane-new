@@ -1,0 +1,12 @@
+4 October 2026; source d172909 plus the journey and refusal wording in this commit.
+Secondary stack 1; org 393311211338337681; local TLS fixture; paid model calls disabled.
+Core up.sh --fresh: FAIL (live-view Viewing timeout); MCP journey ran against the fresh services.
+Command: DEV_STACK_ID=1 node --experimental-strip-types infra/dev-stack/mcp-journey.ts fresh
+Exit: 0
+
+PASS owner signed in through Zitadel on the secondary stack
+PASS HTTP URL refused with an HTTPS explanation and no registration
+PASS private-address URL refused with a public-hostname explanation and no outbound request
+PASS local TLS discovery: two paginated tools, reviewable definitions/digests, zero allowed
+PASS reload: Check status restores inventory; one registration event and no tool calls
+PASS screenshots at 1280px and 390px; no horizontal overflow

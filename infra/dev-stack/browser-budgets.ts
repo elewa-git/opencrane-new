@@ -15,7 +15,7 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   await mkdir(output, { recursive: true });
   const ceilings = async () => (await history(store, `budget-${silo}`, silo)).filter(row => row.event.type === 'budget.ceiling_set');
   const before = await ceilings();
-  const run = before.some(row => (row.event.data as { setBy: string }).setBy !== 'installation') ? 'repeat' : 'fresh';
+  const run = before.some(row => !['installation', 'dev-only-stub-journey'].includes((row.event.data as { setBy: string }).setBy)) ? 'repeat' : 'fresh';
   for (const width of [1280, 390]) await copyFile(`${directory}/workspace-${width}.png`, `${output}/${run}-stub-chat-${width}.png`);
   assert.equal(before.filter(row => (row.event.data as { setBy: string }).setBy === 'installation').length, 1, 'Startup seeds the installation default exactly once');
   await migrateBudgetDefault(store, silo, 'must-not-replace-default');

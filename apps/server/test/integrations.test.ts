@@ -1,3 +1,5 @@
+import { installWorker } from '../src/integrations/install-worker.ts';
+import { remoteFixture } from './support/remote-mcp.ts';
 import { budgets, BudgetActor, readBudget, startDecision } from '@opencrane/models';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
@@ -206,6 +208,8 @@ it('refuses another organisation and a cookie role without projected membership'
 });
 
 it('loads through the dev proxy and preserves the accessible refresh journey in Chromium', async () => {
+  const remote = await remoteFixture();
+  installWorker(app, nats.store, 'test', remote.network).start();
   const target = await app.listen({ host: '127.0.0.1', port: 0 });
   const directory = await mkdtemp(join(tmpdir(), 'opencrane-org-browser-'));
   const proxy = join(directory, 'proxy.json');
@@ -245,6 +249,46 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     expect((await apiResponse).status()).toBe(200);
     await page.locator('.register-row').first().waitFor();
     expect(await page.locator('.register-row').count()).toBe(6);
+
+    await page.getByRole('link', { name: 'Add MCP server', exact: true }).click();
+    await page.getByRole('heading', { name: 'Add an MCP server' }).waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+      await page.screenshot({ path: `/tmp/p3-3-source-${width}.png`, fullPage: true });
+    }
+    await page.getByLabel('Server URL', { exact: true }).fill('https://mcp.example.test/mcp');
+    const registrations: string[] = [];
+    page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/org/integrations')) registrations.push(request.url()); });
+    const registered = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/org/integrations'));
+    await page.getByRole('button', { name: 'Discover tools', exact: true }).click();
+    expect((await registered).status()).toBe(202);
+    await page.reload();
+    await page.getByText('Outcome unknown', { exact: false }).waitFor();
+    await vi.waitFor(async () => {
+      await page.getByRole('button', { name: 'Check status', exact: true }).click();
+      expect(await page.getByRole('region', { name: 'Tool inventory' }).count()).toBe(1);
+    }, { timeout: 10_000 });
+    expect(registrations).toHaveLength(1);
+    await page.getByText('2 tools discovered · 0 allowed').waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+      const controls = page.locator('oc-mcp-install button, oc-mcp-install input, oc-mcp-install summary');
+      for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      await page.screenshot({ path: `/tmp/p3-3-review-${width}.png`, fullPage: true });
+    }
+    remote.status(401);
+    await page.getByRole('button', { name: 'Add another server' }).click();
+    await page.getByLabel('Server URL', { exact: true }).fill('https://mcp.example.test/protected');
+    await page.getByRole('button', { name: 'Discover tools', exact: true }).click();
+    await vi.waitFor(async () => {
+      await page.getByRole('button', { name: 'Check status', exact: true }).click();
+      expect(await page.getByText('A scoped validation connection is required.', { exact: false }).count()).toBe(1);
+    }, { timeout: 10_000 });
+    expect(await page.getByRole('region', { name: 'Tool inventory' }).count()).toBe(0);
+    await page.getByRole('link', { name: 'Back to integrations' }).click();
+    await page.locator('.register-row').first().waitFor();
 
     const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
     await page.getByRole('link', { name: 'Manage tools for Odoo Accounting' }).click();
@@ -305,8 +349,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('tab', { name: /^All/ }).press('Tab');
     await focused(page, 'integrations-panel');
 
-    await page.getByRole('button', { name: 'Add MCP server' }).click();
-    await page.getByText("Adding MCP servers isn't available yet").waitFor();
+    expect(await page.getByRole('link', { name: 'Add MCP server' }).getAttribute('href')).toBe('/org/integrations/new');
     expect(await page.locator('.register-row button').count()).toBe(0);
     const interactive = page.locator('button:visible, a:visible');
     const targets = await Promise.all(Array.from({ length: await interactive.count() }, async (_, index) => {
@@ -373,6 +416,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await context.close();
   } finally {
     config.redirectUri = originalRedirect;
+    await remote.close();
     await browser.close();
     web.kill('SIGTERM');
     const hardKill = setTimeout(() => web.kill('SIGKILL'), 5_000);
@@ -544,4 +588,77 @@ it('never logs private audit filters, tokens or dependency error bodies', async 
     await logged.inject({ url: '/api/conversations/private-conversation-canary/history?requestId=private-request-canary', headers: headers('oidc-alice') });
     expect(logs).not.toContain('canary');
   } finally { failed.mockRestore(); await logged.close(); vi.unstubAllEnvs(); }
+});
+
+it('registers a remote source once and restores its stable change reference through status and replay', async () => {
+  const payload = { locator: 'https://new.example.test/mcp' };
+  const url = '/api/org/integrations';
+  const send = (sub: string) => app.inject({ method: 'POST', url, payload,
+    headers: { ...headers(sub), origin: new URL(config.redirectUri).origin } });
+  expect((await send('oidc-bob')).statusCode).toBe(403);
+  const first = await send('oidc-alice');
+  expect(first.statusCode).toBe(202);
+  const change = first.json<{ serverId: string; changeRef: string }>();
+  expect(change.changeRef).toMatch(/^chg_/u);
+  expect((await send('oidc-alice')).json()).toEqual(change);
+  const status = () => app.inject({ url: `${url}/${change.serverId}/discovery`, headers: headers('oidc-alice') });
+  expect((await status()).json()).toMatchObject({ ...change, state: 'checking' });
+  await runner.run(mcpCatalogue);
+  const before = await catalogue.rows('test');
+  expect(before.filter(r => r.serverId === change.serverId)).toHaveLength(1);
+  await runner.rebuild(mcpCatalogue);
+  expect(await catalogue.rows('test')).toEqual(before);
+  const rows = [];
+  for await (const row of nats.store.readStream(`mcp-${change.serverId}`)) rows.push(row);
+  expect(rows).toHaveLength(1);
+});
+
+
+it('refuses unsafe remote sources and reconciles uncertain concurrent registration without another append', async () => {
+  const url = '/api/org/integrations';
+  const admin = { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin };
+  expect((await app.inject({ method: 'POST', url, payload: { locator: 'https://public.test/' } })).statusCode).toBe(401);
+  expect((await app.inject({ method: 'POST', url, headers: headers('oidc-alice'), payload: { locator: 'https://public.test/' } })).statusCode).toBe(403);
+  const head = await nats.store.head();
+  for (const locator of ['http://public.test/mcp', 'https://user:secret@public.test/', 'https://public.test/?key=secret',
+    'https://public.test/#secret', 'https://127.0.0.1/', 'https://[2001:4860::8888]/', 'https://public.test/\n', 'not a URL']) {
+    const reply = await app.inject({ method: 'POST', url, headers: admin, payload: { locator } });
+    expect(reply.statusCode).toBe(400);
+    expect(reply.json()).toEqual({ status: 'invalid_request' });
+  }
+  const lookup = `${url}/discovery?locator=${encodeURIComponent('https://race.example.test/mcp')}`;
+  expect((await app.inject({ url: lookup, headers: admin })).statusCode).toBe(404);
+  expect(await nats.store.head()).toBe(head);
+  const results = await Promise.all(['oidc-alice', 'oidc-amina', 'oidc-alice', 'oidc-amina'].map(sub => app.inject({ method: 'POST', url,
+    headers: { ...headers(sub), origin: admin.origin }, payload: { locator: 'https://race.example.test/mcp' } })));
+  expect(results.map(r => r.statusCode)).toEqual([202, 202, 202, 202]);
+  expect(results[0]!.json()).toEqual(results[1]!.json());
+  const stored = await nats.store.head();
+  expect(stored).toBe(head + 1);
+  expect((await app.inject({ url: lookup, headers: admin })).json()).toMatchObject(results[0]!.json());
+  expect(await nats.store.head()).toBe(stored);
+});
+
+it('projects protected discovery as Needs input and replays inventory without another network request', async () => {
+  const remote = await remoteFixture();
+  const worker = installWorker(app, nats.store, 'test', remote.network);
+  const admin = { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin };
+  try {
+    for (const path of ['public', 'protected']) {
+      if (path === 'protected') remote.status(401);
+      const response = await app.inject({ method: 'POST', url: '/api/org/integrations', headers: admin, payload: { locator: `https://mcp.example.test/${path}` } });
+      const { serverId } = response.json<{ serverId: string }>();
+      await worker.discover(serverId);
+      await runner.run(mcpCatalogue);
+      const status = await app.inject({ url: `/api/org/integrations/${serverId}/discovery`, headers: admin });
+      expect(status.json()).toMatchObject({ state: 'needs_input', reason: path === 'public' ? 'pending_review' : 'connection_required' });
+      const rows = await catalogue.rows('test');
+      expect(rows.find(r => r.serverId === serverId)).toMatchObject({ status: { kind: 'needs_input' }, toolsAllowed: 0 });
+      const count = remote.calls.length;
+      await runner.rebuild(mcpCatalogue);
+      expect(await catalogue.rows('test')).toEqual(rows);
+      expect(remote.calls).toHaveLength(count);
+      if (path === 'public') expect(await catalogue.tools('test', serverId)).toMatchObject({ published: false, connectionId: null, tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
+    }
+  } finally { await remote.close(); }
 });

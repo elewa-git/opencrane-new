@@ -62,6 +62,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       changed_at TEXT NOT NULL, position BIGINT NOT NULL,
       PRIMARY KEY (silo, server_id))`);
       await db.query(`ALTER TABLE ${tables.catalogue} ADD COLUMN IF NOT EXISTS policy JSONB`);
+      await db.query(`ALTER TABLE ${tables.catalogue} ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
       await db.query(`CREATE TABLE IF NOT EXISTS ${tables.toolModes} (
       silo TEXT NOT NULL, server_id TEXT NOT NULL, tool_name TEXT NOT NULL, mode TEXT NOT NULL,
       PRIMARY KEY (silo, server_id, tool_name))`);
@@ -100,9 +101,9 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
       const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
       await db.query(`UPDATE ${tables.catalogue} SET lifecycle = $3,
       tool_count = COALESCE($4, tool_count), server_name = COALESCE($5, server_name),
-      server_version = COALESCE($6, server_version), changed_at = $7, position = $8
+      server_version = COALESCE($6, server_version), changed_at = $7, position = $8, rejection_reason = $9
       WHERE silo = $1 AND server_id = $2`,
-      [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position]);
+      [event.silo, serverId, lifecycle, toolCount, info?.name ?? null, info?.version ?? null, event.time, position, optionalField(data, 'reason')]);
     },
   };
 }
@@ -167,7 +168,9 @@ export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
       accountModel: 'Not provided',
       toolsAllowed: total === null ? allowed : Math.min(allowed, total),
       toolsTotal: total,
-      status: status(row.lifecycle, row.changed_at),
+      status: row['rejection_reason'] === 'connection_required' && row.lifecycle === 'rejected'
+        ? { kind: 'needs_input', label: 'Needs input', detail: 'A scoped validation connection is required. Protected discovery is not available yet.' }
+        : status(row.lifecycle, row.changed_at),
     };
   });
 }

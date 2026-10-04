@@ -16,7 +16,9 @@
   </nav>
 
   <main>
-    @if (historyPage) { <oc-audit /> } @else if (modelsPage) {
+    @if (historyPage) { <oc-audit /> } @else if (installPage) {
+      <oc-mcp-install />
+    } @else if (modelsPage) {
       <oc-models />
     } @else if (toolServer) {
       <oc-tool-policy [serverId]="toolServer" />
@@ -38,12 +40,9 @@
         <div><h1>Integrations</h1><p>MCP servers your assistants can reach. Each server offers tools; you choose which ones, for whom.</p></div>
         <div class="page-actions">
           <button id="refresh-integrations" type="button" class="button secondary" (click)="refresh()" [attr.aria-disabled]="loadState() === 'loading' || loadState() === 'retrying'">{{ loadState() === 'retrying' ? 'Refreshing list…' : 'Refresh list' }}</button>
-          <button type="button" class="button primary" (click)="addUnavailable.set(true)">Add MCP server</button>
+          <a class="button primary" href="/org/integrations/new">Add MCP server</a>
         </div>
       </div>
-      @if (addUnavailable()) {
-        <div class="unavailable" role="status">Adding MCP servers isn't available yet. You can review the servers already registered.</div>
-      }
       @if (loadState() === 'access') {
         <section class="access-state">
           <h2>Access needed</h2>
@@ -79,7 +78,7 @@
               <div class="register-row" role="row">
                 <div class="server"><span class="tile">{{ row.name.slice(0, 2).toUpperCase() }}</span><span><strong>{{ row.name }}</strong><small>{{ row.source.label }} · {{ row.version }} · {{ row.source.detail }}</small></span></div>
                 <span class="account" data-label="Account">{{ row.accountModel }}</span>
-                <span class="tools" data-label="Tools">{{ tools(row) }} <a [href]="'/org/integrations/' + row.serverId + '/tools'" [attr.aria-label]="'Manage tools for ' + row.name">Manage tools</a></span>
+                <span class="tools" data-label="Tools">{{ tools(row) }} <a [href]="'/org/integrations/new?server=' + row.serverId" [attr.aria-label]="'Check discovery status for ' + row.name">Check status</a> <a [href]="'/org/integrations/' + row.serverId + '/tools'" [attr.aria-label]="'Manage tools for ' + row.name">Manage tools</a></span>
                 <oc-shared-state [kind]="row.status.kind" [message]="row.status.label" [detail]="row.status.detail" [safeToRetry]="row.status.safeToRetry ?? false" />
               </div>
             }

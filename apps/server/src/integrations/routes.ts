@@ -1,3 +1,6 @@
+import { installWorker } from './install-worker.ts';
+import type { RemoteNetwork } from './remote.ts';
+import { registerRemote, discoveryStatus, remoteReference } from './registration.ts';
 import { createHash } from 'node:crypto';
 import { budgetCommandSchema } from '@opencrane/protocol';
 import { z } from 'zod';
@@ -13,6 +16,7 @@ import { sessionFor } from '../members/routes.ts';
 
 export interface IntegrationOptions {
   silo: string;
+  discovery?: RemoteNetwork;
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
   catalogue: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows' | 'tools'>;
   store?: EventStore;
@@ -23,9 +27,10 @@ export interface IntegrationOptions {
 }
 
 export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConfig, options?: IntegrationOptions): void {
+  if (options?.store && options.discovery) installWorker(app, options.store, options.silo, options.discovery).start();
   const authorisation = options && memberAuthorisation(options.binding);
   const now = options?.now ?? (() => new Date());
-  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools']) app.route({ method: (path.endsWith('/tools') || path.endsWith('/models')) ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
+  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/discovery', '/api/org/integrations/discovery']) app.route({ method: !path.endsWith('/discovery') ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
     if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
@@ -43,6 +48,27 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       if (!permission.allowed) {
         return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
       }
+      return await authorisedRequest(path, request, reply, config, options, memberId, now());
+    } catch (error) {
+      return routeError(request, reply, error);
+    }
+  } });
+}
+
+async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
+      if (path.endsWith('/discovery')) {
+        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+        const { serverId } = path === '/api/org/integrations/discovery'
+          ? remoteReference(options.silo, z.object({ locator: z.string().max(2048) }).parse(request.query).locator)
+          : z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(request.params);
+        const status = await discoveryStatus(options.store, options.silo, serverId);
+        return reply.code(status ? 200 : 404).send(status ?? { status: 'not_found' });
+      }
+      if (path === '/api/org/integrations' && request.method === 'POST') {
+        if (request.headers.origin !== new URL(config.redirectUri).origin) return reply.code(403).send({ status: 'refused' });
+        if (!options.store) return reply.code(503).send({ status: 'unavailable' });
+        return reply.code(202).send(await registerRemote(options.store, options.silo, memberId, request.body));
+      }
       if (path.endsWith('/tools')) {
         return await tools(request, reply, config, options, memberId);
       }
@@ -50,15 +76,11 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
         if (request.method === 'POST') return await setBudget(request, reply, config, options, memberId);
         if (!options.modelDb) return reply.code(503).send({ status: 'unavailable' });
         const state = await readBudget(options.modelDb, options.silo);
-        return reply.send({ models, taskRouting, priceTableId, shortContextTokens, ...totals(state, now()), budget: budgetSummary(state, now()) });
+        return reply.send({ models, taskRouting, priceTableId, shortContextTokens, ...totals(state, now), budget: budgetSummary(state, now) });
       }
-      const response: IntegrationsResponse = { rows: await options.catalogue.rows(options.silo), loadedAt: now().toISOString() };
+      const response: IntegrationsResponse = { rows: await options.catalogue.rows(options.silo), loadedAt: now.toISOString() };
       return reply.send(response);
-    } catch (error) {
-      return routeError(request, reply, error);
-    }
-  } });
-}
+ }
 
 async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string) {
         const { serverId } = z.object({ serverId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(request.params);
@@ -70,7 +92,7 @@ async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthC
 }
 
 function routeError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
-      if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
+      if (error instanceof z.ZodError || error instanceof Error && error.message === 'invalid_endpoint') return reply.code(400).send({ status: 'invalid_request' });
       if (error instanceof Error && error.message === 'Access changed') return reply.code(403).send({ status: 'refused' });
       request.log.error({ operation: 'mcp-catalogue.read' }, 'MCP catalogue unavailable');
       return reply.code(503).send({ status: 'unavailable' });

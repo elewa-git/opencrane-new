@@ -1,4 +1,5 @@
 import { AuditScreen } from './audit/audit';
+import { McpInstall } from './mcp-install/mcp-install';
 import { ModelsScreen } from './models/models';
 import { ToolPolicyScreen } from './tool-policy/tool-policy';
 import { ChangeDetectionStrategy, Component, type OnInit, computed, inject, signal } from '@angular/core';
@@ -24,13 +25,14 @@ const STATE_EXAMPLES: ReadonlyArray<{ kind: SharedStateKind; name: string; messa
 ];
 
 @Component({
-  selector: 'app-root', imports: [SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
+  selector: 'app-root', imports: [McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush, host: { '[class.workspace-root]': 'workspacePage' },
 })
 export class App implements OnInit {
   private readonly ws = inject(WebSocketService);
   protected readonly workspacePage = globalThis.location.pathname === '/workspace';
   protected readonly orgPage = globalThis.location.pathname.startsWith('/org');
+  protected readonly installPage = globalThis.location.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(globalThis.location.pathname)?.[1];
   protected readonly historyPage = globalThis.location.pathname === '/org/history';
   protected readonly auditConversation = /^\/history\/([\w-]+)$/u.exec(globalThis.location.pathname)?.[1];
@@ -41,7 +43,6 @@ export class App implements OnInit {
   protected readonly selectedTab = signal<Tab>('all');
   protected readonly loadState = signal<LoadState>('loading');
   protected readonly loadedAt = signal<string | undefined>(undefined);
-  protected readonly addUnavailable = signal(false);
   protected readonly menuOpen = signal(false);
   protected readonly attention = computed(() => this.rows().filter((row) =>
     ['needs_input', 'failed', 'unknown', 'access_changed'].includes(row.status.kind)));
@@ -52,7 +53,7 @@ export class App implements OnInit {
 
   ngOnInit(): void {
     if (this.orgPage) this.ws.connect();
-    if (this.orgPage && !this.statesPage && !this.toolServer && !this.modelsPage && !this.historyPage) void this.load();
+    if (this.orgPage && !this.statesPage && !this.toolServer && !this.modelsPage && !this.historyPage && !this.installPage) void this.load();
   }
 
   protected select(tab: Tab): void { this.selectedTab.set(tab); }

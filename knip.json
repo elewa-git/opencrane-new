@@ -22,7 +22,8 @@
         "test/**/*.ts"
       ],
       "ignoreBinaries": [
-        "kubectl"
+        "kubectl",
+        "openssl"
       ]
     },
     "apps/ops": {
