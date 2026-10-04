@@ -27,7 +27,7 @@ with unrelated subjects. The resource grant subject contains all its grantees.
 The current OpenFGA model permits team membership via the assistant owner or a
 resource grant, so those are the only teams authority discovery follows.
 
-## Evidence
+## Original evidence before rebase
 
 Source base: `3972492d9eb556587bfa443b26e154b33e84f83b` plus this change.
 Environment: 4 October 2026, Linux, Node 22.23.3; disposable local NATS and OpenFGA
@@ -102,6 +102,46 @@ budget refusal test. No skipped condition is claimed as tested.
 Independent adversarial review: **PASS**, no source blockers; four focused tests
 passed independently. Source qualification: **PASS**. Live qualification remains
 **NOT RUN** as described below.
+
+## Rebase qualification — 4 October 2026
+
+Rebased source: `b493547c812b116f6fd32466669ef07cb861498d` on
+`origin/main` at `7b8b1d370836aa21402f42eb5f085779a7cb5195` (uploads #79).
+Git reported a completed rebase; the main revision is an ancestor and neither
+rebase state directory remains. The working branch is `work/authority-reads`.
+
+The exact-subject design replaces the uploads partial fix. It retains parallel
+context reads, request-sized budget reservations, approval binding and audit
+correlation. Harmless command, file, reasoning and message reports can advance
+the exact conversation head; every watched subject is checked again afterwards.
+The race test now injects revocation during that exact report read.
+
+Environment: existing Linux workspace, Node 22.23.3, dependencies refreshed with
+`npm ci`. No fresh silo, service daemon or host-network change was made. Logs are
+in `/tmp/authority-rebase-evidence/` on the builder host.
+
+Independent review of `origin/main..b493547`: **PASS**, no source blockers.
+In-memory fence probes passed for unrelated changes, successive output reports,
+revocation during a report read, late-discovered teams, wildcard refusal and
+expiry after two seconds. These probes did not start service processes.
+
+The retained in-memory probe is executable with
+`node /tmp/authority-rebase-evidence/fence-probe.mjs`.
+
+| Rebased gate | Result |
+| --- | --- |
+| `npm run lint` | PASS, eight function-length warnings |
+| `npm run typecheck` | PASS across all workspaces |
+| `npm run check:events` | PASS, 85 event types agree |
+| `npm run build -w apps/web` | PASS, CSS budget and noVNC CommonJS warnings |
+| `npm run test -w apps/web -- --watch=false --runner-config=/tmp/authority-rebase-web-vitest.mjs` | PASS, 11 files / 60 tests; runner config sets `test.maxWorkers` to 2 |
+
+The full root suite and 100,000-event benchmark remain **NOT RUN** on the rebased
+source pending clarification of the instruction never to start daemons. Their
+fixtures start temporary NATS, OpenFGA and gateway processes; the full suite also
+starts MinIO and ClamAV Docker containers with published localhost ports.
+The original latency table above is historical, not a new measurement.
+Current source qualification is **PARTIAL**; live qualification is **NOT RUN**.
 
 ## Not in this change
 
