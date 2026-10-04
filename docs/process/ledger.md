@@ -2,7 +2,7 @@
 
 Verified against PR titles and evidence on 2026-10-04.
 
-Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. Issue #70 has no PR or evidence committed here, so its external-worktree measurements are excluded.
+Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no matching committed receipt at that checkpoint. Pending PRs below are identified by their issue number.
 
 ## Phase 1
 
@@ -72,6 +72,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-04 | #78 | MCP server registration and discovery | Fresh/repeat MCP discovery assertions | PASS | 2 tools; both blocked pending review | [p3-3-mcp-discover.md](p3-3-mcp-discover.md#secondary-live-qualification-4-october-2026) |
 | 2026-10-04 | #78 | Full MCP startup journey | Full fresh and repeat startup with live-view steps | PARTIAL | MCP journeys PASS; both complete startup journeys FAIL | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
 | 2026-10-04 | #78 | MCP independent review | Two-pass review of inventory fixes | PASS | — | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
+| 2026-10-04 | Pending (#59) | P3-18 screenshots | Retained secondary capture, conversation/panel previews, reload and non-participant refusal; fresh qualification incomplete | PARTIAL | 1280px and 390px PASS; capture 5,061–6,065 ms; 403 refusals; fresh capture and complete startups FAIL after bounded reruns; teardown PASS | [p3-18-screenshots.md](p3-18-screenshots.md#final-rebase-and-secondary-stack-qualification--4-october-2026) |
 
 ## Infrastructure
 
@@ -97,3 +98,4 @@ The evidence does not qualify these conditions yet:
 - Live-provider approval step-up and native Codex MCP continuation; the credential-free approval browser journey passed separately from its skipped root-suite invocation.
 - Rendered Office previews. Upload's latest complete fresh handback journey was FAIL, rather than NOT RUN.
 - MCP live-view reliability across complete startup journeys; the isolated MCP assertions passed but complete runs failed.
+- Fresh screenshot capture and persistence across startup; retained capture and reload passed, but the fresh viewer failed under #77.

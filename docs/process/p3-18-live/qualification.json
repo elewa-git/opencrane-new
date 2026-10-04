@@ -1,0 +1,149 @@
+{
+  "date": "2026-10-04T11:13:26.307999+00:00",
+  "source": "bd938b53ff9f193c4bc54347ee8156d05b466bb4",
+  "reviewApproved": "0e2871f",
+  "rebasedOnto": "65364a0",
+  "rebase": "PASS, completed without conflicts; main ancestor; no rebase in progress",
+  "stackId": "1",
+  "origin": "http://127.0.0.1:25106",
+  "namespace": "opencrane-dev-1",
+  "freshInstall": true,
+  "paidCalls": 0,
+  "operations": [
+    {
+      "step": "fresh",
+      "command": "infra/dev-stack/up.sh --fresh",
+      "seconds": 479.0,
+      "exitCode": 1,
+      "status": "FAIL"
+    },
+    {
+      "step": "fresh-retry",
+      "command": "infra/dev-stack/up.sh --fresh (one rerun)",
+      "seconds": 755.98,
+      "exitCode": 1,
+      "status": "FAIL"
+    },
+    {
+      "step": "screenshot-fresh",
+      "command": "node --experimental-strip-types infra/dev-stack/screenshot-journey.ts fresh",
+      "seconds": 175.91,
+      "exitCode": 1,
+      "status": "FAIL"
+    },
+    {
+      "step": "repeat",
+      "command": "infra/dev-stack/up.sh",
+      "seconds": 122.48,
+      "exitCode": 1,
+      "status": "FAIL"
+    },
+    {
+      "step": "repeat-retry",
+      "command": "infra/dev-stack/up.sh (one rerun)",
+      "seconds": 302.85,
+      "exitCode": 1,
+      "status": "FAIL"
+    },
+    {
+      "step": "screenshot-repeat",
+      "command": "node --experimental-strip-types infra/dev-stack/screenshot-journey.ts repeat",
+      "seconds": 146.04,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "down",
+      "command": "infra/dev-stack/down.sh --id 1",
+      "seconds": 43.97,
+      "exitCode": 0,
+      "status": "PASS"
+    }
+  ],
+  "participantAndNonParticipantJourney": {
+    "fresh": "FAIL, viewer lost pixels before capture",
+    "repeat": "PASS at 390px and 1280px; real Zitadel sessions; both UI entries and previews; reload; non-participant capture/view/file 403"
+  },
+  "freshScreenshotSurvivesStartup": "NOT RUN, no fresh screenshot saved",
+  "teardown": "PASS, claim directory and both namespaces absent",
+  "status": "PARTIAL",
+  "freshWidths": {
+    "390": "FAIL, viewer lost pixels before capture",
+    "1280": "NOT RUN, standalone journey stopped at 390px"
+  },
+  "sourceChecks": [
+    {
+      "step": "root-test",
+      "command": "PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres MODELS_REAL_CALL=0 npm test -- --maxWorkers=2",
+      "seconds": 1423.57,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "typecheck",
+      "command": "npm run typecheck",
+      "seconds": 161.95,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "infra-typecheck",
+      "command": "npx tsc -p infra/dev-stack/tsconfig.json --noEmit",
+      "seconds": 25.26,
+      "exitCode": 2,
+      "status": "FAIL"
+    },
+    {
+      "step": "infra-typecheck-final",
+      "command": "npx tsc -p infra/dev-stack/tsconfig.json --noEmit (after type annotations)",
+      "seconds": 15.48,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "check-events",
+      "command": "npm run check:events",
+      "seconds": 0.89,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "web-build",
+      "command": "npm run build -w apps/web",
+      "seconds": 19.69,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "web-test",
+      "command": "npm run test -w apps/web -- --watch=false",
+      "seconds": 30.53,
+      "exitCode": 0,
+      "status": "PASS"
+    },
+    {
+      "step": "lint",
+      "command": "npm run lint",
+      "seconds": 184.08,
+      "exitCode": 0,
+      "status": "PASS"
+    }
+  ],
+  "sourceReady": "PASS, all required gates and final infrastructure typecheck green",
+  "rootTests": {
+    "filesPassed": 80,
+    "filesSkipped": 4,
+    "testsPassed": 1385,
+    "testsSkipped": 15,
+    "retries": 0
+  },
+  "webTests": {
+    "filesPassed": 11,
+    "testsPassed": 60
+  },
+  "events": 85,
+  "liveJourneySha256": "cad67fd884cec9e7622119441c00ea3fab7697c57e5801cec01f4dcb55e288e5",
+  "finalJourneySha256": "d30ef85df817079b1051a4410a0001426cf9016772c1d92c5c4f4ac8780f2f5e",
+  "typeCorrection": "Three APIResponse annotations plus a type-only import; Node stripTypeScriptTypes transform emitted identical JavaScript before/after: PASS",
+  "hostedCI": "NOT RUN"
+}
