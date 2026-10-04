@@ -148,3 +148,12 @@ core and the authenticated proxy; it provides no control or clipboard path.
 `npm run build:live-view-test -w apps/web` builds a separate browser qualification
 host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
 [Licence and live evidence](../../docs/process/live-view-evidence.md).
+
+The viewer's **Screenshot** button explicitly captures one desktop image. It
+announces capture/scanning progress, disables duplicate clicks and reports a saved
+result only after the file event is committed. Uncertain requests retain the same command key for a retry; a terminal malware
+rejection allows a new capture with a new key. Screenshots appear as PNG thumbnails in the
+conversation and the panel's Screenshots group; Open uses the existing authenticated
+file preview and download. Reload restores them from conversation events. Keyboard
+Enter/Space activates native buttons; Escape closes viewer and preview dialogs.
+The [P3-18 receipt](../../docs/process/p3-18-screenshots.md) records 1280/390px pixel evidence.

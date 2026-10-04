@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-04T09:21:45.039Z",
+  "image": "sha256:62d0d35b4487fd0e432ba3f58bcc2f539c171600132ce8592f6032ef446ca755",
+  "hashes": [
+    "839242cf5e7e9f0c46878828774d041746989befcc612277b8c44ea6820ddda5",
+    "839242cf5e7e9f0c46878828774d041746989befcc612277b8c44ea6820ddda5"
+  ],
+  "status": "PASS",
+  "fresh": "Disposable desktop, NATS, databases, OpenFGA, MinIO and ClamAV; no owner stack",
+  "widths": [
+    1280,
+    390
+  ],
+  "sourceBase": "f88c93458246fa38315e7d390320d3d2a0882145",
+  "sourceFiles": [
+    "apps/server/src/computers/capture.ts",
+    "apps/server/src/computers/screenshots.ts",
+    "apps/server/src/files/commands.ts",
+    "apps/server/src/files/routes.ts",
+    "apps/server/src/server.ts",
+    "apps/server/test/screenshot-browser.test.ts",
+    "apps/server/test/screenshots.test.ts",
+    "apps/server/test/support/screenshot-desktop.ts",
+    "apps/server/test/support/view-fixture.ts",
+    "apps/web/src/app/chat/chat-session.ts",
+    "apps/web/src/app/chat/chat-state.ts",
+    "apps/web/src/app/chat/transcript.css",
+    "apps/web/src/app/chat/workspace.html",
+    "apps/web/src/app/chat/workspace.ts",
+    "apps/web/src/app/live-view/live-view.ts",
+    "libs/events/src/file-events.ts"
+  ],
+  "sourceFilesSha256": "8b31a64d425694b4283a99b60b2e580cd427f220de1005e82fdef902bdd10b5a"
+}

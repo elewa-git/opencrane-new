@@ -60,7 +60,7 @@
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text) { <div class="writing"><oc-fold-loader /><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }
-              @for (file of turn.files; track file) { <div class="file-card" [class.created]="turn.author === 'agent'" [class.dogear]="turn.author === 'agent'"><span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span><span class="file-name"><strong>{{ name(file) }}</strong><small>@if (turn.author === 'agent') { <span class="agent-badge">Ag</span> } {{ time(turn.time) }}</small></span><button type="button" (click)="preview.set(file)">Open</button>@if (turn.author === 'agent') { <button type="button" (click)="showFiles()">Files</button> }</div> }
+              @for (file of turn.files; track file) { <div class="file-card" [class.created]="turn.author === 'agent'" [class.dogear]="turn.author === 'agent'">@if (isScreenshot(file)) { <img class="screenshot-thumbnail" [src]="screenshotUrl(file)" alt="Screenshot of the computer desktop" loading="lazy"> }<span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span><span class="file-name"><strong>{{ name(file) }}</strong><small>@if (turn.author === 'agent') { <span class="agent-badge">Ag</span> } {{ time(turn.time) }}</small></span><button type="button" (click)="preview.set(file)">Open</button>@if (turn.author === 'agent') { <button type="button" (click)="showFiles()">Files</button> }</div> }
               @if (turn.refusal) { <p class="budget-refusal" role="alert">{{ turn.refusal }}</p> }
               @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
             </div>
@@ -87,12 +87,14 @@
   <ng-template #panelContent let-mobile="mobile">
     @if (chat.selected()) { <a class="audit-link" [href]="'/history/' + chat.selected()">Action history</a> }
     <header class="panel-header"><strong>Session</strong><span class="panel-scope"><span class="scope" aria-hidden="true">▱<br>▱<br>▱<br><b>▬</b></span> personal</span>@if (mobile) { <button type="button" class="close-panel" (click)="panelDialog.close()" aria-label="Close session panel"><oc-icon name="close" /></button> }</header>
-    @if (chat.selected() && !chat.denied()) { <oc-live-view [conversationId]="chat.selected()" /> }
+    @if (chat.selected() && !chat.denied()) { <oc-live-view [conversationId]="chat.selected()" (saved)="chat.refresh()" /> }
     <div class="panel-tabs" role="tablist" aria-label="Session views"><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'" (click)="panelTab.set('files')">Files<small>{{ files().length + chat.attachments().length }}</small></button><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'activity'" (click)="panelTab.set('activity')">Activity<small>{{ activity().length }}</small></button></div>
     @if (panelTab() === 'files') {
       <section class="panel-section" role="tabpanel" aria-label="Files">
-        @if (chat.attachments().length) { <h2>Attached by you · {{ chat.attachments().length }}</h2> }
-        @for (file of chat.attachments(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><span class="file-type" [attr.data-type]="type(file.name)">{{ type(file.name) }}</span><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
+        @if (uploads().length) { <h2>Attached by you · {{ uploads().length }}</h2> }
+        @for (file of uploads(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><span class="file-type" [attr.data-type]="type(file.name)">{{ type(file.name) }}</span><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
+        @if (screenshots().length) { <h2>Screenshots · {{ screenshots().length }}</h2> }
+        @for (file of screenshots(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt="Computer desktop" loading="lazy"><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
         @for (file of files(); track file) { <button type="button" class="panel-file created dogear" (click)="preview.set(file)"><span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span><span class="file-name">{{ name(file) }}</span><small>saved</small></button> }
         @if (!files().length && !chat.attachments().length) { <p>Files created in this session will appear here.</p> }

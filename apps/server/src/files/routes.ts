@@ -22,11 +22,15 @@ export function registerFileRoutes(app: FastifyInstance, config: AuthConfig, opt
     try {
       const { memberId, conversationId } = await authorise(options, config, request);
       const { path, preview } = z.object({ path: z.string(), preview: z.string().optional() }).parse(request.query);
-      const rows = await ownConversation(options.store, options.silo, conversationId, memberId);
+      const rows = await ownConversation(options.store, options.silo, conversationId, memberId, true);
       const file = rows.filter(row => row.event.type === 'file.uploaded')
         .map(row => fileUploadedDataSchema.parse(row.event.data))
         .find(file => path === `uploads/${conversationId}/${file.fileId}/${file.name}`);
-      if (!file) return reply.code(404).send({ status: 'not_found' });
+      if (!file) {
+        await ownConversation(options.store, options.silo, conversationId, memberId);
+        return reply.code(404).send({ status: 'not_found' });
+      }
+      if (!file.screenshot) await ownConversation(options.store, options.silo, conversationId, memberId);
       const stream = await options.objects.getObject('files', file.objectKey);
       return reply.header('Content-Type', file.mime).header('Content-Length', file.size)
         .header('Cache-Control', 'private, no-store').header('X-Content-Type-Options', 'nosniff')
@@ -46,7 +50,14 @@ export function registerFileRoutes(app: FastifyInstance, config: AuthConfig, opt
         if (!options) return reply.code(503).send({ status: 'unavailable' });
         try {
           const { memberId, conversationId } = await authorise(options, config, request);
-          if (request.method === 'GET') return reply.send({ rows: await listFiles(options.db, options.silo, conversationId) });
+          if (request.method === 'GET') {
+            const rows = await listFiles(options.db, options.silo, conversationId);
+            const conversation = await ownConversation(options.store, options.silo, conversationId, memberId, true);
+            const owner = z.object({ createdBy: z.string() }).parse(conversation[0]?.event.data).createdBy === memberId;
+            const visible = owner ? rows : rows.filter(file => file.screenshot);
+            if (!owner && !visible.length) throw new Error('Conversation refused');
+            return reply.send({ rows: visible });
+          }
           const name = z.string().regex(/^[\w][\w .()-]{0,119}$/u).parse(request.headers['x-file-name']);
           const key = id.parse(request.headers['idempotency-key']);
           if (!Buffer.isBuffer(request.body) || !request.body.length) return reply.code(400).send({ status: 'invalid_request' });
@@ -68,7 +79,7 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   const { conversationId } = z.object({ conversationId: id }).parse(request.params);
   const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub), auth = memberAuthorisation(options.binding);
   if (!memberId || !(await auth.check(memberId, 'member')).allowed || !(await auth.conversation(memberId, conversationId, request.method === 'POST' ? 'post' : 'read')).allowed) throw new Error('Conversation refused');
-  await ownConversation(options.store, options.silo, conversationId, memberId);
+  await ownConversation(options.store, options.silo, conversationId, memberId, request.method === 'GET');
   return { memberId, conversationId };
 }
 function uploadStatus(status: string) {
@@ -80,11 +91,12 @@ function refuse(reply: FastifyReply, error: unknown) {
   return reply.code(error instanceof z.ZodError ? 400 : known.get(message) ?? 503)
     .send({ status: 'refused', error: known.has(message) ? message : 'Upload unavailable or refused' });
 }
-async function uploadFile(options: FileOptions, memberId: string, conversationId: string, key: string, name: string, bytes: Buffer) {
+export async function uploadFile(options: FileOptions, memberId: string, conversationId: string, key: string, name: string, bytes: Buffer, screenshot?: z.infer<typeof fileUploadedDataSchema>['screenshot'], fresh?: () => Promise<void>) {
+  if (bytes.length > limit) throw new Error('File too large');
   const mime = await inspectFile(name, bytes), sha256 = createHash('sha256').update(bytes).digest('hex');
   const fileId = createHash('sha256').update(JSON.stringify([options.silo, conversationId, memberId, key])).digest('hex');
-  const data = { conversationId, fileId, uploadedBy: memberId, name, size: bytes.length, sha256 };
-  const previous = (await ownConversation(options.store, options.silo, conversationId, memberId)).find(row => row.event.id === `file-upload-${fileId}`);
+  const data = { conversationId, fileId, uploadedBy: memberId, name, size: bytes.length, sha256, ...(screenshot ? { screenshot } : {}) };
+  const previous = (await ownConversation(options.store, options.silo, conversationId, memberId, !!screenshot)).find(row => row.event.id === `file-upload-${fileId}`);
   if (previous) {
     const saved = z.object({ fileId: z.string(), name: z.string(), sha256: z.string(), size: z.number() }).parse(previous.event.data);
     if (saved.name !== name || saved.sha256 !== sha256 || saved.size !== bytes.length) throw new Error('Id reused');
@@ -92,9 +104,11 @@ async function uploadFile(options: FileOptions, memberId: string, conversationId
   }
   const objectKey = `${options.silo}/${conversationId}/${fileId}/${sha256}`;
   const verdict = await options.scan(bytes);
+  await fresh?.();
   const type = verdict === 'clean' ? 'file.uploaded' : 'file.rejected';
   if (verdict === 'clean') await options.objects.putObject('files', objectKey, bytes, bytes.length, { 'Content-Type': mime });
+  await fresh?.();
   const result = await fileCommand(options.store, options.silo, memberId, `file-upload-${fileId}`, type,
-    verdict === 'clean' ? { ...data, mime, objectKey } : { ...data, reason: 'infected' });
+    verdict === 'clean' ? { ...data, mime, objectKey } : { ...data, reason: 'infected' }, fresh);
   return result.status === 'appended' && verdict === 'infected' ? { status: 'infected' as const, error: 'File rejected: malware detected', fileId } : { ...result, fileId };
 }
