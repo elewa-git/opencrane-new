@@ -1,7 +1,7 @@
 {
   "result": "PASS",
-  "date": "2026-10-04T17:35:28.592Z",
-  "source": "Working tree based on d96f288b1f5537b03c55f2c1493249496d68b549",
+  "date": "2026-10-04T20:48:55.282Z",
+  "source": "9688bb8d3bd99604934ba0baac7f31220d05f62d",
   "screenComparison": "PARTIAL: shared treatments match; existing screens retain their fields and shells",
   "freshInstall": false,
   "liveQualification": "NOT RUN: intercepted fixtures only",
@@ -13,8 +13,8 @@
     "no-preference",
     "reduce"
   ],
-  "captures": 48,
-  "environment": "Built Angular assets; Chromium; intercepted read fixtures; no stack",
+  "captures": 56,
+  "environment": "Built Angular assets; Chromium; intercepted protocol fixtures; no stack",
   "checks": [
     "Eleven families",
     "Silent repeated rows",
@@ -28,6 +28,9 @@
     "Specific call-site states",
     "80px desktop rows",
     "Composer focus ring",
+    "Corrected refused address submits by button and Enter",
+    "Citation and session file keyboard focus outside clipped folds",
+    "Pointer focus does not draw a keyboard ring",
     "Citation dog-ears",
     "12px dog-ear",
     "42% rice texture",
