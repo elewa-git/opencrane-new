@@ -53,7 +53,11 @@ read optimisation that preserves this guarantee.
 observed on entry; `fromSequence` is an inclusive global position.
 Read subjects may select a category, such as `member-*`; appends still require an entity.
 `subscribe(fromSequence, signal)` reads exact global sequences from the caller's
-SQL checkpoint, with no durable consumer cursor. It polls the live tail every 100 ms;
+SQL checkpoint, with no durable consumer cursor. Historical reads fetch at most
+64 messages concurrently and yield them in global order; abort is checked before
+each yield. Authority scans no longer wait for each event's network round trip
+before requesting the next.
+It polls the live tail every 100 ms;
 break or abort to stop it. Read-ahead cannot change the next subscription's position.
 `head()` supports bounded projection drains. Provision EVENTS and the dispatcher
 with `npm run provision`; see [ADR 0005](../../docs/adr/0005-nats-access.md).

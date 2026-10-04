@@ -1,0 +1,27 @@
+3 October 2026; source 07f0e22 on work/p3-2-approvals.
+Rebased onto f5e3068 (origin/main); rebase completed.
+Cherry-picked a8ba6e0 as edb0fa6; approvals and FoldLoader imports retained.
+Independent review pass 2: LAND for source integration.
+
+PASS npm run lint (existing warnings only)
+PASS npm run typecheck
+PASS npm run check:events (76 event types)
+PASS npx tsc -p infra/dev-stack/tsconfig.json --noEmit
+PASS PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=1 --testTimeout=15000
+     68 files passed, 2 files skipped; 1118 tests passed, 11 skipped; exit 0; 1525.48 s.
+PASS npm run build -w apps/web (existing bundle/style warnings)
+PASS npm run test -w apps/web (9 files, 51 tests)
+PASS isolated daily/monthly eight-request budget races (2 tests)
+
+Earlier focused gateway/API invocation: FAIL (63 passed, 2 failed, 2 skipped).
+The two eight-request budget races returned zero admissions or 503 refusals
+while compiler/lint and other worktrees ran. The isolated rerun and the complete
+suite above passed without changing assertions or production freshness limits.
+
+Fresh stack attempts 1 and 2: FAIL before approval qualification; down --id 2
+succeeded after each. Attempt 2 timed out at the initial SSO button. Its Angular
+cache dated 13:59 still exported approval schemas without the new budget schemas.
+Moved this worktree's generated cache aside; no source change. The regenerated
+bundle exports both features and the next fresh journey passed.
+
+PASS final fresh up.sh --fresh on stack 2; down.sh --id 2 exit 0.

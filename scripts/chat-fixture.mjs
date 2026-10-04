@@ -34,6 +34,7 @@ export async function chatFixture(page, scenario = 'live') {
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
     const fulfil = body => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname.endsWith('/approvals')) return fulfil({ cards: [], csrf: 'fixture' });
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
     if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant' });

@@ -322,16 +322,20 @@ export class EventStore {
         await delay(100);
         continue;
       }
-      const message = await this.manager.streams.getMessage(streamName, { seq: sequence });
-      if (signal?.aborted) return;
-      if (!message) {
-        throw new Error("Event sequence gap");
+      // Bound read-ahead and keep log order even when replies arrive out of order.
+      const messages = await Promise.all(Array.from({ length: Math.min(64, head - sequence + 1) },
+        (_, offset) => this.manager.streams.getMessage(streamName, { seq: sequence + offset })));
+      for (const message of messages) {
+        if (signal?.aborted) return;
+        if (!message) {
+          throw new Error("Event sequence gap");
+        }
+        yield {
+          sequence: message.seq,
+          event: decodeEvent(message.data, message.subject),
+        };
+        sequence = message.seq + 1;
       }
-      yield {
-        sequence: message.seq,
-        event: decodeEvent(message.data, message.subject),
-      };
-      sequence = message.seq + 1;
     }
   }
 

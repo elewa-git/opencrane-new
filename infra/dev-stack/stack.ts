@@ -237,6 +237,8 @@ async function up(fresh: boolean) {
     ...binding, ...await readEnv('command'), DATABASE_URL: (await readEnv('projection'))['DATABASE_URL']!,
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
+    CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
+    MODEL_MCP_ROUTES: JSON.stringify([{ serverId: 'approval-journey', connectionId: 'installed', upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}` }]),
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,

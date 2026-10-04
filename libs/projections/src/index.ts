@@ -26,3 +26,5 @@ export { conversations, readConversation, listConversations } from './conversati
 export { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
 export { auditTrail, readAudit } from './audit.ts';
 export { rebuildAuditProjection } from './audit-rebuild.ts';
+
+export { conversationKeys } from './keys.ts';

@@ -1,0 +1,25 @@
+@if (error()) { <p role="alert">{{ error() }} <button type="button" (click)="refresh()">Check status</button></p> }
+@for (card of cards(); track card.approvalId) {
+  <section class="approval" [class.terminal]="card.state !== 'requested'" [attr.aria-label]="label(card)" [attr.data-approval]="card.approvalId" tabindex="-1">
+    <header aria-live="polite">{{ label(card) }}@if (card.state !== 'requested') { · {{ card.review.action }} }</header>
+    @if (card.state === 'outcome_unknown') { <button type="button" (click)="refresh()">Check status</button> }
+    @if (card.state === 'requested') {
+      <h2>{{ card.review.action }}</h2>
+      <dl class="approval-ledger">
+        <dt>Action</dt><dd>{{ card.review.tool }}</dd><dt>Target</dt><dd>{{ card.review.target }}</dd>
+        <dt>Data sent</dt><dd>{{ card.review.data }}</dd><dt>System</dt><dd>{{ card.review.destination }}</dd>
+        <dt>Account / profile</dt><dd>{{ card.review.account }}</dd><dt>If approved</dt><dd>{{ card.review.consequence }}</dd>
+      </dl>
+      @if (card.stepUp && card.canDecide) { <p class="step-up">This tool’s policy requires a recent sign-in for this approval. <a [href]="signIn(card)">Sign in again</a></p> }
+      <p class="submission" role="status" aria-live="polite">{{ status()[card.approvalId] }}</p>
+      @if (card.canDecide) {
+        <div class="actions">
+          <button class="approve" type="button" [disabled]="blocked(card)" (click)="decide(card, 'approved')">Approve</button>
+          <button type="button" [disabled]="blocked(card)" (click)="decide(card, 'rejected')">Deny</button>
+          @if (status()[card.approvalId] && status()[card.approvalId] !== 'Submitting…') { <button type="button" (click)="check(card)">Check status</button> }
+          <small>Expires {{ expiry(card) }}</small>
+        </div>
+      } @else { <p>Only the requester can decide.</p> }
+    }
+  </section>
+}

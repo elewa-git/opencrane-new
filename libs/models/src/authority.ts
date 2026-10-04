@@ -8,8 +8,7 @@ import { data } from './state.ts';
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string) {
   const auth = memberAuthorisation(binding);
-  const head = await store.head(), facts = [];
-  const applied: string[] = [];
+  const head = await store.head(), facts = [], receipts: string[] = [];
   let active = true;
   // ponytail: scan relevant history; use a fenced IAM projection when these histories grow.
   const subjects = [`member-${requester}`, `assistant-${assistant}`, 'team-*', 'conversation-*', 'grant-*'];
@@ -25,7 +24,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
     const e = row.event, d = data(e);
     if (e.silo !== binding.silo) continue;
     if (relevant(e, requester, assistant, conversation, resourceType, resourceId)) {
-      applied.push(e.id);
+      receipts.push(e.id);
       facts.push([e.id, row.sequence, d]);
     }
     if (e.subject === `assistant-${assistant}` && e.type === 'assistant.settings_changed') {
@@ -33,7 +32,11 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
       if (typeof d['active'] === 'boolean') active = d['active'];
     }
   }
-  if ((await Promise.all(applied.map(id => auth.applied(id)))).some(value => !value)) throw new Error('IAM projection behind');
+  for (let offset = 0; offset < receipts.length; offset += 16) {
+    if (!(await Promise.all(receipts.slice(offset, offset + 16).map(id => auth.applied(id)))).every(Boolean)) {
+      throw new Error('IAM projection behind');
+    }
+  }
   if (!active) throw new Error('Assistant inactive');
   const permissions = await Promise.all([auth.check(requester, 'member'), auth.actsFor(requester, assistant),
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),

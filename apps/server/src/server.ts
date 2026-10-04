@@ -1,3 +1,4 @@
+import { registerApprovalRoutes } from './chat/approvals.ts';
 // Builds the Fastify instance. Kept separate from main.ts so tests can
 // build a server without binding a real port.
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -54,6 +55,8 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);
+
+  registerApprovalRoutes(app, authConfig, options.chat);
 
   return app;
 }

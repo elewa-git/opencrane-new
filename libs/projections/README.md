@@ -113,3 +113,9 @@ runner's lock in one transaction, preserving table grants and rolling back on
 failure. Ordinary `ProjectionRunner.rebuild(auditTrail)` also supports drop/rebuild
 with readers stopped. Neither path runs reactions. Test:
 `PG_TEST_URL=… npx vitest run libs/projections/test/audit.test.ts`.
+
+`conversationKeys(directory)` is the existing dev encrypted-content adapter shared
+by the chat server and approval decision process. It stores per-conversation keys
+with private filesystem permissions, exposes only key references in events, and
+refuses decryption with a different silo/conversation binding. Production secret
+custody remains a deployment qualification responsibility.

@@ -3,6 +3,9 @@ import { z } from 'zod';
 export const auditReasons = {
   model_allowed: 'Model call permitted', policy_allow: 'Tool policy permits this call', policy_block: 'Tool policy blocks this call',
   approval_required: 'Requester approval needed', budget_exhausted: 'Spending cap reached',
+  approval_requested: 'Requester approval needed', approval_approved: 'Approval not consumed', approval_used: 'Single-use approval consumed',
+  approval_denied: 'Requester declined approval', approval_expired: 'Approval expired', approval_cancelled: 'Approval cancelled',
+  approval_outcome_unknown: 'Approval already consumed; outcome unknown',
   request_refused: 'Request refused', authority_unavailable: 'Authority unavailable', settle_timeout: 'Observation missing',
   unknown_cost: 'Tool cost unavailable', unknown_tariff: 'Price unavailable', computer_lost: 'Computer unavailable', effect_without_permit: 'Effect has no matching permission',
   jwt_failed: 'Gateway authentication refused', dispatch_denied: 'Gateway refused dispatch',

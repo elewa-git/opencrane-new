@@ -1,3 +1,4 @@
+import { conversationKeys } from './chat/keys.ts';
 // The lease elects a process; budget decisions themselves only append to NATS.
 import { readFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -28,13 +29,15 @@ try {
     const actor = new BudgetActor(events.store, silo);
     await actor.start(2000, 20000, process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default');
     const decision = await startDecision(actor, { jwks, issuer: required('TOKEN_ISSUER') }, { silo, apiUrl: required('OPENFGA_API_URL'),
-      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, Number(required('MODEL_DECISION_PORT')));
+      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, Number(required('MODEL_DECISION_PORT')), process.env['CONVERSATION_KEYS_DIR'] ? conversationKeys(process.env['CONVERSATION_KEYS_DIR']) : undefined);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     try {
       gateway = await startGateway({ binary: required('AGENTGATEWAY_BINARY'), configFile: `${directory}/gateway.json`,
         usageFile: `${directory}/usage.jsonl`, keyFile: process.env['MODEL_KEY_FILE'] ?? resolve(import.meta.dirname, '../../../.keys/.openai-key'), port: Number(required('MODEL_GATEWAY_PORT')),
         readinessPort: Number(required('MODEL_READINESS_PORT')), decisionUrl: decision.url, issuer: required('TOKEN_ISSUER'),
         ...(process.env['MODEL_UPSTREAM'] ? { upstream: process.env['MODEL_UPSTREAM'] } : {}),
+        mcpRoutes: z.array(z.object({ serverId: z.string(), connectionId: z.string(), upstream: z.string() }).strict())
+          .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]')),
       });
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.

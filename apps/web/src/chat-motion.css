@@ -5,7 +5,6 @@
   @keyframes oc-crease-in { from { transform: scaleX(0); } to { transform: scaleX(1); } }
   @keyframes oc-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
   @keyframes oc-caret { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
-  @keyframes ocFold { 0%, 12% { transform: rotateX(0); filter: brightness(1); } 42%, 55% { transform: rotateX(-178deg); filter: brightness(.72); } 88%, 100% { transform: rotateX(0); filter: brightness(1); } }
   @keyframes oc-land { from { transform: perspective(900px) translateY(16px) rotateX(22deg) scale(.97); opacity: 0; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
   @keyframes oc-ink { from { opacity: 0; filter: blur(3px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: none; } }
   @keyframes oc-dogear { from { transform: scale(0); } to { transform: scale(1); } }

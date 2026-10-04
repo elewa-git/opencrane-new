@@ -313,19 +313,23 @@ export const conversationClosedDataSchema = z
 
 // --- Tools, approvals and effects ---------------------------------------
 
-// Risky type: the call's own arguments are never carried, only a digest,
-// so the approval card is built from the tool name and this digest.
-export const toolApprovalRequestedDataSchema = z
-  .object({
-    approvalId: id,
-    conversationId: id,
-    turnId: id,
-    assistantId: id, // approvals are bound to requester, conversation, turn, assistant and digest
-    tool: id,
-    argumentsDigest: digestSchema,
-    requesterId: id,
-  })
-  .strict();
+// Review text is encrypted with the conversation key. Digests bind it to the exact call.
+export const toolApprovalRequestedDataSchema = z.object({
+  approvalId: id, conversationId: id, turnId: id, assistantId: id, requesterId: id,
+  tool: id, serverId: id, toolRevision: digestSchema, schemaDigest: digestSchema,
+  connectionId: id, profile: id, policySequence: z.int().nonnegative(),
+  digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
+  expiresAt: z.iso.datetime(), stepUp: z.boolean(),
+  ciphertext: ciphertextSchema.max(32768), keyId: keyIdSchema, reviewDigest: digestSchema,
+}).strict();
+
+// Reviewed, credential-free tools declare every safe argument; unknown fields cannot be hidden.
+const reviewText = z.string().trim().min(1).max(500);
+const toolReviewSchema = z.object({
+  action: reviewText, consequence: reviewText, targetArgument: id,
+  fields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).min(1).max(20),
+  stepUp: z.boolean().default(false),
+}).strict();
 
 export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
 
@@ -356,7 +360,7 @@ export const mcpServerDiscoveredDataSchema = z
     connectionId: id.optional(),
     accountMode: z.enum(['none', 'personal', 'company']).optional(),
     tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),
-      readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional() }).strict()).max(500).optional(),
+      readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional(), review: toolReviewSchema.optional() }).strict()).max(500).optional(),
   })
   .strict();
 

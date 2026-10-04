@@ -1,0 +1,23 @@
+3 October 2026; source: the commit containing this receipt
+Rebased base: cc8d8c0; prior feature tip: 0e35526
+
+PASS npm ci (clean installation after rebase; no new dependencies)
+PASS npm run lint
+PASS npm run typecheck
+PASS npm run check:events (76 types)
+PASS npx tsc -p infra/dev-stack/tsconfig.json --noEmit
+PASS PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=1 --testTimeout=15000
+Test Files  68 passed | 2 skipped (70)
+Tests  1101 passed | 11 skipped (1112)
+Start at  20:47:50
+Duration  1058.81s (tests 95%, import 4%, transform 1%)
+
+PASS npm run build -w apps/web (existing bundle/style budget warnings)
+PASS npm run test -w apps/web -- --watch=false
+Test Files  8 passed (8)
+Tests  50 passed (50)
+Start at  21:11:36
+Duration  8.01s (transform 3.70s, setup 10.18s, import 6.94s, tests 9.33s, environment 18.23s)
+
+PASS infra/dev-stack/down.sh --id 1 (exit 0; both secondary namespaces absent)
+Owner stack and marker untouched; no real OpenAI calls; no push or merge.

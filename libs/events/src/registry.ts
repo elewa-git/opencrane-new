@@ -236,7 +236,9 @@ export const eventRegistry: readonly EventDefinition[] = [
       assistantId: 'asst_1',
       tool: 'odoo.write',
       argumentsDigest: DIGEST_EXAMPLE,
-      requesterId: 'mem_1',
+      requesterId: 'mem_1', serverId: 'mcp_1', toolRevision: DIGEST_EXAMPLE, schemaDigest: DIGEST_EXAMPLE,
+      connectionId: 'installed', profile: 'none', policySequence: 1, digestVersion: 'lossless-json-v1',
+      expiresAt: '2026-10-04T00:00:00.000Z', stepUp: false, ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0LWZvci10ZXN0cw==', keyId: 'key:1', reviewDigest: DIGEST_EXAMPLE,
     },
   ),
   event(
@@ -253,6 +255,8 @@ export const eventRegistry: readonly EventDefinition[] = [
     data.approvalExpiredDataSchema,
     { approvalId: 'appr_1' },
   ),
+  event('approval.cancelled', 'approval', 'The logical turn or reviewed binding closed.',
+    data.approvalExpiredDataSchema, { approvalId: 'appr_1' }),
   event(
     'approval.used',
     'approval',

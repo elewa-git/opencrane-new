@@ -79,9 +79,9 @@ try {
     const cancel = page.getByRole('button', { name: 'Cancel and go back' });
     await cancel.waitFor();
     assert(await cancel.evaluate((element) => element === globalThis.document.activeElement));
-    await page.clock.runFor(4000);
+    await page.clock.runFor(2400);
     assert.equal(new URL(page.url()).pathname, '/signin/handoff');
-    assert.match(await page.locator('[aria-live=polite]').textContent(), /1 second…/);
+    assert.match(await page.locator('[aria-live=polite]').textContent(), /Opening single sign-on…/);
     await page.keyboard.press(key);
     await page.waitForURL(origin + '/');
     await page.clock.runFor(10_000);
@@ -92,11 +92,11 @@ try {
   await page.clock.install();
   await page.goto(`${origin}/signin/handoff`);
   await page.getByRole('button', { name: 'Cancel and go back' }).waitFor();
-  await page.clock.runFor(4999);
+  await page.clock.runFor(2499);
   assert.equal(new URL(page.url()).pathname, '/signin/handoff');
   const redirect = page.waitForRequest(`${origin}/auth/login?returnTo=/`);
   await page.clock.runFor(1);
   await redirect;
   await page.close();
 } finally { await browser.close(); }
-console.log(`PASS 6 sign-in captures: 1x geometry, tokens, copy, 390px/44px; keyboard Cancel (Enter/Space), focus and five-second redirect: ${output}`);
+console.log(`PASS 6 sign-in captures: 1x geometry, tokens, copy, 390px/44px; keyboard Cancel (Enter/Space), focus and 2.5-second redirect: ${output}`);

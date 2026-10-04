@@ -63,7 +63,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `computer-<assistant>` | assistant's computer | claimed, ready, suspended, lost, takeover |
 | `toolset-<profile>` | computer profile (an image plus Codex built-in tool settings) | changed |
 | `conversation-<id>` | conversation | participants, messages, agent activity |
-| `approval-<id>` | approval request | requested, decided, used, expired |
+| `approval-<id>` | approval request | requested, decided, used, expired, cancelled |
 | `decision-<request>` | gateway admission attempt | allow, ask or deny before dispatch |
 | `effect-<permit>` | gateway-observed external call | observed, uncertain, resolved |
 | `mcp-<server>` | MCP server in the catalogue | registered, discovered, tool modes, published, tools changed |
@@ -92,6 +92,8 @@ If a stale read slips past validation, the expected-version check rejects the ap
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,
 `assistantId`, `conversationId` and `turnId`; model allows include `permitId`.
+Approval decisions include `correlation.approval`; consumed approvals also include
+the server-issued request id as `permitId`, matching `approval.used`.
 Unverified identities are omitted. A failed append denies dispatch. Gateway JWT
 refusals before ext_authz have no decision event; observation reconciliation belongs
 to P3-19. No raw arguments, tokens or credential values appear in this event.
@@ -196,11 +198,20 @@ retry with a fresh grant after reconnect or Pod replacement.
 
 ### Tools, approvals and effects
 
+P3-2 approval requests include expiry, `lossless-json-v1`, server/tool/schema,
+connection/profile and policy-sequence bindings, plus bounded encrypted review
+content, key reference and review digest. Plaintext arguments are never events.
+Requester decisions and consumption append conditionally to `approval-<id>`.
+Expiry (24 hours) or a closed logical turn prevents use; a changed reviewed binding
+cancels. Consumption is terminal even if its acknowledgement or forwarding fails.
+Readers replay these streams; replay never forwards or releases credentials.
+
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `tool.approval_requested` | decision service (mode Ask) | approvals | notify the requester; approval card |
 | `approval.decided` | requester | approvals | deliver the decision to the computer (wake it) |
 | `approval.expired` | timer | approvals | tell the computer |
+| `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes |
 | `approval.used` | decision service (single use) | approvals | — |
 | `effect.observed` | gateway log ingest | audit, usage | settle the budget; with no matching permit → `security.alert_raised` |
 | `effect.uncertain` | settle timeout or `computer.lost` | audit, effects | notify for manual resolution |

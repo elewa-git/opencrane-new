@@ -283,3 +283,32 @@ Tests: `PG_TEST_URL=… npx vitest run apps/server/test/integrations.test.ts
 apps/server/test/audit-browser.test.ts`. Browser evidence covers 1280/390px and
 Loading/Empty/Unavailable/Outcome unknown with keyboard filters. Fresh-install
 qualification is NOT RUN; this change does not alter or operate a dev stack.
+
+The P3-2 approval endpoint is `GET|POST /api/conversations/:conversationId/approvals`.
+GET restores safe decrypted cards and a session/conversation-bound CSRF token; POST
+accepts only `approvalId` and `decision` (`approved` or `rejected`). It requires the
+requester's authenticated session, current authority, exact Origin and `x-csrf-token`.
+409 means the decision lost its conditional append; 428 requires step-up; uncertain
+transport or persistence needs Check status, never an automatic repeat of an effect.
+A required step-up uses `/auth/login?approval=<id>&returnTo=<local-path>`, OIDC
+`prompt=login`, `max_age=0`, and verified `auth_time` within five minutes. The flow
+binds the original cookie, requester and approval; missing, future or stale evidence
+refuses. The resulting session authorises only that approval's step-up check.
+
+Run the gateway/API tests with:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/approvals.test.ts
+```
+
+After building the web app, set `APPROVAL_BROWSER=1` for the same command to include
+Chromium at 1280/390px.
+These fixtures create disposable NATS/OpenFGA instances and private Postgres databases.
+They do not use the shared dev stack or a paid upstream.
+
+The model process accepts optional `MODEL_MCP_ROUTES`, a JSON array of
+`{serverId, connectionId, upstream}` records, to configure the existing gateway
+MCP routes. The default is empty. Deployment configuration owns these destinations;
+callers cannot supply them. Set `CONVERSATION_KEYS_DIR` to the same private directory
+as the server so the decision process can encrypt and verify approval reviews.
+The dev stack routes its credential-free recording fixture to its loopback stub.

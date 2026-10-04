@@ -1,0 +1,19 @@
+:host { display: block; margin: 16px 0; }
+.approval { position: relative; border: 1px solid #d9dfe0; border-top: 2.5px solid #f47920; background: #fff; border-radius: 8px; padding: 18px; color: #16191a; font-size: 13px; }
+.approval + .approval { margin-top: 12px; }
+.approval::after { content: ''; position: absolute; right: 0; top: 0; border: 7px solid #fff; border-left-color: #f8bc8d; border-bottom-color: #f8bc8d; }
+header { color: #9a4e16; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+h2 { font-size: 14px; margin: 10px 0 16px; }
+dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 9px 12px; line-height: 1.5; }
+dt { color: #616a6c; } dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.step-up { padding: 12px; border: 1px solid #f6cc9e; border-radius: 6px; background: #fdf8ef; color: #72531e; line-height: 1.6; }
+a { display: inline-block; min-width: 44px; min-height: 44px; color: inherit; padding: 10px 0; }
+.actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } small { margin-left: auto; color: #616a6c; }
+button { min-height: 44px; padding: 10px 18px; border: 1px solid #c9d1d2; border-radius: 7px; background: white; font: inherit; cursor: pointer; }
+button.approve { background: #16191a; color: white; border-color: #16191a; } button:disabled { opacity: .55; cursor: default; }
+button:focus-visible, a:focus-visible, section:focus { outline: 2px solid #0a94a7; outline-offset: 3px; }
+.submission:empty { display: none; }.submission { color: #9a4e16; }
+.terminal { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; border-top: 1px solid #d9dfe0; padding: 12px 0; border-width: 1px 0 0; border-radius: 0; background: transparent; }
+.terminal::after { display: none; }.terminal header { text-transform: none; letter-spacing: 0; color: #454d4f; font-size: 13px; }
+@media (max-width: 600px) { .approval { padding: 14px; } .actions .approve { width: 100%; } small { width: 100%; margin: 0; } dl { grid-template-columns: 80px minmax(0, 1fr); } }
+@media (prefers-reduced-motion: reduce) { * { animation: none; transition: none; } }

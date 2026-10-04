@@ -22,14 +22,9 @@ footer { position: absolute; bottom: 16px; left: 0; right: 0; color: var(--oc-in
 .text-button { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; color: var(--oc-ink-secondary); text-decoration: underline; font-size: 12.5px; }
 .handoff { width: min(100%, 400px); min-height: 420px; padding: 0 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; text-align: center; }
 .handoff h1 { font-size: 16px; letter-spacing: -.2px; margin: 0; }
-.folds { display: flex; gap: 4px; }
-.folds i { width: 14px; height: 16px; background: var(--oc-accent); clip-path: polygon(50% 0,100% 100%,0 100%); animation: flutter 1.6s ease-in-out infinite; }
-.folds i:nth-child(2) { animation-delay: .16s; } .folds i:nth-child(3) { animation-delay: .32s; } .folds i:nth-child(4) { animation-delay: .48s; } .folds i:last-child { background: var(--oc-needs-input); animation-delay: .64s; }
-@keyframes flutter { 50% { transform: scaleX(.5); opacity: .5; } }
 @media (max-width: 600px) {
   :host { min-height: 100dvh; }
   .sign-in { border: 0; border-radius: 0; min-height: 100dvh; padding: 80px 26px 48px; }
   .handoff { padding: 44px 26px; }
   h1 { font-size: 24px; }
 }
-@media (prefers-reduced-motion: reduce) { .folds i { animation: none; } }

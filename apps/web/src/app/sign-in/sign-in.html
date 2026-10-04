@@ -1,9 +1,9 @@
 <main class="sign-in" [class.handoff]="handoff">
   @if (handoff) {
-    <div class="folds" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <oc-fold-loader />
     <h1>Taking you to your identity provider</h1>
     <p>You will come back here signed in. Your organisation uses Zitadel to verify your account.</p>
-    <oc-shared-state kind="checking" [message]="'Opening single sign-on in ' + seconds() + (seconds() === 1 ? ' second…' : ' seconds…')" />
+    <oc-shared-state kind="checking" message="Opening single sign-on…" />
     <button type="button" class="text-button" #cancelButton (click)="cancel()">Cancel and go back</button>
   } @else {
     <a class="brand" href="/" aria-label="OpenCrane home">

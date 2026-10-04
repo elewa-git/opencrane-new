@@ -31,3 +31,6 @@ export { toolPolicySchema, type ToolPolicy } from './integrations.ts';
 
 export { budgetCommandSchema, budgetSummarySchema, type BudgetSummary } from './budgets.ts';
 export { auditReasons, auditRecordSchema, auditRowSchema, auditResponseSchema, auditFilterSchema, type AuditRow, type AuditRecord, type AuditFilter } from './audit.ts';
+
+
+export { approvalReviewSchema, approvalCardsSchema, type ApprovalCard } from './approvals.ts';

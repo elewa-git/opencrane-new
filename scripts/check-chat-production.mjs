@@ -34,12 +34,17 @@ try {
   await page.addInitScript(() => globalThis.document.addEventListener('securitypolicyviolation', event => {
     void globalThis.recordViolation(`${event.violatedDirective}: ${event.blockedURI}`);
   }));
-  await chatFixture(page, 'draft');
+  const fixture = await chatFixture(page, 'draft');
   await page.goto(`http://127.0.0.1:${server.address().port}/workspace`);
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   await composer.fill('Works under CSP');
   await page.getByRole('button', { name: 'Send message' }).click();
   await page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: 'Works under CSP' }).waitFor();
+  const message = fixture.rows().find(row => row.type === 'message.posted');
+  fixture.add('agent.turn_started', { turnId: message.id });
+  const loader = page.locator('oc-fold-loader');
+  await loader.waitFor();
+  assert(await loader.evaluate(node => node.getAnimations({ subtree: true }).length > 0), 'Fold animates under enforcing CSP');
   await page.evaluate(() => globalThis.document.fonts.ready);
   assert.deepEqual(violations, [], 'Production has no blocked styles or scripts');
   assert.equal(await page.locator('.main').evaluate(node => globalThis.getComputedStyle(node).display), 'grid');
