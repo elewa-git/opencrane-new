@@ -62,6 +62,8 @@ Follow the [engineering standard](docs/process/standards.md).
   to the owner; the pass limit never turns failure into success.
 - Required checks (`lint`, `typecheck`, `test`, `check:events`) must pass
   before landing and on `main`; repair or revert failures before landing more.
+- Run vitest, lint, typecheck and builds under `nice -n 10`. Never start a full
+  root suite or a fleet batch while a live-view qualification batch is running.
 - Source ready means green checks with remaining live qualification explicit.
   A capability is done only after its journey passes live on a fresh install.
   Report PASS/FAIL/PARTIAL/NOT RUN honestly; untested conditions never pass.

@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Fleet Codex work, Angular dev-server builds and repository checks run at lower CPU priority; repeated live-view receipts capture host pressure and server scheduling delay.
+
 ### What you can do now
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
