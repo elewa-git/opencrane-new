@@ -9,8 +9,9 @@ import { z } from 'zod';
 import { envelope, history, type BudgetActor } from './actor.ts';
 
 function logNumber(line: string, field: string): number | undefined {
-  const value = new RegExp(`\\b${field}=(\\d+)`, 'u').exec(line)?.[1];
-  return value === undefined ? undefined : Number(value);
+  const value = new RegExp(`\\b${field}=(\\d+)(?=\\s|$)`, 'u').exec(line)?.[1];
+  const number = value === undefined ? undefined : Number(value);
+  return Number.isSafeInteger(number) ? number : undefined;
 }
 interface McpRoute { serverId: string; connectionId: string; upstream: string }
 function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
@@ -54,6 +55,7 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
   };
 }
 const observation = z.union([
+  z.object({ id: z.uuid(), uncertainReason: z.enum(['missing_usage', 'transport_failure']) }).strict(),
   z.object({ id: z.uuid(), outcome: z.enum(['error', 'unknown']), reason: z.enum(['jwt_failed', 'dispatch_denied', 'observation_missing']) }).strict(),
   z.object({ id: z.uuid(), inputTokens: z.int().nonnegative(), outputTokens: z.int().nonnegative(),
     cachedInputTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional() }).strict(),
@@ -74,11 +76,12 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
       if (rows.some(row => row.event.id === eventId)) continue;
       const event = envelope(actor.silo, subject, 'gateway.observation_recorded', { requestId: value.id, outcome: value.outcome, reason: value.reason }, eventId);
       if ((await actor.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status !== 'appended') throw new Error('Gateway evidence unavailable');
-    } else if ('outcome' in value) await actor.effect(value.id, undefined, value.outcome);
+    } else if ('uncertainReason' in value) await actor.uncertain(value.id, value.uncertainReason);
+    else if ('outcome' in value) await actor.effect(value.id, undefined, value.outcome);
     else { const { id, ...usage } = value; await actor.effect(id, usage); }
   }
 }
-function gatewayObservation(line: string) {
+export function gatewayUsage(line: string) {
   const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
   const status = logNumber(line, 'http\\.status');
   if (!id) {
@@ -88,11 +91,23 @@ function gatewayObservation(line: string) {
     return { id: requestId ?? randomUUID(),
       outcome: status >= 400 ? 'error' : 'unknown', reason: status === 401 ? 'jwt_failed' : status >= 400 ? 'dispatch_denied' : 'observation_missing' };
   }
-  const input = logNumber(line, 'inputTokens'), output = logNumber(line, 'outputTokens');
-  if (input !== undefined && output !== undefined) return { id, inputTokens: input, outputTokens: output,
-    cachedInputTokens: logNumber(line, 'cachedInputTokens') ?? 0, cacheWriteTokens: logNumber(line, 'cacheWriteTokens') ?? 0 };
-  return definiteRejection(line, status) ? { id, outcome: 'error' } : undefined;
+  const usage = nativeUsage(line, id);
+  if (usage) return usage;
+  if (definiteRejection(line, status)) return { id, outcome: 'error' };
+  return { id, uncertainReason: /\berror=/u.test(line) || status === 408 || status === 504 ? 'transport_failure' : 'missing_usage' };
 }
+function nativeUsage(line: string, id: string) {
+  const token = z.int().nonnegative();
+  const parsed = z.object({ id: z.uuid(), inputTokens: token, outputTokens: token,
+    cachedInputTokens: token, cacheWriteTokens: token }).safeParse({ id,
+    inputTokens: logNumber(line, 'inputTokens'), outputTokens: logNumber(line, 'outputTokens'),
+    cachedInputTokens: line.includes('cachedInputTokens=') ? logNumber(line, 'cachedInputTokens') : 0,
+    cacheWriteTokens: line.includes('cacheWriteTokens=') ? logNumber(line, 'cacheWriteTokens') : 0,
+  });
+  if (!parsed.success || parsed.data.cachedInputTokens + parsed.data.cacheWriteTokens > parsed.data.inputTokens) return undefined;
+  return parsed.data;
+}
+
 function definiteRejection(line: string, status?: number) {
   return status !== undefined && status >= 400 && status < 600 && status !== 408 && status !== 504 && !/\berror=/u.test(line);
 }
@@ -109,7 +124,7 @@ export async function startGateway(options: { binary: string; configFile: string
   const lines = createInterface({ input: child.stdout });
   // Adapted from S0.1c: never persist raw gateway diagnostics, credentials or request bodies.
   lines.on('line', line => {
-    const value = gatewayObservation(line);
+    const value = gatewayUsage(line);
     if (!value) return;
     const parsed = observation.safeParse(value);
     if (!parsed.success) { failed = true; return; }

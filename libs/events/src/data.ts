@@ -336,12 +336,18 @@ export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();
 export const approvalUsedDataSchema = z.object({ approvalId: id, permitId: id }).strict();
 
 export const effectUncertainDataSchema = z
-  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost', 'unknown_tariff']) })
+  .object({ permitId: id, computerId: id, reason: z.enum(['settle_timeout', 'computer_lost', 'unknown_tariff', 'missing_usage', 'transport_failure']) })
   .strict();
 
-export const effectResolvedDataSchema = z
-  .object({ permitId: id, resolvedBy: id, outcome: z.enum(['settled', 'released']) })
-  .strict();
+// Evidence contains opaque receipt ids and hashes, never raw provider bodies or credentials.
+const evidenceFields = { reference: z.string().regex(/^[\w-]{1,200}$/u), digest: digestSchema };
+export const effectResolvedDataSchema = z.object({
+  permitId: id, reservationId: id, resolvedBy: id, outcome: z.enum(['settled', 'released']), settledCents: centsSchema,
+  evidence: z.array(z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('provider_receipt'), ...evidenceFields, amountCents: centsSchema }).strict(),
+    z.object({ kind: z.literal('dispatch_record'), ...evidenceFields, notDispatched: z.literal(true) }).strict(),
+  ])).min(1).max(10),
+}).strict().refine(d => d.outcome !== 'released' || d.settledCents === 0, 'Released calls have no cost');
 
 // --- MCP catalogue, grants and connections ------------------------------
 
@@ -441,7 +447,7 @@ export const budgetReservedDataSchema = z
   .strict();
 
 export const budgetSettledDataSchema = z
-  .object({ reservationId: id, permitId: id, settledCents: centsSchema, outcome: z.literal('not_dispatched').optional() })
+  .object({ reservationId: id, permitId: id, settledCents: centsSchema, outcome: z.enum(['not_dispatched', 'unknown']).optional() })
   .strict()
   .refine(data => data.outcome !== 'not_dispatched' || data.settledCents === 0, 'Undispatched calls have no cost');
 

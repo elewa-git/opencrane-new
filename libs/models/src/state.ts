@@ -84,7 +84,7 @@ const callSchema = z.object({ requestId: z.string().optional(), model: z.string(
   assistantId: z.string(), requesterId: z.string(), conversationId: z.string(), turnId: z.string(), threadId: z.string(), payingGroupId: z.string().optional(), contextDigest: z.string() }).strict();
 export type ModelCall = z.infer<typeof callSchema>;
 const reservationSchema = z.object({ id: z.string(), amountCents: z.int().nonnegative(), time: z.string(),
-  call: callSchema, settledCents: z.int().nonnegative().optional() });
+  call: callSchema, settledCents: z.int().nonnegative().optional(), outcomeUnknown: z.boolean().optional() });
 const ceilingsSchema = z.array(z.object({ scope: z.enum(['paying_group', 'assistant']), scopeId: z.string(), ceilingCents: z.int().nonnegative() }));
 const stateSchema = z.object({ dailyCeilingCents: z.int().nonnegative(), ceilingCents: z.int().nonnegative(),
   periodStart: z.string().optional(), defaultPayingGroupId: z.string().optional(), ceilings: ceilingsSchema.default([]), sequence: z.int().nonnegative().default(0),
@@ -105,7 +105,8 @@ export function applyBudget(state: BudgetState, event: EventEnvelope, sequence =
   } else if (event.type === 'budget.settled') {
     const reservation = state.reservations.find(r => r.id === d['reservationId']);
     if (!reservation) throw new Error('Unknown reservation');
-    reservation.settledCents = z.int().nonnegative().parse(d['settledCents']);
+    reservation.settledCents = Math.max(reservation.settledCents ?? 0, z.int().nonnegative().parse(d['settledCents']));
+    reservation.outcomeUnknown = d['outcome'] === 'unknown';
   }
 }
 function applyCeiling(state: BudgetState, d: Record<string, unknown>) {
@@ -125,8 +126,8 @@ export function totals(state: BudgetState, now = new Date(), scope?: { scope: 'p
   let today = 0n, monthly = 0n, reserved = 0n;
   for (const r of state.reservations) {
     if (scope && (scope.scope === 'paying_group' ? r.call.payingGroupId : r.call.assistantId) !== scope.scopeId) continue;
-    if (r.settledCents === undefined) reserved += BigInt(r.amountCents);
-    else {
+    if (r.settledCents === undefined || r.outcomeUnknown) reserved += BigInt(r.amountCents);
+    if (r.settledCents !== undefined) {
       if (r.time.startsWith(day)) today += BigInt(r.settledCents);
       if (r.time.startsWith(month)) monthly += BigInt(r.settledCents);
     }

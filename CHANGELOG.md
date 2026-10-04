@@ -10,6 +10,8 @@
 
 ### Fixed or improved
 
+- P3-15 backend records evidence-backed monetary resolutions, retains uncertain reservations and preserves larger late usage charges; its designed screen and fresh-install qualification remain pending.
+
 - Work is under way to publish reviewed MCP tools, let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
 
 ### Known limits

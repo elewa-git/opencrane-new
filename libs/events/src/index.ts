@@ -37,3 +37,5 @@ export { budgetCeilingSetDataSchema, decisionRecordedDataSchema } from './data.t
 
 export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema } from './data.ts';
 export { fileUploadedDataSchema, fileRejectedDataSchema, fileDeliveredDataSchema } from './file-events.ts';
+
+export { effectResolvedDataSchema, effectUncertainDataSchema } from './data.ts';
