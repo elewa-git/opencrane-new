@@ -272,7 +272,8 @@ it('counts pongs and close frames in the viewer output bound', async () => {
 it('admits bounded slow authority reads and keeps their desktop stream connected', async () => {
   const readable = new PassThrough();
   const fixture = await viewFixture(() => { const writable = new PassThrough(); writable.resume(); return Promise.resolve(Duplex.from({ readable, writable })); });
-  const eventDelay = 400; let socket: WebSocket | undefined;
+  // Leave room for real NATS/HTTP work inside the 1200ms check deadline.
+  const eventDelay = 250; let socket: WebSocket | undefined;
   const proxy = createServer((request, response) => {
     const upstream = httpRequest(`${fixture.fga.apiUrl}${request.url}`, { method: request.method, headers: request.headers }, incoming => {
       void delay(650).then(() => { response.writeHead(incoming.statusCode ?? 502, incoming.headers); incoming.pipe(response); });

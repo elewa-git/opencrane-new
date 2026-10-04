@@ -354,7 +354,7 @@ The stub spaces deltas by 500ms
 so Chromium can observe intermediate renders. For the secondary journey’s cancellation
 prompt (`Say hello again.`), the stub pauses for up to 30 seconds after its first
 delta, ending the wait when cancelled. This makes the real browser Stop check
-predictable under concurrent load; the same partial-text assertion still applies. Their overall journey timeout is ten minutes, with 90 seconds for event and
+predictable under concurrent load; the same partial-text assertion still applies. Their overall journey timeout is fifteen minutes (including two real takeover lease expiries), with 90 seconds for event and
 computer readiness under concurrent load (owner: 30 seconds). No OpenAI credentials are read.
 The receipt is [chat UI evidence](../../docs/process/chat-ui-evidence.md).
 
@@ -408,3 +408,17 @@ also completes through the stub provider while the viewer is open. Revoking the
 grant closes the socket, clears pixels and records the stop audit. Keyboard
 opening, Escape, fit/actual-size and 44px targets are checked. Screenshots and
 receipts go to `docs/process/live-view/conversation-*`.
+
+## Requester takeover (P3-17)
+
+Secondary journeys also take control at 390px and 1280px while two real Codex
+threads are streaming from the local provider fixture. The deployed computer
+must close every turn and stop every UID 1001 executor before admitting input.
+The browser sends a key and pointer movement; X events and cursor coordinates
+prove delivery. A second signed-in participant receives pixels but cannot take
+control or send input. F8 reaches Release, which admits fresh checked turns in
+both conversations. A second lease reaches its real two-minute deadline, closes
+control and leaves the agent paused; an explicit Release then cleans up.
+Screenshots and receipts go to `docs/process/p3-17-live/`. The fifteen-minute
+secondary journey limit includes the four minutes spent waiting for expiry.
+No owner stack or paid model provider is used by this qualification.

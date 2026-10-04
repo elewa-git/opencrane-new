@@ -6,6 +6,32 @@ import { grantStream } from '@opencrane/authz';
 import { history } from '@opencrane/models';
 import { viewFixture } from './support/view-fixture.ts';
 
+it('confirms cached takeover history and still sees a changed requester immediately', async () => {
+  const { vi } = await import('vitest');
+  const { takeover } = await import('../src/computers/takeover.ts');
+  const fixture = await viewFixture(() => { throw new Error('No tunnel'); });
+  const engine = takeover({ ...fixture.chat, open: () => Promise.reject(new Error('No tunnel')), control: async () => {} });
+  try {
+    fixture.keys.provision('test', 'chat');
+    await fixture.append('conversation-chat', 'message.posted', { conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text', ...fixture.keys.encrypt('test', 'chat', 'Login') });
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    const lease = await engine.start('alice', 'chat', Date.now() + 300000);
+    await engine.check('alice', 'chat', lease.leaseId);
+    const checkpoints = new Map(await Promise.all(['computer-assistant', 'conversation-chat'].map(async subject =>
+      [subject, (await history(fixture.nats.store, subject, 'test')).at(-1)!.sequence] as const)));
+    const reads = vi.spyOn(fixture.nats.store, 'readStream');
+    await engine.check('alice', 'chat', lease.leaseId);
+    for (const subject of ['computer-assistant', 'conversation-chat']) {
+      const calls = reads.mock.calls.filter(args => args[0] === subject);
+      expect(calls.length).toBeGreaterThan(0);
+      expect(calls.every(args => args[1] === checkpoints.get(subject))).toBe(true);
+    }
+    reads.mockRestore();
+    await fixture.append('conversation-chat', 'message.posted', { conversationId: 'chat', authorId: 'bob', authorKind: 'human', contentType: 'text', ...fixture.keys.encrypt('test', 'chat', 'Changed requester') });
+    await expect(engine.check('alice', 'chat', lease.leaseId)).rejects.toThrow('requester');
+  } finally { await engine.close(); await fixture.close(); }
+}, 30000);
+
 it('only grants the requester control after the whole computer is paused and the intent is durable', async () => {
   let paused = false;
   const fixture = await viewFixture(() => { throw new Error('No tunnel expected'); }, undefined, async (_computer, action) => {

@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { history, envelope } from '@opencrane/models';
+import { envelope } from '@opencrane/models';
 import type { StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
-import { viewAccess } from './view-access.ts';
+import { viewAccess, viewHistory } from './view-access.ts';
 import type { LiveViewOptions } from './view-access.ts';
 
 const leaseSchema = z.object({ assistantId: z.string(), computerId: z.string(), generation: z.int(), podUid: z.string().optional(),
@@ -21,13 +21,13 @@ export function takeover(options: LiveViewOptions) {
   let recovered = false;
   async function access(memberId: string, conversationId: string) {
     const computer = await viewAccess(options, memberId, conversationId);
-    const rows = await history(options.store, `conversation-${conversationId}`, options.silo);
+    const rows = await viewHistory(options.store, `conversation-${conversationId}`, options.silo);
     const message = rows.findLast(r => r.event.type === 'message.posted');
     if (!message || z.object({ authorId: z.string() }).parse(message.event.data).authorId !== memberId) throw new Error('Current requester required');
     return { ...computer, turnId: message.event.id };
   }
   async function state(assistantId: string) {
-    const rows = await history(options.store, `computer-${assistantId}`, options.silo);
+    const rows = await viewHistory(options.store, `computer-${assistantId}`, options.silo);
     const latest = rows.findLast(r => r.event.type.startsWith('takeover.'));
     return { rows, latest, data: latest ? leaseSchema.parse(latest.event.data) : undefined };
   }

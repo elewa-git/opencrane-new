@@ -19,6 +19,7 @@ import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
+import { browserTakeoverJourney } from './browser-takeover.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary } from './identity.ts';
@@ -164,6 +165,7 @@ try {
     authz.use('person', member, 'model', model.id), authz.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'new member and assistant model grants');
   console.log('PASS new member and assistant model grants reach OpenFGA before chat');
+  const takeoverRun = (await computerEvents(computer!.assistant_id)).some(event => event.type === 'takeover.requested') ? 'repeat' : 'fresh';
   const memberChatUrls: string[] = [];
   if (browser) for (const page of browser.memberPages) {
     const failedTransport: string[] = [];
@@ -177,6 +179,10 @@ try {
       memberChatUrls.push(page.url());
       await browserLiveViewJourney(page, origin, computer!, { member, admin, silo, store: events.store, append, until,
         desktopAllowed: async () => (await authz.desktop(member, computer!.computer_id)).allowed });
+      if (secondary) await browserTakeoverJourney(page, browser.ownerPage, origin, computer!, {
+        member, admin, silo, store: events.store, append, until, run: takeoverRun,
+        desktopAllowed: async memberId => (await authz.desktop(memberId, computer!.computer_id)).allowed,
+      });
       await page.goto(origin);
     }
     catch (error) {

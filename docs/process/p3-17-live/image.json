@@ -1,0 +1,27 @@
+{
+  "status": "PASS",
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:7e0d39c39547b0f5e1ad0c5662dc14773b8da6ed37f79942c57f950a12f0f4fa",
+  "packages": 384,
+  "categories": {
+    "application-osi": 38,
+    "debian-main": 339,
+    "application-osi-with-bundled-free": 7
+  },
+  "contents": "PASS: source/routing bytes, root ownership, no runtime credentials or build tools",
+  "notices": "PASS: 91 installed filenames and metadata-named notices collected",
+  "sourceSha256": {
+    "apps/computer/src/bridge.ts": "b9b1bd061acd5042235c12307901e69b46bd160644555ae309531c507b309ad7",
+    "apps/computer/src/channel.ts": "32618cc6624afc070857a40e7204942fbddf73ff4ddac501ea55a44e8cc5d91b",
+    "apps/computer/src/desktop.ts": "28661b828f370b0204a0e0b04e0236b55719545b50ab2638ec82cd4e32ee5bc4",
+    "apps/computer/src/entrypoint.ts": "fcddd1975ed58bfd7043a9278cde9756b2cf4befe1392d20de24273818b8d02b",
+    "apps/computer/src/http.ts": "00651afc84257edbd9cb5a784ec2c67a6e1919112a66c47ec7925f7e64da86e6",
+    "apps/computer/src/proxy.ts": "31094573baa83f07d67d07a4dbdb9207f7d95d7a700ad0812aade94efbda575b",
+    "libs/models/src/routing.ts": "768c9bbfe28df50fa137ee974c10e6547ed46d2bfec80db434ac48df5414a2e0"
+  },
+  "gateInputsSha256": {
+    "apps/computer/.state/sbom.syft.json": "18c275cf4f7da5d2ba50456996bd357037fa9404319c64fa1cbeb04cf6472641",
+    "apps/computer/.state/licence-evidence.json": "2fabfb6787abb1b9426723528c7d7d4cacfa124f64c13cf1d38010dcdb3141bd",
+    "apps/computer/.state/osi.json": "f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd36302ee",
+    "apps/computer/reviewed-licences.json": "a13a44d1430374f6d0e397c31bc4405d13c37d96d31d010e326ee6e88eccbffb"
+  }
+}

@@ -1,12 +1,14 @@
 # Computer image — P2-1
 
 Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
-accepts 383/383 packages. ONNX Runtime is retained: its wheel contains no
+accepts 384/384 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
-The checked template pins the tested release image at
-`sha256:09bc88153ccc6e72fee754dd171235f1aecf988e3b0df62bf7f278d6155df4ac`.
+The checked template pins the reviewed runtime image at
+`sha256:7e0d39c39547b0f5e1ad0c5662dc14773b8da6ed37f79942c57f950a12f0f4fa`.
+The [secondary-stack receipt](../../docs/process/p3-17-live-evidence.md) checks
+this reviewed takeover image against the current source and licence policy.
 This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
 credential through the Kubernetes Pod proxy; the bridge atomically stores it in
 `/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private

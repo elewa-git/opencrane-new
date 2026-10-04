@@ -43,7 +43,7 @@ NATS and OpenFGA fixtures are disposable. The owner stack is untouched.
 | Playwright keyboard at both widths | PASS; only Tab/Enter/F8, native entry, Renew/Release and no forwarded F8 |
 | Revised image contents and permissions | PASS; source/routing match, root ownership and no credentials |
 | Revised gVisor runtime journey | PASS; two threads/tool, release retry, stale pause, three crash recoveries |
-| Independent review pass 2 | NOT RUN |
+| Independent review pass 2 | LAND at `93c80ee`, as confirmed by the owner; rebased source `9f8b5bf` |
 | Fresh complete silo / paid provider | NOT RUN |
 
 The initial root run reported three gateway/approval failures while several local
@@ -57,9 +57,10 @@ Final results above are separate from those failed attempts.
 The revised runtime image is a local source-only overlay of the reviewed P3-17
 image. Local manifest digest:
 `sha256:7e0d39c39547b0f5e1ad0c5662dc14773b8da6ed37f79942c57f950a12f0f4fa`.
-It adds no dependencies and is imported locally rather than pushed. The
-tracked deployment manifest still names the original image; rebuilding and
-publishing the runtime is required before deployment of these source fixes.
+It adds no dependencies. The original qualification imported it locally. The
+tracked deployment manifest originally named the earlier image. The
+[secondary-stack receipt](p3-17-live-evidence.md) records publication of this
+reviewed image, the matching template digest and the current licence gate.
 
 The live tests create only `computer-view-*` disposable namespaces, check gVisor,
 and delete their namespace in `finally`. A timed-out worker left one namespace;

@@ -1,0 +1,192 @@
+{
+  "status": "FAIL",
+  "stackId": "2",
+  "width": 390,
+  "reason": "writer closed with access_changed before keyboard check",
+  "audit": [
+    {
+      "sequence": 144,
+      "event": {
+        "id": "e6063e05-1479-43f1-a78b-d9c9db7a26c0",
+        "type": "takeover.requested",
+        "commandId": "e6063e05-1479-43f1-a78b-d9c9db7a26c0",
+        "source": "opencrane-server",
+        "time": "2026-10-04T07:15:57.697Z",
+        "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-member",
+          "kind": "human"
+        },
+        "correlation": {
+          "conversation": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turn": "d82fe894-b3d8-41b8-938c-6aca46b302ed"
+        },
+        "data": {
+          "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+          "generation": 1,
+          "podUid": "4b3876ac-f1cb-4a60-b529-961a7dcf8829",
+          "requestedBy": "zitadel-member",
+          "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+          "leaseId": "de350852-9e4e-434c-ae14-dc058acf83d7",
+          "expiresAt": "2026-10-04T07:17:57.651Z",
+          "affectedTurns": [
+            {
+              "conversationId": "5b93dfba-48ff-4a66-9aba-032e3548783f",
+              "turnId": "421e3af2-1ef8-4af4-a7be-aa72c53f667a",
+              "threadId": "01a105c4-e5bb-7b03-ad85-cf96e1dbc637",
+              "requesterId": "zitadel-member"
+            },
+            {
+              "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+              "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+              "threadId": "01a105c4-17df-7492-8e78-26306004f7e2",
+              "requesterId": "zitadel-member"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 151,
+      "event": {
+        "id": "9709b4c5-ba6c-4d4e-b2ab-61786922473f",
+        "type": "takeover.started",
+        "commandId": "9709b4c5-ba6c-4d4e-b2ab-61786922473f",
+        "source": "opencrane-server",
+        "time": "2026-10-04T07:16:04.719Z",
+        "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-member",
+          "kind": "human"
+        },
+        "correlation": {
+          "conversation": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turn": "d82fe894-b3d8-41b8-938c-6aca46b302ed"
+        },
+        "data": {
+          "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+          "generation": 1,
+          "podUid": "4b3876ac-f1cb-4a60-b529-961a7dcf8829",
+          "requestedBy": "zitadel-member",
+          "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+          "leaseId": "de350852-9e4e-434c-ae14-dc058acf83d7",
+          "expiresAt": "2026-10-04T07:17:57.651Z",
+          "affectedTurns": [
+            {
+              "conversationId": "5b93dfba-48ff-4a66-9aba-032e3548783f",
+              "turnId": "421e3af2-1ef8-4af4-a7be-aa72c53f667a",
+              "threadId": "01a105c4-e5bb-7b03-ad85-cf96e1dbc637",
+              "requesterId": "zitadel-member"
+            },
+            {
+              "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+              "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+              "threadId": "01a105c4-17df-7492-8e78-26306004f7e2",
+              "requesterId": "zitadel-member"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 155,
+      "event": {
+        "id": "771ffe7b-b104-4e10-b6bf-0dc29610e77f",
+        "type": "takeover.ended",
+        "commandId": "771ffe7b-b104-4e10-b6bf-0dc29610e77f",
+        "source": "opencrane-server",
+        "time": "2026-10-04T07:16:15.463Z",
+        "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-member",
+          "kind": "human"
+        },
+        "correlation": {
+          "conversation": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turn": "d82fe894-b3d8-41b8-938c-6aca46b302ed"
+        },
+        "data": {
+          "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+          "generation": 1,
+          "podUid": "4b3876ac-f1cb-4a60-b529-961a7dcf8829",
+          "requestedBy": "zitadel-member",
+          "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+          "leaseId": "de350852-9e4e-434c-ae14-dc058acf83d7",
+          "expiresAt": "2026-10-04T07:17:57.651Z",
+          "affectedTurns": [
+            {
+              "conversationId": "5b93dfba-48ff-4a66-9aba-032e3548783f",
+              "turnId": "421e3af2-1ef8-4af4-a7be-aa72c53f667a",
+              "threadId": "01a105c4-e5bb-7b03-ad85-cf96e1dbc637",
+              "requesterId": "zitadel-member"
+            },
+            {
+              "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+              "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+              "threadId": "01a105c4-17df-7492-8e78-26306004f7e2",
+              "requesterId": "zitadel-member"
+            }
+          ],
+          "endedBy": "zitadel-member",
+          "reason": "access_changed"
+        }
+      }
+    },
+    {
+      "sequence": 161,
+      "event": {
+        "id": "a31c7d8d-f04f-498f-a825-ceca9c0a7caf",
+        "type": "takeover.ended",
+        "commandId": "a31c7d8d-f04f-498f-a825-ceca9c0a7caf",
+        "source": "opencrane-server",
+        "time": "2026-10-04T07:19:31.366Z",
+        "subject": "computer-personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "silo": "dev",
+        "principal": {
+          "id": "zitadel-member",
+          "kind": "human"
+        },
+        "correlation": {
+          "conversation": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turn": "d82fe894-b3d8-41b8-938c-6aca46b302ed"
+        },
+        "data": {
+          "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+          "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+          "generation": 1,
+          "podUid": "4b3876ac-f1cb-4a60-b529-961a7dcf8829",
+          "requestedBy": "zitadel-member",
+          "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+          "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+          "leaseId": "de350852-9e4e-434c-ae14-dc058acf83d7",
+          "expiresAt": "2026-10-04T07:17:57.651Z",
+          "affectedTurns": [
+            {
+              "conversationId": "5b93dfba-48ff-4a66-9aba-032e3548783f",
+              "turnId": "421e3af2-1ef8-4af4-a7be-aa72c53f667a",
+              "threadId": "01a105c4-e5bb-7b03-ad85-cf96e1dbc637",
+              "requesterId": "zitadel-member"
+            },
+            {
+              "conversationId": "841fc8c7-cedb-431f-8b6f-26fab5ff4212",
+              "turnId": "d82fe894-b3d8-41b8-938c-6aca46b302ed",
+              "threadId": "01a105c4-17df-7492-8e78-26306004f7e2",
+              "requesterId": "zitadel-member"
+            }
+          ],
+          "endedBy": "zitadel-member",
+          "reason": "released"
+        }
+      }
+    }
+  ]
+}

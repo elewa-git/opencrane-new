@@ -48,7 +48,8 @@ The table below records the original implementation. The subsequent independent
 review pass 1 found execution ordering and keyboard escape blockers. Their
 reproductions, fixes and current check results are recorded in the
 [review-fix receipt](p3-17-review-fixes-evidence.md). Review pass 2 for these
-fixes is NOT RUN.
+fixes is LAND at `93c80ee`, as confirmed by the owner. The
+[secondary-stack receipt](p3-17-live-evidence.md) records the rebased qualification.
 
 TDD started with failing requester/pause, bridge and browser journeys. The live
 probe exposed root's missing CAP_KILL; the same-UID helper fixed it. Fault tests
@@ -86,10 +87,12 @@ a pause adapter without active threads; the separate runtime journey proves
 whole-computer quiescence. Screenshots are generated under
 `apps/computer/.state/p317/control-{1280,390}.png`.
 
-Candidate image: `opencrane/computer@sha256:5cfe0d46972df36f2a2b3d2a6b09b78c10944ba8f6233b687a9501ed1dc58e1c`.
+Original candidate image: `opencrane/computer@sha256:5cfe0d46972df36f2a2b3d2a6b09b78c10944ba8f6233b687a9501ed1dc58e1c`.
 A source-only overlay of reviewed base `b2a2852e085fe852a61125f48258630ac284ab1090e35fcf235e9eed9b8a3994`
-adds no application dependencies or OS packages. The runtime manifest pins this
-candidate. Existing OSI/DFSG licence reviews apply unchanged.
+adds no application dependencies or OS packages. The original runtime manifest pinned this
+candidate. The [secondary-stack receipt](p3-17-live-evidence.md) records the
+reviewed source-fix image now pinned by the template. Existing OSI/DFSG licence
+reviews apply unchanged.
 
 ```sh
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --testTimeout=30000

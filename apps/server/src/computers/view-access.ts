@@ -25,7 +25,7 @@ function saveHistory(cache: Map<string, StoredEvent[]>, key: string, rows: Store
   cache.set(key, rows);
 }
 
-async function history(store: EventStore, subject: string, silo: string) {
+export async function viewHistory(store: EventStore, subject: string, silo: string) {
   let cache = histories.get(store);
   if (!cache) { cache = new Map(); histories.set(store, cache); }
   const key = JSON.stringify([silo, subject]);
@@ -49,7 +49,7 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const [conversation, member] = await Promise.all([
-    history(store, `conversation-${conversationId}`, silo), history(store, `member-${memberId}`, silo),
+    viewHistory(store, `conversation-${conversationId}`, silo), viewHistory(store, `member-${memberId}`, silo),
   ]);
   const created = conversation.find(r => r.event.type === 'conversation.created')?.event;
   if (!created || conversation.some(r => r.event.type === 'conversation.closed') ||
@@ -57,7 +57,7 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   const assistantId = identity.parse(created.data).assistantId;
   if (!participatesIn(conversation, created.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
-  const grants = await history(store, grantStream('shared_desktop', computer.computerId), silo);
+  const grants = await viewHistory(store, grantStream('shared_desktop', computer.computerId), silo);
   const current = grants.findLast(r => {
     const data = grant.parse(r.event.data);
     return data.resourceType === 'shared_desktop' && data.resourceId === computer.computerId && data.granteeId === memberId;
@@ -80,7 +80,7 @@ function participatesIn(conversation: StoredEvent[], data: unknown, memberId: st
 }
 
 async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: string) {
-  const lifecycle = await history(store, `computer-${assistantId}`, silo);
+  const lifecycle = await viewHistory(store, `computer-${assistantId}`, silo);
   const latest = lifecycle.findLast(r => !r.event.type.startsWith('computer.turn_') && !r.event.type.startsWith('takeover.'))?.event;
   if (latest?.type !== 'computer.ready') throw new Error('Computer unavailable');
   const computer = ready.parse(latest.data);

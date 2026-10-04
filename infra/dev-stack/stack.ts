@@ -320,7 +320,7 @@ async function up(fresh: boolean) {
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory }, secondary ? 600_000 : 300_000);
+    { ...base, DEV_STACK_DIR: directory }, secondary ? 900_000 : 300_000);
   console.log(output.trim());
 }
 async function status() {
