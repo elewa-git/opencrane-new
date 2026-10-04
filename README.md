@@ -1,5 +1,7 @@
 # OpenCrane 2
 
+[Changelog](CHANGELOG.md)
+
 ## The vision
 
 **Every employee gets an AI assistant with its own computer, and the company stays in control.**
