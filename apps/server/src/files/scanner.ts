@@ -1,14 +1,15 @@
 // Verdict handling adapted from OpenCrane 1's clamscan.ts at 10abd0ef6 (AGPL-3.0-or-later).
 // See infra/clamav/upstream for the unchanged scanner and licence.
 import { connect } from 'node:net';
+import { FileUnavailable } from './refusals.ts';
 
 export function scanFile(host: string, port: number, bytes: Buffer): Promise<'clean' | 'infected'> {
   return new Promise((resolve, reject) => {
     const socket = connect({ host, port });
     let response = '';
-    const timeout = setTimeout(() => socket.destroy(new Error('Scan timed out')), 60_000);
+    const timeout = setTimeout(() => socket.destroy(new FileUnavailable('scanner')), 60_000);
     socket.once('close', () => clearTimeout(timeout));
-    socket.on('error', () => reject(new Error('Scanner unavailable')));
+    socket.on('error', error => reject(new FileUnavailable('scanner', { cause: error })));
     socket.on('data', (chunk: Buffer) => {
       response += chunk.toString();
       if (response.length > 4096) socket.destroy(new Error('Invalid scanner response'));

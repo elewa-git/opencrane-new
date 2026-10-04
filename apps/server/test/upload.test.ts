@@ -5,6 +5,7 @@ import { uploadPdf } from './support/upload-pdf.ts';
 import { expect, it } from 'vitest';
 import { inspectFile } from '../src/files/types.ts';
 import { uploadFile } from '../src/files/routes.ts';
+import { FileUnavailable } from '../src/files/refusals.ts';
 
 it('accepts document content and refuses a disguised executable or archive', async () => {
   expect(await inspectFile('notes.txt', Buffer.from('Meeting at ten.'))).toBe('text/plain');
@@ -133,6 +134,9 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, cookie: '' }, payload: Buffer.from('test') })).statusCode).toBe(401);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, origin: 'https://other.test' }, payload: Buffer.from('test') })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'x-file-name': 'escape.exe' }, payload: Buffer.from('MZbinary') })).statusCode).toBe(415);
+    const malformed = await app.inject({ method: 'POST', url, headers: { ...headers, 'x-file-name': 'bad/name.txt' }, payload: Buffer.from('Meeting at ten.') });
+    expect(malformed.statusCode).toBe(400);
+    expect(malformed.json()).toEqual({ status: 'refused', error: 'Invalid request' });
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.alloc(20 * 1024 * 1024 + 1) })).statusCode).toBe(413);
     const oversizedBytes = Buffer.alloc(20 * 1024 * 1024 + 1);
     const expectedSizeRefusal = {
@@ -157,8 +161,14 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     } finally { release(); }
     expect((await app.inject({ url, headers })).json()).toEqual(list.json());
     release(); expect((await pending).statusCode).toBe(201);
-    options.scan = () => Promise.reject(new Error('Scanner unavailable'));
-    expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'offline' }, payload: Buffer.from('No scan means no file') })).statusCode).toBe(503);
+    options.scan = () => Promise.reject(new Error('Scanner failed unexpectedly'));
+    const unexpected = await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'unexpected' }, payload: Buffer.from('No scan means no file') });
+    expect(unexpected.statusCode).toBe(500);
+    expect(unexpected.json()).toEqual({ status: 'failed', error: 'Unexpected failure' });
+    options.scan = () => Promise.reject(new FileUnavailable('scanner'));
+    const unavailable = await app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'offline' }, payload: Buffer.from('No scan means no file') });
+    expect(unavailable.statusCode).toBe(503);
+    expect(unavailable.json()).toEqual({ status: 'unavailable', error: 'Dependency unavailable' });
     expect(await services.client.listObjectsV2('quarantine', '', true).toArray()).toEqual([]);
     options.scan = services.scan;
     const concurrent = await Promise.all(['Left', 'Right'].map(text => app.inject({ method: 'POST', url, headers: { ...headers, 'idempotency-key': 'race' }, payload: Buffer.from(text) })));

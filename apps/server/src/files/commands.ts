@@ -19,7 +19,7 @@ const fileContext = z.object({
 });
 
 export async function ownConversation(
-  store: EventStore,
+  store: Pick<EventStore, 'readStream'>,
   silo: string,
   conversationId: string,
   memberId: string,
@@ -40,7 +40,11 @@ export async function ownConversation(
   return rows;
 }
 
-async function verifyCurrentMember(store: EventStore, silo: string, memberId: string) {
+async function verifyCurrentMember(
+  store: Pick<EventStore, 'readStream'>,
+  silo: string,
+  memberId: string,
+) {
   let removed = false;
   for await (const row of store.readStream(`member-${memberId}`)) {
     if (row.event.silo !== silo) {
@@ -78,7 +82,7 @@ function currentParticipant(rows: StoredEvent[], memberId: string, isOwner: bool
 
 /** Only writes one conditional append. Storage and delivery are IO reactions. */
 export async function fileCommand(
-  store: EventStore,
+  store: Pick<EventStore, 'readStream' | 'append'>,
   silo: string,
   memberId: string,
   eventId: string,
@@ -159,6 +163,6 @@ function verifyDelivery(rows: StoredEvent[], data: unknown, memberId: string) {
     }
   }
   if (!upload || upload.sha256 !== delivery.sha256 || upload.uploadedBy !== memberId) {
-    throw new Error('File delivery refused');
+    throw new FileRefusal('delivery_refused');
   }
 }

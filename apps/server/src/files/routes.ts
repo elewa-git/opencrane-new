@@ -17,7 +17,7 @@ import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { fileCommand, ownConversation } from './commands.ts';
-import { FileRefusal } from './refusals.ts';
+import { FileRefusal, FileUnavailable } from './refusals.ts';
 import { inspectFile } from './types.ts';
 
 export interface FileOptions extends Omit<ChatOptions, 'keys'> {
@@ -110,7 +110,7 @@ async function handleFileView(
   }
   try {
     const { memberId, conversationId } = await authorise(options, config, request);
-    const { path, preview } = viewQuery.parse(request.query);
+    const { path, preview } = parseRequest(viewQuery, request.query);
     const rows = await ownConversation(options.store, options.silo, conversationId, memberId, true);
     const file = findFileAtPath(rows, conversationId, path);
     if (!file) {
@@ -122,7 +122,12 @@ async function handleFileView(
     if (!file.screenshot) {
       await ownConversation(options.store, options.silo, conversationId, memberId);
     }
-    const stream = await options.objects.getObject('files', file.objectKey);
+    let stream: Awaited<ReturnType<Client['getObject']>>;
+    try {
+      stream = await options.objects.getObject('files', file.objectKey);
+    } catch (error) {
+      throw new FileUnavailable('object_store', { cause: error });
+    }
     let disposition = 'attachment';
     if (preview === 'true') {
       disposition = 'inline';
@@ -170,8 +175,8 @@ async function handleFileRequest(
       const response = { rows };
       return reply.send(response);
     }
-    const name = filename.parse(request.headers['x-file-name']);
-    const key = id.parse(request.headers['idempotency-key']);
+    const name = parseRequest(filename, request.headers['x-file-name']);
+    const key = parseRequest(id, request.headers['idempotency-key']);
     if (!Buffer.isBuffer(request.body) || !request.body.length) {
       const response = { status: 'invalid_request' };
       reply.code(400);
@@ -217,7 +222,7 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   if (wrongOrganisation || wrongSilo || wrongOrigin) {
     throw new FileRefusal('conversation_refused');
   }
-  const { conversationId } = conversationParams.parse(request.params);
+  const { conversationId } = parseRequest(conversationParams, request.params);
   const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
   if (!memberId) {
     throw new FileRefusal('conversation_refused');
@@ -241,7 +246,9 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   return { memberId, conversationId };
 }
 
-function uploadStatus(status: string) {
+type UploadStatus = 'appended' | 'infected' | 'unavailable' | 'conflict';
+
+function uploadStatus(status: UploadStatus) {
   switch (status) {
     case 'infected':
       return 422;
@@ -249,8 +256,19 @@ function uploadStatus(status: string) {
       return 201;
     case 'unavailable':
       return 503;
-    default:
+    case 'conflict':
       return 409;
+  }
+}
+
+function parseRequest<Schema extends z.ZodType>(schema: Schema, value: unknown): z.infer<Schema> {
+  try {
+    return schema.parse(value);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      throw new FileRefusal('invalid_request', { cause: error });
+    }
+    throw error;
   }
 }
 
@@ -260,12 +278,13 @@ function refuse(reply: FastifyReply, error: unknown) {
     reply.code(error.statusCode);
     return reply.send(response);
   }
-  let statusCode = 503;
-  if (error instanceof z.ZodError) {
-    statusCode = 400;
+  if (error instanceof FileUnavailable) {
+    const response = { status: 'unavailable', error: error.message };
+    reply.code(error.statusCode);
+    return reply.send(response);
   }
-  const response = { status: 'refused', error: 'Upload unavailable or refused' };
-  reply.code(statusCode);
+  const response = { status: 'failed', error: 'Unexpected failure' };
+  reply.code(500);
   return reply.send(response);
 }
 
@@ -355,7 +374,11 @@ export async function uploadFile(
   let eventData: object;
   if (verdict === 'clean') {
     const metadata = { 'Content-Type': mime };
-    await options.objects.putObject('files', objectKey, bytes, bytes.length, metadata);
+    try {
+      await options.objects.putObject('files', objectKey, bytes, bytes.length, metadata);
+    } catch (error) {
+      throw new FileUnavailable('object_store', { cause: error });
+    }
     type = 'file.uploaded';
     eventData = { ...data, mime, objectKey };
   } else {
@@ -366,6 +389,12 @@ export async function uploadFile(
   const result = await fileCommand(
     options.store, options.silo, memberId, `file-upload-${fileId}`, type, eventData, fresh,
   );
+  if (result.status === 'unavailable') {
+    throw new FileUnavailable('event_store', { cause: result.cause });
+  }
+  if (result.status === 'rejected') {
+    throw new Error('File event rejected');
+  }
   if (result.status === 'appended' && verdict === 'infected') {
     return infectedUpload(fileId);
   }

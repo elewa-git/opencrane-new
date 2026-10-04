@@ -7,6 +7,8 @@ const fileRefusals = {
     message: 'File too large. Maximum size is 20 MiB.',
   },
   unsupported_file: { statusCode: 415, message: 'Unsupported or unsafe file content' },
+  invalid_request: { statusCode: 400, message: 'Invalid request' },
+  delivery_refused: { statusCode: 403, message: 'File delivery refused' },
 } as const;
 
 type FileRefusalKind = keyof typeof fileRefusals;
@@ -22,5 +24,16 @@ export class FileRefusal extends Error {
     this.name = 'FileRefusal';
     this.kind = kind;
     this.statusCode = refusal.statusCode;
+  }
+}
+
+export class FileUnavailable extends Error {
+  readonly kind: 'object_store' | 'event_store' | 'scanner';
+  readonly statusCode = 503;
+
+  constructor(kind: 'object_store' | 'event_store' | 'scanner', options?: ErrorOptions) {
+    super('Dependency unavailable', options);
+    this.name = 'FileUnavailable';
+    this.kind = kind;
   }
 }
