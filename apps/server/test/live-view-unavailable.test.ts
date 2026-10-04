@@ -1,0 +1,224 @@
+import { once } from 'node:events';
+import { createServer, request as httpRequest } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Duplex, PassThrough } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
+import { encodeSession } from '@opencrane/auth';
+import { grantStream } from '@opencrane/authz';
+import { expect, it, vi } from 'vitest';
+import { WebSocket } from 'ws';
+import { z } from 'zod';
+import { viewFixture } from './support/view-fixture.ts';
+
+type Failure = 'none' | 'deadline' | 'denied';
+const batchRequest = z.object({
+  checks: z.array(z.object({ correlation_id: z.string() })),
+});
+const boundaries = ['starting fence', 'final fence', 'OpenFGA batch item'] as const;
+type Boundary = (typeof boundaries)[number];
+
+function openDesktop() {
+  const writable = new PassThrough();
+  writable.resume();
+  const desktop = Duplex.from({ readable: new PassThrough(), writable });
+  return Promise.resolve(desktop);
+}
+
+function ignoreSocketError() {
+  // The outage and denial cases deliberately close the viewer.
+}
+
+async function captureFenceTimeout(fixture: Awaited<ReturnType<typeof viewFixture>>) {
+  fixture.nats.pauseResponses(true);
+  try {
+    await fixture.nats.store.head();
+  } catch (error) {
+    if (error instanceof Error && error.name === 'TimeoutError') return error;
+    throw error;
+  } finally {
+    fixture.nats.pauseResponses(false);
+  }
+  throw new Error('Expected a NATS fence timeout');
+}
+
+async function startViewer(fixture: Awaited<ReturnType<typeof viewFixture>>) {
+  const grantData = {
+    resourceType: 'shared_desktop', resourceId: 'desktop',
+    granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner',
+  };
+  await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', grantData, true);
+  const session = {
+    sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
+    exp: Math.floor(Date.now() / 1000) + 120,
+  };
+  const headers = {
+    origin: new URL(fixture.config.redirectUri).origin,
+    'x-opencrane-view': '1',
+    cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, session)}`,
+  };
+  const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
+  const admission = await fixture.app.inject(request);
+  expect(admission.statusCode).toBe(200);
+  const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
+  const url = `${address.replace('http:', 'ws:')}/ws/conversations/chat/view`;
+  const protocols = ['binary', admission.json<{ ticket: string }>().ticket];
+  const socket = new WebSocket(url, protocols, { headers });
+  socket.on('error', ignoreSocketError);
+  await once(socket, 'open');
+  return socket;
+}
+
+async function batchFailureProxy(apiUrl: string) {
+  let failure: Failure = 'none';
+  let failures = 0;
+
+  async function sendFailure(request: IncomingMessage, response: ServerResponse) {
+    let body = '';
+    for await (const chunk of request) body += String(chunk);
+    const parsed = batchRequest.parse(JSON.parse(body));
+    const result: Record<string, unknown> = {};
+    for (let index = 0; index < parsed.checks.length; index++) {
+      const check = parsed.checks[index]!;
+      if (index === 0) {
+        result[check.correlation_id] = {
+          error: { internal_error: 'deadline_exceeded', message: 'Check deadline exceeded' },
+        };
+      } else {
+        result[check.correlation_id] = { allowed: failure !== 'denied' || index !== 1 };
+      }
+    }
+    failures++;
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ result }));
+  }
+
+  function handleRequest(request: IncomingMessage, response: ServerResponse) {
+    function failResponse() {
+      response.writeHead(502);
+      response.end();
+    }
+    if (failure !== 'none' && request.url?.endsWith('/batch-check')) {
+      void sendFailure(request, response).catch(failResponse);
+      return;
+    }
+    function forwardResponse(incoming: IncomingMessage) {
+      response.writeHead(incoming.statusCode ?? 502, incoming.headers);
+      incoming.pipe(response);
+    }
+    const options = { method: request.method, headers: request.headers };
+    const upstream = httpRequest(`${apiUrl}${request.url}`, options, forwardResponse);
+    upstream.on('error', failResponse);
+    request.pipe(upstream);
+  }
+
+  const server = createServer(handleRequest);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing OpenFGA proxy');
+  function setFailure(value: Failure) {
+    failure = value;
+  }
+  function failureCount() {
+    return failures;
+  }
+  async function close() {
+    const closed = once(server, 'close');
+    server.closeAllConnections();
+    server.close();
+    await closed;
+  }
+  return { apiUrl: `http://127.0.0.1:${address.port}`, setFailure, failureCount, close };
+}
+
+async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
+  const fixture = await viewFixture(openDesktop);
+  const timeout = await captureFenceTimeout(fixture);
+  const proxy = await batchFailureProxy(fixture.fga.apiUrl);
+  fixture.binding.apiUrl = proxy.apiUrl;
+  let socket: WebSocket | undefined;
+  let failures = 0;
+  let unavailable = false;
+  const head = fixture.nats.store.head.bind(fixture.nats.store);
+  function readHead(subject?: string) {
+    const startingFence = boundary === 'starting fence' && subject === undefined;
+    const finalFence = boundary === 'final fence' && subject === 'conversation-chat';
+    if (unavailable && (startingFence || finalFence)) {
+      failures++;
+      throw timeout;
+    }
+    return head(subject);
+  }
+
+  try {
+    socket = await startViewer(fixture);
+    vi.spyOn(fixture.nats.store, 'head').mockImplementation(readHead);
+    const failedAt = performance.now();
+    unavailable = true;
+    if (boundary === 'OpenFGA batch item') proxy.setFailure('deadline');
+    const closed = once(socket, 'close');
+    await delay(650);
+    const observedFailures = failures + proxy.failureCount();
+    expect(observedFailures).toBeGreaterThan(0);
+    // A failed check cannot revoke authority while its successful snapshot is still valid.
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    if (!recovers) {
+      expect((await closed)[0]).toBe(4003);
+      // Repeated errors must not renew the original 1.5-second lease.
+      expect(performance.now() - failedAt).toBeLessThan(2000);
+      return;
+    }
+    unavailable = false;
+    proxy.setFailure('none');
+    await delay(1700);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    const revokedAt = performance.now();
+    const revocation = {
+      resourceType: 'shared_desktop', resourceId: 'desktop',
+      granteeId: 'alice', revokedBy: 'owner',
+    };
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', revocation);
+    expect((await closed)[0]).toBe(4003);
+    expect(performance.now() - revokedAt).toBeLessThan(2000);
+  } finally {
+    socket?.terminate();
+    vi.restoreAllMocks();
+    await proxy.close();
+    await fixture.close();
+  }
+}
+
+async function keepsRecoveringLease(boundary: Boundary) {
+  await checksUnavailableLease(boundary, true);
+}
+async function expiresUnavailableLease(boundary: Boundary) {
+  await checksUnavailableLease(boundary, false);
+}
+
+it.each(boundaries)('keeps a valid viewer lease through a failed %s and recovery',
+  keepsRecoveringLease, 30_000);
+it.each(boundaries)('expires a viewer lease when the %s keeps failing',
+  expiresUnavailableLease, 30_000);
+
+async function refusesDeniedBatch() {
+  const fixture = await viewFixture(openDesktop);
+  const proxy = await batchFailureProxy(fixture.fga.apiUrl);
+  fixture.binding.apiUrl = proxy.apiUrl;
+  let socket: WebSocket | undefined;
+  try {
+    socket = await startViewer(fixture);
+    const closed = once(socket, 'close');
+    const deniedAt = performance.now();
+    // A separate failed item must not hide an explicit denial in the same batch.
+    proxy.setFailure('denied');
+    expect((await closed)[0]).toBe(4003);
+    expect(performance.now() - deniedAt).toBeLessThan(1000);
+  } finally {
+    socket?.terminate();
+    await proxy.close();
+    await fixture.close();
+  }
+}
+
+it('closes a viewer on explicit OpenFGA denial beside a batch-item deadline error',
+  refusesDeniedBatch, 30_000);

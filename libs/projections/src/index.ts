@@ -29,3 +29,6 @@ export { rebuildAuditProjection } from './audit-rebuild.ts';
 
 export { conversationKeys } from './keys.ts';
 export { files, listFiles } from './files.ts';
+
+export { groups, readGroups } from './groups.ts';
+export { rebuildGroupProjection } from './group-rebuild.ts';

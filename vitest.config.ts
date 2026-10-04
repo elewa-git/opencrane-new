@@ -8,6 +8,8 @@ export default defineConfig({
     exclude: ['**/node_modules/**', '**/dist/**', 'spikes/**'],
     environment: 'node',
     passWithNoTests: false,
+    // Disposable service fixtures need room under load; authority tests assert their own deadlines.
+    testTimeout: 30_000,
     // apps/server now logs JSON via pino; keep test output readable.
     env: { LOG_LEVEL: 'silent' },
   },

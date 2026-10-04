@@ -1,3 +1,5 @@
+import { createServer } from 'node:http';
+import { once } from 'node:events';
 import { readFile, mkdir } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { z } from 'zod';
@@ -328,3 +330,125 @@ it('decides an approval using only its bound authority streams', async () => {
     expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
+
+async function permissionResponseProxy(
+  setup: Awaited<ReturnType<typeof approvalFixture>>,
+  afterAnswer: () => Promise<void>,
+) {
+  const originalUrl = setup.binding.apiUrl;
+  let answered = false;
+  async function forward(request: import('node:http').IncomingMessage,
+    reply: import('node:http').ServerResponse) {
+    const chunks: Buffer[] = [];
+    for await (const chunk of request) {
+      if (!Buffer.isBuffer(chunk)) throw new Error('Unexpected proxy body');
+      chunks.push(chunk);
+    }
+    const body = Buffer.concat(chunks).toString();
+    const response = await fetch(originalUrl + request.url, {
+      method: request.method ?? 'POST', headers: { 'content-type': 'application/json' }, body,
+    });
+    const text = await response.text();
+    if (request.url?.endsWith('/check') && !answered) {
+      const check = z.object({ tuple_key: z.object({ relation: z.string() }) }).parse(
+        JSON.parse(body));
+      if (check.tuple_key.relation === 'read') {
+        answered = true;
+        await afterAnswer();
+      }
+    }
+    reply.writeHead(response.status, { 'content-type': 'application/json' });
+    reply.end(text);
+  }
+  function handle(request: import('node:http').IncomingMessage,
+    reply: import('node:http').ServerResponse) {
+    void forward(request, reply).catch(fail);
+    function fail(error: unknown) {
+      reply.writeHead(500);
+      reply.end(String(error));
+    }
+  }
+  const server = createServer(handle);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing proxy address');
+  setup.binding.apiUrl = `http://127.0.0.1:${address.port}`;
+  async function close() {
+    setup.binding.apiUrl = originalUrl;
+    server.close();
+    await once(server, 'close');
+  }
+  return { close };
+}
+
+// A removal receipt must not turn a stale permission answer into a new baseline.
+const refusesRemovalAfterPermission = async (kind: 'member' | 'participant', applied: boolean) => {
+    const setup = await approvalFixture();
+    try {
+      await setup.call();
+      let removed = false;
+      async function removeAfterPermission() {
+        removed = true;
+        let removal;
+        if (kind === 'member') {
+          removal = await setup.append('member-alice', 'member.removed', {
+            memberId: 'alice', removedBy: 'owner',
+          });
+        } else {
+          removal = await setup.append('conversation-conversation', 'participant.removed', {
+            conversationId: 'conversation', participantId: 'alice', removedBy: 'owner',
+          });
+        }
+        if (applied) await setup.auth.handler.handle(removal, setup.db);
+      }
+      const proxy = await permissionResponseProxy(setup, removeAfterPermission);
+      try {
+        const response = await setup.app.inject({
+          url: '/api/conversations/conversation/approvals', headers: setup.headers(),
+        });
+        expect(removed).toBe(true);
+        expect(response.statusCode).toBeGreaterThanOrEqual(400);
+        expect(response.body).not.toContain('9007199254740993');
+        expect(response.body).not.toContain('hello');
+      } finally {
+        await proxy.close();
+      }
+    } finally {
+      await setup.close();
+    }
+  };
+it.each([
+  ['member', false],
+  ['member', true],
+  ['participant', false],
+  ['participant', true],
+] as const)('hides approval cards when %s removal follows IAM (receipt applied: %s)',
+  refusesRemovalAfterPermission, 40_000);
+
+const preservesApprovalDeadline = async () => {
+  const setup = await approvalFixture();
+  try {
+    await setup.call();
+    const started = performance.now();
+    const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+    function expireAfterPermission() {
+      clock.mockReturnValue(started + 2001);
+      return Promise.resolve();
+    }
+    const proxy = await permissionResponseProxy(setup, expireAfterPermission);
+    try {
+      const response = await setup.app.inject({
+        url: '/api/conversations/conversation/approvals', headers: setup.headers(),
+      });
+      expect(response.statusCode).toBe(503);
+      expect(response.body).not.toContain('hello');
+    } finally {
+      clock.mockRestore();
+      await proxy.close();
+    }
+  } finally {
+    await setup.close();
+  }
+};
+it('keeps the approval request deadline when IAM consumes the two-second budget', preservesApprovalDeadline, 40_000);

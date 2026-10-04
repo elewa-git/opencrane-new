@@ -247,4 +247,19 @@ try {
     await writeFile(`${output}/index.html`, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Chat frame comparison</title><style>body{font:14px system-ui;margin:24px;background:#eceff0;color:#16191a}.pair{display:grid;grid-template-columns:1fr 1fr;gap:20px}figure{margin:0;min-width:0}img{max-width:100%;border:1px solid #d9dfe0}section{margin:40px 0}figcaption{margin-bottom:10px}@media(max-width:700px){.pair{grid-template-columns:1fr}}</style><h1>Chat · reference and build</h1><p>Playwright Chromium · 1280px and 390px · protocol fixtures, not live user data. Personal agent sessions only. The owner reference includes later-phase group, approval and upload controls; those are deliberately excluded. Files use the single-view preview design, with an honest unavailable state until file transport is delivered. Phone layouts apply the owner's responsive rules.</p>${comparisons.join('')}</html>`);
   }
   console.log('PASS Chromium: keyboard, focus, touch targets, streaming, Stop/reload, offline retry, wake state and every scoped frame at 1280/390');
-} finally { await browser.close(); if (web) { web.kill('SIGTERM'); await exited; } }
+} finally {
+  await browser.close();
+  if (web) {
+    web.kill('SIGTERM');
+    function reapWeb() {
+      web.kill('SIGKILL');
+    }
+    const reap = setTimeout(reapWeb, 1000);
+    reap.unref();
+    try {
+      await exited;
+    } finally {
+      clearTimeout(reap);
+    }
+  }
+}

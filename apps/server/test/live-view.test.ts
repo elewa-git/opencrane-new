@@ -417,3 +417,61 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
     await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();
   }
 }, 30_000);
+async function closesRevokedGroupView() {
+  function openDesktop() {
+    const writable = new PassThrough();
+    writable.resume();
+    const desktop = Duplex.from({ readable: new PassThrough(), writable });
+    return Promise.resolve(desktop);
+  }
+  const fixture = await viewFixture(openDesktop);
+  let socket: WebSocket | undefined;
+  try {
+    await fixture.append('team-viewers', 'team.created', { teamId: 'viewers', name: 'Viewers', createdBy: 'alice' }, true);
+    await fixture.append('team-viewers', 'team.member_added', { teamId: 'viewers', memberId: 'alice', addedBy: 'alice' }, true);
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeKind: 'team', granteeId: 'viewers', grantedBy: 'alice' }, true);
+    const headers = { origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const response = await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers });
+    expect(response.statusCode).toBe(200);
+    const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', response.json<{ ticket: string }>().ticket], { headers });
+    function ignoreSocketError() {
+      // Revocation deliberately closes the connection under test.
+    }
+    socket.on('error', ignoreSocketError);
+    await once(socket, 'open');
+    const closed = once(socket, 'close');
+    const removedAt = performance.now();
+    await fixture.append('team-viewers', 'team.member_removed', { teamId: 'viewers', memberId: 'alice', removedBy: 'owner' });
+    expect((await closed)[0]).toBe(4003);
+    expect(performance.now() - removedAt).toBeLessThan(2000);
+    expect((await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).statusCode).toBe(403);
+  } finally {
+    socket?.terminate();
+    await fixture.close();
+  }
+}
+it('closes a group-granted live view within two seconds of removal before IAM catches up',
+  closesRevokedGroupView, 30_000);
+async function keepsDirectGrantIndependent() {
+  function openDesktop() {
+    return Promise.resolve(new PassThrough());
+  }
+  const fixture = await viewFixture(openDesktop);
+  try {
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    await fixture.append('team-viewers', 'team.created', { teamId: 'viewers', name: 'Viewers', createdBy: 'alice' }, true);
+    await fixture.append('team-viewers', 'team.member_added', { teamId: 'viewers', memberId: 'alice', addedBy: 'alice' }, true);
+    await fixture.append('team-viewers', 'team.member_added', { teamId: 'viewers', memberId: 'bob', addedBy: 'alice' }, true);
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'viewers', granteeKind: 'team', grantedBy: 'owner' }, true);
+    await fixture.append('team-viewers', 'team.member_removed', { teamId: 'viewers', memberId: 'bob', removedBy: 'owner' });
+    const headers = { origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    expect((await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).statusCode).toBe(200);
+  } finally {
+    await fixture.close();
+  }
+}
+it('keeps a direct desktop grant independent of a pending group membership change',
+  keepsDirectGrantIndependent, 30_000);

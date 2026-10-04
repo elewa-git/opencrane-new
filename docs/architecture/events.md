@@ -101,6 +101,14 @@ to P3-19. No raw arguments, tokens or credential values appear in this event.
 
 ### Organisation, members and teams
 
+Product groups reuse team ids and exact `team-<id>` subjects. Creation and additions
+may include `membershipSource` (`local` or `identity_provider`); old events mean
+local. Group names cannot contain a NUL character, so accepted events can replay
+into PostgreSQL text. Supplied identity-provider membership is read-only to local commands.
+Group membership grants neither conversation participation nor personal-memory
+access. Each group id is also its paying-group id; shared work never falls back to
+the personal default.
+
 | Event | Emitted by | Projections (content) | Reactions (logic) |
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
@@ -108,7 +116,7 @@ to P3-19. No raw arguments, tokens or credential values appear in this event.
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.role_changed` | admin command | members | OpenFGA role tuples |
 | `member.removed` | admin command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
-| `team.created` / `team.member_added` / `team.member_removed` | admin command | teams | OpenFGA team tuples |
+| `team.created` / `team.member_added` / `team.member_removed` | Owner/Admin command, or supplied identity-provider membership | flat group names, membership and grant-source views | OpenFGA `team#member` tuples and atomic receipts |
 
 `member.invited` pre-allocates `memberId`; invitation and acceptance share
 `member-<memberId>` so one conditional append settles concurrent acceptance.

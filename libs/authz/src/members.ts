@@ -164,6 +164,20 @@ export function memberAuthorisation(binding: Binding) {
       return client.check({ user: objectId('person', binding.silo, memberId),
         object: objectId('resource', binding.silo, 'shared_desktop', computerId), relation: 'use' });
     },
+    view(memberId: string, conversationId: string, computerId: string, receipts: string[]) {
+      const user = objectId('person', binding.silo, memberId);
+      function receiptTuple(eventId: string) {
+        return { user: object, relation: 'applied',
+          object: objectId('projection_event', binding.silo, eventId) };
+      }
+      const receiptTuples = receipts.map(receiptTuple);
+      const checks = [
+        { user, object: objectId('conversation', binding.silo, conversationId), relation: 'read' },
+        { user, object: objectId('resource', binding.silo, 'shared_desktop', computerId), relation: 'use' },
+        ...receiptTuples,
+      ];
+      return client.checkAll(checks);
+    },
     actsFor(memberId: string, assistantId: string) {
       return client.check({ user: objectId('person', binding.silo, memberId),
         object: objectId('assistant', binding.silo, assistantId), relation: 'acts_for' });

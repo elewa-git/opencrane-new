@@ -119,3 +119,7 @@ by the chat server and approval decision process. It stores per-conversation key
 with private filesystem permissions, exposes only key references in events, and
 refuses decryption with a different silo/conversation binding. Production secret
 custody remains a deployment qualification responsibility.
+
+The members worker also maintains the flat-group view (`groups`, `group_members`,
+`group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
+without reactions. See the [group contract](../../docs/api/groups.md).

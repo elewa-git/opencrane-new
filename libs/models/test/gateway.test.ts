@@ -982,7 +982,8 @@ it('resets at the exact UTC month boundary, holds unknown money and attributes l
     await f.actor.configure({ scope: 'paying_group', scopeId: 'personal-default', ceilingCents: 1, setBy: 'alice' });
     f.advance(Date.parse('2026-10-31T23:59:59.999Z') - f.actor.now().getTime());
     await f.runtime.stop();
-    expect((await f.call()).status).toBe(200);
+    const firstCall = await f.call();
+    expect(firstCall.status, firstCall.text).toBe(200);
     const reservation = f.actor.state.reservations[0]!;
     f.advance(1);
     await f.actor.period();
@@ -991,7 +992,8 @@ it('resets at the exact UTC month boundary, holds unknown money and attributes l
     await f.actor.effect(reservation.id, { inputTokens: 1000, outputTokens: 120 });
     await f.actor.settleRecorded(reservation.id, `${reservation.id}:effect.observed`);
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 0 });
-    expect((await f.call()).status).toBe(200);
+    const nextMonthCall = await f.call();
+    expect(nextMonthCall.status, nextMonthCall.text).toBe(200);
     f.advance(); await f.actor.expire();
     expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(1);
     const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now); await recovered.start();
@@ -1189,3 +1191,74 @@ it('keeps an admitted model call uncertain when the recording upstream loses its
     expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
+
+async function refusesSuspensionDuringCredentialRead() {
+  const setup = await fixture();
+  const originalRead = setup.nats.store.readStream.bind(setup.nats.store);
+  let suspended = false;
+  async function* suspendAfterRead(...args: Parameters<typeof originalRead>) {
+    yield* originalRead(...args);
+    if (args[0] === 'computer-assistant' && !suspended) {
+      suspended = true;
+      await setup.append('computer-assistant', 'computer.suspended', {
+        assistantId: 'assistant', computerId: 'computer',
+      });
+    }
+  }
+  const race = vi.spyOn(setup.nats.store, 'readStream').mockImplementation(suspendAfterRead);
+  try {
+    expect((await setup.call()).status).toBe(403);
+    expect(setup.received()).toBe(0);
+  } finally {
+    race.mockRestore();
+    await setup.close();
+  }
+}
+it('refuses suspension during event-backed credential validation',
+  refusesSuspensionDuringCredentialRead, 40_000);
+
+async function fencesDistinctPayingGroupAfterAudit() {
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  const originalAppend = setup.nats.store.append.bind(setup.nats.store);
+  try {
+    await setup.append('team-finance', 'team.created', {
+      teamId: 'finance', name: 'Finance', createdBy: 'alice',
+    });
+    await setup.append('team-finance', 'team.member_added', {
+      teamId: 'finance', memberId: 'alice', addedBy: 'alice',
+    });
+    await setup.append('computer-assistant', 'computer.turn_started', {
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+      turnId: 'finance-turn', threadId: 'finance-thread', requesterId: 'alice',
+      task: 'chat_turn', payingGroupId: 'finance',
+    });
+    const claims = { ...setup.t, turn: 'finance-turn', thread: 'finance-thread' };
+    const token = await setup.sign(claims, 'decision-service');
+    async function removeAfterAudit(command: Parameters<typeof originalAppend>[0]) {
+      const result = await originalAppend(command);
+      const allowAudit = z.object({
+        type: z.literal('decision.recorded'), data: z.object({ outcome: z.literal('allow') }),
+      });
+      if (allowAudit.safeParse(command.event).success) {
+        await setup.append('team-finance', 'team.member_removed', {
+          teamId: 'finance', memberId: 'alice', removedBy: 'admin',
+        });
+      }
+      return result;
+    }
+    const race = vi.spyOn(setup.nats.store, 'append').mockImplementation(removeAfterAudit);
+    try {
+      const headers = { 'x-turn-token': token, 'session-id': 'finance-thread' };
+      expect((await setup.call(headers)).status).toBe(503);
+      expect(setup.received()).toBe(0);
+      expect(setup.actor.state.reservations[0]?.call.payingGroupId).toBe('finance');
+      expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+    } finally {
+      race.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it('fences a selected paying group distinct from the assistant owner through the final allow audit',
+  fencesDistinctPayingGroupAfterAudit, 40_000);

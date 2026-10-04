@@ -10,13 +10,15 @@ import type { ChatOptions } from './routes.ts';
 
 export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.route({ method: ['GET', 'POST'], url: '/api/conversations/:conversationId/approvals', handler: async (req, reply) => {
+    const started = performance.now();
     reply.header('cache-control', 'no-store');
     const session = sessionFor(req, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     if (session.orgId !== config.expectedOrgId || options.binding.silo !== options.silo) return reply.code(403).send({ status: 'refused' });
     try {
-      const fresh = await authorityFence(options.store, performance.now());
+      // Capture before identity and IAM reads; a projected removal cannot reset the baseline.
+      const fresh = await authorityFence(options.store, started);
       const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(req.params);
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       const auth = memberAuthorisation(options.binding);

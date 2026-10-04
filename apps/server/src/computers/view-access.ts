@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { authorityFence, payingGroupAuthority } from '@opencrane/models';
 export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
 export class ViewCheckUnavailable extends Error {}
 
@@ -25,17 +26,19 @@ async function history(store: EventStore, subject: string, silo: string) {
   const rows = [...(cache.get(key) ?? [])];
   const previous = rows.at(-1); let confirmed = !previous;
   // Confirm the saved checkpoint before reading its live tail.
-  try {
-    for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
-      if (row.event.silo !== silo) throw new Error('Wrong silo');
-      if (!confirmed) {
-        if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) break;
-        rows[rows.length - 1] = row; confirmed = true;
-      } else rows.push(row);
+  for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
+    if (row.event.silo !== silo) {
+      throw new Error('Wrong silo');
     }
-  } catch (error) {
-    if (isEventStoreUnavailable(error)) throw new ViewCheckUnavailable('Authority unavailable', { cause: error });
-    throw error;
+    if (!confirmed) {
+      if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) {
+        break;
+      }
+      rows[rows.length - 1] = row;
+      confirmed = true;
+    } else {
+      rows.push(row);
+    }
   }
   if (!confirmed) { cache.delete(key); throw new Error('Authority history changed'); }
   saveHistory(cache, key, rows);
@@ -44,6 +47,18 @@ async function history(store: EventStore, subject: string, silo: string) {
 
 /** Check authority as well as its projection: delayed revocations must fail closed. */
 export async function viewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
+  try {
+    return await checkViewAccess(options, memberId, conversationId);
+  } catch (error) {
+    // Store outages preserve an existing lease until it expires, including during fence reads.
+    if (isEventStoreUnavailable(error)) {
+      throw new ViewCheckUnavailable('Authority unavailable', { cause: error });
+    }
+    throw error;
+  }
+}
+
+async function checkViewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const [conversation, member] = await Promise.all([
@@ -55,16 +70,13 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   const assistantId = identity.parse(created.data).assistantId;
   if (!participatesIn(conversation, created.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
-  const grants = await history(store, grantStream('shared_desktop', computer.computerId), silo);
-  const current = grants.findLast(r => {
-    const data = grant.parse(r.event.data);
-    return data.resourceType === 'shared_desktop' && data.resourceId === computer.computerId && data.granteeId === memberId;
-  })?.event;
-  if (current?.type !== 'grant.given' || z.object({ granteeKind: z.string() }).parse(current.data).granteeKind !== 'member') throw new Error('Desktop access required');
+  const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
   const auth = memberAuthorisation(options.binding);
-  const permissions = await Promise.all([auth.conversation(memberId, conversationId, 'read'), auth.desktop(memberId, computer.computerId)]);
-  if (permissions.some(p => p.status === 'ok' && !p.allowed)) throw new Error('Access changed');
-  if (permissions.some(p => p.status === 'unavailable')) throw new ViewCheckUnavailable('Authority unavailable');
+  const permission = await auth.view(
+    memberId, conversationId, computer.computerId, desktop.receipts);
+  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');
+  if (!permission.allowed) throw new Error('Access changed');
+  await desktop.fresh();
   return computer;
 }
 
@@ -86,4 +98,55 @@ async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: 
   const claimed = ready.parse(lifecycle.findLast(r => r.event.type === 'computer.claimed')?.event.data);
   if (computer.assistantId !== assistantId || computer.computerId !== claimed.computerId || computer.generation !== claimed.generation) throw new Error('Computer changed');
   return computer;
+}
+
+async function desktopGrants(store: EventStore, silo: string, resource: string) {
+  const grants = await history(store, resource, silo);
+  const current = new Map<string, { kind: string; eventId: string }>();
+  for (const { event } of grants) {
+    const data = grant.parse(event.data);
+    if (event.type === 'grant.revoked') {
+      current.delete(data.granteeId);
+    } else {
+      const grantee = z.object({ granteeKind: z.string() }).parse(event.data);
+      current.set(data.granteeId, { kind: grantee.granteeKind, eventId: event.id });
+    }
+  }
+  return current;
+}
+async function belongsToGroup(options: ViewAccessOptions, groupId: string, memberId: string) {
+  const rows = await history(options.store, `team-${groupId}`, options.silo);
+  function matchesMember(row: StoredEvent) {
+    if (!row.event.type.startsWith('team.member_')) return false;
+    const data = z.object({ memberId: z.string() }).parse(row.event.data);
+    return data.memberId === memberId;
+  }
+  const membership = rows.findLast(matchesMember);
+  return membership?.event.type === 'team.member_added';
+}
+async function desktopAccess(options: ViewAccessOptions, memberId: string,
+  conversationId: string, computerId: string) {
+  const { store, silo } = options;
+  const resource = grantStream('shared_desktop', computerId);
+  const subjects = [`member-${memberId}`, `conversation-${conversationId}`, resource];
+  const fresh = await authorityFence(store, performance.now(), subjects);
+  const current = await desktopGrants(store, silo, resource);
+  const direct = current.get(memberId);
+  if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
+  const groupFences: (() => Promise<void>)[] = [];
+  const receipts: string[] = [];
+  for (const [groupId, source] of current) {
+    if (source.kind !== 'team') continue;
+    // Use current event membership even when IAM has not applied a removal yet.
+    if (!await belongsToGroup(options, groupId, memberId)) continue;
+    const groupFence = await payingGroupAuthority(store, silo, memberId, groupId, options.binding);
+    groupFences.push(groupFence);
+    receipts.push(source.eventId);
+  }
+  if (!receipts.length) throw new Error('Desktop access required');
+  async function checkFresh() {
+    await fresh();
+    for (const groupFence of groupFences) await groupFence();
+  }
+  return { receipts, fresh: checkFresh };
 }
