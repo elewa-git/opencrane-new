@@ -8,6 +8,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { startGateway } from '../src/gateway.ts';
 
+const STDERR_AFTER_EXIT_MS = 150;
+
 const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false }));
 
 vi.mock('node:child_process', () => ({
@@ -26,7 +28,9 @@ vi.mock('node:child_process', () => ({
           stdout.end();
           stderr.end();
           child.emit('close', 1, null);
-        }, 10);
+          // Longer than the startup loop's 50 ms poll, so the old code builds its
+          // error before stderr arrives and this test fails without the fix.
+        }, STDERR_AFTER_EXIT_MS);
       }, 0);
     }
     return spawned;
