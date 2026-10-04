@@ -1,5 +1,6 @@
 import { registerScreenshots } from './computers/screenshots.ts';
 import { registerEffectRoutes } from './effects/routes.ts';
+import { registerGroupRoutes, type GroupOptions } from './members/group-routes.ts';
 import { registerApprovalRoutes } from './chat/approvals.ts';
 import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 import { registerFileRoutes, type FileOptions } from './files/routes.ts';
@@ -21,6 +22,7 @@ export interface BuildServerOptions {
   /** Where log lines go; defaults to stdout. A test passes an in-memory stream to read them back. */
   logDestination?: LogDestination;
   membership?: MembershipOptions;
+  groups?: GroupOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
   files?: FileOptions;
@@ -57,6 +59,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   // the callback URL's entire query is dropped from logs.
   registerAuthRoutes(app, authConfig);
   registerMemberRoutes(app, authConfig, options.membership);
+  registerGroupRoutes(app, authConfig, options.groups);
   registerIntegrationRoutes(app, authConfig, options.integrations);
   registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);

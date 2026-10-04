@@ -141,10 +141,10 @@ export const memberRemovedDataSchema = z
   .object({ memberId: id, removedBy: id, reason: reasonCodeSchema.optional() })
   .strict();
 
-export const teamCreatedDataSchema = z.object({ teamId: id, name: id, createdBy: id }).strict();
+export const teamCreatedDataSchema = z.object({ teamId: id, name: id.refine(value => !value.includes('\0')), createdBy: id, membershipSource: z.enum(['local', 'identity_provider']).optional() }).strict();
 
 export const teamMemberAddedDataSchema = z
-  .object({ teamId: id, memberId: id, addedBy: id })
+  .object({ teamId: id, memberId: id, addedBy: id, membershipSource: z.enum(['local', 'identity_provider']).optional() })
   .strict();
 
 export const teamMemberRemovedDataSchema = z

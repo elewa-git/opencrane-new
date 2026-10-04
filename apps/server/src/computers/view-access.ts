@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { authorityFence, payingGroupAuthority } from '@opencrane/models';
 export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
 export class ViewCheckUnavailable extends Error {}
 
@@ -55,16 +56,13 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   const assistantId = identity.parse(created.data).assistantId;
   if (!participatesIn(conversation, created.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
-  const grants = await history(store, grantStream('shared_desktop', computer.computerId), silo);
-  const current = grants.findLast(r => {
-    const data = grant.parse(r.event.data);
-    return data.resourceType === 'shared_desktop' && data.resourceId === computer.computerId && data.granteeId === memberId;
-  })?.event;
-  if (current?.type !== 'grant.given' || z.object({ granteeKind: z.string() }).parse(current.data).granteeKind !== 'member') throw new Error('Desktop access required');
+  const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
   const auth = memberAuthorisation(options.binding);
-  const permissions = await Promise.all([auth.conversation(memberId, conversationId, 'read'), auth.desktop(memberId, computer.computerId)]);
-  if (permissions.some(p => p.status === 'ok' && !p.allowed)) throw new Error('Access changed');
-  if (permissions.some(p => p.status === 'unavailable')) throw new ViewCheckUnavailable('Authority unavailable');
+  const permission = await auth.view(
+    memberId, conversationId, computer.computerId, desktop.receipts);
+  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');
+  if (!permission.allowed) throw new Error('Access changed');
+  await desktop.fresh();
   return computer;
 }
 
@@ -86,4 +84,35 @@ async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: 
   const claimed = ready.parse(lifecycle.findLast(r => r.event.type === 'computer.claimed')?.event.data);
   if (computer.assistantId !== assistantId || computer.computerId !== claimed.computerId || computer.generation !== claimed.generation) throw new Error('Computer changed');
   return computer;
+}
+
+async function desktopAccess(options: ViewAccessOptions, memberId: string, conversationId: string, computerId: string) {
+  const { store, silo } = options;
+  const resource = grantStream('shared_desktop', computerId);
+  const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`, `conversation-${conversationId}`, resource]);
+  const grants = await history(store, resource, silo);
+  const current = new Map<string, { kind: string; eventId: string }>();
+  for (const { event } of grants) {
+    const d = grant.parse(event.data);
+    if (event.type === 'grant.revoked') current.delete(d.granteeId);
+    else current.set(d.granteeId, { kind: z.object({ granteeKind: z.string() }).parse(event.data).granteeKind, eventId: event.id });
+  }
+  const direct = current.get(memberId);
+  if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
+  const groupFences: (() => Promise<void>)[] = [];
+  let permitted = false;
+  const receipts: string[] = [];
+  for (const [id, source] of current) {
+    if (source.kind === 'team') {
+      // Any pending team removal denies until its IAM receipt exists.
+      const rows = await history(store, `team-${id}`, silo);
+      const member = rows.findLast(r => r.event.type.startsWith('team.member_') && z.object({ memberId: z.string() }).parse(r.event.data).memberId === memberId);
+      if (member?.event.type !== 'team.member_added') continue;
+      groupFences.push(await payingGroupAuthority(store, silo, memberId, id, options.binding));
+      receipts.push(source.eventId);
+      permitted = true;
+    }
+  }
+  if (!permitted) throw new Error('Desktop access required');
+  return { receipts, fresh: async () => { await fresh(); await Promise.all(groupFences.map(fence => fence())); } };
 }

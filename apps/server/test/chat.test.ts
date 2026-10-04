@@ -139,6 +139,7 @@ it('binds personal paying group at admission, keeps it on retries and refuses sh
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/turn-budget-`);
   try {
     const actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'personal-default');
+    await nats.store.append({ expectedSequence: 0, event: envelope('test', 'member-alice', 'member.joined', { memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'member' }) });
     await nats.store.append({ expectedSequence: 0, event: envelope('test', 'team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }) });
     const teamHead = (await history(nats.store, 'team-sales', 'test')).at(-1)!.sequence;
     await nats.store.append({ expectedSequence: teamHead, event: envelope('test', 'team-sales', 'team.member_added', { teamId: 'sales', memberId: 'alice', addedBy: 'alice' }) });

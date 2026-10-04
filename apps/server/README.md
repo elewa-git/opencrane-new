@@ -417,3 +417,4 @@ Owners and Admins can list and inspect monetary uncertainty with
 receipt evidence with `POST /api/org/effects/:permitId/resolve`.
 [The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
+Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).

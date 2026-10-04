@@ -165,6 +165,16 @@ export class TupleClient {
     }
   }
 
+  /** Require every exact tuple; a missing answer or failed check refuses the batch. */
+  async checkAll(tuples: Tuple[]) {
+    try {
+      const response = await this.client.batchCheck({ checks: tuples.map((tuple, index) => ({ ...tuple, correlationId: String(index) })) }, consistent);
+      return { allowed: tuples.every((_, index) => response.result.some(result => result.correlationId === String(index) && result.allowed && !result.error)), status: 'ok' as const };
+    } catch (cause) {
+      return { allowed: false as const, status: 'unavailable' as const, error: new Error('Authorisation checks unavailable', { cause }) };
+    }
+  }
+
   /** One atomic transaction, including the event receipt; duplicate receipts must fail. */
   async write(writes: Tuple[], deletes: Tuple[]): Promise<void> {
     await this.client.write({ writes, deletes });
