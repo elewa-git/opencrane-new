@@ -24,7 +24,8 @@ This is how OpenCrane 2 gets built day to day. The [standards](standards.md) say
 5. **Gates.** `npm ci`, `npm run lint`, `npm run typecheck`, `npm test`, `npm run check:events`, plus the web build and tests.
 6. **Secret scan.** `tools/fleet/secret-scan.sh` on the staged diff; the push happens only if it exits 0.
 7. **Land.** Each whole feature stays on a development branch with a well-described PR: **Why / Functional outcome / Architecture / Evidence / Not in this PR**. Small fixes go inside their feature PR. The orchestrator merges after gates, independent review and green CI. Commits use one emoji plus a plain sentence and a short bullet body; never a co-author or AI attribution in commits or PR descriptions.
-8. **Report.** A few lines to the owner: what landed, what is running, what needs a decision.
+8. **Qualification ledger.** Every feature PR appends its qualification rows to [`ledger.md`](ledger.md) and quantitative measurements to [`benchmarks.jsonl`](benchmarks.jsonl). Reviewers copy measurements and verdicts into the PR's evidence receipt; they must not leave the only copy in `/tmp`.
+9. **Report.** A few lines to the owner: what landed, what is running, what needs a decision.
 
 ## What needs the owner first
 
