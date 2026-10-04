@@ -1,0 +1,41 @@
+<a href="/org/integrations">‹ Back to integrations</a>
+<h1>{{ serverId ? 'Review MCP server' : 'Add an MCP server' }}</h1>
+<p>Choose a source, discover its tools, then review what it offers.</p>
+<div class="steps" aria-label="Installation progress"><strong>1 · Source</strong><span>2 · Review tools</span><span>3 · Publish &amp; access — not available yet</span></div>
+@if (!serverId) {
+<div class="sources" aria-label="Server source">
+  <div class="unavailable"><strong>Catalogue</strong><p>Not available yet</p></div>
+  <div class="selected"><strong>● Remote server (URL)</strong><p>A server hosted by you or a provider</p></div>
+  <div class="unavailable"><strong>Package (OCI image)</strong><p>Not available yet</p></div>
+</div>
+}
+@if (phase() !== 'access' && !serverId) {
+  <form (submit)="submit($event)">
+    <label for="remote-url">Server URL</label>
+    <input id="remote-url" type="url" required autocomplete="off" placeholder="https://mcp.example.com/mcp" [value]="locator()" (input)="locator.set($any($event.target).value)" [disabled]="phase() !== 'draft'" />
+    <p>Use an HTTPS address without passwords or access tokens.</p>
+    @if (phase() === 'draft') { <button type="submit" [disabled]="busy()">Discover tools</button> }
+  </form>
+}
+<p role="status" aria-live="polite">{{ message() }}</p>
+@if (changeRef()) { <p>Change reference <code>{{ changeRef() }}</code></p> }
+@if (phase() !== 'draft' && phase() !== 'access') { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
+@if (inventory(); as inventory) {
+  <section aria-label="Tool inventory">
+    <h2>{{ inventory.serverInfo.name }} · {{ inventory.serverInfo.version }}</h2>
+    <p>{{ inventory.tools.length }} tools discovered · 0 allowed</p>
+    @for (readOnly of [true, false]; track readOnly) {
+      <h3>{{ readOnly ? 'Read' : 'Changes data or unclear' }}</h3>
+      @for (tool of inventory.tools; track tool.name) {
+        @if ((tool.readOnly && !tool.destructive) === readOnly) {
+          <article><strong>{{ tool.name }}</strong><p>− Blocked · Unreviewed</p>
+            <details><summary>Review definition and digest</summary><code>{{ tool.revision }}</code><pre>{{ tool.definition }}</pre></details>
+          </article>
+        }
+      }
+    }
+    <details><summary>Advanced</summary><p>MCP 2026-07-28 · Inventory digest</p><code>{{ inventory.schemaDigest }}</code></details>
+    <p>No computer can call these tools. Publication and access come after review.</p>
+  </section>
+}
+@if (!serverId && (phase() === 'needs_input' || phase() === 'failed')) { <button type="button" class="secondary" (click)="another()">Add another server</button> }

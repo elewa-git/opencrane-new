@@ -357,10 +357,11 @@ export const mcpServerDiscoveredDataSchema = z
     toolCount: z.int().nonnegative(),
     schemaDigest: digestSchema,
     serverInfo: z.object({ name: id, version: id }).strict().optional(),
+    discoverResult: z.string().max(65536).optional(),
     connectionId: id.optional(),
     accountMode: z.enum(['none', 'personal', 'company']).optional(),
     tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),
-      readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional(), review: toolReviewSchema.optional() }).strict()).max(500).optional(),
+      readOnly: z.boolean().optional(), destructive: z.boolean().optional(), costCents: centsSchema.max(0).optional(), review: toolReviewSchema.optional(), definition: z.string().max(32768).optional() }).strict()).max(1000).optional(),
   })
   .strict();
 

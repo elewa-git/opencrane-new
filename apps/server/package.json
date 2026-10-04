@@ -14,6 +14,7 @@
     "@opencrane/events": "0.1.0",
     "@opencrane/observability": "0.1.0",
     "@opencrane/protocol": "0.1.0",
+    "ajv": "8.20.0",
     "fastify": "5.12.5",
     "ws": "8.22.0",
     "@opencrane/event-store": "0.1.0",

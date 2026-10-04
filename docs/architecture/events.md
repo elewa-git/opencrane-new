@@ -442,3 +442,17 @@ charge and raises one `security.alert_raised` per permit with reason
 The actual charge counts against every applicable ceiling on later admission,
 including after actor recovery. Retrying settlement after an alert outage repairs
 the alert without charging twice.
+
+### Remote discovery evidence (P3-3)
+
+Remote registration uses one source-derived server stream and stable `chg_` reference.
+Its install reaction appends exactly one terminal discovery or rejection event;
+projection replay never dispatches requests. Discovery stores the complete
+`discoverResult` as immutable JSON text, immutable `tools[].definition` JSON text and SHA-256 `revision`
+for each definition. Definitions use `lossless-json-v1` (sorted keys, preserved
+number text). `schemaDigest` hashes the sorted name/revision inventory. The event
+admits up to 1,000 tools; old events without definitions remain readable.
+Every newly discovered tool is unreviewed and blocked. Discovery does not create
+an installed connection, publish a route or grant access. Rejection reason
+`connection_required` projects Needs input, awaiting P3-9's scoped validation
+connection; other rejection reasons project Failed.

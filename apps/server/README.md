@@ -320,3 +320,42 @@ Read-only desktop sessions use `POST /api/conversations/:id/view` and
 and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`
 and `KUBE_NAMESPACE` for its private Pod stream. See the
 [live-view contract and evidence](../../docs/process/live-view-evidence.md).
+
+## Remote MCP registration (P3-3)
+
+Owner/Admin `POST /api/org/integrations` accepts `{locator}` with the exact session
+Origin. It conditionally appends one registration per normalised HTTPS source and
+returns `{serverId, changeRef}` with HTTP 202. Repeating the same source, including
+concurrent requests, returns the same reference. GET
+`/api/org/integrations/:serverId/discovery` reads event-backed status and immutable
+inventory. GET `/api/org/integrations/discovery?locator=<encoded-source>` reconciles
+a lost registration reply without creating anything. Both require current admin
+access. HTTP 400 refuses the source; 503 is an unknown outcome requiring status.
+
+With the existing event store and catalogue configuration, `main.ts` starts the
+install worker. Its expiring in-memory identity alone admits POST
+`/internal/mcp/:serverId`, bound to that registered server and limited to
+`server/discover` and `tools/list`. Computers have no such identity. This route
+selects its endpoint from events, strips caller headers and never invokes tools.
+Restart reconciles unfinished registrations; terminal evidence is never rediscovered
+by this worker. PostgreSQL replay only rebuilds the register.
+
+The OC1 guarded transport source is commit `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`.
+Every HTTPS connection checks all DNS answers, pins its checked address and verifies
+the original TLS hostname. IP URLs, credentials, queries/fragments, redirects,
+private/reserved addresses and session/legacy MCP are refused. MCP 2026-07-28 and
+complete discovery metadata are mandatory. Per-request fields use `params._meta`
+with `io.modelcontextprotocol/protocolVersion` and `clientCapabilities`; server identity
+comes from `result._meta['io.modelcontextprotocol/serverInfo']`. The full locator query
+is redacted before authentication or validation. Limits: 1 MiB request, 4 MiB response,
+30 seconds for the whole discovery including DNS, ten pages, 100 tools/page and
+1,000 tools total. Definitions are at most 32 KiB each and 512 KiB together;
+discovery metadata is at most 64 KiB and the inventory event payload 900 KiB.
+Invalid schemas, duplicate names/JSON keys and repeated cursors fail closed.
+Ajv 8.20.0 (MIT, licence checked locally) validates schemas without fetching references.
+
+Discovery leaves tools blocked and unpublished. Protected servers show Needs input
+until P3-9; publication, grants and calls are outside this ticket. The local HTTPS,
+DNS rebinding and browser fixtures use no external MCP endpoints. Run
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts`.
+See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).

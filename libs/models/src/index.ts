@@ -11,3 +11,5 @@ export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.t
 
 export { approvalCards, readApproval, decideApproval } from './approvals.ts';
 export { authorityFence, currentAuthority } from './authority.ts';
+
+export { losslessJson } from './lossless-json.ts';

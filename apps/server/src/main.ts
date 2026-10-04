@@ -66,7 +66,7 @@ const app = buildServer(authConfig, {
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
-    catalogue, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
+    catalogue, discovery: {}, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
   ...(realtime && computers ? { computers: { silo: realtime.binding.silo, feed: realtime.feed,
     computers, binding: realtime.binding } } : {}),
 });

@@ -120,9 +120,7 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     expect(root(fixture).querySelector<HTMLAnchorElement>('a[aria-label="Manage tools for Odoo"]')?.getAttribute('href')).toBe('/org/integrations/odoo/tools');
     expect(root(fixture).textContent).not.toContain('Set up again');
-    button(root(fixture), 'Add MCP server').click();
-    await fixture.whenStable();
-    expect(root(fixture).textContent).toContain("Adding MCP servers isn't available yet");
+    expect(root(fixture).querySelector('a[href="/org/integrations/new"]')?.textContent).toBe('Add MCP server');
   });
 
   it('names the role needed when the server refuses a non-admin', async () => {
