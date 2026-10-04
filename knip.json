@@ -42,7 +42,8 @@
       "entry": [
         "src/**/*.spec.ts",
         "test/**/*.test.ts",
-        "test/live-view-main.ts"
+        "test/live-view-main.ts",
+        "test/overlays-main.ts"
       ],
       "project": [
         "src/**/*.ts",

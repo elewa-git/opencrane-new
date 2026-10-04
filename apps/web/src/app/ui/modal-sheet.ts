@@ -11,9 +11,11 @@ import { DogEar, PaperSurface } from './paper';
 })
 export class ModalSheet {
   protected readonly foldedCorner = true;
+  readonly kind = input<'modal' | 'computer'>('modal');
   readonly open = input(false);
   readonly title = input.required<string>();
   readonly description = input('');
+  readonly backLabel = input('Back');
   readonly returnFocusTo = input<HTMLElement>();
   readonly closed = output<void>();
 }

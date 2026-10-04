@@ -1,13 +1,16 @@
 // Workspace grid and message structure adapted from OpenCrane 1 10abd0ef6 (AGPL-3.0-or-later).
 // Presentation follows the owner's Workspace Live; all state comes from the P2 bridge.
 import { HingeDrawer } from '../ui/hinge-drawer';
-import { NavigationMenu, type NavigationItem } from '../ui/navigation-menu';
+import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
 import { GrainLoader } from '../ui/grain-loader';
 import { FlutterLoader } from '../ui/flutter-loader';
 import { SharedState } from '../shared-state/shared-state';
 import { ApprovalCards } from './approvals';
-import { ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal, viewChild, type OnInit } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal,
+  viewChild, type OnInit,
+} from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';
 import { sessionSlug } from '@opencrane/protocol';
@@ -18,9 +21,22 @@ import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 
-@Component({ selector: 'oc-workspace', imports: [HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader, SharedState, ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
-  templateUrl: './workspace.html', styleUrls: ['./workspace.css', './transcript.css', './panel.css'], changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(document:keydown)': 'shortcut($event)', '(window:resize)': 'resized()' } })
+@Component({
+  selector: 'oc-workspace',
+  imports: [
+    HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
+    SharedState, ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView,
+    NgTemplateOutlet, ChatIcon,
+  ],
+  providers: [ChatSession, WebSocketService],
+  templateUrl: './workspace.html',
+  styleUrls: ['./workspace.css', './transcript.css', './panel.css'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: {
+    '(document:keydown)': 'shortcut($event)',
+    '(window:resize)': 'resized()',
+  },
+})
 export class Workspace implements OnInit {
   protected readonly chat = inject(ChatSession);
   protected readonly draft = signal('');
@@ -38,8 +54,6 @@ export class Workspace implements OnInit {
   protected readonly search = signal('');
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');
   protected readonly panelOverlay = signal(false);
-  protected readonly navigationItems = computed(this.menuItems.bind(this));
-  protected readonly activeHref = computed(this.selectedHref.bind(this));
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
   protected readonly screenshots = computed(() => this.chat.attachments().filter(file => file.screenshot));
   protected readonly uploads = computed(() => this.chat.attachments().filter(file => !file.screenshot));
@@ -74,7 +88,12 @@ export class Workspace implements OnInit {
     this.focusComposerAfterNavigation = false;
     this.focusComposer();
   }
-  protected select(id: string): void { void this.chat.select(id); this.rail.set(false); this.searchDialog()?.nativeElement.close(); this.focusComposer(); }
+  protected select(id: string): void {
+    void this.chat.select(id);
+    this.rail.set(false);
+    this.searchDialog()?.nativeElement.close();
+    this.focusComposer();
+  }
   protected togglePanel(): void {
     if (!this.desktop()) {
       this.panelOverlay.set(true);
@@ -121,26 +140,6 @@ export class Workspace implements OnInit {
   private isPanelExpanded(): boolean {
     if (this.desktop()) return this.panel();
     return this.panelOverlay();
-  }
-  private selectedHref(): string {
-    const selected = this.chat.selected();
-    if (!selected) return '/workspace';
-    return `/workspace?conversation=${encodeURIComponent(selected)}`;
-  }
-  private menuItems(): NavigationItem[] {
-    const items: NavigationItem[] = [{ label: 'New session', href: '/workspace' }];
-    for (const conversation of this.chat.conversations()) {
-      const item = {
-        label: conversation.title || 'session-' + conversation.conversationId.slice(0, 8),
-        href: `/workspace?conversation=${encodeURIComponent(conversation.conversationId)}`,
-      };
-      items.push(item);
-    }
-    const settings = { label: 'Settings', href: '/org/integrations' };
-    items.push(settings);
-    const account = { label: this.chat.displayName() + ' · Account', href: '/account' };
-    items.push(account);
-    return items;
   }
   protected duration(start: string, end: string): number { return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)); }
   protected shortcut(event: KeyboardEvent): void {

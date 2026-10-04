@@ -11,9 +11,13 @@ import { DogEar, PaperSurface } from './paper';
 })
 export class HingeDrawer {
   protected readonly foldedCorner = false;
+  protected kind(): string {
+    return 'drawer';
+  }
   readonly open = input(false);
   readonly title = input.required<string>();
   readonly description = input('');
+  readonly backLabel = input('Back');
   readonly returnFocusTo = input<HTMLElement>();
   readonly closed = output<void>();
 }

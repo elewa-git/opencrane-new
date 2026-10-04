@@ -1,3 +1,5 @@
+import { Component } from '@angular/core';
+import { LiveView } from '../live-view/live-view';
 import { TestBed } from '@angular/core/testing';
 import { HingeDrawer } from './hinge-drawer';
 import { ModalSheet } from './modal-sheet';
@@ -82,3 +84,64 @@ async function checkDestruction(): Promise<void> {
 }
 
 it('closes an open native modal when its component is destroyed', checkDestruction);
+
+@Component({
+  imports: [HingeDrawer, LiveView],
+  template: `<oc-hinge-drawer [open]="open" title="Session">
+    <oc-live-view conversationId="chat" />
+  </oc-hinge-drawer>`,
+})
+class NestedViewerHost {
+  open = false;
+}
+
+async function checkNestedDismissal(): Promise<void> {
+  vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('{}', { status: 403 }));
+  const fixture = TestBed.createComponent(NestedViewerHost);
+  await fixture.whenStable();
+  const root = rootElement(fixture.nativeElement);
+  const methods = { showModal, close: closeDialog };
+  for (const dialog of root.querySelectorAll('dialog')) Object.assign(dialog, methods);
+  fixture.componentInstance.open = true;
+  fixture.changeDetectorRef.markForCheck();
+  await fixture.whenStable();
+  const parent = root.querySelector('oc-hinge-drawer > dialog');
+  const child = root.querySelector('oc-live-view dialog');
+  const opener = root.querySelector<HTMLButtonElement>('oc-live-view .entry');
+  if (!(parent instanceof HTMLDialogElement) || !(child instanceof HTMLDialogElement)
+    || !opener) throw new Error('Missing nested viewer');
+  opener.click();
+  await fixture.whenStable();
+  expect(child.open).toBe(true);
+  fixture.componentInstance.open = false;
+  fixture.changeDetectorRef.markForCheck();
+  await fixture.whenStable();
+  expect(parent.open).toBe(false);
+  expect(child.open).toBe(false);
+  expect(opener.getAttribute('aria-expanded')).toBe('false');
+  expect(child.textContent).toContain('Disconnected');
+  fixture.componentInstance.open = true;
+  fixture.changeDetectorRef.markForCheck();
+  await fixture.whenStable();
+  expect(parent.open).toBe(true);
+  expect(child.open).toBe(false);
+}
+
+it('dismisses a child viewer and resets its state before closing its parent', checkNestedDismissal);
+
+async function checkHeaderLabels(component: typeof HingeDrawer | typeof ModalSheet): Promise<void> {
+  const fixture = TestBed.createComponent<HingeDrawer | ModalSheet>(component);
+  fixture.componentRef.setInput('title', 'Review');
+  fixture.componentRef.setInput('backLabel', 'Cancel');
+  await fixture.whenStable();
+  const root = rootElement(fixture.nativeElement);
+  expect(root.querySelectorAll('header button')).toHaveLength(1);
+  expect(root.querySelector('header button')?.textContent).toContain('Cancel');
+  expect(root.querySelector('header button span')?.getAttribute('aria-hidden')).toBe('true');
+  fixture.componentRef.setInput('backLabel', '');
+  await fixture.whenStable();
+  expect(root.querySelectorAll('header button')).toHaveLength(1);
+  expect(root.querySelector('header button')?.getAttribute('aria-label')).toBe('Close Review');
+}
+
+it.each([HingeDrawer, ModalSheet])('uses one labelled header action', checkHeaderLabels);

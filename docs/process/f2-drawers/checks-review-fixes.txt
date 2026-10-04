@@ -1,0 +1,194 @@
+Command: nice -n 10 npm run lint
+npm notice run lint
+npm notice run npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures
+npm notice run lint:code
+npm notice run eslint .
+
+/home/jente/dev/wt/f2-drawers/apps/computer/src/channel.ts
+  48:8  warning  Function 'bridgeChannel' has too many lines (127). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/f2-drawers/apps/server/src/auth/routes.ts
+  57:8  warning  Function 'registerAuthRoutes' has too many lines (108). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/f2-drawers/apps/server/src/computers/view.ts
+  28:8   warning  Function 'registerLiveView' has too many lines (146). Maximum allowed is 80  max-lines-per-function
+  82:52  warning  Arrow function has too many lines (87). Maximum allowed is 80                max-lines-per-function
+
+/home/jente/dev/wt/f2-drawers/apps/server/src/realtime.ts
+  17:8  warning  Function 'memberSubscription' has too many lines (82). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/f2-drawers/apps/server/src/websocket.ts
+  51:8  warning  Function 'attachWebSocketServer' has too many lines (119). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/f2-drawers/libs/authz/src/members.ts
+  35:8  warning  Function 'memberAuthorisation' has too many lines (144). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/f2-drawers/libs/models/src/decision.ts
+  101:8  warning  Async function 'startDecision' has too many lines (81). Maximum allowed is 80  max-lines-per-function
+
+✖ 8 problems (0 errors, 8 warnings)
+
+npm notice run lint:deps
+npm notice run depcruise apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs
+
+✔ no dependency violations found (307 modules, 1112 dependencies cruised)
+
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+npm notice run lint:docs
+npm notice run markdownlint-cli2
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: *.md docs/**/*.md apps/*/README.md libs/*/README.md !docs/design/chat/README.md !docs/design/handoff-v2/[0-9]*/README.md
+Linting: 89 files
+Summary: 0 issues in 0 files
+npm notice run lint:links
+npm notice run sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'
+🔍 789 Total (in 0s) ✅ 654 OK 🚫 0 Errors 👻 135 Excluded
+
+npm notice run lint:fixtures
+npm notice run python3 infra/odoo/boundary.py
+PASS fixture images and build files have no external direct dependencies
+
+Command: nice -n 10 npm run typecheck
+npm notice run typecheck
+npm notice run npm run typecheck --workspaces
+npm notice run typecheck
+npm notice run tsc --noEmit
+npm notice run @opencrane/ops@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.json
+npm notice run @opencrane/server@0.1.0 typecheck
+npm notice run @opencrane/web@0.1.0 typecheck
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck
+
+Command: nice -n 10 npm run check:events
+npm notice run check:events
+npm notice run node --experimental-strip-types scripts/check-event-catalogue.mjs
+check:events — OK: 85 event types agree between the registry and the catalogue.
+
+Command: nice -n 10 npm run build -w apps/web
+npm notice run @opencrane/web@0.1.0 build
+npm notice run ng build
+❯ Building...
+✔ Building...
+Initial chunk files | Names         |  Raw size | Estimated transfer size
+main-32NY5PUW.js    | main          | 809.53 kB |               162.43 kB
+styles-T5QWXPZP.css | styles        |  11.97 kB |                 2.79 kB
+chunk-QXIBXHVB.js   | -             |   1.16 kB |               502 bytes
+
+                    | Initial total | 822.66 kB |               165.72 kB
+
+Lazy chunk files    | Names         |  Raw size | Estimated transfer size
+chunk-U2PYCMFI.js   | viewer        | 287.33 kB |                56.68 kB
+
+Application bundle generation complete. [16.266 seconds] - 2026-10-04T19:08:31.955Z
+
+▲ [WARNING] bundle initial exceeded maximum budget. Budget 650.00 kB was not met by 172.66 kB with a total of 822.66 kB.
+
+
+▲ [WARNING] src/app/app.css exceeded maximum budget. Budget 4.00 kB was not met by 3.71 kB with a total of 7.71 kB.
+
+
+▲ [WARNING] src/app/chat/workspace.css exceeded maximum budget. Budget 4.00 kB was not met by 3.80 kB with a total of 7.80 kB.
+
+
+▲ [WARNING] src/app/chat/transcript.css exceeded maximum budget. Budget 4.00 kB was not met by 1.43 kB with a total of 5.43 kB.
+
+
+▲ [WARNING] Module '@novnc/novnc/lib/rfb.js' used by 'src/app/live-view/viewer.ts' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+Output location: /home/jente/dev/wt/f2-drawers/apps/web/dist/web
+
+
+Command: nice -n 10 npm run test -w apps/web -- --watch=false --runner-config=/tmp/f2-angular-runner.mjs
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false --runner-config=/tmp/f2-angular-runner.mjs
+Using Vitest configuration file: /tmp/f2-angular-runner.mjs
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+chunk-VM3KYJ3I.js                     | -                                  | 193.72 kB |
+spec-app-app.js                       | spec-app-app                       |  82.44 kB |
+chunk-OTKL7M6Q.js                     | -                                  |  38.72 kB |
+chunk-GBGEDIMV.js                     | -                                  |  34.13 kB |
+chunk-3YLETBNS.js                     | -                                  |  27.46 kB |
+chunk-4QLCE32N.js                     | -                                  |  26.60 kB |
+chunk-QNRZCRRR.js                     | -                                  |  24.74 kB |
+chunk-OWXSRZ5N.js                     | -                                  |  23.89 kB |
+chunk-5CO6DGGJ.js                     | -                                  |  23.46 kB |
+chunk-MYLTZGLM.js                     | -                                  |  22.46 kB |
+chunk-AWFKLIOU.js                     | -                                  |  19.30 kB |
+styles.css                            | styles                             |  15.04 kB |
+chunk-MBGIGLNQ.js                     | -                                  |  13.30 kB |
+spec-app-chat-workspace.js            | spec-app-chat-workspace            |  11.99 kB |
+chunk-K6YVK6RS.js                     | -                                  |  10.85 kB |
+spec-app-core-websocket.service.js    | spec-app-core-websocket.service    |   8.30 kB |
+spec-app-ui-overlay.js                | spec-app-ui-overlay                |   6.57 kB |
+chunk-RIRRWDMO.js                     | -                                  |   6.54 kB |
+spec-app-shared-state-call-site.js    | spec-app-shared-state-call-site    |   6.42 kB |
+spec-app-chat-navigation.js           | spec-app-chat-navigation           |   6.24 kB |
+chunk-TNQ3D23B.js                     | -                                  |   6.07 kB |
+spec-app-shared-state-shared-state.js | spec-app-shared-state-shared-state |   5.44 kB |
+chunk-RSTWSNOR.js                     | -                                  |   4.75 kB |
+spec-app-sign-in-sign-in.js           | spec-app-sign-in-sign-in           |   4.12 kB |
+spec-app-audit-audit.js               | spec-app-audit-audit               |   3.92 kB |
+chunk-7UZKYHZR.js                     | -                                  |   3.74 kB |
+spec-app-chat-approvals.js            | spec-app-chat-approvals            |   3.42 kB |
+spec-app-tool-policy-tool-policy.js   | spec-app-tool-policy-tool-policy   |   2.94 kB |
+spec-app-chat-composer.js             | spec-app-chat-composer             |   2.63 kB |
+spec-app-live-view-live-view.js       | spec-app-live-view-live-view       |   2.56 kB |
+spec-app-models-models.js             | spec-app-models-models             |   2.28 kB |
+spec-app-ui-paper.js                  | spec-app-ui-paper                  |   2.12 kB |
+init-testbed.js                       | init-testbed                       |   1.21 kB |
+vitest-mock-patch.js                  | vitest-mock-patch                  | 974 bytes |
+
+                                      | Initial total                      | 648.33 kB
+
+Lazy chunk files                      | Names                              |  Raw size
+chunk-7ONZXKUC.js                     | viewer                             | 202 bytes |
+
+Application bundle generation complete. [13.989 seconds] - 2026-10-04T19:08:49.121Z
+
+
+ RUN  v4.1.11 /home/jente/dev/wt/f2-drawers/apps/web
+
+
+ Test Files  15 passed (15)
+      Tests  105 passed (105)
+   Start at  19:08:49
+   Duration  9.40s (transform 2.69s, setup 1.78s, import 3.70s, tests 9.11s, environment 23.86s)
+
+
+Command: nice -n 10 npm run visual:f2-drawers
+npm notice run visual:f2-drawers
+npm notice run npm run ng -w apps/web -- build --browser test/overlays-main.ts --ts-config test/tsconfig.live-view.json --output-path dist/overlays --base-href /overlay-fixture/ && node scripts/check-f2-drawers.mjs
+npm notice run @opencrane/web@0.1.0 ng
+npm notice run ng build --browser test/overlays-main.ts --ts-config test/tsconfig.live-view.json --output-path dist/overlays --base-href /overlay-fixture/
+❯ Building...
+✔ Building...
+Initial chunk files | Names         |  Raw size | Estimated transfer size
+main-F55S3OTQ.js    | main          | 126.67 kB |                36.85 kB
+styles-T5QWXPZP.css | styles        |  11.97 kB |                 2.79 kB
+
+                    | Initial total | 138.64 kB |                39.64 kB
+
+Application bundle generation complete. [11.064 seconds] - 2026-10-04T19:09:14.734Z
+
+Output location: /home/jente/dev/wt/f2-drawers/apps/web/dist/overlays
+
+PASS F2 overlays: 38 captures; focus, navigation and reduced motion

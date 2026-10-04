@@ -5,11 +5,7 @@
     <button type="button" class="close" aria-label="Close navigation"
       (click)="overlay.dismiss()">×</button>
   </header>
-  <ng-content />
   <nav [attr.aria-label]="label()" (keydown)="move($event)">
-    @for (item of items(); track item.href + item.label) {
-      <a [href]="item.href" [attr.aria-current]="item.href === activeHref() ? 'page' : null"
-        (click)="overlay.dismiss()">{{ item.label }}</a>
-    }
+    <ng-content />
   </nav>
 </dialog>

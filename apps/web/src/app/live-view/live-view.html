@@ -1,19 +1,20 @@
 <button #opener class="entry" type="button" [attr.aria-expanded]="viewOpen()"
   (click)="watch()">Watch your computer</button>
-<oc-hinge-drawer [open]="viewOpen()" title="Computer view"
+<oc-modal-sheet kind="computer" backLabel="" [open]="viewOpen()" title="Computer view"
   description="Read-only · shared desktop" [returnFocusTo]="opener" (closed)="panelClosed()">
   @if (state() === 'Not available') {
     <p>A conversation participant needs a shared-desktop grant and a ready computer to watch.
       Ask the desktop owner for access.</p>
   }
-  <div role="status" aria-live="polite" [attr.aria-busy]="state() === 'Connecting'">
+  <div role="status" aria-live="polite">
     <oc-shared-state [kind]="viewState()" [message]="state()"
       [evidenceAt]="viewedAt()" [showAction]="false" />
   </div>
   @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
   <div class="display" #display tabindex="0" aria-label="Read-only computer display"
+    [attr.aria-busy]="state() === 'Connecting' || capturing()"
     [hidden]="state() !== 'Viewing'"></div>
-  <div role="status" aria-live="polite" [attr.aria-busy]="capturing()">
+  <div role="status" aria-live="polite">
     @if (captureStatus()) {
       <oc-shared-state [kind]="captureKind()" [message]="captureStatus()"
         [evidenceAt]="capturedAt()" [showAction]="false" />
@@ -28,4 +29,4 @@
       </button>
     </div>
   }
-</oc-hinge-drawer>
+</oc-modal-sheet>

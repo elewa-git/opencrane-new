@@ -160,7 +160,7 @@ try {
       await page.getByRole('button', { name: 'Open session navigation' }).click();
       await page.getByRole('button', { name: /Ask your agent/ }).focus(); await page.keyboard.press('Enter');
       await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-      await page.getByRole('dialog', { name: 'Session panel' }).waitFor(); await page.keyboard.press('Escape');
+      await page.getByRole('dialog', { name: 'Session', exact: true }).waitFor(); await page.keyboard.press('Escape');
       assert.equal(await page.locator(':focus').getAttribute('id'), 'panel-toggle');
       for (const target of await page.locator('button:visible, summary:visible, textarea:visible').all()) {
         const box = await target.boundingBox(); assert(box.height >= 44 && box.width >= 44, `44px target: ${await target.getAttribute('aria-label')}`);

@@ -12,7 +12,8 @@ import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
   selector: 'oc-file-preview',
   imports: [SharedState, ModalSheet],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `<oc-modal-sheet [open]="true" [title]="filename()" description="File preview"
+  template: `<oc-modal-sheet [open]="true" [title]="filename()"
+    description="File preview" backLabel="Close preview"
     (closed)="closed.emit()">
     <div role="status" aria-live="polite">
       <oc-shared-state [kind]="statusKind()" [message]="status()"
@@ -24,6 +25,7 @@ import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
       <iframe [src]="safeUrl()" title="Document preview" referrerpolicy="no-referrer"></iframe>
     }
     @if (text()) { <pre>{{ text() }}</pre> }
+    </section>
     @if (url()) {
       <a overlayFooter [href]="originalUrl()" [download]="filename()">↓ Download original file</a>
     }

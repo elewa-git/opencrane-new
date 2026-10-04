@@ -5,7 +5,7 @@ dialog {
   max-width: calc(100vw - 48px);
   max-height: calc(100dvh - 144px);
   border-radius: var(--oc-radius-card);
-  box-shadow: var(--oc-shadow-paper);
+  box-shadow: 0 24px 60px -20px rgba(22, 25, 26, .5);
 }
 dialog[open] { animation: oc-sheet-lift 420ms var(--oc-ease-fold); }
 header { border-radius: var(--oc-radius-card) var(--oc-radius-card) 0 0; }
@@ -13,4 +13,31 @@ footer { border-radius: 0 0 var(--oc-radius-card) var(--oc-radius-card); }
 @media (max-width: 600px) {
   dialog { inset: 0; margin: 0; width: 100%; max-width: 100%; max-height: 100dvh; }
   dialog, header, footer { border-radius: 0; }
+}
+
+dialog.computer {
+  inset: 18px;
+  width: calc(100% - 36px);
+  max-width: calc(100% - 36px);
+  height: calc(100dvh - 36px);
+  max-height: calc(100dvh - 36px);
+  margin: 0;
+  border-radius: 12px;
+  background: var(--oc-surface-subtle);
+}
+.computer .body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  padding: 16px;
+}
+@media (max-width: 600px) {
+  dialog.computer {
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
 }

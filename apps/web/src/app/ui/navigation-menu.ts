@@ -3,11 +3,6 @@ import {
 } from '@angular/core';
 import { Overlay } from './overlay';
 
-export interface NavigationItem {
-  label: string;
-  href: string;
-}
-
 @Component({
   selector: 'oc-navigation-menu',
   imports: [Overlay],
@@ -18,16 +13,14 @@ export interface NavigationItem {
 export class NavigationMenu {
   readonly open = input(false);
   readonly label = input.required<string>();
-  readonly items = input.required<readonly NavigationItem[]>();
-  readonly activeHref = input('');
   readonly returnFocusTo = input<HTMLElement>();
   readonly closed = output<void>();
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected move(event: KeyboardEvent): void {
-    const links = this.element.nativeElement.querySelectorAll<HTMLAnchorElement>('nav a');
+    const links = this.element.nativeElement.querySelectorAll<HTMLElement>('nav button, nav a');
     const active = document.activeElement;
-    if (!(active instanceof HTMLAnchorElement)) return;
+    if (!(active instanceof HTMLElement)) return;
     const destinations = Array.from(links);
     const current = destinations.indexOf(active);
     let next: number;

@@ -3,36 +3,64 @@ import {
 } from '@angular/core';
 
 let nextOverlayId = 0;
+const overlays = new WeakMap<HTMLDialogElement, Overlay>();
 
 function focusableElements(dialog: HTMLDialogElement): HTMLElement[] {
-  const selector = 'button, a[href], input, select, textarea, iframe, [tabindex]';
+  const selector = [
+    'button', 'a[href]', 'input', 'select', 'textarea', 'iframe', 'summary',
+    '[contenteditable]:not([contenteditable=false])', 'audio[controls]', 'video[controls]', '[tabindex]',
+  ].join(', ');
   const candidates = dialog.querySelectorAll<HTMLElement>(selector);
   const elements: HTMLElement[] = [];
   for (const element of Array.from(candidates)) {
-    if (element.tabIndex < 0 || element.matches(':disabled')) continue;
+    if (element.closest('dialog') !== dialog) continue;
+    if (element.hasAttribute('tabindex') && element.tabIndex < 0) continue;
+    if (element.matches(':disabled')) continue;
     if (element.getClientRects().length === 0) continue;
     elements.push(element);
   }
   return elements;
 }
 
-function restoreFocus(opener: HTMLElement | undefined): void {
-  if (opener?.isConnected && opener.getClientRects().length > 0) {
-    opener.focus();
-    if (document.activeElement === opener) return;
-  }
+function focusOpener(opener: HTMLElement | undefined): boolean {
+  if (!opener?.isConnected || opener.getClientRects().length === 0) return false;
+  opener.focus();
+  return document.activeElement === opener;
+}
+
+function focusParentTitle(): boolean {
   const candidates = document.querySelectorAll<HTMLDialogElement>('dialog[open]');
   const panels = Array.from(candidates);
   const panel = panels.at(-1);
-  const panelTitle = panel?.querySelector<HTMLElement>('header h2[tabindex="-1"]');
-  if (panelTitle) {
-    panelTitle.focus();
-    return;
-  }
+  const title = panel?.querySelector<HTMLElement>('header h2[tabindex="-1"]');
+  if (!title) return false;
+  title.focus();
+  return document.activeElement === title;
+}
+
+function focusPageHeading(): void {
   const heading = document.querySelector<HTMLElement>('h1');
-  if (heading) {
-    heading.tabIndex = -1;
-    heading.focus();
+  if (!heading) return;
+  heading.tabIndex = -1;
+  heading.focus();
+}
+
+function restoreFocus(opener: HTMLElement | undefined): void {
+  // Prefer the actual opener, then the remaining parent modal, then the page heading.
+  if (focusOpener(opener)) return;
+  if (focusParentTitle()) return;
+  focusPageHeading();
+}
+
+function dismissChildren(dialog: HTMLDialogElement): void {
+  const candidates = dialog.querySelectorAll<HTMLDialogElement>('dialog[open]');
+  const children = Array.from(candidates);
+  children.reverse();
+  // Children must release modality and their connections before the parent disappears.
+  for (const child of children) {
+    const overlay = overlays.get(child);
+    if (overlay) overlay.dismiss();
+    else child.close();
   }
 }
 
@@ -56,10 +84,12 @@ export class Overlay implements OnDestroy {
   private shown = false;
 
   constructor() {
+    overlays.set(this.element.nativeElement, this);
     afterRenderEffect(this.synchronise.bind(this));
   }
 
   dismiss(): void {
+    dismissChildren(this.element.nativeElement);
     this.element.nativeElement.close();
     this.finishClose();
   }
@@ -72,6 +102,7 @@ export class Overlay implements OnDestroy {
 
   protected finishClose(): void {
     if (!this.shown || this.element.nativeElement.open) return;
+    dismissChildren(this.element.nativeElement);
     this.shown = false;
     restoreFocus(this.opener);
     this.overlayClosed.emit();
@@ -80,6 +111,8 @@ export class Overlay implements OnDestroy {
   protected trapFocus(event: KeyboardEvent): void {
     if (event.key !== 'Tab') return;
     const dialog = this.element.nativeElement;
+    const target = event.target;
+    if (target instanceof Element && target.closest('dialog') !== dialog) return;
     const elements = focusableElements(dialog);
     const first = elements[0];
     const last = elements.at(-1);
@@ -97,6 +130,8 @@ export class Overlay implements OnDestroy {
   }
 
   ngOnDestroy(): void {
+    dismissChildren(this.element.nativeElement);
+    overlays.delete(this.element.nativeElement);
     if (!this.shown) return;
     this.shown = false;
     this.element.nativeElement.close();

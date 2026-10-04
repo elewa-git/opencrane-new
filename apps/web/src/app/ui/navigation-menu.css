@@ -5,12 +5,12 @@ dialog {
   max-width: 100vw;
   height: 100dvh;
   max-height: 100dvh;
-  background: var(--oc-surface-rail);
-  box-shadow: 16px 0 16px -8px #16191a33;
+  background: var(--oc-neutral-soft);
+  box-shadow: 28px 0 48px -26px rgba(22, 25, 26, .5);
   transform-origin: left center;
 }
 dialog[open] { animation: oc-menu-hinge 420ms var(--oc-ease-fold); }
-nav { padding: 12px 10px; overflow: auto; }
+nav { padding: 12px 10px; overflow: auto; overscroll-behavior: contain; }
 a {
   display: flex;
   align-items: center;
@@ -21,8 +21,21 @@ a {
   text-decoration: none;
   overflow-wrap: anywhere;
 }
-a[aria-current] { background: var(--oc-surface-raised); box-shadow: var(--oc-shadow-active-nav); }
+a[aria-current] {
+  font-weight: 600;
+  background: var(--oc-surface-raised);
+  box-shadow: var(--oc-shadow-active-nav);
+}
 @media (max-width: 700px) {
   dialog { width: 100%; }
-  .close { display: block; }
+}
+
+dialog::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: 16px;
+  background: linear-gradient(270deg, rgba(22, 25, 26, .09), transparent 16px);
+  pointer-events: none;
+  z-index: 1;
 }

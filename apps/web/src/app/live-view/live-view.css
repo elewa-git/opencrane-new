@@ -12,9 +12,12 @@ button {
   font: inherit;
 }
 .display {
-  height: min(60dvh, 600px);
+  flex: 1;
+  min-height: 0;
+  height: auto;
   width: 100%;
   overflow: auto;
+  overscroll-behavior: contain;
   background: var(--oc-ink-strong);
 }
 .display[hidden] { display: none; }

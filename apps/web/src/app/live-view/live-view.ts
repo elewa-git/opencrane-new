@@ -1,10 +1,15 @@
-import { HingeDrawer } from '../ui/hinge-drawer';
+import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
-import { ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild, type OnDestroy, type OnChanges, type SimpleChanges } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild,
+  type OnDestroy, type OnChanges, type SimpleChanges,
+} from '@angular/core';
 import type RFB from '@novnc/novnc/lib/rfb.js';
 
 @Component({
-  selector: 'oc-live-view', imports: [SharedState, HingeDrawer], changeDetection: ChangeDetectionStrategy.OnPush,
+  selector: 'oc-live-view',
+  imports: [SharedState, ModalSheet],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './live-view.html',
   styleUrl: './live-view.css',
 })
