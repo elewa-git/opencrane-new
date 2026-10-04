@@ -19,7 +19,6 @@
 
 ### Known limits
 
-- Authority checks still need exact, fast reads at scale and fresh-install qualification ([#70](https://github.com/elewa-git/opencrane-new/issues/70)). Complete MCP startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for other open qualification.
 - Screenshots passed the retained secondary journey at 1280px and 390px, but fresh capture and complete startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [screenshot receipt](docs/process/p3-18-screenshots.md#final-rebase-and-secondary-stack-qualification--4-october-2026) and [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for the qualification limits.
 
 Technical note: in-flight work has no merged PR number yet.
