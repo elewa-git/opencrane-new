@@ -1,3 +1,4 @@
+ARG COMPUTER_BASE=127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS npm-tools
 FROM npm-tools AS launcher-build
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources && \
@@ -5,7 +6,7 @@ RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/a
 COPY tool-user.c /tmp/tool-user.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /tool-user /tmp/tool-user.c
 # S0.5 includes the pinned S0.1b Codex binary and native seccomp launcher.
-FROM 127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47 AS runtime
+FROM ${COMPUTER_BASE} AS runtime
 USER root
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources
 COPY apt.lock /tmp/apt.lock

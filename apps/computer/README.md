@@ -30,6 +30,16 @@ shellcheck apps/computer/build.sh apps/computer/test/licences.sh
 the tracked manifest, runs the real k3d checks and only then moves `p2-1`. A
 failed licence or image check cannot publish the release.
 
+CI prepares the upload test with `sh scripts/build-test-computer.sh`. It rebuilds
+the desktop/Codex base from public pins, then uses the production Dockerfile and
+lockfiles to create `ocn-upload-computer:test` locally. No private registry, running
+stack or pre-existing image is required. This test image is never published;
+release builds keep the reviewed S0.5 base by default. Run the same preparation
+before `npm test` on a clean Linux amd64 development machine. Hosted CI caches
+the build layers, including the base and compiler stages, with Docker Bake.
+The scanner fixture builds `infra/clamav` from its pinned public digest, including
+offline signatures and excluding UnRAR.
+
 The image retains Node 22.23.1, Codex 0.159.2, Chromium 154 and KasmVNC 1.5.0
 from the pinned S0.5 digest. Added apt packages use the signed 1 October 2026
 snapshot and `apt.lock`. The 2 October snapshot supplies additional archive

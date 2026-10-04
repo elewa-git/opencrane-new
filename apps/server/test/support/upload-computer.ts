@@ -14,11 +14,12 @@ export async function uploadComputer() {
   const stub = spawn(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'],
     { env: { ...process.env, STUB_PORT: '0', MODEL_STUB_CAPTURE: `${capture}/requests.jsonl` }, stdio: ['ignore', 'pipe', 'ignore'] });
   let output = ''; stub.stdout.on('data', (chunk: Buffer) => { output += chunk.toString(); });
-  const disk = `upload-disk-${randomUUID()}`;
+  let disk: string | undefined;
   let container: string | undefined, relay: Awaited<ReturnType<typeof tcpProxy>> | undefined;
   const docker = async (...args: string[]) => (await exec('docker', args, { timeout: 120_000 })).stdout.trim();
-  const close = async () => { if (container) await docker('rm', '-f', container); await docker('volume', 'rm', disk); await relay?.close(); stub.kill(); await rm(capture, { recursive: true, force: true }); };
+  const close = async () => { if (container) await docker('rm', '-f', container); if (disk) await docker('volume', 'rm', disk); await relay?.close(); stub.kill(); await rm(capture, { recursive: true, force: true }); };
   try {
+    disk = await docker('volume', 'create', `upload-disk-${randomUUID()}`);
     await until(() => /Stub ready (\d+)/u.test(output));
     const gateway = await docker('network', 'inspect', 'bridge', '--format', '{{(index .IPAM.Config 0).Gateway}}');
     relay = await tcpProxy(() => ({ host: '127.0.0.1', port: Number(/Stub ready (\d+)/u.exec(output)![1]) }), gateway);
@@ -27,7 +28,7 @@ export async function uploadComputer() {
       // Match the silo's capabilities; Docker's defaults include CAP_KILL.
       container = await docker('run', '-d', '--name', `upload-computer-${randomUUID()}`, '-p', '127.0.0.1::8081',
         '--cap-drop=ALL', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
-        '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', `GATEWAY=http://${gateway}:${relay!.port}`, 'ocn-computer-runtime');
+        '-v', `${disk}:/home/agent`, '-v', `${resolve('apps/computer/src')}:/app/src:ro`, '-e', `GATEWAY=http://${gateway}:${relay!.port}`, 'ocn-upload-computer:test');
       const port = Number((await docker('port', container, '8081/tcp')).split(':')[1]);
       url = `http://127.0.0.1:${port}`;
     };

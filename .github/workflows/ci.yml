@@ -53,6 +53,18 @@ jobs:
       - name: Verify Docker for real OpenFGA tests
         run: docker info
 
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the upload test computer from public pins
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: apps/computer/test/upload-bake.hcl
+          load: true
+          set: |
+            computer.cache-from=type=gha,scope=upload-computer
+            computer.cache-to=type=gha,scope=upload-computer,mode=max
+
       - name: Test
         run: npm test
 
