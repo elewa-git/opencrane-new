@@ -315,7 +315,10 @@ it('refuses a grant revocation arriving while the command report is read', async
       resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
     });
   });
-  try { expect((await f.call()).status).toBe(503); expect(f.received()).toBe(0); }
+  try {
+    expect((await f.call()).status).toBe(503);
+    expect(f.received(), f.received() === 0 ? undefined : JSON.stringify(f.providerRequests(), null, 2)).toBe(0);
+  }
   finally { race.mockRestore(); duringRead.mockRestore(); await f.close(); }
 }, 40_000);
 

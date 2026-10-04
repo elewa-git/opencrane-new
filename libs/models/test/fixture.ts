@@ -86,6 +86,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
+  const providerRequests: { time: string; path: string; method: string; correlationHeaders: Record<string, string | string[] | undefined>; bodyDigest: string }[] = [];
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
     const requestId = String(req.headers['x-request-id']);
@@ -94,7 +95,11 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     }));
     received++; providerHeaders = Object.keys(req.headers);
     providerAuthHash = createHash('sha256').update(req.headers.authorization ?? '').digest('hex');
-    req.on('data', (chunk: Buffer) => { upstreamBody += chunk.toString('utf8'); });
+    const body: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => { upstreamBody += chunk.toString('utf8'); body.push(chunk); });
+    req.on('end', () => providerRequests.push({ time: new Date().toISOString(), path: req.url ?? '', method: req.method ?? '',
+      correlationHeaders: Object.fromEntries(Object.entries(req.headers).filter(([name]) => /(?:request-id|correlation|traceparent|audit-id)/i.test(name))),
+      bodyDigest: createHash('sha256').update(Buffer.concat(body)).digest('hex') }));
     req.resume();
     if (req.url?.startsWith('/mcp/')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"jsonrpc":"2.0","id":1,"result":{"content":[]}}'); return; }
     if (rejection === -1) { req.socket.destroy(); return; }
@@ -136,7 +141,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
     reject: (status: number) => { rejection = status; },
-    admitted, received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
+    admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}) {
       const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
       return { status: response.status, text: await response.text() };
