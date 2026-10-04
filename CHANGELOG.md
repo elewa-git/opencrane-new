@@ -29,7 +29,6 @@ Technical note: in-flight work has no merged PR number yet.
 - Owners can set monthly budgets for paying groups and assistants.
 - Members can watch an assistant's computer read-only from a conversation. Access ends when its grant is revoked.
 - Members can see what happened to their requests. Owners and admins can review safe organisation change history.
-- Attach a PDF in chat and the assistant can answer a question about it after it has been scanned.
 
 ### Fixed or improved
 
@@ -42,7 +41,7 @@ Technical note: in-flight work has no merged PR number yet.
 - Publishing MCP tools for computer use, computer takeover and controlled computer egress are still in flight. Authority reads and fresh-install qualification remain open in [#70](https://github.com/elewa-git/opencrane-new/issues/70); complete MCP startup and live-view journeys remain unreliable in [#77](https://github.com/elewa-git/opencrane-new/issues/77).
 - Upload qualification is partial: the full suite and fresh handback failed, and Office previews are NOT RUN. See the [ledger](docs/process/ledger.md#still-not-run) for these and other NOT RUN items, including live provider tokenisation against the budget allowance.
 
-Technical note: merged PRs #68, #72, #78, #65, #71, #73, #74, #76 and #79.
+Technical note: merged PRs #68, #72, #78, #65, #71, #73, #74 and #76. Uploads (#79) are listed under Phase 2.
 
 ## Phase 2: Talk to your computer
 
