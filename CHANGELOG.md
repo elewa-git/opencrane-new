@@ -32,14 +32,14 @@ Technical note: in-flight work has no merged PR number yet.
 
 ### Fixed or improved
 
-- A normal chat turn now holds about 3 cents instead of €5.02, so ordinary requests fit under the daily and group limits.
+- Chat reserves against a request-sized estimate instead of the full model context, so ordinary requests can fit under small daily and group limits. The rendering margin is a planning allowance; live provider tokenisation is NOT RUN (#76).
 - Uploaded files are scanned before storage or delivery, and edits survive reconnects and computer restarts.
 - An assistant's computer cannot use the upload store's credentials.
 
 ### Known limits
 
 - Publishing MCP tools for computer use, computer takeover and controlled computer egress are still in flight. Authority reads and fresh-install qualification remain open in [#70](https://github.com/elewa-git/opencrane-new/issues/70); complete MCP startup and live-view journeys remain unreliable in [#77](https://github.com/elewa-git/opencrane-new/issues/77).
-- Uploads passed hosted CI and a real-model PDF check; a fresh main-stack handback still hit the live-view flake (#77), and Office previews are NOT RUN. See the [ledger](docs/process/ledger.md#still-not-run) for these and other NOT RUN items, including live provider tokenisation against the budget allowance.
+- Uploads passed hosted CI and two real-model PDF checks after two failed paid turns (four turns, 13 cents combined). The latest local full suite failed before the hosted CI pass; the latest fresh main-stack handback failed in the no-grant live viewer (#77). The paid checks preceded the final budget/MCP rebase, and Office previews are NOT RUN. See the [ledger](docs/process/ledger.md#still-not-run) for these and other NOT RUN items, including live provider tokenisation against the budget allowance.
 
 Technical note: merged PRs #68, #72, #78, #65, #71, #73, #74 and #76. Uploads (#79) are listed under Phase 2.
 
@@ -71,13 +71,13 @@ Technical note: merged PRs #34, #35, #36, #37, #38, #39, #64, #66 and #79.
 
 - Developers can create a fresh local silo and repeat its core journeys on the dev stack.
 - Developers can run two extra isolated stacks alongside the stable owner stack.
-- Members can see organisation settings and the registered MCP server list.
+- Owners and admins can see organisation settings and the registered MCP server list; ordinary members are refused (#20).
 - The owner can use a personal account to sign in to the dev silo.
 
 ### Fixed or improved
 
 - Projection data can be rebuilt from the event history, and the dev stack checks fresh, reused and restored journeys.
-- Sign-in, the owner account and parallel stacks are qualified on the development setup.
+- Zitadel sign-in and parallel secondary journeys have development evidence. Owner membership and account admission were checked in #37; the owner’s own interactive browser sign-in was NOT RUN there, and #69 did not rerun it after restoring the owner app.
 
 ### Known limits
 
@@ -101,8 +101,8 @@ Technical note: merged PRs #20, #22, #23, #35, #37, #69 and #78.
 
 ### Known limits
 
-- A first-owner bootstrap path is still waiting on an owner decision. Fresh-silo install and managed-cluster qualification remain NOT RUN; see the [qualification ledger](docs/process/ledger.md#still-not-run).
+- A product first-owner bootstrap path is still in flight; the dev stack has a dev-only owner bootstrap. The Phase 1 core journeys passed on a fresh dev stack (#23); managed-cluster qualification remains NOT RUN; see the [qualification ledger](docs/process/ledger.md#still-not-run).
 
-Technical note: merged PRs #4, #5, #6, #16, #17, #21 and #22.
+Technical note: merged PRs #4, #5, #6, #16, #17, #21, #22 and #23.
 
 <!-- markdownlint-enable MD024 -->
