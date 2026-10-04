@@ -6,6 +6,7 @@ import Fastify from 'fastify';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { registerRemote, discoveryStatus } from '../src/integrations/registration.ts';
 import { installWorker } from '../src/integrations/install-worker.ts';
+import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 
 vi.setConfig({ testTimeout: 20_000 });
 const cleanups: (() => Promise<unknown>)[] = [];
@@ -45,10 +46,55 @@ it('discovers paginated tools over pinned HTTPS with complete metadata and immut
   expect(await discoveryStatus(nats.store, 'test', change.serverId)).toEqual(status);
 });
 
+it('persists valid output schemas and safe per-tool rejections across HTTPS pages and worker restart', async () => {
+  const remote = await remoteFixture(); cleanups.push(remote.close);
+  const metadata = { resultType: 'complete', ttlMs: 1000, cacheScope: 'public' };
+  const inputSchema = { type: 'object' };
+  const definitions = [
+    { name: 'list', inputSchema, outputSchema: { type: 'array', items: { type: 'string' } } },
+    { name: 'scalar', inputSchema, outputSchema: { type: 'string' } },
+    { name: 'anything', inputSchema, outputSchema: {} },
+  ];
+  remote.respond((method, cursor) => method === 'server/discover'
+    ? { ...metadata, supportedVersions: ['2026-07-28'], capabilities: { tools: {} },
+      _meta: { 'io.modelcontextprotocol/serverInfo': { name: 'Fixture', version: '1' } } }
+    : { ...metadata, tools: cursor ? definitions : [
+      { name: 'bad_header', inputSchema: { type: 'object', properties: {
+        region: { type: 'string', 'x-mcp-header': 'Region\r\nfixture-secret' },
+      } } },
+      { name: 'bad_title', inputSchema, title: 42 },
+      { name: 'bad_schema', inputSchema: { type: 'object', required: 'fixture-secret' } },
+    ], ...(cursor ? {} : { nextCursor: 'valid-tools' }) });
+  const nats = await natsFixture(); cleanups.push(() => nats.close());
+  const app = Fastify(); cleanups.push(() => app.close());
+  const worker = installWorker(app, nats.store, 'test', remote.network);
+  const change = await registerRemote(nats.store, 'test', 'admin', { locator: 'https://mcp.example.test/mcp' });
+  await worker.discover(change.serverId);
+  const status = await discoveryStatus(nats.store, 'test', change.serverId);
+  expect(status).toMatchObject({ state: 'needs_input', reason: 'pending_review', inventory: { toolCount: 3,
+    tools: definitions.map(definition => ({ name: definition.name, reviewed: false })),
+    rejectedTools: [
+      { name: 'bad_header', reason: 'invalid_header_name' },
+      { name: 'bad_title', reason: 'invalid_tool_title' },
+      { name: 'bad_schema', reason: 'invalid_input_schema' },
+    ],
+  } });
+  const saved = mcpServerDiscoveredDataSchema.parse(status!.inventory);
+  expect(saved.tools!.map(t => JSON.parse(t.definition!) as unknown)).toEqual(definitions);
+  for (const rejected of saved.rejectedTools!) expect(rejected.revision).toMatch(/^[a-f0-9]{64}$/u);
+  expect(JSON.stringify(status)).not.toContain('fixture-secret');
+  await app.close();
+  const restarted = Fastify(); cleanups.push(() => restarted.close());
+  const resumed = installWorker(restarted, nats.store, 'test', remote.network);
+  remote.respond(() => { throw new Error('Completed discovery must not contact the server'); });
+  await resumed.discover(change.serverId);
+  expect(await discoveryStatus(nats.store, 'test', change.serverId)).toEqual(status);
+});
+
 it.each([
   ['mixed_dns', 'unsafe_address'], ['rebinding', 'unsafe_address'], ['redirect', 'redirect_refused'], ['invalid_tls', 'network_refused'],
   ['protected', 'connection_required'], ['legacy', 'protocol_refused'], ['missing_metadata', 'protocol_refused'],
-  ['duplicate_tools', 'duplicate_tools'], ['invalid_schema', 'protocol_refused'], ['cursor_loop', 'pagination_limit'],
+  ['duplicate_tools', 'duplicate_tools'], ['cursor_loop', 'pagination_limit'],
   ['too_many_tools', 'protocol_refused'], ['large_response', 'response_limit'], ['timeout', 'discovery_timeout'],
   ['duplicate_keys', 'protocol_refused'], ['session', 'protocol_refused'], ['page_limit', 'pagination_limit'], ['inventory_limit', 'inventory_limit'], ['metadata_limit', 'inventory_limit'],
 ])('safely refuses %s through the quarantine discovery route', async (mode, reason) => {
@@ -63,7 +109,6 @@ it.each([
   if (mode === 'legacy') remote.respond(() => ({ ...full, supportedVersions: ['2025-06-18'] }));
   if (mode === 'missing_metadata') remote.respond(() => ({ ...full, ttlMs: undefined }));
   if (mode === 'duplicate_tools') remote.respond(method => method === 'server/discover' ? full : { ...full, tools: [tool, tool] });
-  if (mode === 'invalid_schema') remote.respond(method => method === 'server/discover' ? full : { ...full, tools: [{ ...tool, inputSchema: { type: 'object', required: 'id' } }] });
   if (mode === 'cursor_loop') remote.respond(method => method === 'server/discover' ? full : { ...full, tools: [], nextCursor: 'same' });
   if (mode === 'too_many_tools') remote.respond(method => method === 'server/discover' ? full : { ...full, tools: Array.from({ length: 101 }, (_, i) => ({ ...tool, name: `tool${i}` })) });
   if (mode === 'large_response') remote.respond(() => ({ ...full, instructions: 'x'.repeat(4 * 1024 * 1024) }));

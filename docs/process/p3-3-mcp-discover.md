@@ -21,14 +21,14 @@ The worker uses bounded read-only reconciliation. It does not publish routes, gr
 access, connect accounts or call tools. Protected discovery stays Needs input until
 P3-9. Catalogue/package source choices explicitly remain unavailable.
 
-## Evidence
+## Earlier source evidence (`0d16596`)
 
 The protocol fixture independently requires the request metadata and server identity
 locations in the [2026-07-28 discovery contract](https://modelcontextprotocol.io/specification/2026-07-28/server/discover).
 The first review found and reproduced an inherited wire-shape assumption and nested
 locator log leakage; both now have failing-before/passing-after HTTP fixture checks.
-Final independent review: **PASS**, second of two passes. Both blockers were
-verified fixed; no further code blocker was found. No code changed after that review.
+Those earlier findings are separate from the current pass-one inventory blockers
+below. The earlier review receipt does not qualify the current fixes.
 
 | Check | Result | Evidence on builder host |
 | --- | --- | --- |
@@ -55,6 +55,52 @@ Screenshots from the authenticated Playwright journey are retained at
 Fresh-install live journey: **NOT RUN**; no capability-done claim. The shared dev
 stack was left untouched.
 Hosted CI and merge: **NOT RUN**; the orchestrator owns rebase, CI and landing.
+
+## Inventory review corrections (4 October 2026)
+
+Source: the commit containing these corrections, based on `0d16596`. Same isolated
+fixture environment and PostgreSQL URL as above; no stack was touched.
+
+Pass one found valid output schemas rejecting whole servers and malformed Tool
+declarations entering durable inventory. Each correction began with a failing
+test at the confirmed inventory validator seam, followed by the fix. The HTTPS
+quarantine seam also reproduced the missing durable rejection evidence before
+the event schema was extended. The current implementation and exclusion policy
+are documented in the [server contract](../../apps/server/README.md#remote-mcp-registration-p3-3).
+
+| Regression | Failing-before evidence | Passing-after evidence |
+| --- | --- | --- |
+| Arrays, scalars and unconstrained output schemas; immutable definitions and both digests | `/tmp/p3-3-output-red.log` (7 failures) | `/tmp/p3-3-output-green.log` |
+| Invalid header names and control characters | `/tmp/p3-3-header-red.log` (10 failures) | `/tmp/p3-3-header-green.log` |
+| Prohibited header parameter types | `/tmp/p3-3-header-type-red.log` (7 failures) | `/tmp/p3-3-header-type-green.log` |
+| Case-insensitive header duplicates across nested properties | `/tmp/p3-3-header-duplicate-red.log` | `/tmp/p3-3-header-duplicate-green.log` |
+| Headers outside static property paths | `/tmp/p3-3-header-path-red.log` (18 failures) | `/tmp/p3-3-header-path-green.log` |
+| Malformed declared fields and schemas | `/tmp/p3-3-fields-red.log` (24 failures) | `/tmp/p3-3-fields-green.log` |
+| Allowed primitive unions and complete valid declarations | `/tmp/p3-3-valid-fields-red.log` | `/tmp/p3-3-inventory-final.log` |
+| Whitespace and control characters in icon URIs | `/tmp/p3-3-icon-red.log` (2 failures) | `/tmp/p3-3-inventory-final.log` |
+| HTTPS pagination, durable rejection reasons and worker restart | `/tmp/p3-3-durable-red.log` | `/tmp/p3-3-durable-green.log` |
+
+Final validator run: **PASS**, 70 tests (`/tmp/p3-3-inventory-final.log`).
+Required lint: **PASS**, with five existing function-length warnings
+(`/tmp/p3-3-fixes-lint-final.log`). All workspace typechecks: **PASS**
+(`/tmp/p3-3-fixes-typecheck-green.log`). Event catalogue: **PASS**, 79 event
+types (`/tmp/p3-3-fixes-events.log`). Initial checks caught a test-table type,
+the validator's complexity and missing explicit returns; these were corrected.
+
+The initial full root run was **FAIL**: 1,295 passed, 11 skipped and four failed
+(`/tmp/p3-3-fixes-test.log`). The existing chat Chromium command exceeded 180
+seconds; two existing gateway budget races admitted zero successful calls, and
+one gateway audit test lacked its second usage record. Lint and typecheck ran
+concurrently with that run. These failures are retained as evidence, not waived.
+
+The fresh full rerun, without concurrent lint/typecheck jobs, is **PASS**:
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2`
+passed 72 files / 1,299 tests; 2 files / 11 opt-in tests were skipped
+(`/tmp/p3-3-fixes-test-final.log`). The tests and timeouts were unchanged between
+the two full runs. No inventory or quarantine discovery regression was skipped.
+
+Independent second-pass verification of these corrections: **NOT RUN**; pending
+the orchestrator's review. Fresh-install qualification remains **NOT RUN**.
 
 ## Handoff outside this ticket
 

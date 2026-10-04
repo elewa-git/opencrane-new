@@ -358,6 +358,8 @@ export const mcpServerDiscoveredDataSchema = z
     schemaDigest: digestSchema,
     serverInfo: z.object({ name: id, version: id }).strict().optional(),
     discoverResult: z.string().max(65536).optional(),
+    rejectedTools: z.array(z.object({ name: z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/u).optional(),
+      revision: digestSchema, reason: reasonCodeSchema }).strict()).max(1000).optional(),
     connectionId: id.optional(),
     accountMode: z.enum(['none', 'personal', 'company']).optional(),
     tools: z.array(z.object({ name: id, revision: digestSchema, reviewed: z.boolean(),

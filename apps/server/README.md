@@ -351,11 +351,28 @@ is redacted before authentication or validation. Limits: 1 MiB request, 4 MiB re
 30 seconds for the whole discovery including DNS, ten pages, 100 tools/page and
 1,000 tools total. Definitions are at most 32 KiB each and 512 KiB together;
 discovery metadata is at most 64 KiB and the inventory event payload 900 KiB.
-Invalid schemas, duplicate names/JSON keys and repeated cursors fail closed.
-Ajv 8.20.0 (MIT, licence checked locally) validates schemas without fetching references.
+Duplicate accepted tool names, duplicate JSON keys, malformed page envelopes and
+repeated cursors reject the inventory. Individual malformed Tool declarations are
+excluded; valid siblings remain available for review. This follows the explicit
+per-tool rejection rule for `x-mcp-header` in the
+[MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#x-mcp-header)
+and applies the same isolation to other invalid declared fields and schemas.
+`rejectedTools` records only a safe name (when valid), the definition digest and a
+fixed reason code; it never stores rejected definitions or upstream validation errors.
+
+Input schemas require an object root. Output schemas may describe arrays, scalars
+or unconstrained values (`{}`). Accepted definitions are stored as immutable JSON
+strings, including output schemas and extension fields; the complete definition
+contributes to its revision and the inventory digest. Ajv 8.20.0 (MIT, licence
+checked locally) validates JSON Schema 2020-12 (default) and draft-07 without
+fetching references. Unsupported dialects and unresolved references exclude the tool.
+Header annotations require token names, no control characters, case-insensitive
+uniqueness and only declared string/integer/boolean types. They may appear only
+along a chain of `properties` keys from the input root. Integer argument range
+checks belong to the later call path; discovery never invokes tools.
 
 Discovery leaves tools blocked and unpublished. Protected servers show Needs input
 until P3-9; publication, grants and calls are outside this ticket. The local HTTPS,
 DNS rebinding and browser fixtures use no external MCP endpoints. Run
-`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts`.
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/inventory.test.ts apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts --maxWorkers=2`.
 See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).

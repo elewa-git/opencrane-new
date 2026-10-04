@@ -225,7 +225,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
 | `mcp.server_registered` | admin | catalogue (draft; transport kind and optional catalogue reference) | validate (SSRF / image scan) → `mcp.server_discovered` or `mcp.server_rejected` |
-| `mcp.server_discovered` | reaction | catalogue (tools, schema digests, optional server name and version) | — |
+| `mcp.server_discovered` | reaction | catalogue (valid tools, schema digests, optional server identity and safe per-tool rejection reasons) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
 | `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
@@ -381,6 +381,13 @@ The same procedure recovers from a corrupted projection, adds a new read model, 
 remains replayable but grants no execution. Duplicate names fail closed. Discovery
 resets modes to Block; hints only suggest a choice. Drift/unpublish/rejection
 quarantines execution. A new publication cannot restore a changed tool's old mode.
+
+Discovery may also carry `rejectedTools`: up to 1,000 excluded declarations with
+an optional safe `name`, a definition `revision` digest and a fixed `reason` code.
+These entries carry no definition or policy and are excluded from `toolCount`
+and `schemaDigest`. They remain available in event-backed discovery status for
+review; legacy events without this field remain readable. See the
+[discovery validation contract](../../apps/server/README.md#remote-mcp-registration-p3-3).
 
 `mcp.tool_mode_set` adds `connectionId` and `toolRevision`; both must match the
 current reviewed tool for execution. Legacy name-only events remain readable but
