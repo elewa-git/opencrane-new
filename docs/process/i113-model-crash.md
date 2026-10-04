@@ -5,9 +5,13 @@ Date: 2026-10-04. Base: `089fa31` (`main`).
 ## Change
 
 The models budget loop retries only errors recognised by
-`isEventStoreUnavailable`. It logs a static operation name and no error or event
-content. Lease query failures, a stopped gateway, fence loss and invalid usage
-still fail the service. The computer proxy now pipelines the upstream response
+`isEventStoreUnavailable`, for at most 15 seconds of continuous outage
+(`MAX_EVENT_STORE_OUTAGE_MS`, under the NATS client's ~22 s reconnect limit). After
+that it exits with code 1 so the supervisor restarts it with a fresh connection,
+instead of staying alive but idle. It logs once when an outage starts and once when
+it ends, with the operation name and the error name only, never event content. A
+long-outage test proves the exit. Lease query failures, a stopped gateway, fence
+loss and invalid usage still fail the service at once. The computer proxy now pipelines the upstream response
 to the client, so an upstream abort closes the client stream.
 
 ## Source evidence
