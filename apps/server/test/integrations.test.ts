@@ -1,6 +1,7 @@
+import { z } from 'zod';
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
-import { budgets, BudgetActor, readBudget, startDecision } from '@opencrane/models';
+import { acknowledgeMcp, budgets, BudgetActor, readBudget, startDecision } from '@opencrane/models';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -164,7 +165,7 @@ it('returns the event-derived register and rebuilds to the same rows', async () 
   const body = integrationsResponseSchema.parse(response.json());
   expect(body.loadedAt).toBe('2026-10-01T09:40:00.000Z');
   expect(body.rows.map((row) => [row.serverId, row.status.kind])).toEqual([
-    ['odoo', 'ready'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'needs_input'], ['review', 'needs_input'],
+    ['odoo', 'checking'], ['warehouse', 'checking'], ['broken', 'failed'], ['pricing', 'needs_input'], ['review', 'needs_input'],
     ['retired', 'disabled'],
   ]);
   expect(body.rows[0]).toMatchObject({ name: 'Odoo Accounting', version: '1.4.2', toolsAllowed: 0, toolsTotal: 14,
@@ -278,6 +279,59 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
       await page.screenshot({ path: `/tmp/p3-3-review-${width}.png`, fullPage: true });
     }
+    await page.getByRole('group', { name: 'Review read' }).getByLabel('Allow automatically').check();
+    await page.getByLabel('These tools have no per-call charge').check();
+    let publicationPosts = 0, publicationUrl = '';
+    await page.route('**/publication', async route => {
+      if (route.request().method() !== 'POST') { await route.continue(); return; }
+      publicationPosts++; publicationUrl = route.request().url(); expect((await route.fetch()).status()).toBe(202); await route.abort('failed');
+    });
+    await page.getByRole('button', { name: 'Publish reviewed tools' }).click();
+    await page.getByText('Outcome unknown', { exact: false }).waitFor();
+    expect(await page.getByRole('button', { name: 'Add another server' }).count()).toBe(0);
+    expect(await page.getByRole('button', { name: 'Publish reviewed tools' }).count()).toBe(0);
+    for (const width of [1280, 390]) { await page.setViewportSize({ width, height: 900 }); await page.screenshot({ path: `/tmp/p3-4-unknown-${width}.png`, fullPage: true }); }
+    await page.reload();
+    await page.getByRole('button', { name: 'Check status', exact: true }).click();
+    await page.getByText('Waiting for the gateway to acknowledge this configuration.', { exact: false }).waitFor();
+    expect(publicationPosts).toBe(1); await page.unroute('**/publication');
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+      for (const fact of ['Installed', 'Connected', 'Allowed for', 'Available to the assistant']) await page.getByRole('heading', { name: fact, exact: true }).waitFor();
+      await page.screenshot({ path: `/tmp/p3-4-applying-${width}.png`, fullPage: true });
+    }
+    const publication = z.object({ serverId: z.string(), changeRef: z.string(), digest: z.string() }).parse(
+      (await app.inject({ method: 'GET', url: new URL(publicationUrl).pathname, headers: headers('oidc-alice') })).json());
+    expect(await acknowledgeMcp(nats.store, 'test', publication.serverId, publication.changeRef, publication.digest)).toBe(true);
+    await page.getByRole('button', { name: 'Check status', exact: true }).click();
+    await page.getByText('Ready · The gateway acknowledged', { exact: false }).waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.screenshot({ path: `/tmp/p3-4-ready-${width}.png`, fullPage: true });
+    }
+    await page.getByLabel('Grant access to').selectOption('member:alice');
+    let grantPosts = 0;
+    await page.route('**/grants', async route => {
+      grantPosts++;
+      const payload = z.record(z.string(), z.unknown()).parse(route.request().postDataJSON());
+      const competing = await app.inject({ method: 'POST', url: new URL(route.request().url()).pathname,
+        headers: { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin }, payload: { ...payload, commandId: 'other-admin-grant' } });
+      expect(competing.statusCode).toBe(202);
+      const response = await route.fetch(); expect(response.status()).toBe(409); await route.fulfill({ response });
+    });
+    await page.getByRole('button', { name: 'Grant access', exact: true }).click();
+    await page.getByText('The change was not applied.', { exact: false }).waitFor();
+    expect(grantPosts).toBe(1); await page.unroute('**/grants');
+    await page.getByText('alice', { exact: true }).first().waitFor();
+    await page.getByRole('button', { name: 'Review removal' }).click();
+    await page.getByText('Removing this server does not delete the upstream account.', { exact: true }).waitFor();
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.screenshot({ path: `/tmp/p3-4-removal-${width}.png`, fullPage: true });
+    }
+    await page.getByRole('button', { name: 'Remove for 1 person' }).click();
+    await page.getByText('Disabled / removed', { exact: false }).waitFor();
     remote.status(401);
     await page.getByRole('button', { name: 'Add another server' }).click();
     await page.getByLabel('Server URL', { exact: true }).fill('https://mcp.example.test/protected');
@@ -661,4 +715,21 @@ it('projects protected discovery as Needs input and replays inventory without an
       if (path === 'public') expect(await catalogue.tools('test', serverId)).toMatchObject({ published: false, connectionId: null, tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
     }
   } finally { await remote.close(); }
+});
+
+it('publishes a reviewed revision through the admin interface and keeps grants separate from installation', async () => {
+  const url = '/api/org/integrations/odoo/publication';
+  const admin = { ...headers('oidc-alice'), origin: new URL(config.redirectUri).origin };
+  const read = await app.inject({ url, headers: admin });
+  expect(read.statusCode).toBe(200);
+  const state = read.json<{ sequence: number }>();
+  const discovery = await app.inject({ url: '/api/org/integrations/odoo/discovery', headers: admin });
+  const inventory = discovery.json<{ inventory: { schemaDigest: string; tools: { name: string; revision: string }[] } }>().inventory;
+  const payload = { commandId: 'publish-browser', expectedSequence: state.sequence, schemaDigest: inventory.schemaDigest, accountMode: 'none', tools: inventory.tools.map(t => ({ name: t.name, revision: t.revision, mode: 'block' })) };
+  expect((await app.inject({ method: 'POST', url, headers: headers('oidc-alice'), payload })).statusCode).toBe(403);
+  expect((await app.inject({ method: 'POST', url, headers: { ...admin, ...headers('oidc-bob') }, payload })).statusCode).toBe(403);
+  expect((await app.inject({ method: 'POST', url, headers: admin, payload })).statusCode).toBe(202);
+  const applied = await app.inject({ url: `${url}?changeRef=publish-browser`, headers: admin });
+  expect(applied.json()).toMatchObject({ changeRef: 'publish-browser', state: 'applying', grants: [] });
+  expect((await app.inject({ method: 'POST', url, headers: admin, payload })).statusCode).toBe(409);
 });

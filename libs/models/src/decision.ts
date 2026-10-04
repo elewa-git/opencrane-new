@@ -99,6 +99,15 @@ async function activeTurn(actor: BudgetActor, c: z.infer<typeof computerSchema>,
   return turn;
 }
 export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0, keys?: ReviewKeys) {
+  const permits = new Map<string, { serverId: string; digest: string; bodyDigest: string; expires: number; fresh: () => Promise<void> }>();
+  function issuePermit(outcome: string, res: ServerResponse, serverId: string, digest: string, raw: string, fresh: () => Promise<void>, headers: Record<string, string>) {
+    if (outcome !== 'allow') return;
+    for (const [key, permit] of permits) if (permit.expires <= Date.now()) permits.delete(key);
+    const permit = randomUUID();
+    permits.set(permit, { serverId, digest, bodyDigest: losslessJson(raw).digest, expires: Date.now() + 2000, fresh });
+    res.setHeader('x-mcp-permit', permit);
+    for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
+  }
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     const started = performance.now();
@@ -131,71 +140,8 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       if (t.delegation[0] !== t.requester) throw new Error('Delegation refused');
       const raw = await readBody(req);
       if (route === 'mcp') {
-        const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
+        const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)\/([a-f0-9]{64})$/u.exec(req.url ?? '');
         if (!match) throw new Error('Unknown MCP route');
         fresh.include(`mcp-${match[1]!}`);
-        const policy = await mcpPolicy(actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers);
+        const policy = await mcpPolicy(actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers, match[3]!);
         const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!, fresh);
-        contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
-        // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.
-        await fresh();
-        const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo, {
-          requesterId: t.requester, assistantId: c.assistant, conversationId: t.conversation, turnId: t.turn,
-          serverId: match[1]!, connectionId: match[2]!,
-        }, policy, keys, actor.now, fresh, requestId);
-        await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
-        await fresh();
-        res.setHeader('x-request-id', requestId);
-        res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
-      }
-      const parsed = requestSchema.safeParse(JSON.parse(raw));
-      if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
-      const body = parsed.data;
-      if (body.model !== t.model) throw new Error('Model does not match turn grant');
-      const amountCents = requestReservationCents(body);
-      const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model, fresh);
-      contextDigest = call.contextDigest;
-      const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
-      await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {
-        // No permit has left this process, so the gateway cannot have dispatched it.
-        await actor.releaseUndispatched(reservation);
-        throw error;
-      });
-      res.setHeader('x-request-id', requestId);
-      res.setHeader('x-reservation-id', reservation); res.end('{}');
-    })().catch(async (error: unknown) => {
-      const capped = error instanceof BudgetRefused;
-      try {
-        if (!auditAttempted) await audit('deny', capped ? 'budget_exhausted' : 'request_refused');
-        else { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
-      }
-      catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
-      res.setHeader('x-request-id', requestId);
-      res.writeHead(capped ? 402 : 403);
-      res.end(JSON.stringify({ requestId, error: capped || error instanceof RequestRefused || error instanceof PayingGroupRefused ? error.message : 'Request refused or decision service unavailable' }));
-    });
-  });
-  server.listen(port, '127.0.0.1'); await once(server, 'listening');
-  const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('Decision listen failed');
-  return { url: `http://127.0.0.1:${address.port}`, models,
-    close: () => new Promise<void>((resolve, reject) => { if (!server.listening) { resolve(); return; } server.closeAllConnections(); server.close(error => error ? reject(error) : resolve()); }) };
-}
-
-async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding) {
-  if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return true; }
-  if (req.url === '/budgets' && req.method === 'POST') {
-    try {
-      const result = await configureBudget(actor, binding, identity, JSON.parse(await readBody(req)), req.headers.authorization);
-      res.writeHead(result.status === 'appended' ? 200 : 409); res.end(JSON.stringify(result));
-    } catch (error) {
-      res.writeHead(error instanceof BudgetAccessRefused ? 403 : error instanceof z.ZodError ? 400 : 503); res.end('{"status":"refused"}');
-    }
-    return true;
-  }
-  if (req.url === '/settle' && req.method === 'POST') {
-    const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
-    await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return true;
-  }
-  return false;
-}

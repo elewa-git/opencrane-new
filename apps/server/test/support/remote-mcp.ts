@@ -23,7 +23,7 @@ export async function remoteFixture() {
     req.on('data', (chunk: Buffer) => chunks.push(chunk));
     req.on('end', () => {
       const parsed = z.object({ jsonrpc: z.literal('2.0'), id: z.string(), method: z.string(), params: z.object({ cursor: z.string().optional(),
-        _meta: z.object({ 'io.modelcontextprotocol/protocolVersion': z.literal('2026-07-28'), 'io.modelcontextprotocol/clientCapabilities': z.object({}).strict() }) }) }).strict().safeParse(JSON.parse(Buffer.concat(chunks).toString()));
+        _meta: z.object({ 'io.modelcontextprotocol/protocolVersion': z.literal('2026-07-28'), 'io.modelcontextprotocol/clientCapabilities': z.record(z.string(), z.unknown()) }).passthrough() }) }).strict().safeParse(JSON.parse(Buffer.concat(chunks).toString()));
       if (!parsed.success) { res.writeHead(400, { 'content-type': 'application/json' }); res.end('{}'); return; }
       const body = parsed.data;
       calls.push({ method: body.method, headers: req.headers, body, hostname: z.string().parse(Reflect.get(req.socket, 'servername')) });

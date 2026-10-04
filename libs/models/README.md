@@ -190,15 +190,21 @@ projection replays the same fold. Org settings links each register row to its
 Tools & access screen, using the authenticated GET/POST
 `/api/org/integrations/:serverId/tools` interface with Origin checks on writes.
 
-`startGateway({ ..., mcpRoutes: [{ serverId, connectionId, upstream }] })` adds a
-fixed, operator-reviewed fixture route `/mcp/:serverId/:connectionId`. This is
-not an installer or arbitrary remote-URL interface. ext_authz accepts only bounded
-MCP `tools/call` for 2026-07-28 with matching method/tool/version headers and
-required `_meta` version and empty client capabilities. The route strips caller
-headers and never injects an invented credential. Only explicitly credential-free,
-non-metered reviewed fixtures priced at zero can run until the credential/budget tickets land.
-Ask records `approval_required` without dispatch; approval creation/consumption
-belongs to P3-2. Lossless approval argument binding belongs there too.
+`publishMcp` conditionally appends a reviewed desired generation. `startGateway`
+accepts that publication with the local guarded upstream, renders its route/CEL/
+ext_authz/header rules together and exposes `acknowledgements()` only after the
+effective configuration and active listener policies match. `acknowledgeMcp`
+records the matching digest; `publicationStatus` remains Applying until then.
+Legacy name-only publications have no execution authority.
+
+The decision requires that exact current digest and both grants. Network calls
+use MCP 2026-07-28 `params._meta` (`protocolVersion`, `clientCapabilities`) and
+matching method/tool/version headers. Only discovery, listing and calls pass;
+lossless parsing rejects duplicate/forbidden keys, batches and malformed envelopes.
+A fresh one-use in-memory forwarding permit binds the server, generation and body.
+The guarded transport consumes it after DNS validation, rechecking authority
+within two seconds immediately before opening the socket. It never forwards the
+computer/turn tokens. Credential-dependent profiles remain blocked until P3-8.
 
 Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activity, conversation, explicit requester and assistant

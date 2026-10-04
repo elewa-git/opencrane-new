@@ -1,0 +1,64 @@
+<section aria-label="Publication and access">
+  <p role="status" aria-live="polite">{{ message() }}</p>
+  <button type="button" class="secondary" [disabled]="busy()" (click)="load()">Check status</button>
+  @if (state(); as state) {
+    @if (state.changeRef) { <p>Change reference <code>{{ state.changeRef }}</code></p> }
+    <div class="facts">
+      <article><h3>Installed</h3><p>{{ state.state === 'removed' ? 'Removed' : state.policy.published ? '✓ Reviewed and applied' : 'Awaiting review or gateway acknowledgement' }}</p></article>
+      <article><h3>Connected</h3><p>{{ state.policy.accountMode === 'none' ? 'No account required' : 'No verified account connection' }}</p></article>
+      <article><h3>Allowed for</h3><p>{{ state.state === 'removed' ? 'No one while removed' : state.affectedUsers.length + ' people' }} · {{ state.grants.length }} recorded grants</p></article>
+      <article><h3>Available to the assistant</h3><p>{{ state.policy.published && state.policy.accountMode === 'none' ? 'Publication ready.' : 'Unavailable until publication and connection are ready.' }} {{ assistants() }} assistants granted access. Both the requester and assistant need current permission.</p></article>
+    </div>
+    @if (state.state !== 'needs_review') { <h2>Reviewed tool summary</h2><p>@for (tool of state.policy.tools; track tool.name) { <span>{{ tool.name }} · {{ tool.mode === 'allow' ? 'Allow automatically' : tool.mode === 'ask' ? 'Ask' : 'Block' }}<br /></span> }</p> }
+    @if (state.state === 'needs_review' && !unknown()) {
+      <h2>Tools &amp; access</h2>
+      <label for="account-mode">Whose account will this use?</label>
+      <select id="account-mode" [value]="account()" (change)="account.set($any($event.target).value)">
+        <option value="none">No account required</option><option value="personal">Each person's own account</option><option value="company">One company account</option>
+      </select>
+      @if (account() !== 'none') { <p>Connection setup and permission scopes are not available yet. Calls remain blocked until a verified account is connected.</p> }
+      @if (account() === 'company') { <p class="notice">The external system records actions under one company account. OpenCrane records who asked.</p> }
+      @for (readOnly of [true, false]; track readOnly) {
+        <h3>{{ readOnly ? 'Read' : 'Changes data or unclear' }}</h3>
+        @for (tool of inventory().tools; track tool.name) {
+          @if ((tool.readOnly && !tool.destructive) === readOnly) {
+            <fieldset [attr.aria-label]="'Review ' + tool.name" [disabled]="busy()"><legend>{{ tool.name }}</legend>
+              @for (choice of choices; track choice.mode) { <label class="choice"><input type="radio" [name]="'review-' + tool.name" [checked]="mode(tool.name) === choice.mode" (change)="choose(tool.name, choice.mode)" />{{ choice.label }}</label> }
+              <p>Suggested: {{ tool.readOnly && !tool.destructive ? 'Allow automatically' : 'Ask' }}. New tools remain Block until you choose.</p>
+            </fieldset>
+          }
+        }
+      }
+      <label class="choice"><input type="checkbox" [checked]="free()" (change)="free.set($any($event.target).checked)" />These tools have no per-call charge</label>
+      <p>Unknown charges block execution. Ask needs complete action review details before it can be approved.</p>
+      <p>Publish this reviewed tool list with these modes. Access is granted separately below.</p>
+      <button type="button" [disabled]="busy()" (click)="publish()">Publish reviewed tools</button>
+    }
+    @if (state.state !== 'needs_review' && state.state !== 'removed') {
+      <h2>Access</h2>
+      <p>Grant people or existing teams access, then grant their assistants access.</p>
+      <label for="grant-audience">Grant access to</label>
+      <select id="grant-audience" [disabled]="busy() || unknown()" [value]="selected()" (change)="selected.set($any($event.target).value)">
+        <option value="">Choose a person, team or assistant</option>
+        @for (candidate of state.candidates; track candidate.kind + candidate.id) { <option [value]="candidate.kind + ':' + candidate.id">{{ candidate.name }} · {{ candidate.kind }}</option> }
+      </select>
+      <button type="button" [disabled]="busy() || unknown() || !selected()" (click)="grant('give')">Grant access</button>
+      @for (entry of state.grants; track entry.granteeId) {
+        <div class="grant"><span>{{ name(entry.granteeId, entry.granteeKind) }} · {{ entry.granteeKind }}</span><button class="secondary" type="button" [disabled]="busy() || unknown()" (click)="grant('revoke', entry.granteeId, entry.granteeKind)">Revoke access</button></div>
+      }
+      <h3>Affected people</h3>
+      <p>@for (person of state.affectedUsers; track person.id) { <span>{{ person.name }} </span> } @empty { No people have access today. }</p>
+      <details><summary>Used by</summary><p>Skills and workflow dependencies are not available in this phase. Assistants with grants lose access on removal.</p></details>
+      @if (!removing()) { <button type="button" class="danger" [disabled]="busy() || unknown()" (click)="removing.set(true)">Review removal</button> }
+      @if (removing()) {
+        <section class="notice" aria-label="Removal review"><h2>Remove this server?</h2>
+          <p>{{ state.affectedUsers.length }} people and {{ assistants() }} assistants lose access to all its tools. Existing conversations keep their history.</p>
+          <p>Removing this server does not delete the upstream account.</p>
+          <button type="button" class="danger" [disabled]="busy() || unknown()" (click)="remove()">Remove for {{ state.affectedUsers.length }} {{ state.affectedUsers.length === 1 ? 'person' : 'people' }}</button>
+          <button type="button" class="secondary" (click)="removing.set(false)">Cancel removal</button>
+        </section>
+      }
+    }
+    @if (state.digest) { <details><summary>Applied configuration evidence</summary><code>{{ state.digest }}</code><p>{{ state.policy.published ? 'Gateway acknowledgement received.' : 'Awaiting acknowledgement.' }}</p></details> }
+  }
+</section>

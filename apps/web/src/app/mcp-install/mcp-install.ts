@@ -1,11 +1,15 @@
+import { McpPublication } from '../mcp-publication/mcp-publication';
 import { ChangeDetectionStrategy, Component, signal, type OnInit } from '@angular/core';
 import { z } from 'zod';
 const statusSchema = z.object({ serverId: z.string(), changeRef: z.string(), state: z.enum(['checking', 'needs_input', 'failed']), reason: z.string().optional(),
   inventory: z.object({ schemaDigest: z.string(), serverInfo: z.object({ name: z.string(), version: z.string() }).default({ name: 'Server', version: 'Version not provided' }),
     tools: z.array(z.object({ name: z.string(), revision: z.string(), definition: z.string().default('Definition not stored; rediscovery required.'), readOnly: z.boolean().default(false), destructive: z.boolean().default(false) })).default([]) }).optional() });
-@Component({ selector: 'oc-mcp-install', templateUrl: './mcp-install.html', styleUrl: './mcp-install.css', changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: 'oc-mcp-install', imports: [McpPublication], templateUrl: './mcp-install.html', styleUrl: './mcp-install.css', changeDetection: ChangeDetectionStrategy.OnPush })
 export class McpInstall implements OnInit {
   protected readonly serverId = new URLSearchParams(globalThis.location.search).get('server');
+  protected readonly publicationBlocked = signal(false);
+  protected readonly publicationReviewed = signal(false);
+  protected readonly resolvedId = signal('');
   protected readonly locator = signal('');
   protected readonly phase = signal<'draft' | 'checking' | 'unknown' | 'needs_input' | 'failed' | 'access'>('draft');
   protected readonly busy = signal(false);
@@ -47,14 +51,14 @@ export class McpInstall implements OnInit {
       if (response.status === 404 && !this.serverId) { this.phase.set('draft'); this.message.set('○ No registration was found. You can submit this source.'); sessionStorage.removeItem('mcp-registration'); return; }
       if (!response.ok) throw new Error('Unknown');
       const raw: unknown = await response.json(); const status = statusSchema.parse(raw);
-      this.phase.set(status.state); this.changeRef.set(status.changeRef); this.inventory.set(status.inventory);
+      this.resolvedId.set(status.serverId); this.phase.set(status.state); this.changeRef.set(status.changeRef); this.inventory.set(status.inventory);
       this.message.set(status.state === 'checking' ? '◌ Applying / checking · Validating the server and discovering tools…'
         : status.reason === 'connection_required' ? '● Needs input · A scoped validation connection is required. Protected discovery is not available yet.'
         : status.state === 'needs_input' ? '● Needs input · Pending review. These tools are blocked.'
         : '× Server rejected · The address, protocol or tool inventory did not pass validation.');
     } catch { this.unknown(); } finally { this.busy.set(false); }
   }
-  protected another() { sessionStorage.removeItem('mcp-registration'); this.locator.set(''); this.phase.set('draft'); this.inventory.set(undefined); this.changeRef.set(''); this.message.set('Enter the server address to discover its tools.'); }
+  protected another() { if (this.publicationBlocked()) return; this.publicationReviewed.set(false); this.resolvedId.set(''); sessionStorage.removeItem('mcp-registration'); this.locator.set(''); this.phase.set('draft'); this.inventory.set(undefined); this.changeRef.set(''); this.message.set('Enter the server address to discover its tools.'); }
   private unknown() { this.phase.set('unknown'); this.message.set('? Outcome unknown · We could not confirm the change. Check status before continuing.'); }
   private access(response: Response) {
     if (![401, 403].includes(response.status)) return false;

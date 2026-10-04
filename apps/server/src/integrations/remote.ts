@@ -19,19 +19,46 @@ const rpcResult = z.object({ jsonrpc: z.literal('2.0'), id: z.string(), result: 
 /** The caller selects the stored endpoint. No caller headers, credentials, sessions or redirects pass. */
 export async function remoteRequest(locator: string, method: 'server/discover' | 'tools/list', cursor: string | undefined,
   network: RemoteNetwork, signal: AbortSignal) {
-  const endpoint = remoteEndpoint(locator);
   const id = randomUUID();
   const body = JSON.stringify({ jsonrpc: '2.0', id, method, params: { ...(cursor ? { cursor } : {}),
     _meta: { 'io.modelcontextprotocol/protocolVersion': version, 'io.modelcontextprotocol/clientCapabilities': {} } } });
+  const text = await remoteForward(locator, body, method, undefined, network, signal);
+  try {
+    const parsed = losslessJson(text); // Reject duplicate keys and excessive nesting before ordinary parsing.
+    const result = rpcResult.parse(JSON.parse(text));
+    if (result.id !== id) throw new Error('protocol_refused');
+    if (!(parsed.value instanceof Map)) throw new Error('protocol_refused');
+    return { resultJson: parsed.value.get('result')!.canonical };
+  } catch { throw new Error('protocol_refused'); }
+}
+
+async function resolveAddresses(hostname: string, network: RemoteNetwork, signal: AbortSignal) {
+  let abort = () => {};
+  try {
+    return await Promise.race([
+      (network.resolve ?? (host => lookup(host, { all: true })))(hostname),
+      new Promise<never>((_resolve, reject) => {
+        abort = () => reject(new Error('discovery_timeout'));
+        if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
+      }),
+    ]);
+  } finally { signal.removeEventListener('abort', abort); }
+}
+
+/** Every socket, including published calls, pins a freshly checked DNS answer through TLS. */
+export async function remoteForward(locator: string, body: string, method: string, tool: string | undefined, network: RemoteNetwork, signal: AbortSignal, beforeConnect?: () => Promise<void>, parameterHeaders: Record<string, string> = {}) {
+  const endpoint = remoteEndpoint(locator);
   if (Buffer.byteLength(body) > 1024 * 1024) throw new Error('request_limit');
   const addresses = await resolveAddresses(endpoint.hostname, network, signal);
   signal.throwIfAborted();
   if (!addresses.length || addresses.some(a => !isPublicAddress(a))) throw new Error('unsafe_address');
+  await beforeConnect?.();
+  signal.throwIfAborted();
   const address = addresses[0]!;
   const options: RequestOptions = { method: 'POST', agent: false, signal, family: address.family,
     servername: endpoint.hostname, rejectUnauthorized: true,
     lookup: (_host, _options, done) => done(null, address.address, address.family),
-    headers: { 'content-type': 'application/json', accept: 'application/json', 'mcp-protocol-version': version, 'mcp-method': method } };
+    headers: { ...parameterHeaders, 'content-type': 'application/json', accept: 'application/json', 'mcp-protocol-version': version, 'mcp-method': method, ...(tool ? { 'mcp-name': tool } : {}) } };
   const text = await new Promise<string>((resolve, reject) => {
     const req = (network.request ?? request)(endpoint, options, res => {
       const refuse = (code: string) => { res.destroy(); reject(new Error(code)); };
@@ -53,24 +80,6 @@ export async function remoteRequest(locator: string, method: 'server/discover' |
     req.once('error', () => reject(new Error('network_refused')));
     req.end(body);
   });
-  try {
-    const parsed = losslessJson(text); // Reject duplicate keys and excessive nesting before ordinary parsing.
-    const result = rpcResult.parse(JSON.parse(text));
-    if (result.id !== id) throw new Error('protocol_refused');
-    if (!(parsed.value instanceof Map)) throw new Error('protocol_refused');
-    return { resultJson: parsed.value.get('result')!.canonical };
-  } catch { throw new Error('protocol_refused'); }
-}
-
-async function resolveAddresses(hostname: string, network: RemoteNetwork, signal: AbortSignal) {
-  let abort = () => {};
-  try {
-    return await Promise.race([
-      (network.resolve ?? (host => lookup(host, { all: true })))(hostname),
-      new Promise<never>((_resolve, reject) => {
-        abort = () => reject(new Error('discovery_timeout'));
-        if (signal.aborted) abort(); else signal.addEventListener('abort', abort, { once: true });
-      }),
-    ]);
-  } finally { signal.removeEventListener('abort', abort); }
+  losslessJson(text);
+  return text;
 }

@@ -387,3 +387,31 @@ bucket-scoped STS lease); `CLAMD_HOST` defaults to `127.0.0.1`, `CLAMD_PORT` to
 projection separately. The computer receives clean bytes through the server's
 bridge and holds no object-store credentials. [Evidence and qualification](../../docs/process/upload-evidence.md)
 cover real-service tests and the pending fresh-install journey.
+
+## Reviewed MCP publication (P3-4)
+
+Owner/Admin uses GET/POST `/api/org/integrations/:serverId/publication`, POST
+`/grants` and POST `/remove`. Mutations require same-origin sessions and one
+conditional event append. Review must name every discovered tool revision and
+its chosen mode; unknown tool charges remain blocked. GET publication accepts
+`changeRef` to reconcile a lost reply without another installation. The browser
+shows installation, connection, audience and assistant facts separately, with
+explicit removal consequences. Removing never deletes an upstream account.
+
+`models-main.ts` now derives MCP routes from publication events instead of
+`MODEL_MCP_ROUTES`. Under the existing single-writer lease it replaces the whole
+gateway generation, reads its configuration acknowledgement, and records the exact
+digest. Its loopback-only guarded HTTPS companion consumes one-use decision
+permits and revalidates DNS on every call. A stale or partially configured route
+cannot bypass publication, current grants or the transport permit. The generated
+configuration and persisted gateway evidence contain no credentials.
+
+Run the publication and browser checks with:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run \
+  apps/server/test/mcp-publication.test.ts apps/server/test/integrations.test.ts --maxWorkers=2
+```
+
+See the [P3-4 source receipt](../../docs/process/p3-4-publish.md) for current
+qualification and remaining live-install evidence.

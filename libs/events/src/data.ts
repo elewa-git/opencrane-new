@@ -1,3 +1,4 @@
+import { publicationSchema } from './publication.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
 // and plan.md say the event means: which ids it needs, who did it, and what a
@@ -375,9 +376,8 @@ export const mcpToolModeSetDataSchema = z
   .object({ serverId: id, toolName: id, connectionId: id.optional(), toolRevision: digestSchema.optional(), mode: z.enum(['allow', 'ask', 'block']), setBy: id })
   .strict();
 
-export const mcpServerPublishedDataSchema = z
-  .object({ serverId: id, publishedBy: id })
-  .strict();
+// Legacy rows remain replayable, but carry no execution authority.
+export const mcpServerPublishedDataSchema = z.union([publicationSchema, z.object({ serverId: id, publishedBy: id }).strict()]);
 
 export const mcpServerUnpublishedDataSchema = z
   .object({ serverId: id, unpublishedBy: id })

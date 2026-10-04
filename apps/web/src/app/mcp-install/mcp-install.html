@@ -1,15 +1,15 @@
 <a href="/org/integrations">‹ Back to integrations</a>
-<h1>{{ serverId ? 'Review MCP server' : 'Add an MCP server' }}</h1>
+<h1>{{ resolvedId() ? 'Review MCP server' : 'Add an MCP server' }}</h1>
 <p>Choose a source, discover its tools, then review what it offers.</p>
-<div class="steps" aria-label="Installation progress"><strong>1 · Source</strong><span>2 · Review tools</span><span>3 · Publish &amp; access — not available yet</span></div>
-@if (!serverId) {
+<div class="steps" aria-label="Installation progress"><span [attr.aria-current]="!inventory() ? 'step' : null">1 · Source</span><span [attr.aria-current]="inventory() && !publicationReviewed() ? 'step' : null">2 · Review tools</span><span [attr.aria-current]="publicationReviewed() ? 'step' : null">3 · Publish &amp; access</span></div>
+@if (!serverId && !inventory()) {
 <div class="sources" aria-label="Server source">
   <div class="unavailable"><strong>Catalogue</strong><p>Not available yet</p></div>
   <div class="selected"><strong>● Remote server (URL)</strong><p>A server hosted by you or a provider</p></div>
   <div class="unavailable"><strong>Package (OCI image)</strong><p>Not available yet</p></div>
 </div>
 }
-@if (phase() !== 'access' && !serverId) {
+@if (phase() !== 'access' && !serverId && !inventory()) {
   <form (submit)="submit($event)">
     <label for="remote-url">Server URL</label>
     <input id="remote-url" type="url" required autocomplete="off" placeholder="https://mcp.example.com/mcp" [value]="locator()" (input)="locator.set($any($event.target).value)" [disabled]="phase() !== 'draft'" />
@@ -17,10 +17,12 @@
     @if (phase() === 'draft') { <button type="submit" [disabled]="busy()">Discover tools</button> }
   </form>
 }
-<p role="status" aria-live="polite">{{ message() }}</p>
+@if (!inventory()) { <p role="status" aria-live="polite">{{ message() }}</p>
 @if (changeRef()) { <p>Change reference <code>{{ changeRef() }}</code></p> }
-@if (phase() !== 'draft' && phase() !== 'access') { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
+@if (phase() !== 'draft' && phase() !== 'access' && !inventory()) { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
+}
 @if (inventory(); as inventory) {
+  @if (!publicationReviewed()) {
   <section aria-label="Tool inventory">
     <h2>{{ inventory.serverInfo.name }} · {{ inventory.serverInfo.version }}</h2>
     <p>{{ inventory.tools.length }} tools discovered · 0 allowed</p>
@@ -35,7 +37,9 @@
       }
     }
     <details><summary>Advanced</summary><p>MCP 2026-07-28 · Inventory digest</p><code>{{ inventory.schemaDigest }}</code></details>
-    <p>No computer can call these tools. Publication and access come after review.</p>
+    <p>Discovered definitions are held for review. Publication and access are managed below.</p>
   </section>
+  }
+  <oc-mcp-publication [serverId]="resolvedId()" [inventory]="inventory" (reviewed)="publicationReviewed.set($event)" (blocked)="publicationBlocked.set($event)" (reviewRequested)="check()" />
 }
-@if (!serverId && (phase() === 'needs_input' || phase() === 'failed')) { <button type="button" class="secondary" (click)="another()">Add another server</button> }
+@if (!serverId && !publicationBlocked() && (phase() === 'needs_input' || phase() === 'failed')) { <button type="button" class="secondary" (click)="another()">Add another server</button> }

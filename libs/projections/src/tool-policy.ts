@@ -1,4 +1,4 @@
-import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
+import { publicationSchema, getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
 import { z } from 'zod';
 
@@ -18,10 +18,25 @@ export function applyToolPolicy(state: ToolPolicy, event: EventEnvelope, sequenc
       accountMode: null, tools: tools.map(t => ({ name: t.name, revision: t.revision, reviewed: t.reviewed,
         readOnly: t.readOnly === true && t.destructive !== true, ...(t.costCents === 0 ? { costCents: 0 as const } : {}), mode: 'block',
         suggestion: t.readOnly === true && t.destructive !== true ? 'allow' : 'ask' })) };
+    delete next.publication;
     next.accountMode = z.enum(['none', 'personal', 'company']).nullable().parse(d['accountMode'] ?? null);
   }
-  if (event.type === 'mcp.server_published') next.published = true;
-  if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) next.published = false;
+  if (event.type === 'mcp.server_published') {
+    next.published = false;
+    const publication = publicationSchema.safeParse(d);
+    if (publication.success) {
+      const { desired, digest, changeRef } = publication.data;
+      const choices = new Map(desired.tools.map(t => [t.name, t]));
+      next = { ...next, connectionId: desired.connectionId, accountMode: desired.accountMode, publication: { digest, changeRef },
+        tools: state.tools.map(tool => {
+          const reviewed = choices.get(tool.name);
+          return reviewed?.revision === tool.revision ? { ...tool, ...reviewed, reviewed: true } : { ...tool, reviewed: false, mode: 'block' };
+        }) };
+    } else delete next.publication;
+  }
+  if (event.type === 'mcp.configuration_applied') next.published = matchesPublication(state, d);
+
+  if (['mcp.server_unpublished', 'mcp.server_rejected', 'mcp.tools_changed'].includes(event.type)) { next.published = false; delete next.publication; }
   if (event.type === 'mcp.tools_changed') next.tools = state.tools.map(t => ({ ...t, reviewed: false, mode: 'block' }));
   if (event.type === 'mcp.tool_mode_set') next.tools = applyMode(state, d);
   return toolPolicySchema.parse(next);
@@ -32,4 +47,8 @@ function applyMode(state: ToolPolicy, d: Record<string, unknown>): ToolPolicy['t
   const tool = new Map(state.tools.map(t => [t.name, t])).get(String(d['toolName']));
   if (!tool?.reviewed || tool.revision !== d['toolRevision']) return state.tools;
   return state.tools.map(t => t === tool ? { ...t, mode: z.enum(['allow', 'ask', 'block']).parse(d['mode']) } : t);
+}
+
+function matchesPublication(state: ToolPolicy, data: Record<string, unknown>) {
+  return !!state.publication && data['digest'] === state.publication.digest && data['changeRef'] === state.publication.changeRef;
 }

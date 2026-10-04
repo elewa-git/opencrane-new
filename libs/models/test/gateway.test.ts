@@ -851,16 +851,16 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       tools: [ { name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0 }, { name: 'read', revision: 'b'.repeat(64), reviewed: true, readOnly: true, costCents: 0 },
         { name: 'unpriced', revision: 'a'.repeat(64), reviewed: true },
         { name: 'new', revision: 'c'.repeat(64), reviewed: false } ] });
-    await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
+    await f.publish();
     for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
       const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
       await f.auth.handler.handle(event, f.db);
     }
     const call = async (name: string, extra = {}, patch = {}) => {
       const response = await fetch(`http://127.0.0.1:${f.options.port}/mcp/fixture/installed`, { method: 'POST', headers: { ...f.headers,
-        'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': name, ...extra }, body: JSON.stringify({ jsonrpc: '2.0', id: 1,
-        method: 'tools/call', params: { name, arguments: { note: 'secret-canary' } },
-        _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28', 'io.modelcontextprotocol/client-capabilities': {} }, ...patch }) });
+        'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': name, ...extra }, body: JSON.stringify({ jsonrpc: '2.0', id: 1,
+        method: 'tools/call', params: { name, arguments: { note: 'secret-canary' },
+        _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } }, ...patch }) });
       return { status: response.status, text: await response.text() };
     };
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(0);

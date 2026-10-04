@@ -6,7 +6,7 @@ import type { Projection } from './runner.ts';
 
 const eventTypes = new Set<string>([
   'mcp.server_registered', 'mcp.server_discovered', 'mcp.server_rejected',
-  'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
+  'mcp.configuration_applied', 'mcp.server_published', 'mcp.server_unpublished', 'mcp.tool_mode_set', 'mcp.tools_changed',
 ]);
 type ToolMode = 'allow' | 'ask' | 'block';
 
@@ -96,7 +96,7 @@ function mcpCatalogueProjection(name: string, tables: McpCatalogueTables): Proje
         [event.silo, serverId, field(data, 'toolName'), field(data, 'mode')]);
         return;
       }
-      const lifecycle = event.type.slice('mcp.'.length).replace('server_', '');
+      const lifecycle = lifecycleFor(event.type, policy.published);
       const toolCount = event.type === 'mcp.server_discovered' ? numberField(data, 'toolCount') : null;
       const info = event.type === 'mcp.server_discovered' ? serverInfo(data) : undefined;
       await db.query(`UPDATE ${tables.catalogue} SET lifecycle = $3,
@@ -146,7 +146,8 @@ function status(lifecycle: string, changedAt: string): IntegrationRow['status'] 
     registered: ['checking', 'Applying / checking', 'Validating server…'],
     discovered: ['needs_input', 'Needs input', 'Pending review'],
     rejected: ['failed', 'Failed', 'Validation failed; review before trying again'],
-    published: ['ready', 'Ready', `Published ${time}`],
+    published: ['checking', 'Applying', 'Waiting for gateway acknowledgement'],
+    ready: ['ready', 'Ready', `Applied ${time}`],
     unpublished: ['disabled', 'Disabled', `Unpublished ${time}`],
     tools_changed: ['needs_input', 'Needs input', 'Pending review · tools changed'],
   };
@@ -173,4 +174,8 @@ export function mapMcpCatalogueRows(rows: McpCatalogueRow[]): IntegrationRow[] {
         : status(row.lifecycle, row.changed_at),
     };
   });
+}
+
+function lifecycleFor(type: string, published: boolean) {
+  return type === 'mcp.configuration_applied' ? (published ? 'ready' : 'published') : type.slice('mcp.'.length).replace('server_', '');
 }

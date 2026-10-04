@@ -1,3 +1,4 @@
+import { desiredMcpSchema } from '../src/publication.ts';
 import { record as asRecord } from './record.ts';
 // Security rules from docs/architecture/events.md rule 5 and plan.md,
 // checked as schema rules:
@@ -350,7 +351,9 @@ const RISKY_FIELD_NAME = new RegExp(
 // The risky-looking names that are approved: encrypted text and its key id, a
 // secret reference, and a message's id. Any `...Digest` is approved too (a
 // hash of a value, not the value). Matching is exact, so `Ciphertext` is not.
-const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens']);
+const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens',
+  // Reviewed gateway metadata stores constrained header names and paths, never header values.
+  'headerNames', 'headerParameters', 'headerName']);
 
 // Declared field names, at any depth, that are risky and not approved. This is a
 // net for accidents, not proof: a field with an innocent name still passes by
@@ -497,4 +500,18 @@ describe('audit contracts reject secret canaries', () => {
       });
     }
   }
+});
+
+
+it('publication metadata allows protocol header names and property paths, never header values', () => {
+  const desired = { schemaDigest: 'a'.repeat(64), connectionId: 'installed', accountMode: 'none', tools: [],
+    target: 'https://mcp.example.test', route: '/mcp/fixture/installed', cel: 'false', authz: '/authorize/mcp/fixture/installed',
+    headerNames: ['content-type', 'mcp-param-region'], headerParameters: [{ tool: 'read', path: ['region'], headerName: 'mcp-param-region', types: ['string'] }],
+    transport: 'guarded-https', version: '2026-07-28' };
+  expect(desiredMcpSchema.safeParse(desired).success).toBe(true);
+  for (const value of ['authorization', 'cookie', 'Bearer private-value', 'mcp-param-region: secret']) {
+    expect(desiredMcpSchema.safeParse({ ...desired, headerNames: [value] }).success).toBe(false);
+    expect(desiredMcpSchema.safeParse({ ...desired, headerParameters: [{ ...desired.headerParameters[0], headerName: value }] }).success).toBe(false);
+  }
+  expect(desiredMcpSchema.safeParse({ ...desired, headerParameters: [{ ...desired.headerParameters[0], value: 'private' }] }).success).toBe(false);
 });

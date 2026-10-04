@@ -14,11 +14,7 @@ const input = z.object({ commandId: id, expectedSequence: z.int().nonnegative(),
   toolName: z.string().min(1).max(200), toolRevision: z.string().regex(/^[a-f0-9]{64}$/u), mode: z.enum(['allow', 'ask', 'block']) }).strict();
 export async function setToolPolicy(store: EventStore, binding: Binding, memberId: string, serverId: string, raw: unknown) {
   const command = input.parse(raw);
-  if (!(await memberAuthorisation(binding).check(memberId, 'admin')).allowed) throw new Error('Access changed');
-  const membership = await history(store, `member-${memberId}`, binding.silo);
-  const last = membership.filter(r => ['member.joined', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
-  const member = z.record(z.string(), z.unknown()).parse(last?.event.data);
-  if (!['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new Error('Access changed');
+  await requireMcpAdmin(store, binding, memberId);
   const rows = await history(store, `mcp-${serverId}`, binding.silo);
   const payload = { serverId, connectionId: command.connectionId, toolName: command.toolName,
     toolRevision: command.toolRevision, mode: command.mode, setBy: memberId };
@@ -34,4 +30,12 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
   const event = { ...envelope(binding.silo, `mcp-${serverId}`, 'mcp.tool_mode_set', payload, command.commandId),
     principal: { kind: 'human' as const, id: memberId }, source: 'opencrane-server' };
   return store.append({ event, expectedSequence: command.expectedSequence });
+}
+
+export async function requireMcpAdmin(store: EventStore, binding: Binding, memberId: string) {
+  if (!(await memberAuthorisation(binding).check(memberId, 'admin')).allowed) throw new Error('Access changed');
+  const membership = await history(store, `member-${memberId}`, binding.silo);
+  const last = membership.filter(r => ['member.joined', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
+  const member = z.record(z.string(), z.unknown()).parse(last?.event.data);
+  if (!['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new Error('Access changed');
 }

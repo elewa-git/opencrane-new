@@ -15,3 +15,5 @@ article { border-top: 1px solid var(--oc-border-default); padding: 14px 0; } cod
 summary { min-height: 44px; align-content: center; cursor: pointer; }
 :focus-visible { outline: 2px solid var(--oc-accent-dark); outline-offset: 2px; }
 @media (max-width: 600px) { .sources, .steps { flex-direction: column; gap: 10px; } form, section { padding: 16px; } button { width: 100%; } }
+
+.steps [aria-current] { font-weight: 700; }

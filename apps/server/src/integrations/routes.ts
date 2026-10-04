@@ -1,3 +1,4 @@
+import { publicationRequest } from './publication.ts';
 import { installWorker } from './install-worker.ts';
 import type { RemoteNetwork } from './remote.ts';
 import { registerRemote, discoveryStatus, remoteReference } from './registration.ts';
@@ -30,7 +31,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
   if (options?.store && options.discovery) installWorker(app, options.store, options.silo, options.discovery).start();
   const authorisation = options && memberAuthorisation(options.binding);
   const now = options?.now ?? (() => new Date());
-  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/discovery', '/api/org/integrations/discovery']) app.route({ method: !path.endsWith('/discovery') ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
+  for (const path of ['/api/org/integrations', '/api/org/models', '/api/org/integrations/:serverId/tools', '/api/org/integrations/:serverId/discovery', '/api/org/integrations/discovery', '/api/org/integrations/:serverId/publication', '/api/org/integrations/:serverId/grants', '/api/org/integrations/:serverId/remove']) app.route({ method: !path.endsWith('/discovery') ? ['GET', 'POST'] : ['GET'], url: path, handler: async (request, reply) => {
     const session = sessionFor(request, config, now());
     if (!session) return reply.code(401).send({ status: 'refused', reason: 'no_session' });
     if (!options || !authorisation || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
@@ -56,6 +57,7 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
 }
 
 async function authorisedRequest(path: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig, options: IntegrationOptions, memberId: string, now: Date) {
+      if (['/publication', '/grants', '/remove'].some(suffix => path.endsWith(suffix))) return publicationRequest(request, reply, config, options, memberId);
       if (path.endsWith('/discovery')) {
         if (!options.store) return reply.code(503).send({ status: 'unavailable' });
         const { serverId } = path === '/api/org/integrations/discovery'
@@ -92,6 +94,7 @@ async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthC
 }
 
 function routeError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+      if (error instanceof Error && ['Review stale', 'Review required'].includes(error.message)) return reply.code(409).send({ status: 'conflict' });
       if (error instanceof z.ZodError || error instanceof Error && error.message === 'invalid_endpoint') return reply.code(400).send({ status: 'invalid_request' });
       if (error instanceof Error && error.message === 'Access changed') return reply.code(403).send({ status: 'refused' });
       request.log.error({ operation: 'mcp-catalogue.read' }, 'MCP catalogue unavailable');

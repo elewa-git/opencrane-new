@@ -231,7 +231,8 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `mcp.server_discovered` | reaction | catalogue (valid tools, schema digests, optional server identity and safe per-tool rejection reasons) | — |
 | `mcp.server_rejected` | reaction (validation failed) | catalogue (rejected, with reason) | notify the admin |
 | `mcp.tool_mode_set` | Owner/Admin | tool modes per installed connection and tool revision | next ext_authz call reads current policy |
-| `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue | regenerate gateway config |
+| `mcp.configuration_applied` | gateway reconciler | catalogue (Ready only for the current change reference and digest) | — |
+| `mcp.server_published` / `mcp.server_unpublished` | admin | catalogue (desired reviewed generation / disabled) | reconcile gateway config |
 | `mcp.tools_changed` | drift check | catalogue | quarantine the server in gateway config until re-reviewed |
 | `grant.given` / `grant.revoked` | admin or owner; initial model grants from reaction or upgrade | grants | OpenFGA tuples |
 | `connection.created` | person | connections (secret *reference* only) | — (the credential is written to the secret store inside the command, before the append; a clean-up job removes orphaned secrets) |
@@ -466,3 +467,23 @@ Every newly discovered tool is unreviewed and blocked. Discovery does not create
 an installed connection, publish a route or grant access. Rejection reason
 `connection_required` projects Needs input, awaiting P3-9's scoped validation
 connection; other rejection reasons project Failed.
+
+### P3-4 publication generations
+
+`mcp.server_published` carries `changeRef`, `digest` and `desired`: the reviewed
+inventory digest, connection/account mode, per-tool revisions and modes, guarded
+HTTPS target, route, CEL rule, ext_authz path and outbound header allowlist.
+`digest` hashes the lossless JSON form of `desired`. Legacy publications remain
+readable but cannot grant execution. Publishing makes the register Applying;
+only `mcp.configuration_applied` naming the current reference and digest makes
+it Ready. Discovery, rejection, drift and removal invalidate that authority.
+
+The gateway reconciler rebuilds a complete generation, compares effective config
+and active route policies, then conditionally records acknowledgement. Replay
+only folds events; it never restarts a gateway or invokes a tool. The ext_authz
+path binds the digest, so a stale gateway route cannot borrow current authority.
+
+Grants remain independent `grant.given` / `grant.revoked` events on the existing
+resource grant stream. OpenFGA projects them; admission requires current receipts
+and requester/assistant permission. Publication status reads the change reference
+from events after a lost reply. It never starts another install.

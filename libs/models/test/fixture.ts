@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, expect } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
@@ -15,7 +15,7 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { HandlerRuntime, dispatch, provisionDispatcher } from '@opencrane/handlers';
 import { conversationKeys, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
-import { modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage, models, settlementHandler, startDecision, startGateway } from '../src/index.ts';
+import { publishMcp, currentPublication, acknowledgeMcp, readToolPolicy, modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage, models, settlementHandler, startDecision, startGateway } from '../src/index.ts';
 
 export let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
@@ -120,7 +120,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
-    mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed', upstream: `127.0.0.1:${address.port}` }],
+    mcpRoutes: [] as { serverId: string; connectionId: string; upstream: string; publication: NonNullable<Awaited<ReturnType<typeof currentPublication>>> }[],
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }) };
   let gateway = await startGateway(options);
   const runner = new ProjectionRunner(db, nats.store, logger); await runner.initialise(budgets);
@@ -136,40 +136,4 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
-    credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
-    decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
-    usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
-    reject: (status: number) => { rejection = status; },
-    admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
-    async call(extra = {}, patch: Record<string, unknown> = {}) {
-      const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
-      return { status: response.status, text: await response.text() };
-    },
-    async settled() {
-      await until(async () => { await ingestUsage(actor, options.usageFile); return actor.state.reservations.every(r => r.settledCents !== undefined); });
-      await runner.run(budgets);
-    },
-    async slowDecisions() {
-      await gateway.stop();
-      // Keep the real gateway, but let the decision's own freshness fence end this request.
-      const config = (await readFile(options.configFile, 'utf8')).replaceAll('"extAuthz":{',
-        '"extAuthz":{"policies":{"http":{"requestTimeout":"10s"}},');
-      await writeFile(options.configFile, config);
-      const child = spawn(options.binary, ['-f', options.configFile], { stdio: 'ignore' });
-      const exited = once(child, 'exit');
-      gateway = { healthy: () => child.exitCode === null, stop: async () => { child.kill(); await exited; } };
-      await until(async () => {
-        try { return (await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok; }
-        catch { return false; }
-      });
-    },
-    // Replay checks drain completed requests; crash checks explicitly request SIGKILL.
-    async restart(signal: NodeJS.Signals = 'SIGTERM') { await gateway.stop(signal); gateway = await startGateway(options); },
-    async close() {
-      await gateway.stop(); await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
-      await stopDispatch();
-      await runtime.stop(); await Promise.all(observations); await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true });
-    },
-  };
-}
+  return { takeMcpPermit: decision.takeMcpPermit, dbUrl: dbs.queue.options.connectionString!, keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },

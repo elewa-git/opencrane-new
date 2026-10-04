@@ -1,8 +1,11 @@
+import { configurationAppliedSchema } from './publication.ts';
 import { event } from './definition.ts';
 import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 export const mcpEvents = [
+  event('mcp.configuration_applied', 'mcp', 'The gateway acknowledged the exact reviewed configuration digest.', configurationAppliedSchema,
+    { serverId: 'mcp_1', changeRef: 'review_1', digest: DIGEST_EXAMPLE }),
   // MCP catalogue, grants and connections
   event(
     'mcp.server_registered',

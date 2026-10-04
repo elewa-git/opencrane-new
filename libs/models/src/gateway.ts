@@ -1,3 +1,6 @@
+import { createServer } from 'node:net';
+import { losslessJson } from './lossless-json.ts';
+import type { McpPublication } from './publication.ts';
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
@@ -12,27 +15,31 @@ function logNumber(line: string, field: string): number | undefined {
   const value = new RegExp(`\\b${field}=(\\d+)`, 'u').exec(line)?.[1];
   return value === undefined ? undefined : Number(value);
 }
-interface McpRoute { serverId: string; connectionId: string; upstream: string }
+interface McpRoute { serverId: string; connectionId: string; upstream: string; publication?: McpPublication }
 function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
   const segment = z.string().regex(/^[\w-]{1,200}$/u);
   segment.parse(route.serverId); segment.parse(route.connectionId);
-  const path = `/mcp/${route.serverId}/${route.connectionId}`;
-  return { name: `mcp-${route.serverId}-${route.connectionId}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
+  const publication = route.publication;
+  const parameterHeaders = publication?.desired.headerParameters.map(p => p.headerName) ?? [];
+  const path = publication?.desired.route ?? `/mcp/${route.serverId}/${route.connectionId}`;
+  return { name: `mcp-${route.serverId}-${publication?.digest ?? 'unpublished'}`, gateways: 'default', matches: [{ path: { exact: path }, method: 'POST' }],
     policies: {
+      authorization: { rules: [publication?.desired.cel ?? 'false'] },
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
         location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
       extAuthz: { host: new URL(decisionUrl).host,
-        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-tool-name'],
+        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-name', 'mcp-session-id', ...parameterHeaders],
         includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
-        protocol: { http: { path: JSON.stringify(`/authorize${path}`), includeResponseHeaders: ['x-request-id'] } },
+        protocol: { http: { path: JSON.stringify(`${publication?.desired.authz ?? `/authorize${path}`}/${publication?.digest ?? 'unpublished'}`), includeResponseHeaders: ['x-request-id', 'x-mcp-permit', ...parameterHeaders] } },
         failureMode: { denyWithStatus: 503 } },
-      transformations: { request: { replace: '{"content-type":"application/json", "accept":"application/json", "mcp-protocol-version":request.headers["mcp-protocol-version"], "mcp-method":request.headers["mcp-method"], "mcp-tool-name":request.headers["mcp-tool-name"], "x-request-id":request.headers["x-request-id"]}' } },
+      transformations: { request: { replace: `{${(publication?.desired.headerNames ?? []).map(name =>
+        `${JSON.stringify(name)}:${name === 'content-type' || name === 'accept' ? '"application/json"' : `("${name}" in request.headers ? request.headers["${name}"] : "")`}`).join(',')}}` } },
     }, backends: [{ host: route.upstream }] };
 }
-function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string, mcpRoutes: McpRoute[] = []) {
+function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string, mcpRoutes: McpRoute[] = [], adminPort?: number) {
   const decision = new URL(decisionUrl);
   return {
-    config: { adminAddr: 'off', statsAddr: 'off', readinessAddr: `127.0.0.1:${readinessPort}` },
+    config: { adminAddr: adminPort ? `127.0.0.1:${adminPort}` : 'off', statsAddr: 'off', readinessAddr: `127.0.0.1:${readinessPort}` },
     gateways: { default: { port } },
     frontendPolicies: { accessLog: { add: { reservation: 'extauthz.reservationId',
       inputTokens: 'llm.inputTokens', outputTokens: 'llm.outputTokens',
@@ -101,7 +108,20 @@ export async function startGateway(options: { binary: string; configFile: string
   const expected = process.platform === 'linux' ? 'daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b'
     : 'da432d35bd696da0564f7b2b6bbc783542b6b9c616d6c0c4d4c3daef9dfa11a1';
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
-  await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream, options.mcpRoutes)), { mode: 0o600 });
+  const socket = createServer(); socket.listen(0, '127.0.0.1'); await once(socket, 'listening');
+  const address = socket.address(); if (!address || typeof address === 'string') throw new Error('Admin port unavailable');
+  const adminPort = address.port; await new Promise<void>(resolve => socket.close(() => resolve()));
+  const config = gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream, options.mcpRoutes, adminPort);
+  const expectedDigest = losslessJson(JSON.stringify(config)).digest;
+  await writeFile(options.configFile, JSON.stringify(config), { mode: 0o600 });
+  async function acknowledgements() {
+    const response = await fetch(`http://127.0.0.1:${adminPort}/api/config/effective`, { signal: AbortSignal.timeout(1000) });
+    if (!response.ok || losslessJson(await response.text()).digest !== expectedDigest) throw new Error('Gateway configuration not acknowledged');
+    const dumpResponse = await fetch(`http://127.0.0.1:${adminPort}/config_dump`, { signal: AbortSignal.timeout(1000) });
+    const dump: unknown = await dumpResponse.json();
+    verifyLoadedRoutes(dump, options.mcpRoutes ?? [], options.decisionUrl, options.issuer);
+    return (options.mcpRoutes ?? []).flatMap(r => r.publication ? [{ serverId: r.serverId, changeRef: r.publication.changeRef, digest: r.publication.digest }] : []);
+  }
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -132,11 +152,5 @@ export async function startGateway(options: { binary: string; configFile: string
           const probe = connect(options.port, '127.0.0.1');
           probe.setTimeout(1000, () => probe.destroy(new Error('Gateway listener timed out')));
           await once(probe, 'connect').finally(() => probe.destroy());
-          return { stop, healthy: () => child.exitCode === null && child.signalCode === null && !failed };
-        }
-      } catch { /* Listener is still starting. */ }
-      await delay(50);
-    }
-    throw new Error('Gateway readiness timed out');
-  } catch (error) { await stop(); throw error; }
-}
+          await acknowledgements();
+          return { stop, acknowledgements, healthy: () => child.exitCode === null && child.signalCode === null && !failed };

@@ -13,3 +13,6 @@ export { approvalCards, readApproval, decideApproval } from './approvals.ts';
 export { authorityFence, currentAuthority } from './authority.ts';
 
 export { losslessJson } from './lossless-json.ts';
+export { publishMcp, publicationStatus, acknowledgeMcp, currentPublication, removeMcp, mcpGrants, grantMcp, type McpPublication } from './publication.ts';
+
+export { mcpHeaders } from './mcp-headers.ts';
