@@ -1,5 +1,86 @@
 # P2-6 upload evidence
 
+## Rebase and capped qualification — 4 October 2026
+
+**Overall: PARTIAL. Real-model requalification: NOT RUN.** The new authorisation
+allows one chat turn with a hard five-euro-cent cap and requires stopping if its
+reservation would exceed that cap. The local preflight returned **502 cents**
+for `reservationCents('gpt-6.1-sol', 2000)`. Admission reserves the full supported
+1,050,000-token context at the long-context tariff; the computer proxy sets the
+output bound to 2,000 tokens. No chat turn or provider request was sent, and no
+credentials were read for this preflight. No reservation was actually created.
+The previous three-cent failed turn remains the only paid attempt in this receipt.
+
+| Requested evidence | Observed result |
+| --- | --- |
+| Planned question | What is the project code in the attached PDF? |
+| Expected answer, present only in the test PDF | Willow-47 |
+| Actual answer / correctness | No answer; NOT RUN because the reservation exceeds the authorised cap |
+| Input / output tokens | 0 / 0; no provider request |
+| Cost / authorised cap | 0 / 5 euro cents |
+| Reservation preflight | 502 euro cents; refused locally before a chat turn |
+
+Source: `4847297` rebased onto `origin/main` `b8aee57`, producing `ac5a8d2`.
+The rebase completed, `origin/main` is an ancestor, and no rebase state remains.
+Conflict resolution preserves main's audit routes/workers, budget attribution and
+default-group migration alongside uploads and the custom-tool schema fix.
+
+Source checks: **PASS** `npm run lint`, `npm run typecheck` and
+`npm run check:events` (81 event types). With the disposable PostgreSQL service on
+loopback port 55432, the focused upload, bridge-proxy and gateway run initially
+had 72 passed, one failed and one skipped test. The upload fixture lacked the
+personal paying group now required by main; it timed out waiting for turn
+completion. Adding the same budget setup used by main's bridge tests fixed it:
+all seven upload tests pass on rerun. The gateway and bridge-proxy suites passed
+on the first run; the paid-provider test stayed skipped. Final lint/typecheck
+were rerun after the fixture change and passed. The full suite was NOT RUN in
+this requalification. No new dependency or runtime behaviour was added.
+
+Local logs: `/tmp/upload-rebased-focused.log`,
+`/tmp/upload-rebased-upload-fixed.log`, `/tmp/upload-rebased-lint-final.log`,
+`/tmp/upload-rebased-typecheck-final.log` and `/tmp/upload-rebased-events.log`.
+
+Owner-stack takeover: stopped `/home/jente/dev/opencrane-new` successfully,
+wrote the upload worktree path to `stack-owner` with `printf '%s'` (verified no
+trailing newline), and completed `npm ci`. The first `up.sh` launch failed before
+the journey because this worktree has no `.keys/.zitadel-key`. The configured
+launch used `ZITADEL_KEY_FILE` to reference the existing key in the original
+checkout, without copying or displaying it. Services started, but the default
+journey **FAILED** at `owner 390px login`: it could not find the SSO button on
+the home page. This was not a readiness-only failure, so no journey retry was
+made. This was a warm installation; it does not qualify a fresh upload journey.
+Logs: `/tmp/upload-owner-main-down.log`, `/tmp/upload-owner-npm-ci.log`,
+`/tmp/upload-owner-up.log`, `/tmp/upload-owner-up-configured.log` and the sanitised
+`/tmp/upload-owner-journey-result.json`.
+
+Handback: stopped the upload stack successfully and restored the original
+checkout's owner marker with `printf '%s'`, again verifying the exact bytes.
+The first `up.sh --fresh` in `/home/jente/dev/opencrane-new` **FAILED** at the same
+initial SSO-button check, while the HTTPS endpoint returned 200. An anonymous
+browser diagnostic found the concrete rendering fault: the generated Vite cache
+for `@opencrane/protocol` lacked main's `auditResponseSchema` export. Stopped the
+stack and removed only `apps/web/.angular/cache` in the original checkout before
+repeating the fresh handback. This was a cache repair, not a readiness retry or a
+source change. Failed-attempt logs: `/tmp/upload-main-handback-20261004.log` and
+`/tmp/upload-main-handback-failure.json`.
+
+The repaired fresh run also **FAILED**, later in the journey: both browser chat
+widths completed, then `journey.ts:169` / `chat-journey.ts:32` timed out waiting
+for the HTTP chat's first message delta. The event ledger records
+`decision.recorded` with `request_refused`, not budget exhaustion. Four preceding
+stub calls settled at one fixture cent each; these are not provider spend. No
+further journey retry was made. Log: `/tmp/upload-main-handback-cache-fixed.log`;
+sanitised result: `/tmp/upload-main-handback-cache-fixed-result.json`.
+
+**Restoration health: PASS; complete fresh journey: FAIL.** The original checkout
+owns the running stack, `status.sh` exits zero, and
+`https://ocn-dev.tail00285e.ts.net/` returns HTTP 200. An anonymous Chromium check
+confirms the SSO button renders after cache repair. The original checkout is
+clean; journey-generated screenshots were retained under `/tmp` before restoring
+the two tracked images. Health log:
+`/tmp/upload-main-restored-status-20261004.log`. The requested complete handback
+PASS and real-model PDF acceptance remain unproven.
+
 ## Completion work — 3 October 2026
 
 **Overall: PARTIAL.** Upload and stub qualification are separate from the one

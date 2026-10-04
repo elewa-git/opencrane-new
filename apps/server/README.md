@@ -376,6 +376,7 @@ until P3-9; publication, grants and calls are outside this ticket. The local HTT
 DNS rebinding and browser fixtures use no external MCP endpoints. Run
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/inventory.test.ts apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts --maxWorkers=2`.
 See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).
+
 ## Conversation uploads
 
 The [upload API](../../docs/architecture/upload-api.md) documents raw-byte POST

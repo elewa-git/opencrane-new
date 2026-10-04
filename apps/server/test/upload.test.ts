@@ -60,7 +60,7 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
   const { databases, openfga } = await import('@opencrane/authz/testing');
   const { createStore, memberAuthorisation } = await import('@opencrane/authz');
   const { pgDb, ProjectionRunner, members, conversations, files, connectMemberFeed } = await import('@opencrane/projections');
-  const { envelope, history } = await import('@opencrane/models');
+  const { BudgetActor, envelope, history } = await import('@opencrane/models');
   const { createLogger } = await import('@opencrane/observability');
   const { encodeSession } = await import('@opencrane/auth');
   const { buildServer } = await import('../src/server.ts');
@@ -70,6 +70,7 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
   const config = { ...testAuthConfig(), expectedOrgId: 'org' }, binding = await createStore(fga.apiUrl, 'test');
   const db = pgDb(dbs.queue), auth = memberAuthorisation(binding), feed = await connectMemberFeed(dbs.queue.options.connectionString!);
   const options = { silo: 'test', store: nats.store, db, binding, feed, objects: services.objects, scan: services.scan };
+  await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
   const runner = new ProjectionRunner(db, nats.store, createLogger('files', { level: 'silent' }));
   const app = buildServer(config, { files: options });
   const headers = { origin: new URL(config.redirectUri).origin, 'content-type': 'application/octet-stream', 'x-file-name': 'notes.txt', 'idempotency-key': 'upload',
