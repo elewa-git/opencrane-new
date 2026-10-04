@@ -10,7 +10,7 @@ import { memberAuthorisation } from '@opencrane/authz';
 import { connectEventStore } from '@opencrane/event-store';
 import { envelope, history, models } from '@opencrane/models';
 import { connectProjectionDb } from '@opencrane/projections';
-import { authEnv, readEnv } from './config.ts';
+import { authEnv, directory, readEnv } from './config.ts';
 import { secondary, stackId } from './identity.ts';
 import { browserSessions } from './browser-signin.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
@@ -34,6 +34,32 @@ async function append(type: string, subject: string, data: Record<string, unknow
   const event = envelope(silo, subject, type, data);
   const result = await events.store.append({ event, expectedSequence: (await history(events.store, subject, silo)).at(-1)?.sequence ?? 0 });
   assert.equal(result.status, 'appended');
+}
+async function cpuPressureSomeAvg10() {
+  const pressure = await readFile('/proc/pressure/cpu', 'utf8');
+  const someLine = pressure.split('\n').find((line) => line.startsWith('some '));
+  assert(someLine, 'CPU pressure has a some line');
+  const avg10 = someLine.match(/(?:^| )avg10=([\d.]+)/u)?.[1];
+  assert(avg10, 'CPU pressure has avg10');
+  return Number(avg10);
+}
+async function waitForLowCpuPressure() {
+  const deadline = Date.now() + 120_000;
+  let avg10 = await cpuPressureSomeAvg10();
+  while (avg10 >= 20 && Date.now() < deadline) {
+    await delay(1000);
+    avg10 = await cpuPressureSomeAvg10();
+  }
+  return avg10;
+}
+async function serverRunDelay() {
+  const pidLine = await readFile(`${directory}/server.pid`, 'utf8');
+  const pid = pidLine.split(' ')[0];
+  assert(pid, 'Secondary server PID is recorded');
+  const schedstat = await readFile(`/proc/${pid}/schedstat`, 'utf8');
+  const runDelay = schedstat.trim().split(/\s+/u)[1];
+  assert(runDelay, 'Server schedstat has a run-delay field');
+  return BigInt(runDelay);
 }
 try {
   browser = await browserSessions(config, origin);
@@ -62,9 +88,13 @@ try {
     auth.use('person', member, 'model', model.id), auth.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'member and assistant model grants');
   for (let run = 1; run <= 10; run++) {
+    const cpuPressureSomeAvg10 = await waitForLowCpuPressure();
+    const serverRunDelayBefore = await serverRunDelay();
     const page: Page = browser.memberPages[(run - 1) % 2]!;
     const width = page.viewportSize()!.width, started = performance.now(), beforeLoad = loadavg();
     let result = 'PASS', failure: string | undefined;
+    let journeyPauses: unknown;
+    let journeyPauseMs: unknown;
     try {
       const conversationId = randomUUID();
       const response: APIResponse = await page.request.post(`${origin}/api/conversations`, { headers: { origin },
@@ -76,14 +106,23 @@ try {
       await page.waitForFunction(() => !document.querySelector('.skeleton'));
       await browserLiveViewJourney(page, origin, computer, { member, admin, silo, store: events.store, append, until,
         desktopAllowed: async () => (await auth.desktop(member, computer!.computer_id)).allowed });
-      const receipt = JSON.parse(await readFile(`docs/process/live-view/conversation-${width}.json`, 'utf8')) as unknown;
-      await writeFile(`${output}/run-${run}.json`, JSON.stringify(receipt, null, 2) + '\n');
+      const journeyReceipt = JSON.parse(await readFile(`docs/process/live-view/conversation-${width}.json`, 'utf8')) as {
+        pauses?: unknown; pauseMs?: unknown;
+      };
+      await writeFile(`${output}/run-${run}.json`, JSON.stringify(journeyReceipt, null, 2) + '\n');
+      journeyPauses = journeyReceipt.pauses;
+      journeyPauseMs = journeyReceipt.pauseMs;
     } catch (error) {
       result = 'FAIL'; failure = error instanceof Error ? error.message : String(error);
       await page.screenshot({ path: `${output}/run-${run}-failure.png` });
       process.exitCode = 1;
     }
-    const receipt = { date: new Date().toISOString(), run, width, stackId, result, beforeLoad, afterLoad: loadavg(),
+    const serverRunDelayAfter = await serverRunDelay();
+    const receipt = { date: new Date().toISOString(), run, width, stackId, result, beforeLoad,
+      cpuPressureSomeAvg10, serverRunDelayDelta: String(serverRunDelayAfter - serverRunDelayBefore),
+      afterLoad: loadavg(),
+      ...(journeyPauses === undefined ? {} : { pauses: journeyPauses }),
+      ...(journeyPauseMs === undefined ? {} : { pauseMs: journeyPauseMs }),
       durationMs: Math.round(performance.now() - started), ...(failure ? { failure } : {}) };
     await appendFile(`${output}/runs.jsonl`, JSON.stringify(receipt) + '\n');
     console.log(JSON.stringify(receipt));

@@ -2,17 +2,17 @@
 # Run one Codex task headless on the dev box and keep its log.
 # Usage: tools/fleet/codex-task.sh <name> <workdir> <prompt-file> [effort] [model]
 #   effort: low | medium | high (default high)
-#   model:  gpt-6-astra (default; design, hard builds, reviews)
-#           gpt-6.1-sol (regular builds; reviews of astra) | gpt-6-luna (mechanical edits)
+#   model:  gpt-6.1-sol (default; regular builds and reviews)
+#           gpt-6-luna (mechanical edits)
 # Logs go to $FLEET_LOGS/<name>/ (default ~/.fleet): events.jsonl, stderr.log,
 # last.md (Codex's final message) and exit (its exit code).
 # On the dev box Codex runs without its sandbox: the box is disposable and
 # agents have full control of it by the owner's decision.
 set -u
-NAME="$1"; WORKDIR="$2"; PROMPT="$3"; EFFORT="${4:-high}"; MODEL="${5:-gpt-6-astra}"
+NAME="$1"; WORKDIR="$2"; PROMPT="$3"; EFFORT="${4:-high}"; MODEL="${5:-gpt-6.1-sol}"
 OUT="${FLEET_LOGS:-$HOME/.fleet}/$NAME"; mkdir -p "$OUT"
 cd "$WORKDIR" || exit 2
-codex exec --ignore-user-config -m "$MODEL" -c model_reasoning_effort="$EFFORT" \
+nice -n 10 ionice -c3 codex exec --ignore-user-config -m "$MODEL" -c model_reasoning_effort="$EFFORT" \
   --dangerously-bypass-approvals-and-sandbox \
   -C "$WORKDIR" --json -o "$OUT/last.md" "$(cat "$PROMPT")" < /dev/null > "$OUT/events.jsonl" 2> "$OUT/stderr.log"
 echo $? > "$OUT/exit"

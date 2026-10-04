@@ -3,6 +3,7 @@ import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { open, readFile, rm, stat } from 'node:fs/promises';
+import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Pool } from 'pg';
@@ -63,6 +64,7 @@ async function start(name: string, args: string[], env: Record<string, string>) 
       stdio: ['ignore', log.fd, log.fd] });
     await once(child, 'spawn');
     const pid = child.pid!;
+    if (name === 'web') setPriority(pid, 10);
     await save(`${name}.pid`, `${pid} ${await fingerprint(pid)}`);
     child.unref();
   } finally { await log.close(); }
