@@ -1,4 +1,4 @@
-@if (workspacePage) { <oc-workspace /> } @else if (auditConversation) { <oc-audit [conversationId]="auditConversation" /> } @else if (!orgPage) {
+@if (claimPage) { <oc-claim /> } @else if (workspacePage) { <oc-workspace /> } @else if (auditConversation) { <oc-audit [conversationId]="auditConversation" /> } @else if (!orgPage) {
   <oc-sign-in />
 } @else { <div class="app-frame">
   <header class="mobile-bar">

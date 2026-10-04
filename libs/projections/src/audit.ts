@@ -5,7 +5,7 @@ import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 
 // Free text never enters this projection, including approval reasons and tool arguments.
-const families = /^(decision\.|budget\.(reserved|settled|ceiling_set|exhausted)|effect\.|approval\.|tool\.approval_requested|credential\.released|mcp\.|connection\.|egress\.|takeover\.|security\.alert_raised|gateway\.observation_recorded|agent\.(command_ran|file_changed)|member\.(joined|role_changed|removed)|team\.|assistant\.|grant\.|computer\.(claimed|ready|suspended|resumed|lost|retired))/u;
+const families = /^(silo\.owner_bootstrapped|decision\.|budget\.(reserved|settled|ceiling_set|exhausted)|effect\.|approval\.|tool\.approval_requested|credential\.released|mcp\.|connection\.|egress\.|takeover\.|security\.alert_raised|gateway\.observation_recorded|agent\.(command_ran|file_changed)|member\.(joined|role_changed|removed)|team\.|assistant\.|grant\.|computer\.(claimed|ready|suspended|resumed|lost|retired))/u;
 const identifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 const safeId = (value: unknown) => identifier.safeParse(value).data;
 const amount = (value: unknown) => z.number().int().nonnegative().safe().safeParse(value).data;

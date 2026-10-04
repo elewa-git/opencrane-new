@@ -39,3 +39,4 @@ export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema } from '
 export { fileUploadedDataSchema, fileRejectedDataSchema, fileDeliveredDataSchema } from './file-events.ts';
 
 export { effectResolvedDataSchema, effectUncertainDataSchema } from './data.ts';
+export { siloOwnerBootstrappedDataSchema } from './identity-events.ts';

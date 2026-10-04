@@ -1,0 +1,33 @@
+<main>
+  <a class="brand" href="/">OpenCrane</a>
+  <section aria-labelledby="claim-heading">
+    @if (state() === 'claimed') {
+      <h1 id="claim-heading">You are the silo owner</h1>
+      <p>Your account is recorded as the owner. Your assistant and permissions are being prepared.</p>
+      <a class="button" href="/workspace">Open workspace</a>
+    } @else {
+      <p class="eyebrow">First-time setup</p>
+      <h1 id="claim-heading">Claim this silo</h1>
+      <p>Use the one-time token from your installer to become the silo owner. It expires after 24 hours.</p>
+      @if (state() === 'loading') { <p role="status">Checking your sign-in…</p> }
+      @else if (state() === 'unavailable') { <p role="alert">We could not check your sign-in. Reload this page to try again.</p> }
+      @else if (state() === 'signin') {
+        <p>Sign in with an account from this silo’s organisation first.</p>
+        <a class="button" href="/auth/login?returnTo=/claim">Sign in to claim</a>
+      } @else {
+        <form #claimForm (submit)="claim($event, claimForm, tokenInput)">
+          <label for="display-name">Display name</label>
+          <input id="display-name" name="displayName" autocomplete="name" required maxlength="200" [value]="name()">
+          <label for="contact-email">Contact email</label>
+          <input id="contact-email" name="email" type="email" autocomplete="email" required maxlength="254">
+          <label for="bootstrap-token">Bootstrap token</label>
+          <input #tokenInput id="bootstrap-token" type="password" autocomplete="off" required maxlength="128" spellcheck="false" aria-describedby="token-help">
+          <small id="token-help">Only use a token given to you by this silo’s installer.</small>
+          <button class="button" type="submit" [disabled]="pending()">{{ pending() ? 'Claiming…' : 'Claim this silo' }}</button>
+        </form>
+      }
+    }
+    @if (message()) { <p class="message" role="alert">{{ message() }}</p> }
+  </section>
+  <footer>self-hosted · data sovereign</footer>
+</main>

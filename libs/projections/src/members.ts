@@ -1,5 +1,6 @@
 import {
   memberInvitedDataSchema,
+  siloOwnerBootstrappedDataSchema,
   memberJoinedDataSchema,
   getEventDefinition,
   type EventEnvelope,
@@ -45,6 +46,7 @@ async function applyMember(
     ![
       "member.invited",
       "member.joined",
+      "silo.owner_bootstrapped",
       "member.removed",
       "member.role_changed",
     ].includes(event.type)
@@ -70,7 +72,7 @@ async function applyMember(
       [event.silo, id, field(data, "newRole")],
     );
   } else {
-    const joined = event.type === "member.joined";
+    const joined = event.type === "member.joined" || event.type === "silo.owner_bootstrapped";
     await db.query(
       `INSERT INTO ${tables.members} VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (silo, member_id) DO UPDATE SET email = $3, display_name = $4, role = $5, status = $6`,
@@ -102,6 +104,14 @@ async function applyIdentity(
   data: unknown,
   id: string,
 ): Promise<void> {
+  if (event.type === 'silo.owner_bootstrapped') {
+    const owner = siloOwnerBootstrappedDataSchema.parse(data);
+    if (event.principal?.kind !== 'human' || event.principal.id !== owner.identity.sub) {
+      throw new Error('Bootstrap identity mismatch');
+    }
+    await db.query(`INSERT INTO ${tables.identities} VALUES ($1, $2, $3, $4, $5)`,
+      [event.silo, id, owner.identity.issuer, owner.identity.sub, event.id]);
+  }
   if (event.type === "member.invited") {
     const invitation = memberInvitedDataSchema.parse(data);
     await db.query(

@@ -1,9 +1,18 @@
 // Organisation membership events; the main registry preserves their catalogue order.
+import { z } from 'zod';
 import { event } from './definition.ts';
 import { memberJoinedDataSchema } from './examples.ts';
 import * as data from './data.ts';
 
+export const siloOwnerBootstrappedDataSchema = memberJoinedDataSchema.omit({ invitationId: true }).extend({
+  memberId: z.literal('bootstrap-owner'), role: z.literal('owner'),
+  identity: z.object({ issuer: z.url(), sub: z.string().min(1) }).strict(),
+}).strict();
+
 export const identityEvents = [
+  event('silo.owner_bootstrapped', 'member', 'The installation token admitted the first owner.',
+    siloOwnerBootstrappedDataSchema, { memberId: 'bootstrap-owner', email: 'alice@example.com',
+      displayName: 'Alice', role: 'owner', identity: { issuer: 'https://idp.example.com', sub: 'alice' } }),
   // Organisation, members and teams
   event(
     'org.created',

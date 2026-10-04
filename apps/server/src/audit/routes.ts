@@ -45,12 +45,12 @@ async function access(options: AuditOptions, memberId: string, conversationId?: 
   let role: string | undefined;
   for (const row of members) {
     const d = z.record(z.string(), z.unknown()).parse(row.event.data);
-    if (row.event.type === 'member.joined') role = z.string().parse(d['role']);
+    if ((row.event.type === 'member.joined' || row.event.type === 'silo.owner_bootstrapped')) role = z.string().parse(d['role']);
     if (row.event.type === 'member.role_changed') role = z.string().parse(d['newRole']);
     if (row.event.type === 'member.removed') role = undefined;
   }
   if (!role || (!conversationId && !['owner', 'admin'].includes(role))) return undefined;
-  const facts = members.filter(row => ['member.joined', 'member.role_changed', 'member.removed'].includes(row.event.type));
+  const facts = members.filter(row => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(row.event.type));
   if (conversationId) {
     const conversation = await history(options.store, subjects[1]!, options.silo);
     facts.push(...conversation.filter(row => ['conversation.created', 'participant.added', 'participant.removed'].includes(row.event.type)));

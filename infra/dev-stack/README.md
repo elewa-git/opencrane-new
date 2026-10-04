@@ -190,7 +190,11 @@ Each `up` also runs a dev-only owner bootstrap after the projections and dispatc
 start. Through the command NKey it conditionally appends `member.invited` and
 `member.joined`, binding that issuer and subject to owner member `jente-rosseel`.
 Existing stream state is checked first, so plain and `--fresh` runs do not duplicate it.
-Issue #12 replaces this temporary bootstrap.
+This dev-only bootstrap for `jente@elewa.ke` remains in place. Production installs
+use the [one-time token command and claim screen](../../apps/server/README.md#first-owner-bootstrap-12),
+which refuse a silo that already has an owner. Dev exceptions for external
+identities do not apply to the token claim; its user must belong to the configured
+organisation. Ownership transfer is a separate feature (#24).
 
 To rerun the setup, with `.keys/.zitadel-key` available locally:
 

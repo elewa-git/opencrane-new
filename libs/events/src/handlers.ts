@@ -4,12 +4,12 @@ export const handlerSubscriptions = {
   "settle-budget": ["effect.observed", "effect.resolved", "computer.lost"],
   "update-members": [
     "member.invited",
-    "member.joined",
+    "member.joined", "silo.owner_bootstrapped",
     "member.role_changed",
     "member.removed",
   ],
   "update-openfga": [
-    "member.joined",
+    "member.joined", "silo.owner_bootstrapped",
     "member.role_changed",
     "member.removed",
     "team.created",
@@ -22,8 +22,8 @@ export const handlerSubscriptions = {
     "grant.given",
     "grant.revoked",
   ],
-  "seed-model-grants": ["member.joined", "assistant.created"],
-  "create-assistant": ["member.joined"],
+  "seed-model-grants": ["member.joined", "silo.owner_bootstrapped", "assistant.created"],
+  "create-assistant": ["member.joined", "silo.owner_bootstrapped"],
   "claim-computer": ["assistant.created", "computer.lost"],
 } as const;
 export type HandlerName = keyof typeof handlerSubscriptions;

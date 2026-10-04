@@ -88,7 +88,7 @@ export function memberAuthorisation(binding: Binding) {
       throw new Error("Invalid authorisation event or silo");
     }
     const event = parsed.event;
-    if (!["member.joined", "member.role_changed", "member.removed", "assistant.created", "conversation.created", "participant.added", "participant.removed", "grant.given", "grant.revoked", "team.created", "team.member_added", "team.member_removed"].includes(event.type)) {
+    if (!["member.joined", "silo.owner_bootstrapped", "member.role_changed", "member.removed", "assistant.created", "conversation.created", "participant.added", "participant.removed", "grant.given", "grant.revoked", "team.created", "team.member_added", "team.member_removed"].includes(event.type)) {
       throw new Error(`OpenFGA event not implemented: ${event.type}`);
     }
     const receipt = {
@@ -126,7 +126,7 @@ export function memberAuthorisation(binding: Binding) {
             object,
             field(
               event.data,
-              event.type === "member.joined" ? "role" : "newRole",
+              (event.type === "member.joined" || event.type === "silo.owner_bootstrapped") ? "role" : "newRole",
             ),
           );
     // A lost reply is safe: the receipt and changes either all commit or all fail.

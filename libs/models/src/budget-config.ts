@@ -19,7 +19,7 @@ export async function configureBudget(actor: BudgetActor, binding: Binding, iden
   if (permission.status === 'unavailable') throw new Error('Budget authority unavailable');
   if (!permission.allowed) throw new BudgetAccessRefused('Access changed');
   const membership = await history(actor.store, `member-${checked.memberId}`, actor.silo);
-  const last = membership.filter(r => ['member.joined', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
+  const last = membership.filter(r => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
   const member = last ? data(last.event) : {};
   if (last?.event.type === 'member.removed' || !['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new BudgetAccessRefused('Access changed');
   const { commandId, expectedSequence, ...payload } = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u), expectedSequence: z.int().nonnegative() }).passthrough().parse(raw);

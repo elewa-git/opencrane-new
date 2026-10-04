@@ -16,7 +16,7 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
   const command = input.parse(raw);
   if (!(await memberAuthorisation(binding).check(memberId, 'admin')).allowed) throw new Error('Access changed');
   const membership = await history(store, `member-${memberId}`, binding.silo);
-  const last = membership.filter(r => ['member.joined', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
+  const last = membership.filter(r => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
   const member = z.record(z.string(), z.unknown()).parse(last?.event.data);
   if (!['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new Error('Access changed');
   const rows = await history(store, `mcp-${serverId}`, binding.silo);

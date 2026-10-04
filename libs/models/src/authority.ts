@@ -61,7 +61,7 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
 
 function relevant(e: EventEnvelope, requester: string, assistant: string, conversation: string, resourceType: string, resourceId: string) {
   const d = data(e);
-  return (e.subject === `member-${requester}` && ['member.joined', 'member.role_changed', 'member.removed'].includes(e.type)) ||
+  return (e.subject === `member-${requester}` && ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(e.type)) ||
       (e.subject === `assistant-${assistant}` && e.type === 'assistant.created') ||
       (e.type.startsWith('team.') && (d['memberId'] === requester || e.type === 'team.created')) ||
       (d['conversationId'] === conversation && ['conversation.created', 'participant.added', 'participant.removed'].includes(e.type)) ||
