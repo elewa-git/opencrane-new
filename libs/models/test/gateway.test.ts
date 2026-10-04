@@ -72,7 +72,8 @@ it('clearly refuses a request too large for any context tier before reservation 
 it('admits an authorised call after unrelated audit and chat history grows', async () => {
   const f = await fixture();
   try {
-    for (let batch = 0; batch < 50; batch++) await Promise.all(Array.from({ length: 100 }, async (_, index) => {
+    const before = await f.nats.store.head();
+    for (let batch = 0; batch < 50; batch++) await f.nats.seed(Array.from({ length: 100 }, (_, index) => {
       const requestId = randomUUID();
       const event = index % 2 ? envelope('test', `conversation-${requestId}`, 'agent.message_delta', {
         conversationId: requestId, turnId: 'turn-other', messageId: 'message-other',
@@ -80,8 +81,9 @@ it('admits an authorised call after unrelated audit and chat history grows', asy
       }) : envelope('test', `decision-${requestId}`, 'decision.recorded', {
         requestId, route: 'model', outcome: 'deny', reason: 'approval_required', contextDigest: '0'.repeat(64),
       });
-      expect((await f.nats.store.append({ event, expectedSequence: 0 })).status).toBe('appended');
+      return event;
     }));
+    expect(await f.nats.store.head()).toBe(before + 5000);
     expect((await f.call()).status).toBe(200);
     expect(f.received()).toBe(1);
   } finally { await f.close(); }

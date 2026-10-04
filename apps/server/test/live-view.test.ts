@@ -10,6 +10,7 @@ import { encodeSession } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
 import { history } from '@opencrane/models';
 import { parseEventByType } from '@opencrane/events';
+import * as access from '../src/computers/view-access.ts';
 
 it('requires participation and an explicit desktop grant before opening an audited view', async () => {
   const forwarded: Buffer[] = [];
@@ -269,10 +270,30 @@ it('counts pongs and close frames in the viewer output bound', async () => {
   } finally { transport?.uncork(); socket?.terminate(); await fixture.close(); }
 }, 120_000);
 
+it.each([1050, 1250])('enforces the desktop admission deadline for a %i ms authority check', async milliseconds => {
+  const fixture = await viewFixture(() => Promise.resolve(new PassThrough()));
+  let enter!: () => void;
+  const entered = new Promise<void>(resolve => { enter = resolve; });
+  try {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    vi.spyOn(access, 'viewAccess').mockImplementation(() => {
+      enter();
+      return new Promise(resolve => setTimeout(() => resolve({ assistantId: 'assistant', computerId: 'desktop', generation: 1 }), milliseconds));
+    });
+    const headers = { origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const response = fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers }).then(value => value);
+    await entered;
+    await vi.advanceTimersByTimeAsync(milliseconds);
+    expect((await response).statusCode).toBe(milliseconds < 1200 ? 200 : 403);
+  } finally { vi.useRealTimers(); vi.restoreAllMocks(); await fixture.close(); }
+}, 30_000);
+
 it('admits bounded slow authority reads and keeps their desktop stream connected', async () => {
   const readable = new PassThrough();
   const fixture = await viewFixture(() => { const writable = new PassThrough(); writable.resume(); return Promise.resolve(Duplex.from({ readable, writable })); });
-  const eventDelay = 400; let socket: WebSocket | undefined;
+  // Exact deadline edges are checked above; leave room for real service work here.
+  const eventDelay = 200; let socket: WebSocket | undefined;
   const proxy = createServer((request, response) => {
     const upstream = httpRequest(`${fixture.fga.apiUrl}${request.url}`, { method: request.method, headers: request.headers }, incoming => {
       void delay(650).then(() => { response.writeHead(incoming.statusCode ?? 502, incoming.headers); incoming.pipe(response); });
