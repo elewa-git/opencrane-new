@@ -106,8 +106,9 @@ Safe check logs: [lint](lint.txt), [typecheck](typecheck.txt),
 [events](events.txt), [web tests](web-tests.txt) and [web build](web-build.txt).
 
 The live bootstrap journey passed on fresh local installations. Source readiness
-remains blocked by the root-suite live-view failure; this branch is not ready to
-land on that evidence.
+was blocked by the root-suite live-view failure on that source. The later
+[admission repair receipt](../bootstrap-token-evidence.md#admission-read-scheduling-repair)
+records the fix, rebase and passing source checks.
 
 ```sh
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2

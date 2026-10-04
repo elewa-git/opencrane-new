@@ -371,6 +371,27 @@ it('refuses access when its previously checked authority history disappears', as
   } finally { vi.restoreAllMocks(); await fixture.close(); }
 }, 30_000);
 
+it('checks the new desktop grant when a previously checked computer changes', async () => {
+  const fixture = await viewFixture(() => Promise.resolve(new PassThrough()));
+  const { app, append, config } = fixture;
+  try {
+    const grant = { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' };
+    await append(grantStream('shared_desktop', 'desktop'), 'grant.given', grant, true);
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
+    const request = { method: 'POST' as const, url: '/api/conversations/chat/view', headers };
+    expect((await app.inject(request)).statusCode).toBe(200);
+    await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'next-desktop', sandboxUid: 'next-sandbox', generation: 2, tokenId: 'token:next' });
+    await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'next-desktop', generation: 2, podUid: 'next-pod' });
+    // The event allows the new desktop, but OpenFGA has not applied that grant yet.
+    const nextGrant = { ...grant, resourceId: 'next-desktop' };
+    await append(grantStream('shared_desktop', 'next-desktop'), 'grant.given', nextGrant);
+    expect((await app.inject(request)).statusCode).toBe(403);
+    await append(grantStream('shared_desktop', 'next-desktop'), 'grant.given', nextGrant, true);
+    expect((await app.inject(request)).statusCode).toBe(200);
+  } finally { await fixture.close(); }
+}, 30_000);
+
 it('does not renew the desktop lease from a delayed authority reply after revocation', async () => {
   const fixture = await viewFixture(() => {
     const readable = new PassThrough(), writable = new PassThrough(); writable.resume();

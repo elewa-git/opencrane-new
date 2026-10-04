@@ -61,17 +61,29 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
 async function checkViewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
-  const [conversation, member] = await Promise.all([
-    history(store, `conversation-${conversationId}`, silo), history(store, `member-${memberId}`, silo),
+  const auth = memberAuthorisation(options.binding);
+  // Read independent authority sources together; every result must still pass.
+  const [member, computer, permission] = await Promise.all([
+    history(store, `member-${memberId}`, silo),
+    conversationDesktop(options, memberId, conversationId, auth),
+    auth.conversation(memberId, conversationId, 'read'),
   ]);
-  const created = conversation.find(r => r.event.type === 'conversation.created')?.event;
-  if (!created || conversation.some(r => r.event.type === 'conversation.closed') ||
-      member.at(-1)?.event.type === 'member.removed') throw new Error('Access changed');
-  const assistantId = identity.parse(created.data).assistantId;
-  if (!participatesIn(conversation, created.data, memberId)) throw new Error('Access changed');
+  if (member.at(-1)?.event.type === 'member.removed' ||
+      (permission.status === 'ok' && !permission.allowed)) throw new Error('Access changed');
+  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');
+  return computer;
+}
+
+async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,
+  auth: ReturnType<typeof memberAuthorisation>) {
+  const { store, silo } = options;
+  const conversation = await history(store, `conversation-${conversationId}`, silo);
+  const created = conversation.find(r => r.event.type === 'conversation.created');
+  if (!created || conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Access changed');
+  const assistantId = identity.parse(created.event.data).assistantId;
+  if (!participatesIn(conversation, created.event.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
   const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
-  const auth = memberAuthorisation(options.binding);
   const permission = await auth.view(
     memberId, conversationId, computer.computerId, desktop.receipts);
   if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');

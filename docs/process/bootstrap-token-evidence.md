@@ -87,3 +87,57 @@ The fresh secondary bootstrap journey is PASS, including stub chat, token reuse
 and `members_exist`. The final complete root suite is FAIL: 1,365 passed,
 14 skipped and one live-view authority assertion failed. That test also failed
 in isolation. Source readiness remains blocked; the receipt contains both logs.
+
+## Admission read scheduling repair
+
+Date: 4 October 2026. Base: rebased `6287a38`, on `origin/main` `7b8b1d3`
+(uploads #79), plus this repair. Environment: this worktree, Node 22.23.3,
+existing PostgreSQL at port 55432 and disposable test fixtures. No installation
+or host networking settings were changed.
+
+Comparing `561a405` with main found no extra bootstrap read in this fixture's
+admission path. It uses ordinary joined members and has no membership-route
+configuration. The live-view flow and its event-store read implementation were
+unchanged. Two initial isolated runs passed, then an instrumented whole-file run
+reproduced allowed authority replies taking 1,203–1,230 ms, beyond the unchanged
+1,200 ms deadline. The refusal came from read timing, not a missing owner grant.
+
+Member history, conversation permission and desktop authority now run together.
+The saved computer id starts a fresh desktop permission read alongside live
+computer history. The live result must match that permission target; otherwise
+we check the new desktop. Grant history, membership, participation, lifecycle,
+permissions and history continuity must all pass. No permission result is cached.
+The original slow-read test's assertions and deadlines are unchanged.
+
+The added HTTP replacement-desktop regression returned 200 instead of 403 when
+the target-match guard was temporarily removed. Restoring it refused the new
+desktop until its own grant reached OpenFGA, then admitted it. The final focused
+run passed that case and the slow-read case; its whole-file result was FAIL due
+to a separate NATS `head()` timeout also reproduced before the repair.
+
+- FAIL: complete root run with default timeouts: 1,393 passed, five failed and
+  14 skipped. All 12 live-view tests passed. Uploads lacked the newly required
+  `ocn-upload-computer:test` image; three unrelated cases exceeded Vitest's
+  five-second default, and the Chromium chat command exceeded its 180-second
+  process limit during shared-host load.
+- PASS: `sh scripts/build-test-computer.sh` prepared the documented uploads #79
+  prerequisite from public pins, without starting an installation.
+- PASS: complete root rerun, 79 files passed and three skipped; 1,398 tests
+  passed and 14 skipped, in 1,065.44 seconds. Command:
+  `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --testTimeout=20000 --reporter=verbose`.
+  This adjusts only the default runner timeout. The original slow-read test's
+  explicit 30-second timeout and all application deadlines remain unchanged.
+  All previously failing upload, wake, chat, bridge replay and Chromium cases
+  passed. [Safe root and live-view result](bootstrap-live/admission-repair-tests.txt).
+- PASS: final repository lint, all-workspace typecheck and `check:events`
+  (86 event types). All 60 Angular tests passed in 11 files, and the production
+  web build passed. Existing lint and build warnings remain.
+- PASS: the rebase completed onto `7b8b1d3`; no rebase state remained and
+  `origin/main` was an ancestor. Range comparison retained all three bootstrap
+  commits and the upload documentation, routes and event exports.
+- NOT RUN: the 14 opt-in conditions skipped by the root suite; fresh-install
+  qualification of this scheduling repair. The earlier live bootstrap receipt
+  describes its own source and environment.
+
+Safe full local logs: `/tmp/bootstrap-final-{root-tests,lint,typecheck,events,web-tests,web-build}.log`.
+The default-timeout failure is retained at `/tmp/bootstrap-default-root-tests.log`.
