@@ -15,6 +15,7 @@ import { getEventDefinition, parseEventByType } from '@opencrane/events';
 import { connectProjectionDb, readEvents } from '@opencrane/projections';
 import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
+import { publishJourney } from './publish-journey.ts';
 import { approvalJourney } from './approval-journey.ts';
 import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney } from './browser-budgets.ts';
@@ -186,8 +187,9 @@ try {
       throw error;
     } finally { page.off('requestfailed', failed); }
   }
-  if (browser) await approvalJourney(browser.memberPages, events.store, authz, append, { silo, origin, requesterId: member,
-    assistantId: computer!.assistant_id, computerId: computer!.computer_id, generation: Number(computer!.generation) });
+  const publication = browser ? await approvalJourney(browser.memberPages, events.store, authz, append, { silo, origin, requesterId: member,
+    assistantId: computer!.assistant_id, computerId: computer!.computer_id, generation: Number(computer!.generation), adminId: admin })
+    : await publishJourney(events.store, silo, admin, `https://mcp.example.test/catalogue-${id}`);
   chat = await chatJourney(server, headers(member), computer!.assistant_id);
   const replyMs = await chat.message();
   await chat.reconnect();
@@ -230,17 +232,13 @@ try {
   assert.equal((await runKube('exec', computer!.computer_id, '--', 'cat', '/home/agent/workspace/dev-stack-preserved')).stdout.trim(), 'yes');
   assert((await runKube('exec', computer!.computer_id, '--', 'cat', uploaded.textPath)).stdout.includes('Willow-47'));
   console.log(`PASS assistant/computer lifecycle: join→Ready ${joinReadyMs} ms; resume ${resumeMs} ms; Pod replacement kept disk`);
-  const serverId = `journey-${id}`;
-  await append('mcp.server_registered', `mcp-${serverId}`, { serverId, kind: 'remote', locator: 'https://mcp.example.test/mcp', catalogueRef: 'catalogue:dev' });
-  await append('mcp.server_discovered', `mcp-${serverId}`, { serverId, toolCount: 2, schemaDigest: 'a'.repeat(64), serverInfo: { name: 'Journey MCP', version: '1.0.0' } });
-  await append('mcp.tool_mode_set', `mcp-${serverId}`, { serverId, toolName: 'read', mode: 'allow', setBy: admin });
-  await append('mcp.server_published', `mcp-${serverId}`, { serverId, publishedBy: admin });
+  const { serverId } = publication;
   await until(async () => {
     const response = await fetch(`${server}/api/org/integrations`, { headers: headers(admin), signal: AbortSignal.timeout(5000) });
     assert.equal(response.status, 200);
     const result = integrationsResponseSchema.parse(await response.json());
     const row = result.rows.find((row) => row.serverId === serverId);
-    return row?.name === 'Journey MCP' && row.version === '1.0.0' && row.toolsTotal === 2 && row.toolsAllowed === 1 && row.status.kind === 'ready';
+    return row?.name === 'Journey MCP' && row.version === '1.0.0' && row.toolsTotal === 2 && row.toolsAllowed === 2 && row.status.kind === 'ready';
   }, 'typed integration rows');
   assert.equal((await fetch(`${server}/api/org/integrations`, { headers: headers(member) })).status, 403);
   console.log('PASS admin GET /api/org/integrations typed event-derived rows; anonymous/member refused');

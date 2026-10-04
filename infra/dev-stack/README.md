@@ -64,6 +64,7 @@ so those servers cannot keep an operation lock held after the command finishes.
 | Server / browser | 48000 / 44200 | 25105 / 25106 | 25205 / 25206 |
 | Model gateway / decision / readiness / stub | 43000–43003 | 25107–25110 | 25207–25210 |
 | ClamAV | 43310 | 25111 | 25211 |
+| Local HTTPS MCP fixture | 43004 | 25112 | 25212 |
 
 Relay namespaces append `-gateway`. Each stack has its own namespace-only lifecycle
 ServiceAccount and RBAC, NATS CA/certificates/NKeys, PostgreSQL passwords (including
@@ -90,6 +91,14 @@ uses non-Secure cookies with distinct names per id because cookies ignore ports.
 Real Zitadel login, organisation pinning, CSRF checks and PKCE still apply. Browser
 contexts and screenshots are separate; secondary screenshots live in their private
 generated directories. No paid model provider is used.
+
+The approval and catalogue journeys register and discover the local HTTPS MCP
+fixture, publish reviewed Ask/Allow tools, wait for the exact gateway digest and
+grant access. The dev entrypoints inject only the fixture network mapping and CA;
+production entrypoints keep public DNS and normal TLS trust. Calls still traverse
+the real gateway, decision service and guarded HTTPS transport. Ask card metadata
+is part of the reviewed publication. Both approval viewports also make an Allow
+call, checking the forwarded bytes and absence of caller credentials.
 
 The limit is **owner plus two journey stacks on the 8-core, 16 GiB box**. Each
 secondary caps Compose services to 0.5 CPU each and 256–512 MiB each (models: one CPU / 768 MiB), Angular to two

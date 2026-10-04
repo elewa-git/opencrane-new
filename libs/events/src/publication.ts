@@ -2,8 +2,16 @@ import { z } from 'zod';
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 const parameterHeader = z.string().regex(/^mcp-param-[!#$%&'*+.^_`|~0-9a-z-]+$/u);
+// Reviewed, credential-free tools declare every safe argument; unknown fields cannot be hidden.
+const reviewText = z.string().trim().min(1).max(500);
+export const toolReviewSchema = z.object({
+  action: reviewText, consequence: reviewText, targetArgument: z.string().min(1),
+  fields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).min(1).max(20),
+  stepUp: z.boolean().default(false),
+}).strict();
+
 export const reviewedToolSchema = z.object({ name: z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/u), revision: digest,
-  mode: z.enum(['allow', 'ask', 'block']), costCents: z.int().nonnegative().max(0).pipe(z.literal(0)).optional() }).strict();
+  mode: z.enum(['allow', 'ask', 'block']), review: toolReviewSchema.optional(), costCents: z.int().nonnegative().max(0).pipe(z.literal(0)).optional() }).strict();
 export const desiredMcpSchema = z.object({ schemaDigest: digest, connectionId: id, accountMode: z.enum(['none', 'personal', 'company']),
   tools: z.array(reviewedToolSchema).max(1000), target: z.url(), route: z.string(), cel: z.string(), authz: z.string(),
   headerNames: z.array(z.union([z.enum(['content-type', 'accept', 'mcp-protocol-version', 'mcp-method', 'mcp-name', 'x-request-id', 'x-mcp-permit']), parameterHeader])), headerParameters: z.array(z.object({ tool: z.string(), path: z.array(z.string()),

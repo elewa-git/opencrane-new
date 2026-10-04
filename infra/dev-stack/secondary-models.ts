@@ -5,7 +5,7 @@ import { createConnection, createServer, type Socket, type Server } from 'node:n
 
 const sockets = new Set<Socket>();
 const servers: Server[] = [];
-for (const name of ['MODEL_DECISION_PORT', 'MODEL_READINESS_PORT', 'MODEL_STUB_PORT']) {
+for (const name of ['MODEL_DECISION_PORT', 'MODEL_READINESS_PORT', 'MODEL_STUB_PORT', 'MCP_FIXTURE_PORT']) {
   const port = Number(process.env[name]);
   // These existing listeners bind loopback. Forward the container interfaces
   // without widening their production listeners or changing the owner stack.
@@ -28,4 +28,4 @@ for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => {
   for (const socket of sockets) socket.destroy();
 });
 await import('./model-stub.ts');
-await import('../../apps/server/src/models-main.ts');
+await import('./journey-models.ts');

@@ -471,7 +471,8 @@ connection; other rejection reasons project Failed.
 ### P3-4 publication generations
 
 `mcp.server_published` carries `changeRef`, `digest` and `desired`: the reviewed
-inventory digest, connection/account mode, per-tool revisions and modes, guarded
+inventory digest, connection/account mode, per-tool revisions and modes, optional
+reviewed approval-card metadata (action, target argument, shown fields and consequence), guarded
 HTTPS target, route, CEL rule, ext_authz path and outbound header allowlist.
 `digest` hashes the lossless JSON form of `desired`. Legacy publications remain
 readable but cannot grant execution. Publishing makes the register Applying;

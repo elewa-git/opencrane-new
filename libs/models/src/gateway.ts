@@ -154,3 +154,38 @@ export async function startGateway(options: { binary: string; configFile: string
           await once(probe, 'connect').finally(() => probe.destroy());
           await acknowledgements();
           return { stop, acknowledgements, healthy: () => child.exitCode === null && child.signalCode === null && !failed };
+        }
+      } catch { /* Listener is still starting. */ }
+      await delay(50);
+    }
+    throw new Error('Gateway readiness timed out');
+  } catch (error) { await stop(); throw error; }
+}
+
+/** Compare the data plane too: the editable configuration can lead the active listeners. */
+function verifyLoadedRoutes(raw: unknown, routes: McpRoute[], decisionUrl: string, issuer: string) {
+  const dump = z.object({ binds: z.array(z.object({ listeners: z.record(z.string(), z.object({ routes: z.record(z.string(), z.object({ name: z.string(), matches: z.unknown(), backends: z.unknown(), inlinePolicies: z.array(z.unknown()).default([]) })) })) })), backends: z.array(z.unknown()) }).parse(raw);
+  const active = dump.binds.flatMap(b => Object.values(b.listeners).flatMap(l => Object.values(l.routes)));
+  if (active.filter(r => r.name.startsWith('mcp-')).length !== routes.length) throw new Error('Loaded gateway route set differs');
+  for (const route of routes) {
+    const expected = mcpRoute(route, decisionUrl, issuer), loaded = active.find(r => r.name === expected.name);
+    const policies = expected.policies;
+    const backendName = `gateway/default/default/${expected.name}/backend0`;
+    if (!loaded || !contains(loaded.matches, expected.matches) ||
+      !contains(loaded.backends, [{ weight: 1, backend: `/${backendName}` }]) ||
+      !dump.backends.some(b => contains(b, { backend: { host: { name: backendName, namespace: '', target: route.upstream } } })) ||
+      !loaded.inlinePolicies.some(p => contains(p, { jwtAuth: { mode: 'strict', preserveToken: true,
+        providers: [{ issuer }], location: policies.jwtAuth.location } })) ||
+      !loaded.inlinePolicies.some(p => contains(p, { authorization: { rules: { allow: policies.authorization.rules } } })) ||
+      !loaded.inlinePolicies.some(p => contains(p, { transformation: policies.transformations })) ||
+      !loaded.inlinePolicies.some(p => contains(p, { extAuthz: { inlineBackend: policies.extAuthz.host,
+        protocol: policies.extAuthz.protocol, includeRequestBody: policies.extAuthz.includeRequestBody,
+        includeRequestHeaders: policies.extAuthz.includeRequestHeaders, failureMode: policies.extAuthz.failureMode } }))) throw new Error('Loaded gateway generation differs');
+  }
+}
+function contains(actual: unknown, expected: unknown): boolean {
+  if (Array.isArray(expected)) return Array.isArray(actual) && expected.length === actual.length && expected.every((v, i) => contains(actual[i], v));
+  if (expected !== null && typeof expected === 'object') return actual !== null && typeof actual === 'object' &&
+    Object.entries(expected).every(([key, value]) => contains(Reflect.get(actual, key), value));
+  return actual === expected;
+}

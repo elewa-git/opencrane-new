@@ -77,3 +77,91 @@ the security and money guards pass 330 tests, including refusal of credentials/h
 values and explicit integer bounds for zero-cost tools (`/tmp/p3-4-schema-final.log`).
 Fresh-install journey, hosted CI, merge and push: **NOT RUN**. The orchestrator owns
 rebase after P3-3 lands and subsequent live qualification; no capability-done claim.
+
+## Review fixes and secondary-stack qualification
+
+4 October 2026, base `62e63da` (rebased onto `39fe9da`) plus the commit containing
+this update. This section supersedes the initial fresh-install status above.
+The agreed seams are journey scripts, the real gateway fixture and audit ingestion.
+
+The journey regression first failed on `Approval journey requires a reviewed
+publication` (`/tmp/p3-4-journey-unit-red.log`). Both journey scripts now use the
+same discovered, reviewed Ask/Allow publication, wait for its exact acknowledgement,
+and grant both requester and assistant. Approval-card metadata is part of the
+reviewed publication digest. The old HTTP MCP stub, legacy envelope and name
+header are removed. Dev entrypoints inject the local TLS fixture's network mapping;
+production entrypoints retain normal DNS and TLS trust. The browser checks one-use
+approval, denial, reload and an automatic Allow call, including exact forwarded
+bytes and stripped credentials.
+
+The audit failure is a pre-existing shutdown race: process `exit` can precede
+unread stdout. Closing the reader at exit drops the final gateway observation.
+Shutdown now waits for closed pipes, then all queued file writes. The deterministic
+regression failed with only the first trusted id (`/tmp/p3-4-ingestion-red.log`);
+the reviewer’s existing assertion is unchanged. The gateway source at pre-rebase
+`693bc98` and rebased `62e63da` is byte-for-byte identical; the faulty shutdown
+sequence is also present on parent `39fe9da`, originating before P3-4. The deterministic test also fails against an isolated copy of parent `39fe9da`
+with the same missing second id (`/tmp/p3-4-parent-audit-red.log`); temporary
+baseline files were removed. Neither the rebase nor P3-4 introduced this race.
+
+Live environment: claimed secondary id **1**, project/namespace
+`opencrane-dev-1`, loopback web port **25106**, local HTTPS MCP fixture **25111**,
+real Zitadel sign-in and the stub model. No owner-stack command was run. Initial
+attempts hit shared-host Docker/Kubernetes networking failures before qualification;
+the missing default Docker bridge and the `pg-test` attachment were restored,
+and the shared Kubernetes API recovered before retry. Owner-stack containers,
+configuration and data were not changed. A later attempt caught and fixed the fixture recording request's IPv4
+lookup setting, and the catalogue assertion was corrected to count both Ask and
+Allow as allowed tools. The real approval flow also moves publication beyond the
+first 50 audit records; the audit journey now follows the API cursor and the
+browser’s Older history control. The first repeat attempt stopped in the existing
+live-view check when access changed and the viewer cleared its controls; its
+assertion was retained and plain `up.sh` retried. Screenshot:
+`/tmp/p3-4-repeat-live-view-failure.png`. A second repeat timed out waiting for
+the existing chat reply while host load averaged 27 on eight cores. Assertions
+and timeouts were retained. After the long root suite, the retained computer had
+idled to Suspended; that repeat stopped at the existing Ready precondition. A real
+Zitadel-authenticated chat woke it (`/tmp/p3-4-repeat-wake.log`). Subsequent attempts
+stopped at approval submission and the live-view connection assertion. These
+failed attempts are not passing evidence. A second fresh run completed both
+publication viewports but failed later when audit history returned 503
+(`/tmp/p3-4-fresh-pair-audit-failure.log`). Its subsequent plain run stopped at
+WebSocket initial catch-up (`/tmp/p3-4-repeat-catchup-failure.log`). The server
+health check and projection workers were healthy afterwards; these failures
+are not sufficient evidence to attribute every live failure to host load.
+The final plain repeat reached the new approval card but all three approval POSTs
+returned 503 after 2,417, 2,149 and 3,058 ms. Those timings are consistent with the
+existing two-second authority fence expiring; the precise cause remains unproved.
+No fence, assertion or timeout was relaxed. **Repeat qualification remains FAIL**;
+the publication fix is not claimed capability-done.
+
+The first full root run used `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`,
+`--maxWorkers=2 --no-file-parallelism` and a temporary Node compile cache. It
+reported 1,351 passes, five failures and 14 existing opt-in skips: NATS timeout and
+a closed delayed-authority viewer in live-view, five-second timeouts in authz
+projection and bridge replay, and a 40-second publication-journey timeout with a
+NATS rejection. Host load was above 20 on eight cores during the run. All four
+files then passed unchanged (29 tests); the publication journey took 13.5 seconds.
+No assertions, test limits or skips were changed. The failed complete run and
+successful focused retry are separate evidence; no clean complete-run claim.
+
+| Review-fix check | Result | Evidence |
+| --- | --- | --- |
+| Journey setup, real HTTPS Ask/approve/one-use/Allow and deterministic audit drain | PASS, two focused tests | `/tmp/p3-4-fix-focused.log` |
+| Unchanged trusted-decision regression plus deterministic drain | PASS | `/tmp/p3-4-audit-green.log` |
+| Infra TypeScript | PASS | `/tmp/p3-4-infra-types.log` |
+| Event catalogue | PASS, 83 types | `/tmp/p3-4-fix-events.log` |
+| Secondary `up.sh --fresh` | PASS, both approval viewports, Allow, typed catalogue, audit pagination, budgets and replay | `/tmp/p3-4-review-fix/fresh/up.log` |
+| `npm run lint` | PASS, eight existing size warnings | `/tmp/p3-4-fix-lint.log` |
+| `npm run typecheck` | PASS | `/tmp/p3-4-fix-typecheck.log` |
+| Web production build | PASS, existing bundle/CSS/CommonJS warnings | `/tmp/p3-4-fix-web-build.log` |
+| Web tests | PASS, 11 files / 56 tests | `/tmp/p3-4-fix-web-test.log` |
+| Full root suite | FAIL, 1,351 passed / five failed / 14 skipped; one NATS rejection | `/tmp/p3-4-fix-test.log` |
+| All failed root files, unchanged | PASS, four files / 29 tests | `/tmp/p3-4-fix-test-retry.log` |
+| Secondary plain `up.sh` | FAIL, approval submissions return 503; complete repeat unqualified | `/tmp/p3-4-review-fix/repeat/failure.log`, `/tmp/p3-4-review-fix/repeat/approval-responses.json` |
+| `down.sh --id 1` | PASS; secondary containers, namespace and private directory removed | `/tmp/p3-4-down.log`, post-teardown checks |
+
+Fresh screenshots: `/tmp/p3-4-review-fix/fresh/publication-live/` (requested,
+approved, used and denied at 390px and 1280px). The remaining blockers are a clean
+complete root-suite run and a complete retained-stack journey. Hosted CI, merge
+and push are NOT RUN. This repair commit is for review, not a landing-ready claim.

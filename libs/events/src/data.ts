@@ -1,4 +1,4 @@
-import { publicationSchema } from './publication.ts';
+import { publicationSchema, toolReviewSchema } from './publication.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
 // and plan.md say the event means: which ids it needs, who did it, and what a
@@ -322,14 +322,6 @@ export const toolApprovalRequestedDataSchema = z.object({
   digestVersion: z.literal('lossless-json-v1'), argumentsDigest: digestSchema,
   expiresAt: z.iso.datetime(), stepUp: z.boolean(),
   ciphertext: ciphertextSchema.max(32768), keyId: keyIdSchema, reviewDigest: digestSchema,
-}).strict();
-
-// Reviewed, credential-free tools declare every safe argument; unknown fields cannot be hidden.
-const reviewText = z.string().trim().min(1).max(500);
-const toolReviewSchema = z.object({
-  action: reviewText, consequence: reviewText, targetArgument: id,
-  fields: z.array(z.string().regex(/^[a-zA-Z][\w-]{0,63}$/u)).min(1).max(20),
-  stepUp: z.boolean().default(false),
 }).strict();
 
 export const approvalExpiredDataSchema = z.object({ approvalId: id }).strict();

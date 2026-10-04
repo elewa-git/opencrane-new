@@ -38,5 +38,4 @@ export { budgetCeilingSetDataSchema, decisionRecordedDataSchema } from './data.t
 export { toolApprovalRequestedDataSchema, mcpServerDiscoveredDataSchema } from './data.ts';
 export { fileUploadedDataSchema, fileRejectedDataSchema, fileDeliveredDataSchema } from './file-events.ts';
 
-
 export { publicationSchema, desiredMcpSchema, reviewedToolSchema, configurationAppliedSchema } from './publication.ts';

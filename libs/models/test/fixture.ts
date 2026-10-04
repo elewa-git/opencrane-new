@@ -137,3 +137,52 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
   return { takeMcpPermit: decision.takeMcpPermit, dbUrl: dbs.queue.options.connectionString!, keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+    credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
+    decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
+    usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
+    reject: (status: number) => { rejection = status; },
+    admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
+    async call(extra = {}, patch: Record<string, unknown> = {}) {
+      const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
+      return { status: response.status, text: await response.text() };
+    },
+    async settled() {
+      await until(async () => { await ingestUsage(actor, options.usageFile); return actor.state.reservations.every(r => r.settledCents !== undefined); });
+      await runner.run(budgets);
+    },
+    async slowDecisions() {
+      await gateway.stop();
+      // Keep the real gateway, but let the decision's own freshness fence end this request.
+      const config = (await readFile(options.configFile, 'utf8')).replaceAll('"extAuthz":{',
+        '"extAuthz":{"policies":{"http":{"requestTimeout":"10s"}},');
+      await writeFile(options.configFile, config);
+      const child = spawn(options.binary, ['-f', options.configFile], { stdio: 'ignore' });
+      const exited = once(child, 'exit');
+      gateway = { acknowledgements: gateway.acknowledgements, healthy: () => child.exitCode === null, stop: async () => { child.kill(); await exited; } };
+      await until(async () => {
+        try { return (await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok; }
+        catch { return false; }
+      });
+    },
+    gatewayAcknowledgements: () => gateway.acknowledgements(),
+    stopGateway: () => gateway.stop(),
+    async publish() {
+      const policy = await readToolPolicy(nats.store, 'test', 'fixture');
+      const rows = await history(nats.store, 'mcp-fixture', 'test');
+      const discovery = z.object({ schemaDigest: z.string() }).parse(rows.findLast(r => r.event.type === 'mcp.server_discovered')?.event.data);
+      expect((await publishMcp(nats.store, binding, 'alice', 'fixture', { commandId: randomUUID(), expectedSequence: policy.sequence,
+        schemaDigest: discovery.schemaDigest, accountMode: policy.accountMode ?? 'none', tools: policy.tools.map(t => ({ name: t.name, revision: t.revision, mode: t.mode, ...(t.costCents === 0 ? { costCents: 0 } : {}) })) })).status).toBe('appended');
+      const publication = (await currentPublication(nats.store, 'test', 'fixture'))!;
+      options.mcpRoutes = [{ serverId: 'fixture', connectionId: publication.desired.connectionId, upstream: `127.0.0.1:${address.port}`, publication }];
+      await gateway.stop(); gateway = await startGateway(options);
+      for (const ack of await gateway.acknowledgements()) expect(await acknowledgeMcp(nats.store, 'test', ack.serverId, ack.changeRef, ack.digest)).toBe(true);
+    },
+    // Replay checks drain completed requests; crash checks explicitly request SIGKILL.
+    async restart(signal: NodeJS.Signals = 'SIGTERM') { await gateway.stop(signal); gateway = await startGateway(options); },
+    async close() {
+      await gateway.stop(); await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
+      await stopDispatch();
+      await runtime.stop(); await Promise.all(observations); await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true });
+    },
+  };
+}

@@ -57,17 +57,30 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     await capture(page, `${output}/${run}-action-${page.viewportSize()!.width}.png`);
     console.log(`PASS ${run} audit ${page.viewportSize()!.width}px: own stub turn, allow and success shown separately; other member and owner refused private history`);
   }
-  const response = await owner.request.get(`${origin}/api/org/history`);
-  assert.equal(response.status(), 200);
-  const changes = auditResponseSchema.parse(await response.json());
-  assert(changes.rows.some(row => row.records.some(record => record.type === 'mcp.server_published')));
-  assert(!JSON.stringify(changes).includes('canary'));
+  let before: number | undefined, published = false;
+  do {
+    const response = await owner.request.get(`${origin}/api/org/history${before === undefined ? '' : `?before=${before}`}`);
+    assert.equal(response.status(), 200);
+    const changes = auditResponseSchema.parse(await response.json());
+    published = changes.rows.some(row => row.records.some(record => record.type === 'mcp.server_published'));
+    assert(!JSON.stringify(changes).includes('canary'));
+    assert(changes.nextBefore === undefined || before === undefined || changes.nextBefore < before, 'History cursor moves backwards');
+    before = changes.nextBefore;
+  } while (!published && before !== undefined);
+  assert(published, 'Published MCP configuration appears in organisation history');
   assert.equal((await members[0]!.request.get(`${origin}/api/org/history`)).status(), 403);
   for (const width of [1280, 390]) {
     await owner.setViewportSize({ width, height: 900 });
     await owner.goto(`${origin}/org/history`);
     await owner.getByRole('heading', { name: 'Change history', exact: true }).waitFor();
-    await owner.getByText('mcp.server_published', { exact: true }).first().waitFor();
+    const publication = owner.getByText('mcp.server_published', { exact: true }).first();
+    await owner.locator('oc-audit .refresh[aria-disabled="false"]').waitFor();
+    while (!await publication.isVisible()) {
+      const loaded = owner.waitForResponse(response => new URL(response.url()).pathname === '/api/org/history');
+      await owner.getByRole('button', { name: 'Older history', exact: true }).click();
+      assert.equal((await loaded).status(), 200);
+      await owner.locator('oc-audit .refresh[aria-disabled="false"]').waitFor();
+    }
     await capture(owner, `${output}/${run}-change-${width}.png`);
     await members[0]!.setViewportSize({ width, height: 900 });
     await members[0]!.goto(`${origin}/org/history`);

@@ -12,6 +12,7 @@ services:
       - "127.0.0.1:${MODEL_DECISION_PORT}:${MODEL_DECISION_PORT}"
       - "127.0.0.1:${MODEL_READINESS_PORT}:${MODEL_READINESS_PORT}"
       - "127.0.0.1:${MODEL_STUB_PORT}:${MODEL_STUB_PORT}"
+      - "127.0.0.1:${MCP_FIXTURE_PORT}:${MCP_FIXTURE_PORT}"
   openfga-migrate:
     cpus: 0.5
     mem_limit: 256m

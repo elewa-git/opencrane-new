@@ -26,7 +26,7 @@ async function run(command: string, args: string[], env: Record<string, string> 
   }
 }
 async function compose(...args: string[]) {
-  return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args]);
+  return run('docker', ['compose', '--project-name', project, '--env-file', `${directory}/settings.env`, '-f', 'infra/dev-stack/compose.yaml', ...(secondary ? ['-f', 'infra/dev-stack/compose.secondary.yaml'] : []), ...args], { ...base, MCP_FIXTURE_PORT: defaultPorts['MCP_FIXTURE_PORT']! });
 }
 async function wait(check: () => Promise<boolean>, name: string) {
   // Allow two minutes for secondary startup on the shared host.
@@ -207,6 +207,7 @@ async function up(fresh: boolean) {
     if (secondary) await writeEnv('models', {});
   }
   const settings = { ...defaultPorts, ...await readEnv('settings') };
+  await writeEnv('settings', settings);
   await checkPorts(settings, await Promise.all(names.map(processId)), project);
   if (settings['ORIGIN'] !== origin) throw new Error('Tailnet name changed; use --fresh');
   await compose('up', '-d', '--wait', 'postgres', 'nats', 'minio', 'clamav');
@@ -269,6 +270,9 @@ async function up(fresh: boolean) {
   const issuer = await tokenIssuer({ privateKeyPath: `${directory}/token-signing-key.pem`, issuer: `${settings['ORIGIN']}/` });
   await save('model-jwks.json', JSON.stringify(issuer.jwks));
   await save('model-stub-key', 'dev-stack-stub-only');
+  await import('node:fs/promises').then(fs => fs.mkdir(`${directory}/mcp-tls`, { recursive: true, mode: 0o700 }));
+  await run('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', `${directory}/mcp-tls/key`, '-out', `${directory}/mcp-tls/cert`,
+    '-days', '1', '-subj', '/CN=mcp.example.test', '-addext', 'subjectAltName=DNS:mcp.example.test']);
   if (!secondary) await modelFirewall(true);
   if (!secondary) await start('model-stub', ['--experimental-strip-types', 'infra/dev-stack/model-stub.ts'], { MODEL_STUB_PORT: settings['MODEL_STUB_PORT']! });
   await run('flock', ['--close', `/tmp/opencrane-dev-stack-tools-${process.getuid!()}.lock`, 'bash', 'spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh']);
@@ -277,17 +281,17 @@ async function up(fresh: boolean) {
     DEFAULT_PAYING_GROUP_ID: process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default',
     MODEL_STATE_DIR: `${directory}/models`, MODEL_JWKS_FILE: `${directory}/model-jwks.json`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
     CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
-    MODEL_MCP_ROUTES: JSON.stringify([{ serverId: 'approval-journey', connectionId: 'installed', upstream: `127.0.0.1:${settings['MODEL_STUB_PORT']}` }]),
     MODEL_UPSTREAM: `127.0.0.1:${settings['MODEL_STUB_PORT']}`, MODEL_KEY_FILE: `${directory}/model-stub-key`,
     AGENTGATEWAY_BINARY: `${root}/spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64`,
     MODEL_DECISION_PORT: settings['MODEL_DECISION_PORT']!, MODEL_GATEWAY_PORT: settings['MODEL_GATEWAY_PORT']!, MODEL_READINESS_PORT: settings['MODEL_READINESS_PORT']!, MODEL_STUB_PORT: settings['MODEL_STUB_PORT']!,
+    MCP_FIXTURE_PORT: settings['MCP_FIXTURE_PORT']!, DEV_STACK_DIR: directory,
   };
   if (secondary) {
     const database = new URL(models.DATABASE_URL); database.hostname = 'postgres'; database.port = '5432';
     await writeEnv('models', { ...base, ...models, DATABASE_URL: database.href, NATS_URL: 'tls://127.0.0.1:4222',
       OPENFGA_API_URL: 'http://openfga:8080', MODEL_STUB_PAUSE_ON_STOP: '1', NODE_OPTIONS: '--max-old-space-size=256' });
     await compose('up', '-d', 'models');
-  } else await start('models', ['--experimental-strip-types', 'apps/server/src/models-main.ts'], models);
+  } else await start('models', ['--experimental-strip-types', 'infra/dev-stack/journey-models.ts'], models);
   await wait(() => healthy(`http://127.0.0.1:${settings['MODEL_READINESS_PORT']}/healthz/ready`), 'model gateway');
   await start('dispatcher', ['--experimental-strip-types', 'apps/ops/src/worker.ts', 'dispatcher'],
     { ...await readEnv('dispatcher'), ...binding, MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`, ...prefixed(await readEnv('command'), 'COMMAND_'),
@@ -297,9 +301,9 @@ async function up(fresh: boolean) {
       COMPUTER_IDLE_MS: process.env['COMPUTER_IDLE_MS'] ?? '900000' });
   console.log((await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/owner-bootstrap.ts'],
     { ...base, DEV_STACK_DIR: directory })).trim());
-  await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
+  await start('server', ['--experimental-strip-types', 'infra/dev-stack/journey-server.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
-      MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
+      DEV_STACK_DIR: directory, MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });

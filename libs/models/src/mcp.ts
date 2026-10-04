@@ -26,8 +26,9 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
   if (!policy.published || policy.connectionId !== connection || policy.accountMode !== 'none') throw new Error('MCP context unavailable');
   // A reviewed, credential-free fixture is explicit. Never invent a personal profile or memory grant.
   const tool = new Map(policy.tools.map(t => [t.name, t])).get(name);
+  const metadata = await reviewMetadata(store, silo, server, name);
   return { ...(call.method === 'tools/call' ? toolDecision(tool) : { outcome: 'allow' as const, reason: 'catalogue_read' }), policy, mappedHeaders, revision: tool?.revision, name: name || call.method, args,
-    ...await reviewMetadata(store, silo, server, name) };
+    ...metadata, review: publication.desired.tools.find(t => t.name === name)?.review ?? metadata.review };
 }
 function checkHeaders(publication: NonNullable<Awaited<ReturnType<typeof currentPublication>>>, body: string, call: z.infer<typeof callSchema>, headers: IncomingHttpHeaders) {
   const name = call.method === 'tools/call' ? call.params.name : '';
