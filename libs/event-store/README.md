@@ -42,6 +42,11 @@ the original cause. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
 
+Reads throw their service errors. `isEventStoreUnavailable(error)` identifies
+the same transient NATS failures used by append retries without exposing SDK
+types to callers. A failed authority read proves neither permission nor denial;
+it must never extend a caller's existing permission lease.
+
 Command identity is checked in entity history before every attempt and
 again after a conflict. It is scoped to principal kind/id and subject.
 No separate ledger or duplicate window determines success. Reusing a key

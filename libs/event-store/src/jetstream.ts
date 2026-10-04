@@ -112,16 +112,16 @@ function verifyEventsConfig(config: StreamConfig, replicas: number): void {
 }
 
 // JetStreamNotEnabled is not in the SDK public exports; check its name and typed cause.
-function transient(error: unknown): boolean {
+export function isEventStoreUnavailable(error: unknown): boolean {
   return (
     error instanceof TimeoutError ||
     error instanceof ConnectionError ||
     error instanceof ClosedConnectionError ||
     (error instanceof Error &&
       error.name === "JetStreamNotEnabled" &&
-      transient(error.cause)) ||
+      isEventStoreUnavailable(error.cause)) ||
     (error instanceof RequestError &&
-      (error.isNoResponders() || transient(error.cause))) ||
+      (error.isNoResponders() || isEventStoreUnavailable(error.cause))) ||
     (error instanceof JetStreamApiError && error.status >= 500)
   );
 }
@@ -211,7 +211,7 @@ export class EventStore {
       try {
         return await this.attempt(event, command.expectedSequence, deadline);
       } catch (error) {
-        if (!transient(error)) {
+        if (!isEventStoreUnavailable(error)) {
           throw new Error("Event append failed", { cause: error });
         }
         cause = error;

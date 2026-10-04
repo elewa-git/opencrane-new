@@ -1,0 +1,15 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-liveview
+
+
+ Test Files  80 passed | 3 skipped (83)
+      Tests  1391 passed | 14 skipped (1405)
+   Start at  13:03:38
+   Duration  1118.99s (tests 96%, import 3%)
+
+    Isolate  83 workers spawned · ~264ms startup each (spawn + environment, per file)
+             at least ~10.71s faster with isolate: false — reuses workers across files instead of one per file

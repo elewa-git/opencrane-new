@@ -1,0 +1,32 @@
+{"probe":"read","time":1791117692022,"subject":"conversation-2d78d1a1-c334-41c3-a6de-14ab6db1a185","ms":388,"rows":1,"from":172}
+{"probe":"read","time":1791117692030,"subject":"member-zitadel-member","ms":395,"rows":2,"from":47}
+{"probe":"read","time":1791117692409,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":371,"rows":12,"from":169}
+{"probe":"read","time":1791117692661,"subject":"grant-WyJzaGFyZWRfZGVza3RvcCIsImNvbXB1dGVyLTI5M2FkOWUxZGNhNzM5MzcxNGZkMzZmODg0ZWU4ZWU1Il0","ms":251,"rows":7,"from":173}
+{"probe":"read","time":1791117694929,"subject":"conversation-2d78d1a1-c334-41c3-a6de-14ab6db1a185","ms":84,"rows":1,"from":172}
+{"probe":"read","time":1791117694939,"subject":"member-zitadel-member","ms":88,"rows":2,"from":47}
+{"probe":"read","time":1791117695339,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":392,"rows":12,"from":169}
+{"probe":"read","time":1791117695518,"subject":"grant-WyJzaGFyZWRfZGVza3RvcCIsImNvbXB1dGVyLTI5M2FkOWUxZGNhNzM5MzcxNGZkMzZmODg0ZWU4ZWU1Il0","ms":170,"rows":7,"from":175}
+{"probe":"read","time":1791117695975,"subject":"conversation-2d78d1a1-c334-41c3-a6de-14ab6db1a185","ms":246,"rows":1,"from":172}
+{"probe":"read","time":1791117696032,"subject":"member-zitadel-member","ms":298,"rows":2,"from":47}
+{"probe":"read","time":1791117696241,"subject":"conversation-2d78d1a1-c334-41c3-a6de-14ab6db1a185","ms":233,"rows":1,"from":172}
+{"probe":"read","time":1791117696249,"subject":"member-zitadel-member","ms":240,"rows":2,"from":47}
+{"probe":"read","time":1791117696738,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":704,"rows":12,"from":169}
+{"probe":"admission-error","time":1791117697043,"ms":1316,"error":"View check timeout","renewedAt":0,"session":"3f27d9c2-7954-477c-a1a7-f1190c17ca80"}
+{"probe":"stop","time":1791117697048,"reason":"access_changed","validUntil":1791117697227,"renewedAt":0,"session":"3f27d9c2-7954-477c-a1a7-f1190c17ca80"}
+{"probe":"read-error","time":1791117697052,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":796,"error":"TimeoutError"}
+{"probe":"renewal-error","time":1791117697053,"ms":1046,"error":"Authority unavailable","cause":"TimeoutError","session":"3f27d9c2-7954-477c-a1a7-f1190c17ca80"}
+{"probe":"read","time":1791117697267,"subject":"conversation-2d78d1a1-c334-41c3-a6de-14ab6db1a185","ms":940,"rows":1,"from":172}
+{"probe":"read","time":1791117697272,"subject":"member-zitadel-member","ms":940,"rows":2,"from":47}
+{"probe":"read","time":1791117697276,"subject":"grant-WyJzaGFyZWRfZGVza3RvcCIsImNvbXB1dGVyLTI5M2FkOWUxZGNhNzM5MzcxNGZkMzZmODg0ZWU4ZWU1Il0","ms":536,"rows":7,"from":175}
+{"probe":"read","time":1791117697292,"subject":"member-zitadel-member","ms":537,"rows":2,"from":47}
+{"probe":"read","time":1791117697292,"subject":"conversation-2d78d1a1-c334-41c3-a6de-14ab6db1a185","ms":538,"rows":1,"from":172}
+{"probe":"read","time":1791117697341,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":68,"rows":12,"from":169}
+{"probe":"read","time":1791117697348,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":54,"rows":12,"from":169}
+{"probe":"renewal-error","time":1791117697678,"ms":1352,"error":"View check timeout","session":"3f27d9c2-7954-477c-a1a7-f1190c17ca80"}
+{"probe":"read","time":1791117697700,"subject":"grant-WyJzaGFyZWRfZGVza3RvcCIsImNvbXB1dGVyLTI5M2FkOWUxZGNhNzM5MzcxNGZkMzZmODg0ZWU4ZWU1Il0","ms":356,"rows":7,"from":175}
+{"probe":"read","time":1791117697701,"subject":"grant-WyJzaGFyZWRfZGVza3RvcCIsImNvbXB1dGVyLTI5M2FkOWUxZGNhNzM5MzcxNGZkMzZmODg0ZWU4ZWU1Il0","ms":353,"rows":7,"from":175}
+{"probe":"renewal-error","time":1791117698280,"ms":1526,"error":"View check timeout","session":"3f27d9c2-7954-477c-a1a7-f1190c17ca80"}
+{"probe":"read","time":1791117724098,"subject":"conversation-e6d41add-385f-419d-b943-3030fb4f9d65","ms":174,"rows":1}
+{"probe":"read","time":1791117724104,"subject":"member-zitadel-member","ms":179,"rows":2,"from":47}
+{"probe":"read","time":1791117724340,"subject":"computer-personal-73d770dde01f8ce0aee9d9309ea3167d","ms":234,"rows":12,"from":169}
+{"probe":"read","time":1791117724660,"subject":"grant-WyJzaGFyZWRfZGVza3RvcCIsImNvbXB1dGVyLTI5M2FkOWUxZGNhNzM5MzcxNGZkMzZmODg0ZWU4ZWU1Il0","ms":319,"rows":8,"from":175}

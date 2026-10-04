@@ -12,6 +12,7 @@
 
 - Owners and admins can read populated monetary-effect lists through one bounded replay. The P3-15 backend records evidence-backed resolutions, retains uncertain reservations and preserves larger late usage charges; its designed screen and fresh-install qualification remain pending.
 
+- Live viewers keep a valid permission lease when an older authority check is late, including during connection setup; revocation deadlines stay unchanged ([#77 evidence](docs/process/i77-live-view.md)).
 - Work is under way to publish reviewed MCP tools, let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
 
 ### Known limits

@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import { decodeSession, isIdentityAllowed, parseCookieHeader, type AuthConfig } from '@opencrane/auth';
 import type { connectMemberFeed } from '@opencrane/projections';
 import { envelope } from '@opencrane/models';
-import { viewAccess, type ViewAccessOptions } from './view-access.ts';
+import { viewAccess, ViewCheckUnavailable, type ViewAccessOptions } from './view-access.ts';
 
 export interface LiveViewOptions extends ViewAccessOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
@@ -20,7 +20,7 @@ export const liveViewPath = /^\/ws\/conversations\/([\w-]{1,200})\/view$/u;
 function deadline<T>(work: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     // Include event reads around OpenFGA's one-second call; the desktop lease remains 1.5 seconds.
-    const timer = setTimeout(() => reject(new Error('View check timeout')), 1200);
+    const timer = setTimeout(() => reject(new ViewCheckUnavailable('View check timeout')), 1200);
     void work.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }
@@ -98,7 +98,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       if (result.status !== 'appended') throw new Error('Audit unavailable');
       // Include the check after the start audit in the limit of five outstanding checks.
       let viewer: WebSocket | undefined, upstream: Duplex | undefined, stopped = false, checking = 1;
-      let validUntil = Date.now() + 1500;
+      let validUntil = Date.now() + 1500, renewedAt = 0;
       const stop = (reason: StopReason) => {
         if (stopped) return; stopped = true; clearInterval(timer); stops.delete(stop);
         upstream?.destroy();
@@ -121,15 +121,24 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         void deadline(viewAccess(options, ticket.memberId, ticket.conversationId)).then(current => {
           if (JSON.stringify(current) !== JSON.stringify(computer)) return stop('access_changed');
           // A delayed reply must not extend the age of the authority snapshot.
+          renewedAt = Math.max(renewedAt, checkedAt);
           validUntil = Math.max(validUntil, checkedAt + 1500);
-        }, () => stop('access_changed')).finally(() => { checking--; });
+        }, (error: unknown) => {
+          // A missed check cannot revoke a lease renewed by another check.
+          // It grants no extra time: the existing snapshot still expires at validUntil.
+          if (!(error instanceof ViewCheckUnavailable)) stop('access_changed');
+        }).finally(() => { checking--; });
       }, 250);
       stops.add(stop); opening--; reserved = false; socket.once('close', () => stop('disconnected'));
       if (socket.destroyed) { stop('disconnected'); return; }
       try {
         // Audit persistence can wait long enough for authority or the cookie to expire.
         const checkedAt = Date.now();
-        const current = await deadline(viewAccess(options, ticket.memberId, ticket.conversationId)).catch(() => undefined).finally(() => { checking--; });
+        const current = await deadline(viewAccess(options, ticket.memberId, ticket.conversationId)).catch((error: unknown) => {
+          // A newer, successful post-audit check can satisfy this same admission fence.
+          // Its lease already ends at or after checkedAt + 1500; this grants no extra time.
+          return error instanceof ViewCheckUnavailable && renewedAt >= checkedAt && Date.now() < validUntil ? computer : undefined;
+        }).finally(() => { checking--; });
         if (stopped || !current || JSON.stringify(current) !== JSON.stringify(computer)) { stop('access_changed'); return; }
         if (Date.now() >= ticket.expires) { stop('expired'); return; }
         validUntil = Math.max(validUntil, checkedAt + 1500);
