@@ -1,13 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
-import { budgetCeilingSetDataSchema, effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDataSchema, effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
-import { applyBudget, costCents, data, emptyBudget, models, totals, type ModelCall } from './state.ts';
+import { applyBudget, costCents, data, emptyBudget, models, totals, type BudgetState, type ModelCall } from './state.ts';
 
-export async function history(store: EventStore, subject: string, silo: string) {
+export async function history(store: EventStore, subject: string, silo: string, deadline = Infinity) {
   const rows = [];
-  for await (const row of store.readStream(subject)) {
+  for await (const row of store.readStream(subject, 1, deadline)) {
     if (row.event.silo !== silo) throw new Error('Wrong silo');
     rows.push(row);
   }
@@ -123,7 +123,9 @@ export class BudgetActor {
   }
   settle(event: EventEnvelope) {
     return this.serial(async () => {
-      if (event.silo !== this.silo || event.type !== 'effect.observed') throw new Error('Wrong effect');
+      if (event.silo !== this.silo) throw new Error('Wrong effect');
+      if (event.type === 'effect.resolved') return this.settleResolution(event);
+      if (event.type !== 'effect.observed') throw new Error('Wrong effect');
       const d = effectObservedDataSchema.parse(event.data);
       const r = this.state.reservations.find(r => r.id === d.permitId);
       const validCost = d.usage ? r && d.usage.priceTableId === r.call.priceTableId &&
@@ -132,33 +134,52 @@ export class BudgetActor {
       if (!r || !validCost || d.computerId !== r.call.computerId || d.tool !== r.call.model || !(await this.permitted(d.permitId, r.call.requestId))) {
         await this.alert(d.permitId); return;
       }
-      if (r.settledCents !== undefined) {
-        if (r.settledCents !== d.costCents) throw new Error('Conflicting settlement');
-      } else {
-        // Never erase a larger observed charge. Overruns stop subsequent reservations.
-        await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: d.costCents });
-      }
-      // Retry the alert even after settlement, so an alert outage cannot lose the charge or notice.
-      await this.alert(r.id, {
-        model: r.call.model, reservedCents: r.amountCents, settledCents: d.costCents,
-      });
+      await this.settleCharge(r, d.costCents);
     });
+  }
+  private async settleResolution(event: EventEnvelope) {
+    const d = effectResolvedDataSchema.parse(event.data);
+    const r = this.state.reservations.find(r => r.id === d.reservationId && r.id === d.permitId);
+    if (!r || event.principal?.kind !== 'human' || event.principal.id !== d.resolvedBy) throw new Error('Invalid resolution');
+    await this.settleCharge(r, d.settledCents, d.outcome === 'released');
+  }
+  private async settleCharge(r: BudgetState['reservations'][number], cents: number, released = false) {
+    const rows = await history(this.store, `effect-${r.id}`, this.silo);
+    const amounts = rows.flatMap(({ event }) => {
+      if (event.type === 'effect.observed') return [effectObservedDataSchema.parse(event.data).costCents];
+      if (event.type === 'effect.resolved') return [effectResolvedDataSchema.parse(event.data).settledCents];
+      return [];
+    });
+    const conflict = Boolean(r.outcomeUnknown) || amounts.some(amount => amount !== cents) ||
+      (r.settledCents !== undefined && r.settledCents !== cents);
+    const amount = Math.max(r.settledCents ?? 0, cents, ...amounts);
+    if (r.settledCents !== amount || Boolean(r.outcomeUnknown) !== conflict) {
+      await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: amount,
+        ...(conflict ? { outcome: 'unknown' } : released ? { outcome: 'not_dispatched' } : {}) });
+    }
+    // Retry the alert even after settlement, so an alert outage cannot lose the notice.
+    await this.alert(r.id, { model: r.call.model, reservedCents: r.amountCents, settledCents: amount });
+  }
+
+  uncertain(id: string, reason: z.infer<typeof effectUncertainDataSchema>['reason']) {
+    return this.serial(() => this.recordEffect(id, undefined, 'success', reason));
   }
   effect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
     return this.serial(() => this.recordEffect(id, usage, outcome));
   }
-  private async recordEffect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
+  private async recordEffect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success', reason = 'settle_timeout') {
     const r = this.state.reservations.find(r => r.id === id);
     if (!r || !(await this.permitted(id, r.call.requestId))) { await this.alert(id); return; }
     const knownTariff = models.some(row => row.id === r.call.model && row.priceTableId === r.call.priceTableId);
-    const type = knownTariff && (usage || outcome === 'error') ? 'effect.observed' : 'effect.uncertain';
-    const eventId = `${id}:${type}`;
+    const observed = observedPayload(r, usage, outcome);
+    const type = observed ? 'effect.observed' : 'effect.uncertain';
     const rows = await history(this.store, `effect-${id}`, this.silo);
-    if (rows.some(row => row.event.id === eventId)) return;
-    const payload = type === 'effect.observed' ? { permitId: id, computerId: r.call.computerId, tool: r.call.model, destination: 'openai',
-      costCents: usage ? costCents(r.call.model, usage.inputTokens, usage.outputTokens, usage.cachedInputTokens, usage.cacheWriteTokens, r.call.priceTableId) : 0, outcome,
-      ...(usage ? { usage: { ...usage, priceTableId: r.call.priceTableId } } : {}) }
-      : { permitId: id, computerId: r.call.computerId, reason: knownTariff ? 'settle_timeout' : 'unknown_tariff' };
+    if (redundantTimeout(type, reason, rows)) return;
+    const payload = observed ? effectObservedDataSchema.parse(observed) : effectUncertainDataSchema.parse({
+      permitId: id, computerId: r.call.computerId, reason: knownTariff && !usage ? reason : 'unknown_tariff' });
+    if (rows.some(row => row.event.type === type && JSON.stringify(row.event.data) === JSON.stringify(payload))) return;
+    const suffix = rows.some(row => row.event.type === type) ? `:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}` : '';
+    const eventId = `${id}:${type}${suffix}`;
     const result = await this.store.append({ event: envelope(this.silo, `effect-${id}`, type, payload, eventId),
       expectedSequence: rows.at(-1)?.sequence ?? 0 });
     if (result.status !== 'appended') throw new Error('Effect append failed');
@@ -193,6 +214,17 @@ export class BudgetActor {
       if (r.settledCents === undefined && this.now().getTime() - Date.parse(r.time) > 180_000) await this.effect(r.id);
     }
   }
+  async computerLostRecorded(subject: string, eventId: string) {
+    if (!/^computer-[\w-]+$/u.test(subject)) throw new Error('Wrong computer stream');
+    const event = (await history(this.store, subject, this.silo)).find(r => r.event.id === eventId)?.event;
+    if (event?.type !== 'computer.lost') throw new Error('Computer loss not recorded');
+    const computerId = z.string().parse(data(event)['computerId']);
+    return this.serial(async () => {
+      for (const r of this.state.reservations.filter(r => r.call.computerId === computerId && r.settledCents === undefined)) {
+        await this.recordEffect(r.id, undefined, 'success', 'computer_lost');
+      }
+    });
+  }
   async settleRecorded(id: string, eventId: string) {
     const row = (await history(this.store, `effect-${id}`, this.silo)).find(row => row.event.id === eventId);
     if (!row) throw new Error('Effect not recorded');
@@ -202,8 +234,24 @@ export class BudgetActor {
 export function settlementHandler(decisionUrl: string) {
   return registerHandler('settle-budget', async event => {
     const d = data(event);
-    const response = await fetch(`${decisionUrl}/settle`, { method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ permitId: d['permitId'], eventId: event.id }), signal: AbortSignal.timeout(10_000) });
+    const lost = event.type === 'computer.lost';
+    const response = await fetch(`${decisionUrl}/${lost ? 'computer-lost' : 'settle'}`, { method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(lost ? { subject: event.subject, eventId: event.id } : { permitId: d['permitId'], eventId: event.id }), signal: AbortSignal.timeout(10_000) });
     if (!response.ok) throw new Error('Budget settlement unavailable');
   });
+}
+
+function observedPayload(r: BudgetState['reservations'][number], usage: { inputTokens: number; outputTokens: number;
+  cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined } | undefined, outcome: 'success' | 'error') {
+  if (!models.some(row => row.id === r.call.model && row.priceTableId === r.call.priceTableId)) return undefined;
+  if (!usage && outcome !== 'error') return undefined;
+  try {
+    return { permitId: r.id, computerId: r.call.computerId, tool: r.call.model, destination: 'openai', outcome,
+      costCents: usage ? costCents(r.call.model, usage.inputTokens, usage.outputTokens, usage.cachedInputTokens, usage.cacheWriteTokens, r.call.priceTableId) : 0,
+      ...(usage ? { usage: { ...usage, priceTableId: r.call.priceTableId } } : {}) };
+  } catch { return undefined; }
+}
+
+function redundantTimeout(type: string, reason: string, rows: Awaited<ReturnType<typeof history>>) {
+  return type === 'effect.uncertain' && reason === 'settle_timeout' && rows.some(row => row.event.type === type);
 }

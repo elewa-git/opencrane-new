@@ -193,6 +193,10 @@ async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: 
     }
     return true;
   }
+  if (req.url === '/computer-lost' && req.method === 'POST') {
+    const d = z.object({ subject: z.string().max(300), eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
+    await actor.computerLostRecorded(d.subject, d.eventId); res.end('{}'); return true;
+  }
   if (req.url === '/settle' && req.method === 'POST') {
     const d = z.object({ permitId: id, eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
     await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return true;

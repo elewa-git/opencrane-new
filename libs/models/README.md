@@ -282,3 +282,13 @@ Codex waiting, grant renewal, notification and continuation; this slice never
 redispatches from replay. `CONVERSATION_KEYS_DIR` must identify the same secret-store
 adapter for the server and decision process; unavailable keys refuse Ask admission.
 The shared gateway fixture is exported as `@opencrane/models/testing` for API tests.
+
+P3-15 adds `readEffect`, `listEffects` and `resolveEffect` for monetary uncertainty.
+The command conditionally appends one evidence-backed resolution on the effect
+stream; `settle-budget` applies it through the fenced budget actor. Conflicting
+observations preserve the largest charge and retain the full reservation.
+Status reads replay safe metadata and evidence references without provider calls.
+Lists use one finite, batched log replay; details read the exact budget and effect
+subjects. Both reads are bounded to two seconds and fail closed on expiry.
+[The HTTP contract and source evidence](../../docs/process/p3-15-reconcile.md)
+cover the screen binding, refusals and remaining live qualification.

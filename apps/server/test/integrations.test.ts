@@ -1,6 +1,6 @@
 import { installWorker } from '../src/integrations/install-worker.ts';
 import { remoteFixture } from './support/remote-mcp.ts';
-import { budgets, BudgetActor, readBudget, startDecision } from '@opencrane/models';
+import { budgets, BudgetActor, readBudget, startDecision, settlementHandler, history } from '@opencrane/models';
 import { createHash, generateKeyPairSync } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
@@ -661,4 +661,87 @@ it('projects protected discovery as Needs input and replays inventory without an
       if (path === 'public') expect(await catalogue.tools('test', serverId)).toMatchObject({ published: false, connectionId: null, tools: [{ mode: 'block', reviewed: false }, { mode: 'block', reviewed: false }] });
     }
   } finally { await remote.close(); }
+});
+
+it('lists 50 held and settled reservations and reads their details within the authority deadline', async () => {
+  const permits: string[] = [];
+  for (let index = 0; index < 50; index++) {
+    const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+      computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private-conversation',
+      turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) }, 10);
+    permits.push(permitId);
+    await actor.effect(permitId, index < 25 ? undefined : { inputTokens: 1, outputTokens: 1 });
+    if (index >= 25) {
+      const observed = (await history(nats.store, `effect-${permitId}`, 'test')).find(row => row.event.type === 'effect.observed')!;
+      await actor.settleRecorded(permitId, observed.event.id);
+    }
+  }
+  const head = await nats.store.head();
+  const started = performance.now();
+  const response = await app.inject({ url: '/api/org/effects', headers: headers('oidc-alice') });
+  const listMs = performance.now() - started;
+  expect(response.statusCode).toBe(200);
+  expect(listMs).toBeLessThan(2000);
+  expect(response.headers['cache-control']).toBe('no-store');
+  const { effects } = response.json<{ effects: { permitId: string; state: string; settledCents: number | null; reasons: string[] }[] }>();
+  expect(effects).toHaveLength(50);
+  expect(effects.map(effect => effect.permitId)).toEqual(permits);
+  for (const effect of effects.slice(0, 25)) {
+    expect(effect).toMatchObject({ state: 'outcome_unknown', settledCents: null, reasons: ['settle_timeout'] });
+  }
+  for (const effect of effects.slice(25)) {
+    expect(effect).toMatchObject({ state: 'settled', settledCents: 1, reasons: [] });
+  }
+  const detailMs: number[] = [];
+  for (const index of [0, 49]) {
+    const detailStarted = performance.now();
+    const detail = await app.inject({ url: `/api/org/effects/${permits[index]!}`, headers: headers('oidc-amina') });
+    detailMs.push(performance.now() - detailStarted);
+    expect(detail.statusCode).toBe(200);
+    expect(detailMs.at(-1)).toBeLessThan(2000);
+    expect(detail.json()).toMatchObject(effects[index]!);
+  }
+  expect(await nats.store.head()).toBe(head);
+  console.info('Effect HTTP timings (ms)', { listMs, detailMs });
+}, 60_000);
+
+it('exposes safe effect evidence to Owner/Admin, refuses other identities and records a resolution without dispatch', async () => {
+  const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+    computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private-conversation',
+    turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) }, 10);
+  await actor.effect(permitId);
+  const url = `/api/org/effects/${permitId}`;
+  const operatorHeaders = headers('oidc-alice');
+  const status = await app.inject({ method: 'GET', url, headers: operatorHeaders });
+  expect(status.statusCode).toBe(200);
+  const body = status.json<{ sequence: number; csrf: string; state: string }>();
+  expect(body.state).toBe('outcome_unknown');
+  for (const privateValue of ['private-conversation', 'private-turn', 'private-thread', 'requesterId', 'contextDigest', 'authorization']) expect(status.body).not.toContain(privateValue);
+  expect((await app.inject({ method: 'GET', url: '/api/org/effects', headers: headers('oidc-amina') })).statusCode).toBe(200);
+  expect((await app.inject({ method: 'GET', url })).statusCode).toBe(401);
+  expect((await app.inject({ method: 'GET', url, headers: headers('oidc-bob') })).statusCode).toBe(403);
+  expect((await app.inject({ method: 'GET', url, headers: headers('oidc-alice', 'other') })).statusCode).toBe(403);
+  const payload = { commandId: 'resolve-safe', expectedSequence: body.sequence, outcome: 'released', settledCents: 0,
+    evidence: [{ kind: 'dispatch_record', reference: 'dispatch-check-1', digest: 'b'.repeat(64), notDispatched: true }] };
+  expect((await app.inject({ method: 'POST', url: `${url}/resolve`, headers: headers('oidc-alice'), payload })).statusCode).toBe(403);
+  const head = await nats.store.head('budget-test');
+  const resolveHeaders = { ...operatorHeaders, origin: new URL(config.redirectUri).origin, 'x-csrf-token': body.csrf };
+  const effectHead = await nats.store.head(`effect-${permitId}`);
+  for (const fractional of ['0.99999999999999999', '1.00000000000000001', '1e-324']) {
+    const raw = JSON.stringify({ ...payload, outcome: 'settled', settledCents: 1, evidence: [{ kind: 'provider_receipt', reference: 'receipt', digest: 'a'.repeat(64), amountCents: 1 }] }).replace('"settledCents":1', `"settledCents":${fractional}`);
+    expect((await app.inject({ method: 'POST', url: `${url}/resolve`, headers: { ...resolveHeaders, 'content-type': 'application/json' }, payload: raw })).statusCode).toBe(400);
+    const badReceipt = JSON.stringify({ ...payload, outcome: 'settled', settledCents: 1, evidence: [{ kind: 'provider_receipt', reference: 'receipt', digest: 'a'.repeat(64), amountCents: 1 }] }).replace('"amountCents":1', `"amountCents":${fractional}`);
+    expect((await app.inject({ method: 'POST', url: `${url}/resolve`, headers: { ...resolveHeaders, 'content-type': 'application/json' }, payload: badReceipt })).statusCode).toBe(400);
+    expect(await nats.store.head(`effect-${permitId}`)).toBe(effectHead);
+  }
+  expect((await app.inject({ method: 'POST', url: `${url}/resolve`, headers: resolveHeaders, payload })).statusCode).toBe(202);
+  expect((await app.inject({ method: 'POST', url: `${url}/resolve`, headers: resolveHeaders, payload })).statusCode).toBe(202);
+  expect(await nats.store.head('budget-test')).toBe(head); // The command appends only to the effect stream.
+  const after = await app.inject({ method: 'GET', url, headers: headers('oidc-alice') });
+  expect(after.json()).toMatchObject({ state: 'resolution_pending', resolution: { outcome: 'released', settledCents: 0 } });
+  const resolution = (await history(nats.store, `effect-${permitId}`, 'test')).find(row => row.event.type === 'effect.resolved')!.event;
+  await settlementHandler(decision.url).handle(resolution, pgDb(dbs.queue));
+  await settlementHandler(decision.url).handle(resolution, pgDb(dbs.queue));
+  const completed = await app.inject({ method: 'GET', url, headers: operatorHeaders });
+  expect(completed.json()).toMatchObject({ state: 'released', settledCents: 0 });
 });

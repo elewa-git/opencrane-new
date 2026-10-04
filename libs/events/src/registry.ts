@@ -278,7 +278,8 @@ export const eventRegistry: readonly EventDefinition[] = [
     'effect',
     'A person resolved an uncertain effect.',
     data.effectResolvedDataSchema,
-    { permitId: 'permit_1', resolvedBy: 'mem_1', outcome: 'settled' },
+    { permitId: 'permit_1', reservationId: 'res_1', resolvedBy: 'mem_1', outcome: 'settled', settledCents: 180,
+      evidence: [{ kind: 'provider_receipt', reference: 'receipt_1', digest: '0'.repeat(64), amountCents: 180 }] },
   ),
 
   ...mcpEvents,

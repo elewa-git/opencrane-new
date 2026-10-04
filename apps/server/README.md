@@ -412,3 +412,8 @@ After the web build, `SCREENSHOT_BROWSER=1` with the same database runs
 `apps/server/test/screenshot-browser.test.ts` against disposable real Kasm, scan
 and storage fixtures. It requires the existing `ocn-upload-computer:test` image.
 See the [P3-18 evidence](../../docs/process/p3-18-screenshots.md) for remaining qualification.
+Owners and Admins can list and inspect monetary uncertainty with
+`GET /api/org/effects` and `GET /api/org/effects/:permitId`, then submit attested
+receipt evidence with `POST /api/org/effects/:permitId/resolve`.
+[The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
+CSRF token, optimistic sequence and pending settlement state. No screen is added.

@@ -230,7 +230,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `approval.used` | decision service (single use) | approvals | — |
 | `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised` |
 | `effect.uncertain` | settle timeout or `computer.lost` | audit, effects | notify for manual resolution |
-| `effect.resolved` | person | audit, effects | settle or release the reservation |
+| `effect.resolved` | Owner/Admin | audit, effects | evidence, reservation id and integer settledCents; settle or release through settle-budget |
 
 ### MCP catalogue, grants and connections
 
@@ -290,7 +290,23 @@ actor instead appends `budget.settled` with `settledCents: 0` and
 `outcome: not_dispatched`. This releases the reservation without an effect;
 expiry and replay preserve that settlement.
 `settle-budget` retries a recorded
-observation through the decision process; duplicate settlement is a no-op.
+observation or operator resolution through the decision process; duplicate settlement is a no-op.
+It also records uncertainty for outstanding reservations of a lost computer.
+`effect.resolved` binds `permitId`, `reservationId`, `resolvedBy`, `outcome`,
+`settledCents` and evidence. Evidence is an opaque receipt reference and SHA-256
+hash, with either a provider-receipt integer amount or a dispatch record proving
+non-dispatch. The Owner/Admin attests the evidence; it is not an automatic provider
+verification. No raw response, conversation content or credential is included.
+Conflicting or insufficient evidence cannot resolve a hold. Distinct final
+observations are retained; conflicting amounts keep the full reservation and the
+largest recorded charge. The `budget.settled` outcome `unknown` records that hold;
+replay never lowers its recorded amount. A status read sends no external action.
+Native gateway fields are derived from the final streamed usage, including cache
+reads/writes. Streamed replies are never parsed as one JSON document. Missing or
+malformed usage and transport failures record uncertainty. Gateway log timestamps
+are ignored: agentgateway 1.5 drops leading fractional zeros, so ambiguous or
+malformed values determine neither budget periods nor ordering. Reservation event
+time owns attribution, and stream sequence owns causal order.
 The budget projection can be rebuilt with reactions disabled. Cap refusals append
 `budget.exhausted` once per unchanged configuration and scope per UTC day, including across
 actor recovery. P3-1 records every admission separately as `decision.recorded`.
@@ -371,7 +387,7 @@ events. Desktop admission additionally requires an explicit member
 
 | Handler | Subscribed events |
 | --- | --- |
-| `settle-budget` | `effect.observed` |
+| `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `member.role_changed`, `member.removed` |
 | `update-openfga` | `member.joined`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
 | `seed-model-grants` | `member.joined`, `assistant.created` |

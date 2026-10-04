@@ -1,4 +1,5 @@
 import { registerScreenshots } from './computers/screenshots.ts';
+import { registerEffectRoutes } from './effects/routes.ts';
 import { registerApprovalRoutes } from './chat/approvals.ts';
 import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 import { registerFileRoutes, type FileOptions } from './files/routes.ts';
@@ -57,6 +58,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerAuthRoutes(app, authConfig);
   registerMemberRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
+  registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);
