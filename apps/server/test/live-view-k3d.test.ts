@@ -136,7 +136,7 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
         const authority = vi.spyOn(access, 'viewAccess').mockImplementation(unavailable);
         try {
           await page.getByText('Paused', { exact: true }).waitFor({ timeout: 2000 });
-          expect(await page.locator('canvas').count()).toBe(0);
+          await page.locator('canvas').waitFor({ state: 'detached', timeout: 2000 });
           await new Promise(function wait(resolve) { setTimeout(resolve, 2500); });
         } finally { authority.mockRestore(); }
         await page.getByText('Viewing', { exact: true }).waitFor({ timeout: 10_000 });

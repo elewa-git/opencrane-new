@@ -69,7 +69,7 @@ export class LiveView implements OnDestroy, OnChanges {
   private locallyExpired = true;
   private leaseTimer: ReturnType<typeof setTimeout> | undefined;
   private leaseDeadline = -Infinity;
-  private readonly accessConfirmed = signal(false);
+  protected readonly accessConfirmed = signal(false);
 
   protected connectionDetail() {
     if (this.accessConfirmed()) return 'Access confirmed. Starting the desktop…';

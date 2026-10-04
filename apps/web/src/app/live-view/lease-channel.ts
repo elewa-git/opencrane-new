@@ -1,6 +1,7 @@
 import type { RawChannel } from '@novnc/novnc/lib/rfb.js';
 
 export type LeaseNotice = { lease: 'paused' } | { lease: 'valid'; at: number; until: number };
+const HANDSHAKE_REPLY_BYTES = 14;
 interface ChannelEvents {
   notice(notice: LeaseNotice): void;
   invalid(): void;
@@ -88,7 +89,7 @@ export class LeaseChannel {
     }
     if (!this.handshakeComplete) this.handshake.push(event.data.slice(0));
     // Detached viewers have no backbuffer into which paused pixels could accumulate.
-    if (this.port?.readyState !== 3) this.port?.onmessage?.(event);
+    if (this.port?.readyState !== WebSocket.CLOSED) this.port?.onmessage?.(event);
   }
 
   private opened(event: Event) { this.port?.onopen?.(event); }
@@ -102,7 +103,7 @@ class ViewerPort implements RawChannel {
   onerror: ((event: Event) => void) | null = null;
   onclose: ((event: CloseEvent) => void) | null = null;
   private detached = false;
-  private replayBytes: number;
+  private handshakeBytesSwallowed: number;
   private readonly socket: WebSocket;
   private readonly events: ChannelEvents;
   private closeNotified = false;
@@ -114,17 +115,17 @@ class ViewerPort implements RawChannel {
   ) {
     this.socket = socket;
     this.events = events;
-    this.replayBytes = replay ? 0 : 14;
+    this.handshakeBytesSwallowed = replay ? 0 : HANDSHAKE_REPLY_BYTES;
   }
 
   get binaryType() { return this.socket.binaryType; }
   set binaryType(value: BinaryType) { this.socket.binaryType = value; }
   get protocol() { return this.socket.protocol; }
-  get readyState() { return this.detached ? 3 : this.socket.readyState; }
+  get readyState() { return this.detached ? WebSocket.CLOSED : this.socket.readyState; }
 
   send(data: ArrayBuffer | ArrayBufferView<ArrayBuffer>) {
     if (this.detached) return;
-    if (this.replayBytes === 14) {
+    if (this.handshakeBytesSwallowed === HANDSHAKE_REPLY_BYTES) {
       this.socket.send(data);
       return;
     }
@@ -132,13 +133,14 @@ class ViewerPort implements RawChannel {
     if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
     else bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
     let consumed = 0;
-    while (consumed < bytes.length && this.replayBytes < 14) {
-      if (bytes[consumed] !== this.expected[this.replayBytes]) {
+    while (consumed < bytes.length && this.handshakeBytesSwallowed < HANDSHAKE_REPLY_BYTES) {
+      const expectedIndex = this.handshakeBytesSwallowed;
+      if (bytes[consumed] !== this.expected[expectedIndex]) {
         this.events.invalid();
         return;
       }
       consumed++;
-      this.replayBytes++;
+      this.handshakeBytesSwallowed++;
     }
     if (consumed < bytes.length) this.socket.send(bytes.subarray(consumed));
   }

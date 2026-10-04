@@ -55,6 +55,7 @@ export class ViewDelivery {
   toBrowser(message: Buffer, setup: boolean): boolean {
     if (!this.active() || !this.viewer) return false;
     const allowed = this.lease.allows(this.clock.now());
+    // allows() can send the paused notice and stop delivery when the lease lapses.
     if (this.stopped) return false;
     if (!allowed) {
       this.sendNotice();
@@ -72,6 +73,7 @@ export class ViewDelivery {
   toDesktop(message: Buffer) {
     if (!this.active() || !this.desktop) return;
     const allowed = this.lease.allows(this.clock.now());
+    // allows() can send the paused notice and stop delivery when the lease lapses.
     if (this.stopped) return;
     if (!allowed) {
       this.sendNotice();

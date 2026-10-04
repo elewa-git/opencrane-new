@@ -75,6 +75,23 @@ it(
   'gates desktop bytes at send time and sends only one paused notice',
   gate,
 );
+async function repeatedPauses() {
+  const fixture = await deliveryFixture();
+  fixture.lapse();
+  fixture.delivery.toBrowser(Buffer.from('first update'), false);
+  await fixture.resume();
+  fixture.lapse();
+  fixture.delivery.toBrowser(Buffer.from('second update'), false);
+  const pausedNotices = fixture.sent.filter(function isPausedNotice(message) {
+    return typeof message === 'string' && message === '{"lease":"paused"}';
+  });
+  expect(pausedNotices).toHaveLength(2);
+  fixture.lease.stop();
+}
+it(
+  'sends exactly one paused notice for each pause across a resume',
+  repeatedPauses,
+);
 async function release() {
   const fixture = await deliveryFixture();
   fixture.lapse();

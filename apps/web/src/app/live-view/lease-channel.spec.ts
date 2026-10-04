@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { LeaseChannel, parseLeaseNotice } from './lease-channel';
 
 class FakeSocket extends EventTarget {
+  static readonly CLOSED = WebSocket.CLOSED;
   static last: FakeSocket;
   constructor() {
     super();

@@ -12,7 +12,9 @@
   </div>
   @if (state() === 'Connecting') {
     <p>{{ connectionDetail() }}</p>
-    <p>Checking that you're in this computer's audience before any pixels load.</p>
+    @if (!accessConfirmed()) {
+      <p>Checking that you're in this computer's audience before any pixels load.</p>
+    }
   }
   @if (state() === 'Paused') {
     <p>Paused — checking your access. The picture is hidden until your access is confirmed,

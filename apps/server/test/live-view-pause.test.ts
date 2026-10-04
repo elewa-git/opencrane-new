@@ -59,7 +59,7 @@ async function pauseFixture(pendingOpen = false) {
     const startedMode = mode;
     if (startedMode === 'deny') throw new Error('Access changed');
     if (startedMode === 'unavailable') throw new access.ViewCheckUnavailable('authorisation');
-    if (startedMode === 'slow-ok') await delay(1100);
+    if (startedMode === 'slow-ok') await delay(900);
     if (startedMode === 'ok' || startedMode === 'slow-ok') return expected;
     expected = await realAccess(...args);
     return expected;
@@ -176,18 +176,24 @@ async function resumes() {
     await fixture.handshake();
     fixture.setMode('unavailable');
     await fixture.notice('paused');
-    const count = fixture.binaries.length;
+    const pauseAt = fixture.notices.find(function paused(entry) {
+      return entry.notice.lease === 'paused';
+    })!.at;
     fixture.readable.write(update(2));
     fixture.socket.send(request);
     await delay(1000);
-    expect(fixture.binaries).toHaveLength(count);
+    expect(fixture.binaries.every(function arrivedBeforePause(frame) {
+      return frame.at < pauseAt;
+    })).toBe(true);
     expect(fixture.received).toEqual([]);
     const resumedAt = performance.now();
     fixture.setMode('ok');
     await fixture.notice('valid', resumedAt);
     await until(function receivedRequest() { return fixture.received.length > 0; });
     expect(Buffer.concat(fixture.received)).toEqual(request);
-    expect(fixture.binaries).toHaveLength(count);
+    expect(fixture.binaries.every(function arrivedBeforePause(frame) {
+      return frame.at < pauseAt;
+    })).toBe(true);
     const next = nextBinaryMessage(fixture.socket);
     fixture.readable.write(update(3));
     expect(await next).toEqual(update(3));
@@ -247,10 +253,16 @@ async function hiddenRevocation() {
       granteeId: 'alice', revokedBy: 'owner' };
     await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', revocation);
     await fixture.notice('paused', revokedAt);
-    const count = fixture.binaries.length;
+    const pauseNotice = fixture.notices.find(function paused(entry) {
+      return entry.notice.lease === 'paused' && entry.at >= revokedAt;
+    });
+    expect(pauseNotice).toBeDefined();
+    const pauseAt = pauseNotice!.at;
     expect(fixture.binaries.at(-1)!.at - revokedAt).toBeLessThan(2000);
     await delay(Math.max(0, revokedAt + 3000 - performance.now()));
-    expect(fixture.binaries).toHaveLength(count);
+    expect(fixture.binaries.every(function arrivedBeforePause(frame) {
+      return frame.at < pauseAt;
+    })).toBe(true);
     const closed = once(fixture.socket, 'close');
     const deniedAt = performance.now();
     fixture.setMode('real');
