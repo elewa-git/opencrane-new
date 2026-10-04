@@ -3,6 +3,7 @@ import { appendFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+const calls: Array<{ body: string; requestId: string }> = [];
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/approval-calls') {
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(calls)); return;

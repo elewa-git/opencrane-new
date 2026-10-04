@@ -180,7 +180,7 @@ MCP and browser egress brokering remain later work. No provider key is embedded.
 `sandbox-template.json` uses agent-sandbox v1beta1, gVisor and S0.5's 512 MiB
 limit. It declares `networkPolicyManagement: Unmanaged`; apply
 `network-policy.json` before creating a pool. The policy permits TCP 3000 egress
-only to `app=opencrane-gateway` and TCP 8081/6901 ingress only from
+only to `app=opencrane-gateway` and TCP 8081 ingress only from
 `app=opencrane-server`, both in the same namespace. There is no DNS exception.
 The gateway is the documented `computer-runtime` ConfigMap parameter, key
 `gateway`. Create it in the computer namespace with the real gateway Pod IP

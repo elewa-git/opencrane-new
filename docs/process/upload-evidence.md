@@ -1,5 +1,151 @@
 # P2-6 upload evidence
 
+## Final rebase and isolated-host qualification — 4 October 2026
+
+**Local source gates: PASS. Single real PDF turn: PASS, three euro cents.**
+**Fresh main handback journey: FAIL; restored main health: PASS.**
+
+Source: `work/upload`, rebased from `465c23c` onto `origin/main` `bbf0bab`
+(approvals #72, live view #73, audit #74 and budgets #71). Rebased source:
+`3fdb78a`, plus the integration updates recorded in this commit. The rebase
+completed; main is an ancestor and neither rebase state directory remains.
+
+Conflict resolution retains upload routes and delivery, approval routes and
+lossless request parsing, paying-group attribution, audit workers/routes and the
+live viewer. The model fixture keeps approval-call recording, PDF/custom-exec
+responses and the streaming Stop case. Main's extracted gateway fixture retains
+its audit-drain cleanup; upload regression tests use it. Authority checks keep
+main's batches of 16 IAM receipts and this branch's bounded entity histories and
+output-report fence. This is the **partial #70 fix**, not closure of #70.
+
+Computer image: `sha256:688db3cbc1558d8ab2f5ffb2cd008ab05390489b83cc41effd6e0fb028189d77`.
+The tracked template and release tag agree. Main's `POD_UID` setting and removal
+of direct desktop ingress are retained; exec-host isolation is unchanged.
+`apps/computer/build.sh`: **PASS**, including matching image sources, 384/384
+licence entries, custom exec/PDF proof and all 24 fresh/resumed gVisor assertions.
+The generated licence inventory is copied to the tracked inventory; its missing
+`@opencrane/models` AGPL entry is now included. No dependency was added.
+Image receipt: `apps/computer/.state/checks.json`; build log:
+`/tmp/upload-final-round-image.log`.
+
+**PASS**: clean `npm ci`, root lint (seven warnings, no errors), workspace and
+infra typecheck, `check:events` (85 types), web build and all 60 web tests.
+Logs: `/tmp/upload-final-round-{lint,typecheck,infra,events,web-build,web-tests}.log`.
+
+The first full run, overlapping the image build and source gates, **FAIL**ed:
+1,226 passed, 14 skipped, three failed. The policy integration exceeded its
+five-second test deadline; an approval fixture reported `Gateway stopped`; the
+model-grant replay migration subprocess failed. All three passed unchanged in
+focused reruns (one policy, three approval variants, one replay test). Those
+reruns do not turn the failed full run into a pass. No assertion or production
+deadline was relaxed. Logs: `/tmp/upload-final-round-tests.log` and
+`/tmp/upload-final-round-{policy,approval,replay}-rerun.log`.
+
+### Exactly one real turn: PASS
+
+Warm OWNER stack; receipt started `2026-10-04T03:27:55.932Z`. Stopped the original checkout,
+wrote this worktree to `stack-owner` with `printf '%s'` and verified the exact
+bytes, completed `npm ci`, then ran `up.sh` with the original Zitadel key file
+referenced by path. The retained computers lacked uploads and `POD_UID`; updating
+only their image was correctly refused by admission. They were then given the
+exact qualified template and their Pods replaced, retaining their disks.
+The generated Angular cache was archived before startup.
+
+Warm `up.sh` journey: **FAIL** at member 1280px sign-in with
+`ERR_NETWORK_CHANGED`; this happened before a paid turn. Service health was
+**PASS**. The separate one-shot harness then signed in, uploaded the test PDF
+through the shipped UI and sent exactly:
+
+> What is the project code in the attached PDF?
+
+Answer: **The project code is Willow-47.** Correct: **yes**.
+
+| Measurement | Observed |
+| --- | --- |
+| Model | `gpt-6.1-sol` |
+| Chat turns / provider responses | 1 / 1 |
+| Input / output tokens | 10,178 / 15 |
+| Cached input / cache-write tokens | 0 / 10,175 |
+| Actual settled cost / authorised cap | 3 / 10 euro cents |
+| Local worst-case bound before forwarding | 5 euro cents |
+| Gateway reservation, fully settled | 502 euro cents; unchanged #75 hold |
+
+The request contained bounded untrusted PDF text. This paid turn answered from
+that text without a custom-exec continuation; actual native-host execution and
+isolation were separately proved by the image checks above. The one-shot relay
+allowed only this conversation, counted input before generation and refused any
+response whose bounded cost exceeded the remaining allowance. No paid retry was
+made. Provider usage and the event ledger agree on three settled cents.
+Conversation `cdd65c12-e025-4590-bd93-076d34f633c5`; turn `c9eccfed-d0fe-46e4-a5c2-36f33e5c094f`.
+Safe private receipts: `.tools/upload-final-round-receipt.json`,
+`/tmp/upload-final-round-real.log` and `/tmp/upload-final-round-ledger.log`.
+Takeover logs: `/tmp/upload-final-round-{main-down,owner-npm-ci,owner-up,owner-status,image-rollout}.log`.
+
+### Fresh handback
+
+Stopped this stack successfully, restored `/home/jente/dev/opencrane-new` with
+`printf '%s'` and verified the no-newline marker. Main remains at `bbf0bab`.
+Its noVNC dependency was missing locally, so `npm ci` installed its lockfile;
+its generated Angular cache was archived before `up.sh --fresh`.
+Fresh `up.sh --fresh`: **FAIL**, timed out waiting for the joined member's
+computer. All three computers subsequently became Ready. One readiness retry
+with `journey.sh` on that fresh installation reached the browser chat, then
+**FAIL**ed at `browser-chat.ts:44`, **Stop keeps genuinely partial text**.
+No further journey retry was made, and no main source was changed. This is not
+recorded as an issue #70 failure. Restoration health and the exact owner marker
+are **PASS**; the complete fresh handback journey remains **FAIL**.
+Logs: `/tmp/upload-final-round-main-{npm-ci,fresh,ready-journey,status-final}.log`.
+Private failure details: `/tmp/upload-final-round-main-private-failure.log` and
+`/tmp/upload-final-round-main-ready-private-failure.log`.
+
+### Final rebased source gates
+
+The second full run **FAIL**ed with 1,227 passed, 14 skipped and two failures:
+the slow live-view stream closed, and an audit replay test observed one of two
+JWT refusals after an immediate forced kill. The shared model fixture had used
+`SIGKILL` for both log-draining replay checks and actual crash recovery. Replay
+restarts now use `SIGTERM`; the in-flight crash test explicitly keeps `SIGKILL`.
+All three focused audit/restart cases **PASS** after this fixture-only change.
+No production deadline or assertion was changed. The live-view positive test
+adds 1.05 seconds of delay against a 1.2-second deadline; the final full run
+serialises files to reduce contention while retaining `--maxWorkers=2`, with
+a 20-second default test-runner timeout. Production time limits are unchanged.
+Logs: `/tmp/upload-final-round-tests-clean.log` and
+`/tmp/upload-final-round-audit-restart.log`.
+
+Final root lint, workspace typecheck and `check:events`: **PASS**.
+Logs: `/tmp/upload-final-round-lint-final2.log`,
+`/tmp/upload-final-round-typecheck-final.log` and
+`/tmp/upload-final-round-events-final.log`. An added blank line initially failed
+Markdown lint and was removed before the successful final lint run.
+
+Restored-main anonymous UI check: **PASS**, HTTP 200, visible SSO button, no page
+errors and local model stub; `/tmp/upload-final-round-main-ui.log`.
+
+**PASS**: 74 test files, 1,229 tests; 14 tests skipped across the suite.
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --no-file-parallelism --testTimeout=20000 --reporter=verbose
+```
+
+The full serial run took 1,534.04 seconds and includes the unchanged slow-authority
+live-view assertion, all upload tests and the corrected audit/restart fixture.
+Log: `/tmp/upload-final-round-tests-serial.log`. The image and other source gates
+had completed before this run. The two earlier failed full runs remain recorded
+above; this is the complete green run on the final source.
+
+**NOT RUN in this round**: the gated lifecycle/bridge/live-view Kubernetes suites,
+the conditional approval browser test and the automated three-call paid-provider
+test. The separate 24-assertion fresh/resumed gVisor image qualification and the
+single capped real-provider turn are recorded above. Hosted CI and a complete
+fresh-install upload journey on this rebased source remain unqualified; this
+receipt does not declare the whole capability done.
+
+Final checks also confirm that main's checkout is clean, the restored owner
+marker has exactly the original checkout path, and the qualified computer digest
+matches the tracked manifest and release tag. No real secrets or provider
+credentials are included in this receipt.
+
 ## Custom exec host isolation — 4 October 2026
 
 Source: `work/upload`, starting at `bb7af88`. The focused review receipt

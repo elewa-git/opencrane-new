@@ -19,7 +19,7 @@
         "containers": [
           {
             "name": "computer",
-            "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:2a387e36ff44f6bd75f80e2bcffe3b0f9443e601efab5051cb32b13d10a637b9",
+            "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:688db3cbc1558d8ab2f5ffb2cd008ab05390489b83cc41effd6e0fb028189d77",
             "env": [
               {
                 "name": "GATEWAY",

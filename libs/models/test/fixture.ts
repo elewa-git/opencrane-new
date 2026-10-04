@@ -155,7 +155,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
         catch { return false; }
       });
     },
-    async restart() { await gateway.stop('SIGKILL'); gateway = await startGateway(options); },
+    // Replay checks drain completed requests; crash checks explicitly request SIGKILL.
+    async restart(signal: NodeJS.Signals = 'SIGTERM') { await gateway.stop(signal); gateway = await startGateway(options); },
     async close() {
       await gateway.stop(); await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
       abort.abort(); await dispatching.catch(error => { if (!(error instanceof Error && error.name === 'AbortError')) throw error; });

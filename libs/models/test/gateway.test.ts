@@ -499,7 +499,7 @@ it('retains an in-flight reservation across gateway kill and actor recovery, rec
   const f = await fixture(25, 200);
   try {
     f.hold(); const call = f.call().catch(() => ({ status: 502 }));
-    await until(() => f.received() === 1); await f.restart(); await call;
+    await until(() => f.received() === 1); await f.restart('SIGKILL'); await call;
     f.advance(); await f.actor.expire();
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toContain('effect.uncertain');
