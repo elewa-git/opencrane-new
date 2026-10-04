@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { encodeSession } from '@opencrane/auth';
 import { testAuthConfig } from '@opencrane/auth/testing';
 import { approvalCardsSchema } from '@opencrane/protocol';
+import { auditTrail, readAudit } from '@opencrane/projections';
+import { history } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { expect, it, vi } from 'vitest';
 import { grantStream } from '@opencrane/authz';
@@ -73,6 +75,22 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
     }
     expect(JSON.stringify(events)).not.toContain('hello');
     expect(events.filter(e => e.type === 'approval.used')).toHaveLength(1);
+    const used = z.object({ permitId: z.string() }).parse(events.find(e => e.type === 'approval.used')!.data);
+    const decision = (await history(f.nats.store, `decision-${used.permitId}`, 'test'))[0]!;
+    expect(decision.event).toMatchObject({ correlation: { approval: cards[0]!.approvalId },
+      data: { requestId: used.permitId, permitId: used.permitId, outcome: 'allow', reason: 'approval_used' } });
+    await f.runner.initialise(auditTrail); await f.runner.run(auditTrail);
+    const audit = await readAudit(f.db, 'test', { requestId: used.permitId });
+    expect(audit.rows).toHaveLength(1);
+    expect(audit.rows[0]).toMatchObject({ decision: 'allow', outcome: 'unknown' });
+    expect(audit.rows[0]!.records).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'tool.approval_requested' }), expect.objectContaining({ type: 'approval.decided' }),
+      expect.objectContaining({ type: 'approval.used' }), expect.objectContaining({ type: 'decision.recorded', reason: 'Single-use approval consumed' }),
+    ]));
+    expect(JSON.stringify(audit)).not.toContain('hello');
+    await f.runner.rebuild(auditTrail);
+    expect(await readAudit(f.db, 'test', { requestId: used.permitId })).toEqual(audit);
+    expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
 
@@ -98,7 +116,7 @@ it.each([
   } finally { await f.close(); }
 }, 40_000);
 
-it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed', 'revoked', 'lost_ack', 'fence'])('refuses %s approval with zero upstream effects', async reason => {
+it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed', 'revoked', 'lost_ack', 'fence', 'audit', 'audit_fence'])('refuses %s approval with zero upstream effects', async reason => {
   const f = await approvalFixture();
   try {
     await f.call(); expect((await f.decide(reason === 'rejected' ? 'rejected' : 'approved')).statusCode).toBe(200);
@@ -111,7 +129,12 @@ it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed
     if (reason === 'revoked') await f.append(grantStream('mcp_server', 'fixture'), 'grant.revoked', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId: 'alice', revokedBy: 'alice' });
     const append = f.nats.store.append.bind(f.nats.store);
     const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
+      const auditing = z.object({ type: z.literal('decision.recorded') }).safeParse(command.event).success;
+      if (reason === 'audit' && auditing) return { status: 'unavailable', cause: new Error('Audit unavailable') };
       const result = await append(command);
+      if (reason === 'audit_fence' && auditing) {
+        await f.append('assistant-assistant', 'assistant.settings_changed', { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: false });
+      }
       if (z.object({ type: z.literal('approval.used') }).safeParse(command.event).success) {
         if (reason === 'lost_ack') throw new Error('Acknowledgement lost after durable append');
         if (reason === 'fence') await f.append('assistant-assistant', 'assistant.settings_changed', { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: false });
@@ -127,7 +150,7 @@ it.each(['rejected', 'expired', 'cancelled', 'changed', 'profile', 'turn_changed
     if (reason === 'rejected') expect(state).toBe('denied');
     if (reason === 'expired') expect(state).toBe('expired');
     if (['cancelled', 'changed', 'profile', 'turn_changed'].includes(reason)) expect(state).toBe('cancelled');
-    if (['lost_ack', 'fence'].includes(reason)) expect(state).toBe('outcome_unknown');
+    if (['lost_ack', 'fence', 'audit', 'audit_fence'].includes(reason)) expect(state).toBe('outcome_unknown');
   } finally { await f.close(); }
 }, 40_000);
 

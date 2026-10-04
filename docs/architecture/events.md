@@ -92,6 +92,8 @@ If a stale read slips past validation, the expected-version check rejects the ap
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,
 `assistantId`, `conversationId` and `turnId`; model allows include `permitId`.
+Approval decisions include `correlation.approval`; consumed approvals also include
+the server-issued request id as `permitId`, matching `approval.used`.
 Unverified identities are omitted. A failed append denies dispatch. Gateway JWT
 refusals before ext_authz have no decision event; observation reconciliation belongs
 to P3-19. No raw arguments, tokens or credential values appear in this event.

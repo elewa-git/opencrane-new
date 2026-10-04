@@ -93,13 +93,14 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
     const requestId = randomUUID(), route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
     let contextDigest = createHash('sha256').update('unverified').digest('hex');
     let correlation: { conversationId: string; turnId: string } | undefined;
-    const audit = async (outcome: 'allow' | 'ask' | 'deny', reason: string, permitId?: string) => {
+    const audit = async (outcome: 'allow' | 'ask' | 'deny', reason: string, permitId?: string, approvalId?: string) => {
       auditAttempted = true;
       const event = envelope(actor.silo, `decision-${requestId}`, 'decision.recorded', {
         requestId, route, outcome, reason, contextDigest, ...correlation,
         ...(auditedContext ? { requesterId: auditedContext.requesterId, assistantId: auditedContext.assistantId } : {}),
         ...(permitId ? { permitId } : {}),
       });
+      if (approvalId) event.correlation.approval = approvalId;
       if ((await actor.store.append({ event, expectedSequence: 0 })).status !== 'appended') throw new Error('Decision audit unavailable');
     };
     void (async () => {
@@ -121,12 +122,12 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!);
         contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
         // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.
+        await fresh();
         const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo, {
           requesterId: t.requester, assistantId: c.assistant, conversationId: t.conversation, turnId: t.turn,
           serverId: match[1]!, connectionId: match[2]!,
         }, policy, keys, actor.now, fresh, requestId);
-        await fresh();
-        await audit(outcome, reason);
+        await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
         res.setHeader('x-request-id', requestId);
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
