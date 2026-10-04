@@ -9,7 +9,8 @@ Resolve missing product decisions with the owner; do not hide them behind an int
 
 1. Inspect the actual package graph, entrypoints and tests. Reuse the existing owner
    of a responsibility; avoid speculative packages and duplicate paths.
-2. Implement the smallest coherent change. Keep event-only truth, replayable
+2. Implement the smallest coherent change, written as verbose, clear code that follows
+   the code style in AGENTS.md: small atomic named functions, no chaining or inline logic. Keep event-only truth, replayable
    projections, typed TypeScript business rules, integer cents and secret references.
    Check licences before introducing dependencies. Remove replaced reachable behaviour.
 3. Test the acceptance claim, including refused operations and meaningful failure
