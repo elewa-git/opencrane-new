@@ -12,15 +12,16 @@ const callSchema = z.object({ jsonrpc: z.literal('2.0'), id: z.union([z.string()
   _meta: z.object({ 'io.modelcontextprotocol/protocol-version': z.literal(version),
     'io.modelcontextprotocol/client-capabilities': z.object({}).strict() }).strict(),
 }).strict();
-export async function mcpPolicy(store: EventStore, silo: string, server: string, connection: string, body: string, headers: IncomingHttpHeaders) {
+export async function mcpPolicy(store: EventStore, silo: string, server: string,
+  connection: string, body: string, headers: IncomingHttpHeaders, deadline = Infinity) {
   const { call, args } = parseCall(body);
   if (headers['mcp-protocol-version'] !== version || headers['mcp-method'] !== call.method || headers['mcp-tool-name'] !== call.params.name) throw new Error('MCP protocol refused');
-  const policy = await readToolPolicy(store, silo, server);
+  const policy = await readToolPolicy(store, silo, server, deadline);
   if (!policy.published || policy.connectionId !== connection || policy.accountMode !== 'none') throw new Error('MCP context unavailable');
   // A reviewed, credential-free fixture is explicit. Never invent a personal profile or memory grant.
   const tool = new Map(policy.tools.map(t => [t.name, t])).get(call.params.name);
   return { ...toolDecision(tool), policy, revision: tool?.revision, name: call.params.name, args,
-    ...await reviewMetadata(store, silo, server, call.params.name) };
+    ...await reviewMetadata(store, silo, server, call.params.name, deadline) };
 }
 function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][number] | undefined) {
   const mode = tool?.reviewed ? tool.mode : 'block';
@@ -29,8 +30,9 @@ function toolDecision(tool: Awaited<ReturnType<typeof readToolPolicy>>['tools'][
   const reason = mode === 'ask' ? 'approval_required' : mode === 'allow' ? 'policy_allow' : 'policy_block';
   return { outcome, reason } as const;
 }
-async function reviewMetadata(store: EventStore, silo: string, server: string, name: string) {
-  const rows = await history(store, `mcp-${server}`, silo);
+async function reviewMetadata(store: EventStore, silo: string, server: string,
+  name: string, deadline: number) {
+  const rows = await history(store, `mcp-${server}`, silo, deadline);
   const discovered = rows.findLast(r => r.event.type === 'mcp.server_discovered');
   const discovery = mcpServerDiscoveredDataSchema.parse(discovered?.event.data);
   const review = discovery.tools?.find(t => t.name === name)?.review;

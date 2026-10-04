@@ -212,7 +212,9 @@ that head. Team subjects come only from the assistant owner and current team gra
 for that resource. The turn lifecycle lives on the exact computer and conversation
 subjects; MCP policy lives on the exact server subject.
 
-`authorityFence` returns a freshness check with `include(...subjects)` and `head`.
+`authorityFence` returns a freshness check with `include(...subjects)`, `head` and
+the original absolute `deadline`. Gateway and approval reads share that deadline,
+including credential, policy and approval-history reads; store retries cannot reset it.
 Callers add exact subjects as verified credentials, policy and paying-group bindings
 reveal them. Subjects discovered later still use the original snapshot head.
 Before reservation (inside the budget queue), approval use and final admission,

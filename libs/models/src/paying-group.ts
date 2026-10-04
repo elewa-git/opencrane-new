@@ -13,10 +13,12 @@ function isCreated(row: StoredEvent) {
 function needsReceipt(row: StoredEvent) {
   return row.event.type !== 'member.invited';
 }
-async function readMembership(store: EventStore, silo: string, requesterId: string, groupId: string) {
+async function readMembership(store: EventStore, silo: string, requesterId: string,
+  groupId: string, deadline: number) {
   try {
     const [groupRows, memberRows] = await Promise.all([
-      history(store, `team-${groupId}`, silo), history(store, `member-${requesterId}`, silo),
+      history(store, `team-${groupId}`, silo, deadline),
+      history(store, `member-${requesterId}`, silo, deadline),
     ]);
     return { groupRows, memberRows };
   } catch {
@@ -60,18 +62,20 @@ async function requireApplied(binding: Binding, silo: string, requesterId: strin
 
 /** Shared spending requires both active silo membership and current group membership. */
 export async function payingGroupAuthority(store: EventStore, silo: string,
-  requesterId: string, groupId: string, binding?: Binding) {
+  requesterId: string, groupId: string, binding?: Binding, callerDeadline = Infinity) {
   const started = performance.now();
-  const { groupRows, memberRows } = await readMembership(store, silo, requesterId, groupId);
+  const deadline = Math.min(started + 2000, callerDeadline);
+  const { groupRows, memberRows } = await readMembership(
+    store, silo, requesterId, groupId, deadline);
   requireMembership(groupRows, memberRows, requesterId, groupId);
   if (binding) {
     await requireApplied(binding, silo, requesterId, groupId, groupRows, memberRows);
   }
   async function fresh() {
     // Compare against the histories we authorised, so a concurrent removal fails closed.
-    const groupHead = await store.head(`team-${groupId}`);
-    const memberHead = await store.head(`member-${requesterId}`);
-    const expired = performance.now() - started > 2000;
+    const groupHead = await store.head(`team-${groupId}`, deadline);
+    const memberHead = await store.head(`member-${requesterId}`, deadline);
+    const expired = performance.now() >= deadline;
     if (groupHead !== groupRows.at(-1)?.sequence || memberHead !== memberRows.at(-1)?.sequence ||
         expired) {
       throw new PayingGroupRefused('Paying group authority changed; try again');

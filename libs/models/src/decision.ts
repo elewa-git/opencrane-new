@@ -11,6 +11,7 @@ import type { JSONWebKeySet } from 'jose';
 import { computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import type { StoredEvent } from '@opencrane/event-store';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId, type ModelCall } from './state.ts';
 
@@ -69,9 +70,9 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   const permission = await memberAuthorisation(binding).check(t.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
   const [assistants, conversation, turn, authority] = await Promise.all([
-    history(actor.store, `assistant-${c.assistant}`, actor.silo),
-    history(actor.store, `conversation-${t.conversation}`, actor.silo),
-    activeTurn(actor, c, t),
+    history(actor.store, `assistant-${c.assistant}`, actor.silo, fresh.deadline),
+    history(actor.store, `conversation-${t.conversation}`, actor.silo, fresh.deadline),
+    activeTurn(actor, c, t, fresh.deadline),
     currentAuthority(actor.store, binding, t.requester, c.assistant, t.conversation, resourceType, resourceId, fresh),
   ]);
   const assistant = assistants.find(r => r.event.type === 'assistant.created');
@@ -83,19 +84,40 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
   if (data(assistant.event)['kind'] === 'team') {
     fresh.include(`team-${payingGroupId}`);
-    await (await payingGroupAuthority(actor.store, actor.silo, t.requester, payingGroupId, binding))();
+    const groupAuthority = await payingGroupAuthority(
+      actor.store, actor.silo, t.requester, payingGroupId, binding, fresh.deadline);
+    await groupAuthority();
   }
   return { model: t.model, payingGroupId, priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
     conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
     contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed, authority, payingGroupId])).digest('hex') };
 }
-async function activeTurn(actor: BudgetActor, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>) {
-  const lifecycle = (await history(actor.store, `computer-${c.assistant}`, actor.silo)).filter(r =>
-    r.event.source === 'opencrane-server' && r.event.type.startsWith('computer.turn_') && data(r.event)['turnId'] === t.turn);
-  const turn = lifecycle.find(r => r.event.type === 'computer.turn_started');
-  if (!turn || lifecycle.some(r => r.event.type === 'computer.turn_closed') ||
-      data(turn.event)['threadId'] !== t.thread || data(turn.event)['conversationId'] !== t.conversation ||
-      data(turn.event)['requesterId'] !== t.requester || data(turn.event)['task'] !== t.task) throw new Error('Turn is not active');
+async function activeTurn(actor: BudgetActor, computer: z.infer<typeof computerSchema>,
+  turnToken: z.infer<typeof turnSchema>, deadline: number) {
+  const rows = await history(actor.store, `computer-${computer.assistant}`, actor.silo, deadline);
+  function matchesTurn(row: StoredEvent) {
+    return row.event.source === 'opencrane-server' &&
+      row.event.type.startsWith('computer.turn_') &&
+      data(row.event)['turnId'] === turnToken.turn;
+  }
+  function isStarted(row: StoredEvent) {
+    return row.event.type === 'computer.turn_started';
+  }
+  function isClosed(row: StoredEvent) {
+    return row.event.type === 'computer.turn_closed';
+  }
+  const lifecycle = rows.filter(matchesTurn);
+  const turn = lifecycle.find(isStarted);
+  const closed = lifecycle.some(isClosed);
+  if (!turn || closed) {
+    throw new Error('Turn is not active');
+  }
+  const recorded = data(turn.event);
+  if (recorded['threadId'] !== turnToken.thread ||
+      recorded['conversationId'] !== turnToken.conversation ||
+      recorded['requesterId'] !== turnToken.requester || recorded['task'] !== turnToken.task) {
+    throw new Error('Turn is not active');
+  }
   return turn;
 }
 export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0, keys?: ReviewKeys) {
@@ -123,7 +145,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       if (await internalRoutes(req, res, actor, identity, binding)) return;
       if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
       const fresh = await authorityFence(actor.store, started);
-      const checked = await credentials.check(req.headers);
+      const checked = await credentials.check(req.headers, undefined, fresh.deadline);
       const c = computerSchema.parse(checked.computer), t = turnSchema.parse(checked.turn);
       fresh.include(`member-${t.requester}`, `assistant-${c.assistant}`, `computer-${c.assistant}`, `conversation-${t.conversation}`);
       auditedContext = { requesterId: t.requester, assistantId: c.assistant };
@@ -135,7 +157,8 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
         const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
         if (!match) throw new Error('Unknown MCP route');
         fresh.include(`mcp-${match[1]!}`);
-        const policy = await mcpPolicy(actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers);
+        const policy = await mcpPolicy(
+          actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers, fresh.deadline);
         const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!, fresh);
         contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
         // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.

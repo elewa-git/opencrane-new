@@ -4,9 +4,13 @@ import { applyToolPolicy, emptyToolPolicy } from '@opencrane/projections';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { envelope, history } from './actor.ts';
 
-export async function readToolPolicy(store: EventStore, silo: string, serverId: string) {
+export async function readToolPolicy(store: EventStore, silo: string, serverId: string,
+  deadline = Infinity) {
   let policy = emptyToolPolicy();
-  for (const row of await history(store, `mcp-${serverId}`, silo)) policy = applyToolPolicy(policy, row.event, row.sequence);
+  const rows = await history(store, `mcp-${serverId}`, silo, deadline);
+  for (const row of rows) {
+    policy = applyToolPolicy(policy, row.event, row.sequence);
+  }
   return policy;
 }
 const id = z.string().regex(/^[\w-]{1,200}$/u);

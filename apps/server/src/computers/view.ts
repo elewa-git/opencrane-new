@@ -8,7 +8,7 @@ import type { FastifyInstance } from 'fastify';
 import { decodeSession, isIdentityAllowed, parseCookieHeader, type AuthConfig } from '@opencrane/auth';
 import type { connectMemberFeed } from '@opencrane/projections';
 import { envelope } from '@opencrane/models';
-import { viewAccess, ViewCheckUnavailable, type ViewAccessOptions } from './view-access.ts';
+import { viewAccess, ViewCheckUnavailable, viewCheckMs, type ViewAccessOptions } from './view-access.ts';
 
 export interface LiveViewOptions extends ViewAccessOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
@@ -24,7 +24,10 @@ export const liveViewPath = /^\/ws\/conversations\/([\w-]{1,200})\/view$/u;
 function deadline<T>(work: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     // Include event reads around OpenFGA's one-second call; the desktop lease remains 1.5 seconds.
-    const timer = setTimeout(() => reject(new ViewCheckUnavailable('deadline')), 1200);
+    function timeout() {
+      reject(new ViewCheckUnavailable('deadline'));
+    }
+    const timer = setTimeout(timeout, viewCheckMs);
     void work.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }

@@ -35,17 +35,24 @@ appends, including an explicit system principal for system commands.
 `append` returns `appended` with the global sequence, `conflict` for a stale
 expected subject sequence, `rejected` for invalid input or an unrelated
 duplicate id, or `unavailable` after bounded backoff. Timeouts and server
-unavailability retry for ten seconds, with at most one final 250 ms read.
+unavailability retry for ten seconds; its history reads share that deadline.
 It preserves the original expectation: callers reload and revalidate on
 conflict. Unexpected configuration/permission/corruption errors throw with
 the original cause. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
 
-Reads throw their service errors. `isEventStoreUnavailable(error)` identifies
-the same transient NATS failures used by append retries without exposing SDK
-types to callers. A failed authority read proves neither permission nor denial;
-it must never extend a caller's existing permission lease.
+Reads retry only transient unavailable errors with jittered exponential backoff
+capped at 500 ms, for at most one second per NATS read. Each request keeps its
+250 ms timeout.
+`readStream(subject, fromSequence, deadline)` and `head(subject, deadline)` accept
+an absolute `performance.now()` deadline; an earlier caller deadline stops retries
+and rejects late replies. Reads still throw when their bound expires, and other
+service errors throw immediately. `isEventStoreUnavailable(error)` identifies
+the same transient NATS failures without exposing SDK types to callers.
+A failed authority read proves neither permission nor denial;
+it must never extend a caller's existing permission lease. A failed subscription
+batch cancels its sibling reads so they cannot keep retrying after the failure.
 
 An optional `expectedSubject` can select the event's whole category, such as
 `member-*`, instead of its entity. `expectedSequence` then checks the latest
@@ -65,8 +72,8 @@ observed on entry; `fromSequence` is an inclusive global position.
 Read subjects may select a category, such as `member-*`; appends still require an entity.
 `subscribe(fromSequence, signal)` reads exact global sequences from the caller's
 SQL checkpoint, with no durable consumer cursor. Historical reads fetch at most
-64 messages concurrently and yield them in global order; abort is checked before
-each yield. Authority scans no longer wait for each event's network round trip
+64 messages concurrently and yield them in global order; abort stops retries and
+is checked before each yield. Authority scans no longer wait for each event's network round trip
 before requesting the next.
 It polls the live tail every 100 ms;
 break or abort to stop it. Read-ahead cannot change the next subscription's position.

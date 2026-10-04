@@ -6,6 +6,7 @@ import {
   JetStreamApiError,
   type JetStreamClient,
   type JetStreamManager,
+  type MsgRequest,
   type StreamConfig,
 } from "@nats-io/jetstream";
 import {
@@ -35,6 +36,7 @@ function readSubject(subject: string): string {
 
 const streamName = "EVENTS";
 const requestMs = 250;
+const readMs = 1_000;
 const appendMs = 10_000;
 // The server omits some defaults from StreamInfo. Absence means these values.
 const defaults = {
@@ -124,6 +126,67 @@ export function isEventStoreUnavailable(error: unknown): boolean {
       (error.isNoResponders() || isEventStoreUnavailable(error.cause))) ||
     (error instanceof JetStreamApiError && error.status >= 500)
   );
+}
+
+// Retry only transient failures: each read has a one-second cap and an earlier caller deadline wins.
+async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Infinity,
+  signal?: AbortSignal) {
+  const deadline = Math.min(callerDeadline, performance.now() + readMs);
+  let cause: unknown = new TimeoutError();
+  let backoff = 25;
+  while (performance.now() < deadline) {
+    signal?.throwIfAborted();
+    try {
+      return await readBeforeDeadline(read, deadline, signal);
+    } catch (error) {
+      if (!isEventStoreUnavailable(error)) {
+        throw error;
+      }
+      cause = error;
+      const remaining = deadline - performance.now();
+      if (remaining <= 0) {
+        break;
+      }
+      const options = signal ? { signal } : undefined;
+      // Spread concurrent read retries so an outage does not produce synchronised bursts.
+      const jitteredBackoff = backoff / 2 + Math.random() * backoff / 2;
+      await delay(Math.min(jitteredBackoff, remaining), undefined, options);
+      backoff = Math.min(backoff * 2, 500);
+    }
+  }
+  throw cause;
+}
+
+async function readBeforeDeadline<Value>(read: () => Promise<Value>, deadline: number,
+  signal?: AbortSignal) {
+  const expired = Promise.withResolvers<never>();
+  function timeout() {
+    expired.reject(new TimeoutError());
+  }
+  function abort() {
+    const reason: unknown = signal?.reason;
+    if (reason instanceof Error) {
+      expired.reject(reason);
+      return;
+    }
+    expired.reject(new Error("Event read aborted"));
+  }
+  const timer = setTimeout(timeout, Math.max(0, deadline - performance.now()));
+  const listenerOptions = { once: true };
+  signal?.addEventListener("abort", abort, listenerOptions);
+  try {
+    // Keep the SDK's 250 ms timeout; the outer bound also stops its final in-flight read.
+    const pendingRead = read();
+    const value = await Promise.race([pendingRead, expired.promise]);
+    // A stalled event loop may deliver the reply before it runs the expired timer.
+    if (performance.now() >= deadline) {
+      throw new TimeoutError();
+    }
+    return value;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", abort);
+  }
 }
 
 /** The caller owns the authenticated TLS connection and its lifecycle. */
@@ -289,7 +352,7 @@ export class EventStore {
     deadline = Infinity,
   ): AsyncGenerator<StoredEvent> {
     const wire = readSubject(subject);
-    const head = (await this.manager.streams.info(streamName)).state.last_seq;
+    const head = await this.readHead(deadline);
     let sequence = Math.max(1, fromSequence);
     while (sequence <= head) {
       if (performance.now() >= deadline) {
@@ -297,7 +360,7 @@ export class EventStore {
       }
       // The server supports next_by_subj on MSG.GET; the SDK types omit it.
       const query = { next_by_subj: wire, seq: sequence };
-      const message = await this.manager.streams.getMessage(streamName, query);
+      const message = await this.readMessage(query, deadline);
       if (!message || message.seq > head) {
         break;
       }
@@ -309,6 +372,23 @@ export class EventStore {
     }
   }
 
+  private readMessage(query: MsgRequest, deadline = Infinity, signal?: AbortSignal) {
+    const manager = this.manager;
+    function read() {
+      return manager.streams.getMessage(streamName, query);
+    }
+    return retryRead(read, deadline, signal);
+  }
+
+  private async readHead(deadline = Infinity, signal?: AbortSignal) {
+    const manager = this.manager;
+    function readGlobalHead() {
+      return manager.streams.info(streamName);
+    }
+    const info = await retryRead(readGlobalHead, deadline, signal);
+    return info.state.last_seq;
+  }
+
   /** Read from the caller's SQL checkpoint; no server-side delivery cursor survives a restart. */
   async *subscribe(
     fromSequence = 1,
@@ -317,36 +397,72 @@ export class EventStore {
     signal?.throwIfAborted();
     let sequence = Math.max(1, fromSequence);
     let head = 0;
-    while (!signal?.aborted) {
-      if (sequence > head) head = await this.head();
-      if (sequence > head) {
-        // Poll only at the live tail. Historical reads have no delay or shared cursor.
-        await delay(100);
-        continue;
-      }
-      // Bound read-ahead and keep log order even when replies arrive out of order.
-      const messages = await Promise.all(Array.from({ length: Math.min(64, head - sequence + 1) },
-        (_, offset) => this.manager.streams.getMessage(streamName, { seq: sequence + offset })));
-      for (const message of messages) {
-        if (signal?.aborted) return;
-        if (!message) {
-          throw new Error("Event sequence gap");
+    try {
+      while (!signal?.aborted) {
+        if (sequence > head) {
+          head = await this.readHead(Infinity, signal);
         }
-        yield {
-          sequence: message.seq,
-          event: decodeEvent(message.data, message.subject),
-        };
-        sequence = message.seq + 1;
+        if (sequence > head) {
+          // Poll only at the live tail. Historical reads have no delay or shared cursor.
+          await delay(100);
+          continue;
+        }
+        // Bound read-ahead and keep log order even when replies arrive out of order.
+        const count = Math.min(64, head - sequence + 1);
+        const messages = await this.readBatch(sequence, count, signal);
+        for (const message of messages) {
+          if (signal?.aborted) {
+            return;
+          }
+          if (!message) {
+            throw new Error("Event sequence gap");
+          }
+          yield {
+            sequence: message.seq,
+            event: decodeEvent(message.data, message.subject),
+          };
+          sequence = message.seq + 1;
+        }
+      }
+    } catch (error) {
+      if (!signal?.aborted) {
+        throw error;
       }
     }
   }
 
+  private async readBatch(sequence: number, count: number, signal?: AbortSignal) {
+    const controller = new AbortController();
+    const batchSignal = signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal;
+    const readMessage = this.readMessage.bind(this);
+    function readSequence(_value: unknown, offset: number) {
+      const query = { seq: sequence + offset };
+      return readMessage(query, Infinity, batchSignal);
+    }
+    const batchLength = { length: count };
+    const reads = Array.from(batchLength, readSequence);
+    try {
+      return await Promise.all(reads);
+    } finally {
+      // A failed batch cannot yield, so its sibling reads must stop retrying too.
+      controller.abort();
+    }
+  }
+
   /** Latest global sequence, or latest entity/category sequence (for example team-*). */
-  async head(subject?: string): Promise<number> {
+  async head(subject?: string, deadline = Infinity): Promise<number> {
+    const manager = this.manager;
     if (subject !== undefined) {
       const wire = readSubject(subject);
-      return (await this.manager.streams.getMessage(streamName, { last_by_subj: wire }))?.seq ?? 0;
+      const query = { last_by_subj: wire };
+      function readSubjectHead() {
+        return manager.streams.getMessage(streamName, query);
+      }
+      const message = await retryRead(readSubjectHead, deadline);
+      return message?.seq ?? 0;
     }
-    return (await this.manager.streams.info(streamName)).state.last_seq;
+    return this.readHead(deadline);
   }
 }
