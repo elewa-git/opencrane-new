@@ -69,11 +69,28 @@ it("honours a caller deadline shorter than the request timeout", callerDeadline)
 async function lateReply() {
   fixture = await natsFixture();
   await fixture.seed([storedEvent("late-head")]);
-  stallNextRequest(fixture.connection, "STREAM.MSG.GET.EVENTS");
+  stallAfterReply(fixture.connection);
   const deadline = performance.now() + 100;
   await expect(fixture.store.head("member-alice", deadline)).rejects.toBeInstanceOf(TimeoutError);
 }
 it("refuses a late reply after the caller deadline", lateReply);
+
+function stallAfterReply(connection: NatsConnection) {
+  const request = connection.request.bind(connection);
+  const send: NatsConnection["request"] = async function send(subject, data, options) {
+    const reply = await request(subject, data, options);
+    if (subject.endsWith("STREAM.MSG.GET.EVENTS")) {
+      // The SDK has already received its reply and cancelled its 250 ms timer.
+      // Stall for 150 ms so only the caller's 100 ms deadline expires.
+      const until = performance.now() + 150;
+      while (performance.now() < until) {
+        // Deliberate event-loop stall, independent of host load.
+      }
+    }
+    return reply;
+  };
+  vi.spyOn(connection, "request").mockImplementation(send);
+}
 
 async function missingStream() {
   fixture = await natsFixture({ provision: false });
@@ -167,3 +184,35 @@ async function recoverSubscription() {
   expect(sequences).toEqual(Array.from({ length: 64 }, expectedSequence));
 }
 it("recovers subscription read-ahead in order after a stall", recoverSubscription);
+
+async function cancelsSiblingReads() {
+  fixture = await natsFixture();
+  const events = [];
+  for (let index = 1; index <= 64; index++) {
+    events.push(storedEvent(`cancel-${index}`, `member-${index}`));
+  }
+  await fixture.seed(events);
+  const clockOptions: Parameters<typeof vi.useFakeTimers>[0] = {
+    toFake: ["setTimeout", "clearTimeout", "performance"],
+  };
+  vi.useFakeTimers(clockOptions);
+  const request = fixture.connection.request.bind(fixture.connection);
+  let messageReads = 0;
+  const send: NatsConnection["request"] = function send(subject, data, options) {
+    if (!subject.endsWith("STREAM.MSG.GET.EVENTS")) {
+      return request(subject, data, options);
+    }
+    messageReads++;
+    if (messageReads === 1) {
+      return Promise.reject(new Error("Permanent read failure"));
+    }
+    return Promise.reject(new TimeoutError());
+  };
+  vi.spyOn(fixture.connection, "request").mockImplementation(send);
+  const subscription = fixture.store.subscribe();
+  await expect(subscription.next()).rejects.toThrow("Permanent read failure");
+  const readsAtFailure = messageReads;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(messageReads).toBe(readsAtFailure);
+}
+it("stops sibling subscription retries after the first read fails", cancelsSiblingReads);

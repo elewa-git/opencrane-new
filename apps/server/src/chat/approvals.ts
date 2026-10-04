@@ -32,9 +32,10 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
         .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
         .digest('hex');
       if (req.method === 'GET') {
+        const readOptions = { deadline: fresh.deadline };
         const cards = await approvalCards(
           options.store, options.silo, conversationId, memberId, options.keys,
-          undefined, fresh.deadline);
+          readOptions);
         await fresh();
         return reply.send({ cards, csrf });
       }
@@ -50,8 +51,9 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
 async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions, session: SessionData,
   memberId: string, conversationId: string, fresh: Awaited<ReturnType<typeof authorityFence>>) {
       const input = z.object({ approvalId: z.string().regex(/^[a-f0-9]{64}$/u), decision: z.enum(['approved', 'rejected']) }).strict().parse(req.body);
+      const readOptions = { deadline: fresh.deadline };
       const { request } = await readApproval(
-        options.store, options.silo, input.approvalId, undefined, fresh.deadline);
+        options.store, options.silo, input.approvalId, readOptions);
       if (request.conversationId !== conversationId || request.requesterId !== memberId) return reply.code(403).send({ status: 'refused' });
       const text = options.keys.decrypt(options.silo, conversationId, request);
       approvalReviewSchema.parse(JSON.parse(text));

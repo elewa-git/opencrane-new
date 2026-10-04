@@ -278,3 +278,50 @@ async function refusesMixedAuthorityRead(testCase: (typeof mixedFailures)[number
 it.each(mixedFailures)(
   'closes a viewer with $failure and an unavailable read when $delayedRead replies last',
   refusesMixedAuthorityRead, 30_000);
+
+async function keepsLeaseAfterLateFence() {
+  const fixture = await viewFixture(openDesktop);
+  const readHead = fixture.nats.store.head.bind(fixture.nats.store);
+  const realNow = performance.now.bind(performance);
+  const crossed = Promise.withResolvers<void>();
+  let offset = 0;
+  let late = false;
+  let socket: WebSocket | undefined;
+
+  function clockNow() {
+    return realNow() + offset;
+  }
+  function resumeClock() {
+    offset = 0;
+    crossed.resolve();
+  }
+  async function replyAfterDeadline(subject?: string, deadline?: number) {
+    if (late || subject !== 'conversation-chat' || deadline === undefined) {
+      return readHead(subject, deadline);
+    }
+    late = true;
+    // Let the sibling heads settle before delivering the final fence reply.
+    await delay(20);
+    const head = await readHead(subject, deadline);
+    // Model an I/O reply handled after 1,200 ms, before the overdue timer runs.
+    offset = deadline - realNow() + 1;
+    setImmediate(resumeClock);
+    return head;
+  }
+
+  try {
+    socket = await startViewer(fixture);
+    vi.spyOn(performance, 'now').mockImplementation(clockNow);
+    vi.spyOn(fixture.nats.store, 'head').mockImplementation(replyAfterDeadline);
+    await crossed.promise;
+    await delay(500);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    socket?.terminate();
+    vi.restoreAllMocks();
+    await fixture.close();
+  }
+}
+
+it('keeps the viewer connected when a renewal fence crosses its 1,200 ms deadline',
+  keepsLeaseAfterLateFence, 30_000);

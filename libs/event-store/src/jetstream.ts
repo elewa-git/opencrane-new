@@ -128,6 +128,7 @@ export function isEventStoreUnavailable(error: unknown): boolean {
   );
 }
 
+// Retry only transient failures: each read has a one-second cap and an earlier caller deadline wins.
 async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Infinity,
   signal?: AbortSignal) {
   const deadline = Math.min(callerDeadline, performance.now() + readMs);
@@ -147,7 +148,9 @@ async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Inf
         break;
       }
       const options = signal ? { signal } : undefined;
-      await delay(Math.min(backoff, remaining), undefined, options);
+      // Spread concurrent read retries so an outage does not produce synchronised bursts.
+      const jitteredBackoff = backoff / 2 + Math.random() * backoff / 2;
+      await delay(Math.min(jitteredBackoff, remaining), undefined, options);
       backoff = Math.min(backoff * 2, 500);
     }
   }
@@ -156,29 +159,25 @@ async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Inf
 
 async function readBeforeDeadline<Value>(read: () => Promise<Value>, deadline: number,
   signal?: AbortSignal) {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let aborted: (() => void) | undefined;
-  function expire(_resolve: (value: never) => void, reject: (error: Error) => void) {
-    function timeout() {
-      reject(new TimeoutError());
-    }
-    timer = setTimeout(timeout, Math.max(0, deadline - performance.now()));
-    function abort() {
-      const reason: unknown = signal?.reason;
-      if (reason instanceof Error) {
-        reject(reason);
-        return;
-      }
-      reject(new Error("Event read aborted"));
-    }
-    aborted = abort;
-    const listenerOptions = { once: true };
-    signal?.addEventListener("abort", abort, listenerOptions);
+  const expired = Promise.withResolvers<never>();
+  function timeout() {
+    expired.reject(new TimeoutError());
   }
-  const expired = new Promise<never>(expire);
+  function abort() {
+    const reason: unknown = signal?.reason;
+    if (reason instanceof Error) {
+      expired.reject(reason);
+      return;
+    }
+    expired.reject(new Error("Event read aborted"));
+  }
+  const timer = setTimeout(timeout, Math.max(0, deadline - performance.now()));
+  const listenerOptions = { once: true };
+  signal?.addEventListener("abort", abort, listenerOptions);
   try {
     // Keep the SDK's 250 ms timeout; the outer bound also stops its final in-flight read.
-    const value = await Promise.race([read(), expired]);
+    const pendingRead = read();
+    const value = await Promise.race([pendingRead, expired.promise]);
     // A stalled event loop may deliver the reply before it runs the expired timer.
     if (performance.now() >= deadline) {
       throw new TimeoutError();
@@ -186,9 +185,7 @@ async function readBeforeDeadline<Value>(read: () => Promise<Value>, deadline: n
     return value;
   } finally {
     clearTimeout(timer);
-    if (aborted) {
-      signal?.removeEventListener("abort", aborted);
-    }
+    signal?.removeEventListener("abort", abort);
   }
 }
 
@@ -412,12 +409,7 @@ export class EventStore {
         }
         // Bound read-ahead and keep log order even when replies arrive out of order.
         const count = Math.min(64, head - sequence + 1);
-        const readSequence = (_value: unknown, offset: number) => {
-          const query = { seq: sequence + offset };
-          return this.readMessage(query, Infinity, signal);
-        };
-        const reads = Array.from({ length: count }, readSequence);
-        const messages = await Promise.all(reads);
+        const messages = await this.readBatch(sequence, count, signal);
         for (const message of messages) {
           if (signal?.aborted) {
             return;
@@ -436,6 +428,26 @@ export class EventStore {
       if (!signal?.aborted) {
         throw error;
       }
+    }
+  }
+
+  private async readBatch(sequence: number, count: number, signal?: AbortSignal) {
+    const controller = new AbortController();
+    const batchSignal = signal
+      ? AbortSignal.any([signal, controller.signal])
+      : controller.signal;
+    const readMessage = this.readMessage.bind(this);
+    function readSequence(_value: unknown, offset: number) {
+      const query = { seq: sequence + offset };
+      return readMessage(query, Infinity, batchSignal);
+    }
+    const batchLength = { length: count };
+    const reads = Array.from(batchLength, readSequence);
+    try {
+      return await Promise.all(reads);
+    } finally {
+      // A failed batch cannot yield, so its sibling reads must stop retrying too.
+      controller.abort();
     }
   }
 

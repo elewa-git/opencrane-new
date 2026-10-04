@@ -16,6 +16,10 @@ const hash = (text: string) => createHash('sha256').update(text).digest('hex');
 type Request = z.infer<typeof toolApprovalRequestedDataSchema>;
 type Binding = Pick<Request, 'requesterId' | 'conversationId' | 'turnId' | 'assistantId' | 'serverId' | 'connectionId'>;
 type FreshAuthority = (() => Promise<void>) & { deadline?: number };
+interface ApprovalReadOptions {
+  now?: Date;
+  deadline?: number;
+}
 
 /** Deterministic request identity prevents a retry from reopening denied, expired or used authority. */
 async function askApproval(store: EventStore, silo: string, bound: Binding,
@@ -41,14 +45,17 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
     const result = await store.append({ event: envelope(silo, subject, 'tool.approval_requested', request, `request-${approvalId}`), expectedSequence: 0 });
     if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Approval persistence unavailable');
   }
-  const current = await readApproval(store, silo, approvalId, now, deadline);
+  const readOptions = { now, deadline };
+  const current = await readApproval(store, silo, approvalId, readOptions);
   if (hash(keys.decrypt(silo, bound.conversationId, current.request)) !== reviewDigest) throw new Error('Review unavailable');
   return current;
 }
 
 export async function readApproval(store: EventStore, silo: string, approvalId: string,
-  now = new Date(), deadline = Infinity):
+  options: ApprovalReadOptions = {}):
   Promise<{ request: Request; state: ApprovalCard['state']; sequence: number }> {
+  const now = options.now ?? new Date();
+  const deadline = options.deadline ?? Infinity;
   const rows = await history(store, `approval-${approvalId}`, silo, deadline);
   const request = toolApprovalRequestedDataSchema.parse(rows[0]?.event.data);
   let state: ApprovalCard['state'] = 'requested';
@@ -65,7 +72,8 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
     if (terminal) {
       const result = await store.append({ event: envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, { approvalId }), expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
-      return readApproval(store, silo, approvalId, now, deadline);
+      const readOptions = { now, deadline };
+      return readApproval(store, silo, approvalId, readOptions);
     }
   }
   return { request, state, sequence };
@@ -96,7 +104,8 @@ async function invalidated(store: EventStore, silo: string, request: Request, de
 export async function decideApproval(store: EventStore, silo: string, approvalId: string, memberId: string,
   decision: 'approved' | 'rejected', recentAuth: boolean,
   fresh: FreshAuthority, now = new Date()) {
-  const current = await readApproval(store, silo, approvalId, now, fresh.deadline);
+  const readOptions = { now, deadline: fresh.deadline ?? Infinity };
+  const current = await readApproval(store, silo, approvalId, readOptions);
   if (current.request.requesterId !== memberId) throw new Error('Requester only');
   if (current.state !== 'requested') return { status: 'conflict' } as const;
   // Sensitive approvals marked for step-up need a recent authentication before approval.
@@ -114,7 +123,10 @@ async function consumeApproval(store: EventStore, silo: string, current: Awaited
 }
 
 export async function approvalCards(store: EventStore, silo: string, conversationId: string,
-  memberId: string, keys: ReviewKeys, now = new Date(), deadline = Infinity): Promise<ApprovalCard[]> {
+  memberId: string, keys: ReviewKeys, options: ApprovalReadOptions = {}): Promise<ApprovalCard[]> {
+  const now = options.now ?? new Date();
+  const deadline = options.deadline ?? Infinity;
+  const readOptions = { now, deadline };
   const ids: string[] = [];
   // ponytail: replay the captured head; add an indexed projection when approval history grows.
   const head = await store.head(undefined, deadline);
@@ -130,7 +142,7 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   }
   const cards: ApprovalCard[] = [];
   for (const id of ids) {
-    const { request, state } = await readApproval(store, silo, id, now, deadline);
+    const { request, state } = await readApproval(store, silo, id, readOptions);
     const text = keys.decrypt(silo, conversationId, request);
     if (hash(text) !== request.reviewDigest) throw new Error('Review digest mismatch');
     cards.push({ approvalId: id, conversationId, requesterId: request.requesterId, expiresAt: request.expiresAt,

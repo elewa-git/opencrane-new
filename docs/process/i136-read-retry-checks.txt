@@ -101,3 +101,143 @@ Full root suite: PASS
       Tests  1486 passed | 15 skipped (1501)
    Start at  18:18:19
    Duration  1571.07s (tests 95%, import 5%)
+
+Review fixes, 4 October 2026 UTC
+
+B1 red, before the fix
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 3 to be 1 // Object.is equality
+- Expected
++ Received
+- 1
++ 3
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed | 10 skipped (12)
+   Duration  16.55s (tests 72%, transform 18%, import 9%)
+
+B1 green with explicit denial control
+ Test Files  1 passed (1)
+      Tests  2 passed | 10 skipped (12)
+   Duration  15.83s (tests 67%, transform 20%, import 13%)
+
+Sibling cancellation red
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 379 to be 64 // Object.is equality
+- Expected
++ Received
+- 64
++ 379
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Duration  4.33s (tests 46%, transform 39%, import 15%)
+
+Sibling cancellation green
+ Test Files  1 passed (1)
+      Tests  1 passed | 11 skipped (12)
+   Duration  4.44s (tests 53%, transform 29%, import 18%)
+
+After-reply guard temporarily removed (restored before qualification)
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: promise resolved "1" instead of rejecting
+- Expected:
++ Received:
+ Test Files  1 failed (1)
+      Tests  1 failed | 11 skipped (12)
+   Duration  6.01s (tests 58%, transform 25%, import 17%)
+
+Focused batch
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+AssertionError: expected 1013.181058999995 to be less than 1000
+ Test Files  1 failed | 11 passed (12)
+      Tests  1 failed | 129 passed | 1 skipped (131)
+   Duration  606.99s (tests 94%, import 4%, transform 1%)
+
+Root start gate
+Root suite start: 2026-10-04 19:59:01 UTC
+15.63 21.62 18.44 18/2266 582910
+
+First review-fix root run
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/approvals.test.ts > refuses hidden or ambiguous arguments and does not use an approval for changed number text
+TypeError: Cannot read properties of undefined (reading 'approvalId')
+ ❯ Object.decide apps/server/test/approvals.test.ts:47:126
+     45|   const decide = async (decision = 'approved', session = headers(), pa…
+     46|     const { cards, csrf } = await read(session);
+     47|     return app.inject({ method: 'POST', url, headers: { ...session, 'x…
+       |                                                                                                                              ^
+     48|   };
+     49|   return { ...f, config, app, headers, read, decide, call, body, disco…
+ ❯ apps/server/test/approvals.test.ts:199:21
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  libs/models/test/gateway.test.ts > admits one last reservation under daily 2000 / monthly 1 cents and clearly refuses the next call
+AssertionError: [403,200,402,402,402,402,402,402]: expected [ { status: 402, …(1) }, …(5) ] to have a length of 7 but got 6
+
+- Expected
++ Received
+
+- 7
++ 6
+
+ ❯ libs/models/test/gateway.test.ts:493:95
+    491|     }
+    492|     expect(replies.filter(r => r.status === 200), JSON.stringify(repli…
+    493|     expect(replies.filter(r => r.status === 402), JSON.stringify(repli…
+       |                                                                                               ^
+    494|     expect((await f.call()).text).toContain('spending cap reached');
+    495|     await f.runner.initialise(conversations); await f.runner.run(conve…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 87 passed | 4 skipped (93)
+      Tests  2 failed | 1486 passed | 15 skipped (1503)
+   Start at  19:59:03
+   Duration  1612.61s (tests 96%, import 4%)
+
+    Isolate  93 workers spawned · ~363ms startup each (spawn + environment, per file)
+             at least ~16.53s faster with isolate: false — reuses workers across files instead of one per file
+
+
+Final lint: PASS (eight existing size warnings; no errors).
+Final typecheck: PASS (all workspaces).
+Event catalogue: PASS (86 event types agree).
+
+Failed-case rerun gate
+Failed-case rerun start: 2026-10-04 20:29:36 UTC
+15.46 16.01 16.76 24/2299 794982
+
+Failed-case reruns
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/approvals.test.ts libs/models/test/gateway.test.ts libs/models/test/authority-volume.test.ts -t refuses hidden or ambiguous|daily 2000 / monthly 1 cents|100,000 unrelated --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+
+
+ Test Files  3 passed (3)
+      Tests  3 passed | 105 skipped (108)
+   Start at  20:29:38
+   Duration  92.96s (tests 90%, transform 5%, import 5%)
+
+Final review-fix root start gate
+Final root suite start: 2026-10-04 20:32:29 UTC
+13.27 14.39 15.99 12/2376 810435
+
+Final review-fix root suite
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+
+
+ Test Files  89 passed | 4 skipped (93)
+      Tests  1488 passed | 15 skipped (1503)
+   Start at  20:32:32
+   Duration  1406.81s (tests 96%, import 3%, transform 1%)
+
+    Isolate  93 workers spawned · ~244ms startup each (spawn + environment, per file)
+             at least ~11.10s faster with isolate: false — reuses workers across files instead of one per file

@@ -90,7 +90,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-03 | #68 | Message to first reply | Joined member HTTP message, streamed Codex/stub reply | PASS | 6,273 ms total; first token 4,521 ms | [p3-1-live/repeat-stack.txt](p3-1-live/repeat-stack.txt) |
 | 2026-10-03 | #69 | Two isolated secondary stacks | Concurrent isolated dev-stack journeys and owner preservation | PASS | Two secondary stack limit | [parallel-stacks-evidence.md](parallel-stacks-evidence.md) |
 | 2026-10-04 | #78 | MCP complete startup check on secondary stack | Fresh/repeat complete startup journeys including live-view | FAIL | Fresh live-view timeout; repeat decoded-pixels timeout | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
-| 2026-10-04 | Pending (#136) | Event-store read resilience | Real NATS stall, outage, deadline and abort regressions; required source checks and full root suite | PASS | Root 1,486 passed / 15 skipped; loaded focused batch FAIL and isolated reruns PASS retained; fresh install NOT RUN | [Read-retry receipt](i136-read-retry.md) |
+| 2026-10-04 | Pending (#136) | Event-store read resilience | Real NATS stall, outage, deadline and abort regressions; required source checks and full root suite | PARTIAL | Final root 1,488 passed / 15 skipped; earlier focused and root failures plus passing reruns retained; fresh install NOT RUN | [Read-retry receipt](i136-read-retry.md) |
 
 ## Work awaiting qualification
 

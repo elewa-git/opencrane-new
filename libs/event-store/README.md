@@ -42,15 +42,17 @@ the original cause. The `unavailable.cause` is internal diagnostic data;
 HTTP callers must expose only the status. An unavailable result can be
 ambiguous: retry with the same command key.
 
-Reads retry only transient unavailable errors with append's 25–500 ms backoff,
-for at most one second per NATS read. Each request keeps its 250 ms timeout.
+Reads retry only transient unavailable errors with jittered exponential backoff
+capped at 500 ms, for at most one second per NATS read. Each request keeps its
+250 ms timeout.
 `readStream(subject, fromSequence, deadline)` and `head(subject, deadline)` accept
 an absolute `performance.now()` deadline; an earlier caller deadline stops retries
 and rejects late replies. Reads still throw when their bound expires, and other
 service errors throw immediately. `isEventStoreUnavailable(error)` identifies
 the same transient NATS failures without exposing SDK types to callers.
 A failed authority read proves neither permission nor denial;
-it must never extend a caller's existing permission lease.
+it must never extend a caller's existing permission lease. A failed subscription
+batch cancels its sibling reads so they cannot keep retrying after the failure.
 
 An optional `expectedSubject` can select the event's whole category, such as
 `member-*`, instead of its entity. `expectedSequence` then checks the latest

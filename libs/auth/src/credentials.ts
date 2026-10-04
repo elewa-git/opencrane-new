@@ -35,7 +35,8 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
     if (computer['typ'] !== 'computer' || turn['typ'] !== 'turn' ||
         computer['silo'] !== silo || turn['silo'] !== silo ||
         computer.jti !== current.tokenId || computer['computer'] !== current.computerId ||
-        computer['generation'] !== current.generation || turn['computerTokenId'] !== current.tokenId ||
+        computer['generation'] !== current.generation ||
+        turn['computerTokenId'] !== current.tokenId ||
         turn['assistant'] !== computer['assistant'] ||
         z.string().min(1).parse(turn['thread']) !== sessionId) {
       throw new Error('Credential binding mismatch');
@@ -47,7 +48,9 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       if (!tokens.turn) throw new Error('Turn issuer unavailable');
       return tokens.turn({ ...input, silo, computerTokenId: computer.tokenId });
     },
-    async check(headers: IncomingHttpHeaders, activeTurnId?: string, deadline = Infinity) {
+    async check(
+      headers: IncomingHttpHeaders, activeTurnId?: string, deadline = Infinity,
+    ) {
       const bearer = headers.authorization, turnValue = headers['x-turn-token'];
       if (!bearer?.startsWith('Bearer ') || typeof turnValue !== 'string') throw new Error('Missing credentials');
       const computer = await tokens.verify(bearer.slice(7), computerTokenAudience);

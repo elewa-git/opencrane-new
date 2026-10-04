@@ -19,6 +19,7 @@ export class ViewCheckUnavailable extends Error {
     this.boundary = boundary;
   }
 }
+export const viewCheckMs = 1200;
 
 const identity = z.object({ assistantId: z.string() });
 const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
@@ -63,14 +64,23 @@ async function history(store: EventStore, subject: string, silo: string, deadlin
 /** Check authority as well as its projection: delayed revocations must fail closed. */
 export async function viewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
   // Retries share the existing check deadline, rather than starting a new budget per history.
-  const deadline = Math.min(options.deadline ?? Infinity, performance.now() + 1200);
+  const deadline = Math.min(options.deadline ?? Infinity, performance.now() + viewCheckMs);
   const boundedOptions = { ...options, deadline };
   try {
-    return await checkViewAccess(boundedOptions, memberId, conversationId);
+    const computer = await checkViewAccess(boundedOptions, memberId, conversationId);
+    // Handling a successful reply late must not renew an expired authority snapshot.
+    if (performance.now() >= deadline) {
+      throw new ViewCheckUnavailable('deadline');
+    }
+    return computer;
   } catch (error) {
-    // Store outages preserve an existing lease until it expires, including during fence reads.
+    // Late checks and outages cannot revoke a lease renewed by another check.
+    const errorOptions = { cause: error };
+    if (performance.now() >= deadline) {
+      throw new ViewCheckUnavailable('deadline', errorOptions);
+    }
     if (isEventStoreUnavailable(error)) {
-      throw new ViewCheckUnavailable('event_store', { cause: error });
+      throw new ViewCheckUnavailable('event_store', errorOptions);
     }
     throw error;
   }
@@ -125,9 +135,12 @@ function settledRead<Value>(result: PromiseSettledResult<Value>): Value {
 async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,
   auth: ReturnType<typeof memberAuthorisation>) {
   const { store, silo } = options;
-  const conversation = await history(store, `conversation-${conversationId}`, silo, options.deadline);
+  const conversation = await history(
+    store, `conversation-${conversationId}`, silo, options.deadline);
   const created = conversation.find(r => r.event.type === 'conversation.created');
-  if (!created || conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Access changed');
+  if (!created || conversation.some(r => r.event.type === 'conversation.closed')) {
+    throw new Error('Access changed');
+  }
   const assistantId = identity.parse(created.event.data).assistantId;
   if (!participatesIn(conversation, created.event.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
