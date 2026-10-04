@@ -3,9 +3,10 @@ import { conversationKeys } from './chat/keys.ts';
 import { readFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
-import { connectEventStore } from '@opencrane/event-store';
+import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
 import { BudgetActor, startDecision, startGateway, ingestUsage } from '@opencrane/models';
+import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
 
@@ -15,6 +16,21 @@ function required(name: string): string {
   return value;
 }
 const stop = new AbortController();
+const logger = createLogger('models');
+// Exit before NATS exhausts its reconnect attempts, so the supervisor can reconnect cleanly.
+const MAX_EVENT_STORE_OUTAGE_MS = 15_000;
+
+function trackEventStoreOutage(error: unknown, unavailableSince: number | undefined,
+  previousErrorName: string | undefined) {
+  if (!isEventStoreUnavailable(error)) throw error;
+  if (unavailableSince === undefined) {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    logger.warn({ operation: 'models.budget_tick', errorName }, 'Event store outage started');
+    return { unavailableSince: Date.now(), errorName };
+  }
+  if (Date.now() - unavailableSince > MAX_EVENT_STORE_OUTAGE_MS) throw error;
+  return { unavailableSince, errorName: previousErrorName };
+}
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => stop.abort());
 const db = connectProjectionDb(required('DATABASE_URL'), () => stop.abort());
 const events = await connectEventStore();
@@ -39,12 +55,29 @@ try {
         mcpRoutes: z.array(z.object({ serverId: z.string(), connectionId: z.string(), upstream: z.string() }).strict())
           .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]')),
       });
+      let eventStoreUnavailableSince: number | undefined;
+      let eventStoreUnavailableErrorName: string | undefined;
       while (!stop.signal.aborted) {
         await locked.query('SELECT 1'); // Lease connection loss must stop admission.
         if (!gateway.healthy()) throw new Error('Gateway stopped');
-        await ingestUsage(actor, `${directory}/usage.jsonl`);
-        await actor.period();
-        await actor.expire();
+        let budgetTickSucceeded = false;
+        try {
+          await ingestUsage(actor, `${directory}/usage.jsonl`);
+          await actor.period();
+          await actor.expire();
+          budgetTickSucceeded = true;
+        } catch (error) {
+          const outage = trackEventStoreOutage(error, eventStoreUnavailableSince,
+            eventStoreUnavailableErrorName);
+          eventStoreUnavailableSince = outage.unavailableSince;
+          eventStoreUnavailableErrorName = outage.errorName;
+        }
+        if (budgetTickSucceeded && eventStoreUnavailableSince !== undefined) {
+          logger.info({ operation: 'models.budget_tick', errorName: eventStoreUnavailableErrorName },
+            'Event store outage ended');
+          eventStoreUnavailableSince = undefined;
+          eventStoreUnavailableErrorName = undefined;
+        }
         await delay(100, undefined, { signal: stop.signal });
       }
     } finally { await gateway?.stop(); await decision.close(); }
