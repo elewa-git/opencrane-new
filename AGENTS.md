@@ -68,6 +68,27 @@ Follow the [engineering standard](docs/process/standards.md).
 
 ## Style
 
+Owner rule (4 October 2026): build only what is needed, and write it as
+verbose, clear code. Be lean about scope, never about clarity. This overrides
+any agent skill that prefers short code.
+
+- Don't overbuild. Reuse existing helpers, the standard library and installed
+  dependencies first. No speculative abstractions, config or scaffolding
+  "for later". Remove what a change replaces.
+- Write small, atomic, named functions that do one thing and can be reused.
+  A reader should understand each function without scrolling.
+- Avoid chaining. Give each step its own statement and a descriptive variable
+  name. At most one `.map(namedFunction)` or `.filter(namedFunction)` per
+  statement.
+- Avoid inline definitions. Don't put arrow functions with logic, object
+  builders or callbacks inside a call; define a named function or constant
+  first.
+- No nested ternaries; use `if`/`else` or a small named function. Keep lines
+  to about 100 characters.
+- Use descriptive names; no one-letter names except loop indexes.
+- Comment the why: invariants, security boundaries, ordering, retries and
+  what a stored state means. Don't comment what the code already says.
+- Never compress code to fit on one line or to pass a lint limit.
 - Plain-English comments: say what the code does simply, not with heavy
   vocabulary. Avoid words like "canonicalise" or "provenance" when
   "standardise" or "source" will do.
