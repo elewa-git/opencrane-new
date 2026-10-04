@@ -49,13 +49,33 @@ export function costCents(model: string, inputTokens: number, outputTokens: numb
     BigInt(cachedInputTokens) * BigInt(price.cachedInputCents ?? 0) + BigInt(cacheWriteTokens) * BigInt(price.cacheWriteCents ?? 0) +
     BigInt(outputTokens) * BigInt(price.outputCents));
 }
-// ponytail: full supported context is the safe bound until we measure server-side tokenisation.
+// Callers without a measured input bound still reserve the full supported context.
 export function reservationCents(model: string, outputBound: number, inputBound = 1_050_000): number {
   if (models.some(row => row.id === model && row.retired)) throw new Error('Retired model');
   if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0) || outputBound === 0) throw new Error('Invalid bound');
-  const price = priceFor(model, inputBound);
+  // Reserve long rates above 90% of the tier boundary, leaving room for rendering drift.
+  const price = priceFor(model, inputBound > shortContextTokens * 0.9 ? shortContextTokens + 1 : inputBound);
   return roundedCents(BigInt(inputBound) * BigInt(Math.max(price.inputCents, price.cacheWriteCents ?? 0)) +
     BigInt(outputBound) * BigInt(price.outputCents));
+}
+export class ModelRequestRefused extends Error {}
+export function requestReservationCents(body: { model: string; max_output_tokens: number; n?: number | undefined; [key: string]: unknown }): number {
+  if (body.n !== undefined && body.n !== 1) throw new ModelRequestRefused('Model request refused: n = 1 is required');
+  // Bytes bound text tokenisation, but the provider also renders roles, boundaries and tools:
+  // https://developers.openai.com/api/docs/guides/token-counting
+  // Allow 2,048 tokens per request and 64 per JSON object: messages, content/input items,
+  // function outputs and tool definitions. Count the wrapper and nested schema objects too.
+  // This is generous planning headroom, not a provider guarantee; settlement alerts on overruns.
+  let items = 0;
+  const serialised = JSON.stringify(body, (_key, value: unknown) => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) items++;
+    return value;
+  });
+  const inputBound = Buffer.byteLength(serialised, 'utf8') + 2048 + 64 * items;
+  if (inputBound + body.max_output_tokens * (body.n ?? 1) > 1_050_000) {
+    throw new ModelRequestRefused('Model request refused: input and output bounds exceed the 1,050,000-token context');
+  }
+  return reservationCents(body.model, body.max_output_tokens * (body.n ?? 1), inputBound);
 }
 export function data(event: EventEnvelope): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);

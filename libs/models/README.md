@@ -40,11 +40,26 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   the model on every turn, including resumed threads. It never guesses task
   difficulty from message text. Refine the rows using measured success, latency
   and spend; there is no learned router. Automation execution is still future work.
-- Reservations cover the full supported **1,050,000-token** context plus the
-  supplied output limit at long rates, using the greater input/cache-write rate.
-  `reservationCents` accepts a proven input bound for future trusted server-side
-  tokenisation; no caller-supplied token count is trusted today. This can refuse
-  an expensive model under the unchanged daily cap even for a tiny request.
+- `requestReservationCents` reserves this request's input and output bounds.
+  The UTF-8 byte count of its serialised, decoded body bounds text tokenisation.
+  [Provider rendering](https://developers.openai.com/api/docs/guides/token-counting)
+  also adds roles, boundaries and tool formatting. Add **2,048 tokens per request
+  plus 64 per JSON object**, covering messages, content/input items, function outputs
+  and tool definitions, including the wrapper and nested schema objects. This is
+  generous planning headroom, not a provider guarantee. The padded bound selects
+  long rates **above 244,800 tokens** (90% of 272,000), leaving a safety band.
+  Cached-input
+  discounts apply only at settlement; the greater uncached input/cache-write
+  rate covers cache writes too. Output is the supplied limit times `n` (only
+  `n = 1` is accepted), and the combined cost rounds up once. Input plus output
+  bounds above **1,050,000 tokens** are refused before reservation or dispatch.
+  `reservationCents` retains its full-context fallback for callers without a
+  proven bound; admission always supplies the measured request bound.
+  If observed settlement exceeds its reservation, charge the full actual cost and
+  raise one `security.alert_raised` with reason `budget_reservation_exceeded` and
+  `overrun: { model, reservedCents, settledCents }`. All ceilings use that actual
+  spend on later admissions, including after recovery. Alert retries do not charge
+  twice; an alert outage cannot erase the settled cost.
   Only inline text and local function calls are accepted. Media, hosted tools,
   stored history, background requests, multiple completions and premium tiers
   fail closed. The caller supplies `stream: true` and `max_output_tokens` from

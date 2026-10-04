@@ -12,9 +12,8 @@ import { computerCredentials, tokenVerifier } from '@opencrane/auth';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
-import { reservationCents, data, models, priceTableId, type ModelCall } from './state.ts';
+import { requestReservationCents, ModelRequestRefused as RequestRefused, data, models, priceTableId, type ModelCall } from './state.ts';
 
-class RequestRefused extends Error {}
 const id = z.string().regex(/^[\w-]+$/u).max(200);
 const common = { silo: id, assistant: id, exp: z.int(), iat: z.int() };
 const computerSchema = z.object({ ...common, typ: z.literal('computer'), computer: id, generation: z.int().nonnegative() });
@@ -136,10 +135,10 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
       const body = parsed.data;
       if (body.model !== t.model) throw new Error('Model does not match turn grant');
+      const amountCents = requestReservationCents(body);
       const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model);
       contextDigest = call.contextDigest;
-      // No client token count is trusted; reserve the full supported context at long rates.
-      const reservation = await actor.reserve({ ...call, requestId }, reservationCents(body.model, body.max_output_tokens), fresh);
+      const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
       await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {
         // No permit has left this process, so the gateway cannot have dispatched it.
         await actor.releaseUndispatched(reservation);

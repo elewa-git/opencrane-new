@@ -216,7 +216,7 @@ Readers replay these streams; replay never forwards or releases credentials.
 | `approval.expired` | timer | approvals | tell the computer |
 | `approval.cancelled` | decision service / approval reader | approvals | close the card when its logical turn or binding changes |
 | `approval.used` | decision service (single use) | approvals | — |
-| `effect.observed` | gateway log ingest | audit, usage | settle the budget; with no matching permit → `security.alert_raised` |
+| `effect.observed` | gateway log ingest | audit, usage | settle the actual cost; with no matching permit or a reservation overrun → `security.alert_raised` |
 | `effect.uncertain` | settle timeout or `computer.lost` | audit, effects | notify for manual resolution |
 | `effect.resolved` | person | audit, effects | settle or release the reservation |
 
@@ -434,3 +434,11 @@ observation, including a reservation without an allowing decision. Missing usage
 keeps the reservation and outcome uncertain. Projection replay dispatches nothing,
 releases no credential and settles no money. See the
 [audit read contract](../../apps/server/README.md#permission-scoped-audit-p3-19).
+
+If the actual model cost exceeds its reservation, settlement retains the full
+charge and raises one `security.alert_raised` per permit with reason
+`budget_reservation_exceeded`. Its optional `overrun` record names `model`,
+`reservedCents` and `settledCents`; envelope `correlation.permit` binds the alert.
+The actual charge counts against every applicable ceiling on later admission,
+including after actor recovery. Retrying settlement after an alert outage repairs
+the alert without charging twice.
