@@ -68,9 +68,13 @@ Follow the [engineering standard](docs/process/standards.md).
 
 ## Style
 
-Owner rule (4 October 2026): prefer verbose, clear code over dense code. It
-overrides any agent skill that prefers short code.
+Owner rule (4 October 2026): build only what is needed, and write it as
+verbose, clear code. Be lean about scope, never about clarity. This overrides
+any agent skill that prefers short code.
 
+- Don't overbuild. Reuse existing helpers, the standard library and installed
+  dependencies first. No speculative abstractions, config or scaffolding
+  "for later". Remove what a change replaces.
 - Write small, atomic, named functions that do one thing and can be reused.
   A reader should understand each function without scrolling.
 - Avoid chaining. Give each step its own statement and a descriptive variable

@@ -39,9 +39,9 @@ secret exposure, event/architecture breaches, incompatible runtime licences and
 materially false or missing public contracts. High-impact defects block regardless of label.
 Uncertain security or data-integrity concerns need a focused test or owner decision.
 Readability is a fix finding, not taste: check new and changed code against the code
-style in AGENTS.md (atomic named functions, no chaining, no inline logic, no nested
-ternaries, why-comments at invariants and boundaries) and name the expected rewrite.
-Other naming preferences, speculative abstractions and optional wording stay non-blocking.
+style in AGENTS.md (no overbuilding, atomic named functions, no chaining, no inline
+logic, no nested ternaries, why-comments at invariants and boundaries) and name the
+expected rewrite. Other naming preferences and optional wording stay non-blocking.
 
 At most two independent passes per change. The second checks fixes and introduced risk,
 including batched disputed findings. If blockers remain, hold for the owner; do not
