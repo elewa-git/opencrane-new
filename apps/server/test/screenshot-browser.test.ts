@@ -69,7 +69,7 @@ it.runIf(process.env['SCREENSHOT_BROWSER'] === '1')('captures real desktop pixel
       await page.screenshot({ path: `${output}/thumbnail-${width}.png` });
       await card.getByRole('button', { name: 'Open', exact: true }).focus(); await page.keyboard.press('Enter');
       const preview = page.getByRole('dialog', { name: 'File preview', exact: true });
-      await preview.getByText('✓ Preview ready', { exact: true }).waitFor();
+      await preview.getByText('Preview ready', { exact: true }).waitFor();
       const pixels = await preview.locator('img').evaluate(async (image: HTMLImageElement) => {
         await image.decode(); const canvas = document.createElement('canvas'); canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
         canvas.getContext('2d')!.drawImage(image, 0, 0); return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height).data)));
@@ -79,13 +79,18 @@ it.runIf(process.env['SCREENSHOT_BROWSER'] === '1')('captures real desktop pixel
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.keyboard.press('Escape'); await preview.waitFor({ state: 'hidden' });
       if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-      await page.locator('.panel-file:visible').last().click(); await preview.getByText('✓ Preview ready', { exact: true }).waitFor();
+      await page.locator('.panel-file:visible').last().click(); await preview.getByText('Preview ready', { exact: true }).waitFor();
       await page.keyboard.press('Escape');
       await watch.click(); await page.getByText('Viewing', { exact: true }).waitFor();
-      failScan = true; await capture.click(); await page.getByText('Screenshot could not be saved. Retry.', { exact: true }).waitFor();
+      failScan = true;
+      await capture.click();
+      await page.getByText('Screenshot could not be saved. Retry.', { exact: true }).waitFor();
+      expect(await page.locator('oc-live-view [data-state=failed]').count()).toBe(1);
+      expect(await page.locator('oc-live-view [data-state=unknown]').count()).toBe(0);
       await page.screenshot({ path: `${output}/error-${width}.png` }); failScan = false;
       infected = true; await capture.click();
       await page.getByText('File rejected: malware detected', { exact: true }).waitFor({ timeout: 3000 });
+      expect(await page.locator('oc-live-view [data-state=refused]').count()).toBe(1);
       infected = false; await capture.click(); await until(() => scanning); scanning = false; release?.();
       await page.getByText('Screenshot saved', { exact: true }).waitFor();
       await page.close();

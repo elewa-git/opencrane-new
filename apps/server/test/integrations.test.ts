@@ -299,7 +299,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     // Angular enables Save after rendering the choice; press() does not wait for enabled controls.
     await page.getByRole('button', { name: 'Save write', disabled: false }).press('Enter');
     expect((await saved).status()).toBe(200);
-    await page.getByText('✓ Saved').waitFor();
+    await page.getByText('Tool policy saved').waitFor();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
@@ -317,7 +317,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     const budgetSaved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/org/models'));
     await page.getByRole('button', { name: 'Save budget' }).click();
     expect((await budgetSaved).status()).toBe(200);
-    await page.getByText('✓ Budget saved').waitFor();
+    await page.getByText('Budget saved').waitFor();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);

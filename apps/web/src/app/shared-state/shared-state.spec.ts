@@ -1,47 +1,118 @@
-import { Component, signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import type { SharedStateKind } from '@opencrane/protocol';
-import { SharedState } from './shared-state';
+import { SharedState, type PresentationState } from './shared-state';
 
-@Component({ imports: [SharedState], template: `<oc-shared-state [kind]="kind()" [message]="message"
-  [detail]="detail" [actionLabel]="actionLabel" [safeToRetry]="safe()" />` })
-class Host {
-  readonly kind = signal<SharedStateKind>('ready');
-  message = 'Visible words';
-  detail = 'Evidence';
-  actionLabel = 'Manage';
-  readonly safe = signal(false);
+function create(kind: PresentationState): ComponentFixture<SharedState> {
+  const fixture = TestBed.createComponent(SharedState);
+  fixture.componentRef.setInput('kind', kind);
+  fixture.componentRef.setInput('message', 'Visible operation words');
+  fixture.detectChanges();
+  return fixture;
 }
 
-const stateCases: ReadonlyArray<[SharedStateKind, string | undefined, boolean, string | undefined]> = [
-  ['not_configured', 'Start setup', false, 'Start setup'], ['draft', 'Continue', false, 'Continue'],
-  ['checking', 'Submit again', false, undefined], ['needs_input', 'Connect account', false, 'Connect account'],
-  ['ready', 'Manage', false, 'Manage'], ['failed', 'Wrong retry label', true, 'Try the same change again'],
-  ['failed', 'Wrong retry label', false, undefined],
-  ['unknown', 'Wrong status label', false, 'Check status'], ['access_changed', 'Ask an admin', false, 'Ask an admin'],
-  ['disabled', 'Set up again', false, 'Set up again'],
-];
+function rootOf(fixture: ComponentFixture<SharedState>): HTMLElement {
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
+  return element;
+}
 
-describe('SharedState', () => {
-  function rootOf(fixture: ComponentFixture<Host>): HTMLElement {
-    const element: unknown = fixture.nativeElement;
-    if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
-    return element;
-  }
+function actionText(fixture: ComponentFixture<SharedState>): string | undefined {
+  return rootOf(fixture).querySelector('button')?.textContent.trim();
+}
 
-  it.each(stateCases)(
-    'shows the glyph, words, action rule and polite live region for %s', (kind, action, safe, expectedAction) => {
-    const fixture = TestBed.createComponent(Host);
-    fixture.componentInstance.kind.set(kind);
-    fixture.componentInstance.actionLabel = action ?? '';
-    fixture.componentInstance.safe.set(safe);
+describe('SharedState action and announcement contract', () => {
+  it('offers retry only for a server-established safe failure, never for an unknown outcome', () => {
+    const fixture = create('failed');
+    fixture.componentRef.setInput('actionLabel', 'Try again');
     fixture.detectChanges();
-    const root = rootOf(fixture);
-    expect(root.querySelector('[data-glyph]')?.getAttribute('aria-hidden')).toBe('true');
-    expect(root.textContent).toContain('Visible words');
-    expect(root.textContent).toContain('Evidence');
-    expect(root.querySelector('.state')?.getAttribute('aria-live')).toBe('polite');
-    expect(root.querySelector('button')?.textContent.trim()).toBe(expectedAction);
+    expect(actionText(fixture)).toBeUndefined();
+    expect(rootOf(fixture).textContent).not.toContain('nothing changed');
+    fixture.componentRef.setInput('message', 'Failed');
+    fixture.componentRef.setInput('safeToRetry', true);
+    fixture.detectChanges();
+    expect(actionText(fixture)).toBe('Try again');
+    expect(rootOf(fixture).textContent).toContain('Failed — nothing changed');
+    fixture.componentRef.setInput('kind', 'unknown');
+    fixture.componentRef.setInput('changeReference', 'chg_original');
+    fixture.detectChanges();
+    expect(actionText(fixture)).toBe('Check status');
+    expect(rootOf(fixture).textContent).toContain('chg_original');
+    const action = vi.fn();
+    fixture.componentInstance.action.subscribe(action);
+    rootOf(fixture).querySelector('button')?.click();
+    expect(action).toHaveBeenCalledOnce();
+  });
+
+  it('keeps repeated rows silent and allows one explicit operation announcement', () => {
+    const fixture = create('checking');
+    fixture.componentRef.setInput('actionLabel', 'Submit again');
+    fixture.detectChanges();
+    expect(rootOf(fixture).querySelector('[aria-live]')).toBeNull();
+    expect(actionText(fixture)).toBeUndefined();
+    fixture.componentRef.setInput('announce', true);
+    fixture.detectChanges();
+    expect(rootOf(fixture).querySelector('[role=status]')?.textContent)
+      .toContain('Visible operation words');
+    expect(rootOf(fixture).querySelector('[data-glyph]')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('shows supplied evidence and timestamps in UTC without inventing dates', () => {
+    const fixture = create('ready');
+    expect(rootOf(fixture).querySelector('time')).toBeNull();
+    fixture.componentRef.setInput('evidenceAt', '2026-10-04T08:40:00Z');
+    fixture.detectChanges();
+    expect(rootOf(fixture).querySelector('time')?.textContent).toContain('4 Oct 2026, 08:40 UTC');
+    fixture.componentRef.setInput('kind', 'scheduled');
+    fixture.componentRef.setInput('timestamp', '2026-10-04T12:00:00+02:00');
+    fixture.detectChanges();
+    expect(rootOf(fixture).querySelector('[data-state]')?.getAttribute('data-state'))
+      .toBe('scheduled');
+    expect(rootOf(fixture).textContent).toContain('10:00 UTC');
+    fixture.componentRef.setInput('timestamp', 'invalid');
+    fixture.detectChanges();
+    expect(rootOf(fixture).textContent).not.toContain('Invalid Date');
+  });
+
+  it.each<PresentationState>(['draft', 'paused', 'blocked', 'removed', 'waiting', 'ready'])(
+    'refuses an inappropriate retry label for %s', (kind) => {
+      const fixture = create(kind);
+      fixture.componentRef.setInput('actionLabel', 'Try again');
+      fixture.detectChanges();
+      expect(actionText(fixture)).toBeUndefined();
     },
   );
+});
+
+it('prints the caller message once without a generic heading', () => {
+  const fixture = create('not_configured');
+  fixture.componentRef.setInput('message', 'Nothing set up yet');
+  fixture.componentRef.setInput('detail', 'Add a server to begin.');
+  fixture.detectChanges();
+  expect(rootOf(fixture).querySelector('.message')?.textContent).toBe('Nothing set up yet');
+  expect(rootOf(fixture).textContent).not.toContain('Not configured');
+  expect(rootOf(fixture).querySelectorAll('.message')).toHaveLength(1);
+});
+
+it.each<PresentationState>([
+  'not_configured', 'draft', 'needs_input', 'checking', 'applying', 'ready', 'confirmed',
+  'failed', 'unknown', 'access_changed', 'paused', 'blocked', 'refused', 'disabled',
+  'removed', 'waiting', 'scheduled', 'expired',
+])('renders a glyph and the specific words for %s', (kind) => {
+  const fixture = create(kind);
+  expect(rootOf(fixture).querySelector('[data-glyph]')?.children.length).toBe(1);
+  expect(rootOf(fixture).querySelector('.message')?.textContent).toBe('Visible operation words');
+});
+
+const retryLabels = ['Try again', 'Retry', 'Retry capture', 'TRY AGAIN'];
+it.each(retryLabels)('blocks the repeat action %s without a safe failure', (label) => {
+  const fixture = create('ready');
+  fixture.componentRef.setInput('actionLabel', label);
+  fixture.detectChanges();
+  expect(actionText(fixture)).toBeUndefined();
+});
+
+it('preserves specific safe-failure words supplied by the caller', () => {
+  const fixture = create('failed');
+  fixture.componentRef.setInput('safeToRetry', true);
+  fixture.detectChanges();
+  expect(rootOf(fixture).querySelector('.message')?.textContent).toBe('Visible operation words');
 });

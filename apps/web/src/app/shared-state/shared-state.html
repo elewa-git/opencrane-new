@@ -1,20 +1,46 @@
-<span class="state" [attr.data-state]="kind()" aria-live="polite">
+<span class="state" [attr.data-state]="kind()" [attr.data-glyph-name]="glyph()"
+  [attr.role]="announce() ? 'status' : null" [attr.aria-live]="announce() ? 'polite' : null">
   <span class="glyph" data-glyph aria-hidden="true">
-    @switch (kind()) {
+    @switch (glyph()) {
       @case ('not_configured') { <span class="empty"></span> }
-      @case ('draft') { <span class="dot"></span> }
-      @case ('checking') { <span class="spinner"></span> }
-      @case ('needs_input') { <span class="dot"></span> }
-      @case ('ready') { <svg viewBox="0 0 12 12"><path d="M2.5 6.3l2.3 2.3L9.5 3.6"/></svg> }
-      @case ('failed') { <svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg> }
+      @case ('dot') { <span class="dot"></span> }
+      @case ('spinner') { <span class="spinner"></span> }
+      @case ('check') {
+        <svg viewBox="0 0 16 16"><path d="m3.2 8.4 3 3 6.6-6.8" /></svg>
+      }
+      @case ('failed') {
+        <svg viewBox="0 0 16 16"><path d="m4.3 4.3 7.4 7.4m0-7.4-7.4 7.4" /></svg>
+      }
       @case ('unknown') { <span class="question">?</span> }
       @case ('access_changed') {
-        <svg viewBox="0 0 16 16"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg>
+        <svg viewBox="0 0 16 16">
+          <rect x="3.5" y="7" width="9" height="6.5" rx="1.4" />
+          <path d="M5.5 7V5.2a2.5 2.5 0 0 1 5 0V7" />
+        </svg>
       }
-      @case ('disabled') { <span class="dash"></span> }
+      @case ('paused') {
+        <svg viewBox="0 0 16 16"><path d="M5.5 3.5v9m5-9v9" /></svg>
+      }
+      @case ('block') {
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" />
+          <path d="m4.1 11.9 7.8-7.8" /></svg>
+      }
+      @case ('dash') { <span class="dash"></span> }
+      @case ('clock') {
+        <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.6" />
+          <path d="M8 5v3.2l2 1.4" /></svg>
+      }
     }
   </span>
-  <span class="copy"><span class="message">{{ message() }}</span>@if (detail()) { <span class="detail">{{ detail() }}</span> }</span>
+  <span class="copy">
+    <span class="message">{{ shownMessage() }}</span>
+    @if (detail()) { <span class="detail">{{ detail() }}</span> }
+    @if (evidenceTime()) {
+      <span class="detail">Evidence: <time [attr.datetime]="evidenceAt()">{{ evidenceTime() }}</time></span>
+    }
+    @if (stateTime()) { <time class="detail" [attr.datetime]="timestamp()">{{ stateTime() }}</time> }
+    @if (changeReference()) { <code class="detail">{{ changeReference() }}</code> }
+  </span>
   @if (shownAction(); as label) {
     <button type="button" class="state-action" (click)="action.emit()">{{ label }}</button>
   }

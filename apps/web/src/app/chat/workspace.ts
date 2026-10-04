@@ -1,6 +1,10 @@
-import { ApprovalCards } from './approvals';
 // Workspace grid and message structure adapted from OpenCrane 1 10abd0ef6 (AGPL-3.0-or-later).
 // Presentation follows the owner's Workspace Live; all state comes from the P2 bridge.
+import { PaperSurface, DogEar } from '../ui/paper';
+import { GrainLoader } from '../ui/grain-loader';
+import { FlutterLoader } from '../ui/flutter-loader';
+import { SharedState } from '../shared-state/shared-state';
+import { ApprovalCards } from './approvals';
 import { ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal, viewChild, type OnInit } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';
@@ -12,7 +16,7 @@ import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 
-@Component({ selector: 'oc-workspace', imports: [ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
+@Component({ selector: 'oc-workspace', imports: [PaperSurface, DogEar, GrainLoader, FlutterLoader, SharedState, ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
   templateUrl: './workspace.html', styleUrls: ['./workspace.css', './transcript.css', './panel.css'], changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'shortcut($event)' } })
 export class Workspace implements OnInit {

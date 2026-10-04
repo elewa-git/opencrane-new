@@ -1,15 +1,21 @@
 // File-view interaction adapted from Open Terminal b58442aa8599755525878f917b621e0145b0e8f7 (MIT).
 // Original/preview fallback and workspace root: see docs/design/chat/OPEN-TERMINAL-LICENSE.txt.
+import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, input, output, signal, viewChild, type OnDestroy } from '@angular/core';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
 
-@Component({ selector: 'oc-file-preview', changeDetection: ChangeDetectionStrategy.OnPush,
+@Component({ selector: 'oc-file-preview', imports: [SharedState], changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<dialog #dialog aria-label="File preview" (close)="closed.emit()"><header><div><small>▰ workspace</small><h2>{{ path().split('/').at(-1) }}</h2></div><button type="button" aria-label="Close file preview" (click)="dialog.close()">×</button></header>
-    <p role="status" aria-live="polite">{{ status() }}</p>
+    <div role="status" aria-live="polite">
+      <oc-shared-state [kind]="statusKind()" [message]="status()"
+        [evidenceAt]="evidenceAt()" [showAction]="false" />
+    </div>
+    <section aria-label="Preview content" [attr.aria-busy]="statusKind() === 'checking'">
     @if (kind() === 'image') { <img [src]="url()" [alt]="path()"> }
     @if (kind() === 'pdf') { <iframe [src]="safeUrl()" title="Document preview" referrerpolicy="no-referrer"></iframe> }
     @if (text()) { <pre>{{ text() }}</pre> }
     @if (url()) { <a [href]="originalUrl()" [download]="path().split('/').at(-1)">↓ Download original file</a> }
+    </section>
   </dialog>`,
   styles: `dialog{width:min(900px,94vw);max-height:90dvh;border:1px solid #d9dfe0;border-radius:12px;padding:20px;color:#2b3133;animation:oc-hinge .42s var(--oc-ease-fold)}dialog::backdrop{background:#16191a55}header{display:flex;justify-content:space-between;gap:12px}h2{font-size:16px;overflow-wrap:anywhere}small,p{color:#616a6c;font-size:12px}button,a{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}iframe{width:100%;height:60dvh;border:0}img{max-width:100%;max-height:60dvh}pre{white-space:pre-wrap;overflow-wrap:anywhere}`,
 })
@@ -18,7 +24,9 @@ export class FilePreview implements OnDestroy {
   readonly conversationId = input.required<string>();
   readonly closed = output<void>();
   protected readonly originalUrl = computed(() => `/api/conversations/${encodeURIComponent(this.conversationId())}/files/view?path=${encodeURIComponent(this.path())}`);
-  protected readonly status = signal('▱ Loading preview…');
+  protected readonly status = signal('Loading preview…');
+  protected readonly statusKind = signal<PresentationState>('checking');
+  protected readonly evidenceAt = signal<string | undefined>(undefined);
   protected readonly kind = signal('');
   protected readonly text = signal('');
   protected readonly url = signal('');
@@ -37,11 +45,23 @@ export class FilePreview implements OnDestroy {
       const type = response.headers.get('content-type')?.split(';')[0] ?? '';
       const blob = new Blob(chunks, { type });
       this.url.set(URL.createObjectURL(blob));
+      this.evidenceAt.set(new Date().toISOString());
       if (['image/png', 'image/jpeg', 'image/webp', 'image/gif'].includes(type)) this.kind.set('image');
       else if (type === 'application/pdf') { this.kind.set('pdf'); this.safeUrl.set(this.sanitizer.bypassSecurityTrustResourceUrl(`${this.url()}#toolbar=0&navpanes=0&view=FitH`)); }
       else if (type.startsWith('text/') && type !== 'text/html') this.text.set(await blob.text());
-      this.status.set(this.kind() || this.text() ? '✓ Preview ready' : '▤ No rendered preview — download the original file.');
-    } catch { if (!this.abort.signal.aborted) this.status.set('⊘ Preview unavailable. File access is not available for this session yet.'); }
+      if (this.kind() || this.text()) {
+        this.statusKind.set('ready');
+        this.status.set('Preview ready');
+      } else {
+        this.statusKind.set('ready');
+        this.status.set('No rendered preview — download the original file.');
+      }
+    } catch {
+      if (!this.abort.signal.aborted) {
+        this.statusKind.set('failed');
+        this.status.set('Preview unavailable. File access is not available for this session yet.');
+      }
+    }
   }
 }
 

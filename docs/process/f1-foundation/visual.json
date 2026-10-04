@@ -1,0 +1,39 @@
+{
+  "result": "PASS",
+  "date": "2026-10-04T21:10:28.038Z",
+  "source": "aa3678e28869f897fdb66077a2b0bb11082d068b",
+  "screenComparison": "PARTIAL: shared treatments match; existing screens retain their fields and shells",
+  "freshInstall": false,
+  "liveQualification": "NOT RUN: intercepted fixtures only",
+  "widths": [
+    1280,
+    390
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": 56,
+  "environment": "Built Angular assets; Chromium; intercepted protocol fixtures; no stack",
+  "checks": [
+    "Eleven families",
+    "Silent repeated rows",
+    "Single progress region",
+    "44px phone tabs",
+    "Arrow keys and Home",
+    "2px focus ring",
+    "Refresh retains focus and rows",
+    "No overflow",
+    "Busy content excludes status regions",
+    "Specific call-site states",
+    "80px desktop rows",
+    "Composer focus ring",
+    "Corrected refused address submits by button and Enter",
+    "Citation and session file keyboard focus outside clipped folds",
+    "Pointer focus does not draw a keyboard ring",
+    "Citation dog-ears",
+    "12px dog-ear",
+    "42% rice texture",
+    "Static reduced-motion loaders"
+  ]
+}

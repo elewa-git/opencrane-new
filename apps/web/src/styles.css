@@ -5,18 +5,7 @@
 @import '@fontsource/dm-sans/700.css';
 @import '@fontsource/dm-mono/500.css';
 
-/* Copied from OpenCrane 1 (10abd0ef6)
-   libs/frontend/core/src/lib/theme/opencrane-theme.scss and
-   libs/frontend/core/src/lib/theme/opencrane-preset.ts
-   changed: plain CSS (no Sass). Dropped the two @import lines for the DM
-   fonts and PrimeNG's icon font (not installed yet, so the font variables
-   fall back to the system font). Dropped the token groups no screen here
-   uses (archetype and scope colours, avatars, the conversation layout and
-   paper texture, the sidebar rail, ledger cards); copy them back with the
-   components that need them. From the preset, only the plain values are
-   kept: the primary palette, contrast colour, hover and active mapping and
-   the 7px button radius, as --oc-primary-* and --oc-radius-button. Every
-   other token, the resets and the utility classes are unchanged. */
+/* Shared foundation values follow the v2 handoff. Existing consumers keep their token names. */
 
 :root {
 	/* Typography */
@@ -31,8 +20,8 @@
 	--oc-surface-raised: #ffffff;
 	--oc-surface-subtle: #f1f4f5;
 	--oc-ink-strong: #16191a;
-	--oc-ink-default: #42494b;
-	--oc-ink-muted: #5f6769;
+	--oc-ink-default: #2b3133;
+	--oc-ink-muted: #4f575a;
 	--oc-border-subtle: #e6eaeb;
 	--oc-border-default: #d9dfe0;
 	--oc-border-strong: #b8c0c1;
@@ -62,14 +51,14 @@
 	--oc-brand-crane-beak: #f2811f;
 	/* Organisation administration handoff values not present in the copied theme. */
 	--oc-ink-secondary: #4f575a;
-	--oc-ink-admin-muted: #6f7779;
+	--oc-ink-admin-muted: #4f575a;
 	--oc-ink-placeholder: #8a9294;
 	--oc-ink-faint: #a7aeaf;
 	--oc-border-row: #e1e6e7;
 	--oc-border-input: #c9d1d2;
 	--oc-surface-app: #f6f8f8;
 	--oc-surface-table-header: #f1f4f4;
-	--oc-accent-dark: #0a8497;
+	--oc-accent-dark: #0a6f7e;
 	--oc-accent-tint: #e4f6f9;
 	--oc-accent-border: #cdeef3;
 	--oc-accent-hover: #22c3d8;
@@ -96,7 +85,7 @@
 	--oc-primary-contrast: #16191a;
 	--oc-primary-hover: var(--oc-accent-hover);
 	--oc-primary-active: var(--oc-primary-700);
-	--oc-radius-button: 7px;
+	--oc-radius-button: 8px;
 
 	/* Type scale and spacing */
 	--oc-text-2xs: 10px;
@@ -107,7 +96,7 @@
 	--oc-text-xl: 20px;
 	--oc-text-2xl: 26px;
 	--oc-text-4xl: 38px;
-	--oc-type-page: 600 22px/1.25 var(--oc-font-sans);
+	--oc-type-page: 600 24px/1.25 var(--oc-font-sans);
 	--oc-type-section: 600 24px/1.25 var(--oc-font-sans);
 	--oc-type-card: 600 16px/1.35 var(--oc-font-sans);
 	--oc-type-row: 600 13.5px/1.35 var(--oc-font-sans);
@@ -136,7 +125,7 @@
 	/* Shape, depth, focus, and motion */
 	--oc-radius-chip: 5px;
 	--oc-radius-control: 8px;
-	--oc-radius-card: 9px;
+	--oc-radius-card: 12px;
 	--oc-radius-notice: 10px;
 	--oc-radius-panel: 11px;
 	--oc-radius-app: 12px;
@@ -147,13 +136,18 @@
 	--oc-shadow-card: 0 1px 1px rgba(22, 25, 26, 0.04);
 	--oc-shadow-card-hover: 0 2px 5px rgba(22, 25, 26, 0.08);
 	--oc-shadow-selected: 0 0 0 1px var(--oc-accent-soft);
-	--oc-shadow-primary: 0 1px 0 #0a8497;
+	--oc-shadow-primary: 0 1px 0 var(--oc-accent-dark);
 	--oc-shadow-active-nav: inset 2px 0 0 #0db5cc, 0 1px 2px rgba(0, 0, 0, 0.04);
 	--oc-focus-ring: #0a8497;
 	--oc-focus-width: 2px;
 	--oc-focus-offset: 2px;
 	--oc-lift-card: -1px;
-	--oc-fold-size: 20px;
+	--oc-dogear-size: 12px;
+	--oc-fold-start: #cfd6d7;
+	--oc-fold-end: #eef1f2;
+	--oc-crease: #cdd4d5;
+	--oc-page-padding: 28px 32px;
+	--oc-motion-crease: 600ms;
 	--oc-layer-sticky: 2;
 	--oc-opacity-disabled: 0.52;
 	--oc-motion-fast: 140ms;
@@ -215,4 +209,58 @@ select {
 .wo-scrollable {
 	overflow-y: auto;
 	scrollbar-width: none;
+}
+
+/* Isolation keeps the texture above the main background and behind its content. */
+.oc-rice {
+	position: relative;
+	isolation: isolate;
+}
+.oc-rice::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -1;
+	opacity: .42;
+	filter: brightness(1.06) contrast(1.08);
+	background: url('/chat/rice-paper.jpg') 0 0 / 280px;
+	border-radius: inherit;
+	pointer-events: none;
+}
+.oc-dogear {
+	position: relative;
+	/* Clip the paper inside its focusable wrapper so the outer ring stays visible. */
+	clip-path: polygon(0 0, calc(100% - var(--oc-dogear-size)) 0,
+		100% var(--oc-dogear-size), 100% 100%, 0 100%);
+}
+.oc-dogear::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	right: 0;
+	width: var(--oc-dogear-size);
+	height: var(--oc-dogear-size);
+	background: linear-gradient(225deg,
+		var(--oc-surface-app) 0%, var(--oc-surface-app) 50%,
+		var(--oc-fold-start) 50%, var(--oc-fold-end) 100%);
+	border-bottom-left-radius: 3px;
+	pointer-events: none;
+}
+.oc-crease {
+	display: block;
+	width: 100%;
+	height: 2px;
+	margin: 0;
+	border: 0;
+	background: linear-gradient(var(--oc-crease) 0 1px, var(--oc-surface-raised) 1px 2px);
+	transform-origin: 50% 50%;
+}
+.oc-crease-complete {
+	animation: oc-crease-in var(--oc-motion-crease) var(--oc-ease-fold) backwards;
+}
+@media (max-width: 600px) {
+	:root { --oc-page-padding: 18px 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.oc-crease-complete { animation: none; transform: scaleX(1); }
 }

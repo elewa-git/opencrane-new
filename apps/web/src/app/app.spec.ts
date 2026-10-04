@@ -67,6 +67,10 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).querySelector('.empty')).not.toBeNull());
     expect(root(fixture).querySelector('.empty')?.textContent).toContain('Not configured');
     expect(root(fixture).querySelector('.empty')?.textContent).toContain('Nothing set up yet');
+    expect(root(fixture).querySelector('.empty [data-state]')?.getAttribute('data-state'))
+      .toBe('not_configured');
+    expect(root(fixture).querySelectorAll('.empty .message')).toHaveLength(1);
+    expect(root(fixture).querySelector('.empty .message')?.textContent).toBe('Not configured');
   });
 
   it('distinguishes an empty filter from an empty register', async () => {
@@ -93,7 +97,7 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).querySelector('.refresh-notice')?.textContent).toContain('Showing what we loaded at 09:40'));
     const notice = root(fixture).querySelector('.refresh-notice');
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
-    expect(notice?.getAttribute('role')).toBe('status');
+    expect(notice?.parentElement?.getAttribute('role')).toBe('status');
     expect(notice?.textContent).toContain('Showing what we loaded at 09:40');
     expect(button(root(fixture), 'Refresh list')).toBeTruthy();
   });
@@ -107,7 +111,7 @@ describe('MCP register', () => {
     await fixture.whenStable();
     const notice = root(fixture).querySelector('.refresh-notice');
     const retry = button(root(fixture), 'Refreshing list…');
-    expect(notice?.getAttribute('aria-live')).toBe('polite');
+    expect(notice?.parentElement?.getAttribute('aria-live')).toBe('polite');
     expect(notice?.textContent).toContain('Refreshing the integrations list…');
     expect(root(fixture).textContent).not.toContain('Nothing set up yet');
     expect(retry.getAttribute('aria-disabled')).toBe('true');
@@ -146,6 +150,18 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(0);
     expect(root(fixture).textContent).not.toContain('Showing what we loaded');
+  });
+
+  it('keeps the server retry fact in the status cell', async () => {
+    const failedRow = row('safe-failure', 'failed', 'Validation stopped');
+    failedRow.status.safeToRetry = true;
+    const reply = { rows: [failedRow], loadedAt: loaded.loadedAt };
+    const fixture = create(response(reply));
+    function safeFailureIsVisible(): void {
+      expect(root(fixture).querySelector('.register-row .message')?.textContent)
+        .toBe('Failed — nothing changed');
+    }
+    await vi.waitFor(safeFailureIsVisible);
   });
 
   it('keeps the existing sign-in shell outside /org routes', () => {

@@ -34,7 +34,7 @@ describe('theme tokens', () => {
     expect(tokens.get('--oc-primary-contrast')).toBe('#16191a');
     expect(tokens.get('--oc-primary-hover')).toBe('var(--oc-accent-hover)');
     expect(tokens.get('--oc-primary-active')).toBe('var(--oc-primary-700)');
-    expect(tokens.get('--oc-radius-button')).toBe('7px');
+    expect(tokens.get('--oc-radius-button')).toBe('8px');
   });
 
   it('never refer to a token that is not defined (such as PrimeNG ones, which are not installed)', () => {
@@ -52,4 +52,37 @@ describe('shell buttons', () => {
     const hover = luminance(tokens.get('--oc-accent-hover')!);
     expect((hover + 0.05) / (ink + 0.05)).toBeGreaterThanOrEqual(4.5);
   });
+});
+
+describe('state text contrast', () => {
+  it.each(['#ffffff', '#f6f8f8'])('meets 4.5:1 against %s', (surface) => {
+    const text = luminance(tokens.get('--oc-accent-dark')!);
+    const background = luminance(surface);
+    expect((background + 0.05) / (text + 0.05)).toBeGreaterThanOrEqual(4.5);
+    expect(tokens.get('--oc-focus-ring')).toBe('#0a8497');
+  });
+});
+
+it('uses the accessible state text colour for checking, actions and the specimen', () => {
+  const stateCss = readCss('../src/app/shared-state/shared-state.css');
+  const specimenCss = readCss('../src/app/shared-state/state-specimen.css');
+  expect(stateCss).toMatch(/\[data-glyph-name='spinner'\]\s*\{[^}]*var\(--oc-accent-dark\)/u);
+  expect(stateCss).toMatch(/\.state-action\s*\{[^}]*var\(--oc-accent-dark\)/u);
+  expect(specimenCss).toMatch(/\.interaction\s*\{[^}]*var\(--oc-accent-dark\)/u);
+});
+
+it('keeps paused text readable and uses amber only for its glyph', () => {
+  const stateCss = readCss('../src/app/shared-state/shared-state.css');
+  const pausedText = luminance('#8a5d1f');
+  const white = luminance('#ffffff');
+  const raised = luminance('#f6f8f8');
+  expect((white + 0.05) / (pausedText + 0.05)).toBeGreaterThanOrEqual(4.5);
+  expect((raised + 0.05) / (pausedText + 0.05)).toBeGreaterThanOrEqual(4.5);
+  expect(stateCss).toMatch(/\[data-glyph-name='paused'\] \.message\s*\{[^}]*#8a5d1f/u);
+  expect(stateCss).toMatch(/\[data-glyph-name='paused'\] \.glyph\s*\{[^}]*#b0661a/u);
+});
+
+it('keeps stale row text at full opacity', () => {
+  expect(shellCss).toMatch(/\.stale \.register-row\s*\{[^}]*background:\s*#f1f3f3/u);
+  expect(shellCss).not.toMatch(/\.stale \.register-row\s*\{[^}]*opacity:/u);
 });

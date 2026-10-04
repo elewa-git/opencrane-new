@@ -3,7 +3,7 @@
     <oc-fold-loader />
     <h1>Taking you to your identity provider</h1>
     <p>You will come back here signed in. Your organisation uses Zitadel to verify your account.</p>
-    <oc-shared-state kind="checking" message="Opening single sign-on…" />
+    <oc-shared-state kind="checking" message="Opening single sign-on…" [announce]="true" />
     <button type="button" class="text-button" #cancelButton (click)="cancel()">Cancel and go back</button>
   } @else {
     <a class="brand" href="/" aria-label="OpenCrane home">
@@ -13,7 +13,8 @@
     <div class="content">
       @if (authenticated()) {
         <h1>You are signed in</h1>
-        <oc-shared-state kind="ready" message="Your workspace session is active" />
+        <oc-shared-state kind="ready" message="Your workspace session is active"
+          [evidenceAt]="authenticatedAt()" />
         <a class="button primary" href="/workspace">Open workspace</a>
         <a class="button secondary" href="/org/integrations">Organisation integrations</a>
         <form method="post" action="/auth/logout" enctype="text/plain">
@@ -39,7 +40,7 @@
           </div>
         }
       }
-      @if (error()) { <oc-shared-state kind="unknown" [message]="error()" [showAction]="false" /> }
+      @if (error()) { <oc-shared-state kind="unknown" [message]="error()" [announce]="true" [showAction]="false" /> }
     </div>
     <footer>self-hosted · data sovereign</footer>
   }

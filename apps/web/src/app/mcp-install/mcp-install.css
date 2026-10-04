@@ -13,5 +13,5 @@ button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--oc-border-
 button.secondary { background: white; margin-top: 18px; } button:disabled { opacity: .65; cursor: wait; }
 article { border-top: 1px solid var(--oc-border-default); padding: 14px 0; } code, pre { font-family: monospace; font-size: 12px; overflow-wrap: anywhere; white-space: pre-wrap; }
 summary { min-height: 44px; align-content: center; cursor: pointer; }
-:focus-visible { outline: 2px solid var(--oc-accent-dark); outline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
 @media (max-width: 600px) { .sources, .steps { flex-direction: column; gap: 10px; } form, section { padding: 16px; } button { width: 100%; } }
