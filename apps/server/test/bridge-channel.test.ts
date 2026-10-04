@@ -3,7 +3,7 @@ import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -170,6 +170,111 @@ it('interrupts the requested Codex turn and retains the partial report', async (
     await until(() => reports.some(row => row.type === 'agent.turn_failed'), 1500);
     expect(reports.find(row => row.type === 'agent.message_delta')?.text).toBe('Partial');
   } finally { socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('replays reports written before a channel restart without executing the turn again', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-restart-journal-`), server = createServer();
+  const journal = `${directory}/reports`;
+  let starts = 0;
+  const driver = {
+    rpc(method: string, _params: Record<string, unknown>) {
+      if (method === 'thread/start') return Promise.resolve({ thread: { id: 'thread' } });
+      if (method === 'turn/start') {
+        starts++;
+        channel.notification({ method: 'item/agentMessage/delta', params: { threadId: 'thread', delta: 'Saved' } });
+      }
+      return Promise.resolve({});
+    },
+    async grant() {},
+    credential: () => ({ value: 'test', expiresAt: Date.now() + 60_000 }),
+    journal,
+  };
+  let channel = bridgeChannel(server, driver);
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const url = `ws://127.0.0.1:${address.port}/bridge`;
+  let reports: { sequence: number; type: string; text?: string | undefined }[] = [];
+  const connect = async (since: number) => {
+    const socket = new WebSocket(url, { headers: { 'x-bridge-token': 'test' } });
+    socket.on('message', raw => {
+      const report = z.object({ sequence: z.number(), type: z.string(), text: z.string().optional() })
+        .parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
+      reports.push(report);
+      socket.send(JSON.stringify({ type: 'ack', sequence: report.sequence, token: 'turn', expiresAt: Date.now() + 60_000 }));
+    });
+    await once(socket, 'open');
+    socket.send(JSON.stringify({ type: 'resume', since }));
+    return socket;
+  };
+  let socket: WebSocket | undefined;
+  try {
+    socket = await connect(0);
+    socket.send(JSON.stringify({ type: 'turn', id: 'message', conversationId: 'conversation',
+      assistantId: 'assistant', text: 'Hello', token: 'turn', expiresAt: Date.now() + 60_000 }));
+    await until(() => reports.some(report => report.text === 'Saved'));
+    expect(starts).toBe(1);
+    channel.notification({ method: 'turn/completed',
+      params: { threadId: 'thread', turn: { status: 'completed' } } });
+    await until(() => reports.some(report => report.type === 'agent.turn_completed'));
+    socket.terminate(); await once(socket, 'close'); socket = undefined;
+    await channel.close();
+
+    channel = bridgeChannel(server, driver);
+    reports = [];
+    socket = await connect(1);
+    await until(() => reports.some(report => report.sequence === 2 && report.text === 'Saved'));
+    expect(reports.filter(report => report.sequence === 2)).toEqual([
+      { sequence: 2, type: 'agent.message_delta', text: 'Saved' },
+    ]);
+    expect(starts).toBe(1);
+    const journalRows = (await readFile(journal, 'utf8')).trim().split('\n');
+    expect(journalRows).toHaveLength(3);
+  } finally {
+    socket?.terminate(); await channel.close(); server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('marks an executing turn failed when the channel restarts', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-crash-recovery-`), server = createServer();
+  const journal = `${directory}/reports`;
+  const started = { sequence: 1, previousSequence: 0, conversationId: 'conversation',
+    turnId: 'message', assistantId: 'assistant', type: 'agent.turn_started', threadId: 'thread' };
+  await writeFile(journal, `${JSON.stringify(started)}\n`);
+  await writeFile(`${journal}.executions`, 'message\n');
+  const channel = bridgeChannel(server, {
+    rpc: () => Promise.reject(new Error('Recovery must not execute a turn')),
+    async grant() {},
+    credential: () => ({ value: 'test', expiresAt: Date.now() + 60_000 }),
+    journal,
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, {
+    headers: { 'x-bridge-token': 'test' },
+  });
+  const reports: { sequence: number; type: string }[] = [];
+  socket.on('message', raw => {
+    const report = z.object({ sequence: z.number(), type: z.string() })
+      .parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '') as unknown);
+    reports.push(report);
+  });
+  try {
+    await once(socket, 'open'); socket.send(JSON.stringify({ type: 'resume', since: 1 }));
+    await until(() => reports.some(report => report.type === 'agent.turn_failed'));
+    expect(reports).toEqual([{ sequence: 2, type: 'agent.turn_failed' }]);
+    const journalRows = (await readFile(journal, 'utf8')).trim().split('\n');
+    function readReportType(line: string) {
+      return z.object({ type: z.string() }).parse(JSON.parse(line) as unknown).type;
+    }
+    const reportTypes = journalRows.map(readReportType);
+    expect(reportTypes).toEqual([
+      'agent.turn_started', 'agent.turn_failed',
+    ]);
+  } finally {
+    socket.terminate(); await channel.close(); server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 it('retries a failed Stop after turn/start returns, retaining the active turn and its reports', async () => {
