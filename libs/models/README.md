@@ -64,7 +64,7 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   stored history, background requests, multiple completions and premium tiers
   fail closed. The caller supplies `stream: true` and `max_output_tokens` from
   16 (the [API minimum](https://developers.openai.com/api/reference/java/resources/beta/subresources/responses/methods/create))
-  to 2,000. Codex function/custom call history, tool-result IDs, reasoning
+  to 2,000. Codex function/custom call history, string or text-block custom results, tool-result IDs, reasoning
   continuations and assistant message phases are preserved; unknown fields remain refused. The gateway fixes the
   service tier to standard pricing.
 - IAM uses current requester ∩ assistant resource grants in live OpenFGA.
@@ -177,7 +177,7 @@ P2-3 also verifies the native Codex text request shape through the real gateway:
 nullable message ids, input/output text, reasoning summaries, local function
 selection, parallel calls and cache/client metadata. Native Sol text turns also
 carry strictly checked tool declarations (including namespaces and Lark custom
-tools), `all_turns` reasoning context and text verbosity. These fields do not relax
+tools), top-level local custom tools and namespaces, `all_turns` reasoning context and text verbosity. These fields do not relax
 the output limit or admit media, hosted tools or stored-history references.
 
 ## Per-tool policy (P3-1)

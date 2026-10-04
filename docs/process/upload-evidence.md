@@ -1,5 +1,149 @@
 # P2-6 upload evidence
 
+## Reliable document context — 4 October 2026
+
+Source: `work/upload`, starting at `6ba292e`. No dependency was added.
+
+### Diagnosis and regression
+
+The 00:45 paid receipt records two admitted provider responses, both HTTP 200,
+and two settlements totalling four cents. That turn was not blocked by model
+request admission. The named receipt/log retain usage and the answer, not full
+request bodies; this diagnosis does not claim otherwise. The earlier native
+continuation captures show `exec` wrapping `tools.exec_command`, followed by a
+disabled-host result. The original bridge explicitly set `code_mode_host = false`.
+
+A disposable computer using the original bridge config reproduces the same
+failure with the pinned Codex 0.159.2 binary: `additional_tools` advertises the
+`functions` namespace with custom `exec`, and its continuation contains
+`custom_tool_call_output.output: "code-mode host is disabled"`. The declaration’s
+instructions expose `tools.exec_command` through that host. Normal shell
+execution was present, but the route the model expected was disabled. These are
+local computer tools, not MCP calls; the MCP per-tool policy was not involved.
+Private reproduction: `/tmp/upload-disabled-host-requests.jsonl` and
+`/tmp/upload-disabled-host-reproduced.log`.
+
+The old stub invented a direct `exec_command` fallback after that refusal. It
+now uses the native custom call and fails on the refusal. The existing real
+computer upload test then failed with **PDF reading failed** instead of Willow-47:
+`/tmp/upload-fix-tools-red.log`. Enabling the host exposed another concrete
+boundary mismatch: successful native custom results contain an array of text
+blocks, whereas both admission and the stub expected a string. The gateway
+regression failed with 403 before accepting that recorded shape:
+`/tmp/upload-fix-blocks-red.log`. Top-level custom/namespace declarations also
+failed before the shared local-tool schema fix: `/tmp/upload-fix-schema-red.log`.
+The existing `additional_tools` grammar was already accepted.
+
+### Resulting behaviour and source proof
+
+The computer enables its bundled code-mode host and normal shell tools. Tool
+output defaults to 2,000 tokens; the model response ceiling remains 2,000 tokens.
+The decision schema accepts local function/custom/namespace declarations in both
+locations and string or text-block custom results. Hosted tools, unknown fields,
+media and excessive output bounds remain refused; MCP policy is unchanged.
+The [configuration reference](https://developers.openai.com/codex/config-reference)
+and the pinned executable’s feature list informed the configuration check.
+
+The server passes attachment metadata separately from the stored user message.
+The computer bridge reads converted PDF text through the existing UID 1001
+executor before starting the model turn. Context includes original and converted
+paths, at most 32 KiB of valid UTF-8 text across attachments, and an explicit
+untrusted-document label. Truncation and unavailable text are explicit. Reads
+reject symlinks and non-regular files. Text documents use their original path;
+formats without converted text retain their original path. The newest 100
+attachments are listed; older omissions are counted without breaking the turn.
+
+Red/green context receipts: `/tmp/upload-fix-context-{red,green}.log`,
+`/tmp/upload-fix-context-invalid-red.log` and `/tmp/upload-fix-many-{red,green}.log`.
+The five focused integration cases pass in `/tmp/upload-fix-focused-green.log`:
+real Codex reads through `exec`, its native result reaches the stub, and a second
+attachment turn answers from inline text in exactly one provider request.
+The stub learns the code from document content, not the question. The browser
+journey now asks the exact unmarked real-model question.
+
+Independent review: two passes. The first found that rejecting 101 attachments
+would permanently break later chat turns; the fix bounds metadata before sending
+and reports omissions. The second found no remaining blocker. The three final
+builder tests pass in `/tmp/upload-fix-many-green.log`.
+
+### Live qualification and the single paid turn
+
+The reviewed image is
+`sha256:e584d4c58fbdc2d364572aae1ac767154657cabc9d4eb5274935116a5be04367`.
+Build, licence/SBOM checks and the gVisor qualification all **PASS**, including
+512 MiB operation, executor isolation, browser, MarkItDown, network isolation,
+hostile PVC and saved-disk resume: `/tmp/upload-fix-image-reviewed.log`.
+
+Owner takeover used main `down.sh`, `printf` to write the upload checkout marker,
+`npm ci`, and upload `up.sh`. The warm sandbox templates were updated to the
+reviewed image through the existing checked-digest admission. The overall
+`up.sh` journey is **FAIL**: its final browser logout failed with
+`net::ERR_NETWORK_CHANGED`, obscuring the earlier journey error. Private logs:
+`/tmp/upload-fix-main-down.log`, `/tmp/upload-fix-npm-ci.log`,
+`/tmp/upload-fix-owner-image.log`, `/tmp/upload-fix-owner-up.log` and
+`.tools/upload-fixed-owner-diagnostics/`. This is not a full-stack journey pass.
+
+The focused real-browser upload journey on that owner stack is **PASS**:
+PDF → ClamAV → MarkItDown → inline context → Willow-47, reload, upload-response
+loss with one retry and no duplicate, EICAR/type/size refusal, and promoted
+PDF/text/image previews. One preview retry recovered from `ERR_NETWORK_CHANGED`.
+Receipt: `/tmp/upload-fix-browser.log`; screenshots:
+`/tmp/upload-fix-browser-screenshots/`.
+
+Exactly **one** further real `gpt-6.1-sol` chat turn was sent, asking
+**What is the project code in the attached PDF?** The displayed answer was:
+
+> The project code is Willow-47.
+
+**Correct: yes. Actual settled cost: 3 euro cents, below the 10-cent cap.**
+The one provider request contained the converted text in its user input;
+no file-reading call was needed. Input was 10,160 tokens, output 15 tokens,
+reasoning 0, cached input 0 and cache-write input 10,157. HTTP status was 200.
+The pre-generation token count and 2,000-token response bound allowed at most
+five cents for that request. The independent ledger confirms one turn, one
+unchanged 502-cent reservation and one three-cent settlement. No paid retry
+was made. Receipt began at `2026-10-04T01:49:30.181Z`.
+
+Private receipts: `.tools/upload-fixed-receipt.json`,
+`.tools/upload-fixed-requests.jsonl`, `.tools/upload-fixed-responses.sse`,
+`/tmp/upload-fix-real.log` and `/tmp/upload-fix-real-ledger.log`.
+
+### Final checks and handback
+
+- **PASS** lint: `/tmp/upload-fix-lint-reviewed.log` (five existing warnings,
+  no errors); evidence Markdown rechecked in `/tmp/upload-fix-docs-final.log`.
+- **PASS** workspace typecheck: `/tmp/upload-fix-typecheck-reviewed.log`;
+  dev-stack TypeScript: `/tmp/upload-fix-infra-types.log`.
+- **PASS** `check:events`: 81 registered event types,
+  `/tmp/upload-fix-events.log`.
+- **FAIL**, then affected cases **PASS**: with
+  `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`,
+  `npm test -- --maxWorkers=2` finished with 1,144 passed, ten skipped and two
+  failures (`/tmp/upload-fix-tests-final.log`). The Chromium command exceeded
+  180 seconds; the daily-budget concurrency case returned six cap responses
+  instead of seven. The unchanged failed cases, including both daily/monthly
+  variants, passed on the targeted rerun: three passed, 67 filtered out,
+  `/tmp/upload-fix-failed-rerun.log`. No timeout or assertion was loosened.
+  The full run was not green; the targeted rerun does not erase that result.
+  All new attachment and request-shape cases passed in the full run.
+
+Restoration used upload `down.sh`, `printf` to write the main checkout marker,
+and main `up.sh --fresh`. The first fresh start refused an occupied port 43002
+while shutdown finished. After the port cleared, the second fresh start
+provisioned main successfully but its browser journey **FAIL**ed at
+`browser-chat.ts:42`: waiting for **Stopped · partial reply kept** exceeded
+30 seconds. This is a partial handback, not a fresh-install qualification pass.
+Main is clean at `3972492d9eb556587bfa443b26e154b33e84f83b`; the marker contains
+`/home/jente/dev/opencrane-new`. All eleven managed processes and the server,
+OpenFGA, MinIO and tailnet HTTPS health checks are **PASS**. The restored provider
+is the local stub. No further paid turn was sent.
+
+Private handback receipts: `/tmp/upload-fix-upload-down.log`,
+`/tmp/upload-fix-main-fresh.log`, `/tmp/upload-fix-main-fresh-first-failure.log`,
+`/tmp/upload-fix-main-fresh-retry.log`, `/tmp/upload-fix-main-status.log` and
+`.tools/upload-fixed-main-diagnostics/`. Generated browser screenshots were
+preserved privately and removed from the source diff.
+
 ## One turn under the settled-cost cap — 4 October 2026
 
 **Real-model answer: FAIL. Spending cap: PASS.** This authorisation permits

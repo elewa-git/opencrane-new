@@ -106,8 +106,8 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   await page.screenshot({ path: `${screenshots}/preview-${width}.png`, fullPage: true });
   await page.getByRole('button', { name: 'Close file preview' }).click();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
-  // The answer is absent from the prompt. The stub only answers after Codex returns the converted text.
-  await composer.fill('UPLOAD_PDF_PROOF Read the attached PDF and tell me the project code.');
+  // The answer is absent from the question. The stub must receive the converted text in the turn.
+  await composer.fill('What is the project code in the attached PDF?');
   await page.getByRole('button', { name: 'Send message', exact: true }).click();
   await page.getByRole('article', { name: 'Agent reply', exact: true }).filter({ hasText: 'The project code is Willow-47.' }).getByText('Done', { exact: true }).waitFor({ timeout: 120_000 });
   await page.reload();
@@ -137,5 +137,5 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     await page.getByRole('button', { name: 'Close file preview' }).click();
   }
   assert.equal(((await (await page.request.get(filesUrl)).json()) as { rows: unknown[] }).rows.length, 3, 'Refused files never appear');
-  console.log(`PASS browser upload ${width}px: PDF → ClamAV → MarkItDown → Codex tool output → Willow-47; ${retries} upload retries, ${previewRetries} preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots`);
+  console.log(`PASS browser upload ${width}px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; ${retries} upload retries, ${previewRetries} preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots`);
 }

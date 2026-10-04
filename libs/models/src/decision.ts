@@ -31,18 +31,19 @@ const functionTool = z.object({ type: z.literal('function'), name: z.string(), d
   parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict();
 const tool = z.union([functionTool, z.object({ type: z.literal('custom'), name: z.string(), description: z.string().optional(),
   format: z.object({ type: z.literal('grammar'), syntax: z.literal('lark'), definition: z.string() }).strict() }).strict()]);
+const localTool = z.union([tool, z.object({ type: z.literal('namespace'), name: z.string(), description: z.string().optional(),
+  tools: z.array(tool) }).strict()]);
 const additionalTools = z.object({ type: z.literal('additional_tools'), id: z.string(), role: z.literal('developer'),
-  tools: z.array(z.union([tool, z.object({ type: z.literal('namespace'), name: z.string(), description: z.string().optional(),
-    tools: z.array(tool) }).strict()])) }).strict();
+  tools: z.array(localTool) }).strict();
 const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired).map(row => row.id)), stream: z.literal(true),
   input: z.union([z.string(), z.array(z.union([message, additionalTools, reasoningItem,
     z.object({ type: z.literal('custom_tool_call'), call_id: z.string(), name: z.string(), input: z.string(), id: z.string().optional(),
       status: z.enum(['in_progress', 'completed', 'incomplete']).optional() }).strict(),
-    z.object({ type: z.literal('custom_tool_call_output'), call_id: z.string(), output: z.string(), id: z.string().optional() }).strict(),
+    z.object({ type: z.literal('custom_tool_call_output'), call_id: z.string(), output: z.union([z.string(), z.array(textContent)]), id: z.string().optional() }).strict(),
     z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string(), id: z.string().optional() }).strict(),
     z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
   instructions: z.string().optional(), max_output_tokens: z.int().min(16).max(2000), n: z.literal(1).optional(),
-  tools: z.array(functionTool).optional(),
+  tools: z.array(localTool).optional(),
   reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional(),
     context: z.literal('all_turns').optional() }).strict().optional(),
   text: z.object({ verbosity: z.enum(['low', 'medium', 'high']) }).strict().optional(),

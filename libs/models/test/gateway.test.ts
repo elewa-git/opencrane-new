@@ -803,6 +803,41 @@ it('admits routed Sol tool declarations and settings while refusing malformed or
   } finally { await f.close(); }
 }, 40_000);
 
+it('admits the native code-mode text-block result so a successful file read reaches the provider', async () => {
+  const f = await fixture();
+  const output = { type: 'custom_tool_call_output', id: 'ctco_read', call_id: 'call_read', output: [
+    { type: 'input_text', text: 'Script completed\nWall time 0.2 seconds\nOutput:\n' },
+    { type: 'input_text', text: '{"exit_code":0,"output":"Project code: Willow-47."}' },
+  ] };
+  try {
+    expect((await f.call({}, { input: [output] })).status).toBe(200);
+    await f.settled(); expect(f.received()).toBe(1);
+    for (const invalid of [[{ type: 'input_image', image_url: 'https://hosted.invalid/image' }], [{ type: 'input_text', text: 'text', unknown: true }]]) {
+      expect((await f.call({}, { input: [{ ...output, output: invalid }] })).status).toBe(403);
+    }
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('admits local custom tools at both Codex declaration locations, without hosted tools', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const local = { type: 'custom', name: 'exec', description: 'Run code',
+    format: { type: 'grammar', syntax: 'lark', definition: 'start: /.+/' } };
+  const namespace = { type: 'namespace', name: 'functions', tools: [local] };
+  try {
+    for (const tools of [[local], [namespace]]) {
+      expect((await f.call({}, { tools })).status).toBe(200);
+      await f.settled();
+    }
+    for (const tools of [[{ type: 'web_search' }], [{ ...namespace, tools: [{ type: 'file_search', vector_store_ids: ['remote'] }] }], [{ ...local, unknown: true }]]) {
+      expect((await f.call({}, { tools })).status).toBe(403);
+      expect((await f.call({}, { input: [{ type: 'additional_tools', id: 'tools', role: 'developer', tools }] })).status).toBe(403);
+    }
+    expect((await f.call({}, { tools: [local], max_output_tokens: 2001 })).status).toBe(403);
+    expect(f.received()).toBe(2);
+  } finally { await f.close(); }
+}, 40_000);
+
 it('enforces reviewed tool modes at the real gateway, including the first automatic write', async () => {
   const f = await fixture();
   try {

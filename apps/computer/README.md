@@ -142,6 +142,10 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
   reused from the pinned base. UID 1001 inherits `no_new_privs` and the same
   seccomp rules denying sockets, process inspection and alternative syscall ABIs.
 - The bridge, Codex and authenticated loopback model proxy use UID 1000.
+  The code-mode host and normal shell tools are enabled; tool output defaults to
+  2,000 tokens and the proxy bounds each model response to 2,000 output tokens.
+  Hosted web search stays disabled. Uploaded document context is described in
+  [the upload contract](../../docs/architecture/upload-api.md#http-interface).
   The bridge initialises the real app-server and exposes `/health` on TCP 8081.
   Health requires initialised Codex and a listening desktop; required child exits
   terminate the container. A ready report is emitted when the first health check confirms both.

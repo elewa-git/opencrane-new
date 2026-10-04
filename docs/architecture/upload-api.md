@@ -64,9 +64,15 @@ server's promoted MinIO object, never from the computer. Responses use the inspe
 MIME, `nosniff` and private/no-store caching. The existing Open Terminal-style modal
 renders PDF, text and browser-supported images; other formats offer a download.
 
-The composer waits for delivery before sending. The bridge adds attachment paths
-(PDF MarkItDown text paths where available) to Codex context without changing the
-stored user message or its length limit. Retrying an upload
+The composer waits for delivery before sending. The bridge adds each attachment’s
+workspace path and its PDF MarkItDown text path (or original plain-text path)
+without changing the stored user message or its length limit. It reads at most
+32 KiB of text across the turn’s attachments through the isolated tools executor
+and marks the JSON content as untrusted document data, never instructions.
+Missing text and truncation are explicit; local tools can read more. Images have
+no converted text path. Only uploads recorded before the message are included,
+with the newest 100 attachment entries per turn and an explicit count of older
+entries omitted from context. Retrying an upload
 retains its key and bytes on the page; reloading discards an uncommitted selection.
 
 ## Flow and recovery

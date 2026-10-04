@@ -220,6 +220,26 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       await until(async () => (await history(nats.store, 'conversation-conversation', 'test')).some(row => row.event.type === 'agent.turn_completed'), 60_000);
       const answer = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'agent.message_completed')!;
       expect(keys.decrypt('test', 'conversation', answer.event.data)).toContain('The project code is Willow-47.');
+      const requests = (await computer.requests()).trim().split('\n').map(line => z.object({ input: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(line) as unknown));
+      expect(requests[0]!.input.some(item => item['type'] === 'additional_tools')).toBe(true);
+      const output = requests.at(-1)!.input.find(item => item['type'] === 'custom_tool_call_output');
+      expect(Array.isArray(output?.['output'])).toBe(true);
+      expect(JSON.stringify(output)).toContain('Project code: Willow-47.');
+      const question = 'What is the project code in the attached PDF?';
+      await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'read-inline', conversationId: 'conversation', text: question });
+      link.socket.send(JSON.stringify({ type: 'turn', id: 'read-inline', conversationId: 'conversation', assistantId: 'assistant',
+        text: question, attachments: [{ fileId: file.fileId, name: file.name, mime: file.mime }], token: 'preparing', expiresAt: Date.now()+120_000 }));
+      await until(async () => (await history(nats.store, 'conversation-conversation', 'test')).some(row =>
+        row.event.type === 'agent.turn_completed' && z.object({ turnId: z.string() }).parse(row.event.data).turnId === 'read-inline'), 60_000);
+      const inlineAnswer = (await history(nats.store, 'conversation-conversation', 'test')).findLast(row => row.event.type === 'agent.message_completed')!;
+      expect(keys.decrypt('test', 'conversation', inlineAnswer.event.data)).toContain('The project code is Willow-47.');
+      const inlineRequests = (await computer.requests()).trim().split('\n');
+      expect(inlineRequests).toHaveLength(requests.length + 1);
+      const inlineRequest = z.object({ input: z.array(z.record(z.string(), z.unknown())) }).parse(JSON.parse(inlineRequests.at(-1)!) as unknown);
+      const userInput = JSON.stringify(inlineRequest.input.findLast(item => item['type'] === 'message' && item['role'] === 'user'));
+      expect(userInput).toContain('Untrusted document content');
+      expect(userInput).toContain('Project code: Willow-47.');
+
       expect(await computer.read(path)).toBe(editedPdf);
       expect(await computer.read(path + '.md')).toBe(editedText);
       await runner.run(files);

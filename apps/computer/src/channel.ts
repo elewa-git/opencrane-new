@@ -1,3 +1,4 @@
+import { turnInput } from './turn-input.ts';
 import { filePackets, type WorkspaceFile } from './files.ts';
 import type { Server, IncomingMessage } from 'node:http';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
@@ -17,18 +18,20 @@ interface Driver {
   credential(): { value: string; expiresAt: number };
   journal: string;
 }
-interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number; taskKind: string }
+interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number; taskKind: string; attachments?: unknown; omittedAttachments: number }
 function string(value: Record<string, unknown>, name: string): string {
   const result = value[name]; if (typeof result !== 'string' || !result) throw new Error('Invalid bridge field'); return result;
 }
 function turn(value: Record<string, unknown>): Turn {
   const expiresAt = value['expiresAt'];
   const taskKind = value['taskKind'] ?? 'chat_turn';
+  const omittedAttachments = value['omittedAttachments'] ?? 0;
+  if (typeof omittedAttachments !== 'number' || !Number.isSafeInteger(omittedAttachments) || omittedAttachments < 0) throw new Error('Invalid attachment count');
   if (typeof taskKind !== 'string') throw new Error('Invalid task kind');
   modelForTask(taskKind); // Reject unknown task kinds at the bridge boundary.
   if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) throw new Error('Expired turn');
   return { id: string(value, 'id'), conversationId: string(value, 'conversationId'), assistantId: string(value, 'assistantId'),
-    text: string(value, 'text'), token: string(value, 'token'), expiresAt, taskKind };
+    text: string(value, 'text'), token: string(value, 'token'), expiresAt, taskKind, attachments: value['attachments'], omittedAttachments };
 }
 function stored(line: string): BridgeReport {
   const value = record(JSON.parse(line) as unknown), sequence = value['sequence'];
@@ -90,7 +93,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
       }
       appendFileSync(`${driver.journal}.executions`, input.id + '\n', { mode: 0o600, flush: true });
       executions.add(input.id);
-      const result = record(await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: input.text, text_elements: [] }] }));
+      const result = record(await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: await turnInput(input.text, input.conversationId, input.attachments, undefined, input.omittedAttachments), text_elements: [] }] }));
       await rememberTurn(input, thread, result);
     } catch {
       report(input, 'agent.turn_failed');

@@ -35,6 +35,13 @@ export function filePackets(receive: (file: WorkspaceFile, bytes: Buffer) => Pro
 
 /** Use the existing socket-denied tools executor: the Codex UID cannot write workspace files. */
 export async function receiveFile(file: WorkspaceFile, bytes: Buffer) {
+  const result = await workspaceProcess(['/opt/python/bin/python', '/app/src/receive-file.py', JSON.stringify(file)], bytes);
+  if (result.exitCode === 10) return 'kept_existing' as const;
+  if (result.exitCode !== 0) throw new Error('Workspace conversion failed');
+  return;
+}
+
+export async function workspaceProcess(argv: string[], bytes: Buffer) {
   const socket = connect('/run/executor/exec.sock'), lines = createInterface({ input: socket });
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
   let nextId = 0;
@@ -52,18 +59,26 @@ export async function receiveFile(file: WorkspaceFile, bytes: Buffer) {
   try {
     await rpc('initialize', { clientName: 'opencrane-upload' }); socket.write(JSON.stringify({ method: 'initialized', params: {} }) + '\n');
     const processId = 'upload';
-    await rpc('process/start', { processId, argv: ['/opt/python/bin/python', '/app/src/receive-file.py', JSON.stringify(file)],
+    await rpc('process/start', { processId, argv,
       cwd: 'file:///workspace', env: {}, tty: false, pipeStdin: true, arg0: null });
     for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
       const response = record(await rpc('process/write', { processId, writeId: String(offset), chunk: bytes.subarray(offset, offset + 64 * 1024).toString('base64') }));
       if (response['status'] !== 'accepted') throw new Error('Workspace write refused');
     }
+    let afterSeq: number | null = null, length = 0;
+    const output: Buffer[] = [];
     while (true) {
-      const result = record(await rpc('process/read', { processId, afterSeq: null, maxBytes: 1024, waitMs: 1000 }));
-      if (!result['exited']) continue;
-      if (result['exitCode'] === 10) return 'kept_existing' as const;
-      if (result['exitCode'] !== 0) throw new Error('Workspace conversion failed');
-      return;
+      const result = record(await rpc('process/read', { processId, afterSeq, maxBytes: 64 * 1024, waitMs: 1000 }));
+      if (!Array.isArray(result['chunks']) || typeof result['nextSeq'] !== 'number') throw new Error('Invalid workspace output');
+      for (const raw of result['chunks']) {
+        const chunk = record(raw), data = chunk['chunk'];
+        if (typeof data !== 'string') throw new Error('Invalid workspace chunk');
+        const decoded = Buffer.from(data, 'base64'); length += decoded.length;
+        if (length > 64 * 1024) throw new Error('Workspace output too large');
+        if (chunk['stream'] === 'stdout') output.push(decoded);
+      }
+      afterSeq = result['nextSeq'];
+      if (result['exited'] && result['closed']) return { exitCode: result['exitCode'], output: Buffer.concat(output) };
     }
   } finally { clearTimeout(timeout); lines.close(); socket.destroy(); }
 }

@@ -25,6 +25,7 @@ model_provider = "local"
 approval_policy = "on-request"
 sandbox_mode = "danger-full-access"
 web_search = "disabled"
+tool_output_token_limit = 2000
 [model_providers.local]
 name = "local authenticated proxy"
 base_url = "http://127.0.0.1:8080/v1"
@@ -40,7 +41,9 @@ memories = false
 apps = false
 plugins = false
 remote_plugin = false
-code_mode_host = false
+code_mode_host = true
+shell_tool = true
+unified_exec = true
 shell_snapshot = false
 `);
 const child = spawn('codex', ['app-server', '--stdio'], { cwd: '/workspace', env: {
