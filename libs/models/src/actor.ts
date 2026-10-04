@@ -134,10 +134,14 @@ export class BudgetActor {
       }
       if (r.settledCents !== undefined) {
         if (r.settledCents !== d.costCents) throw new Error('Conflicting settlement');
-        return;
+      } else {
+        // Never erase a larger observed charge. Overruns stop subsequent reservations.
+        await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: d.costCents });
       }
-      // Never erase a larger observed charge. Overruns stop subsequent reservations.
-      await this.append('budget.settled', { reservationId: r.id, permitId: r.id, settledCents: d.costCents });
+      // Retry the alert even after settlement, so an alert outage cannot lose the charge or notice.
+      await this.alert(r.id, {
+        model: r.call.model, reservedCents: r.amountCents, settledCents: d.costCents,
+      });
     });
   }
   effect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
@@ -166,12 +170,14 @@ export class BudgetActor {
       return row.event.type === 'decision.recorded' && d['outcome'] === 'allow' && d['permitId'] === permitId;
     });
   }
-  private async alert(permitId: string) {
-    const subject = `security-${permitId}`, id = `${permitId}:unmatched`;
+  private async alert(permitId: string, overrun?: { model: string; reservedCents: number; settledCents: number }) {
+    if (overrun && overrun.settledCents <= overrun.reservedCents) return;
+    const subject = `security-${permitId}`, id = `${permitId}:${overrun ? 'overrun' : 'unmatched'}`;
     const rows = await history(this.store, subject, this.silo);
     if (rows.some(row => row.event.id === id)) return;
     const event = { ...envelope(this.silo, subject, 'security.alert_raised', {
-      alertId: id, severity: 'high', reason: 'effect_without_permit',
+      alertId: id, severity: 'high', reason: overrun ? 'budget_reservation_exceeded' : 'effect_without_permit',
+      ...(overrun ? { overrun } : {}),
     }, id), correlation: { permit: permitId } };
     const result = await this.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
     if (result.status !== 'appended') throw new Error('Security alert unavailable');

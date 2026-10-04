@@ -343,9 +343,10 @@ and the final full run above passed without overlap.
 Fresh-install live upgrade, shared-stack deployment, paid calls, hosted CI and
 independent review pass 2: **NOT RUN** in this fix task.
 
-## Request-sized reservations — 4 October 2026
+## Initial request-sized reservations — 4 October 2026
 
-Issue #75, source `3972492` plus this fix on `work/reservation-sizing`.
+Issue #75, source `50307c0` on `work/reservation-sizing`. This records the initial
+byte-only implementation; the rendering correction below supersedes its sizing proof.
 Linux, Node 22.23.3; disposable NATS, OpenFGA, agentgateway and PostgreSQL
 databases through `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
 The SSE provider is scripted. No shared stack was changed and no paid call ran.
@@ -363,10 +364,10 @@ The SSE provider is scripted. No shared stack was changed and no paid call ran.
   Each tier's maximum proves the bound for all smaller tokenisations and
   outputs, including cached reads and supported cache writes. Removing request
   text from sizing makes the property fail; restoring sizing makes it pass.
-- **PASS:** independent read-only review of pricing and admission, and its
-  final verification, found no blockers. Cached-input discounts remain
-  settlement-only. Existing cache-write
-  pricing is dearer than uncached input, so reservations retain that safety margin.
+- **FAIL, independent review pass 1:** request bytes bound their own tokenisation,
+  but do not bound provider-rendered roles, boundaries and formatting. Admission
+  could select short rates while settlement uses long rates near 272k. Cached-input
+  discounts remain settlement-only, and reservation rates still cover cache writes.
 - **PASS, red then green:** the eight-call daily/monthly cap races timed out
   under shared-host load before any admission. Model grants now await readability,
   and the eight requests run in concurrent pairs to fit the normal admission
@@ -386,3 +387,43 @@ Safe local logs:
 `/tmp/reservation-sizing-lint.log`, `/tmp/reservation-sizing-typecheck.log`,
 `/tmp/reservation-sizing-test-complete.log` and `/tmp/reservation-sizing-fixtures-final.log`.
 Fresh-install live chat, paid provider tokenisation and hosted CI: **NOT RUN**.
+
+## Rendering correction for request-sized reservations — 4 October 2026
+
+Issue #75, fixing the pass-1 blocker on source `50307c0`. The input bound now adds
+2,048 tokens per request and 64 per JSON object, covering messages, content/input
+items, function outputs and nested tool/schema definitions. The code cites the
+[provider token-counting documentation](https://developers.openai.com/api/docs/guides/token-counting).
+Above 244,800 padded input tokens, admission uses long rates; settlement still
+selects the tier from actual usage.
+
+- **PASS, red then green:** pure reservation tests exercise the 90% safety-band
+  boundary, per-item headroom and refusal when rendering headroom exceeds context.
+- **PASS, red then green:** the independent property tokenises individual text
+  fields and generates separate request/role/boundary/tool overhead. Restoring the
+  old byte-only sizing and tier selection makes it fail at seed 75, trial 3.
+- **PASS, red then green:** an observed 115-cent charge against a one-cent
+  reservation raises an alert naming the model and both amounts. Each of the daily,
+  global monthly, paying-group and assistant ceilings refuses later admission;
+  actor recovery preserves the actual charge and does not duplicate the alert.
+- **PASS:** an alert append outage leaves the full charge in the budget, so later
+  admission is refused. Actor recovery retries the recorded effect and repairs the
+  alert, with one settlement and one alert after duplicate delivery.
+
+| Final gate | Result |
+| --- | --- |
+| `npm run lint` | PASS; five existing function-length warnings |
+| `npm run typecheck` | PASS; every workspace |
+| `npm run check:events` | PASS; 79 event types agree |
+| `PG_TEST_URL=… npm test -- --maxWorkers=2` | PASS; 70 files passed / 2 skipped, 1,201 tests passed / 11 skipped; 805.02 seconds |
+
+The first full run passed 1,200 tests but failed when agentgateway exited during
+fixture startup, before the existing multiplicity test ran. That test passed in
+isolation; the final full run passed without overlapping checks. Production
+readiness checks and admission deadlines were unchanged. Safe local logs:
+`/tmp/reservation-sizing-lint.log`, `/tmp/reservation-sizing-typecheck.log`,
+`/tmp/reservation-sizing-test.log`, `/tmp/reservation-sizing-test-startup-failure.log`
+and `/tmp/reservation-sizing-validation.log`.
+
+Fresh-install live chat, paid provider tokenisation, hosted CI and independent
+review pass 2: **NOT RUN** in this correction task.

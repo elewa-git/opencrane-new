@@ -514,6 +514,7 @@ export const securityAlertRaisedDataSchema = z
     alertId: id,
     severity: z.enum(['low', 'medium', 'high', 'critical']),
     reason: reasonCodeSchema,
+    overrun: z.object({ model: id, reservedCents: centsSchema, settledCents: centsSchema }).strict().optional(),
     decision: z.object({ outcome: z.literal('deny'), requesterId: id.optional(), assistantId: id.optional(),
       contextDigest: digestSchema }).strict().optional(),
   })

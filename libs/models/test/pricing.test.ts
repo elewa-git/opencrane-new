@@ -60,8 +60,14 @@ it('reserves long rates without a proven bound and covers cache writes as well a
   expect(reservationCents('gpt-6-astra', 128)).toBe(2495);
   expect(reservationCents('gpt-6-astra', 2000)).toBe(2508);
   expect(reservationCents('gpt-6-astra', 100_000, 100_000)).toBe(594);
-  expect(reservationCents('gpt-6-astra', 1, 272_000)).toBe(324);
+  expect(reservationCents('gpt-6-astra', 1, 272_000)).toBe(647);
   expect(reservationCents('gpt-6-astra', 1, 272_001)).toBe(647);
+});
+
+it('reserves long rates above the 90% safety band while settlement uses the actual tier', () => {
+  expect(reservationCents('gpt-6-astra', 1, 244_800)).toBe(291);
+  expect(reservationCents('gpt-6-astra', 1, 244_801)).toBe(582);
+  expect(costCents('gpt-6-astra', 244_801, 1)).toBe(233);
 });
 
 it('requires a positive output bound even for a trusted prompt bound', () => {
@@ -70,13 +76,33 @@ it('requires a positive output bound even for a trusted prompt bound', () => {
 
 it('reserves a few cents for this Sol chat request with a 2,000-token output bound', () => {
   const body = { model: 'gpt-6.1-sol', input: 'Say OK.', instructions: 'Be brief.'.repeat(450), max_output_tokens: 2000, stream: true, n: 1 };
-  expect(requestReservationCents(body)).toBe(3);
+  expect(requestReservationCents(body)).toBe(4);
 });
 
-it.each([[272_000, 67], [272_001, 133], [300_000, 146]])('reserves the correct tier for a %i-byte request', (bytes, cents) => {
+it.each([[242_688, 61], [242_689, 120], [272_000, 134], [272_001, 134], [300_000, 147]])('includes rendering headroom when reserving a %i-byte request', (bytes, cents) => {
   const body = { model: 'gpt-6.1-sol', input: '', max_output_tokens: 2000 };
   body.input = 'x'.repeat(bytes - Buffer.byteLength(JSON.stringify(body)));
   expect(requestReservationCents(body)).toBe(cents);
+});
+
+it('allows for each message, content item, function output and nested tool definition', () => {
+  const body = { model: 'gpt-6.1-sol', instructions: '', max_output_tokens: 2000,
+    input: Array.from({ length: 1000 }, () => [
+      { role: 'user', content: [{ type: 'input_text', text: '' }] },
+      { type: 'function_call_output', call_id: 'call', output: '' },
+    ]).flat(),
+    tools: [{ type: 'namespace', name: 'functions', tools: [{ type: 'function', name: 'run',
+      parameters: { type: 'object', properties: { arg: { type: 'string' } } } }] }],
+  };
+  body.instructions = 'x'.repeat(130_000 - Buffer.byteLength(JSON.stringify(body)));
+  // 130k bytes plus generous framing for 3,006 objects selects long rates.
+  expect(requestReservationCents(body)).toBe(157);
+});
+
+it('includes rendering headroom in the supported context limit', () => {
+  const body = { model: 'gpt-6.1-sol', input: '', max_output_tokens: 2000 };
+  body.input = 'x'.repeat(1_047_000 - Buffer.byteLength(JSON.stringify(body)));
+  expect(() => requestReservationCents(body)).toThrow('context');
 });
 
 it('refuses a request whose input and output bounds exceed the supported context', () => {
@@ -89,7 +115,7 @@ it.each([0, 1.5, 2])('refuses multiplicity %s rather than leaving output unbound
   expect(() => requestReservationCents(body)).toThrow('n = 1');
 });
 
-it('never reserves less than settlement for random text bodies and any tokenisation of at most one token per byte', () => {
+it('covers independently rendered token counts across models, cache modes and context tiers', () => {
   // Fixed seed makes failures repeatable without adding a property-testing dependency.
   let seed = 75;
   const random = (limit: number) => {
@@ -97,13 +123,16 @@ it('never reserves less than settlement for random text bodies and any tokenisat
     return seed % limit;
   };
   const active = models.filter(row => !row.retired);
+  let admitted = 0, longContexts = 0;
   for (let trial = 0; trial < 160; trial++) {
     const model = active[trial % active.length]!;
     const fragments = Array.from({ length: 7 }, () => ['ASCII', '£', '漢字', '😀', '\n"\\', '\u0000'][random(6)]!);
     const slot = random(fragments.length);
-    fragments[slot] = fragments[slot]!.repeat([1, 128, 4096, 60_000, 68_000, 90_000][random(6)]!);
+    fragments[slot] = fragments[slot]!.repeat([1, 128, 4096, 60_000, 67_875, 90_000][random(6)]!);
+    const messages = Array.from({ length: random(1500) }, () => ({ role: 'user', content: [{ type: 'input_text', text: '' }] }));
     const body = { model: model.id, stream: true, instructions: fragments[0]!, max_output_tokens: 16 + random(1985), n: 1,
       input: [
+        ...messages,
         { role: 'user', content: [{ type: 'input_text', text: fragments[1]! }] },
         { type: 'function_call', call_id: 'call', name: 'run', arguments: fragments[2]! },
         { type: 'function_call_output', call_id: 'call', output: fragments[3]! },
@@ -114,15 +143,23 @@ it('never reserves less than settlement for random text bodies and any tokenisat
         [fragments[6]!]: { type: 'string', description: fragments[6]! },
       } } }],
     };
-    const bytes = Buffer.byteLength(JSON.stringify(body));
-    if (bytes + body.max_output_tokens > 1_050_000) {
-      expect(() => requestReservationCents(body)).toThrow('context');
+    // A separate renderer tokenises text fields, then adds hidden request, role,
+    // boundary, content, function and schema tokens. It never tokenises the HTTP JSON
+    // or imports the reservation margin. Vary the framing independently of text size.
+    const textTokens = fragments.reduce((sum, text) => sum + Buffer.byteLength(text), 0) + Buffer.byteLength(fragments[6]!);
+    const renderedTokens = textTokens + 1000 + random(1000) +
+      messages.length * (32 + 24 + random(9)) + // role/boundaries and the content item
+      32 + 24 + 48 + 48 + 32 + 96 + 96; // message, calls, namespace, custom/function schemas
+    let reservation: number;
+    try { reservation = requestReservationCents(body); }
+    catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toContain('input and output bounds exceed');
       continue;
     }
-    const reservation = requestReservationCents(body);
-    // Within each tier all prices are non-negative and cost increases with tokens.
-    // Checking each tier's maximum therefore covers every smaller tokenisation and output.
-    for (const input of [0, Math.min(bytes, 272_000), bytes, random(bytes + 1)]) {
+    admitted++;
+    if (renderedTokens > 272_000) longContexts++;
+    for (const input of [0, Math.min(renderedTokens, 272_000), renderedTokens, random(renderedTokens + 1)]) {
       for (const [cached, writes] of [[0, 0], [model.short.cachedInputCents === null ? 0 : input, 0],
         [0, model.short.cacheWriteCents === null ? 0 : input]]) {
         expect(reservation, `seed 75, trial ${trial}, input ${input}`).toBeGreaterThanOrEqual(
@@ -130,4 +167,6 @@ it('never reserves less than settlement for random text bodies and any tokenisat
       }
     }
   }
+  expect(admitted).toBeGreaterThan(120);
+  expect(longContexts).toBeGreaterThan(0);
 });

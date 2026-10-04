@@ -30,24 +30,26 @@ async function waitForJwtLogs(f: Awaited<ReturnType<typeof fixture>>, count: num
   });
 }
 
-it('admits a normal Sol turn under a three-cent cap with a 2,000-token output bound', async () => {
-  const f = await fixture(3, 3, false, 'gpt-6.1-sol');
+it('admits a normal Sol turn under a four-cent cap with a 2,000-token output bound', async () => {
+  const f = await fixture(4, 4, false, 'gpt-6.1-sol');
   try {
     const response = await f.call({}, { input: 'Say OK.', instructions: 'Be brief.'.repeat(450), max_output_tokens: 2000 });
     expect(response.status, response.text).toBe(200);
-    expect(f.actor.state.reservations[0]?.amountCents).toBe(3);
+    expect(f.actor.state.reservations[0]?.amountCents).toBe(4);
     await f.settled();
     expect(f.actor.state.reservations[0]?.settledCents).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
 
 it.each([
-  { input: 'x'.repeat(271_000), instructions: '', cents: 67 },
-  { input: 'x'.repeat(271_000), instructions: 'x'.repeat(1000), cents: 133 },
-  { input: 'x'.repeat(300_000), instructions: '', cents: 146 },
+  { input: 'x'.repeat(271_000), instructions: '', cents: 133 },
+  { input: 'x'.repeat(271_000), instructions: 'x'.repeat(1000), cents: 134 },
+  { input: 'x'.repeat(300_000), instructions: '', cents: 147 },
 ])('reserves $cents cents through the real gateway at the request context tier', async ({ input, instructions, cents }) => {
   const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
   try {
+    // The scripted rendered prompt crosses 272k even when the request bytes do not.
+    f.usage(input.length + instructions.length + 1500, 0, 2000);
     const reply = await f.call({}, { input, instructions, max_output_tokens: 2000 });
     expect(reply.status, reply.text).toBe(200);
     expect(f.actor.state.reservations[0]?.amountCents).toBe(cents);
@@ -92,6 +94,36 @@ it('a new member and assistant receive Phase 2 chat grants after installation', 
     };
     expect((await f.call(headers)).status).toBe(200);
     expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it.each(['daily', 'global', 'paying_group', 'assistant'] as const)('charges and alerts on an overrun, then hard-stops the %s ceiling after recovery', async scope => {
+  const f = await fixture(scope === 'daily' ? 2 : 2000, scope === 'global' ? 2 : 2000, false, 'gpt-6.1-sol');
+  try {
+    if (scope === 'paying_group' || scope === 'assistant') await f.actor.configure({ scope,
+      scopeId: scope === 'paying_group' ? 'personal-default' : 'assistant', ceilingCents: 2, setBy: 'alice' });
+    // Deliberately exceed the planning bound: provider usage remains authoritative.
+    f.usage(300_000, 0, 128);
+    expect((await f.call()).status).toBe(200);
+    await f.settled();
+    const r = f.actor.state.reservations[0]!;
+    expect(r).toMatchObject({ amountCents: 1, settledCents: 115 });
+    await until(async () => (await history(f.nats.store, `security-${r.id}`, 'test')).length === 1);
+    expect((await history(f.nats.store, `security-${r.id}`, 'test'))[0]?.event).toMatchObject({
+      type: 'security.alert_raised', correlation: { permit: r.id }, data: {
+        reason: 'budget_reservation_exceeded', severity: 'high',
+        overrun: { model: 'gpt-6.1-sol', reservedCents: 1, settledCents: 115 },
+      },
+    });
+    expect((await f.call()).status).toBe(402);
+    expect(f.received()).toBe(1);
+    await f.runtime.stop();
+    const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now);
+    await recovered.start();
+    await recovered.settleRecorded(r.id, `${r.id}:effect.observed`);
+    await expect(recovered.reserve(r.call, 1)).rejects.toThrow('spending cap');
+    expect(totals(recovered.state, f.actor.now())).toMatchObject({ todayCents: 115, monthCents: 115, reservedCents: 0 });
+    expect((await history(f.nats.store, `security-${r.id}`, 'test'))).toHaveLength(1);
   } finally { await f.close(); }
 }, 40_000);
 
@@ -431,6 +463,37 @@ it('does not duplicate exhaustion after its append succeeds but the acknowledgem
     expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
+it('keeps an overrun charged during an alert outage and repairs the alert after recovery', async () => {
+  const f = await fixture(2, 2, false, 'gpt-6.1-sol');
+  try {
+    await f.runtime.stop();
+    f.usage(300_000, 0, 128);
+    expect((await f.call()).status).toBe(200);
+    const r = f.actor.state.reservations[0]!;
+    const eventId = `${r.id}:effect.observed`;
+    await until(async () => { await ingestUsage(f.actor, f.options.usageFile); return (await history(f.nats.store, `effect-${r.id}`, 'test')).length === 1; });
+    const append = f.nats.store.append.bind(f.nats.store);
+    const outage = vi.spyOn(f.nats.store, 'append').mockImplementation(command =>
+      z.object({ type: z.literal('security.alert_raised') }).safeParse(command.event).success ? Promise.resolve({ status: 'unavailable', cause: new Error('Alert unavailable') }) : append(command));
+    try {
+      await expect(f.actor.settleRecorded(r.id, eventId)).rejects.toThrow('Security alert unavailable');
+      expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 115, monthCents: 115, reservedCents: 0 });
+      expect((await f.call()).status).toBe(402);
+    } finally { outage.mockRestore(); }
+    const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now);
+    await recovered.start();
+    await recovered.settleRecorded(r.id, eventId);
+    await recovered.settleRecorded(r.id, eventId);
+    await expect(recovered.reserve(r.call, 1)).rejects.toThrow('spending cap');
+    expect((await history(f.nats.store, 'budget-test', 'test')).filter(row => row.event.type === 'budget.settled')).toHaveLength(1);
+    expect((await history(f.nats.store, `security-${r.id}`, 'test')).map(row => row.event.data)).toEqual([{
+      alertId: `${r.id}:overrun`, severity: 'high', reason: 'budget_reservation_exceeded',
+      overrun: { model: 'gpt-6.1-sol', reservedCents: 1, settledCents: 115 },
+    }]);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
 it('leaves money reserved on settlement failure and retries the recorded effect idempotently', async () => {
   const f = await fixture();
   try {
