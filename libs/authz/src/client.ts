@@ -176,9 +176,18 @@ export class TupleClient {
       const answers = new Map<string, (typeof response.result)[number]>();
       for (const result of response.result) answers.set(result.correlationId, result);
       let allowed = true;
+      let failedCheck: (typeof response.result)[number] | undefined;
       for (let index = 0; index < tuples.length; index++) {
         const answer = answers.get(String(index));
-        if (!answer?.allowed || answer.error) allowed = false;
+        if (answer?.error) {
+          failedCheck = answer;
+        } else if (!answer?.allowed) {
+          allowed = false;
+        }
+      }
+      // A failed item grants no authority, but cannot hide an explicit denial beside it.
+      if (allowed && failedCheck) {
+        throw new Error('Authorisation batch item unavailable', { cause: failedCheck.error });
       }
       return { allowed, status: 'ok' as const };
     } catch (cause) {

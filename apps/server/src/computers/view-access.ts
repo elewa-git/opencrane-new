@@ -26,17 +26,19 @@ async function history(store: EventStore, subject: string, silo: string) {
   const rows = [...(cache.get(key) ?? [])];
   const previous = rows.at(-1); let confirmed = !previous;
   // Confirm the saved checkpoint before reading its live tail.
-  try {
-    for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
-      if (row.event.silo !== silo) throw new Error('Wrong silo');
-      if (!confirmed) {
-        if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) break;
-        rows[rows.length - 1] = row; confirmed = true;
-      } else rows.push(row);
+  for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
+    if (row.event.silo !== silo) {
+      throw new Error('Wrong silo');
     }
-  } catch (error) {
-    if (isEventStoreUnavailable(error)) throw new ViewCheckUnavailable('Authority unavailable', { cause: error });
-    throw error;
+    if (!confirmed) {
+      if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) {
+        break;
+      }
+      rows[rows.length - 1] = row;
+      confirmed = true;
+    } else {
+      rows.push(row);
+    }
   }
   if (!confirmed) { cache.delete(key); throw new Error('Authority history changed'); }
   saveHistory(cache, key, rows);
@@ -45,6 +47,18 @@ async function history(store: EventStore, subject: string, silo: string) {
 
 /** Check authority as well as its projection: delayed revocations must fail closed. */
 export async function viewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
+  try {
+    return await checkViewAccess(options, memberId, conversationId);
+  } catch (error) {
+    // Store outages preserve an existing lease until it expires, including during fence reads.
+    if (isEventStoreUnavailable(error)) {
+      throw new ViewCheckUnavailable('Authority unavailable', { cause: error });
+    }
+    throw error;
+  }
+}
+
+async function checkViewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const [conversation, member] = await Promise.all([
