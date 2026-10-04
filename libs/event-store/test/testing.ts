@@ -10,7 +10,7 @@ import { jetstream } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
 import { createEventStore, connectNats } from "../src/index.ts";
-import { onTestFinished } from "vitest";
+import { afterAll, expect, onTestFinished } from "vitest";
 
 function registerChildCleanup(child: ChildProcess) {
   const killChild = () => {
@@ -33,7 +33,11 @@ function registerChildCleanup(child: ChildProcess) {
   process.once("SIGTERM", stopChildOnSigterm);
   process.once("SIGINT", stopChildOnSigint);
   child.once("close", removeSignalHandlers);
-  onTestFinished(killChild);
+  if (expect.getState().currentTestName) {
+    onTestFinished(killChild);
+  } else {
+    afterAll(killChild);
+  }
 }
 
 /** Keep the public port bound while a child service stops and starts behind it. */

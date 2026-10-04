@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { onTestFinished } from 'vitest';
+import { afterAll, expect, onTestFinished } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -47,7 +47,11 @@ function registerGatewayCleanup(
   process.once('SIGTERM', stopOnSigterm);
   process.once('SIGINT', stopOnSigint);
   child.once('close', removeSignalHandlers);
-  onTestFinished(stopChild);
+  if (expect.getState().currentTestName) {
+    onTestFinished(stopChild);
+  } else {
+    afterAll(stopChild);
+  }
 }
 async function freePort() {
   const server = createServer(); server.listen(0, '::'); await once(server, 'listening');
@@ -180,6 +184,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
   return { keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+    gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
@@ -227,7 +232,11 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
       process.once('SIGTERM', stopSlowGatewayOnSigterm);
       process.once('SIGINT', stopSlowGatewayOnSigint);
       child.once('close', removeSlowGatewaySignalHandlers);
-      onTestFinished(stopSlowGateway);
+      if (expect.getState().currentTestName) {
+        onTestFinished(stopSlowGateway);
+      } else {
+        afterAll(stopSlowGateway);
+      }
       const exited = once(child, 'exit');
       gateway = {
         healthy: slowGatewayHealthy,
