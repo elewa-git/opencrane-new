@@ -8,7 +8,7 @@
   color: var(--oc-ink-default);
 }
 .glyph {
-  width: 16px;
+  width: 12px;
   height: 19px;
   flex-shrink: 0;
   display: inline-flex;
@@ -18,7 +18,7 @@
 .copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 3px; }
 .message { font-weight: 500; }
 .copy > * { overflow-wrap: anywhere; }
-.description, .detail { color: var(--oc-ink-muted); font-size: 12px; }
+.detail { color: var(--oc-ink-muted); font-size: 12px; }
 code { font-family: var(--oc-font-mono); }
 .empty { width: 11px; height: 11px; border: 1.6px solid #81888a; border-radius: 50%; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--oc-needs-input); }
@@ -41,8 +41,8 @@ code { font-family: var(--oc-font-mono); }
   justify-content: center;
 }
 svg {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.7;
@@ -50,10 +50,17 @@ svg {
   stroke-linejoin: round;
 }
 .dash { width: 10px; height: 2px; background: var(--oc-ink-muted); }
-[data-state='check'] { color: var(--oc-success-admin); }
-[data-state='dot'], [data-state='paused'] { color: var(--oc-warning-text); }
-[data-state='spinner'] { color: var(--oc-accent-dark); }
-[data-state='failed'], [data-state='block'] { color: var(--oc-danger-admin); }
+[data-glyph-name='check'] { color: var(--oc-success-admin); }
+[data-glyph-name='dot'] { color: var(--oc-warning-text); }
+[data-glyph-name='paused'] { color: #b0661a; }
+[data-glyph-name='access_changed'] { color: #3f4749; }
+[data-glyph-name='unknown'] { color: #16191a; }
+[data-glyph-name='clock'] { color: #4f575a; }
+[data-glyph-name='check'] svg, [data-glyph-name='failed'] svg { stroke-width: 2.1; }
+[data-glyph-name='access_changed'] svg, [data-glyph-name='clock'] svg { stroke-width: 1.6; }
+[data-glyph-name='paused'] svg { stroke-width: 2.2; }
+[data-glyph-name='spinner'] { color: var(--oc-accent-dark); }
+[data-glyph-name='failed'], [data-glyph-name='block'] { color: var(--oc-danger-admin); }
 .state-action {
   min-height: 44px;
   min-width: 44px;

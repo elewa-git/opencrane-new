@@ -10,23 +10,23 @@
 </div>
 }
 @if (phase() !== 'access' && !serverId) {
-  <form (submit)="submit($event)">
+  <form [attr.aria-busy]="busy()" (submit)="submit($event)">
     <label for="remote-url">Server URL</label>
     <input id="remote-url" type="url" required autocomplete="off" placeholder="https://mcp.example.com/mcp" [value]="locator()" (input)="locator.set($any($event.target).value)" [disabled]="phase() !== 'draft'" />
     <p>Use an HTTPS address without passwords or access tokens.</p>
     @if (phase() === 'draft') { <button type="submit" [disabled]="busy()">Discover tools</button> }
   </form>
 }
-<div role="status" aria-live="polite" [attr.aria-busy]="busy()">
-  <oc-shared-state [kind]="presentationState()" [message]="message()"
+<div role="status" aria-live="polite">
+  <oc-shared-state [kind]="presentationState()" [message]="message()" [detail]="refusalDetail()"
     [changeReference]="changeRef()" [showAction]="false" />
 </div>
 @if (phase() !== 'draft' && phase() !== 'access') { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
 @if (inventory(); as inventory) {
-  <section aria-label="Tool inventory">
+  <section aria-label="Tool inventory" [attr.aria-busy]="busy()">
     <h2>{{ inventory.serverInfo.name }} · {{ inventory.serverInfo.version }}</h2>
     <p>{{ inventory.tools.length }} tools discovered · 0 allowed</p>
-    @for (readOnly of [true, false]; track readOnly) {
+    @for (readOnly of toolGroups; track readOnly) {
       <h3>{{ readOnly ? 'Read' : 'Changes data or unclear' }}</h3>
       @for (tool of inventory.tools; track tool.name) {
         @if ((tool.readOnly && !tool.destructive) === readOnly) {
@@ -40,4 +40,4 @@
     <p>No computer can call these tools. Publication and access come after review.</p>
   </section>
 }
-@if (!serverId && (phase() === 'needs_input' || phase() === 'failed')) { <button type="button" class="secondary" (click)="another()">Add another server</button> }
+@if (!serverId && (phase() === 'needs_input' || phase() === 'failed' || phase() === 'refused')) { <button type="button" class="secondary" (click)="another()">Add another server</button> }

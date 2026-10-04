@@ -44,6 +44,7 @@ export class App implements OnInit {
   protected readonly modelsPage = globalThis.location.pathname === '/org/models';
   protected readonly statesPage = globalThis.location.pathname.endsWith('/states');
   protected readonly examples = STATE_EXAMPLES;
+  protected readonly skeletonWidths = ['48%', '65%', '54%', '72%'];
   protected readonly rows = signal<IntegrationRow[]>([]);
   protected readonly selectedTab = signal<Tab>('all');
   protected readonly loadState = signal<LoadState>('loading');
@@ -89,7 +90,23 @@ export class App implements OnInit {
   }
   protected loadedTime(): string {
     const value = this.loadedAt();
-    return value ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    if (!value) return '';
+    const options: Intl.DateTimeFormatOptions = {
+      hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC',
+    };
+    return `${new Date(value).toLocaleTimeString('en-GB', options)} UTC`;
+  }
+
+  protected tabCount(count: number): string {
+    if (this.loadState() === 'loading') return '–';
+    return `· ${count}`;
+  }
+
+  protected loadMessage(): string {
+    const state = this.loadState();
+    if (state === 'loading') return 'Loading integrations…';
+    if (state === 'access') return 'Integration access changed';
+    return 'Integrations loaded';
   }
 
   private async load(): Promise<void> {

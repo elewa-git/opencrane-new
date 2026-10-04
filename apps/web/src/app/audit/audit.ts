@@ -7,6 +7,7 @@ export class AuditScreen implements OnInit {
   readonly conversationId = input<string>();
   protected readonly rows = signal<AuditRow[]>([]);
   protected readonly state = signal<'loading' | 'ready' | 'unavailable' | 'access'>('loading');
+  protected readonly evidenceAt = signal<string | undefined>(undefined);
   protected readonly nextBefore = signal<number | undefined>(undefined);
   protected decision = '';
   protected requestId = '';
@@ -21,6 +22,7 @@ export class AuditScreen implements OnInit {
   protected async load(before?: number) {
     if (this.pending) return;
     this.pending = true; this.state.set('loading'); this.rows.set([]); this.nextBefore.set(undefined);
+    this.evidenceAt.set(undefined);
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries({ decision: this.decision, requestId: this.requestId, turnId: this.turnId })) {
       if (value.trim()) query.set(key, value.trim());
@@ -34,6 +36,7 @@ export class AuditScreen implements OnInit {
       if (!response.ok) throw new Error('History unavailable');
       const raw: unknown = await response.json();
       const result = auditResponseSchema.parse(raw);
+      this.evidenceAt.set(new Date().toISOString());
       this.rows.set(result.rows); this.nextBefore.set(result.nextBefore); this.state.set('ready');
     } catch { this.state.set('unavailable'); }
     finally { this.pending = false; }

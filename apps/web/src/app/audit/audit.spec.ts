@@ -21,6 +21,9 @@ it('renders loading, unknown outcome, filters, empty, unavailable and access los
   const filter = root.querySelector<HTMLSelectElement>('select')!; filter.value = 'deny'; filter.dispatchEvent(new Event('change'));
   root.querySelector<HTMLFormElement>('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
   await vi.waitFor(() => expect(root.textContent).toContain('No history matches'));
+  expect(root.querySelector('[role=status] [data-state]')?.getAttribute('data-state'))
+    .toBe('ready');
+  expect(root.textContent).not.toContain('Not configured');
   expect(fetch.mock.calls.at(-1)?.[0]).toEqual(expect.stringContaining('decision=deny'));
   fetch.mockResolvedValueOnce(reply(503, { error: 'bearer-private-canary' })); root.querySelector<HTMLButtonElement>('.refresh')!.click();
   await vi.waitFor(() => expect(root.textContent).toContain('History unavailable'));

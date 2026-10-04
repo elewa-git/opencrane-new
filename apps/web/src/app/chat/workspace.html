@@ -2,13 +2,14 @@
 <div class="workspace" [class.panel-open]="panel()">
   <nav class="rail" aria-label="Sessions" [class.mobile-open]="rail()">
     <div class="brand"><svg width="23" height="17" viewBox="0 0 32 24" aria-hidden="true"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"/><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"/><polygon points="11,15 16,3 19,15" fill="#22c7dd"/><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"/><polygon points="19,15 30,7 22,20" fill="#66d7e6"/></svg><strong>Open<span>Crane</span></strong><button type="button" aria-label="Find a session" (click)="searchDialog.showModal()"><kbd>⌘K</kbd></button></div>
-    <div class="rail-content">
+    <span class="sr-only" role="status" aria-live="polite">{{ chat.railLoading() ? 'Loading sessions' : chat.railUnavailable() ? 'Sessions unavailable' : 'Sessions loaded' }}</span>
+    <div class="rail-content" [attr.aria-busy]="chat.railLoading()">
       <button type="button" class="new-session" [class.active]="!chat.selected()" (click)="newSession()"><oc-icon name="plus" /> New session <kbd>⌘N</kbd></button>
       <button type="button" class="ask" (click)="newSession()"><oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd></button>
       <h2>Projects</h2><p class="empty-rail">No project sessions</p>
       <h2>Personal</h2>
       @if (chat.railLoading()) {
-        <div class="rail-card rail-loading" role="status" aria-busy="true"><h2>Loading</h2><oc-grain-loader /><oc-grain-loader /><oc-grain-loader /><span class="sr-only">Loading sessions</span></div>
+        <div class="rail-card rail-loading" aria-hidden="true"><h2>Loading</h2><oc-grain-loader /><oc-grain-loader /><oc-grain-loader /><span class="sr-only">Loading sessions</span></div>
       } @else if (chat.railUnavailable()) {
         <div class="rail-card"><strong><span class="offline-dot"></span> Can't reach your pod</strong><p>Your conversations are safe.</p><p class="retry-countdown">Retrying in {{ chat.retryIn() }}s</p><button type="button" (click)="chat.load()">Retry now</button></div>
       } @else if (!chat.assistantId() && !chat.denied()) {
@@ -37,9 +38,10 @@
       <span class="header-status" aria-live="polite">@if (chat.active()) { <oc-icon name="agent" /> Agent working }</span>
       <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span><button id="panel-toggle" type="button" aria-label="Session panel" [attr.aria-expanded]="panel()" (click)="togglePanel()"><oc-icon name="panel" /></button>
     </header>
-    <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages">
+    <span class="sr-only" role="status" aria-live="polite">{{ chat.loading() ? 'Loading conversation…' : chat.denied() ? 'Conversation access changed' : 'Conversation loaded' }}</span>
+    <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
       <div class="transcript-inner">
-        @if (chat.loading()) { <div class="skeleton" role="status" aria-busy="true">
+        @if (chat.loading()) { <div class="skeleton" aria-hidden="true">
           <oc-shared-state kind="checking" message="Loading conversation…" />
           <oc-grain-loader width="80%" />
         </div> }
@@ -65,7 +67,7 @@
                   <div class="tool-drawer"><dl><dt>tool</dt><dd>{{ tool.label === 'Reply failed' ? 'agent run' : 'computer command' }}</dd><dt>error</dt><dd>{{ tool.failed ? 'execution · ' + tool.detail : 'none · ' + tool.detail }}</dd><dt>provider</dt><dd>Not reported</dd><dt>time</dt><dd>{{ time(tool.time) }} · retries not reported</dd></dl><footer>Details are sanitised — tokens, cookies and headers are never shown. @if (tool.failed) { <button type="button" (click)="focusComposer()">Retry in a new message</button> }</footer></div>
                 </details>
               }
-              @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)">{{ part.text.slice(1, -1) }}</button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
+              @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text) { <div class="writing"><oc-fold-loader /><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }

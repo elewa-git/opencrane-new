@@ -1,10 +1,10 @@
+// Workspace grid and message structure adapted from OpenCrane 1 10abd0ef6 (AGPL-3.0-or-later).
+// Presentation follows the owner's Workspace Live; all state comes from the P2 bridge.
 import { PaperSurface, DogEar } from '../ui/paper';
 import { GrainLoader } from '../ui/grain-loader';
 import { FlutterLoader } from '../ui/flutter-loader';
 import { SharedState } from '../shared-state/shared-state';
 import { ApprovalCards } from './approvals';
-// Workspace grid and message structure adapted from OpenCrane 1 10abd0ef6 (AGPL-3.0-or-later).
-// Presentation follows the owner's Workspace Live; all state comes from the P2 bridge.
 import { ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal, viewChild, type OnInit } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';

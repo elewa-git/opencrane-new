@@ -21,7 +21,8 @@ time { color: #a7aeaf; font-size: 11px; }
 .turn-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #2a7d4f; animation: oc-settle 260ms var(--oc-ease-standard); transform-origin: left; }
 .turn-status.stopped { color: #91989a; }
 .turn-status.failed { color: #c1392b; }
-.citation { position: relative; display: inline-block; vertical-align: baseline; height: 20px; color: #0a94a7; background: #e4f6f9; padding: 2px 5px; margin: 0 2px; border: 1px solid #cdeef3; border-radius: 3px; font: 10px var(--oc-font-mono); }
+.citation { position: relative; display: inline-block; vertical-align: baseline; height: 20px; margin: 0 2px; }
+.citation-paper { --oc-dogear-size: 6px; display: inline-block; height: 20px; color: #0a94a7; background: #e4f6f9; padding: 2px 5px; border: 1px solid #cdeef3; border-radius: 3px; font: 10px var(--oc-font-mono); }
 .citation::before { content: ''; position: absolute; width: 44px; height: 44px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
 .file-card { display: flex; gap: 10px; align-items: center; border: 1px solid #dee3e4; border-radius: 10px; background: white; padding: 12px; margin-top: 14px; text-align: left; max-width: 100%; }
 .file-card.created { border-color: #9fdde8; }.file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

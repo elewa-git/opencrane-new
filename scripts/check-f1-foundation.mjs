@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { chromium } from 'playwright';
+import { chatFixture } from './chat-fixture.mjs';
 
 const output = resolve('docs/process/f1-foundation');
 const build = resolve('apps/web/dist/web/browser');
@@ -23,7 +25,7 @@ const register = {
   loadedAt: '2026-10-04T09:40:00.000Z',
   rows: [
     integration('odoo', 'Odoo Community', 'ready', 'Tool list checked',
-      'Discovery checked 4 Oct 2026, 08:40 UTC; publication is a separate fact'),
+      'Discovery checked 4 Oct, 08:40 UTC'),
     integration('microsoft', 'Microsoft 365', 'draft', 'Review not finished',
       'Nothing available to an assistant yet'),
     integration('slack', 'Slack', 'checking', 'Pending review', 'Image checks running'),
@@ -94,6 +96,10 @@ function flatGrain(node) {
   return globalThis.getComputedStyle(node).backgroundImage;
 }
 
+function textColour(node) {
+  return globalThis.getComputedStyle(node).color;
+}
+
 function flutterOpacity(node) {
   return globalThis.getComputedStyle(node).opacity;
 }
@@ -109,6 +115,10 @@ async function checkSpecimen(page, width, motion) {
   await page.locator('.state-row').last().waitFor();
   await page.evaluate(fontsReady);
   assert.equal(await page.locator('.state-row').count(), 11);
+  assert.equal(await page.locator('[data-state=checking]').evaluate(textColour),
+    'rgb(10, 111, 126)');
+  assert.equal(await page.locator('.interaction').first().evaluate(textColour),
+    'rgb(10, 111, 126)');
   assert.equal(await page.locator('.state-row [aria-live]').count(), 0, 'Repeated rows are silent');
   assert.deepEqual(await page.locator('main').evaluate(textureStyle), ['0.42', '280px auto', 'none']);
   assert.equal(await page.locator('.paper-example').evaluate(cornerSize), '12px');
@@ -149,13 +159,20 @@ async function checkRegister(page, width, motion) {
   await page.goto(`${origin}/org/integrations`);
   await page.locator('.skeleton-row').last().waitFor();
   await page.evaluate(fontsReady);
+  const status = await page.locator('main [role=status]').elementHandle();
+  assert.equal(await page.locator('main [role=status]').innerText(), 'Loading integrations…');
   assert.equal(await page.locator('.register').getAttribute('aria-busy'), 'true');
-  assert.equal(await page.locator('.register [aria-live]').count(), 1);
+  assert.equal(await page.locator('main [role=status]').count(), 1);
+  assert.equal(await page.locator('[aria-busy=true] [aria-live]').count(), 0);
   await capture(page, 'integrations-loading', width, motion);
   releaseRead();
   await page.locator('.register-row').last().waitFor();
   assert.equal(await page.locator('.register').getAttribute('aria-busy'), 'false');
+  assert.equal(await status.evaluate(nodeConnected), true, 'Loading status persists');
+  assert.equal(await page.locator('main [role=status]').innerText(), 'Integrations loaded');
   assert.equal(await page.locator('.register-row [aria-live]').count(), 0);
+  const addServer = page.getByRole('link', { name: 'Add MCP server', exact: true });
+  assert.equal(await addServer.evaluate(textColour), 'rgb(22, 25, 26)');
   const all = page.getByRole('tab', { name: 'All · 4', exact: true });
   await all.focus();
   await page.keyboard.press('ArrowRight');
@@ -167,16 +184,137 @@ async function checkRegister(page, width, motion) {
     const box = await all.boundingBox();
     assert(box.height >= 44, 'Phone tabs have 44px targets');
   }
+  const rowHeight = await page.locator('.register-row').first().boundingBox();
+  if (width === 1280) assert(rowHeight.height <= 90, 'Status rows stay near 80px');
   await capture(page, 'integrations-loaded', width, motion);
   const refresh = page.getByRole('button', { name: 'Refresh list', exact: true });
   await refresh.focus();
   await page.keyboard.press('Enter');
   await page.getByText('Showing what we loaded at', { exact: false }).waitFor();
   assert.equal(await page.locator('.register-row').count(), 4, 'Failed refresh keeps last read');
+  assert.equal(await page.locator('.register').getAttribute('class'), 'register stale');
+  const noticeBox = await page.locator('.refresh-notice').boundingBox();
+  const tabsBox = await page.locator('.tabs').boundingBox();
+  assert(noticeBox.y < tabsBox.y, 'Stale notice is above the tabs');
+  const noticeText = await page.locator('.refresh-notice').innerText();
+  assert(noticeText.includes('09:40 UTC'));
+  assert.equal(await page.locator('.refresh-notice button').count(), 1);
   assert(await refresh.evaluate(retainsFocus));
   assert.equal(await page.locator('.refresh-notice [aria-live]').count(), 0, 'No nested announcement');
   await capture(page, 'integrations-stale', width, motion);
   await page.unroute('**/api/org/integrations', integrations);
+}
+
+function nodeConnected(node) {
+  return node.isConnected;
+}
+
+function noBusyStatus(node) {
+  return node.closest('[aria-busy="true"]') === null;
+}
+
+async function checkStatusRegions(page) {
+  for (const region of await page.locator('[role=status]').all()) {
+    assert(await region.evaluate(noBusyStatus), 'Status region is outside busy content');
+  }
+}
+
+const budget = {
+  sequence: 2, defaultPayingGroupId: 'personal-default', periodStart: '2026-10-01T00:00:00Z',
+  todayCents: 100, monthCents: 2500, reservedCents: 25, ceilingCents: 20000,
+  dailyCeilingCents: 2000, ceilings: [],
+};
+const policy = {
+  sequence: 12, connectionId: 'installed', accountMode: 'none', published: true,
+  tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true,
+    readOnly: true, mode: 'block', suggestion: 'allow' }],
+};
+
+async function modelsReply(route) {
+  await route.fulfill({ json: { budget, models: [{ id: 'Installed model' }] } });
+}
+
+async function policyReply(route) {
+  await route.fulfill({ json: policy });
+}
+
+async function refuseInstall(route) {
+  if (route.request().resourceType() !== 'fetch') return route.fallback();
+  await route.fulfill({ status: 400, json: { status: 'refused' } });
+}
+
+async function refuseView(route) {
+  await route.fulfill({ status: 403, json: { status: 'refused' } });
+}
+
+async function previewReply(route) {
+  await route.fulfill({ contentType: 'text/plain', body: 'The board pack is ready for review.' });
+}
+
+async function checkEditors(page, width, motion) {
+  await page.route('**/api/org/models', modelsReply);
+  await page.goto(`${origin}/org/models`);
+  await page.getByText('Budgets loaded', { exact: true }).waitFor();
+  await checkStatusRegions(page);
+  await capture(page, 'models', width, motion);
+  await page.route('**/api/org/integrations/installed/tools', policyReply);
+  await page.goto(`${origin}/org/integrations/installed/tools`);
+  await page.getByText('Choose a mode, then save the tool.', { exact: true }).waitFor();
+  assert.equal(await page.locator('oc-tool-policy [data-state]').getAttribute('data-state'), 'ready');
+  await checkStatusRegions(page);
+  await capture(page, 'tool-policy', width, motion);
+  await page.route('**/api/org/integrations', refuseInstall);
+  await page.goto(`${origin}/org/integrations/new`);
+  await page.getByLabel('Server URL').fill('https://private.example/mcp');
+  await page.getByRole('button', { name: 'Discover tools' }).click();
+  await page.getByText('This address was refused.', { exact: false }).waitFor();
+  assert.equal(await page.locator('oc-mcp-install [data-state]').getAttribute('data-state'), 'refused');
+  await checkStatusRegions(page);
+  await capture(page, 'mcp-install', width, motion);
+}
+
+async function checkWorkspace(browser, width, motion, scenario) {
+  const page = await browser.newPage({ viewport: { width, height: 900 }, reducedMotion: motion });
+  try {
+    await page.route(`${origin}/**`, interceptAssets);
+    await chatFixture(page, scenario);
+    const query = scenario === 'rail-loading' ? '' : '?conversation=chat';
+    await page.goto(`${origin}/workspace${query}`);
+    if (scenario === 'rail-loading') {
+      await page.locator('.rail-loading').waitFor({ state: 'attached' });
+      if (width === 390) await page.getByRole('button', { name: 'Open session navigation' }).click();
+      await checkStatusRegions(page);
+      await capture(page, 'workspace-grain', width, motion);
+      return;
+    }
+    await page.locator('.citation').first().waitFor();
+    await page.evaluate(fontsReady);
+    await checkStatusRegions(page);
+    await page.getByRole('textbox', { name: 'Message your agent' }).focus();
+    assert.deepEqual(await page.locator('textarea').evaluate(focusRing),
+      ['2px', 'rgb(10, 132, 151)', '2px']);
+    if (scenario === 'streaming' && width === 390) {
+      await page.getByRole('button', { name: 'Open session navigation' }).click();
+    }
+    const name = scenario === 'streaming' ? 'workspace-flutter' : 'chat-dogears';
+    assert.equal(await page.locator('.citation-paper').first().evaluate(cornerSize), '6px');
+    await capture(page, name, width, motion);
+    if (scenario === 'streaming') return;
+    await page.route('**/api/conversations/chat/files/view?*', previewReply);
+    await page.locator('.file-card').getByRole('button', { name: 'Open', exact: true }).click();
+    await page.getByText('Preview ready', { exact: true }).waitFor();
+    await checkStatusRegions(page);
+    await capture(page, 'file-preview', width, motion);
+    await page.keyboard.press('Escape');
+    await page.route('**/api/conversations/chat/view', refuseView);
+    if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
+    await page.getByRole('button', { name: 'Watch your computer', exact: true }).click();
+    await page.getByText('Not available', { exact: true }).waitFor();
+    await checkStatusRegions(page);
+    await capture(page, 'live-view', width, motion);
+  } finally {
+    await page.close();
+  }
 }
 
 await mkdir(output, { recursive: true });
@@ -191,18 +329,28 @@ try {
       await page.routeWebSocket('**', closeSocket);
       await checkSpecimen(page, width, motion);
       await checkRegister(page, width, motion);
+      await checkEditors(page, width, motion);
+      for (const scenario of ['rail-loading', 'streaming', 'live']) {
+        await checkWorkspace(browser, width, motion, scenario);
+      }
       await page.close();
     }
   }
+  const gitOptions = { encoding: 'utf8' };
+  const revisionOutput = execFileSync('git', ['rev-parse', 'HEAD'], gitOptions);
+  const revision = revisionOutput.trim();
   const result = {
-    result: 'PASS', widths: [1280, 390], motion: ['no-preference', 'reduce'],
-    captures: 16, environment: 'Built Angular assets; Chromium; intercepted read fixtures; no stack',
+    result: 'PASS', date: new Date().toISOString(), source: `Working tree based on ${revision}`,
+    screenComparison: 'PARTIAL: shared treatments match; existing screens retain their fields and shells',
+    freshInstall: false, liveQualification: 'NOT RUN: intercepted fixtures only', widths: [1280, 390], motion: ['no-preference', 'reduce'],
+    captures: 48, environment: 'Built Angular assets; Chromium; intercepted read fixtures; no stack',
     checks: ['Eleven families', 'Silent repeated rows', 'Single progress region', '44px phone tabs',
       'Arrow keys and Home', '2px focus ring', 'Refresh retains focus and rows', 'No overflow',
-      '12px dog-ear', '42% rice texture', 'Static reduced-motion loaders'],
+      'Busy content excludes status regions', 'Specific call-site states',
+      '80px desktop rows', 'Composer focus ring', 'Citation dog-ears', '12px dog-ear', '42% rice texture', 'Static reduced-motion loaders'],
   };
   await writeFile(`${output}/visual.json`, JSON.stringify(result, null, 2) + '\n');
-  console.log('PASS F1 foundation: 16 captures, states, register, keyboard and reduced motion');
+  console.log('PASS F1 foundation: 48 captures, states, register, keyboard and reduced motion');
 } finally {
   await browser.close();
 }

@@ -18,45 +18,45 @@ interface StateExample {
 
 const EXAMPLES: readonly StateExample[] = [
   {
-    kind: 'not_configured', message: 'No connection set up',
+    kind: 'not_configured', message: 'Not configured — no connection set up',
     need: 'What is missing and who can configure it', interaction: 'Start setup',
   },
   {
-    kind: 'draft', message: 'Steps 1–2 of 4 saved',
+    kind: 'draft', message: 'Draft — steps 1–2 of 4 saved',
     need: 'Saved draft or unsent input; name what is missing', interaction: 'Continue',
   },
   {
-    kind: 'checking', message: 'Reading the tool list…', changeReference: 'chg_7F3K',
+    kind: 'checking', message: 'Checking the tool list…', changeReference: 'chg_7F3K',
     need: 'Which step is underway; keep the original reference',
     interaction: 'Wait — no duplicate submit',
   },
   {
-    kind: 'ready', message: 'Tool list checked for this connection',
+    kind: 'ready', message: 'Ready — tool list checked for this connection',
     evidenceAt: '2026-10-04T08:40:00Z', need: 'Dated evidence for this particular fact',
     interaction: 'Manage',
   },
   {
-    kind: 'failed', message: 'Validation stopped before the change', safe: true,
+    kind: 'failed', message: 'Failed — validation stopped before the change', safe: true,
     need: 'Server evidence that nothing changed', interaction: 'Try again',
   },
   {
-    kind: 'unknown', message: 'We could not confirm the change', changeReference: 'chg_7F3K',
+    kind: 'unknown', message: 'Outcome unknown — we could not confirm the change', changeReference: 'chg_7F3K',
     need: 'Read evidence for the original operation', interaction: 'Check status — never resubmit',
   },
   {
-    kind: 'access_changed', message: 'The Owner or Admin role is needed',
+    kind: 'access_changed', message: 'Access changed — the Owner or Admin role is needed',
     need: 'Clear protected data and ignore late replies', interaction: 'Ask an admin',
   },
   {
-    kind: 'paused', message: 'Tool definitions changed',
+    kind: 'paused', message: 'Paused — tool definitions changed',
     need: 'Explain the cause and authorised resume path', interaction: 'Review changes',
   },
   {
-    kind: 'blocked', message: 'Unreviewed tools cannot be called',
+    kind: 'blocked', message: 'Blocked — unreviewed tools cannot be called',
     need: 'A safe reason and remedy', interaction: 'Review tools',
   },
   {
-    kind: 'removed', message: 'Connection removed; history kept',
+    kind: 'removed', message: 'Removed — connection history kept',
     need: 'Retained history is explicit', interaction: 'New reviewed setup',
   },
   {

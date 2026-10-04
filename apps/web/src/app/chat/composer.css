@@ -3,8 +3,8 @@
 .composer { position: relative; background: #fff; border: 1px solid #d9dfe0; border-radius: 12px; box-shadow: 0 3px 14px #16191a08; padding: 12px 14px 8px; }
 .composer:focus-within { border-color: #9fdde8; }
 textarea { width: 100%; resize: none; border: 0; background: transparent; color: #2b3133; font: 14px/1.6 var(--oc-font-sans); min-height: 54px; field-sizing: content; max-height: 180px; }
-textarea:focus { outline: none; }
-textarea:focus-visible { outline: 2px solid #0db5cc; outline-offset: 2px; }
+textarea:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-ring);
+  outline-offset: var(--oc-focus-offset); }
 .toolbar { display: flex; gap: 8px; align-items: center; }
 .toolbar button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 32px; min-height: 32px; border-radius: 7px; color: #81888a; }
 .toolbar button.selected { background: #eef1f2; }

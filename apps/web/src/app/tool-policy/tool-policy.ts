@@ -10,6 +10,7 @@ import { toolPolicySchema, type ToolPolicy } from '@opencrane/protocol';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ToolPolicyScreen implements OnInit {
+  protected readonly toolGroups = [true, false];
   readonly serverId = input.required<string>();
   protected readonly policy = signal<ToolPolicy | undefined>(undefined);
   protected readonly state = signal<'loading' | 'ready' | 'pending' | 'error' | 'access'>('loading');
@@ -48,7 +49,8 @@ export class ToolPolicyScreen implements OnInit {
       this.policy.set(policy);
       this.choices.set(new Map());
       this.state.set('ready');
-      this.statusKind.set('needs_input');
+      this.statusKind.set('ready');
+      this.evidenceAt.set(new Date().toISOString());
       this.message.set('Choose a mode, then save the tool.');
     } catch {
       this.state.set('error');
@@ -85,7 +87,7 @@ export class ToolPolicyScreen implements OnInit {
       this.state.set('ready');
       this.statusKind.set('confirmed');
       this.evidenceAt.set(new Date().toISOString());
-      this.message.set('Saved tool policy projection read');
+      this.message.set('Tool policy saved');
     } catch {
       this.state.set('error');
       this.statusKind.set('unknown');

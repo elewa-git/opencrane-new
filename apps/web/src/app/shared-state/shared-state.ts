@@ -5,28 +5,12 @@ import type { SharedStateKind } from '@opencrane/protocol';
 export type PresentationState = SharedStateKind | 'applying' | 'confirmed' | 'paused'
   | 'blocked' | 'refused' | 'removed' | 'waiting' | 'scheduled' | 'expired';
 
-const STATE_LABELS: Record<PresentationState, string> = {
-  not_configured: 'Not configured',
-  draft: 'Draft',
-  needs_input: 'Needs input',
-  checking: 'Checking',
-  applying: 'Applying',
-  ready: 'Ready',
-  confirmed: 'Confirmed',
-  failed: 'Failed',
-  unknown: 'Outcome unknown',
-  access_changed: 'Access changed',
-  paused: 'Paused',
-  blocked: 'Blocked',
-  refused: 'Refused',
-  disabled: 'Removed',
-  removed: 'Removed',
-  waiting: 'Waiting',
-  scheduled: 'Scheduled',
-  expired: 'Expired',
-};
+type StateGlyph = 'not_configured' | 'dot' | 'spinner' | 'check' | 'failed'
+  | 'unknown' | 'access_changed' | 'paused' | 'block' | 'dash' | 'clock';
 
-const STATE_GLYPHS: Record<PresentationState, string> = {
+const REPEAT_ACTION_WORDS = /\b(?:retry|try\s+again)\b/iu;
+
+const STATE_GLYPHS: Record<PresentationState, StateGlyph> = {
   not_configured: 'not_configured',
   draft: 'dot',
   needs_input: 'dot',
@@ -67,20 +51,20 @@ export class SharedState {
   readonly announce = input(false);
   readonly action = output<void>();
 
-  protected readonly label = computed(this.stateLabel.bind(this));
+  protected readonly shownMessage = computed(this.stateMessage.bind(this));
   protected readonly glyph = computed(this.stateGlyph.bind(this));
   protected readonly shownAction = computed(this.actionText.bind(this));
   protected readonly evidenceTime = computed(this.formatEvidenceTime.bind(this));
   protected readonly stateTime = computed(this.formatStateTime.bind(this));
 
-  private stateLabel(): string {
-    if (this.kind() === 'failed' && this.safeToRetry()) {
+  private stateMessage(): string {
+    if (this.kind() === 'failed' && this.safeToRetry() && this.message() === 'Failed') {
       return 'Failed — nothing changed';
     }
-    return STATE_LABELS[this.kind()];
+    return this.message();
   }
 
-  private stateGlyph(): string {
+  private stateGlyph(): StateGlyph {
     return STATE_GLYPHS[this.kind()];
   }
 
@@ -93,7 +77,8 @@ export class SharedState {
       return undefined;
     }
     const label = this.actionLabel();
-    if (label && /try.*again/i.test(label)) return undefined;
+    // Only an established safe failure can offer to repeat the operation.
+    if (label && REPEAT_ACTION_WORDS.test(label)) return undefined;
     return label;
   }
 

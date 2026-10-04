@@ -1,4 +1,4 @@
-import { Directive, input } from '@angular/core';
+import { Directive, input, signal, type OnChanges, type SimpleChanges } from '@angular/core';
 
 @Directive({
   selector: '[ocPaperSurface]',
@@ -18,9 +18,19 @@ export class DogEar {
 
 @Directive({
   selector: '[ocCrease]',
-  host: { class: 'oc-crease', '[class.oc-crease-complete]': 'ocCrease()' },
+  host: { class: 'oc-crease', '[class.oc-crease-complete]': 'animateCompletion()' },
 })
-export class Crease {
+export class Crease implements OnChanges {
   // False is a divider; a new false-to-true completion draws the line once.
   readonly ocCrease = input(false);
+  protected readonly animateCompletion = signal(false);
+
+  ngOnChanges(changes: SimpleChanges): void {
+    const completion = changes['ocCrease'];
+    if (!completion) return;
+    // Restored completed content is static; only a new completion draws the crease.
+    const isNewCompletion = !completion.firstChange
+      && completion.previousValue === false && completion.currentValue === true;
+    this.animateCompletion.set(isNewCompletion);
+  }
 }

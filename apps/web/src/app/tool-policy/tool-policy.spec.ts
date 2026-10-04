@@ -13,6 +13,8 @@ it('holds saves while pending, clears protected data on access change and requir
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Expected screen');
   await vi.waitFor(() => expect(root.querySelector('fieldset')).not.toBeNull());
+  expect(root.querySelector('[data-state]')?.getAttribute('data-state')).toBe('ready');
+  expect(root.textContent).not.toContain('Needs input');
   const ask = root.querySelector<HTMLInputElement>('input[value="ask"]')!;
   ask.click(); fixture.detectChanges();
   let finish!: (response: Response) => void;

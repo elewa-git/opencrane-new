@@ -53,3 +53,20 @@ describe('shell buttons', () => {
     expect((hover + 0.05) / (ink + 0.05)).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('state text contrast', () => {
+  it.each(['#ffffff', '#f6f8f8'])('meets 4.5:1 against %s', (surface) => {
+    const text = luminance(tokens.get('--oc-accent-dark')!);
+    const background = luminance(surface);
+    expect((background + 0.05) / (text + 0.05)).toBeGreaterThanOrEqual(4.5);
+    expect(tokens.get('--oc-focus-ring')).toBe('#0a8497');
+  });
+});
+
+it('uses the accessible state text colour for checking, actions and the specimen', () => {
+  const stateCss = readCss('../src/app/shared-state/shared-state.css');
+  const specimenCss = readCss('../src/app/shared-state/state-specimen.css');
+  expect(stateCss).toMatch(/\[data-glyph-name='spinner'\]\s*\{[^}]*var\(--oc-accent-dark\)/u);
+  expect(stateCss).toMatch(/\.state-action\s*\{[^}]*var\(--oc-accent-dark\)/u);
+  expect(specimenCss).toMatch(/\.interaction\s*\{[^}]*var\(--oc-accent-dark\)/u);
+});

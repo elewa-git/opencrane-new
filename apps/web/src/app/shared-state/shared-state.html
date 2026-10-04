@@ -1,4 +1,4 @@
-<span class="state" [attr.data-state]="glyph()"
+<span class="state" [attr.data-state]="kind()" [attr.data-glyph-name]="glyph()"
   [attr.role]="announce() ? 'status' : null" [attr.aria-live]="announce() ? 'polite' : null">
   <span class="glyph" data-glyph aria-hidden="true">
     @switch (glyph()) {
@@ -33,8 +33,7 @@
     }
   </span>
   <span class="copy">
-    <span class="message">{{ label() }}</span>
-    @if (message() !== label()) { <span class="description">{{ message() }}</span> }
+    <span class="message">{{ shownMessage() }}</span>
     @if (detail()) { <span class="detail">{{ detail() }}</span> }
     @if (evidenceTime()) {
       <span class="detail">Evidence: <time [attr.datetime]="evidenceAt()">{{ evidenceTime() }}</time></span>

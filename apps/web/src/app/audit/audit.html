@@ -8,12 +8,14 @@
     <label>Turn id<input aria-label="Turn id filter" type="search" [value]="turnId" (input)="turnId = $any($event.target).value" maxlength="300"></label>
     <button id="apply-audit-filters" type="submit" [attr.aria-disabled]="state() === 'loading'">Apply filters</button>
   </form>
-  <div role="status" aria-live="polite" [attr.aria-busy]="state() === 'loading'">
+  <div role="status" aria-live="polite">
     @if (state() === 'loading') { <oc-shared-state kind="checking" message="Loading history…" /> }
     @else if (state() === 'unavailable') { <oc-shared-state kind="failed" message="History unavailable" detail="We could not read the audit trail. Refresh to check status." [showAction]="false" /> }
     @else if (state() === 'access') { <oc-shared-state kind="access_changed" message="Access changed" detail="Sign in or ask for access. Protected details have been cleared." [showAction]="false" /> }
-    @else if (!rows().length) { <oc-shared-state kind="not_configured" message="No history matches" detail="There are no records for this selection. Try another filter." [showAction]="false" /> }
+    @else if (!rows().length) { <oc-shared-state kind="ready" message="No history matches" [evidenceAt]="evidenceAt()" detail="There are no records for this selection. Try another filter." [showAction]="false" /> }
+    @else { <span class="sr-only">History loaded</span> }
   </div>
+  <div [attr.aria-busy]="state() === 'loading'">
   @for (row of rows(); track row.id) {
     <article tabindex="0" [attr.aria-label]="'Audit record ' + row.id">
       <h2>{{ row.requestId ? 'Request ' + row.requestId : 'Organisation change' }}</h2>
@@ -26,4 +28,5 @@
     </article>
   }
   @if (nextBefore()) { <button type="button" (click)="load(nextBefore())">Older history</button> }
+  </div>
 </section>

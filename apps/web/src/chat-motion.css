@@ -7,7 +7,6 @@
   @keyframes oc-caret { 0%, 45% { opacity: 1; } 55%, 100% { opacity: 0; } }
   @keyframes oc-land { from { transform: perspective(900px) translateY(16px) rotateX(22deg) scale(.97); opacity: 0; } 60% { opacity: 1; } to { transform: none; opacity: 1; } }
   @keyframes oc-ink { from { opacity: 0; filter: blur(3px); transform: translateY(3px); } to { opacity: 1; filter: blur(0); transform: none; } }
-  @keyframes oc-dogear { from { transform: scale(0); } to { transform: scale(1); } }
   @keyframes oc-hinge { from { transform: perspective(1200px) rotateY(-26deg) translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes oc-settle { from { transform: scale(.6); opacity: 0; } 70% { transform: scale(1.12); opacity: 1; } to { transform: none; opacity: 1; } }
   @keyframes oc-flick { 0%, 100% { transform: none; } 20% { transform: translateX(-3px); } 40% { transform: translateX(3px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }

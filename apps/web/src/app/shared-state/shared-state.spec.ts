@@ -26,6 +26,7 @@ describe('SharedState action and announcement contract', () => {
     fixture.detectChanges();
     expect(actionText(fixture)).toBeUndefined();
     expect(rootOf(fixture).textContent).not.toContain('nothing changed');
+    fixture.componentRef.setInput('message', 'Failed');
     fixture.componentRef.setInput('safeToRetry', true);
     fixture.detectChanges();
     expect(actionText(fixture)).toBe('Try again');
@@ -63,7 +64,8 @@ describe('SharedState action and announcement contract', () => {
     fixture.componentRef.setInput('kind', 'scheduled');
     fixture.componentRef.setInput('timestamp', '2026-10-04T12:00:00+02:00');
     fixture.detectChanges();
-    expect(rootOf(fixture).textContent).toContain('Scheduled');
+    expect(rootOf(fixture).querySelector('[data-state]')?.getAttribute('data-state'))
+      .toBe('scheduled');
     expect(rootOf(fixture).textContent).toContain('10:00 UTC');
     fixture.componentRef.setInput('timestamp', 'invalid');
     fixture.detectChanges();
@@ -78,4 +80,39 @@ describe('SharedState action and announcement contract', () => {
       expect(actionText(fixture)).toBeUndefined();
     },
   );
+});
+
+it('prints the caller message once without a generic heading', () => {
+  const fixture = create('not_configured');
+  fixture.componentRef.setInput('message', 'Nothing set up yet');
+  fixture.componentRef.setInput('detail', 'Add a server to begin.');
+  fixture.detectChanges();
+  expect(rootOf(fixture).querySelector('.message')?.textContent).toBe('Nothing set up yet');
+  expect(rootOf(fixture).textContent).not.toContain('Not configured');
+  expect(rootOf(fixture).querySelectorAll('.message')).toHaveLength(1);
+});
+
+it.each<PresentationState>([
+  'not_configured', 'draft', 'needs_input', 'checking', 'applying', 'ready', 'confirmed',
+  'failed', 'unknown', 'access_changed', 'paused', 'blocked', 'refused', 'disabled',
+  'removed', 'waiting', 'scheduled', 'expired',
+])('renders a glyph and the specific words for %s', (kind) => {
+  const fixture = create(kind);
+  expect(rootOf(fixture).querySelector('[data-glyph]')?.children.length).toBe(1);
+  expect(rootOf(fixture).querySelector('.message')?.textContent).toBe('Visible operation words');
+});
+
+const retryLabels = ['Try again', 'Retry', 'Retry capture', 'TRY AGAIN'];
+it.each(retryLabels)('blocks the repeat action %s without a safe failure', (label) => {
+  const fixture = create('ready');
+  fixture.componentRef.setInput('actionLabel', label);
+  fixture.detectChanges();
+  expect(actionText(fixture)).toBeUndefined();
+});
+
+it('preserves specific safe-failure words supplied by the caller', () => {
+  const fixture = create('failed');
+  fixture.componentRef.setInput('safeToRetry', true);
+  fixture.detectChanges();
+  expect(rootOf(fixture).querySelector('.message')?.textContent).toBe('Visible operation words');
 });

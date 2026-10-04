@@ -1,10 +1,10 @@
 <h1>Models & budgets</h1>
 <p>One charge counts towards the global, paying-group and optional assistant ceilings. Monthly budgets reset at 00:00 UTC on the first. Unconfirmed usage stays reserved.</p>
-<div role="status" aria-live="polite"
-    [attr.aria-busy]="state() === 'loading' || state() === 'pending'">
+<div role="status" aria-live="polite">
     <oc-shared-state [kind]="statusKind()" [message]="message()"
       [evidenceAt]="evidenceAt()" [changeReference]="changeReference()" [showAction]="false" />
   </div>
+<div [attr.aria-busy]="state() === 'loading' || state() === 'pending'">
 @if (state() !== 'access') {
   <button class="refresh" type="button" (click)="load()" [disabled]="state() === 'loading' || state() === 'pending'">Check status</button>
 }
@@ -32,3 +32,4 @@
   </form>
   <details><summary>Pinned models</summary><p>Model tariffs and task routing are fixed for this installation.</p>@for (model of models(); track model) { <p>{{ model }}</p> }</details>
 }
+</div>
