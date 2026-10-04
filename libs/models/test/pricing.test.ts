@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { costCents, reservationCents, models } from '../src/index.ts';
+import { costCents, reservationCents, requestReservationCents, models } from '../src/index.ts';
 
 it('prices Astra short context in whole euro cents at the pinned planning FX', () => {
   // 100k input ($1) + 100k output ($5), at EUR 0.95/USD = 570 cents.
@@ -66,4 +66,68 @@ it('reserves long rates without a proven bound and covers cache writes as well a
 
 it('requires a positive output bound even for a trusted prompt bound', () => {
   expect(() => reservationCents('gpt-6-luna', 0, 1000)).toThrow('Invalid bound');
+});
+
+it('reserves a few cents for this Sol chat request with a 2,000-token output bound', () => {
+  const body = { model: 'gpt-6.1-sol', input: 'Say OK.', instructions: 'Be brief.'.repeat(450), max_output_tokens: 2000, stream: true, n: 1 };
+  expect(requestReservationCents(body)).toBe(3);
+});
+
+it.each([[272_000, 67], [272_001, 133], [300_000, 146]])('reserves the correct tier for a %i-byte request', (bytes, cents) => {
+  const body = { model: 'gpt-6.1-sol', input: '', max_output_tokens: 2000 };
+  body.input = 'x'.repeat(bytes - Buffer.byteLength(JSON.stringify(body)));
+  expect(requestReservationCents(body)).toBe(cents);
+});
+
+it('refuses a request whose input and output bounds exceed the supported context', () => {
+  const body = { model: 'gpt-6.1-sol', input: 'x'.repeat(1_048_001), max_output_tokens: 2000 };
+  expect(() => requestReservationCents(body)).toThrow('input and output bounds exceed the 1,050,000-token context');
+});
+
+it.each([0, 1.5, 2])('refuses multiplicity %s rather than leaving output unbounded', n => {
+  const body = { model: 'gpt-6.1-sol', input: 'OK', max_output_tokens: 2000, n };
+  expect(() => requestReservationCents(body)).toThrow('n = 1');
+});
+
+it('never reserves less than settlement for random text bodies and any tokenisation of at most one token per byte', () => {
+  // Fixed seed makes failures repeatable without adding a property-testing dependency.
+  let seed = 75;
+  const random = (limit: number) => {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    return seed % limit;
+  };
+  const active = models.filter(row => !row.retired);
+  for (let trial = 0; trial < 160; trial++) {
+    const model = active[trial % active.length]!;
+    const fragments = Array.from({ length: 7 }, () => ['ASCII', '£', '漢字', '😀', '\n"\\', '\u0000'][random(6)]!);
+    const slot = random(fragments.length);
+    fragments[slot] = fragments[slot]!.repeat([1, 128, 4096, 60_000, 68_000, 90_000][random(6)]!);
+    const body = { model: model.id, stream: true, instructions: fragments[0]!, max_output_tokens: 16 + random(1985), n: 1,
+      input: [
+        { role: 'user', content: [{ type: 'input_text', text: fragments[1]! }] },
+        { type: 'function_call', call_id: 'call', name: 'run', arguments: fragments[2]! },
+        { type: 'function_call_output', call_id: 'call', output: fragments[3]! },
+        { type: 'additional_tools', id: 'tools', role: 'developer', tools: [{ type: 'namespace', name: 'functions',
+          tools: [{ type: 'custom', name: 'exec', format: { type: 'grammar', syntax: 'lark', definition: fragments[4]! } }] }] },
+      ],
+      tools: [{ type: 'function', name: 'run', description: fragments[5]!, parameters: { type: 'object', properties: {
+        [fragments[6]!]: { type: 'string', description: fragments[6]! },
+      } } }],
+    };
+    const bytes = Buffer.byteLength(JSON.stringify(body));
+    if (bytes + body.max_output_tokens > 1_050_000) {
+      expect(() => requestReservationCents(body)).toThrow('context');
+      continue;
+    }
+    const reservation = requestReservationCents(body);
+    // Within each tier all prices are non-negative and cost increases with tokens.
+    // Checking each tier's maximum therefore covers every smaller tokenisation and output.
+    for (const input of [0, Math.min(bytes, 272_000), bytes, random(bytes + 1)]) {
+      for (const [cached, writes] of [[0, 0], [model.short.cachedInputCents === null ? 0 : input, 0],
+        [0, model.short.cacheWriteCents === null ? 0 : input]]) {
+        expect(reservation, `seed 75, trial ${trial}, input ${input}`).toBeGreaterThanOrEqual(
+          costCents(model.id, input, body.max_output_tokens, cached, writes));
+      }
+    }
+  }
 });

@@ -342,3 +342,47 @@ an existing readiness assertion. All three readiness cases passed in isolation,
 and the final full run above passed without overlap.
 Fresh-install live upgrade, shared-stack deployment, paid calls, hosted CI and
 independent review pass 2: **NOT RUN** in this fix task.
+
+## Request-sized reservations — 4 October 2026
+
+Issue #75, source `3972492` plus this fix on `work/reservation-sizing`.
+Linux, Node 22.23.3; disposable NATS, OpenFGA, agentgateway and PostgreSQL
+databases through `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The SSE provider is scripted. No shared stack was changed and no paid call ran.
+
+- **PASS, red then green:** a Sol turn with a 2,000-token output bound was
+  refused under a three-cent cap with the full-context reservation. Measuring
+  the complete request now admits it, reserves three cents and settles one.
+- **PASS:** pure reservation tests cover exactly 272,000 bytes (short),
+  272,001 bytes (long), long context and input-plus-output context overflow.
+  Gateway tests verify a near-threshold request, instructions pushing it into
+  long context, a long request and clear refusal before dispatch or reservation
+  when no tier can fit the request's bounds.
+- **PASS:** the seeded random-body property covers UTF-8, instructions, input
+  items, tool schemas, grammar definitions, function arguments and outputs.
+  Each tier's maximum proves the bound for all smaller tokenisations and
+  outputs, including cached reads and supported cache writes. Removing request
+  text from sizing makes the property fail; restoring sizing makes it pass.
+- **PASS:** independent read-only review of pricing and admission, and its
+  final verification, found no blockers. Cached-input discounts remain
+  settlement-only. Existing cache-write
+  pricing is dearer than uncached input, so reservations retain that safety margin.
+- **PASS, red then green:** the eight-call daily/monthly cap races timed out
+  under shared-host load before any admission. Model grants now await readability,
+  and the eight requests run in concurrent pairs to fit the normal admission
+  deadline. Exactly one request is admitted and seven are refused.
+  The two audit restart cases now await their expected log records before
+  stopping the gateway; response arrival alone did not guarantee those records
+  had been written. All four regressions pass without changing production deadlines.
+
+| Final gate | Result |
+| --- | --- |
+| `npm run lint` | PASS; five existing function-length warnings |
+| `npm run typecheck` | PASS; every workspace |
+| `npm run check:events` | PASS; 79 event types agree |
+| `PG_TEST_URL=… npm test -- --maxWorkers=2` | PASS; 70 files passed / 2 skipped, 1,191 tests passed / 11 skipped; 1,070.11 seconds |
+
+Safe local logs:
+`/tmp/reservation-sizing-lint.log`, `/tmp/reservation-sizing-typecheck.log`,
+`/tmp/reservation-sizing-test-complete.log` and `/tmp/reservation-sizing-fixtures-final.log`.
+Fresh-install live chat, paid provider tokenisation and hosted CI: **NOT RUN**.

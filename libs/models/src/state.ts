@@ -49,13 +49,24 @@ export function costCents(model: string, inputTokens: number, outputTokens: numb
     BigInt(cachedInputTokens) * BigInt(price.cachedInputCents ?? 0) + BigInt(cacheWriteTokens) * BigInt(price.cacheWriteCents ?? 0) +
     BigInt(outputTokens) * BigInt(price.outputCents));
 }
-// ponytail: full supported context is the safe bound until we measure server-side tokenisation.
+// Callers without a measured input bound still reserve the full supported context.
 export function reservationCents(model: string, outputBound: number, inputBound = 1_050_000): number {
   if (models.some(row => row.id === model && row.retired)) throw new Error('Retired model');
   if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0) || outputBound === 0) throw new Error('Invalid bound');
   const price = priceFor(model, inputBound);
   return roundedCents(BigInt(inputBound) * BigInt(Math.max(price.inputCents, price.cacheWriteCents ?? 0)) +
     BigInt(outputBound) * BigInt(price.outputCents));
+}
+export class ModelRequestRefused extends Error {}
+export function requestReservationCents(body: { model: string; max_output_tokens: number; n?: number | undefined; [key: string]: unknown }): number {
+  if (body.n !== undefined && body.n !== 1) throw new ModelRequestRefused('Model request refused: n = 1 is required');
+  // Serialising the decoded body counts all text, tool schemas and framing, including UTF-8 and JSON escapes.
+  // One token per byte is a conservative BPE ceiling; no client token estimate is trusted.
+  const inputBound = Buffer.byteLength(JSON.stringify(body), 'utf8');
+  if (inputBound + body.max_output_tokens * (body.n ?? 1) > 1_050_000) {
+    throw new ModelRequestRefused('Model request refused: input and output bounds exceed the 1,050,000-token context');
+  }
+  return reservationCents(body.model, body.max_output_tokens * (body.n ?? 1), inputBound);
 }
 export function data(event: EventEnvelope): Record<string, unknown> {
   return z.record(z.string(), z.unknown()).parse(event.data);

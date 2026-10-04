@@ -17,6 +17,56 @@ import { auditTrail, readAudit, conversations, readConversation } from '@opencra
 import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, startDecision, totals } from '../src/index.ts';
 
 import { fixture, fga, waitForModelGrants } from './fixture.ts';
+
+async function waitForJwtLogs(f: Awaited<ReturnType<typeof fixture>>, count: number) {
+  await until(async () => {
+    try {
+      const lines = (await readFile(f.options.usageFile, 'utf8')).split('\n').slice(0, -1);
+      return lines.filter(line => z.object({ reason: z.literal('jwt_failed') }).safeParse(JSON.parse(line) as unknown).success).length === count;
+    } catch (error) {
+      if (z.object({ code: z.literal('ENOENT') }).safeParse(error).success) return false;
+      throw error;
+    }
+  });
+}
+
+it('admits a normal Sol turn under a three-cent cap with a 2,000-token output bound', async () => {
+  const f = await fixture(3, 3, false, 'gpt-6.1-sol');
+  try {
+    const response = await f.call({}, { input: 'Say OK.', instructions: 'Be brief.'.repeat(450), max_output_tokens: 2000 });
+    expect(response.status, response.text).toBe(200);
+    expect(f.actor.state.reservations[0]?.amountCents).toBe(3);
+    await f.settled();
+    expect(f.actor.state.reservations[0]?.settledCents).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it.each([
+  { input: 'x'.repeat(271_000), instructions: '', cents: 67 },
+  { input: 'x'.repeat(271_000), instructions: 'x'.repeat(1000), cents: 133 },
+  { input: 'x'.repeat(300_000), instructions: '', cents: 146 },
+])('reserves $cents cents through the real gateway at the request context tier', async ({ input, instructions, cents }) => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  try {
+    const reply = await f.call({}, { input, instructions, max_output_tokens: 2000 });
+    expect(reply.status, reply.text).toBe(200);
+    expect(f.actor.state.reservations[0]?.amountCents).toBe(cents);
+    await f.settled();
+    expect(f.actor.state.reservations[0]?.settledCents).toBeLessThanOrEqual(cents);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('clearly refuses a request too large for any context tier before reservation or dispatch', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  try {
+    const reply = await f.call({}, { input: 'x'.repeat(1_048_001), max_output_tokens: 2000 });
+    expect(reply.status).toBe(403);
+    expect(reply.text).toContain('input and output bounds exceed the 1,050,000-token context');
+    expect(f.actor.state.reservations).toHaveLength(0);
+    expect(f.received()).toBe(0);
+  } finally { await f.close(); }
+}, 40_000);
+
 it('fresh installation grants Phase 2 chat through reactions', async () => {
   const f = await fixture(20000, 20000, false, 'gpt-6.1-sol', false, 'reactions');
   try {
@@ -264,11 +314,16 @@ it.each([{ computerId: 'old-computer', generation: 2 }, { computerId: 'computer'
     expect(f.received()).toBe(0);
   } finally { await f.close(); }
 }, 40_000);
-it.each([[25, 2000], [2000, 25]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {
+it.each([[1, 2000], [2000, 1]])('admits one last reservation under daily %i / monthly %i cents and clearly refuses the next call', async (daily, monthly) => {
   const f = await fixture(daily, monthly);
   try {
-    const replies = await Promise.all(Array.from({ length: 8 }, () => f.call()));
-    expect(replies.filter(r => r.status === 200)).toHaveLength(1); expect(f.received()).toBe(1);
+    await waitForModelGrants(f.auth, 'alice', 'assistant');
+    // Concurrent pairs keep this budget race within the normal admission deadline on a loaded host.
+    const replies: Awaited<ReturnType<typeof f.call>>[] = [];
+    for (let pair = 0; pair < 4; pair++) {
+      replies.push(...await Promise.all([f.call(), f.call()]));
+    }
+    expect(replies.filter(r => r.status === 200), JSON.stringify(replies)).toHaveLength(1); expect(f.received()).toBe(1);
     expect(replies.filter(r => r.status === 402), JSON.stringify(replies.map(r => r.status))).toHaveLength(7); await f.settled();
     expect((await f.call()).text).toContain('spending cap reached');
     await f.runner.initialise(conversations); await f.runner.run(conversations);
@@ -288,9 +343,9 @@ it('retains an in-flight reservation across gateway kill and actor recovery, rec
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toContain('effect.uncertain');
     const recovered = new BudgetActor(f.nats.store, 'test'); await recovered.start();
-    expect(totals(recovered.state).reservedCents).toBe(25);
+    expect(totals(recovered.state).reservedCents).toBe(1);
     expect((await f.call()).status).toBe(403); // The old actor cannot append after the replacement's fence.
-    await f.runner.rebuild(budgets); expect(totals(await readBudget(f.db, 'test')).reservedCents).toBe(25);
+    await f.runner.rebuild(budgets); expect(totals(await readBudget(f.db, 'test')).reservedCents).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
 it('recovers old-tariff usage after an upgrade and continues past an unknown model', async () => {
@@ -355,7 +410,7 @@ it('records exhaustion once even when decision audit appends fail and callers re
   } finally { fault.mockRestore(); await f.close(); }
 }, 40_000);
 it('does not duplicate exhaustion after its append succeeds but the acknowledgement is lost', async () => {
-  const f = await fixture(25, 25);
+  const f = await fixture(1, 1);
   try {
     expect((await f.call()).status).toBe(200);
     const append = f.nats.store.append.bind(f.nats.store);
@@ -381,20 +436,20 @@ it('leaves money reserved on settlement failure and retries the recorded effect 
   try {
     await f.runtime.stop(); expect((await f.call()).status).toBe(200);
     await until(async () => { await ingestUsage(f.actor, f.options.usageFile); return (await history(f.nats.store, `effect-${f.actor.state.reservations[0]!.id}`, 'test')).length > 0; });
-    expect(totals(f.actor.state).reservedCents).toBe(25);
+    expect(totals(f.actor.state).reservedCents).toBe(1);
     const r = f.actor.state.reservations[0]!;
     await expect(f.actor.settleRecorded(r.id, randomUUID())).rejects.toThrow('Effect not recorded');
     const effect = (await history(f.nats.store, `effect-${r.id}`, 'test'))[0]!.event;
     const replacement = new BudgetActor(f.nats.store, 'test'); await replacement.start();
     await expect(f.actor.settle(effect)).rejects.toThrow('lost its fence');
-    expect(totals(f.actor.state).reservedCents).toBe(25);
+    expect(totals(f.actor.state).reservedCents).toBe(1);
     await replacement.settle(effect); await replacement.settle(effect);
     expect(totals(replacement.state).reservedCents).toBe(0);
     expect((await history(f.nats.store, 'budget-test', 'test')).filter(r => r.event.type === 'budget.settled')).toHaveLength(1);
   } finally { await f.close(); }
 }, 40_000);
 it.each([400, 401, 404, 429, 500])('releases an observed provider %i rejection without usage or consuming the cap', async status => {
-  const f = await fixture(25, 25);
+  const f = await fixture(1, 1);
   try {
     f.reject(status); expect((await f.call()).status).toBe(status);
     await f.settled();
@@ -408,7 +463,7 @@ it.each([400, 401, 404, 429, 500])('releases an observed provider %i rejection w
   } finally { await f.close(); }
 }, 40_000);
 it.each([408, 504, -1])('retains the reservation for an ambiguous provider outcome %i', async status => {
-  const f = await fixture(25, 25);
+  const f = await fixture(1, 1);
   try {
     f.reject(status); expect((await f.call()).status).toBeGreaterThanOrEqual(400);
     await f.restart(); // Drain the gateway log writer before inspecting its observations.
@@ -416,7 +471,7 @@ it.each([408, 504, -1])('retains the reservation for an ambiguous provider outco
     f.advance(); await f.actor.expire();
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toEqual(['effect.uncertain']);
-    expect(totals(f.actor.state).reservedCents).toBe(25);
+    expect(totals(f.actor.state).reservedCents).toBe(1);
   } finally { await f.close(); }
 }, 40_000);
 it('rolls UTC periods without forgetting outstanding reservations', async () => {
@@ -469,19 +524,19 @@ it('settles cached input reported by the real gateway at its discounted rate', a
   const f = await fixture(10000, 20000);
   try {
     f.usage(100_000, 80_000, 1000);
-    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra' })).status).toBe(200);
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra', input: 'x'.repeat(100_000), max_output_tokens: 1000 })).status).toBe(200);
     await f.settled();
     expect(f.actor.state.reservations[0]?.settledCents).toBe(32);
     f.usage(300_000, 100_000, 1000, 100_000);
-    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra' })).status).toBe(200);
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra', input: 'x'.repeat(300_000), max_output_tokens: 1000 })).status).toBe(200);
     await f.settled();
     expect(f.actor.state.reservations[1]?.settledCents).toBe(454);
   } finally { await f.close(); }
 }, 40_000);
-it.each([[2494, 20000], [20000, 2494]])('caps expensive Astra before reaching OpenAI with daily %i / monthly %i', async (daily, monthly) => {
+it.each([[700, 20000], [20000, 700]])('caps expensive Astra before reaching OpenAI with daily %i / monthly %i', async (daily, monthly) => {
   const f = await fixture(daily, monthly);
   try {
-    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra' })).status).toBe(402);
+    expect((await f.call({ 'x-turn-token': await f.sign({ ...f.t, model: 'gpt-6-astra' }, 'decision-service') }, { model: 'gpt-6-astra', input: 'x'.repeat(300_000) })).status).toBe(402);
     expect(f.received()).toBe(0);
   } finally { await f.close(); }
 }, 40_000);
@@ -673,7 +728,7 @@ it('uses the current requester on a team assistant and refuses removed team memb
 it.each(['global', 'paying_group', 'assistant'] as const)('serialises concurrent reservations at the %s monthly ceiling and replays one charge', async scope => {
   const f = await fixture(2000, 2000);
   try {
-    await f.actor.configure({ scope, ...(scope === 'global' ? {} : { scopeId: scope === 'paying_group' ? 'personal-default' : 'assistant' }), ceilingCents: 25, setBy: 'alice' });
+    await f.actor.configure({ scope, ...(scope === 'global' ? {} : { scopeId: scope === 'paying_group' ? 'personal-default' : 'assistant' }), ceilingCents: 1, setBy: 'alice' });
     const replies = await Promise.all(Array.from({ length: 2 }, () => f.call()));
     expect(replies.filter(r => r.status === 200), JSON.stringify(replies)).toHaveLength(1);
     expect(replies.filter(r => r.status === 402)).toHaveLength(1);
@@ -691,21 +746,21 @@ it.each(['global', 'paying_group', 'assistant'] as const)('serialises concurrent
 it('resets at the exact UTC month boundary, holds unknown money and attributes late usage to the original group and month', async () => {
   const f = await fixture(2000, 2000);
   try {
-    await f.actor.configure({ scope: 'paying_group', scopeId: 'personal-default', ceilingCents: 25, setBy: 'alice' });
+    await f.actor.configure({ scope: 'paying_group', scopeId: 'personal-default', ceilingCents: 1, setBy: 'alice' });
     f.advance(Date.parse('2026-10-31T23:59:59.999Z') - f.actor.now().getTime());
     await f.runtime.stop();
     expect((await f.call()).status).toBe(200);
     const reservation = f.actor.state.reservations[0]!;
     f.advance(1);
     await f.actor.period();
-    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 25 });
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 1 });
     expect((await f.call()).status).toBe(402);
     await f.actor.effect(reservation.id, { inputTokens: 1000, outputTokens: 120 });
     await f.actor.settleRecorded(reservation.id, `${reservation.id}:effect.observed`);
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 0 });
     expect((await f.call()).status).toBe(200);
     f.advance(); await f.actor.expire();
-    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(25);
+    expect(totals(f.actor.state, f.actor.now()).reservedCents).toBe(1);
     const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now); await recovered.start();
     expect(recovered.state.reservations[0]?.call).toEqual(reservation.call);
     await expect(f.actor.releaseUndispatched(recovered.state.reservations[1]!.id)).rejects.toThrow('lost its fence');
@@ -731,7 +786,7 @@ it('fixes multiplicity at one and gives a clear reason for absent, fractional, c
 }, 40_000);
 
 it('resets the daily safety cap at UTC midnight within a month while keeping outstanding reservations', async () => {
-  const f = await fixture(25, 2000);
+  const f = await fixture(1, 2000);
   try {
     f.advance(Date.parse('2026-10-03T23:59:59.999Z') - f.actor.now().getTime());
     expect((await f.call()).status).toBe(200); await f.settled();
@@ -742,7 +797,7 @@ it('resets the daily safety cap at UTC midnight within a month while keeping out
     expect((await f.call()).status).toBe(200);
     f.advance(86400_000); await f.actor.expire();
     expect((await f.call()).status).toBe(402);
-    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1, reservedCents: 25 });
+    expect(totals(f.actor.state, f.actor.now())).toMatchObject({ todayCents: 0, monthCents: 1, reservedCents: 1 });
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(f.actor.state);
     expect(f.received()).toBe(2);
   } finally { await f.close(); }
@@ -760,7 +815,7 @@ it('explains a real model call by ids and rebuilds the same decision, outcome an
     const before = await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
     expect(before.rows).toHaveLength(1);
     expect(before.rows[0]).toMatchObject({ requestId: f.admitted[0], conversationId: 'conversation', turnId: 'turn',
-      decision: 'allow', outcome: 'success', reservedCents: 25, settledCents: 1,
+      decision: 'allow', outcome: 'success', reservedCents: 1, settledCents: 1,
       permitId: f.actor.state.reservations[0]?.id });
     expect(before.rows[0]?.records.map(r => r.type)).toEqual(expect.arrayContaining([
       'decision.recorded', 'budget.reserved', 'effect.observed', 'budget.settled']));
@@ -787,6 +842,7 @@ it('keeps forged JWT failures distinct from a caller-selected request through in
       expect((await f.call({ authorization: 'Bearer forged-secret-canary', 'x-audit-id': requestId,
         'x-request-id': requestId }, { input: 'private-secret-canary' })).status).toBe(401);
     }
+    await waitForJwtLogs(f, 2);
     await f.restart();
     const evidence = z.array(z.object({ id: z.uuid(), reason: z.string().optional() }))
       .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown))
@@ -852,6 +908,7 @@ it('retains safe JWT correlation, denies an audit outage and alerts once for unm
   try {
     await f.runner.initialise(auditTrail);
     expect((await f.call({ authorization: 'Bearer forged-secret-canary', 'x-audit-id': correlation }, { input: 'private-secret-canary' })).status).toBe(401);
+    await waitForJwtLogs(f, 1);
     await f.restart();
     const evidence = z.object({ id: z.uuid(), reason: z.literal('jwt_failed') }).parse(JSON.parse((await readFile(f.options.usageFile, 'utf8')).trim()));
     expect(evidence.id).not.toBe(correlation);
@@ -891,7 +948,7 @@ it('keeps an admitted model call uncertain when the recording upstream loses its
     f.advance(); await f.actor.expire();
     await f.runner.run(auditTrail);
     const trail = await readAudit(f.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });
-    expect(trail.rows[0]).toMatchObject({ decision: 'allow', outcome: 'unknown', reservedCents: 25 });
+    expect(trail.rows[0]).toMatchObject({ decision: 'allow', outcome: 'unknown', reservedCents: 1 });
     expect(trail.rows[0]?.settledCents).toBeUndefined();
     expect(trail.rows[0]?.records.map(r => r.type)).toContain('effect.uncertain');
     expect(f.received()).toBe(1);
