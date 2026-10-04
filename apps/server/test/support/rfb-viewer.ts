@@ -1,3 +1,5 @@
+import type { LeaseNotice } from '../../src/computers/view-lease.ts';
+import { z } from 'zod';
 import { once } from 'node:events';
 import { createHash } from 'node:crypto';
 import { expect } from 'vitest';
@@ -9,7 +11,10 @@ import type { Duplex } from 'node:stream';
 export async function rfbViewer<T extends WebSocket | Duplex>(socket: T) {
   let buffer: Buffer = Buffer.alloc(0);
   const send = (bytes: Buffer) => { if (socket instanceof WebSocket) socket.send(bytes); else socket.write(bytes); };
-  socket.on(socket instanceof WebSocket ? 'message' : 'data', (bytes: unknown) => { if (Buffer.isBuffer(bytes)) buffer = Buffer.concat([buffer, bytes]); });
+  function receive(bytes: unknown, binary = true) {
+    if (binary && Buffer.isBuffer(bytes)) buffer = Buffer.concat([buffer, bytes]);
+  }
+  socket.on(socket instanceof WebSocket ? 'message' : 'data', receive);
   const take = async (count: number) => {
     await until(() => { if ((socket instanceof WebSocket ? socket.readyState === socket.CLOSED : socket.destroyed)) throw new Error('Viewer disconnected'); return buffer.length >= count; });
     const out = buffer.subarray(0, count); buffer = buffer.subarray(count); return out;
@@ -36,4 +41,58 @@ export async function rfbViewer<T extends WebSocket | Duplex>(socket: T) {
     return { pixels, hash: hash.digest('hex') };
   };
   return { socket, request, refresh, first: await refresh() };
+}
+
+export function nextBinaryMessage(socket: WebSocket): Promise<Buffer> {
+  function wait(resolve: (bytes: Buffer) => void, reject: (error: Error) => void) {
+    function cleanup() {
+      socket.off('message', receive);
+      socket.off('close', closed);
+      socket.off('error', failed);
+    }
+    function receive(bytes: unknown, binary: boolean) {
+      if (!binary || !Buffer.isBuffer(bytes)) return;
+      cleanup();
+      resolve(bytes);
+    }
+    function closed() { cleanup(); reject(new Error('Viewer disconnected')); }
+    function failed(error: Error) { cleanup(); reject(error); }
+    socket.on('message', receive);
+    socket.once('close', closed);
+    socket.once('error', failed);
+  }
+  return new Promise(wait);
+}
+export function recordLeaseNotices(socket: WebSocket) {
+  const notices: { notice: LeaseNotice; at: number }[] = [];
+  function receive(bytes: unknown, binary: boolean) {
+    if (binary) return;
+    const schema = z.discriminatedUnion('lease', [
+      z.object({ lease: z.literal('paused') }),
+      z.object({ lease: z.literal('valid'), at: z.number(), until: z.number() }),
+    ]);
+    const notice = schema.parse(JSON.parse(String(bytes)));
+    notices.push({ notice, at: performance.now() });
+  }
+  socket.on('message', receive);
+  return notices;
+}
+export async function expectUnavailablePause(socket: WebSocket, failedAt: number,
+  notices: ReturnType<typeof recordLeaseNotices>) {
+  const closed = once(socket, 'close');
+  let binaryAfterPause = false;
+  function receive(_bytes: unknown, binary: boolean) {
+    if (binary && notices.some(isPaused)) binaryAfterPause = true;
+  }
+  function isPaused(entry: (typeof notices)[number]) { return entry.notice.lease === 'paused'; }
+  function paused() { return notices.some(isPaused); }
+  socket.on('message', receive);
+  await until(paused, 2000);
+  const pause = notices.find(isPaused)!;
+  expect(pause.at - failedAt).toBeLessThan(2000);
+  expect((await closed)[0]).toBe(4503);
+  expect(performance.now() - pause.at).toBeGreaterThanOrEqual(9500);
+  expect(performance.now() - pause.at).toBeLessThan(12_500);
+  expect(binaryAfterPause).toBe(false);
+  socket.off('message', receive);
 }

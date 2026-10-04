@@ -22,6 +22,8 @@
 - PDF upload turns no longer hang when the model stream is cut: the models service rides out
   short event-store hiccups, restarts itself after 15 seconds of real outage instead of
   sitting idle, and upstream aborts reach Codex promptly (#113).
+- Live view pauses and hides the picture while access can't be confirmed and resumes by itself, instead of closing; explicit revocation still closes within 2 seconds (#77).
+
 - Live view retries access checks that do not answer for up to 5 seconds, and says it couldn't confirm access instead of Access changed or Not available when they time out (#77).
 - Gateway startup failures now include the gateway's stderr error line and exit status; test
   fixtures clean up spawned services after timeouts and worker shutdown.

@@ -1,3 +1,4 @@
+import { nextBinaryMessage, recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
 import { once } from 'node:events';
 import { Duplex, PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -83,8 +84,8 @@ async function firstFrameDuringLateCheck() {
     const init = Buffer.from('000100012018000100ff00ff00ff10080000000000000000', 'hex');
     const frame = Buffer.from('0000000100000000000100010000000001020300', 'hex');
     const messages: Buffer[] = [];
-    function receive(bytes: Buffer) {
-      messages.push(bytes);
+    function receive(bytes: Buffer, binary: boolean) {
+      if (binary) messages.push(bytes);
     }
     socket.on('message', receive);
     readable.write(Buffer.concat([greeting, security, init, frame.subarray(0, 12)]));
@@ -97,9 +98,9 @@ async function firstFrameDuringLateCheck() {
     }
     vi.spyOn(nats.store, 'readStream').mockImplementation(delayedRead);
     await delay(1800);
-    const received = once(socket, 'message');
+    const received = nextBinaryMessage(socket);
     readable.write(frame.subarray(12));
-    expect((await received)[0]).toEqual(frame);
+    expect(await received).toEqual(frame);
     expect(messages).toEqual([greeting, Buffer.from([1, 1]), Buffer.alloc(4), init, frame]);
     expect(socket.readyState).toBe(WebSocket.OPEN);
 
@@ -177,16 +178,15 @@ async function noFrameBeforeLeaseExpiry() {
     const connected = await admitView(fixture);
     socket = connected.socket;
     const messages: Buffer[] = [];
-    function receive(bytes: Buffer) {
-      messages.push(bytes);
+    function receive(bytes: Buffer, binary: boolean) {
+      if (binary) messages.push(bytes);
     }
     socket.on('message', receive);
     await once(socket, 'open');
-    const closed = once(socket, 'close');
+    const notices = recordLeaseNotices(socket);
     const unavailableAt = performance.now();
     nats.pauseResponses(true);
-    expect((await closed)[0]).toBe(4503);
-    expect(performance.now() - unavailableAt).toBeLessThan(2000);
+    await expectUnavailablePause(socket, unavailableAt, notices);
     expect(messages).toEqual([]);
   } finally {
     nats.pauseResponses(false);
@@ -195,5 +195,5 @@ async function noFrameBeforeLeaseExpiry() {
   }
 }
 
-it('closes an HTTP-200 viewer before its first bytes when renewals remain unavailable',
+it('pauses an HTTP-200 viewer before its first bytes, then closes after unavailable renewals',
   noFrameBeforeLeaseExpiry, 30_000);

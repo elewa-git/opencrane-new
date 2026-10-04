@@ -1,3 +1,4 @@
+import { nextBinaryMessage, recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import { PassThrough, Duplex } from 'node:stream';
@@ -43,11 +44,11 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
       finally { timings.push({ subject: args[0], rows, ms: Math.round(performance.now() - started), ...(failure ? { error: failure } : {}) }); }
     });
     if (boundary === 'NATS outage') {
-      const closed = once(socket, 'close'), unavailableAt = performance.now();
+      const notices = recordLeaseNotices(socket);
+      const unavailableAt = performance.now();
       nats.pauseResponses(true);
-      expect((await closed)[0]).toBe(4503);
+      await expectUnavailablePause(socket, unavailableAt, notices);
       const expiredMs = Math.round(performance.now() - unavailableAt);
-      expect(expiredMs).toBeLessThan(2000);
       console.log(JSON.stringify({ scenario: 'NATS outage', expiredMs, timings }));
       return;
     }
@@ -57,8 +58,8 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
     await delay(1900);
     console.log(JSON.stringify({ scenario: `jittered ${boundary} renewal`, timings }));
     expect(socket.readyState).toBe(WebSocket.OPEN);
-    const displayed = once(socket, 'message'); readable.write(Buffer.from('RFB 003.008\n'));
-    expect((await displayed)[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    const displayed = nextBinaryMessage(socket); readable.write(Buffer.from('RFB 003.008\n'));
+    expect(await displayed).toEqual(Buffer.from('RFB 003.008\n'));
     const closed = once(socket, 'close'), revokedAt = performance.now();
     await append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', {
       resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner',
@@ -105,9 +106,9 @@ it.each(['recovered', 'unavailable', 'revoked'])('requires a fresh successful po
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admission.json<{ ticket: string }>().ticket], { headers });
     socket.on('error', () => undefined);
-    const displayed = once(socket, 'message');
+    const displayed = nextBinaryMessage(socket);
     if (mode === 'recovered') {
-      expect((await displayed)[0]).toEqual(Buffer.from('RFB 003.008\n'));
+      expect(await displayed).toEqual(Buffer.from('RFB 003.008\n'));
       expect(socket.readyState).toBe(WebSocket.OPEN);
       expect(opened).toBe(1);
     } else {
@@ -158,9 +159,9 @@ it('admits slow authority and audit reads while a slow desktop opens and deliver
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admission.json<{ ticket: string }>().ticket], { headers });
     socket.on('error', () => undefined); await once(socket, 'open');
     const openMs = Math.round(performance.now() - started);
-    const displayed = once(socket, 'message');
+    const displayed = nextBinaryMessage(socket);
     readable.write(Buffer.from('RFB 003.')); await delay(1800); readable.write(Buffer.from('008\n'));
-    expect((await displayed)[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    expect(await displayed).toEqual(Buffer.from('RFB 003.008\n'));
     expect(socket.readyState).toBe(WebSocket.OPEN);
     console.log(JSON.stringify({ scenario: 'slow admission, audit and desktop', admissionMs, openMs, displayMs: Math.round(performance.now() - started) }));
     const closed = once(socket, 'close'); socket.terminate(); await closed;

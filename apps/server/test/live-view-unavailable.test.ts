@@ -1,3 +1,4 @@
+import { recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
 import { once } from 'node:events';
 import { createServer, request as httpRequest } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -5,6 +6,8 @@ import { Duplex, PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { encodeSession } from '@opencrane/auth';
 import { grantStream } from '@opencrane/authz';
+import { history } from '@opencrane/models';
+import { until } from '@opencrane/authz/testing';
 import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -183,6 +186,7 @@ async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
   try {
     socket = await startViewer(fixture);
     vi.spyOn(fixture.nats.store, 'head').mockImplementation(readHead);
+    const notices = recordLeaseNotices(socket);
     const failedAt = performance.now();
     unavailable = true;
     if (boundary === 'OpenFGA batch item') proxy.setFailure('deadline');
@@ -193,9 +197,18 @@ async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
     // A failed check cannot revoke authority while its successful snapshot is still valid.
     expect(socket.readyState).toBe(WebSocket.OPEN);
     if (!recovers) {
-      expect((await closed)[0]).toBe(4503);
-      // Repeated errors must not renew the original 1.5-second lease.
-      expect(performance.now() - failedAt).toBeLessThan(2000);
+      await expectUnavailablePause(socket, failedAt, notices);
+      function hasStop(record: Awaited<ReturnType<typeof history>>[number]) {
+        return record.event.type === 'computer.view_stopped';
+      }
+      async function stopped() {
+        const records = await history(fixture.nats.store, 'view-*', 'test');
+        return records.some(hasStop);
+      }
+      await until(stopped);
+      const records = await history(fixture.nats.store, 'view-*', 'test');
+      const stop = records.find(hasStop);
+      expect(stop?.event.data).toMatchObject({ reason: 'unavailable' });
       return;
     }
     unavailable = false;

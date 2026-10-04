@@ -1,3 +1,4 @@
+import { nextBinaryMessage } from './support/rfb-viewer.ts';
 import { grantStream } from '@opencrane/authz';
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -63,7 +64,7 @@ it.each(['web', 'dev-stack'])('opens the viewer through the configured %s fronte
     const { ticket, sessionId } = z.object({ ticket: z.string(), sessionId: z.string() }).parse(await response.json() as unknown);
     const socket = new WebSocket(`${origin.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', ticket], { headers, handshakeTimeout: 2000 });
     sockets.push(socket); socket.on('error', () => undefined);
-    expect((await once(socket, 'message'))[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    expect(await nextBinaryMessage(socket)).toEqual(Buffer.from('RFB 003.008\n'));
     const closed = once(socket, 'close'); socket.close(); await closed;
     await until(async () => (await history(fixture.nats.store, `view-${sessionId}`, 'test')).length === 2);
     expect((await history(fixture.nats.store, `view-${sessionId}`, 'test')).map(row => row.event.type)).toEqual(['computer.view_started', 'computer.view_stopped']);

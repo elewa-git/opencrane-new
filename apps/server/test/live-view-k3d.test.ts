@@ -5,7 +5,8 @@ import { createServer } from 'node:net';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import * as access from '../src/computers/view-access.ts';
 import { chromium } from 'playwright';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
@@ -128,6 +129,26 @@ it.runIf(process.env['LIVE_VIEW_K3D'] === '1')('renders real gVisor pixels at de
       const button = page.getByRole('button', { name: 'Watch your computer', exact: true }); await button.focus(); await page.keyboard.press('Enter');
       await page.getByText('Viewing', { exact: true }).waitFor({ timeout: 20_000 }).catch(error => { throw new Error(JSON.stringify(browserErrors), { cause: error }); });
       const canvas = page.locator('canvas'); await until(async () => await canvas.evaluate((c: HTMLCanvasElement) => c.width === 800 && c.height === 600)).catch(async error => { throw new Error(JSON.stringify({ browserErrors, body: await page.locator('body').innerText(), canvases: await page.locator('canvas').evaluateAll(cs => cs.map(c => [c.getAttribute('width'), c.getAttribute('height')])) }), { cause: error }); });
+      if (width === 1280) {
+        function unavailable() {
+          return Promise.reject(new access.ViewCheckUnavailable('authorisation'));
+        }
+        const authority = vi.spyOn(access, 'viewAccess').mockImplementation(unavailable);
+        try {
+          await page.getByText('Paused', { exact: true }).waitFor({ timeout: 2000 });
+          expect(await page.locator('canvas').count()).toBe(0);
+          await new Promise(function wait(resolve) { setTimeout(resolve, 2500); });
+        } finally { authority.mockRestore(); }
+        await page.getByText('Viewing', { exact: true }).waitFor({ timeout: 10_000 });
+        await page.waitForFunction(function repainted() {
+          const canvas = document.querySelector('canvas');
+          if (!canvas || canvas.width !== 800 || canvas.height !== 600) return false;
+          const bytes = canvas.getContext('2d')!.getImageData(0, 0, 800, 600).data;
+          return bytes.some(function different(value, index) {
+            return index % 4 !== 3 && value !== bytes[index % 4];
+          });
+        });
+      }
       const neighbour = await rfbViewer((await connect()).socket); expect(neighbour.first.pixels).toBe(480000);
       neighbour.socket.close(); await once(neighbour.socket, 'close');
       await page.getByText('Viewing', { exact: true }).waitFor();
