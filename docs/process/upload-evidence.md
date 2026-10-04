@@ -2,10 +2,11 @@
 
 ## Final rebase and isolated-host qualification — 4 October 2026
 
-**Local source gates: PASS. Single real PDF turn: PASS, three euro cents.**
+**Latest full suite: FAIL (two gateway startup failures); other source gates: PASS.**
+**Single real PDF turn: PASS, three euro cents, before the later budget/MCP rebase.**
 **Fresh main handback journey: FAIL; restored main health: PASS.**
 
-Source: `work/upload`, rebased from `465c23c` onto `origin/main` `bbf0bab`
+First qualification: `work/upload`, rebased from `465c23c` onto `origin/main` `bbf0bab`
 (approvals #72, live view #73, audit #74 and budgets #71). Rebased source:
 `3fdb78a`, plus the integration updates recorded in this commit. The rebase
 completed; main is an ancestor and neither rebase state directory remains.
@@ -84,14 +85,15 @@ Takeover logs: `/tmp/upload-final-round-{main-down,owner-npm-ci,owner-up,owner-s
 ### Fresh handback
 
 Stopped this stack successfully, restored `/home/jente/dev/opencrane-new` with
-`printf '%s'` and verified the no-newline marker. Main remains at `bbf0bab`.
+`printf '%s'` and verified the no-newline marker. The shared main checkout had
+advanced to `291dc69` (#76) at 03:22 UTC; this first handback ran that revision.
 Its noVNC dependency was missing locally, so `npm ci` installed its lockfile;
 its generated Angular cache was archived before `up.sh --fresh`.
 Fresh `up.sh --fresh`: **FAIL**, timed out waiting for the joined member's
 computer. All three computers subsequently became Ready. One readiness retry
 with `journey.sh` on that fresh installation reached the browser chat, then
 **FAIL**ed at `browser-chat.ts:44`, **Stop keeps genuinely partial text**.
-No further journey retry was made, and no main source was changed. This is not
+No further journey retry at that revision was made, and no main source was changed. This is not
 recorded as an issue #70 failure. Restoration health and the exact owner marker
 are **PASS**; the complete fresh handback journey remains **FAIL**.
 Logs: `/tmp/upload-final-round-main-{npm-ci,fresh,ready-journey,status-final}.log`.
@@ -132,7 +134,7 @@ The full serial run took 1,534.04 seconds and includes the unchanged slow-author
 live-view assertion, all upload tests and the corrected audit/restart fixture.
 Log: `/tmp/upload-final-round-tests-serial.log`. The image and other source gates
 had completed before this run. The two earlier failed full runs remain recorded
-above; this is the complete green run on the final source.
+above; this is the complete green run on the first qualified source (`a368b88`).
 
 **NOT RUN in this round**: the gated lifecycle/bridge/live-view Kubernetes suites,
 the conditional approval browser test and the automated three-call paid-provider
@@ -145,6 +147,73 @@ Final checks also confirm that main's checkout is clean, the restored owner
 marker has exactly the original checkout path, and the qualified computer digest
 matches the tracked manifest and release tag. No real secrets or provider
 credentials are included in this receipt.
+
+### Later main changes and final rebase
+
+The shared upstream advanced during qualification: `291dc69` (#76, request-sized
+budget reservations) at 03:22 UTC, then `39fe9da` (#78, MCP registration and
+discovery) at 04:00 UTC. Rebased again onto `39fe9da`, completed at `9936169`.
+Both rebase state directories are absent and `origin/main` is an ancestor.
+Conflicts retain MCP discovery and uploads together, the request-sized budget
+calculation, strict custom-tool continuation parsing, and both sets of gateway
+regression tests. The partial #70 authority fix is unchanged.
+
+The complete computer directory, its copied model package/routing inputs, chat
+bridge and authority module are byte-for-byte unchanged from `a368b88`. The
+qualified image above remains applicable; no second image build is required.
+The added upstream Ajv 8.20.0 dependency is MIT. Clean `npm ci` and final source
+gates are rerun below.
+
+The **single paid turn belongs to the first qualified source**. No second paid
+turn was made after the budget/MCP rebase. Its three-cent settlement remains
+valid evidence for that run; its 502-cent hold predates #76. The final combined
+source has no additional paid-provider or fresh-install upload qualification.
+
+The restored main stack is restarted fresh at `39fe9da`, with `npm ci` and its
+generated Angular cache archived, so running services match the new checkout.
+Latest `up.sh --fresh`: **FAIL** at `browser-live-view.ts:37`, waiting for
+**Not available** in the no-grant desktop viewer (Playwright timeout). Browser
+request logs also contain `ERR_NETWORK_CHANGED`; causation is not established.
+No further journey retry was made. `status.sh`: **PASS**, server, identity,
+object store and public web URL healthy. The owner marker is exactly the original
+checkout path. The journey-generated screenshot was archived locally and the
+tracked original restored; main source remains clean.
+Logs: `/tmp/upload-final-round-main-latest-{down,npm-ci,fresh,status}.log`;
+private failure: `/tmp/upload-final-round-main-latest-private-failure.log`.
+
+Final `npm ci`, `check:events` (85 types) and web build: **PASS**. The build
+retains bundle/CSS-size and noVNC CommonJS warnings. Web tests initially **FAIL**ed
+with 59 passed and the streamed workspace test exceeding its five-second runner
+timeout. Rerun with `maxWorkers: 2` and `fileParallelism: false` in a temporary
+runner config: **PASS**, all 60 tests across 11 files, unchanged five-second
+timeout. No source or assertion change was needed.
+Logs: `/tmp/upload-final-round-latest-{npm-ci,events,web,web-serial}.log`;
+web build output is in the command receipt. Runner config:
+`/tmp/upload-final-round-web-vitest.mjs`.
+
+Final root lint: **PASS**, seven warnings and no errors. Workspace typecheck
+and `infra/dev-stack` typecheck: **PASS**. Logs:
+`/tmp/upload-final-round-latest-{lint,typecheck}.log`; workspace typecheck output
+is in the command receipt.
+
+Final full suite: **FAIL**, 1,373 tests passed, two failed and 14 skipped;
+75 files passed, one failed and three skipped. Duration: 1,996.48 seconds.
+The command was the same serial `npm test` command shown above, including
+`PG_TEST_URL` and `--maxWorkers=2`. Both failures were `Gateway stopped` from
+`startGateway` during fixture creation, before test assertions: the normal Sol
+four-cent admission case and the cached-input settlement case. The cause of the
+startup exits is not established. No production change was made to mask them.
+Upload, approval, live-view, audit, MCP discovery, production browser/CSP and
+remaining budget checks all passed. The same 14 conditional tests remain skipped.
+Log: `/tmp/upload-final-round-latest-tests.log`.
+
+Focused rerun of both failed cases, without source changes: **PASS**, two tests.
+Command: `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run libs/models/test/gateway.test.ts --maxWorkers=2 --no-file-parallelism --testTimeout=20000 --reporter=verbose -t 'admits a normal Sol turn under a four-cent cap|settles cached input reported by the real gateway'`.
+Log: `/tmp/upload-final-round-latest-gateway-rerun.log`.
+Final restored-main `status.sh`: **PASS**; checkout clean at `39fe9da`, owner
+marker exact. Log: `/tmp/upload-final-round-main-latest-status-final.log`.
+This receipt does **not** call the latest full run green or renew a LAND verdict;
+the earlier complete green run qualifies `a368b88`, before #76/#78.
 
 ## Custom exec host isolation — 4 October 2026
 
