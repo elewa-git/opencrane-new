@@ -1,0 +1,3 @@
+npm notice run check:events
+npm notice run node --experimental-strip-types scripts/check-event-catalogue.mjs
+check:events — OK: 83 event types agree between the registry and the catalogue.

@@ -74,3 +74,16 @@ claimant's binding stream. This also fences concurrent trusted provisioning.
   including the browser journey. Log: `/tmp/bootstrap-review-root-tests.log`.
 - NOT RUN: the 14 existing opt-in tests skipped by their live/provider flags.
 - NOT RUN: review pass 2 and fresh-install qualification. Stacks remain untouched.
+
+## Final qualification round
+
+Review pass 2 is LAND at `a3ef79c`, as supplied by the owner. The rebase completed
+without conflicts. The [secondary live receipt](bootstrap-live/README.md) records
+the completed fresh-install journey, screenshots and current source checks after
+the orchestrator restored host forwarding. Historical NOT RUN entries above
+describe their earlier runs.
+
+The fresh secondary bootstrap journey is PASS, including stub chat, token reuse
+and `members_exist`. The final complete root suite is FAIL: 1,365 passed,
+14 skipped and one live-view authority assertion failed. That test also failed
+in isolation. Source readiness remains blocked; the receipt contains both logs.

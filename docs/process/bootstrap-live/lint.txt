@@ -1,0 +1,49 @@
+npm notice run lint
+npm notice run npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures
+npm notice run lint:code
+npm notice run eslint .
+
+/home/jente/dev/wt/bootstrap-token/apps/computer/src/channel.ts
+  43:8  warning  Function 'bridgeChannel' has too many lines (123). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/bootstrap-token/apps/server/src/auth/routes.ts
+  57:8  warning  Function 'registerAuthRoutes' has too many lines (108). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/bootstrap-token/apps/server/src/computers/view.ts
+  28:8   warning  Function 'registerLiveView' has too many lines (141). Maximum allowed is 80  max-lines-per-function
+  82:52  warning  Arrow function has too many lines (82). Maximum allowed is 80                max-lines-per-function
+
+/home/jente/dev/wt/bootstrap-token/apps/server/src/realtime.ts
+  17:8  warning  Function 'memberSubscription' has too many lines (82). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/bootstrap-token/apps/server/src/websocket.ts
+  51:8  warning  Function 'attachWebSocketServer' has too many lines (119). Maximum allowed is 80  max-lines-per-function
+
+/home/jente/dev/wt/bootstrap-token/libs/authz/src/members.ts
+  35:8  warning  Function 'memberAuthorisation' has too many lines (130). Maximum allowed is 80  max-lines-per-function
+
+✖ 7 problems (0 errors, 7 warnings)
+
+npm notice run lint:deps
+npm notice run depcruise apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs
+
+✔ no dependency violations found (264 modules, 928 dependencies cruised)
+
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+npm notice run lint:docs
+npm notice run markdownlint-cli2
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: *.md docs/**/*.md apps/*/README.md libs/*/README.md !docs/design/chat/README.md
+Linting: 73 files
+Summary: 0 issues in 0 files
+npm notice run lint:links
+npm notice run sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'
+🔍 490 Total (in 0s) ✅ 419 OK 🚫 0 Errors 👻 71 Excluded
+
+npm notice run lint:fixtures
+npm notice run python3 infra/odoo/boundary.py
+PASS fixture images and build files have no external direct dependencies

@@ -1,0 +1,17 @@
+{
+  "source": "a3ef79c5d377a666b41791f261c083cad57c721a",
+  "compose": [
+    "node:22.23.1-bookworm-slim c7904516c4f8",
+    "openfga/openfga:v1.21.0 05921dd2d843",
+    "postgres:17 c1554b7e36e8",
+    "nats:2.15.0-alpine 59c9335c5060",
+    "alpine/minio:RELEASE.2025-10-15T17-29-55Z f28aff6a9b71"
+  ],
+  "computers": [
+    {
+      "name": "computer",
+      "image": "sha256:59571994adad453a9dbd511e8f80d951730c1442055672b5398ec35b3af15238",
+      "imageID": "k3d-ocn-registry:5000/opencrane/computer@sha256:b2a2852e085fe852a61125f48258630ac284ab1090e35fcf235e9eed9b8a3994"
+    }
+  ]
+}
