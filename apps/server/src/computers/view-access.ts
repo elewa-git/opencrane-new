@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
 export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
+export class ViewCheckUnavailable extends Error {}
 
 const identity = z.object({ assistantId: z.string() });
 const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
@@ -24,12 +25,17 @@ async function history(store: EventStore, subject: string, silo: string) {
   const rows = [...(cache.get(key) ?? [])];
   const previous = rows.at(-1); let confirmed = !previous;
   // Confirm the saved checkpoint before reading its live tail.
-  for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
-    if (row.event.silo !== silo) throw new Error('Wrong silo');
-    if (!confirmed) {
-      if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) break;
-      rows[rows.length - 1] = row; confirmed = true;
-    } else rows.push(row);
+  try {
+    for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
+      if (row.event.silo !== silo) throw new Error('Wrong silo');
+      if (!confirmed) {
+        if (row.sequence !== previous?.sequence || row.event.id !== previous?.event.id) break;
+        rows[rows.length - 1] = row; confirmed = true;
+      } else rows.push(row);
+    }
+  } catch (error) {
+    if (isEventStoreUnavailable(error)) throw new ViewCheckUnavailable('Authority unavailable', { cause: error });
+    throw error;
   }
   if (!confirmed) { cache.delete(key); throw new Error('Authority history changed'); }
   saveHistory(cache, key, rows);
@@ -57,7 +63,8 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   if (current?.type !== 'grant.given' || z.object({ granteeKind: z.string() }).parse(current.data).granteeKind !== 'member') throw new Error('Desktop access required');
   const auth = memberAuthorisation(options.binding);
   const permissions = await Promise.all([auth.conversation(memberId, conversationId, 'read'), auth.desktop(memberId, computer.computerId)]);
-  if (permissions.some(p => !p.allowed)) throw new Error('Access changed');
+  if (permissions.some(p => p.status === 'ok' && !p.allowed)) throw new Error('Access changed');
+  if (permissions.some(p => p.status === 'unavailable')) throw new ViewCheckUnavailable('Authority unavailable');
   return computer;
 }
 

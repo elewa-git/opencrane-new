@@ -1,4 +1,4 @@
-export { createEventStore, connectNats, connectEventStore, EventStore } from "./jetstream.ts";
+export { createEventStore, connectNats, connectEventStore, EventStore, isEventStoreUnavailable } from "./jetstream.ts";
 export {
   wireSubject,
   decodeEvent,

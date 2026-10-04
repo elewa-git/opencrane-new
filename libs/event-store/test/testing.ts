@@ -13,8 +13,12 @@ import { createEventStore, connectNats } from "../src/index.ts";
 /** Keep the public port bound while a child service stops and starts behind it. */
 export async function tcpProxy(target: () => { host: string; port: number }, host = "127.0.0.1") {
   const sockets = new Set<Socket>();
+  const responses = new Set<Socket>();
+  let paused = false;
   const server = createServer((socket) => {
     const upstream = connect(target());
+    responses.add(upstream);
+    upstream.on("close", () => responses.delete(upstream));
     for (const peer of [socket, upstream]) {
       peer.setNoDelay(true);
       sockets.add(peer);
@@ -22,6 +26,7 @@ export async function tcpProxy(target: () => { host: string; port: number }, hos
       peer.on("error", () => { socket.destroy(); upstream.destroy(); });
     }
     socket.pipe(upstream).pipe(socket);
+    if (paused) upstream.pause();
   });
   server.listen(0, host);
   await once(server, "listening");
@@ -29,6 +34,12 @@ export async function tcpProxy(target: () => { host: string; port: number }, hos
   if (!address || typeof address === "string") throw new Error("No proxy address");
   return {
     port: address.port,
+    pauseResponses(this: void, value: boolean) {
+      paused = value;
+      for (const response of responses) {
+        if (value) response.pause(); else response.resume();
+      }
+    },
     async close() {
       const closed = once(server, "close");
       server.close();
@@ -130,6 +141,7 @@ export async function natsFixture({ provision = true } = {}) {
   if (provision) await store.ensureStream({ replicas: 1 });
   return {
     store,
+    pauseResponses: proxy.pauseResponses,
     connection,
     reader: readerStore,
     dispatcherConnection,
