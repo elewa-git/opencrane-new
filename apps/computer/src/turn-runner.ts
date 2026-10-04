@@ -35,7 +35,9 @@ interface TurnRunnerState {
 
 function requiredString(value: Record<string, unknown>, name: string) {
   const result = value[name];
-  if (typeof result !== 'string' || !result) throw new Error('Invalid bridge field');
+  if (typeof result !== 'string' || !result) {
+    throw new Error('Invalid bridge field');
+  }
   return result;
 }
 
@@ -47,9 +49,13 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     || omittedAttachments < 0) {
     throw new Error('Invalid attachment count');
   }
-  if (typeof taskKind !== 'string') throw new Error('Invalid task kind');
+  if (typeof taskKind !== 'string') {
+    throw new Error('Invalid task kind');
+  }
   modelForTask(taskKind);
-  if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) throw new Error('Expired turn');
+  if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) {
+    throw new Error('Expired turn');
+  }
   return {
     id: requiredString(value, 'id'),
     conversationId: requiredString(value, 'conversationId'),
@@ -64,13 +70,19 @@ export function parseTurn(value: Record<string, unknown>): Turn {
 }
 
 function containsTurn(turns: Iterable<Turn>, turnId: string) {
-  for (const turn of turns) if (turn.id === turnId) return true;
+  for (const turn of turns) {
+    if (turn.id === turnId) {
+      return true;
+    }
+  }
   return false;
 }
 
 function findTurn(state: TurnRunnerState, turnId: string, conversationId: string) {
   const preparingTurn = state.preparing.get(conversationId);
-  if (preparingTurn?.id === turnId) return preparingTurn;
+  if (preparingTurn?.id === turnId) {
+    return preparingTurn;
+  }
   const runningTurns = state.running.values();
   for (const runningTurn of runningTurns) {
     if (runningTurn.id === turnId && runningTurn.conversationId === conversationId) {
@@ -82,10 +94,14 @@ function findTurn(state: TurnRunnerState, turnId: string, conversationId: string
 
 function deleteTurn(state: TurnRunnerState, turnId: string) {
   for (const [conversationId, turn] of state.preparing) {
-    if (turn.id === turnId) state.preparing.delete(conversationId);
+    if (turn.id === turnId) {
+      state.preparing.delete(conversationId);
+    }
   }
   for (const [threadId, turn] of state.running) {
-    if (turn.id === turnId) state.running.delete(threadId);
+    if (turn.id === turnId) {
+      state.running.delete(threadId);
+    }
   }
 }
 
@@ -135,6 +151,8 @@ class TurnRunner {
   }
 
   private mayHaveExecuted(report: BridgeReport) {
+    // A prepared turn has no execution marker and can safely wait for a fresh delivery.
+    // Older journals lack that marker, so their started turns are uncertain and must fail.
     return this.journal.executions.has(report.turnId) || report.previousSequence === undefined;
   }
 
@@ -158,16 +176,21 @@ class TurnRunner {
 
   private recover() {
     for (const report of [...this.journal.reports]) {
-      if (this.isStarted(report) && this.mayHaveExecuted(report) && !this.isFinished(report.turnId)) {
+      if (this.isStarted(report) && this.mayHaveExecuted(report)
+        && !this.isFinished(report.turnId)) {
         this.journal.append(report, 'agent.turn_failed');
       }
     }
   }
 
   private hasActiveConversation(conversationId: string) {
-    if (this.state.preparing.has(conversationId)) return true;
+    if (this.state.preparing.has(conversationId)) {
+      return true;
+    }
     for (const turn of this.state.running.values()) {
-      if (turn.conversationId === conversationId) return true;
+      if (turn.conversationId === conversationId) {
+        return true;
+      }
     }
     return false;
   }
@@ -189,12 +212,18 @@ class TurnRunner {
     _reject: (reason?: unknown) => void,
   ) {
     this.state.waiting.set(sequence, resolve);
-    if (previousStart) this.send(previousStart);
+    if (previousStart) {
+      this.send(previousStart);
+    }
   }
 
   async start(input: Turn) {
-    if (this.isFinished(input.id) || this.isActiveTurn(input.id)) return;
-    if (this.hasActiveConversation(input.conversationId)) return;
+    if (this.isFinished(input.id) || this.isActiveTurn(input.id)) {
+      return;
+    }
+    if (this.hasActiveConversation(input.conversationId)) {
+      return;
+    }
 
     // Reserve the conversation before thread/start so concurrent delivery cannot start it twice.
     this.state.preparing.set(input.conversationId, input);
@@ -226,8 +255,13 @@ class TurnRunner {
 
     const response = record(await this.driver.rpc(method, params));
     const threadValue = record(response['thread'])['id'];
-    if (typeof threadValue !== 'string') throw new Error('Missing thread');
+    if (typeof threadValue !== 'string') {
+      throw new Error('Missing thread');
+    }
     const threadId = threadValue;
+
+    // Move the reservation synchronously before awaiting the first turn operation.
+    // Another delivered turn can then see the conversation as active throughout.
     this.state.preparing.delete(input.conversationId);
     this.state.running.set(threadId, input);
     await this.runThread(input, threadId);
@@ -236,8 +270,12 @@ class TurnRunner {
   private async runThread(input: Turn, threadId: string) {
     const previousStart = this.lastStartedReport(input.id);
     let sequence: number;
-    if (previousStart) sequence = previousStart.sequence;
-    else sequence = this.appendReport(input, 'agent.turn_started', { threadId }).sequence;
+    if (previousStart) {
+      sequence = previousStart.sequence;
+    } else {
+      const startedReport = this.appendReport(input, 'agent.turn_started', { threadId });
+      sequence = startedReport.sequence;
+    }
 
     const grant = await this.waitForGrant(sequence, previousStart);
     await this.driver.grant(threadId, input.conversationId, grant.token, grant.expiresAt);
@@ -248,6 +286,7 @@ class TurnRunner {
       return;
     }
 
+    // Mark execution only once grant is accepted; recovery leaves earlier prepared turns alone.
     this.journal.recordExecution(input.id);
     const inputText = await turnInput(input.text, input.conversationId, input.attachments,
       undefined, input.omittedAttachments);
@@ -262,13 +301,19 @@ class TurnRunner {
 
   private async rememberTurn(input: Turn, threadId: string, result: Record<string, unknown>) {
     const turnResult = result['turn'];
-    if (!turnResult || !this.state.running.has(threadId)) return;
+    if (!turnResult || !this.state.running.has(threadId)) {
+      return;
+    }
     const codexTurnId = requiredString(record(turnResult), 'id');
     this.state.codexTurns.set(input.id, codexTurnId);
-    if (!this.state.cancelled.has(input.id)) return;
+    if (!this.state.cancelled.has(input.id)) {
+      return;
+    }
     try {
-      await this.driver.rpc('turn/interrupt', { threadId, turnId: codexTurnId });
+      const interruptParams = { threadId, turnId: codexTurnId };
+      await this.driver.rpc('turn/interrupt', interruptParams);
     } catch {
+      // Keep the active turn so a reconnect can retry Stop after the transport recovers.
       this.closeCurrentSocket(1011, 'Interrupt unavailable');
     }
   }
@@ -290,19 +335,29 @@ class TurnRunner {
     const turnId = requiredString(value, 'turnId');
     const conversationId = requiredString(value, 'conversationId');
     const input = findTurn(this.state, turnId, conversationId);
-    if (!input) return;
+    if (!input) {
+      return;
+    }
 
     this.state.cancelled.add(turnId);
     const codexTurnId = this.state.codexTurns.get(turnId);
-    if (!codexTurnId) return;
+    if (!codexTurnId) {
+      return;
+    }
     const threadId = this.findRunningThread(turnId);
-    if (!threadId) return;
-    await this.driver.rpc('turn/interrupt', { threadId, turnId: codexTurnId });
+    if (!threadId) {
+      return;
+    }
+    // Leave the turn in the running map if interrupt fails so a reconnect can retry Stop.
+    const interruptParams = { threadId, turnId: codexTurnId };
+    await this.driver.rpc('turn/interrupt', interruptParams);
   }
 
   private findRunningThread(turnId: string) {
     for (const [threadId, turn] of this.state.running) {
-      if (turn.id === turnId) return threadId;
+      if (turn.id === turnId) {
+        return threadId;
+      }
     }
     return undefined;
   }
@@ -311,7 +366,9 @@ class TurnRunner {
     const completed = record(params['item']);
     if (completed['type'] === 'commandExecution' && typeof completed['command'] === 'string'
       && typeof completed['exitCode'] === 'number') {
-      const commandDigest = createHash('sha256').update(completed['command']).digest('hex');
+      const commandHash = createHash('sha256');
+      commandHash.update(completed['command']);
+      const commandDigest = commandHash.digest('hex');
       this.appendReport(input, 'agent.command_ran', {
         commandDigest,
         exitCode: completed['exitCode'],
@@ -329,34 +386,54 @@ class TurnRunner {
     const event = record(value);
     const params = record(event['params'] ?? {});
     const threadId = params['threadId'];
-    if (typeof threadId !== 'string') return;
+    if (typeof threadId !== 'string') {
+      return;
+    }
     const input = this.state.running.get(threadId);
-    if (!input) return;
+    if (!input) {
+      return;
+    }
 
-    const itemId = typeof params['itemId'] === 'string' ? params['itemId'] : input.id;
+    let itemId = input.id;
+    if (typeof params['itemId'] === 'string') {
+      itemId = params['itemId'];
+    }
     if (event['method'] === 'item/agentMessage/delta' && typeof params['delta'] === 'string') {
       this.appendReport(input, 'agent.message_delta', { messageId: itemId, text: params['delta'] });
     }
     if (event['method'] === 'item/reasoning/summaryTextDelta' && typeof params['delta'] === 'string') {
       this.appendReport(input, 'agent.reasoning_summarised', { text: params['delta'] });
     }
-    if (event['method'] === 'item/completed') this.completedItem(input, params);
-    if (event['method'] !== 'turn/completed') return;
+    if (event['method'] === 'item/completed') {
+      this.completedItem(input, params);
+    }
+    if (event['method'] !== 'turn/completed') {
+      return;
+    }
     this.completeTurn(input, threadId, params);
   }
 
   private completeTurn(input: Turn, threadId: string, params: Record<string, unknown>) {
     const turn = record(params['turn']);
-    const reportType = turn['status'] === 'completed' ? 'agent.turn_completed' : 'agent.turn_failed';
+    let reportType = 'agent.turn_failed';
+    if (turn['status'] === 'completed') {
+      reportType = 'agent.turn_completed';
+    }
     this.appendReport(input, reportType);
     this.state.running.delete(threadId);
-    void this.driver.grant(threadId, input.conversationId, '', 0).catch(ignoreGrantFailure);
+    void revokeGrant(this.driver, threadId, input.conversationId);
     this.state.codexTurns.delete(input.id);
     this.state.cancelled.delete(input.id);
   }
 }
 
-function ignoreGrantFailure() {}
+async function revokeGrant(driver: TurnDriver, threadId: string, conversationId: string) {
+  try {
+    await driver.grant(threadId, conversationId, '', 0);
+  } catch {
+    // The completed report is durable; a later grant refresh cannot revive the finished turn.
+  }
+}
 
 export function turnRunner(
   driver: TurnDriver,

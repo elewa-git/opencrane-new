@@ -27,19 +27,25 @@ interface JournalDriver {
 
 function requiredString(value: Record<string, unknown>, name: string) {
   const result = value[name];
-  if (typeof result !== 'string' || !result) throw new Error('Invalid bridge field');
+  if (typeof result !== 'string' || !result) {
+    throw new Error('Invalid bridge field');
+  }
   return result;
 }
 
 function optionalString(value: Record<string, unknown>, name: string) {
   const result = value[name];
-  if (typeof result === 'string') return result;
+  if (typeof result === 'string') {
+    return result;
+  }
   return undefined;
 }
 
 function optionalNumber(value: Record<string, unknown>, name: string) {
   const result = value[name];
-  if (typeof result === 'number') return result;
+  if (typeof result === 'number') {
+    return result;
+  }
   return undefined;
 }
 
@@ -64,12 +70,24 @@ function parseStoredReport(line: string): BridgeReport {
   const messageId = optionalString(value, 'messageId');
   const text = optionalString(value, 'text');
 
-  if (previousSequence !== undefined) report.previousSequence = previousSequence;
-  if (commandDigest !== undefined) report.commandDigest = commandDigest;
-  if (exitCode !== undefined) report.exitCode = exitCode;
-  if (threadId !== undefined) report.threadId = threadId;
-  if (messageId !== undefined) report.messageId = messageId;
-  if (text !== undefined) report.text = text;
+  if (previousSequence !== undefined) {
+    report.previousSequence = previousSequence;
+  }
+  if (commandDigest !== undefined) {
+    report.commandDigest = commandDigest;
+  }
+  if (exitCode !== undefined) {
+    report.exitCode = exitCode;
+  }
+  if (threadId !== undefined) {
+    report.threadId = threadId;
+  }
+  if (messageId !== undefined) {
+    report.messageId = messageId;
+  }
+  if (text !== undefined) {
+    report.text = text;
+  }
   return report;
 }
 
@@ -78,16 +96,29 @@ function hasContent(line: string) {
 }
 
 function readReportLines(path: string) {
-  if (!existsSync(path)) return [];
-  const contents = readFileSync(path, 'utf8').trim();
-  if (!contents) return [];
+  if (!existsSync(path)) {
+    return [];
+  }
+  const fileContents = readFileSync(path, 'utf8');
+  const contents = fileContents.trim();
+  if (!contents) {
+    return [];
+  }
   const lines = contents.split('\n');
   return lines.filter(hasContent);
 }
 
 function readExecutionLines(path: string) {
-  if (!existsSync(path)) return [];
-  return readFileSync(path, 'utf8').trim().split('\n');
+  if (!existsSync(path)) {
+    return [];
+  }
+  const fileContents = readFileSync(path, 'utf8');
+  const contents = fileContents.trim();
+  if (!contents) {
+    return [];
+  }
+  const lines = contents.split('\n');
+  return lines;
 }
 
 export function reportJournal(driver: JournalDriver) {
@@ -109,8 +140,11 @@ export function reportJournal(driver: JournalDriver) {
   function append(input: ReportInput | BridgeReport, type: string,
     extra: Partial<BridgeReport> = {}) {
     let turnId: string;
-    if ('id' in input) turnId = input.id;
-    else turnId = input.turnId;
+    if ('id' in input) {
+      turnId = input.id;
+    } else {
+      turnId = input.turnId;
+    }
 
     function isPreviousConversationReport(report: BridgeReport) {
       return report.conversationId === input.conversationId;
@@ -125,19 +159,25 @@ export function reportJournal(driver: JournalDriver) {
       previousSequence: previousReport?.sequence ?? 0,
       sequence: reports.length + 1,
     };
-    appendFileSync(driver.journal, `${JSON.stringify(report)}\n`, { mode: 0o600, flush: true });
+    const serializedReport = JSON.stringify(report);
+    const reportLine = `${serializedReport}\n`;
+    appendFileSync(driver.journal, reportLine, { mode: 0o600, flush: true });
     reports.push(report);
     return report;
   }
 
   function replay(since: number, waiting: Map<number, unknown>, send: (report: BridgeReport) => void) {
     for (const report of reports) {
-      if (report.sequence > since || waiting.has(report.sequence)) send(report);
+      if (report.sequence > since || waiting.has(report.sequence)) {
+        send(report);
+      }
     }
   }
 
   function recordExecution(turnId: string) {
-    appendFileSync(`${driver.journal}.executions`, `${turnId}\n`, { mode: 0o600, flush: true });
+    const executionPath = `${driver.journal}.executions`;
+    const executionLine = `${turnId}\n`;
+    appendFileSync(executionPath, executionLine, { mode: 0o600, flush: true });
     executions.add(turnId);
   }
 

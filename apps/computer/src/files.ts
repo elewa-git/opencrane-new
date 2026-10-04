@@ -58,14 +58,20 @@ export function filePackets(
   }
 
   async function finishFile(currentFile: WorkspaceFile) {
-    if (size !== currentFile.size) throw new Error('Incomplete file');
+    if (size !== currentFile.size) {
+      throw new Error('Incomplete file');
+    }
     const bytes = Buffer.concat(parts);
     file = undefined;
     parts = [];
     busy = true;
     try {
-      const digest = createHash('sha256').update(bytes).digest('hex');
-      if (digest !== currentFile.sha256) throw new Error('File digest mismatch');
+      const hash = createHash('sha256');
+      hash.update(bytes);
+      const digest = hash.digest('hex');
+      if (digest !== currentFile.sha256) {
+        throw new Error('File digest mismatch');
+      }
       const outcome = await receive(currentFile, bytes) ?? 'saved';
       return {
         type: 'file_received',
@@ -79,18 +85,24 @@ export function filePackets(
   }
 
   return async function receivePacket(input: Record<string, unknown>) {
-    if (busy) throw new Error('File delivery busy');
+    if (busy) {
+      throw new Error('File delivery busy');
+    }
     if (input['type'] === 'file_begin') {
       beginFile(input);
       return undefined;
     }
     const currentFile = file;
-    if (!currentFile) throw new Error('No file');
+    if (!currentFile) {
+      throw new Error('No file');
+    }
     if (input['type'] === 'file_chunk') {
       appendChunk(input, currentFile);
       return undefined;
     }
-    if (input['type'] !== 'file_end') throw new Error('Incomplete file');
+    if (input['type'] !== 'file_end') {
+      throw new Error('Incomplete file');
+    }
     return finishFile(currentFile);
   };
 }
@@ -101,8 +113,12 @@ export async function receiveFile(file: WorkspaceFile, bytes: Buffer) {
     ['/opt/python/bin/python', '/app/src/receive-file.py', JSON.stringify(file)],
     bytes,
   );
-  if (result.exitCode === 10) return 'kept_existing' as const;
-  if (result.exitCode !== 0) throw new Error('Workspace conversion failed');
+  if (result.exitCode === 10) {
+    return 'kept_existing' as const;
+  }
+  if (result.exitCode !== 0) {
+    throw new Error('Workspace conversion failed');
+  }
   return;
 }
 
@@ -121,12 +137,19 @@ function createResponseHandler(pending: Map<number, PendingCall>) {
   return function handleResponseLine(line: string) {
     const message = record(JSON.parse(line) as unknown);
     const id = message['id'];
-    if (typeof id !== 'number') return;
+    if (typeof id !== 'number') {
+      return;
+    }
     const call = pending.get(id);
-    if (!call) return;
+    if (!call) {
+      return;
+    }
     pending.delete(id);
-    if (message['error']) call.reject(new Error('Workspace executor refused'));
-    else call.resolve(message['result']);
+    if (message['error']) {
+      call.reject(new Error('Workspace executor refused'));
+    } else {
+      call.resolve(message['result']);
+    }
   };
 }
 
@@ -145,17 +168,23 @@ function createRpc(socket: ReturnType<typeof connect>, pending: Map<number, Pend
 
 function writeChunk(rpc: ReturnType<typeof createRpc>, processId: string,
   offset: number, bytes: Buffer) {
-  return rpc('process/write', {
+  const chunkEnd = offset + 64 * 1024;
+  const chunkBytes = bytes.subarray(offset, chunkEnd);
+  const encodedChunk = chunkBytes.toString('base64');
+  const params = {
     processId,
     writeId: String(offset),
-    chunk: bytes.subarray(offset, offset + 64 * 1024).toString('base64'),
-  });
+    chunk: encodedChunk,
+  };
+  return rpc('process/write', params);
 }
 
 async function sendInput(rpc: ReturnType<typeof createRpc>, processId: string, bytes: Buffer) {
   for (let offset = 0; offset < bytes.length; offset += 64 * 1024) {
     const response = record(await writeChunk(rpc, processId, offset, bytes));
-    if (response['status'] !== 'accepted') throw new Error('Workspace write refused');
+    if (response['status'] !== 'accepted') {
+      throw new Error('Workspace write refused');
+    }
   }
 }
 
@@ -164,23 +193,31 @@ async function readOutput(rpc: ReturnType<typeof createRpc>, processId: string) 
   let length = 0;
   const output: Buffer[] = [];
   while (true) {
-    const result = record(await rpc('process/read', {
+    const readParams = {
       processId,
       afterSeq,
       maxBytes: 64 * 1024,
       waitMs: 1000,
-    }));
+    };
+    const rawResult = await rpc('process/read', readParams);
+    const result = record(rawResult);
     if (!Array.isArray(result['chunks']) || typeof result['nextSeq'] !== 'number') {
       throw new Error('Invalid workspace output');
     }
     for (const rawChunk of result['chunks']) {
       const chunk = record(rawChunk);
       const data = chunk['chunk'];
-      if (typeof data !== 'string') throw new Error('Invalid workspace chunk');
-      const decoded = Buffer.from(data, 'base64');
-      length += decoded.length;
-      if (length > 64 * 1024) throw new Error('Workspace output too large');
-      if (chunk['stream'] === 'stdout') output.push(decoded);
+      if (typeof data !== 'string') {
+        throw new Error('Invalid workspace chunk');
+      }
+      const decodedChunk = Buffer.from(data, 'base64');
+      length += decodedChunk.length;
+      if (length > 64 * 1024) {
+        throw new Error('Workspace output too large');
+      }
+      if (chunk['stream'] === 'stdout') {
+        output.push(decodedChunk);
+      }
     }
     afterSeq = result['nextSeq'];
     if (result['exited'] && result['closed']) {
@@ -209,10 +246,12 @@ export async function workspaceProcess(argv: string[], bytes: Buffer) {
   lines.on('line', handleResponseLine);
 
   try {
-    await rpc('initialize', { clientName: 'opencrane-upload' });
-    socket.write(`${JSON.stringify({ method: 'initialized', params: {} })}\n`);
+    const initializeParams = { clientName: 'opencrane-upload' };
+    await rpc('initialize', initializeParams);
+    const initializedNotification = { method: 'initialized', params: {} };
+    socket.write(`${JSON.stringify(initializedNotification)}\n`);
     const processId = 'upload';
-    await rpc('process/start', {
+    const startParams = {
       processId,
       argv,
       cwd: 'file:///workspace',
@@ -220,7 +259,8 @@ export async function workspaceProcess(argv: string[], bytes: Buffer) {
       tty: false,
       pipeStdin: true,
       arg0: null,
-    });
+    };
+    await rpc('process/start', startParams);
     await sendInput(rpc, processId, bytes);
     return await readOutput(rpc, processId);
   } finally {

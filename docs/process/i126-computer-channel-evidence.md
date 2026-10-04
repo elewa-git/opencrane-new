@@ -37,3 +37,26 @@ not completed without an unrelated service-fixture failure, so the root-suite ga
 remains PARTIAL. The active shared-host live-view qualification prevented another
 Vitest run after the rebase; the computer bridge source itself did not change in the
 rebase.
+
+## Review 1 follow-up
+
+The four requested behaviour characterisations are committed alongside the existing
+restart, recovery and Stop tests. The bridge-channel tests pass against both this
+branch and `origin/main`'s `apps/computer` implementation. The `origin/main` run used
+the same server test file with the temporary worktree's NATS test binary supplied
+from the existing checkout. Final focused runs passed 11/11 bridge-channel tests
+on both implementations and 18/18 bridge-channel, replay and suspend tests here.
+
+Review item B1, `approvals.test.ts:42` returning 503 during concurrent decisions,
+is the known #136 read-retry flake. The open `work/i136-read-retry` branch addresses
+that retry; approvals code is unchanged in this change. Any occurrence in the root
+suite is recorded as a separate unrelated failure, not attributed to this refactor.
+
+The requested final root run used the specified PostgreSQL URL and
+`nice -n 10 npm test -- --maxWorkers=2`. It completed **PARTIAL**: 91 files passed,
+2 failed and 4 were skipped (1,493 tests passed, 2 failed and 15 skipped). The
+failures were the gateway ambiguous-provider reservation test (40-second timeout)
+and the event-store append/race test (NATS stream-info request timeout). Each failing
+case passed in an isolated retry under `nice -n 10`. The approvals 503 case did not
+fail in this run. The two root-suite failures remain recorded as failures; the
+isolated retries do not turn the root gate green.

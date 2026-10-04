@@ -31,9 +31,13 @@ function verify(driver: TurnDriver, request: IncomingMessage) {
 
 function parseMessage(bytes: Buffer | ArrayBuffer | Buffer[]) {
   let messageBytes: Buffer;
-  if (Buffer.isBuffer(bytes)) messageBytes = bytes;
-  else if (Array.isArray(bytes)) messageBytes = Buffer.concat(bytes);
-  else messageBytes = Buffer.from(bytes);
+  if (Buffer.isBuffer(bytes)) {
+    messageBytes = bytes;
+  } else if (Array.isArray(bytes)) {
+    messageBytes = Buffer.concat(bytes);
+  } else {
+    messageBytes = Buffer.from(bytes);
+  }
   return record(JSON.parse(messageBytes.toString()) as unknown);
 }
 
@@ -50,7 +54,9 @@ function createFileReceiver(driver: TurnDriver) {
 }
 
 function sendFileReceipt(next: WebSocket, receipt: unknown) {
-  if (receipt && next.readyState === next.OPEN) next.send(JSON.stringify(receipt));
+  if (receipt && next.readyState === next.OPEN) {
+    next.send(JSON.stringify(receipt));
+  }
 }
 
 async function deliverFile(
@@ -66,10 +72,16 @@ async function deliverFile(
   }
 }
 
-function interruptFailureHandler(next: WebSocket) {
-  return function closeForInterruptFailure() {
+async function interruptTurn(
+  input: Record<string, unknown>,
+  runner: TurnRunnerPort,
+  next: WebSocket,
+) {
+  try {
+    await runner.interrupt(input);
+  } catch {
     next.close(1011, 'Interrupt unavailable');
-  };
+  }
 }
 
 function dispatch(
@@ -98,7 +110,7 @@ function dispatch(
     return;
   }
   if (type === 'stop' && state.resumed) {
-    void runner.interrupt(input).catch(interruptFailureHandler(next));
+    void interruptTurn(input, runner, next);
     return;
   }
   throw new Error('Invalid message');
@@ -149,7 +161,9 @@ function receiveMessage(
 ) {
   return function handleMessage(bytes: Buffer | ArrayBuffer | Buffer[]) {
     try {
-      if (state.socket !== next) return;
+      if (state.socket !== next) {
+        return;
+      }
       const input = parseMessage(bytes);
       dispatch(input, next, state, runner, receiveFile, sendReports);
     } catch {
@@ -179,7 +193,9 @@ export function bridgeSocket(
 ) {
   function send(report: BridgeReport) {
     const socket = state.socket;
-    if (!state.resumed || !socket || socket.readyState !== socket.OPEN) return;
+    if (!state.resumed || !socket || socket.readyState !== socket.OPEN) {
+      return;
+    }
     if (socket.bufferedAmount > 1_048_576) {
       socket.close(1013);
       return;

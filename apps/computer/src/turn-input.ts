@@ -17,7 +17,9 @@ async function readAttachment(path: string, limit: number) {
     path,
     String(limit),
   ], Buffer.alloc(0));
-  if (result.exitCode !== 0) throw new Error('Attachment text unavailable');
+  if (result.exitCode !== 0) {
+    throw new Error('Attachment text unavailable');
+  }
   return result.output;
 }
 
@@ -33,8 +35,12 @@ function attachmentPaths(raw: unknown, conversationId: string) {
 
   const workspacePath = `/workspace/uploads/${conversationId}/${fileId}/${name}`;
   let textPath: string | null = null;
-  if (mime === 'application/pdf') textPath = `${workspacePath}.md`;
-  if (mime === 'text/plain') textPath = workspacePath;
+  if (mime === 'application/pdf') {
+    textPath = `${workspacePath}.md`;
+  }
+  if (mime === 'text/plain') {
+    textPath = workspacePath;
+  }
   return { workspacePath, textPath };
 }
 
@@ -47,7 +53,9 @@ interface AttachmentContext {
 }
 
 function attachmentNotice(omitted: number) {
-  if (!omitted) return '';
+  if (!omitted) {
+    return '';
+  }
   return `\n${omitted} earlier attachment(s) omitted from this turn’s context; the most recent `
     + `${MAX_ATTACHMENTS} are listed.\n`;
 }
@@ -98,7 +106,9 @@ export async function turnInput(
   read = readAttachment,
   omitted = 0,
 ) {
-  if (attachments === undefined) return text;
+  if (attachments === undefined) {
+    return text;
+  }
   if (!Array.isArray(attachments) || !isSafeId(conversationId)) {
     throw new Error('Invalid attachments');
   }
@@ -116,6 +126,8 @@ export async function turnInput(
   }
 
   const notice = attachmentNotice(totalOmitted);
-  if (contexts.length === 0) return text + notice;
+  if (contexts.length === 0) {
+    return text + notice;
+  }
   return text + notice + ATTACHMENT_PREAMBLE + JSON.stringify(contexts);
 }

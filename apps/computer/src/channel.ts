@@ -15,7 +15,9 @@ export function bridgeChannel(server: Server, driver: TurnDriver) {
 
   function sendReport(report: BridgeReport) {
     const send = socketMethods.send;
-    if (send) send(report);
+    if (send) {
+      send(report);
+    }
   }
 
   function closeCurrentSocket(code: number, reason: string) {
