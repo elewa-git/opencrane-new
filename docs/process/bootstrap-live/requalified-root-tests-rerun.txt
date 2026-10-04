@@ -1,0 +1,34 @@
+Command: PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --reporter=verbose
+PARTIAL: stopped with SIGINT (exit 130) after gateway fixture startup failed; 930.06 command seconds.
+No completed-suite PASS is claimed. Excerpts from /tmp/bootstrap-requalification-root-rerun.log follow.
+
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2 --reporter=verbose
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+ × libs/models/test/gateway.test.ts > a forged computer restart after agent.turn_failed stays refused without a reservation 3794ms
+   → Gateway stopped
+... remaining passing cases omitted ...
+ ✓ apps/server/test/models-main.test.ts > starts with actual issuer public JWKS and rejects invalid key patch undefined 6829ms
+ ✓ apps/server/test/bootstrap-claim.test.ts > projects and replays the owner identity and OpenFGA role, assistant and model grants 8575ms
+ ✓ apps/server/test/bootstrap-claim.test.ts > keeps tokens out of success, refusal, malformed-body and dependency-error logs 2042ms
+ ✓ apps/server/test/models-main.test.ts > starts with actual issuer public JWKS and rejects invalid key patch {"d":"not-a-private-key"} 5322ms
+ ✓ apps/server/test/bootstrap-claim.test.ts > fails closed on unsafe secret-file permissions or a missing file without writing events 2201ms
+ ✓ apps/server/test/models-main.test.ts > starts with actual issuer public JWKS and rejects invalid key patch {"alg":"ES384"} 3942ms
+ ✓ apps/server/test/bootstrap-claim.test.ts > reports an unavailable event store and admits a safe retry after it recovers 4517ms
+ ✓ apps/server/test/models-main.test.ts > starts with actual issuer public JWKS and rejects invalid key patch {"crv":"P-384"} 5244ms
+ ✓ apps/server/test/models-main.test.ts > starts with actual issuer public JWKS and rejects invalid key patch {"kty":"RSA"} 5183ms
+ ✓ apps/server/test/models-main.test.ts > starts with actual issuer public JWKS and rejects invalid key patch {"use":"enc"} 5770ms
+ ✓ apps/server/test/models-main.test.ts > upgrades an existing budget through startup without changing ceilings and admits personal chat 10046ms
+ ✓ apps/server/test/models-main.test.ts > upgrades an existing budget through migration without changing ceilings and admits personal chat 8989ms
+ ✓ apps/server/test/shutdown.test.ts > idle SIGTERM exits 0 and closes NATS once 8217ms
+ ✓ apps/server/test/shutdown.test.ts > idle SIGINT exits 0 and closes NATS once 7552ms
+ ✓ apps/server/test/audit-browser.test.ts > shows action and change history states at 1280 and 390px with keyboard filters 50134ms
+ ✓ apps/server/test/shutdown.test.ts > gives an open WebSocket a 1001 close and exits inside grace 4736ms
+ ✓ apps/server/test/shutdown.test.ts > bounds a stalled partial body, reports timeout and invokes cleanup once 6390ms
+ ✓ apps/server/test/shutdown.test.ts > lets a 700 ms in-flight join finish with 200 and durable append during a 1000 ms grace 8862ms
+ ✓ apps/server/test/shutdown.test.ts > exits non-zero on NATS close fail 12208ms
+ ✓ apps/server/test/shutdown.test.ts > exits non-zero on NATS close hang 10262ms

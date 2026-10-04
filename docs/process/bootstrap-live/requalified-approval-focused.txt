@@ -1,0 +1,12 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run apps/server/test/approvals.test.ts --maxWorkers=2 -t opens one encrypted Ask card
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 21 skipped (22)
+   Start at  11:43:57
+   Duration  15.84s (tests 69%, transform 19%, import 12%)

@@ -10,6 +10,7 @@
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - Members with desktop access can take a screenshot from a conversation's viewer, open it from chat or the session panel, and find it again after reload.
+- The first authenticated member can claim a fresh silo as owner with an installation token that expires after 24 hours. Reuse and claims after membership exists are refused (#12).
 
 ### Fixed or improved
 

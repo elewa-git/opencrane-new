@@ -2,7 +2,7 @@
 
 Verified against PR titles and evidence on 2026-10-04.
 
-Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no matching committed receipt at that checkpoint. Pending PRs below are identified by their issue number.
+Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no committed receipt at that checkpoint. External-worktree measurements without committed receipts remain excluded. Pending PRs below are identified by issue number.
 
 ## Phase 1
 
@@ -16,6 +16,9 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-01 | #23 | Dev-box silo | Fresh install core dev-stack journey | PASS | — | [dev-stack-evidence.md](dev-stack-evidence.md) |
 | 2026-10-02 | #35 | Zitadel sign-in | Real-service sign-in/out, refusal cases, repeat fresh journeys | PASS | 14 checks in each of two fresh journeys | [signin-evidence.md](signin-evidence.md) |
 | 2026-10-02 | #35 | Sign-in review-fix regressions | Focused authentication regressions after the final review corrections | PASS | 78 focused tests | [signin-evidence.md](signin-evidence.md) |
+| 2026-10-04 | — | First-owner bootstrap (#12) source requalification | Rebase onto #111; lint, typecheck, catalogue, web checks and complete root rerun | PASS | 1,406 root tests passed / 14 skipped; earlier FAIL and PARTIAL retained | [Bootstrap receipt](bootstrap-live/README.md#requalification-on-main) |
+| 2026-10-04 | — | Bootstrap (#12) mixed authority denial correction | Rebase onto #137; regression red/green and all source gates | PASS | 1,475 root tests passed / 15 opt-in tests skipped | [Correction receipt](bootstrap-live/README.md#mixed-denial-and-unavailability-correction) |
+| 2026-10-04 | — | First-owner bootstrap (#12) fresh secondary journey | Owner claim, stub chat, token reuse and existing-member refusal; teardown | PASS | Two fresh installs on slot 1; 201 owner claim, 409 refusals; first token 15,776 ms | [Live receipt](bootstrap-live/README.md#corrected-fresh-secondary-qualification) |
 
 ## Phase 2
 

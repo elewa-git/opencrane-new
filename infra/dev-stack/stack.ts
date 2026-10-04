@@ -297,10 +297,12 @@ async function up(fresh: boolean) {
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/`,
       ...(secondary ? { COMPUTER_STORAGE: '1Gi' } : {}),
       COMPUTER_IDLE_MS: process.env['COMPUTER_IDLE_MS'] ?? '900000' });
-  console.log((await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/owner-bootstrap.ts'],
+  const tokenBootstrap = secondary && process.env['DEV_OWNER_BOOTSTRAP'] === '0';
+  if (!tokenBootstrap) console.log((await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/owner-bootstrap.ts'],
     { ...base, DEV_STACK_DIR: directory })).trim());
   await start('server', ['--experimental-strip-types', 'apps/server/src/main.ts'],
     { ...await readEnv('command'), ...await authEnv(), ...await readEnv('server'), ...binding,
+      ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
       CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
@@ -317,7 +319,7 @@ async function up(fresh: boolean) {
     }
   }
   await wait(() => healthy(`${origin}/org/integrations`), 'web origin');
-  await journey();
+  if (!tokenBootstrap) await journey();
   const after = await run('ss', ['-H', '-ltnp']);
   await save('listeners-after.txt', after);
   const pids = await Promise.all(names.map(processId));

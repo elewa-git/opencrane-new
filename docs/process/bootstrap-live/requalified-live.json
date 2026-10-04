@@ -1,0 +1,17 @@
+{
+  "stackId": "1",
+  "source": "b74a97b5c47cd136a4b7953ca1f98ae8f8fb3531",
+  "fixtureCorrection": "Full Chromium channel for native PDF preview",
+  "startedAt": "2026-10-04T12:51:56.230580+00:00",
+  "startup": {
+    "exitCode": 0,
+    "seconds": 88.6
+  },
+  "journey": {
+    "exitCode": 0,
+    "seconds": 303.64
+  },
+  "teardownExitCode": 0,
+  "finishedAt": "2026-10-04T12:58:28.476486+00:00",
+  "exitCode": 0
+}

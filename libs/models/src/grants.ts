@@ -9,7 +9,7 @@ import { data, models } from './state.ts';
 
 /** One command, one conditional append; existing grants and revocations win. */
 async function seedGrant(store: EventStore, trigger: EventEnvelope, model: string) {
-  const member = trigger.type === 'member.joined';
+  const member = (trigger.type === 'member.joined' || trigger.type === 'silo.owner_bootstrapped');
   const granteeId = data(trigger)[member ? 'memberId' : 'assistantId'];
   if (typeof granteeId !== 'string') throw new Error('Missing model grantee');
   const subject = grantStream('model', model);
@@ -37,7 +37,7 @@ export async function migrateModelGrants(store: EventStore, silo: string) {
   if (!head) return;
   for await (const { event } of readEvents(store, 1, head)) {
     if (event.silo !== silo) throw new Error('Model grant migration silo mismatch');
-    if (event.type === 'member.joined' || event.type === 'assistant.created') entities.set(event.subject, event);
+    if ((event.type === 'member.joined' || event.type === 'silo.owner_bootstrapped') || event.type === 'assistant.created') entities.set(event.subject, event);
     if (event.type === 'member.removed') entities.delete(event.subject);
   }
   const handler = modelGrantHandler(store);

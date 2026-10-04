@@ -1,0 +1,90 @@
+RED: before the authority-result ordering fix
+
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/live-view-unavailable.test.ts -t an unavailable read --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+ ❯ apps/server/test/live-view-unavailable.test.ts (11 tests | 2 failed | 7 skipped) 19332ms
+   × closes a viewer with conversation denied and an unavailable read when desktop replies last 6292ms
+   × closes a viewer with conversation denied and an unavailable read when conversation replies last 5189ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/live-view-unavailable.test.ts > closes a viewer with conversation denied and an unavailable read when desktop replies last
+AssertionError: expected 1478.2825300000004 to be less than 1000
+ ❯ refusesMixedAuthorityRead apps/server/test/live-view-unavailable.test.ts:266:42
+    264|     expect(String(closeResult[1])).toBe('access_changed');
+    265|     // A denial must close the viewer before its existing 1.5-second l…
+    266|     expect(performance.now() - deniedAt).toBeLessThan(1000);
+       |                                          ^
+    267|   } finally {
+    268|     socket?.terminate();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/server/test/live-view-unavailable.test.ts > closes a viewer with conversation denied and an unavailable read when conversation replies last
+AssertionError: expected 1445.3599620000005 to be less than 1000
+ ❯ refusesMixedAuthorityRead apps/server/test/live-view-unavailable.test.ts:266:42
+    264|     expect(String(closeResult[1])).toBe('access_changed');
+    265|     // A denial must close the viewer before its existing 1.5-second l…
+    266|     expect(performance.now() - deniedAt).toBeLessThan(1000);
+       |                                          ^
+    267|   } finally {
+    268|     socket?.terminate();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 2 passed | 7 skipped (11)
+   Start at  16:05:50
+   Duration  24.98s (tests 78%, transform 12%, import 10%)
+
+
+GREEN: after the fix
+
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/live-view-unavailable.test.ts -t an unavailable read --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed | 7 skipped (11)
+   Start at  16:06:53
+   Duration  20.30s (tests 81%, transform 12%, import 7%)
+
+
+Requested live-view and bootstrap files
+
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/live-view.test.ts apps/server/test/live-view-delays.test.ts apps/server/test/live-view-unavailable.test.ts apps/server/test/bootstrap-token.test.ts apps/server/test/bootstrap-claim.test.ts apps/server/test/bootstrap-browser.test.ts --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+
+ Test Files  6 passed (6)
+      Tests  55 passed (55)
+   Start at  16:07:34
+   Duration  157.44s (tests 94%, import 4%, transform 2%)
+
+
+Full root suite
+
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+
+ Test Files  88 passed | 4 skipped (92)
+      Tests  1475 passed | 15 skipped (1490)
+   Start at  16:10:29
+   Duration  1343.53s (tests 96%, import 3%)
+
+    Isolate  92 workers spawned · ~259ms startup each (spawn + environment, per file)
+             at least ~11.63s faster with isolate: false — reuses workers across files instead of one per file
+

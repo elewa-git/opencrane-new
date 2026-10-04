@@ -113,6 +113,7 @@ the personal default.
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
 | `member.invited` | admin command | invitations, members (pending) | send the invitation |
+| `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.role_changed` | admin command | members | OpenFGA role tuples |
 | `member.removed` | admin command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
@@ -134,9 +135,27 @@ the earlier sequence without appending, even after invitation expiry or later
 removal; it reports the earlier command's success and does not restore membership.
 Changed invitation/display-name arguments with the same key are refused. A race
 with another command reloads history and returns a refusal without a second
-append; the caller can retry after reconsidering the result. `plan.md` defines no
-first-member bootstrap policy, so the server provides no bootstrap or automatic
-SSO membership path. Invitation creation and identity binding are separate work.
+append; the caller can retry after reconsidering the result. Invitation creation
+and identity binding are separate work.
+
+Owner decision, 2 October 2026: production installation prints a one-time token
+with a 24-hour expiry. Only its hash and expiry live in a private local file.
+`POST /api/silo/claim` requires a same-origin authenticated session from the
+configured Zitadel organisation. The token creates the first owner of a fresh
+silo. Any membership history disables bootstrap, including pending invitations
+and removed members; an existing member cannot claim ownership with the token.
+One conditional append at expected sequence zero across `member-*` records
+`silo.owner_bootstrapped` on `member-bootstrap-owner`, including that OIDC
+identity and owner role. Identity bindings live on member streams, so this same
+append checks that the claimant's binding stream and all other member streams
+are still empty. Concurrent claims or membership writes cause a conflict without
+an event or token consumption. Historical owner refusals retain `owner_exists`
+or `token_used`; other membership history returns `members_exist`.
+Ownership transfer belongs to #24. Neither the token nor its
+hash is event data. Projection/reactions treat this event as a joined owner,
+including identity binding, personal assistant and initial model grants. The
+model process seeds the installation's default paying group as for every owner.
+The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke`.
 
 ### Assistants and computers
 
@@ -396,10 +415,10 @@ events. Desktop admission additionally requires an explicit member
 | Handler | Subscribed events |
 | --- | --- |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
-| `update-members` | `member.invited`, `member.joined`, `member.role_changed`, `member.removed` |
-| `update-openfga` | `member.joined`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
-| `seed-model-grants` | `member.joined`, `assistant.created` |
-| `create-assistant` | `member.joined` |
+| `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed` |
+| `update-openfga` | `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |
+| `create-assistant` | `member.joined`, `silo.owner_bootstrapped` |
 | `claim-computer` | `assistant.created`, `computer.lost` |
 
 ## Rebuilding content

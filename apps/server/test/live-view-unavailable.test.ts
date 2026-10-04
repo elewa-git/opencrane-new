@@ -10,7 +10,15 @@ import { WebSocket } from 'ws';
 import { z } from 'zod';
 import { viewFixture } from './support/view-fixture.ts';
 
-type Failure = 'none' | 'deadline' | 'denied';
+type MixedFailure = 'conversation denied' | 'desktop denied';
+type Failure = 'none' | 'deadline' | 'denied' | MixedFailure;
+type AuthorityRead = 'conversation' | 'desktop';
+const mixedFailures = [
+  { failure: 'conversation denied', delayedRead: 'desktop' },
+  { failure: 'conversation denied', delayedRead: 'conversation' },
+  { failure: 'desktop denied', delayedRead: 'conversation' },
+  { failure: 'desktop denied', delayedRead: 'desktop' },
+] as const;
 const batchRequest = z.object({
   checks: z.array(z.object({ correlation_id: z.string() })),
 });
@@ -68,23 +76,42 @@ async function startViewer(fixture: Awaited<ReturnType<typeof viewFixture>>) {
   return socket;
 }
 
-async function batchFailureProxy(apiUrl: string) {
+async function batchFailureProxy(apiUrl: string, delayedRead?: AuthorityRead) {
   let failure: Failure = 'none';
   let failures = 0;
 
   async function sendFailure(request: IncomingMessage, response: ServerResponse) {
+    const batch = request.url?.endsWith('/batch-check');
+    const mixed = failure === 'conversation denied' || failure === 'desktop denied';
+    const authorityRead = batch ? 'desktop' : 'conversation';
+    if (mixed && authorityRead === delayedRead) {
+      await delay(100);
+    }
+    if (!batch) {
+      if (failure === 'conversation denied') {
+        const headers = { 'content-type': 'application/json' };
+        const permission = { allowed: false };
+        response.writeHead(200, headers);
+        response.end(JSON.stringify(permission));
+      } else {
+        response.writeHead(503);
+        response.end();
+      }
+      return;
+    }
     let body = '';
     for await (const chunk of request) body += String(chunk);
     const parsed = batchRequest.parse(JSON.parse(body));
     const result: Record<string, unknown> = {};
     for (let index = 0; index < parsed.checks.length; index++) {
       const check = parsed.checks[index]!;
-      if (index === 0) {
+      if (index === 0 && failure !== 'desktop denied') {
         result[check.correlation_id] = {
           error: { internal_error: 'deadline_exceeded', message: 'Check deadline exceeded' },
         };
       } else {
-        result[check.correlation_id] = { allowed: failure !== 'denied' || index !== 1 };
+        const deniesDesktop = failure === 'denied' || failure === 'desktop denied';
+        result[check.correlation_id] = { allowed: !deniesDesktop || index !== 1 };
       }
     }
     failures++;
@@ -97,7 +124,10 @@ async function batchFailureProxy(apiUrl: string) {
       response.writeHead(502);
       response.end();
     }
-    if (failure !== 'none' && request.url?.endsWith('/batch-check')) {
+    const mixed = failure === 'conversation denied' || failure === 'desktop denied';
+    const failedBatch = failure !== 'none' && request.url?.endsWith('/batch-check');
+    const failedConversation = mixed && request.url?.endsWith('/check');
+    if (failedBatch || failedConversation) {
       void sendFailure(request, response).catch(failResponse);
       return;
     }
@@ -222,3 +252,29 @@ async function refusesDeniedBatch() {
 
 it('closes a viewer on explicit OpenFGA denial beside a batch-item deadline error',
   refusesDeniedBatch, 30_000);
+
+async function refusesMixedAuthorityRead(testCase: (typeof mixedFailures)[number]) {
+  const fixture = await viewFixture(openDesktop);
+  const proxy = await batchFailureProxy(fixture.fga.apiUrl, testCase.delayedRead);
+  fixture.binding.apiUrl = proxy.apiUrl;
+  let socket: WebSocket | undefined;
+  try {
+    socket = await startViewer(fixture);
+    const closed = once(socket, 'close');
+    const deniedAt = performance.now();
+    proxy.setFailure(testCase.failure);
+    const closeResult = await closed;
+    expect(closeResult[0]).toBe(4003);
+    expect(String(closeResult[1])).toBe('access_changed');
+    // A denial must close the viewer before its existing 1.5-second lease expires.
+    expect(performance.now() - deniedAt).toBeLessThan(1000);
+  } finally {
+    socket?.terminate();
+    await proxy.close();
+    await fixture.close();
+  }
+}
+
+it.each(mixedFailures)(
+  'closes a viewer with $failure and an unavailable read when $delayedRead replies last',
+  refusesMixedAuthorityRead, 30_000);

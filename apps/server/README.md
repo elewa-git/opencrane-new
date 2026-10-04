@@ -418,3 +418,70 @@ receipt evidence with `POST /api/org/effects/:permitId/resolve`.
 [The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
+
+## First-owner bootstrap (#12)
+
+A production install generates one random 256-bit token with a 24-hour expiry:
+
+```sh
+SILO_ID=acme BOOTSTRAP_TOKEN_FILE=/var/lib/opencrane/bootstrap/token.json \
+  npm run bootstrap-token -w apps/server
+```
+
+Run under the server's Unix account. The command creates a private directory
+(0700) and file (0600) outside the repository, writes only a SHA-256 hash, silo
+and expiry, syncs it, then prints the token once to stdout. Run in a private
+terminal with output capture disabled; never put the token in argv, a URL, logs
+or events. An existing file is refused, so repeated installation cannot rotate
+credentials silently. For an expired or lost token on an unclaimed silo, the
+operator may remove that private file and rerun the command. Event history still
+prevents a new claim after any membership history exists. Back up the event store;
+losing this hash file after a successful claim does not reopen bootstrap.
+
+Set the same `BOOTSTRAP_TOKEN_FILE` and `SILO_ID` on the server, along with its
+existing NATS credentials and required `OIDC_EXPECTED_ORG_ID`. The server reads
+this file only during an unclaimed installation, verifies private permissions
+and ownership, and fails closed on missing or invalid material. It does not
+write business state to the file or PostgreSQL. Open `/claim`, sign in through
+Zitadel, enter a display name, contact email and token, then choose **Claim this
+silo**. Email is contact data; the encrypted authenticated session supplies the
+identity. The token input clears after submission and is never saved in browser
+storage. A successful claim returns HTTP 201 and records one event; reactions
+provision the personal assistant, owner/member OpenFGA tuples and model grants.
+The model process seeds `installation-default` (or `DEFAULT_PAYING_GROUP_ID`)
+as the default personal paying group using its existing budget events.
+
+`POST /api/silo/claim` accepts only `{token, displayName, email}` with an exact
+same-origin session. The token creates the first owner of a fresh silo: any
+membership history, including pending invitations and removed members, disables
+this path. An existing member cannot use it to gain ownership. This follows the
+owner decision on #12; it is not a recovery or promotion command.
+
+Identity bindings live on member streams. The same conditional append requires
+expected sequence zero across `member-*`, including every identity's binding
+stream, using NATS' native subject-filter expectation. A membership write between
+the history read and append therefore refuses the claim without recording an
+event or consuming the token. No projection freshness is needed for this check.
+
+Refusals include `token_used`, `owner_exists`, `members_exist`,
+`token_expired`, `wrong_token`, `wrong_organisation`, `concurrent_claim`,
+`no_session`, `wrong_origin` and `invalid_request`. Five submissions per minute
+share a process-wide installation budget across identities; HTTP 429 carries
+`Retry-After: 60`. This bounds failed attempts and in-flight races. Deployments
+with multiple server replicas must also apply a shared ingress rate limit.
+HTTP 503 means the outcome is unknown; do not assume ownership or repeat effects.
+A later submission consults event history and cannot create a second owner.
+All claim replies use `Cache-Control: no-store`.
+
+The existing dev stack retains its explicit invitation/join owner bootstrap
+for `jente@elewa.ke`; see its [instructions](../../infra/dev-stack/README.md#zitadel-sign-in).
+This production token path never uses the dev external-identity exception.
+Ownership transfer remains #24. The production install uses the token method alone.
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres \
+  npx vitest run apps/server/test/bootstrap-token.test.ts apps/server/test/bootstrap-claim.test.ts apps/server/test/bootstrap-browser.test.ts --maxWorkers=2
+```
+
+Tests use disposable NATS, PostgreSQL and OpenFGA plus Chromium at 1280/390px.
+[Evidence and remaining live qualification](../../docs/process/bootstrap-token-evidence.md).

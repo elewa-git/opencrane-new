@@ -11,7 +11,7 @@ infra/dev-stack/status.sh
 infra/dev-stack/down.sh
 ```
 
-`up` always runs the core journey. `--fresh` first stops this stack, deletes its
+By default, `up` runs the core journey. `--fresh` first stops this stack, deletes its
 three Compose volumes, computer namespace and generated service credentials, then provisions
 from nothing. The `zitadel-*` files and `zitadel.json` are retained: cloud identities survive fresh installs.
 Plain `up` reuses data and running processes; owner `down` retains data and credentials.
@@ -190,7 +190,18 @@ Each `up` also runs a dev-only owner bootstrap after the projections and dispatc
 start. Through the command NKey it conditionally appends `member.invited` and
 `member.joined`, binding that issuer and subject to owner member `jente-rosseel`.
 Existing stream state is checked first, so plain and `--fresh` runs do not duplicate it.
-Issue #12 replaces this temporary bootstrap.
+This dev-only bootstrap for `jente@elewa.ke` remains in place. Production installs
+use the [one-time token command and claim screen](../../apps/server/README.md#first-owner-bootstrap-12),
+which refuse a silo that already has an owner. Dev exceptions for external
+identities do not apply to the token claim; its user must belong to the configured
+organisation. Ownership transfer is a separate feature (#24).
+
+For a fresh secondary token qualification, set `DEV_OWNER_BOOTSTRAP=0` on
+`up.sh --id "$stack_id" --fresh`. This skips the dev owner events and automatic
+member-seeding journey, and sets the server's `BOOTSTRAP_TOKEN_FILE` to the
+secondary directory's `bootstrap-token.json`.
+Generate that file with the installation command after startup. The override
+only applies to secondary stacks; the owner stack always keeps its bootstrap.
 
 To rerun the setup, with `.keys/.zitadel-key` available locally:
 

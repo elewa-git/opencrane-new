@@ -57,6 +57,6 @@ async function accessApplied(options: ChatOptions, memberId: string, conversatio
   const auth = memberAuthorisation(options.binding);
   const rows = [...await history(options.store, `member-${memberId}`, options.silo),
     ...await history(options.store, `conversation-${conversationId}`, options.silo)];
-  const access = rows.filter(r => ['member.joined', 'member.role_changed', 'member.removed', 'conversation.created', 'participant.added', 'participant.removed'].includes(r.event.type));
+  const access = rows.filter(r => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed', 'conversation.created', 'participant.added', 'participant.removed'].includes(r.event.type));
   return (await Promise.all(access.map(r => auth.applied(r.event.id)))).every(Boolean);
 }

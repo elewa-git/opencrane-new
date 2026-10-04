@@ -1,0 +1,16 @@
+{
+  "stackId": "1",
+  "source": "b74a97b5c47cd136a4b7953ca1f98ae8f8fb3531",
+  "startedAt": "2026-10-04T12:29:04.700491+00:00",
+  "startup": {
+    "exitCode": 0,
+    "seconds": 76.47
+  },
+  "journey": {
+    "exitCode": 1,
+    "seconds": 144.76
+  },
+  "teardownExitCode": 0,
+  "finishedAt": "2026-10-04T12:32:45.934901+00:00",
+  "exitCode": 1
+}

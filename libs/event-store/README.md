@@ -47,6 +47,12 @@ the same transient NATS failures used by append retries without exposing SDK
 types to callers. A failed authority read proves neither permission nor denial;
 it must never extend a caller's existing permission lease.
 
+An optional `expectedSubject` can select the event's whole category, such as
+`member-*`, instead of its entity. `expectedSequence` then checks the latest
+sequence across that category in the same native conditional publish. Only the
+event's own subject or category is accepted. Bootstrap uses zero across all
+member streams, which also contain identity bindings, to require a fresh silo.
+
 Command identity is checked in entity history before every attempt and
 again after a conflict. It is scoped to principal kind/id and subject.
 No separate ledger or duplicate window determines success. Reusing a key

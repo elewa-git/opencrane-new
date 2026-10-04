@@ -1,0 +1,40 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run apps/server/test/live-view.test.ts --maxWorkers=2 -t admits bounded slow authority reads
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+ ❯ apps/server/test/live-view.test.ts (11 tests | 1 failed | 10 skipped) 9343ms
+   × admits bounded slow authority reads and keeps their desktop stream connected 9333ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/live-view.test.ts > admits bounded slow authority reads and keeps their desktop stream connected
+AssertionError: expected 403 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 403
+
+ ❯ apps/server/test/live-view.test.ts:297:33
+    295|       cookie: `${fixture.config.cookieName}=${encodeSession(fixture.co…
+    296|     const response = await fixture.app.inject({ method: 'POST', url: '…
+    297|     expect(response.statusCode).toBe(200);
+       |                                 ^
+    298|     const server = await fixture.app.listen({ host: '127.0.0.1', port:…
+    299|     socket = new WebSocket(`${server.replace('http:', 'ws:')}/ws/conve…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 10 skipped (11)
+   Start at  06:24:57
+   Duration  21.96s (tests 44%, transform 41%, import 16%)
+
+  Transform  transforming modules took 8.74s · 41% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

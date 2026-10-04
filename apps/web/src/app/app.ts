@@ -1,3 +1,4 @@
+import { Claim } from './claim/claim';
 import { AuditScreen } from './audit/audit';
 import { McpInstall } from './mcp-install/mcp-install';
 import { ModelsScreen } from './models/models';
@@ -25,11 +26,12 @@ const STATE_EXAMPLES: ReadonlyArray<{ kind: SharedStateKind; name: string; messa
 ];
 
 @Component({
-  selector: 'app-root', imports: [McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
+  selector: 'app-root', imports: [Claim, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush, host: { '[class.workspace-root]': 'workspacePage' },
 })
 export class App implements OnInit {
   private readonly ws = inject(WebSocketService);
+  protected readonly claimPage = globalThis.location.pathname === '/claim';
   protected readonly workspacePage = globalThis.location.pathname === '/workspace';
   protected readonly orgPage = globalThis.location.pathname.startsWith('/org');
   protected readonly installPage = globalThis.location.pathname === '/org/integrations/new';

@@ -1,0 +1,22 @@
+2026-10-04: rebased 6287a38 plus the admission repair; Node 22.23.3.
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --testTimeout=20000 --reporter=verbose
+The original slow-read test retains its explicit 30000ms timeout, 400ms event delay and 650ms OpenFGA delay.
+Application deadlines remain 1200ms per check, 1500ms per desktop lease and 1000ms per OpenFGA call.
+
+ ✓ apps/server/test/live-view.test.ts > requires participation and an explicit desktop grant before opening an audited view 7058ms
+ ✓ apps/server/test/live-view.test.ts > bounds redemption of pre-issued tickets and rejects reuse without opening another desktop 4924ms
+ ✓ apps/server/test/live-view.test.ts > denies delayed grants, revoked tickets and audit outages, and closes viewers when OpenFGA is unavailable 5732ms
+ ✓ apps/server/test/live-view.test.ts > rechecks authority after a delayed start audit before opening the desktop 2746ms
+ ✓ apps/server/test/live-view.test.ts > closes a ping flood independently of other viewers (paused reader: false) 2988ms
+ ✓ apps/server/test/live-view.test.ts > closes a ping flood independently of other viewers (paused reader: true) 4393ms
+ ✓ apps/server/test/live-view.test.ts > counts pongs and close frames in the viewer output bound 4000ms
+ ✓ apps/server/test/live-view.test.ts > admits bounded slow authority reads and keeps their desktop stream connected 9560ms
+ ✓ apps/server/test/live-view.test.ts > checks new authority events without replaying an unchanged computer history 5032ms
+ ✓ apps/server/test/live-view.test.ts > refuses access when its previously checked authority history disappears 3533ms
+ ✓ apps/server/test/live-view.test.ts > checks the new desktop grant when a previously checked computer changes 3687ms
+ ✓ apps/server/test/live-view.test.ts > does not renew the desktop lease from a delayed authority reply after revocation 5864ms
+
+ Test Files  79 passed | 3 skipped (82)
+      Tests  1398 passed | 14 skipped (1412)
+   Start at  07:37:33
+   Duration  1065.44s (tests 96%, import 4%)

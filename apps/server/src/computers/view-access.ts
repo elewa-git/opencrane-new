@@ -61,17 +61,59 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
 async function checkViewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
-  const [conversation, member] = await Promise.all([
-    history(store, `conversation-${conversationId}`, silo), history(store, `member-${memberId}`, silo),
-  ]);
-  const created = conversation.find(r => r.event.type === 'conversation.created')?.event;
-  if (!created || conversation.some(r => r.event.type === 'conversation.closed') ||
-      member.at(-1)?.event.type === 'member.removed') throw new Error('Access changed');
-  const assistantId = identity.parse(created.data).assistantId;
-  if (!participatesIn(conversation, created.data, memberId)) throw new Error('Access changed');
+  const auth = memberAuthorisation(options.binding);
+  const authorityReads = [
+    history(store, `member-${memberId}`, silo),
+    conversationDesktop(options, memberId, conversationId, auth),
+    auth.conversation(memberId, conversationId, 'read'),
+  ] as const;
+  // Wait for every authority source: an outage must not hide an explicit denial.
+  const results = await Promise.allSettled(authorityReads);
+  const [memberResult, computerResult, permissionResult] = results;
+  const memberRemoved = memberResult.status === 'fulfilled' &&
+    memberResult.value.at(-1)?.event.type === 'member.removed';
+  const conversationDenied = permissionResult.status === 'fulfilled' &&
+    permissionResult.value.status === 'ok' && !permissionResult.value.allowed;
+  if (memberRemoved || conversationDenied) {
+    throw new Error('Access changed');
+  }
+  for (const result of results) {
+    if (result.status !== 'rejected') {
+      continue;
+    }
+    const error: unknown = result.reason;
+    if (!(error instanceof ViewCheckUnavailable) && !isEventStoreUnavailable(error)) {
+      throw error;
+    }
+  }
+  // Failed reads grant no authority, even when the remaining reads allow access.
+  settledRead(memberResult);
+  const computer = settledRead(computerResult);
+  const permission = settledRead(permissionResult);
+  if (permission.status === 'unavailable') {
+    throw new ViewCheckUnavailable('Authority unavailable');
+  }
+  return computer;
+}
+
+function settledRead<Value>(result: PromiseSettledResult<Value>): Value {
+  if (result.status === 'rejected') {
+    const error: unknown = result.reason;
+    throw error;
+  }
+  return result.value;
+}
+
+async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,
+  auth: ReturnType<typeof memberAuthorisation>) {
+  const { store, silo } = options;
+  const conversation = await history(store, `conversation-${conversationId}`, silo);
+  const created = conversation.find(r => r.event.type === 'conversation.created');
+  if (!created || conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Access changed');
+  const assistantId = identity.parse(created.event.data).assistantId;
+  if (!participatesIn(conversation, created.event.data, memberId)) throw new Error('Access changed');
   const computer = await currentComputer(options, assistantId);
   const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
-  const auth = memberAuthorisation(options.binding);
   const permission = await auth.view(
     memberId, conversationId, computer.computerId, desktop.receipts);
   if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');

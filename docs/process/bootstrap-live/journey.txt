@@ -1,0 +1,10 @@
+PASS npm run bootstrap-token -w apps/server; install output: [REDACTED]
+PASS real secondary CI owner sign-in through Zitadel at 1280px
+PASS claimant is the sole joined owner, bound to the real CI subject; OpenFGA owner=true
+PASS browser chat 1280px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token 15312 ms, completion 16681 ms, browser journey 24107 ms; screenshot /home/jente/.config/opencrane/dev-stack-2/workspace-1280.png
+PASS same installation token refused a second time with token_used
+PASS real secondary CI member sign-in through Zitadel at 1280px
+PASS second user refused with owner_exists after the owner claim; exactly one membership event
+PASS real secondary CI member sign-in through Zitadel at 1280px
+PASS second CI user refused with members_exist in a fresh silo with a joined non-owner member; no ownership event
+PASS down.sh --id 2; secondary stack removed
