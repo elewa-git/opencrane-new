@@ -17,6 +17,7 @@ export class SignIn implements AfterViewInit, OnDestroy {
   protected readonly rejected = globalThis.location.pathname === '/signin/rejected';
   protected readonly reason = new URLSearchParams(globalThis.location.search).get('reason');
   protected readonly authenticated = signal(false);
+  protected readonly authenticatedAt = signal<string | undefined>(undefined);
   protected readonly error = signal('');
 
   ngAfterViewInit(): void {
@@ -35,8 +36,13 @@ export class SignIn implements AfterViewInit, OnDestroy {
     try {
       const response = await fetch('/auth/me');
       const body: unknown = await response.json();
-      this.authenticated.set(response.ok && typeof body === 'object' && body !== null
-        && 'authenticated' in body && body.authenticated === true);
+      const authenticated = response.ok && typeof body === 'object' && body !== null
+        && 'authenticated' in body && body.authenticated === true;
+      this.authenticated.set(authenticated);
+      if (authenticated) {
+        // This timestamp records when the session read confirmed the active session.
+        this.authenticatedAt.set(new Date().toISOString());
+      }
     } catch { this.error.set('We could not check your session. You can try signing in again.'); }
   }
 }

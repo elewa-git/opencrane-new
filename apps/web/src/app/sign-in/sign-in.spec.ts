@@ -69,6 +69,9 @@ describe('sign-in handoff', () => {
       await vi.waitFor(() => {
         fixture.detectChanges();
         expect(element.querySelector('form')).not.toBeNull();
+        const evidence = element.querySelector('oc-shared-state time');
+        expect(evidence?.getAttribute('datetime')).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+        expect(evidence?.textContent).toContain('UTC');
       });
       const form = element.querySelector('form');
       expect(form?.getAttribute('method')).toBe('post');
