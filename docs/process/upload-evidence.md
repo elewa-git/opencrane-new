@@ -1,15 +1,130 @@
 # P2-6 upload evidence
 
+## One turn under the settled-cost cap — 4 October 2026
+
+**Real-model answer: FAIL. Spending cap: PASS.** This authorisation permits
+exactly one chat turn with at most **10 euro cents of actual settled cost**.
+Reservations are temporary holds, not spend. The 502-cent reservation bug is
+tracked separately in [issue #75](https://github.com/elewa-git/opencrane-new/issues/75)
+and was not changed. The earlier three-cent turn belongs to the previous
+qualification; this authorisation produced one new turn and no other paid calls.
+
+Source: `work/upload` at `59a4be9`; warm owner stack on the shared tailnet dev box,
+Zitadel organisation `393311211338337681`. Computer image:
+`sha256:24298d7546b149db86b1ce26828576add20a96842b6d35084beeba3a3e2c2916`.
+
+The browser uploaded the existing `project.pdf` fixture and sent exactly:
+**What is the project code in the attached PDF?** The expected answer was
+**Willow-47**, present in the PDF and absent from the question. The displayed
+reply was:
+
+> I’ll check the attached document for the project code.
+> I couldn’t open the attachment because the file-reading tool is unavailable.
+> Please paste the document text here, and I’ll identify the project code.
+
+**Correct: no.** Neither provider request contained the converted PDF text.
+The model completed the turn without the expected answer; no paid retry was
+made. The one-shot browser harness routed only this attachment conversation to
+`gpt-6.1-sol`, counted input tokens before generation and checked the remaining
+actual-cost allowance against each response’s bounded cost. The normal gateway
+still made its unchanged 502-cent reservations. No production code was changed.
+
+| Provider response within the single chat turn | Input tokens | Output tokens | Reserved cents | Settled cents |
+| --- | --- | --- | --- | --- |
+| 1 | 10,021 | 115 | 502 | 3 |
+| 2 | 10,151 | 56 | 502 | 1 |
+| Total | 20,172 | 171 | 1,004 across two holds | 4 |
+
+Both reservations settled; their sum is not the actual spend. The second
+response included 21 reasoning tokens within its 56 output tokens. Cached input
+was 0 then 10,018 tokens; cache-write input was 10,018 then 130 tokens.
+The receipt began at `2026-10-04T00:45:32.236Z`.
+Conversation: `1d6c8677-b538-403e-83f5-739d2f0d4315`.
+Turn: `87b1fb18-8408-421b-85c5-f251592e125c`.
+Provider usage and the event ledger agree on **4 settled cents**.
+Private local receipt: `.tools/upload-settled-receipt.json`; log:
+`/tmp/upload-settled-real.log`. Neither contains provider credentials.
+
+### Owner-stack takeover and runtime preparation
+
+Stopped `/home/jente/dev/opencrane-new`, wrote the upload path to `stack-owner`
+using `printf '%s'` with no newline, and ran `npm ci`: **PASS**. Started with
+`ZITADEL_KEY_FILE` pointing to the original checkout’s existing key; no secret
+was copied or printed.
+
+The first default `up.sh` journey **FAILED** before sign-in. An anonymous browser
+check identified a stale generated Vite cache missing `auditResponseSchema`.
+Stopped the stack, archived `apps/web/.angular/cache` under `/tmp`, and repeated
+`up.sh`. This repaired sign-in; the browser completed a stub chat and Stop/reload
+checks, then **FAILED** after 130 seconds waiting for PDF delivery at
+`browser-upload.ts:46`. The event store contained `file.uploaded` but no
+`file.delivered` for that conversation.
+
+The warm stack had retained main’s computer image
+`sha256:b2a2852e085fe852a61125f48258630ac284ab1090e35fcf235e9eed9b8a3994`,
+which lacks this branch’s upload support. Updated only the affected member’s
+Sandbox to the branch’s pinned image and replaced its Pod while retaining the
+saved disk. The replacement was Ready with the expected digest; the paid
+harness then delivered its PDF successfully before sending the question.
+The complete default journey was not repeated after this runtime repair and
+remains **FAIL**, not a fresh-install upload PASS.
+
+Logs: `/tmp/upload-settled-main-down.log`, `/tmp/upload-settled-npm-ci.log`,
+`/tmp/upload-settled-owner-up.log`, `/tmp/upload-settled-cache-down.log`,
+`/tmp/upload-settled-owner-cache-fixed.log`; sanitised failure receipts:
+`/tmp/upload-settled-owner-result.json` and
+`/tmp/upload-settled-owner-cache-fixed-result.json`.
+
+### Fresh handback to main
+
+Stopped the upload stack successfully and restored
+`/home/jente/dev/opencrane-new` in `stack-owner` using `printf '%s'`; the exact
+bytes were verified. Main source: `b8aee57`. Its first `up.sh --fresh` **FAILED**
+in the logout probe at `login for response body`: the SSO button was absent.
+An anonymous browser check found main’s generated Vite cache missing
+`approvalCardsSchema`; HTTP returned 200 but the sign-in screen was blank.
+`status.sh` passed service health, which did not make the browser journey pass.
+Stopped main and archived its generated Angular cache before repeating the
+fresh handback. Logs: `/tmp/upload-settled-owner-down.log`,
+`/tmp/upload-settled-main-fresh.log`, `/tmp/upload-settled-main-fresh-result.json`,
+`/tmp/upload-settled-main-status.log` and `/tmp/upload-settled-main-cache-down.log`.
+
+The cache-repaired `up.sh --fresh` also **FAILED**, before the journey: model
+startup reported `Gateway stopped`, then the launcher timed out waiting for the
+model gateway. Log: `/tmp/upload-settled-main-fresh-cache-fixed.log`; sanitised
+result: `/tmp/upload-settled-main-fresh-cache-fixed-result.json`. A plain `up.sh`
+was then used to recover services on that newly created installation.
+
+The recovery run also **FAILED** its journey. It reached the mobile chat
+screenshot, then reported `Real browser logout failed at login for fetch` with
+`net::ERR_NETWORK_CHANGED` while waiting for the SSO button. This is the observed
+failure; it is not recorded as an issue #70 authority-admission failure.
+Logs: `/tmp/upload-settled-main-recovery.log` and sanitised
+`/tmp/upload-settled-main-recovery-result.json`.
+
+**Final restoration health: PASS; complete fresh journey: FAIL.** Main owns the
+running stack with the exact no-newline marker, and its final `status.sh` exits
+zero. Server, OpenFGA, MinIO and tailnet HTTPS report healthy. After cache repair,
+an anonymous browser check returned HTTP 200, a visible SSO button and no page
+errors. Logs: `/tmp/upload-settled-main-final-status.log` and
+`/tmp/upload-settled-main-render.log`. Journey screenshots were saved under
+`/tmp` and their tracked originals restored; main’s checkout is clean.
+
+This update changes only this evidence document. **PASS**: receipt-total and
+single-turn assertions, `git diff --check`, Markdown lint and local-link checks.
+The full source test suite was **NOT RUN** again for this documentation update.
+Neither issue #75 nor the failed paid-model behaviour was changed here.
+
 ## Rebase and capped qualification — 4 October 2026
 
-**Overall: PARTIAL. Real-model requalification: NOT RUN.** The new authorisation
+**Overall: PARTIAL. Real-model requalification: NOT RUN.** That authorisation
 allows one chat turn with a hard five-euro-cent cap and requires stopping if its
 reservation would exceed that cap. The local preflight returned **502 cents**
 for `reservationCents('gpt-6.1-sol', 2000)`. Admission reserves the full supported
 1,050,000-token context at the long-context tariff; the computer proxy sets the
 output bound to 2,000 tokens. No chat turn or provider request was sent, and no
 credentials were read for this preflight. No reservation was actually created.
-The previous three-cent failed turn remains the only paid attempt in this receipt.
+At that point, the previous three-cent failed turn was the only paid attempt.
 
 | Requested evidence | Observed result |
 | --- | --- |
