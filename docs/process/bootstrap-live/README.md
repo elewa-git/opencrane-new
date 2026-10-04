@@ -145,6 +145,17 @@ startup failures must also be followed by that teardown command.
 
 ## Requalification on main
 
+### Rebase onto live-view lease checks (#128)
+
+The `libs/event-store/README.md` conflict keeps #128's explanation of transient
+read failures and lease behaviour, alongside bootstrap's category-wide sequence
+check for a fresh silo. The `apps/server/src/computers/view-access.ts` conflict
+keeps bootstrap's parallel authority reads and bootstrap-event support, while
+preserving #128's explicit-denial and unavailable-result paths. Recognised
+transient store errors still become unavailable checks, so a late or unavailable
+check cannot revoke a valid viewer lease. `CHANGELOG.md`, `ledger.md` and
+`benchmarks.jsonl` retain entries from both sides.
+
 Date: 4 October 2026. Application source:
 `b74a97b5c47cd136a4b7953ca1f98ae8f8fb3531`, rebased onto `origin/main`
 `65364a03b59babb3cacddd24978732edca831e5f` (#111). The rebase completed

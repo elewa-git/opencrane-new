@@ -2,8 +2,7 @@
 
 Verified against PR titles and evidence on 2026-10-04.
 
-Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no matching committed receipt at that checkpoint. Pending PRs below are identified by their issue number.
-Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. External-worktree measurements without committed receipts are excluded.
+Dates are UTC qualification dates, which may precede the PR merge date. Every cited PR title, merge date and body was checked against its committed evidence. Historical checkpoints remain labelled separately from later results; review rows do not treat source gates as review approval. Rows without matching committed qualification evidence are omitted. The initial ledger excluded issue #70's external-worktree measurements because they had no committed receipt at that checkpoint. External-worktree measurements without committed receipts remain excluded. Pending PRs below are identified by issue number.
 
 ## Phase 1
 
