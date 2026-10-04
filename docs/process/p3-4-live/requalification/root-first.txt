@@ -1,0 +1,296 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/p3-4-publish
+
+ ❯ apps/server/test/integrations.test.ts (19 tests | 2 failed) 284925ms
+   × loads through the dev proxy and preserves the accessible refresh journey in Chromium 128161ms
+   × saves a reviewed connection revision policy through one conditional event and replays it 12478ms
+ ❯ apps/server/test/approvals.test.ts (22 tests | 1 failed | 1 skipped) 314508ms
+   × opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart 23956ms
+ ❯ libs/authz/test/projection.test.ts (11 tests | 1 failed) 40534ms
+   × cleans a rebuild store when the create response is lost at the HTTP boundary 5016ms
+ ❯ libs/models/test/gateway.test.ts (78 tests | 3 failed | 1 skipped) 1065794ms
+   × fresh installation grants Phase 2 chat through reactions 21688ms
+   × a new member and assistant receive Phase 2 chat grants after installation 22739ms
+   × admits one last reservation under daily 1 / monthly 2000 cents and clearly refuses the next call 18058ms
+ ❯ apps/server/test/bridge-replay.test.ts (6 tests | 5 failed) 33522ms
+   × acknowledges completed-start duplicates and keeps other threads recovering (lifecycle closed: true) 5114ms
+   × acknowledges completed-start duplicates and keeps other threads recovering (lifecycle closed: false) 5006ms
+   × replays an older Alice/Bob journal in its global computer sequence 5047ms
+   × surfaces a permanent report rejection and stops automatic reconnect attempts 5073ms
+   × wakes another conversation without rereading the archive of an already closed turn 5023ms
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"model","samples":30,"p50Ms":328.0395529999987,"p95Ms":509.9872299999988,"authorityEvents":15,"authorityStreamReads":8}
+
+ ❯ libs/models/test/authority-volume.test.ts (1 test | 1 failed) 19024ms
+   × keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events 17060ms
+ ❯ apps/server/test/journey-publication.test.ts (1 test | 1 failed) 42307ms
+   × sets up the approval journey with a reviewed, acknowledged publication 40007ms
+ ❯ libs/models/test/gateway-start.test.ts (1 test | 1 failed) 7308ms
+   × waits for the request listener even when the readiness listener is already ready 7306ms
+ ❯ libs/models/test/gateway-ingestion.test.ts (1 test | 1 failed) 5017ms
+   × drains observations emitted after process exit before completing gateway shutdown 5014ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 16 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/authz/test/projection.test.ts > cleans a rebuild store when the create response is lost at the HTTP boundary
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ libs/authz/test/projection.test.ts:429:1
+    427| });
+    428|
+    429| it("cleans a rebuild store when the create response is lost at the HTT…
+       | ^
+    430|   const service = await openfga(await dbs.postgres());
+    431|   const client = new OpenFgaClient({ apiUrl: service.apiUrl });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/16]⎯
+
+ FAIL  libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+AssertionError: {"requestId":"c3c63bce-dbb4-4edc-b797-6b0e0d717757","error":"Request refused or decision service unavailable"}: expected 403 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 403
+
+ ❯ mcp libs/models/test/authority-volume.test.ts:70:60
+     68|               headers: { ...headers, 'mcp-protocol-version': '2026-07-…
+     69|               body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 't…
+     70|                 _meta: { 'io.modelcontextprotocol/protocolVersion': '2…
+       |                                                            ^
+     71|             expect(response.status, await response.text()).toBe(200);
+     72|           },
+ ❯ libs/models/test/authority-volume.test.ts:78:48
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/16]⎯
+
+ FAIL  libs/models/test/gateway-ingestion.test.ts > drains observations emitted after process exit before completing gateway shutdown
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ libs/models/test/gateway-ingestion.test.ts:13:1
+     11| vi.mock('node:child_process', () => ({ spawn: subprocess.spawn }));
+     12| afterEach(() => { vi.unstubAllGlobals(); });
+     13|
+       | ^
+     14| it('drains observations emitted after process exit before completing g…
+     15|   const directory = await mkdtemp(`${tmpdir()}/gateway-drain-`);
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/16]⎯
+
+ FAIL  libs/models/test/gateway-start.test.ts > waits for the request listener even when the readiness listener is already ready
+Error: Gateway readiness timed out
+ ❯ Module.startGateway libs/models/src/gateway.ts:161:11
+    159|       await delay(50);
+    160|     }
+    161|     throw new Error('Gateway readiness timed out');
+       |           ^
+    162|   } catch (error) { await stop(); throw error; }
+    163| }
+ ❯ libs/models/test/gateway-start.test.ts:40:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/16]⎯
+
+ FAIL  libs/models/test/gateway.test.ts > fresh installation grants Phase 2 chat through reactions
+Error: Timed out waiting for service outcome
+ ❯ until libs/authz/test/services.ts:38:13
+     36|   while (!(await check())) {
+     37|     if (performance.now() >= deadline) {
+     38|       throw new Error("Timed out waiting for service outcome");
+       |             ^
+     39|     }
+     40|     await delay(20);
+ ❯ waitForModelGrants libs/models/test/fixture.ts:29:3
+ ❯ fixture libs/models/test/fixture.ts:132:31
+ ❯ libs/models/test/gateway.test.ts:137:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/16]⎯
+
+ FAIL  libs/models/test/gateway.test.ts > a new member and assistant receive Phase 2 chat grants after installation
+Error: Timed out waiting for service outcome
+ ❯ until libs/authz/test/services.ts:38:13
+     36|   while (!(await check())) {
+     37|     if (performance.now() >= deadline) {
+     38|       throw new Error("Timed out waiting for service outcome");
+       |             ^
+     39|     }
+     40|     await delay(20);
+ ❯ waitForModelGrants libs/models/test/fixture.ts:29:3
+ ❯ fixture libs/models/test/fixture.ts:132:31
+ ❯ libs/models/test/gateway.test.ts:145:13
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/16]⎯
+
+ FAIL  libs/models/test/gateway.test.ts > admits one last reservation under daily 1 / monthly 2000 cents and clearly refuses the next call
+AssertionError: [200,402,402,402,402,402,403,403]: expected [ { status: 402, …(1) }, …(4) ] to have a length of 7 but got 5
+
+- Expected
++ Received
+
+- 7
++ 5
+
+ ❯ libs/models/test/gateway.test.ts:493:95
+    491|     }
+    492|     expect(replies.filter(r => r.status === 200), JSON.stringify(repli…
+    493|     expect(replies.filter(r => r.status === 402), JSON.stringify(repli…
+       |                                                                                               ^
+    494|     expect((await f.call()).text).toContain('spending cap reached');
+    495|     await f.runner.initialise(conversations); await f.runner.run(conve…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/16]⎯
+
+ FAIL  apps/server/test/approvals.test.ts > opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart
+AssertionError: expected 503 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 503
+
+ ❯ read apps/server/test/approvals.test.ts:40:33
+     38|   const read = async (session = headers()) => {
+     39|     const response = await app.inject({ url, headers: session });
+     40|     expect(response.statusCode).toBe(200);
+       |                                 ^
+     41|     return z.object({ cards: approvalCardsSchema, csrf: z.string() }).…
+     42|   };
+ ❯ Object.decide apps/server/test/approvals.test.ts:44:29
+ ❯ apps/server/test/approvals.test.ts:59:18
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/16]⎯
+
+ FAIL  apps/server/test/bridge-replay.test.ts > acknowledges completed-start duplicates and keeps other threads recovering (lifecycle closed: true)
+ FAIL  apps/server/test/bridge-replay.test.ts > acknowledges completed-start duplicates and keeps other threads recovering (lifecycle closed: false)
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/bridge-replay.test.ts:54:22
+     52| }
+     53|
+     54| it.each([true, false])('acknowledges completed-start duplicates and ke…
+       |                      ^
+     55|   const fixture = await replayFixture();
+     56|   const alice = { sequence: 1, previousSequence: 0, conversationId: 'a…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/16]⎯
+
+ FAIL  apps/server/test/bridge-replay.test.ts > replays an older Alice/Bob journal in its global computer sequence
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/bridge-replay.test.ts:86:1
+     84| });
+     85|
+     86| it('replays an older Alice/Bob journal in its global computer sequence…
+       | ^
+     87|   const fixture = await replayFixture(), directory = await mkdtemp(`${…
+     88|   const reports = ['alice', 'bob', 'alice', 'bob'].map((conversationId…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/16]⎯
+
+ FAIL  apps/server/test/bridge-replay.test.ts > surfaces a permanent report rejection and stops automatic reconnect attempts
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/bridge-replay.test.ts:172:1
+    170| }, 30_000);
+    171|
+    172| it('surfaces a permanent report rejection and stops automatic reconnec…
+       | ^
+    173|   const fixture = await replayFixture(), dbs = await databases(), stop…
+    174|   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', private…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/16]⎯
+
+ FAIL  apps/server/test/bridge-replay.test.ts > wakes another conversation without rereading the archive of an already closed turn
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/bridge-replay.test.ts:209:1
+    207| });
+    208|
+    209| it('wakes another conversation without rereading the archive of an alr…
+       | ^
+    210|   const fixture = await replayFixture(), dbs = await databases(), stop…
+    211|   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', private…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/16]⎯
+
+ FAIL  apps/server/test/integrations.test.ts > loads through the dev proxy and preserves the accessible refresh journey in Chromium
+Error: Test timed out in 120000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/integrations.test.ts:211:1
+    209| });
+    210|
+    211| it('loads through the dev proxy and preserves the accessible refresh j…
+       | ^
+    212|   const remote = await remoteFixture();
+    213|   installWorker(app, nats.store, 'test', remote.network).start();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[13/16]⎯
+
+ FAIL  apps/server/test/integrations.test.ts > saves a reviewed connection revision policy through one conditional event and replays it
+Error: Test timed out in 5000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/integrations.test.ts:509:1
+    507| });
+    508|
+    509| it('saves a reviewed connection revision policy through one conditiona…
+       | ^
+    510|   await mcp('odoo', 'mcp.server_discovered', { toolCount: 2, schemaDig…
+    511|     connectionId: 'installed-odoo', accountMode: 'none', tools: [
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[14/16]⎯
+
+ FAIL  apps/server/test/journey-publication.test.ts > sets up the approval journey with a reviewed, acknowledged publication
+Error: Test timed out in 40000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/journey-publication.test.ts:19:1
+     17| }));
+     18|
+     19| it('sets up the approval journey with a reviewed, acknowledged publica…
+       | ^
+     20|   const f = await fixture(2000, 20000, false, 'gpt-6-luna', false, 're…
+     21|   const remote = await remoteFixture();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[15/16]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TimeoutError: timeout
+ ❯ timeout node_modules/@nats-io/nats-core/lib/util.js:53:31
+ ❯ new RequestOne node_modules/@nats-io/nats-core/lib/request.js:100:41
+ ❯ NatsConnectionImpl.request node_modules/@nats-io/nats-core/lib/nats.js:356:23
+ ❯ StreamAPIImpl._request node_modules/@nats-io/jetstream/lib/jsbaseclient_api.js:102:41
+ ❯ StreamAPIImpl.getMessage node_modules/@nats-io/jetstream/lib/jsmstream_api.js:480:34
+ ❯ EventStore.head libs/event-store/src/jetstream.ts:346:42
+    344|     if (subject !== undefined) {
+    345|       const wire = readSubject(subject);
+    346|       return (await this.manager.streams.getMessage(streamName, { last…
+       |                                          ^
+    347|     }
+    348|     return (await this.manager.streams.info(streamName)).state.last_se…
+ ❯ Object.reconcile apps/server/src/integrations/published-gateway.ts:10:34
+ ❯ apps/server/test/journey-publication.test.ts:27:69
+
+This error originated in "apps/server/test/journey-publication.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "sets up the approval journey with a reviewed, acknowledged publication". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  9 failed | 73 passed | 3 skipped (85)
+      Tests  16 failed | 1379 passed | 14 skipped (1409)
+     Errors  1 error
+   Start at  10:37:00
+   Duration  1950.47s (tests 95%, import 5%, transform 1%)
+
+    Isolate  85 workers spawned · ~481ms startup each (spawn + environment, per file)
+             at least ~19.97s faster with isolate: false — reuses workers across files instead of one per file

@@ -1,0 +1,18 @@
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Promoted preview unavailable (no browser transport error)
+    at openPreview (file:///home/jente/dev/wt/p3-4-publish/infra/dev-stack/browser-upload.ts:35:7)
+    at async browserUploadJourney (file:///home/jente/dev/wt/p3-4-publish/infra/dev-stack/browser-upload.ts:86:3)
+    at async browserChatJourney (file:///home/jente/dev/wt/p3-4-publish/infra/dev-stack/browser-chat.ts:56:3)
+    at async file:///home/jente/dev/wt/p3-4-publish/infra/dev-stack/journey.ts:178:7 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v22.23.3

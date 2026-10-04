@@ -1,0 +1,6 @@
+{"seeded":0,"route":"model","samples":30,"p50Ms":171.36566700000003,"p95Ms":273.84541100000024,"authorityEvents":15,"authorityStreamReads":8}
+{"seeded":0,"route":"mcp","samples":30,"p50Ms":180.8001260000001,"p95Ms":227.91134599999896,"authorityEvents":30,"authorityStreamReads":11}
+{"seeded":0,"route":"destinationAuthority","samples":30,"p50Ms":52.173838999999134,"p95Ms":78.6130869999979,"authorityEvents":6,"authorityStreamReads":4}
+{"seeded":100000,"route":"model","samples":30,"p50Ms":229.10835200000292,"p95Ms":339.8502430000008,"authorityEvents":15,"authorityStreamReads":8}
+{"seeded":100000,"route":"mcp","samples":30,"p50Ms":224.32815399999527,"p95Ms":325.76170199999615,"authorityEvents":30,"authorityStreamReads":11}
+{"seeded":100000,"route":"destinationAuthority","samples":30,"p50Ms":63.04215000000113,"p95Ms":86.16663999999582,"authorityEvents":6,"authorityStreamReads":4}

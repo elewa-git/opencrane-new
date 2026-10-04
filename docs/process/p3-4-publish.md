@@ -165,3 +165,106 @@ Fresh screenshots: `/tmp/p3-4-review-fix/fresh/publication-live/` (requested,
 approved, used and denied at 390px and 1280px). The remaining blockers are a clean
 complete root-suite run and a complete retained-stack journey. Hosted CI, merge
 and push are NOT RUN. This repair commit is for review, not a landing-ready claim.
+
+## Requalification after authority reads (#70)
+
+4 October 2026. Rebased `1ef81d0` onto `origin/main` at `65364a0` (#111,
+implementing #70). The resulting source is `7b6131e`, plus the three test-fixture
+repairs and browser-journey restoration in the commit containing this receipt. Rebase completion was checked by
+ancestry and the absence of rebase state. Conflicts preserve upload wiring,
+scoped authority reads, the gateway listener probe and drained audit output;
+secondary MCP uses 25112/25212 alongside ClamAV on 25111/25211.
+
+Environment: Linux dev box, Node 22.23.3, clean `npm ci`, real disposable
+NATS/PostgreSQL/OpenFGA, the pinned gateway, Chromium and local model/MCP fixtures.
+PostgreSQL uses `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+No paid calls, host daemon startup or host networking changes. Early verification
+caught an incorrect conflict resolution and missing newly merged dependencies;
+these were corrected before the complete runs. Two interrupted initial test
+attempts are not passing evidence.
+
+The first complete root run exposed three concrete fixture mismatches: the new
+volume test used the old MCP publication/envelope, gateway-start lacked responses
+for configuration acknowledgement, and audit-drain lacked the new TCP listener.
+Their failing tests preceded the repairs. The volume fixture now uses the existing
+publish helper and digest-bound route; the gateway fixtures provide the missing
+external dependencies. Production code, assertions, timeouts and opt-in skips
+were not weakened. All three repaired tests passed together.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| First complete `npm test -- --maxWorkers=2` | FAIL: 1,379 passed, 16 failed, 14 skipped; one unhandled NATS timeout; 1,950.47 s | [Original result](p3-4-live/requalification/root-first.txt) |
+| Three repaired fixtures, two-worker limit with files serial | PASS: three tests, 64.76 s; includes 100,000-event comparison | [Fixture results](p3-4-live/requalification/fixture-fixes.txt) |
+| Remaining 13 failed cases, unchanged, files serial | PASS: 13 selected tests; 124 other tests filtered out; 217.73 s | [Focused retry](p3-4-live/requalification/failed-cases-retry.txt) |
+| Complete root repeat, `--maxWorkers=2 --no-file-parallelism --reporter=verbose` | FAIL: 1,394 passed, one failed, 14 skipped; one unhandled NATS timeout; 2,409.64 s | [Serial result](p3-4-live/requalification/root-serial.txt) |
+| Publication-journey isolated retry after serial run | FAIL: 40-second timeout and NATS rejection | [Failed retry](p3-4-live/requalification/publication-failed-retry.txt) |
+| Publication-journey last unchanged retry | PASS: 19.35 s test, 28.09 s run | [Last retry](p3-4-live/requalification/publication-last-retry.txt) |
+| `npm run lint`, `npm run typecheck`, `npm run check:events` after repairs | PASS: eight size warnings; 86 event types | `/tmp/p3-4-requal/{lint,types,events}-final.log` |
+| Infra typecheck; claim-port regression | PASS | `/tmp/p3-4-requal/infra-types-clean.log`; [Claim test](p3-4-live/requalification/claim.txt) |
+| Web production build | PASS: existing bundle/CSS/CommonJS warnings | `/tmp/p3-4-requal/web-build.log` |
+| First web tests | FAIL: 59 passed; chat workspace exceeded five seconds | `/tmp/p3-4-requal/web-test.log` |
+| Complete unchanged web retry | PASS: 60 tests in 11 files | [Web retry](p3-4-live/requalification/web-retry.txt) |
+
+Both full root failures are retained. The serial run cleared every first-run
+failure except the publication journey, whose background reconciler reported a
+NATS timeout. A diagnostic run with temporary timing output passed in 14.85 s;
+that output was removed before the final unchanged retry. Passing and failing
+isolated runs do not establish a single cause. Shared-host load was approximately
+20–35 during much of the first run. **No clean complete-root-run claim** is made.
+
+The full serial run passed the repaired volume benchmark. With 100,000 unrelated
+events, p95 was 339.85 ms for model decisions, 325.76 ms for MCP decisions and
+86.17 ms for destination authority. Thirty samples per route retained constant
+read counts across zero/100,000 events: model 15 events/8 reads, MCP 30/11,
+destination 6/4. [Exact measurements](p3-4-live/requalification/authority-volume.jsonl)
+retain the zero-event comparison too; destination-authority timing is not an
+end-to-end egress measurement.
+
+The first secondary pair claimed id 1. Fresh startup failed after 364 s waiting
+for Viewing at `browser-live-view.ts:87`; the screenshot showed Access changed.
+Plain startup failed after 285 s with Promoted preview unavailable at
+`browser-upload.ts:35`. [Fresh failure](p3-4-live/requalification/fresh-first-failure.txt)
+and [repeat failure](p3-4-live/requalification/repeat-first-failure.txt) retain the
+errors. `down.sh --id 1` passed and removed the generated directory. Neither
+attempt reached complete publication qualification.
+
+The second fresh attempt claimed id 2 and reached publication at both 390px and
+1280px, but failed after 707 s in audit qualification. Upload's browser journey
+opens a new conversation; its caller retained that URL instead of the original
+chat containing the audit canary. The existing [audit assertion failed](p3-4-live/requalification/fresh-second-failure.txt)
+before the fix. `browserChatJourney` now returns to the original chat after
+upload checks and waits for its original message. This preserves the later
+live-view and audit journeys' input without weakening either assertion. Infra
+TypeScript passed. The already-running repeat was deliberately stopped after
+109 s because it had loaded the old journey; it is NOT RUN as complete repeat
+evidence. `down.sh --id 2` passed. The next claim initially found both slots owned
+by other worktrees; neither ownership marker was changed.
+
+The final pair claimed id 1 after queuing. Fresh startup failed after **633 s**
+and plain startup failed after **391 s**, both waiting 20 seconds for Viewing
+at `browser-live-view.ts:53`. The restored original chat message was found before
+the viewer checks, but the complete post-fix audit journey remains **NOT RUN**.
+[Fresh error](p3-4-live/requalification/fresh-third-failure.txt),
+[repeat error](p3-4-live/requalification/repeat-final-failure.txt),
+[fresh screenshot](p3-4-live/requalification/fresh-final-viewer.png) and
+[repeat screenshot](p3-4-live/requalification/repeat-final-viewer.png) retain this
+failure. These are live-view qualification failures consistent with the open #77
+symptom; the exact cause is not established here.
+
+The earlier second fresh run completed the publication checks before its audit
+failure. Its [390px approval](p3-4-live/requalification/publication-before-chat-fix/approved-390.png)
+and [1280px approval](p3-4-live/requalification/publication-before-chat-fix/approved-1280.png)
+screenshots sit beside requested/used/denied receipts for both viewports. They
+qualify those publication steps only, before the chat-URL repair; they are not a
+complete fresh-install PASS.
+
+**Held:** the requested fresh/plain PASS pair was not achieved, and the latest
+complete root run is FAIL despite the passing focused publication retry. No
+assertion, freshness fence or timeout was relaxed to obtain a pass. Review pass
+two remains the existing review checkpoint; no third pass was requested. Hosted
+CI and merge are NOT RUN.
+
+Final `down.sh --id 1`: **PASS**. The generated directory, Compose containers and
+Kubernetes namespace were absent afterwards. Every claimed stack in this run was
+released. The owner stack was not restarted or reconfigured. The branch is prepared
+for review with the qualification hold above; it is not merged or capability-done.

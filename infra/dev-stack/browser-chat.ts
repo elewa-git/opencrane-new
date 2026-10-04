@@ -54,5 +54,8 @@ export async function browserChatJourney(page: Page, origin: string, prompt = 'S
   await mkdir(screenshots, { recursive: true });
   await page.screenshot({ path: `${screenshots}/workspace-${width}.png`, fullPage: true });
   await browserUploadJourney(page, origin, screenshots);
+  // Uploads use a new conversation; later journeys need this chat's original turn.
+  await page.goto(url);
+  await page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: prompt }).waitFor();
   console.log(`PASS browser chat ${width}px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token ${firstTokenMs} ms, completion ${completeMs} ms, browser journey ${Math.round(performance.now() - start)} ms; screenshot ${screenshots}/workspace-${width}.png`);
 }

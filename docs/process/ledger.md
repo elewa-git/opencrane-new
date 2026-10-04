@@ -72,6 +72,9 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-04 | #78 | MCP server registration and discovery | Fresh/repeat MCP discovery assertions | PASS | 2 tools; both blocked pending review | [p3-3-mcp-discover.md](p3-3-mcp-discover.md#secondary-live-qualification-4-october-2026) |
 | 2026-10-04 | #78 | Full MCP startup journey | Full fresh and repeat startup with live-view steps | PARTIAL | MCP journeys PASS; both complete startup journeys FAIL | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
 | 2026-10-04 | #78 | MCP independent review | Two-pass review of inventory fixes | PASS | — | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
+| 2026-10-04 | — | P3-4 publication (#45), rebase onto #70 | Complete root runs after rebase and fixture repairs | FAIL | First: 1,379 passed / 16 failed; serial: 1,394 passed / one failed; 14 opt-in skips in both; publication retry PASS | [Requalification](p3-4-publish.md#requalification-after-authority-reads-70) |
+| 2026-10-04 | — | P3-4 publication (#45), authority volume | 100,000 unrelated events through reviewed MCP and model decisions | PASS | Model p95 340 ms; MCP 326 ms; destination authority 86 ms; read counts unchanged | [Measurements](p3-4-live/requalification/authority-volume.jsonl) |
+| 2026-10-04 | — | P3-4 publication (#45), secondary qualification | Fresh/plain startup after chat-URL repair | FAIL | Fresh 633 s; repeat 391 s; both live-view timeouts; earlier publication steps passed at 390px and 1280px before audit failure | [Requalification](p3-4-publish.md#requalification-after-authority-reads-70) |
 
 ## Infrastructure
 

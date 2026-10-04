@@ -1,0 +1,3 @@
+fresh exit=1 seconds=633
+repeat exit=1 seconds=391
+down exit=0

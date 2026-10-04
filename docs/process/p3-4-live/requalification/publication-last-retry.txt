@@ -1,0 +1,11 @@
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/journey-publication.test.ts --maxWorkers=2 --reporter=verbose
+
+ RUN  v5.0.3 /home/jente/dev/wt/p3-4-publish
+
+ ✓ apps/server/test/journey-publication.test.ts > sets up the approval journey with a reviewed, acknowledged publication 19354ms
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  12:13:11
+   Duration  28.09s (tests 76%, transform 14%, import 11%)

@@ -6,15 +6,16 @@
 
 ### What you can do now
 
-- No new member, owner or admin capability is ready to use from the work in flight.
+- Owners and admins can publish reviewed MCP tools, grant access to people, teams and assistants, and remove access without deleting an upstream account. Tools become Ready only after the gateway confirms the reviewed configuration.
 
 ### Fixed or improved
 
-- Work is under way to publish reviewed MCP tools, let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
+- Work is under way to let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
 
 ### Known limits
 
-- Authority checks still need exact, fast reads at scale and fresh-install qualification ([#70](https://github.com/elewa-git/opencrane-new/issues/70)). Complete MCP startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for other open qualification.
+- Publication qualification still has an intermittent 40-second journey-test failure in the full root suite; focused retries pass. See the [publication receipt](docs/process/p3-4-publish.md#requalification-after-authority-reads-70).
+- Authority reads have scale-test evidence but still need successful fresh-install qualification ([#70](https://github.com/elewa-git/opencrane-new/issues/70)). Complete MCP startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for other open qualification.
 
 Technical note: in-flight work has no merged PR number yet.
 

@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
-import { currentAuthority } from '../src/index.ts';
+import { currentAuthority, currentPublication } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
 function unrelated(index: number): EventEnvelope {
@@ -28,9 +28,10 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
       await f.append('mcp-fixture', 'mcp.server_registered', { serverId: 'fixture', kind: 'remote', locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
       await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture', connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1,
         tools: [{ name: 'read', revision: 'a'.repeat(64), reviewed: true, readOnly: true, costCents: 0 }] });
-      await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
       await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture', connectionId: 'installed', toolName: 'read',
         toolRevision: 'a'.repeat(64), mode: 'allow', setBy: 'alice' });
+      await f.publish();
+      const publication = (await currentPublication(f.nats.store, 'test', 'fixture'))!;
       for (const [resourceType, resourceId] of [['mcp_server', 'fixture'], ['destination', 'docs']] as const) {
         for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']] as const) {
           const event = await f.append(grantStream(resourceType, resourceId), 'grant.given', { resourceType, resourceId, granteeId, granteeKind, grantedBy: 'alice' });
@@ -63,10 +64,10 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
             expect(response.status, await response.text()).toBe(200);
           },
           mcp: async () => {
-            const response = await fetch(`${f.options.decisionUrl}/authorize/mcp/fixture/installed`, { method: 'POST',
-              headers: { ...headers, 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': 'read' },
-              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: {} },
-                _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28', 'io.modelcontextprotocol/client-capabilities': {} } }) });
+            const response = await fetch(`${f.options.decisionUrl}${publication.desired.authz}/${publication.digest}`, { method: 'POST',
+              headers: { ...headers, 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'read' },
+              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: {},
+                _meta: { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientCapabilities': {} } } }) });
             expect(response.status, await response.text()).toBe(200);
           },
           destinationAuthority: () => currentAuthority(f.nats.store, f.binding, 'alice', 'assistant', 'conversation', 'destination', 'docs'),

@@ -1,5 +1,5 @@
 import { EventEmitter, once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -27,6 +27,10 @@ it('waits for the request listener even when the readiness listener is already r
   if (!address || typeof address === 'string' || !readyAddress || typeof readyAddress === 'string') throw new Error('Missing listener');
   await new Promise<void>(resolve => traffic.close(() => resolve()));
   const directory = await mkdtemp(`${tmpdir()}/gateway-start-`);
+  const fetch = globalThis.fetch;
+  vi.stubGlobal('fetch', (url: string) => url.endsWith('/api/config/effective')
+    ? readFile(`${directory}/config.json`, 'utf8').then(body => new Response(body))
+    : url.endsWith('/config_dump') ? Promise.resolve(new Response('{"binds":[],"backends":[]}')) : fetch(url));
   const pending = startGateway({
     binary: resolve(`spikes/s0-1c-real-model-smoke/.tools/agentgateway-${process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64'}`),
     configFile: `${directory}/config.json`, usageFile: `${directory}/usage.jsonl`, keyFile: `${directory}/key`,
@@ -45,5 +49,6 @@ it('waits for the request listener even when the readiness listener is already r
     await (await pending).stop();
     await Promise.all([readiness, traffic].map(server => new Promise<void>(resolve => server.close(() => resolve()))));
     await rm(directory, { recursive: true, force: true });
+    vi.unstubAllGlobals();
   }
 }, 10_000);

@@ -1,0 +1,55 @@
+Full command: PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres NG_BUILD_MAX_WORKERS=2 NODE_COMPILE_CACHE=/tmp/p3-4-requal/node-cache npm test -- --maxWorkers=2 --no-file-parallelism --reporter=verbose
+Full host log: /tmp/p3-4-requal/root-serial.log
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/journey-publication.test.ts > sets up the approval journey with a reviewed, acknowledged publication
+Error: Test timed out in 40000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/journey-publication.test.ts:19:1
+     17| }));
+     18|
+     19| it('sets up the approval journey with a reviewed, acknowledged publica…
+       | ^
+     20|   const f = await fixture(2000, 20000, false, 'gpt-6-luna', false, 're…
+     21|   const remote = await remoteFixture();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+⎯⎯⎯⎯⎯⎯ Unhandled Errors ⎯⎯⎯⎯⎯⎯
+
+Vitest caught 1 unhandled error during the test run.
+This might cause false positive tests. Resolve unhandled errors to make sure your tests are not affected.
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+TimeoutError: timeout
+ ❯ timeout node_modules/@nats-io/nats-core/lib/util.js:53:31
+ ❯ new RequestOne node_modules/@nats-io/nats-core/lib/request.js:100:41
+ ❯ NatsConnectionImpl.request node_modules/@nats-io/nats-core/lib/nats.js:356:23
+ ❯ StreamAPIImpl._request node_modules/@nats-io/jetstream/lib/jsbaseclient_api.js:102:41
+ ❯ StreamAPIImpl.getMessage node_modules/@nats-io/jetstream/lib/jsmstream_api.js:480:34
+ ❯ EventStore.head libs/event-store/src/jetstream.ts:346:42
+    344|     if (subject !== undefined) {
+    345|       const wire = readSubject(subject);
+    346|       return (await this.manager.streams.getMessage(streamName, { last…
+       |                                          ^
+    347|     }
+    348|     return (await this.manager.streams.info(streamName)).state.last_se…
+ ❯ Object.reconcile apps/server/src/integrations/published-gateway.ts:10:34
+ ❯ apps/server/test/journey-publication.test.ts:27:69
+
+This error originated in "apps/server/test/journey-publication.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+The last test to run before this error was "sets up the approval journey with a reviewed, acknowledged publication". This means either:
+- the error was thrown while Vitest was running this test, or
+- the error was thrown after the test completed, and this was the most recent test at that point.
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+
+
+ Test Files  1 failed | 81 passed | 3 skipped (85)
+      Tests  1 failed | 1394 passed | 14 skipped (1409)
+     Errors  1 error
+   Start at  11:29:10
+   Duration  2409.64s (tests 97%, import 3%)
+
+    Isolate  85 workers spawned · ~260ms startup each (spawn + environment, per file)
+             at least ~21.83s faster with isolate: false — reuses workers across files instead of one per file

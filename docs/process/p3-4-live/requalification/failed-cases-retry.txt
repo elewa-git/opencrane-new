@@ -1,0 +1,18 @@
+Only the 13 previously failed, unchanged cases were selected; 124 other cases were filtered out.
+ ✓ libs/models/test/gateway.test.ts > fresh installation grants Phase 2 chat through reactions 6289ms
+ ✓ libs/models/test/gateway.test.ts > a new member and assistant receive Phase 2 chat grants after installation 11334ms
+ ✓ libs/models/test/gateway.test.ts > admits one last reservation under daily 1 / monthly 2000 cents and clearly refuses the next call 11702ms
+ ✓ apps/server/test/approvals.test.ts > opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart 21663ms
+ ✓ apps/server/test/integrations.test.ts > loads through the dev proxy and preserves the accessible refresh journey in Chromium 73394ms
+ ✓ apps/server/test/integrations.test.ts > saves a reviewed connection revision policy through one conditional event and replays it 6552ms
+ ✓ apps/server/test/journey-publication.test.ts > sets up the approval journey with a reviewed, acknowledged publication 22535ms
+ ✓ libs/authz/test/projection.test.ts > cleans a rebuild store when the create response is lost at the HTTP boundary 4716ms
+ ✓ apps/server/test/bridge-replay.test.ts > acknowledges completed-start duplicates and keeps other threads recovering (lifecycle closed: true) 3203ms
+ ✓ apps/server/test/bridge-replay.test.ts > acknowledges completed-start duplicates and keeps other threads recovering (lifecycle closed: false) 2905ms
+ ✓ apps/server/test/bridge-replay.test.ts > replays an older Alice/Bob journal in its global computer sequence 3011ms
+ ✓ apps/server/test/bridge-replay.test.ts > surfaces a permanent report rejection and stops automatic reconnect attempts 3286ms
+ ✓ apps/server/test/bridge-replay.test.ts > wakes another conversation without rereading the archive of an already closed turn 4430ms
+ Test Files  6 passed (6)
+      Tests  13 passed | 124 skipped (137)
+   Start at  11:11:22
+   Duration  217.73s (tests 87%, import 10%, transform 3%)

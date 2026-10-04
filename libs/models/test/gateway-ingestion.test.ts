@@ -1,4 +1,5 @@
-import { EventEmitter } from 'node:events';
+import { EventEmitter, once } from 'node:events';
+import { createServer } from 'node:net';
 import { PassThrough } from 'node:stream';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,6 +13,10 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 it('drains observations emitted after process exit before completing gateway shutdown', async () => {
   const directory = await mkdtemp(`${tmpdir()}/gateway-drain-`);
+  const traffic = createServer(socket => socket.end());
+  traffic.listen(0, '127.0.0.1'); await once(traffic, 'listening');
+  const address = traffic.address();
+  if (!address || typeof address === 'string') throw new Error('Missing listener');
   const ids = ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222'];
   const line = (id: string) => `http.status=403 decisionRequestId="${id}"\n`;
   const child = Object.assign(new EventEmitter(), {
@@ -31,11 +36,14 @@ it('drains observations emitted after process exit before completing gateway shu
     await writeFile(`${directory}/key`, 'fixture-only');
     const gateway = await startGateway({ binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
       configFile: `${directory}/config.json`, usageFile: `${directory}/usage.jsonl`, keyFile: `${directory}/key`,
-      port: 12345, readinessPort: 12346, decisionUrl: 'http://127.0.0.1:12347', issuer: 'https://fixture.test/' });
+      port: address.port, readinessPort: 12346, decisionUrl: 'http://127.0.0.1:12347', issuer: 'https://fixture.test/' });
     child.stdout.write(line(ids[0]!));
     await vi.waitFor(async () => { expect(await readFile(`${directory}/usage.jsonl`, 'utf8')).toContain(ids[0]); });
     await gateway.stop();
     const saved = (await readFile(`${directory}/usage.jsonl`, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown);
     expect(saved).toEqual(ids.map(id => ({ id, outcome: 'error', reason: 'dispatch_denied' })));
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await new Promise<void>(resolve => traffic.close(() => resolve()));
+    await rm(directory, { recursive: true, force: true });
+  }
 });

@@ -1,0 +1,47 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false
+❯ Building...
+✔ Building...
+Initial chunk files                   | Names                              |  Raw size
+chunk-7IATIRNA.js                     | -                                  | 176.09 kB |
+spec-app-app.js                       | spec-app-app                       | 141.63 kB |
+chunk-O7ZJE2Z6.js                     | -                                  |  34.13 kB |
+chunk-42A3W4XE.js                     | -                                  |  26.58 kB |
+chunk-KMY4BDUD.js                     | -                                  |  24.04 kB |
+chunk-5CO6DGGJ.js                     | -                                  |  23.46 kB |
+chunk-P5VPM4BS.js                     | -                                  |  22.09 kB |
+chunk-BVVBV34C.js                     | -                                  |  17.51 kB |
+chunk-OQIIL2RU.js                     | -                                  |  14.21 kB |
+chunk-UTDYAGHI.js                     | -                                  |  13.44 kB |
+styles.css                            | styles                             |  13.25 kB |
+spec-app-chat-workspace.js            | spec-app-chat-workspace            |  11.31 kB |
+spec-app-core-websocket.service.js    | spec-app-core-websocket.service    |   8.30 kB |
+chunk-RIRRWDMO.js                     | -                                  |   6.54 kB |
+chunk-TNQ3D23B.js                     | -                                  |   6.07 kB |
+chunk-RSTWSNOR.js                     | -                                  |   4.75 kB |
+spec-app-sign-in-sign-in.js           | spec-app-sign-in-sign-in           |   3.91 kB |
+spec-app-audit-audit.js               | spec-app-audit-audit               |   3.76 kB |
+spec-app-shared-state-shared-state.js | spec-app-shared-state-shared-state |   3.42 kB |
+spec-app-chat-approvals.js            | spec-app-chat-approvals            |   3.42 kB |
+spec-app-tool-policy-tool-policy.js   | spec-app-tool-policy-tool-policy   |   2.76 kB |
+spec-app-chat-composer.js             | spec-app-chat-composer             |   2.63 kB |
+spec-app-live-view-live-view.js       | spec-app-live-view-live-view       |   2.50 kB |
+spec-app-models-models.js             | spec-app-models-models             |   2.22 kB |
+init-testbed.js                       | init-testbed                       |   1.21 kB |
+vitest-mock-patch.js                  | vitest-mock-patch                  | 974 bytes |
+
+                                      | Initial total                      | 570.19 kB
+
+Lazy chunk files                      | Names                              |  Raw size
+chunk-7ONZXKUC.js                     | viewer                             | 202 bytes |
+
+Application bundle generation complete. [23.959 seconds] - 2026-10-04T11:15:56.886Z
+
+
+ RUN  v4.1.11 /home/jente/dev/wt/p3-4-publish/apps/web
+
+
+ Test Files  11 passed (11)
+      Tests  60 passed (60)
+   Start at  11:15:57
+   Duration  13.76s (transform 3.70s, setup 13.60s, import 8.73s, tests 18.37s, environment 52.15s)
