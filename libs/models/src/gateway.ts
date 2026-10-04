@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
+import { connect } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { envelope, history, type BudgetActor } from './actor.ts';
@@ -116,16 +117,21 @@ export async function startGateway(options: { binary: string; configFile: string
       .catch(() => { failed = true; child.kill('SIGTERM'); });
   });
   child.stderr.resume();
-  const exited = once(child, 'exit');
+  // Exit can precede the final stdout records; close waits for the pipes to drain.
+  const closed = once(child, 'close');
   const stop = async (signal: NodeJS.Signals = 'SIGTERM') => {
     if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-    await exited; await writes; lines.close();
+    await closed; await writes; lines.close();
   };
   try {
     for (let i = 0; i < 100; i++) {
       if (child.exitCode !== null || child.signalCode !== null || failed) throw new Error('Gateway stopped');
       try {
         if ((await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok) {
+          // Readiness can precede the request listener. A TCP probe creates no request audit.
+          const probe = connect(options.port, '127.0.0.1');
+          probe.setTimeout(1000, () => probe.destroy(new Error('Gateway listener timed out')));
+          await once(probe, 'connect').finally(() => probe.destroy());
           return { stop, healthy: () => child.exitCode === null && child.signalCode === null && !failed };
         }
       } catch { /* Listener is still starting. */ }

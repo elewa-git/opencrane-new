@@ -72,7 +72,8 @@ it('clearly refuses a request too large for any context tier before reservation 
 it('admits an authorised call after unrelated audit and chat history grows', async () => {
   const f = await fixture();
   try {
-    for (let batch = 0; batch < 50; batch++) await Promise.all(Array.from({ length: 100 }, async (_, index) => {
+    const before = await f.nats.store.head();
+    for (let batch = 0; batch < 50; batch++) await f.nats.seed(Array.from({ length: 100 }, (_, index) => {
       const requestId = randomUUID();
       const event = index % 2 ? envelope('test', `conversation-${requestId}`, 'agent.message_delta', {
         conversationId: requestId, turnId: 'turn-other', messageId: 'message-other',
@@ -80,8 +81,9 @@ it('admits an authorised call after unrelated audit and chat history grows', asy
       }) : envelope('test', `decision-${requestId}`, 'decision.recorded', {
         requestId, route: 'model', outcome: 'deny', reason: 'approval_required', contextDigest: '0'.repeat(64),
       });
-      expect((await f.nats.store.append({ event, expectedSequence: 0 })).status).toBe('appended');
+      return event;
     }));
+    expect(await f.nats.store.head()).toBe(before + 5000);
     expect((await f.call()).status).toBe(200);
     expect(f.received()).toBe(1);
   } finally { await f.close(); }
@@ -309,11 +311,14 @@ it('refuses a grant revocation arriving while the command report is read', async
   });
   const duringRead = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
     yield* readStream(...args);
-    if (args[0] === 'conversation-*') await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+    if (args[0] === 'conversation-conversation' && (args[1] ?? 0) > 1) await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
       resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
     });
   });
-  try { expect((await f.call()).status).toBe(503); expect(f.received()).toBe(0); }
+  try {
+    expect((await f.call()).status).toBe(503);
+    expect(f.received(), f.received() === 0 ? undefined : JSON.stringify(f.providerRequests(), null, 2)).toBe(0);
+  }
   finally { race.mockRestore(); duringRead.mockRestore(); await f.close(); }
 }, 40_000);
 
@@ -1110,6 +1115,8 @@ it('keeps the trusted decision id on authenticated refusals through gateway inge
       expect(requestId).not.toBe(forged);
     }
     expect(new Set(requestIds).size).toBe(2);
+    await until(async () => existsSync(f.options.usageFile) &&
+      (await readFile(f.options.usageFile, 'utf8')).split('\n').filter(line => line.includes('"reason":"dispatch_denied"')).length === 2);
     await f.restart();
     const evidence = z.array(z.object({ id: z.uuid(), outcome: z.literal('error'), reason: z.literal('dispatch_denied') }))
       .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown));

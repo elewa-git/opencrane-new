@@ -86,6 +86,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
+  const providerRequests: { time: string; path: string; method: string; correlationHeaders: Record<string, string | string[] | undefined>; bodyDigest: string }[] = [];
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
     const requestId = String(req.headers['x-request-id']);
@@ -94,7 +95,11 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     }));
     received++; providerHeaders = Object.keys(req.headers);
     providerAuthHash = createHash('sha256').update(req.headers.authorization ?? '').digest('hex');
-    req.on('data', (chunk: Buffer) => { upstreamBody += chunk.toString('utf8'); });
+    const body: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => { upstreamBody += chunk.toString('utf8'); body.push(chunk); });
+    req.on('end', () => providerRequests.push({ time: new Date().toISOString(), path: req.url ?? '', method: req.method ?? '',
+      correlationHeaders: Object.fromEntries(Object.entries(req.headers).filter(([name]) => /(?:request-id|correlation|traceparent|audit-id)/i.test(name))),
+      bodyDigest: createHash('sha256').update(Buffer.concat(body)).digest('hex') }));
     req.resume();
     if (req.url?.startsWith('/mcp/')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"jsonrpc":"2.0","id":1,"result":{"content":[]}}'); return; }
     if (rejection === -1) { req.socket.destroy(); return; }
@@ -125,14 +130,18 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const abort = new AbortController(); const dispatching = dispatch(nats.connection, runtime, abort.signal);
   void dispatching.catch(() => undefined);
   if (grants === 'reactions') await waitForModelGrants(auth, 'alice', 'assistant');
+  const stopDispatch = async () => {
+    abort.abort();
+    await dispatching.catch(error => { if (!(error instanceof Error && error.name === 'AbortError')) throw error; });
+  };
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
-  return { keys, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+  return { keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
     reject: (status: number) => { rejection = status; },
-    admitted, received: () => received, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
+    admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}) {
       const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
       return { status: response.status, text: await response.text() };
@@ -159,7 +168,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     async restart(signal: NodeJS.Signals = 'SIGTERM') { await gateway.stop(signal); gateway = await startGateway(options); },
     async close() {
       await gateway.stop(); await decision.close(); stub.closeAllConnections(); await new Promise<void>(resolve => stub.close(() => resolve()));
-      abort.abort(); await dispatching.catch(error => { if (!(error instanceof Error && error.name === 'AbortError')) throw error; });
+      await stopDispatch();
       await runtime.stop(); await Promise.all(observations); await nats.close(); await dbs.close(); await rm(directory, { recursive: true, force: true });
     },
   };

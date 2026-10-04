@@ -20,6 +20,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(req.params);
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       const auth = memberAuthorisation(options.binding);
+      if (memberId) fresh.include(`member-${memberId}`, `conversation-${conversationId}`);
       if (!memberId || !(await auth.check(memberId, 'member')).allowed || !(await auth.conversation(memberId, conversationId, 'read')).allowed) return reply.code(403).send({ status: 'refused' });
       if (!await accessApplied(options, memberId, conversationId)) return reply.code(403).send({ status: 'refused' });
       const csrf = createHmac('sha256', config.cookieSecret).update(JSON.stringify(['approval', req.headers.cookie, conversationId])).digest('hex');
@@ -36,14 +37,15 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
 }
 
 async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions, session: SessionData,
-  memberId: string, conversationId: string, fresh: () => Promise<void>) {
+  memberId: string, conversationId: string, fresh: Awaited<ReturnType<typeof authorityFence>>) {
       const input = z.object({ approvalId: z.string().regex(/^[a-f0-9]{64}$/u), decision: z.enum(['approved', 'rejected']) }).strict().parse(req.body);
       const { request } = await readApproval(options.store, options.silo, input.approvalId);
       if (request.conversationId !== conversationId || request.requesterId !== memberId) return reply.code(403).send({ status: 'refused' });
       const text = options.keys.decrypt(options.silo, conversationId, request);
       approvalReviewSchema.parse(JSON.parse(text));
       if (createHash('sha256').update(text).digest('hex') !== request.reviewDigest) throw new Error('Review unavailable');
-      await currentAuthority(options.store, options.binding, memberId, request.assistantId, conversationId, 'mcp_server', request.serverId);
+      fresh.include(`computer-${request.assistantId}`);
+      await currentAuthority(options.store, options.binding, memberId, request.assistantId, conversationId, 'mcp_server', request.serverId, fresh);
       const recent = session.stepUpApproval === input.approvalId && session.authTime > 0 && session.authTime <= Date.now() / 1000 && Date.now() / 1000 - session.authTime <= 300;
       const result = await decideApproval(options.store, options.silo, input.approvalId, memberId, input.decision, recent, fresh);
       return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : result.status === 'step_up_required' ? 428 : 409).send({ status: result.status });

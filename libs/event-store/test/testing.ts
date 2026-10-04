@@ -5,7 +5,9 @@ import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
 import type { NatsConnection } from "@nats-io/transport-node";
 import { certificates } from "./certificates.ts";
-import { getEventDefinition } from "@opencrane/events";
+import { jetstream } from "@nats-io/jetstream";
+import { wireSubject } from "../src/contract.ts";
+import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
 import { createEventStore, connectNats } from "../src/index.ts";
 
 /** Keep the public port bound while a child service stops and starts behind it. */
@@ -133,6 +135,15 @@ export async function natsFixture({ provision = true } = {}) {
     dispatcherConnection,
     env,
     client,
+    /** Publish known-valid fixture envelopes on new subjects, without command retry lookups. */
+    async seed(events: EventEnvelope[]) {
+      const js = jetstream(connection);
+      await Promise.all(events.map(async event => {
+        await js.publish(wireSubject(event.subject), JSON.stringify(event), {
+          msgID: event.id, expect: { streamName: "EVENTS", lastSubjectSequence: 0 },
+        });
+      }));
+    },
     async stop() {
       if (
         running.process.exitCode === null &&
