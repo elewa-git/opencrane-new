@@ -304,3 +304,27 @@ it('refuses review reads after conversation access is removed even while OpenFGA
     expect(f.received()).toBe(0);
   } finally { await f.close(); }
 }, 40_000);
+
+it('decides an approval using only its bound authority streams', async () => {
+  const f = await approvalFixture();
+  try {
+    await f.call();
+    const session = f.headers(), { cards, csrf } = await f.read(session);
+    const approvalId = cards[0]!.approvalId;
+    const read = vi.spyOn(f.nats.store, 'readStream');
+    const head = vi.spyOn(f.nats.store, 'head');
+    const subscribe = vi.spyOn(f.nats.store, 'subscribe');
+    try {
+      const response = await f.app.inject({ method: 'POST', url: '/api/conversations/conversation/approvals',
+        headers: { ...session, 'x-csrf-token': csrf }, payload: { approvalId, decision: 'approved' } });
+      expect(response.statusCode).toBe(200);
+      const relevant = new Set(['member-alice', 'assistant-assistant', 'computer-assistant', 'conversation-conversation',
+        'mcp-fixture', grantStream('mcp_server', 'fixture'), `approval-${approvalId}`]);
+      expect(read.mock.calls.map(([subject]) => subject).filter(subject => !relevant.has(subject))).toEqual([]);
+      expect(head.mock.calls.flatMap(([subject]) => subject === undefined || relevant.has(subject) ? [] : [subject])).toEqual([]);
+      expect(subscribe).not.toHaveBeenCalled();
+    } finally { read.mockRestore(); head.mockRestore(); subscribe.mockRestore(); }
+    expect((await f.call()).status).toBe(200);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);

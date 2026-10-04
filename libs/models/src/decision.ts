@@ -65,14 +65,14 @@ async function readBody(req: IncomingMessage) {
   losslessJson(text);
   return text;
 }
-async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string): Promise<ModelCall> {
+async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string, fresh: Awaited<ReturnType<typeof authorityFence>>): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(t.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
   const [assistants, conversation, turn, authority] = await Promise.all([
     history(actor.store, `assistant-${c.assistant}`, actor.silo),
     history(actor.store, `conversation-${t.conversation}`, actor.silo),
     activeTurn(actor, c, t),
-    currentAuthority(actor.store, binding, t.requester, c.assistant, t.conversation, resourceType, resourceId),
+    currentAuthority(actor.store, binding, t.requester, c.assistant, t.conversation, resourceType, resourceId, fresh),
   ]);
   const assistant = assistants.find(r => r.event.type === 'assistant.created');
   if (!assistant) throw new Error('Assistant refused');
@@ -81,7 +81,10 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
       conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Conversation refused');
   const payingGroupId = data(turn.event)['payingGroupId'];
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
-  if (data(assistant.event)['kind'] === 'team') await (await payingGroupAuthority(actor.store, actor.silo, t.requester, payingGroupId, binding))();
+  if (data(assistant.event)['kind'] === 'team') {
+    fresh.include(`team-${payingGroupId}`);
+    await (await payingGroupAuthority(actor.store, actor.silo, t.requester, payingGroupId, binding))();
+  }
   return { model: t.model, payingGroupId, priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
     conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
     contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed, authority, payingGroupId])).digest('hex') };
@@ -121,6 +124,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       const fresh = await authorityFence(actor.store, started);
       const checked = await credentials.check(req.headers);
       const c = computerSchema.parse(checked.computer), t = turnSchema.parse(checked.turn);
+      fresh.include(`member-${t.requester}`, `assistant-${c.assistant}`, `computer-${c.assistant}`, `conversation-${t.conversation}`);
       auditedContext = { requesterId: t.requester, assistantId: c.assistant };
       correlation = { conversationId: t.conversation, turnId: t.turn };
       contextDigest = createHash('sha256').update(JSON.stringify([c, t])).digest('hex');
@@ -129,8 +133,9 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       if (route === 'mcp') {
         const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
         if (!match) throw new Error('Unknown MCP route');
+        fresh.include(`mcp-${match[1]!}`);
         const policy = await mcpPolicy(actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers);
-        const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!);
+        const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!, fresh);
         contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
         // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.
         await fresh();
@@ -148,7 +153,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
       const body = parsed.data;
       if (body.model !== t.model) throw new Error('Model does not match turn grant');
       const amountCents = requestReservationCents(body);
-      const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model);
+      const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model, fresh);
       contextDigest = call.contextDigest;
       const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
       await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {

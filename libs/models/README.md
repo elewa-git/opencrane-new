@@ -204,20 +204,34 @@ Model and MCP admission share `currentAuthority`: current member/role, team
 membership, assistant activity, conversation, explicit requester and assistant
 resource grants, lifecycle tokens and delegation. OpenFGA is queried at higher
 consistency on every call. Receipt reads run in groups of at most 16; every relevant
-event receipt must exist before a projection
-can authorise; lag denies. A two-second freshness budget starts when the decision
-request arrives. Cheap authority-category head reads fence the snapshot before
-reservation (inside the budget queue) and again after the audit, before admission.
-Any authority change or expired budget denies. Command, file, reasoning and
-message output reports do not change authority; when those advance the conversation
-head, admission checks all category heads again after reading them. Stop, turn
+event receipt must exist before a projection can authorise; lag denies. A two-second
+freshness budget starts when the decision request arrives. One global head (metadata,
+not a log scan) fixes the snapshot. Authority reads use exact member, assistant,
+conversation and resource-grant subjects, starting at position 1 and stopping at
+that head. Team subjects come only from the assistant owner and current team grants
+for that resource. The turn lifecycle lives on the exact computer and conversation
+subjects; MCP policy lives on the exact server subject.
+
+`authorityFence` returns a freshness check with `include(...subjects)` and `head`.
+Callers add exact subjects as verified credentials, policy and paying-group bindings
+reveal them. Subjects discovered later still use the original snapshot head.
+Before reservation (inside the budget queue), approval use and final admission,
+any authority change after the snapshot or an expired two-second budget denies.
+Command, file, reasoning and message output reports can advance the exact
+conversation head; the fence then rechecks every watched subject. Stop, turn
 lifecycle, participant and conversation changes still refuse admission.
-Category heads conservatively refuse
-unrelated IAM changes too; budget and audit traffic do not invalidate them. Memory scopes are empty. Personal work retains the
-installation's paying group; team turns require an explicit paying-group binding; there is no fabricated credential/profile.
-Independent assistant, conversation, active-turn and IAM reads run together under
-that fence. Entity/team reads and budget appends still have linear history cost;
-use a fenced IAM projection before high-volume operation. Egress can reuse this resource check.
+Independent assistant, conversation, active-turn and IAM reads run together.
+Unrelated IAM, budget and audit traffic do not invalidate authority. No permission
+or event-history cache survives a decision. The read cost follows the selected
+subjects' histories, not the whole silo; long individual histories may still need
+a fenced projection. Approval card listing remains a separate replay query.
+
+Memory scopes are empty. Personal work retains the installation's paying group;
+team turns require an explicit paying-group binding; there is no fabricated
+credential/profile. Destination checks can reuse `currentAuthority` and pass the
+same fence to include their own policy subjects. This branch does not yet contain
+the P3-20 egress route. Counting, race and 100,000-event benchmark results are
+recorded in the [authority-read evidence](../../docs/process/authority-reads.md).
 Each allow/ask/deny appends `decision.recorded` before forwarding; append failure
 denies. A decision is admission, not proof of an observed effect.
 

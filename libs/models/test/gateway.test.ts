@@ -309,7 +309,7 @@ it('refuses a grant revocation arriving while the command report is read', async
   });
   const duringRead = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
     yield* readStream(...args);
-    if (args[0] === 'conversation-*') await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+    if (args[0] === 'conversation-conversation' && (args[1] ?? 0) > 1) await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
       resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
     });
   });
@@ -1110,6 +1110,8 @@ it('keeps the trusted decision id on authenticated refusals through gateway inge
       expect(requestId).not.toBe(forged);
     }
     expect(new Set(requestIds).size).toBe(2);
+    await until(async () => existsSync(f.options.usageFile) &&
+      (await readFile(f.options.usageFile, 'utf8')).split('\n').filter(line => line.includes('"reason":"dispatch_denied"')).length === 2);
     await f.restart();
     const evidence = z.array(z.object({ id: z.uuid(), outcome: z.literal('error'), reason: z.literal('dispatch_denied') }))
       .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown));

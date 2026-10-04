@@ -1,26 +1,23 @@
 import type { EventEnvelope } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
 
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
-  conversation: string, resourceType: string, resourceId: string) {
+  conversation: string, resourceType: string, resourceId: string,
+  fresh?: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh ??= await authorityFence(store, performance.now());
   const auth = memberAuthorisation(binding);
-  const head = await store.head(), facts = [], receipts: string[] = [];
+  const facts = [], receipts: string[] = [];
   let active = true;
-  // IAM handlers enforce these entity subjects. Keep unrelated traffic out of the freshness window.
-  const subjects = [`member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, 'team-*', grantStream(resourceType, resourceId)];
-  const histories = await Promise.all(subjects.map(async subject => {
-    const rows = [];
-    for await (const row of store.readStream(subject)) {
-      if (row.sequence > head) break;
-      rows.push(row);
-    }
-    return rows;
-  }));
-  // ponytail: replay entity/team histories; use a fenced IAM projection if those grow too large.
+  const subjects = [`member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, grantStream(resourceType, resourceId)];
+  fresh.include(...subjects, ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
+  const histories = await Promise.all(subjects.map(subject => readAt(store, subject, fresh.head)));
+  const teams = authorityTeams(histories.flat(), binding.silo);
+  fresh.include(...teams);
+  histories.push(...await Promise.all([...teams].map(subject => readAt(store, subject, fresh.head))));
   for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
     const e = row.event, d = data(e);
     if (e.silo !== binding.silo) continue;
@@ -43,7 +40,23 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
     auth.conversation(requester, conversation, 'post'), auth.use('person', requester, resourceType, resourceId),
     auth.use('assistant', assistant, resourceType, resourceId)]);
   if (permissions.some(p => !p.allowed)) throw new Error('Current authority refused');
+  await fresh();
   return createHash('sha256').update(JSON.stringify({ facts, permissions, memoryScopes: [], credential: null })).digest('hex');
+}
+
+function authorityTeams(rows: StoredEvent[], silo: string) {
+  // Only the assistant's owner and current resource grantees can supply team authority.
+  const teams = new Set<string>();
+  const grants = new Map<string, Record<string, unknown>>();
+  for (const { event } of rows) {
+    if (event.silo !== silo) continue;
+    const d = data(event);
+    if (event.type === 'assistant.created' && d['kind'] === 'team') teams.add(`team-${String(d['ownerId'])}`);
+    if (event.type === 'grant.given') grants.set(String(d['granteeId']), d);
+    if (event.type === 'grant.revoked') grants.delete(String(d['granteeId']));
+  }
+  for (const d of grants.values()) if (d['granteeKind'] === 'team') teams.add(`team-${String(d['granteeId'])}`);
+  return teams;
 }
 
 function relevant(e: EventEnvelope, requester: string, assistant: string, conversation: string, resourceType: string, resourceId: string) {
@@ -55,28 +68,50 @@ function relevant(e: EventEnvelope, requester: string, assistant: string, conver
       (e.type.startsWith('grant.') && d['resourceType'] === resourceType && d['resourceId'] === resourceId);
 }
 
-/** Fence every authority source, including changes while credentials/policy were being read. */
-export async function authorityFence(store: EventStore, started: number,
-  subjects = ['member-*', 'team-*', 'assistant-*', 'conversation-*', 'computer-*', 'grant-*', 'mcp-*']) {
-  // ponytail: model decisions use category heads; narrow further if unrelated IAM changes cause contention.
-  const heads = await Promise.all(subjects.map(subject => store.head(subject)));
-  return async () => {
-    while (true) {
-      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
-      const current = await Promise.all(subjects.map(subject => store.head(subject)));
-      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
-      if (current.every((head, index) => head === heads[index])) return;
-      if (current.some((head, index) => index !== 3 && head !== heads[index]) || current[3]! < heads[3]!) {
-        throw new Error('Authority changed');
-      }
-      // Output reports can arrive beside their model continuation. They grant no authority.
-      for await (const row of store.readStream('conversation-*', heads[3]! + 1, started + 2000)) {
-        if (row.sequence > current[3]!) break;
-        if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
-          'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) throw new Error('Authority changed');
-      }
-      heads[3] = current[3]!;
-      // Check every category again: a revocation may have arrived during that read.
+async function readAt(store: EventStore, subject: string, head: number) {
+  const rows: StoredEvent[] = [];
+  for await (const row of store.readStream(subject, 1)) {
+    if (row.sequence > head) break;
+    rows.push(row);
+  }
+  return rows;
+}
+
+/** Add exact subjects as they are discovered; all are fenced against the same starting head. */
+export async function authorityFence(store: EventStore, started: number, subjects: string[] = []) {
+  const head = await store.head();
+  const watched = new Set<string>();
+  const include = (...subjects: string[]) => {
+    for (const subject of subjects) {
+      wireSubject(subject); // Reject wildcard or malformed subjects before any authority read.
+      watched.add(subject);
     }
   };
+  include(...subjects);
+  const outputHeads = new Map<string, number>();
+  const fresh = async () => {
+    while (true) {
+      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
+      const current = await Promise.all([...watched].map(async subject => ({ subject, sequence: await store.head(subject) })));
+      const changed = current.filter(({ subject, sequence }) => sequence > (outputHeads.get(subject) ?? head));
+      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
+      if (!changed.length) return;
+      for (const { subject, sequence } of changed) {
+        await checkOutputReports(store, subject, (outputHeads.get(subject) ?? head) + 1, sequence, started + 2000);
+        outputHeads.set(subject, sequence);
+      }
+      // Recheck every exact subject: revocation may have arrived while reading reports.
+    }
+  };
+  return Object.assign(fresh, { include, head });
+}
+
+async function checkOutputReports(store: EventStore, subject: string, from: number, to: number, deadline: number) {
+  if (!subject.startsWith('conversation-')) throw new Error('Authority changed');
+  // Output reports grant no authority and may arrive beside their model continuation.
+  for await (const row of store.readStream(subject, from, deadline)) {
+    if (row.sequence > to) break;
+    if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
+      'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) throw new Error('Authority changed');
+  }
 }

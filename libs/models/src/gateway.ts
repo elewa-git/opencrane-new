@@ -116,10 +116,11 @@ export async function startGateway(options: { binary: string; configFile: string
       .catch(() => { failed = true; child.kill('SIGTERM'); });
   });
   child.stderr.resume();
-  const exited = once(child, 'exit');
+  // Exit can precede the final stdout records; close waits for the pipes to drain.
+  const closed = once(child, 'close');
   const stop = async (signal: NodeJS.Signals = 'SIGTERM') => {
     if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-    await exited; await writes; lines.close();
+    await closed; await writes; lines.close();
   };
   try {
     for (let i = 0; i < 100; i++) {
