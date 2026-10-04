@@ -241,3 +241,101 @@ npm notice run vitest run --maxWorkers=2
 
     Isolate  93 workers spawned · ~244ms startup each (spawn + environment, per file)
              at least ~11.10s faster with isolate: false — reuses workers across files instead of one per file
+
+Rebase qualification on 089fa31 — 4 October 2026
+All commands use PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres and nice -n 10.
+lint: PASS (8 size warnings); typecheck: PASS; check:events: PASS (86 types).
+Initial lint: FAIL on MD012 and MD018 in the new rebase note; both fixed.
+
+Initial integration batch — FAIL
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test apps/server/test/live-view-delays.test.ts apps/server/test/live-view-k3d.test.ts apps/server/test/live-view-proxy.test.ts apps/server/test/live-view-timings.test.ts apps/server/test/live-view-unavailable.test.ts apps/server/test/live-view.test.ts apps/server/test/approvals.test.ts apps/server/test/bridge-channel.test.ts libs/models/test/authority-standalone.test.ts libs/models/test/authority-volume.test.ts libs/models/test/authority.test.ts libs/models/test/approvals.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"model","samples":30,"p50Ms":193.5589230000005,"p95Ms":303.93082100000083,"authorityEvents":15,"authorityStreamReads":8}
+
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"mcp","samples":30,"p50Ms":115.56566899999962,"p95Ms":184.57102599999962,"authorityEvents":23,"authorityStreamReads":10}
+
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":0,"route":"destinationAuthority","samples":30,"p50Ms":39.91601599999922,"p95Ms":55.41372499999852,"authorityEvents":6,"authorityStreamReads":4}
+
+stdout | libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+{"seeded":100000,"route":"model","samples":30,"p50Ms":136.69442599999456,"p95Ms":192.52206399999704,"authorityEvents":15,"authorityStreamReads":8}
+
+ ❯ libs/models/test/authority-volume.test.ts (1 test | 1 failed) 41804ms
+   × keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events 40355ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/authority-volume.test.ts > keeps decisions below the egress and ext_authz bounds with 100,000 unrelated events
+AssertionError: {"requestId":"e458aba6-a527-4f69-aa0e-7f3743b38d2e","error":"Request refused or decision service unavailable"}: expected 403 to be 200 // Object.is equality
+
+- Expected
++ Received
+
+- 200
++ 403
+
+ ❯ mcp libs/models/test/authority-volume.test.ts:70:60
+     68|               body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 't…
+     69|                 _meta: { 'io.modelcontextprotocol/protocol-version': '…
+     70|             expect(response.status, await response.text()).toBe(200);
+       |                                                            ^
+     71|           },
+     72|           destinationAuthority: () => currentAuthority(f.nats.store, f…
+ ❯ libs/models/test/authority-volume.test.ts:78:48
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 13 passed | 1 skipped (15)
+      Tests  1 failed | 134 passed | 3 skipped (138)
+   Start at  21:24:55
+   Duration  655.24s (tests 96%, import 3%, transform 1%)
+
+
+Authority-volume isolated rerun — PASS
+npm notice run npx
+npm notice run 'vitest' run libs/models/test/authority-volume.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed (1)
+   Start at  21:36:55
+   Duration  52.97s (tests 94%, transform 3%, import 2%)
+
+
+Final integration batch — PASS
+npm notice run npx
+npm notice run 'vitest' run libs/event-store/test apps/server/test/live-view-delays.test.ts apps/server/test/live-view-k3d.test.ts apps/server/test/live-view-proxy.test.ts apps/server/test/live-view-timings.test.ts apps/server/test/live-view-unavailable.test.ts apps/server/test/live-view.test.ts apps/server/test/approvals.test.ts apps/server/test/bridge-channel.test.ts libs/models/test/authority-standalone.test.ts libs/models/test/authority-volume.test.ts libs/models/test/authority.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+
+
+ Test Files  14 passed | 1 skipped (15)
+      Tests  135 passed | 3 skipped (138)
+   Start at  21:38:17
+   Duration  581.57s (tests 96%, import 3%, transform 1%)
+
+
+Follow-up rebase onto b5e7d0e — PASS, no conflicts
+git diff --exit-code af2aa32 HEAD -- apps/server/src libs apps/server/test/live-view*.test.ts apps/server/test/approvals.test.ts apps/server/test/bridge-channel.test.ts: PASS, tested files unchanged.
+git merge-base --is-ancestor origin/main HEAD: PASS.
+Union of main and 0bf54c2 entries in CHANGELOG.md, ledger.md and benchmarks.jsonl: PASS.
+lint: PASS; typecheck: PASS; check:events: PASS (86 types).
+npm notice run npx
+npm notice run 'vitest' run apps/server/test/live-view-proxy.test.ts --maxWorkers=1
+
+ RUN  v5.0.3 /home/jente/dev/wt/i136-read-retry
+
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  21:49:30
+   Duration  53.71s (tests 90%, transform 6%, import 3%)
+

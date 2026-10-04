@@ -279,20 +279,29 @@ it.each(mixedFailures)(
   'closes a viewer with $failure and an unavailable read when $delayedRead replies last',
   refusesMixedAuthorityRead, 30_000);
 
-async function keepsLeaseAfterLateFence() {
-  const fixture = await viewFixture(openDesktop);
+async function keepsLeaseAfterLateFence(millisecondsAfterDeadline: number) {
+  const logs: string[] = [];
+  function write(line: string) {
+    logs.push(line);
+  }
+  vi.stubEnv('LOG_LEVEL', 'info');
+  const destination = { write };
+  const fixture = await viewFixture(openDesktop, undefined, destination);
   const readHead = fixture.nats.store.head.bind(fixture.nats.store);
   const realNow = performance.now.bind(performance);
   const crossed = Promise.withResolvers<void>();
-  let offset = 0;
+  let handledAt: number | undefined;
   let late = false;
   let socket: WebSocket | undefined;
 
   function clockNow() {
-    return realNow() + offset;
+    if (handledAt !== undefined) {
+      return handledAt;
+    }
+    return realNow();
   }
   function resumeClock() {
-    offset = 0;
+    handledAt = undefined;
     crossed.resolve();
   }
   async function replyAfterDeadline(subject?: string, deadline?: number) {
@@ -303,8 +312,8 @@ async function keepsLeaseAfterLateFence() {
     // Let the sibling heads settle before delivering the final fence reply.
     await delay(20);
     const head = await readHead(subject, deadline);
-    // Model an I/O reply handled after 1,200 ms, before the overdue timer runs.
-    offset = deadline - realNow() + 1;
+    // Model an I/O reply handled at or after 1,200 ms, before the overdue timer runs.
+    handledAt = deadline + millisecondsAfterDeadline;
     setImmediate(resumeClock);
     return head;
   }
@@ -316,12 +325,26 @@ async function keepsLeaseAfterLateFence() {
     await crossed.promise;
     await delay(500);
     expect(socket.readyState).toBe(WebSocket.OPEN);
+    const deadlineTiming = z.object({
+      operation: z.literal('view.timing'),
+      stage: z.literal('lease_check'),
+      phase: z.literal('renewal'),
+      outcome: z.literal('unavailable'),
+      boundary: z.literal('deadline'),
+    });
+    function isDeadlineTiming(line: string) {
+      const record: unknown = JSON.parse(line);
+      return deadlineTiming.safeParse(record).success;
+    }
+    expect(logs.some(isDeadlineTiming)).toBe(true);
   } finally {
     socket?.terminate();
     vi.restoreAllMocks();
     await fixture.close();
+    vi.unstubAllEnvs();
   }
 }
 
-it('keeps the viewer connected when a renewal fence crosses its 1,200 ms deadline',
+it.each([0, 1])(
+  'keeps the viewer connected when a renewal fence is handled %i ms after its 1,200 ms deadline',
   keepsLeaseAfterLateFence, 30_000);

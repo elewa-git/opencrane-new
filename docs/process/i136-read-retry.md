@@ -163,3 +163,54 @@ live-view (all three files), approval, bridge-channel and authority tests passed
 in this run. The 15 opt-in tests and fresh-install qualification remain **NOT RUN**.
 The [retained summaries](i136-read-retry-checks.txt) preserve the failed batches,
 passing reruns and final green root run.
+
+## Rebase onto main — 4 October 2026
+
+Rebased both commits ending at `0bf54c2` onto `089fa31`. This includes
+PRs #139, #142, #140 and #145. Git completed the rebase and restored
+`work/i136-read-retry`.
+
+- `apps/server/src/chat/approvals.ts`: kept #142's CSRF and projection comments,
+  step-up helper and named 300-second constant unchanged. Kept #136's shared
+  authority deadline for history reads and named options objects for card and
+  approval reads.
+- `apps/server/src/computers/view-access.ts`: kept #139's `ViewCheckUnavailable`
+  boundary labels and #145's denial-first `Promise.allSettled` decision order.
+  Kept the shared `viewCheckMs = 1200` and deadline propagation through histories
+  and fences. Replies handled at or after the deadline are unavailable with the
+  `deadline` boundary; earlier store outages retain `event_store`, and earlier
+  authorisation outages retain `authorisation`. Timely denials remain denials.
+- `apps/server/src/computers/view.ts`: kept every #139 timing record and boundary
+  field. The named timeout callback uses the shared constant and reports the
+  `deadline` boundary. The 1,500 ms lease and every admission fence are unchanged.
+- `CHANGELOG.md`, `ledger.md` and `benchmarks.jsonl`: retained the union of both
+  tips' entries. Removed only the obsolete intermediate #136 changelog wording
+  that Git had retained beside its final replacement.
+
+The late-fence regression now covers both the exact deadline and one millisecond
+later, and checks that the renewal timing record reports `unavailable` at the
+`deadline` boundary. No existing assertion or timing bound was relaxed.
+
+Rebase source checks on `089fa31`: lint, typecheck and `check:events` **PASS**
+(86 event types). The final requested integration batch **PASS**: 14 files and
+135 tests passed; one file and three opt-in tests skipped. Every command used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and `nice -n 10`;
+the integration batch used `--maxWorkers=1`.
+
+The initial lint run rejected two Markdown layout issues in this note; both were
+fixed. The initial integration batch was **FAIL**: 134 passed, one failed and
+three skipped. The authority-volume test received MCP HTTP 403 instead of 200.
+It passed unchanged in isolation, then the entire unchanged batch passed.
+The [retained summaries](i136-read-retry-checks.txt) include all three test runs.
+The two `LIVE_VIEW_K3D` tests and the `APPROVAL_BROWSER` test remain **NOT RUN**.
+No full root suite or fresh-install journey was rerun for this rebase.
+
+Main advanced during qualification with #148. The follow-up rebase onto
+`b5e7d0e` completed without conflicts. A Git diff confirmed that every tested
+server source file, library file and selected server test was unchanged from the
+fully passing batch; #148 changes the frontend used by the live-view proxy test.
+The union check also passed against this newer main tip.
+
+Final checks on `b5e7d0e`: lint, typecheck and `check:events` **PASS**; both
+live-view frontend proxy cases **PASS**. These follow-up checks use the same
+PostgreSQL URL and CPU priority. The containing commit supplies the final source.
