@@ -113,6 +113,11 @@ export async function natsFixture({ provision = true } = {}) {
       "-c", `${directory}/${jetstream ? "nats" : "no-js"}.conf`,
     ], { env: { ...globalThis.process.env, ...env("server"), ...publicKeys,
       NATS_LISTEN: "127.0.0.1:-1", NATS_STORE_DIR: `${directory}/store` } });
+    const stopChildOnWorkerExit = () => {
+      if (process.exitCode === null && process.signalCode === null) process.kill("SIGKILL");
+    };
+    globalThis.process.once("exit", stopChildOnWorkerExit);
+    process.once("close", () => globalThis.process.removeListener("exit", stopChildOnWorkerExit));
     const exited = once(process, "exit");
     const ready = new Promise<void>((done, reject) => {
       let output = "";

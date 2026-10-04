@@ -21,7 +21,7 @@ export let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
 afterAll(async () => { await fga.close(); });
 async function freePort() {
-  const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const server = createServer(); server.listen(0, '::'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
 }
@@ -117,12 +117,25 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const address = stub.address(); if (!address || typeof address === 'string') throw new Error('No stub');
   const keyFile = real ? resolve(process.env['MODELS_REAL_KEY_FILE'] ?? '.keys/.openai-key') : `${directory}/stub-key`;
   if (!real) await writeFile(keyFile, 'stub-only-placeholder');
-  const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
+  let options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
     mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed', upstream: `127.0.0.1:${address.port}` }],
     ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }) };
-  let gateway = await startGateway(options);
+  let gateway: Awaited<ReturnType<typeof startGateway>>;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      gateway = await startGateway(options);
+      break;
+    } catch (error) {
+      const isAddressConflict = error instanceof Error &&
+        /address (?:already )?in use/iu.test(error.message);
+      if (!isAddressConflict || attempt >= 2) {
+        throw error;
+      }
+      options = { ...options, port: await freePort(), readinessPort: await freePort() };
+    }
+  }
   const runner = new ProjectionRunner(db, nats.store, logger); await runner.initialise(budgets);
   await provisionDispatcher(nats.connection);
   const runtime = new HandlerRuntime({ db, logger, silo: 'test', handlers: [settlementHandler(decision.url), ...(grants === 'reactions' ? [modelGrantHandler(nats.store), auth.handler] : [])], retryDelay: 1 });
@@ -157,8 +170,16 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
         '"extAuthz":{"policies":{"http":{"requestTimeout":"10s"}},');
       await writeFile(options.configFile, config);
       const child = spawn(options.binary, ['-f', options.configFile], { stdio: 'ignore' });
+      const stopChildOnWorkerExit = () => {
+        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      };
+      process.once('exit', stopChildOnWorkerExit);
       const exited = once(child, 'exit');
-      gateway = { healthy: () => child.exitCode === null, stop: async () => { child.kill(); await exited; } };
+      gateway = { healthy: () => child.exitCode === null && child.signalCode === null, stop: async () => {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+        await exited;
+        process.removeListener('exit', stopChildOnWorkerExit);
+      } };
       await until(async () => {
         try { return (await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok; }
         catch { return false; }

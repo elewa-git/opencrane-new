@@ -162,7 +162,22 @@ export async function startGateway(options: { binary: string; configFile: string
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
+  const stopChildOnWorkerExit = () => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  };
+  const removeWorkerExitHandler = () => process.removeListener('exit', stopChildOnWorkerExit);
+  process.once('exit', stopChildOnWorkerExit);
   let writes = Promise.resolve(), failed = false;
+  let errorLine = '';
+  let stderrBuffer = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => {
+    stderrBuffer += chunk;
+    const lines = stderrBuffer.split('\n');
+    stderrBuffer = lines.pop() ?? '';
+    const match = lines.find(line => /\bError:/u.test(line));
+    if (match) errorLine = match.trim();
+  });
   const lines = createInterface({ input: child.stdout });
   // Adapted from S0.1c: never persist raw gateway diagnostics, credentials or request bodies.
   lines.on('line', line => {
@@ -173,16 +188,22 @@ export async function startGateway(options: { binary: string; configFile: string
     writes = writes.then(() => appendFile(options.usageFile, `${JSON.stringify(parsed.data)}\n`, { mode: 0o600 }))
       .catch(() => { failed = true; child.kill('SIGTERM'); });
   });
-  child.stderr.resume();
+  child.stderr.on('end', () => {
+    if (!errorLine && /\bError:/u.test(stderrBuffer)) errorLine = stderrBuffer.trim();
+  });
   // Exit can precede the final stdout records; close waits for the pipes to drain.
   const closed = once(child, 'close');
   const stop = async (signal: NodeJS.Signals = 'SIGTERM') => {
     if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-    await closed; await writes; lines.close();
+    await closed; await writes; lines.close(); removeWorkerExitHandler();
   };
   try {
     for (let i = 0; i < 100; i++) {
-      if (child.exitCode !== null || child.signalCode !== null || failed) throw new Error('Gateway stopped');
+      if (child.exitCode !== null || child.signalCode !== null || failed) {
+        const status = child.signalCode ? `signal ${child.signalCode}` : `exit code ${child.exitCode}`;
+        const diagnostic = errorLine ? `: ${errorLine}` : '';
+        throw new Error(`Gateway stopped (${status})${diagnostic}`);
+      }
       try {
         if ((await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok) {
           // Readiness can precede the request listener. A TCP probe creates no request audit.

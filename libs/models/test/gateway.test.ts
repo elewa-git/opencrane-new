@@ -238,7 +238,13 @@ it.each([
     });
     try {
       const pending = f.call();
-      await capturing;
+      const captureOrResponse = await Promise.race([
+        capturing.then(() => undefined),
+        pending,
+      ]);
+      if (captureOrResponse) {
+        throw new Error(`Gateway returned ${captureOrResponse.status} before history was captured`);
+      }
       if (revoke) await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
         resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
       });
