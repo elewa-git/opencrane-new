@@ -34,7 +34,7 @@ it('only grants the requester control after the whole computer is paused and the
   } finally { await fixture.close(); }
 }, 30000);
 
-it('refuses pause failure and keeps the fence when explicit recovery still cannot pause', async () => {
+it('refuses pause failure and records explicit release for the quiescence reaction', async () => {
   const fixture = await viewFixture(() => { throw new Error('No writer'); }, undefined, () => Promise.reject(new Error('Tool still running')));
   try {
     fixture.keys.provision('test', 'chat');
@@ -46,8 +46,8 @@ it('refuses pause failure and keeps the fence when explicit recovery still canno
     expect(events.at(-1)?.event.type).toBe('takeover.failed');
     const status = await fixture.app.inject({ method: 'GET', url: '/api/conversations/chat/control', headers });
     expect(status.json<{ status: string; leaseId: string }>().status).toBe('paused');
-    expect((await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/control', headers, payload: { action: 'release', leaseId: status.json<{ leaseId: string }>().leaseId } })).statusCode).toBe(403);
-    expect((await history(fixture.nats.store, 'computer-assistant', 'test')).at(-1)?.event.type).toBe('takeover.failed');
+    expect((await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/control', headers, payload: { action: 'release', leaseId: status.json<{ leaseId: string }>().leaseId } })).statusCode).toBe(200);
+    expect((await history(fixture.nats.store, 'computer-assistant', 'test')).at(-1)?.event).toMatchObject({ type: 'takeover.ended', data: { reason: 'released' } });
   } finally { await fixture.close(); }
 }, 30000);
 
@@ -165,13 +165,15 @@ it.each(['takeover.requested', 'takeover.started', 'takeover.renewed', 'takeover
     if (['takeover.requested', 'takeover.started'].includes(fault)) {
       await expect(engine.start('alice', 'chat', Date.now() + 300000)).rejects.toThrow();
       expect((await history(fixture.nats.store, 'computer-assistant', 'test')).some(r => r.event.type === 'takeover.started')).toBe(false);
-      expect(pauses).toBe(1);
+      expect(pauses).toBe(fault === 'takeover.requested' ? 0 : 1);
     } else {
       const lease = await engine.start('alice', 'chat', Date.now() + 300000);
       if (fault === 'takeover.renewed') await expect(engine.renew('alice', 'chat', lease.leaseId, Date.now() + 300000)).rejects.toThrow();
       else {
         let closed = false; engine.connect(lease.leaseId, () => { closed = true; });
+        const beforeRelease = pauses;
         await expect(engine.release('alice', 'chat', lease.leaseId)).rejects.toThrow(); expect(closed).toBe(true);
+        expect(pauses).toBe(beforeRelease);
         await expect(engine.check('alice', 'chat', lease.leaseId)).rejects.toThrow();
         failing.mockRestore(); await engine.release('alice', 'chat', lease.leaseId);
       }
@@ -223,4 +225,55 @@ it('releases a failed pause with missing terminal reports into one fresh checked
     expect(messages).toHaveLength(2); expect(messages[1]!.event.id).not.toBe(message.id);
     expect(fixture.keys.decrypt('test', 'chat', messages[1]!.event.data)).toContain('keep unknown outcomes uncertain');
   } finally { await engine.close(); await fixture.close(); }
+}, 30000);
+
+it('a rejected release retry leaves the released computer running', async () => {
+  const { takeover } = await import('../src/computers/takeover.ts');
+  let paused = false;
+  const fixture = await viewFixture(() => Promise.reject(new Error('No tunnel')));
+  const engine = takeover({ ...fixture.chat, open: () => Promise.reject(new Error('No tunnel')),
+    control: (_computer, action) => { paused = action === 'pause'; return Promise.resolve(); } });
+  try {
+    fixture.keys.provision('test', 'chat');
+    await fixture.append('conversation-chat', 'message.posted', { conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text', ...fixture.keys.encrypt('test', 'chat', 'Login') });
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    expect(paused).toBe(false);
+    const lease = await engine.start('alice', 'chat', Date.now() + 300000);
+    await engine.release('alice', 'chat', lease.leaseId);
+    // The release reaction has resumed execution before the retry arrives.
+    paused = false;
+    const released = await history(fixture.nats.store, 'computer-assistant', 'test');
+    await expect(engine.release('alice', 'chat', lease.leaseId)).rejects.toThrow('Already released');
+    expect(await engine.status('alice', 'chat')).toEqual({ status: 'ready' });
+    expect(await history(fixture.nats.store, 'computer-assistant', 'test')).toEqual(released);
+    expect(paused).toBe(false);
+  } finally { await engine.close(); await fixture.close(); }
+}, 30000);
+
+it('a delayed losing takeover cannot pause execution after the winner releases', async () => {
+  const { takeover } = await import('../src/computers/takeover.ts');
+  let paused = false, winner: string | undefined, arrived!: () => void, deliver!: () => void;
+  const arriving = new Promise<void>(resolve => { arrived = resolve; });
+  const delayed = new Promise<void>(resolve => { deliver = resolve; });
+  const fixture = await viewFixture(() => Promise.reject(new Error('No tunnel')));
+  const engine = takeover({ ...fixture.chat, open: () => Promise.reject(new Error('No tunnel')),
+    control: async (_computer, action, leaseId) => {
+      if (action === 'pause' && winner && leaseId !== winner) { arrived(); await delayed; }
+      paused = action === 'pause';
+    } });
+  try {
+    fixture.keys.provision('test', 'chat');
+    await fixture.append('conversation-chat', 'message.posted', { conversationId: 'chat', authorId: 'alice', authorKind: 'human', contentType: 'text', ...fixture.keys.encrypt('test', 'chat', 'Login') });
+    await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
+    expect(paused).toBe(false);
+    const lease = await engine.start('alice', 'chat', Date.now() + 300000); winner = lease.leaseId;
+    const losing = engine.start('alice', 'chat', Date.now() + 300000).then(() => 'admitted', () => 'refused');
+    await Promise.race([arriving, losing]);
+    await engine.release('alice', 'chat', lease.leaseId);
+    paused = false; // The committed release reaction has resumed execution.
+    deliver(); expect(await losing).toBe('refused');
+    expect(await engine.status('alice', 'chat')).toEqual({ status: 'ready' });
+    expect((await history(fixture.nats.store, 'computer-assistant', 'test')).at(-1)?.event.data).toMatchObject({ reason: 'released', leaseId: winner });
+    expect(paused).toBe(false);
+  } finally { deliver(); await engine.close(); await fixture.close(); }
 }, 30000);

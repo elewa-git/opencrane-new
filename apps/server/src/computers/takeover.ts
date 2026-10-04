@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { history, envelope } from '@opencrane/models';
+import type { StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import { viewAccess } from './view-access.ts';
 import type { LiveViewOptions } from './view-access.ts';
@@ -49,7 +50,15 @@ export function takeover(options: LiveViewOptions) {
     const event = envelope(options.silo, `computer-${data.assistantId}`, type, { ...data, ...extra });
     event.source = 'opencrane-server'; event.principal = { kind: 'human', id: extra['endedBy'] ?? data.requestedBy };
     event.correlation = { conversation: data.conversationId, turn: data.turnId };
-    if ((await options.store.append({ event, expectedSequence: expectedSequence ?? current.rows.at(-1)?.sequence ?? 0 })).status !== 'appended') throw new Error('Takeover audit unavailable');
+    const result = await options.store.append({ event, expectedSequence: expectedSequence ?? current.rows.at(-1)?.sequence ?? 0 });
+    if (result.status !== 'appended') throw new Error('Takeover audit unavailable');
+    return { event, sequence: result.sequence };
+  }
+  // Execution effects use only committed takeover events, including retries and recovery.
+  async function pauseCommitted(row: StoredEvent, computer: Pick<Lease, 'computerId' | 'generation' | 'podUid'>) {
+    if (!options.control) throw new Error('Pause unavailable');
+    if (!row.event.type.startsWith('takeover.') || (row.event.type === 'takeover.ended' && z.object({ reason: z.string() }).parse(row.event.data).reason === 'released')) throw new Error('No pause event');
+    await options.control(computer, 'pause', leaseSchema.parse(row.event.data).leaseId, row.sequence);
   }
   async function stop(leaseId: string, reason: ControlReason) {
     const previous = ending.get(leaseId); if (previous) return previous;
@@ -72,7 +81,7 @@ export function takeover(options: LiveViewOptions) {
       if (!options.control || !current) return;
       // Trusted recovery uses the current Pod binding, never the abandoned writer's transport.
       const computer = leaseSchema.pick({ assistantId: true, computerId: true, generation: true, podUid: true }).parse(current.event.data);
-      try { await options.control(computer, 'pause', data.leaseId); recovering.delete(data.leaseId); }
+      try { await pauseCommitted(saved.latest!, computer); recovering.delete(data.leaseId); }
       catch { /* Keep retrying; missing Pods and expired credentials grant no writer. */ }
       if (['takeover.requested', 'takeover.started', 'takeover.renewed'].includes(saved.latest!.event.type))
         await append('takeover.ended', data, { endedBy: data.requestedBy, reason: 'crash' });
@@ -91,15 +100,11 @@ export function takeover(options: LiveViewOptions) {
       const data: Lease = { ...computer, requestedBy: memberId, conversationId, leaseId: randomUUID(),
         expiresAt: new Date(Math.min(Date.now() + 120_000, sessionExpiry)).toISOString(), affectedTurns: [...active.values()] };
       processing.add(data.leaseId);
-      try { await append('takeover.requested', data, {}, current.rows.at(-1)?.sequence ?? 0); }
-      catch {
-        processing.delete(data.leaseId);
-        // Persistence failure grants no writer; leave a persistent execution fence in the computer.
-        await options.control(computer, 'pause', data.leaseId);
-        throw new Error('Intent audit unavailable; agent paused');
-      }
+      let requested: StoredEvent;
+      try { requested = await append('takeover.requested', data, {}, current.rows.at(-1)?.sequence ?? 0); }
+      catch (error) { processing.delete(data.leaseId); throw error; }
       try {
-        await options.control(computer, 'pause', data.leaseId);
+        await pauseCommitted(requested, computer);
         // The bridge's durable terminal reports must be observed before admitting a writer.
         const deadline = Date.now() + 10_000;
         while (true) {
@@ -138,9 +143,9 @@ export function takeover(options: LiveViewOptions) {
       const computer = await access(memberId, conversationId), saved = await state(computer.assistantId);
       if (!saved.data || saved.data.leaseId !== leaseId || saved.data.conversationId !== conversationId) throw new Error('Foreign control');
       if (processing.has(leaseId)) throw new Error('Still taking control');
+      validateTransition(saved, 'takeover.ended');
       // Destroy the transport before persisting release or issuing fresh turns/tokens.
       leases.get(leaseId)?.close?.(); leases.delete(leaseId);
-      await options.control(computer, 'pause', saved.data.leaseId);
       await append('takeover.ended', saved.data, { endedBy: memberId, reason: 'released' });
     },
     async status(memberId: string, conversationId: string) {

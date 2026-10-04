@@ -224,7 +224,11 @@ Older journals without that marker distinction remain uncertain. Saved Codex thr
 or computer credential. See [bridge evidence](../../docs/process/bridge-evidence.md).
 
 P3-17 adds private pause/resume endpoints checked by the current computer
-credential. The bridge writes a persistent pause marker, interrupts all active
+credential. Each pause/resume carries the committed computer-stream version.
+The bridge serialises effects and persists that version, including completed
+releases, so delayed or replayed pauses cannot override newer releases. A release
+reaction confirms quiescence before resuming; a failed reaction remains fenced
+and retries without admitting checked work. The bridge writes a persistent pause marker, interrupts all active
 turns, clears grants and asks the supervisor to fence execution and stop every
 UID 1001 process. The fixed helper uses the tool UID to signal tools; no CAP_KILL
 is added. Restart reads the marker before admitting tools or model requests.

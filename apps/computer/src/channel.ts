@@ -49,6 +49,28 @@ export function bridgeChannel(server: Server, driver: Driver) {
   let socket: WebSocket | undefined, resumed = false;
   let pauseId = existsSync(`${driver.journal}.paused`) ? readFileSync(`${driver.journal}.paused`, 'utf8').trim() : undefined;
   let paused = Boolean(pauseId);
+  const controlFile = `${driver.journal}.control`;
+  let controlState = existsSync(controlFile) ? record(JSON.parse(readFileSync(controlFile, 'utf8')) as unknown) : undefined;
+  let controlQueue = Promise.resolve();
+  function control(action: 'pause' | 'resume', leaseId: string, version: number) {
+    if (!Number.isSafeInteger(version) || version < 1) return Promise.reject(new Error('Invalid takeover version'));
+    const work = controlQueue.then(async () => {
+      const previous = controlState?.['version'];
+      if (typeof previous !== 'number' && controlState) throw new Error('Invalid takeover checkpoint');
+      if (typeof previous === 'number' && version < previous) return;
+      if (version === previous && (controlState?.['action'] !== action || controlState['leaseId'] !== leaseId)) throw new Error('Takeover version changed');
+      if (version === previous && controlState?.['completed'] === true) return;
+      // Retain release versions too: an old pause must stay stale after a restart.
+      controlState = { version, action, leaseId };
+      writeFileSync(controlFile, JSON.stringify(controlState), { mode: 0o600, flush: true });
+      await pause(leaseId);
+      if (action === 'resume') await release(leaseId);
+      controlState['completed'] = true;
+      writeFileSync(controlFile, JSON.stringify(controlState), { mode: 0o600, flush: true });
+    });
+    controlQueue = work.catch(() => undefined);
+    return work;
+  }
   const active = new Map<string, Turn>();
   const cancelled = new Set<string>();
   const codexTurns = new Map<string, string>();
@@ -140,11 +162,13 @@ export function bridgeChannel(server: Server, driver: Driver) {
     // Wake prepared turns without minting a grant. A late acknowledgement cannot restart them.
     for (const resolve of waiting.values()) resolve({ token: '', expiresAt: 0 });
     waiting.clear();
-    await Promise.all([local, ...[...active].map(async ([thread, input]) => {
+    const results = await Promise.allSettled([local, ...[...active].map(async ([thread, input]) => {
       await driver.grant(thread, input.conversationId, '', 0);
       const turnId = codexTurns.get(input.id);
       if (turnId) await driver.rpc('turn/interrupt', { threadId: thread, turnId });
     })]);
+    const failed = results.find(result => result.status === 'rejected');
+    if (failed) throw new Error('Pause unavailable', { cause: failed.reason });
     const deadline = Date.now() + 10_000;
     while (active.size) {
       if (Date.now() >= deadline) throw new Error('Pause timeout');
@@ -177,7 +201,10 @@ export function bridgeChannel(server: Server, driver: Driver) {
         else if (input['type'] === 'ack') acknowledge(input['sequence'], input);
         else if (input['type'] === 'turn' && resumed) void start(turn(input));
         else if (input['type'] === 'stop' && resumed) void interrupt(input).catch(() => next.close(1011, 'Interrupt unavailable'));
-        else if (input['type'] === 'pause' && resumed) void pause(string(input, 'id')).then(() => next.send(JSON.stringify({ type: 'paused', id: input['id'] })), () => next.close(1011, 'Pause unavailable'));
+        else if (input['type'] === 'pause' && resumed) {
+          if (typeof input['version'] !== 'number') throw new Error('Invalid takeover version');
+          void control('pause', string(input, 'id'), input['version']).then(() => next.send(JSON.stringify({ type: 'paused', id: input['id'] })), () => next.close(1011, 'Pause unavailable'));
+        }
         else throw new Error('Invalid message');
       } catch { next.close(1008, 'Invalid bridge message'); }
     });
@@ -188,7 +215,8 @@ export function bridgeChannel(server: Server, driver: Driver) {
         if (completed['type'] === 'agentMessage' && typeof completed['text'] === 'string') report(input, 'agent.message_completed', { messageId: String(completed['id']), text: completed['text'] });
   }
   return {
-    pause, release,
+    pause: (leaseId: string, version: number) => control('pause', leaseId, version),
+    release: (leaseId: string, version: number) => control('resume', leaseId, version),
     notification(value: unknown) {
       const event = record(value), params = record(event['params'] ?? {}), thread = params['threadId'];
       if (typeof thread !== 'string') return;

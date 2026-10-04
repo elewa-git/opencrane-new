@@ -77,14 +77,15 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
   const releasing = new Map<string, Promise<void>>();
   const control = computerControl(kube.kubeconfig, kube.namespace);
   async function releaseComputer(lifecycle: Awaited<ReturnType<typeof history>>, current: NonNullable<Awaited<ReturnType<typeof history>>[number]['event']>) {
-    const end = lifecycle.findLast(row => row.event.type.startsWith('takeover.'))?.event;
+    const committed = lifecycle.findLast(row => row.event.type.startsWith('takeover.'));
+    const end = committed?.event;
     if (end?.type === 'takeover.ended' && !released.has(end.id)) {
       if (await unavailableComputer(current, z.object({ assistantId: z.string() }).parse(current.data).assistantId)) return true;
       let work = releasing.get(end.id);
       if (!work) {
         work = (async () => {
           const ready = z.object({ computerId: z.string(), generation: z.int(), podUid: z.string() }).parse(current.data);
-          await control(ready, 'resume', z.object({ leaseId: z.string() }).parse(end.data).leaseId);
+          await control(ready, 'resume', z.object({ leaseId: z.string() }).parse(end.data).leaseId, committed!.sequence);
           if (!options.binding) throw new Error('Release authority unavailable');
           await resumeAfterRelease(options, end, memberAuthorisation(options.binding));
           released.add(end.id);

@@ -87,7 +87,9 @@ const server = createServer((req, res) => {
       if (typeof credential['expiresAt'] !== 'number' || credential['expiresAt'] <= Date.now() || actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('Not authorised');
       const input = record(await body(req)), leaseId = input['leaseId'];
       if (typeof leaseId !== 'string' || !/^[\w-]{1,200}$/u.test(leaseId)) throw new Error('Invalid pause id');
-      if (req.url === '/pause') await channel.pause(leaseId); else await channel.release(leaseId);
+      const version = input['version'];
+      if (typeof version !== 'number' || !Number.isSafeInteger(version) || version < 1) throw new Error('Invalid takeover version');
+      if (req.url === '/pause') await channel.pause(leaseId, version); else await channel.release(leaseId, version);
       json(res, { quiescent: true });
     })().catch(() => json(res, { error: 'paused' }, 503)); return;
   }

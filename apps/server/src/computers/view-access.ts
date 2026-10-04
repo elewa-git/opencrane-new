@@ -7,7 +7,7 @@ export interface ViewAccessOptions { silo: string; store: EventStore; binding: B
 
 export interface LiveViewOptions extends ViewAccessOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
-  control?: ((computer: { computerId: string; generation: number; podUid?: string | undefined }, action: 'pause' | 'resume', leaseId: string) => Promise<void>) | undefined;
+  control?: ((computer: { computerId: string; generation: number; podUid?: string | undefined }, action: 'pause' | 'resume', leaseId: string, version: number) => Promise<void>) | undefined;
   open(computer: { computerId: string; generation: number; podUid?: string | undefined }, writer?: boolean): Promise<Duplex>;
 }
 

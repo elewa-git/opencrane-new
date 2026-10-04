@@ -10,7 +10,7 @@ import { desktopPod } from './support/desktop-pod.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { desktopConnection } from '../src/computers/desktop.ts';
 
-it.runIf(process.env['TAKEOVER_K3D'] === '1')('takes and releases real desktop input with keyboard and 44px controls at 1280 and 390px', async () => {
+it.runIf(process.env['TAKEOVER_K3D'] === '1')('takes, renews and releases real desktop control using only the keyboard at 1280 and 390px', async () => {
   const pod = await desktopPod();
   const browser = await chromium.launch({ headless: true });
   let fixture: Awaited<ReturnType<typeof viewFixture>> | undefined;
@@ -34,24 +34,42 @@ it.runIf(process.env['TAKEOVER_K3D'] === '1')('takes and releases real desktop i
     await fixture.app.listen({ port, host: '127.0.0.1' });
       const context = await browser.newContext();
       await context.addCookies([{ name: fixture.config.cookieName, value: encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+600 }), url: origin }]);
-      const page = await context.newPage(); await mkdir('apps/computer/.state/p317', { recursive: true });
+      const page = await context.newPage();
+      const writerFrames: Buffer[] = [];
+      page.on('websocket', socket => {
+        if (socket.url().endsWith('/control')) socket.on('framesent', frame => writerFrames.push(Buffer.isBuffer(frame.payload) ? frame.payload : Buffer.from(frame.payload)));
+      });
+      await mkdir('apps/computer/.state/p317', { recursive: true });
       for (const width of [1280, 390]) {
         await page.setViewportSize({ width, height: 900 }); await page.goto(`${origin}/live-view-test`);
-        await page.getByRole('button', { name: 'Watch your computer' }).click();
+        await page.keyboard.press('Tab'); await page.keyboard.press('Enter');
         await page.getByText('Viewing', { exact: true }).waitFor();
         const take = page.getByRole('button', { name: 'Take control', exact: true });
         await take.waitFor({ timeout: 10000 }).catch(async (cause: unknown) => { throw new Error(`Missing control at ${width}: ${await page.locator('body').innerText()}`, { cause }); });
-        await take.focus(); await page.keyboard.press('Enter'); await page.getByText('You are in control', { exact: true }).waitFor();
+        for (let tab = 0; tab < 12 && !await take.evaluate(node => node === document.activeElement); tab++) await page.keyboard.press('Tab');
+        expect(await take.evaluate(node => node === document.activeElement)).toBe(true);
+        await page.keyboard.press('Enter'); await page.getByText('You are in control', { exact: true }).waitFor();
         for (const name of ['Release', 'Renew control']) {
           const box = await page.getByRole('button', { name, exact: true }).boundingBox(); expect(box?.height).toBeGreaterThanOrEqual(44); expect(box?.width).toBeGreaterThanOrEqual(44);
         }
-        const canvas = page.locator('canvas'); const bounds = await canvas.boundingBox();
-        if (!bounds) throw new Error('No computer pixels');
-        await page.mouse.click(bounds.x + bounds.width / 4, bounds.y + bounds.height / 4);
-        const pointer = await pod.k('exec', 'desktop', '--', 'env', 'DISPLAY=:1', 'xdotool', 'getmouselocation');
-        expect(pointer).toMatch(/x:19[89]|x:20[01]/u);
+        const canvas = page.locator('canvas');
+        const keyboard = page.getByRole('button', { name: 'Use desktop keyboard', exact: true });
+        for (let tab = 0; tab < 12 && !await keyboard.evaluate(node => node === document.activeElement); tab++) await page.keyboard.press('Tab');
+        expect(await keyboard.evaluate(node => node === document.activeElement)).toBe(true);
+        await page.keyboard.press('Enter');
         await page.screenshot({ path: `apps/computer/.state/p317/control-${width}.png` });
-        const release = page.getByRole('button', { name: 'Release', exact: true }); await release.focus();
+        expect(await canvas.evaluate(node => node === document.activeElement)).toBe(true);
+        const beforeEscape = writerFrames.length;
+        await page.keyboard.press('F8');
+        expect(writerFrames.slice(beforeEscape).some(frame => frame.includes(Buffer.from([0, 0, 0xff, 0xc5])))).toBe(false);
+        const release = page.getByRole('button', { name: 'Release', exact: true });
+        expect(await release.evaluate(node => node === document.activeElement)).toBe(true);
+        await page.keyboard.press('Tab');
+        expect(await page.getByRole('button', { name: 'Renew control', exact: true }).evaluate(node => node === document.activeElement)).toBe(true);
+        const renewed = page.waitForResponse(response => response.url().endsWith('/control') && response.request().postData()?.includes('renew') === true);
+        await page.keyboard.press('Enter'); expect((await renewed).status()).toBe(200);
+        await page.keyboard.press('Shift+Tab');
+        expect(await release.evaluate(node => node === document.activeElement)).toBe(true);
         const released = page.waitForResponse(response => response.url().endsWith('/control') && response.request().postData()?.includes('release') === true);
         await page.keyboard.press('Enter'); expect((await released).status()).toBe(200);
         await page.getByRole('button', { name: 'Take control', exact: true }).waitFor();
@@ -122,6 +140,10 @@ it.runIf(process.env['TAKEOVER_K3D'] === '1')('quiesces two real Codex threads a
     await closed;
     await until(async () => (await history(f.nats.store, 'computer-assistant', 'test')).filter(r => r.event.type === 'computer.turn_started').length === 4, 30000);
     const resumed = await history(f.nats.store, 'computer-assistant', 'test');
+    expect((await f.app.inject({ method: 'POST', url: '/api/conversations/chat/control', headers, payload: { action: 'release', leaseId: lease.leaseId } })).statusCode).toBe(403);
+    const requested = resumed.find(row => row.event.type === 'takeover.requested')!;
+    await computerControl(pod.kubeconfig, pod.namespace)({ computerId: 'desktop', generation: 1, podUid: pod.uid }, 'pause', lease.leaseId, requested.sequence);
+    expect(await pod.k('exec', 'desktop', '--', 'node', '-e', "console.log(require('node:fs').existsSync('/home/agent/codex/bridge-reports.jsonl.paused'))")).toBe('false');
     expect(new Set(resumed.filter(r => r.event.type === 'computer.turn_started').map(r => z.object({ turnId: z.string() }).parse(r.event.data).turnId)).size).toBe(4);
     // A new proxy instance must recover each durable crash boundary against the real restarted computer.
     const { takeover } = await import('../src/computers/takeover.ts');
@@ -133,7 +155,7 @@ it.runIf(process.env['TAKEOVER_K3D'] === '1')('quiesces two real Codex threads a
         leaseId: randomUUID(), expiresAt: new Date(Date.now() + 120000).toISOString(), affectedTurns: [] };
       await f.append('computer-assistant', 'takeover.requested', data);
       if (transition !== 'takeover.requested') {
-        await control(computer, 'pause', data.leaseId); await f.append('computer-assistant', 'takeover.started', data);
+        await control(computer, 'pause', data.leaseId, (await history(f.nats.store, 'computer-assistant', 'test')).at(-1)!.sequence); await f.append('computer-assistant', 'takeover.started', data);
         if (transition === 'takeover.renewed') await f.append('computer-assistant', transition, data);
       }
       const count = Number(await pod.k('get', 'pod/desktop', '-o', 'jsonpath={.status.containerStatuses[0].restartCount}'));
@@ -147,7 +169,7 @@ it.runIf(process.env['TAKEOVER_K3D'] === '1')('quiesces two real Codex threads a
       expect(recovered).toMatchObject({ type: 'takeover.ended', data: { reason: 'crash', leaseId: data.leaseId } });
       expect(await pod.k('exec', 'desktop', '--', 'cat', '/home/agent/codex/bridge-reports.jsonl.paused')).toBe(data.leaseId);
       await expect(recovery.check('alice', 'chat', data.leaseId)).rejects.toThrow();
-      await recovery.release('alice', 'chat', data.leaseId); await control(computer, 'resume', data.leaseId); await recovery.close();
+      await recovery.release('alice', 'chat', data.leaseId); await control(computer, 'resume', data.leaseId, (await history(f.nats.store, 'computer-assistant', 'test')).findLast(row => row.event.type === 'takeover.ended')!.sequence); await recovery.close();
     }
 
   } finally {

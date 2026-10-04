@@ -44,13 +44,13 @@ export function desktopConnection(kubeconfig: string, namespace: string): LiveVi
 
 /** Runs only inside the UID-bound Pod; the bridge credential never leaves it. */
 export function computerControl(kubeconfig: string, namespace: string): NonNullable<LiveViewOptions['control']> {
-  return async (computer, action, leaseId) => {
+  return async (computer, action, leaseId, version) => {
     if (!computer.podUid || !/^[a-z0-9-]+$/u.test(computer.computerId)) throw new Error('Unbound computer');
     const script = `import { readFileSync } from 'node:fs';
 if (process.env['POD_UID'] !== ${JSON.stringify(computer.podUid)}) process.exit(1);
 process.setgroups([]); process.setgid(1000); process.setuid(1000);
 const credential = JSON.parse(readFileSync('/run/codex/computer.json', 'utf8'));
-const response = await fetch('http://127.0.0.1:8081/${action}', { method: 'POST', headers: { 'x-bridge-token': credential.value }, body: JSON.stringify({ leaseId: ${JSON.stringify(leaseId)} }), signal: AbortSignal.timeout(15000) });
+const response = await fetch('http://127.0.0.1:8081/${action}', { method: 'POST', headers: { 'x-bridge-token': credential.value }, body: JSON.stringify({ leaseId: ${JSON.stringify(leaseId)}, version: ${version} }), signal: AbortSignal.timeout(15000) });
 if (!response.ok || !(await response.json()).quiescent) process.exit(1);`;
     await promisify(execFile)('kubectl', ['--kubeconfig', kubeconfig, '-n', namespace, 'exec', computer.computerId, '-c', 'computer', '--', 'node', '--input-type=module', '-e', script], { timeout: 17000, maxBuffer: 4096 });
   };

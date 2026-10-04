@@ -30,6 +30,7 @@ export async function desktopPod(withComputer = false) {
     const template = z.object({ spec: z.object({ podTemplate: z.object({ spec: z.record(z.string(), z.unknown()) }) }) }).parse(JSON.parse(await readFile('apps/computer/sandbox-template.json', 'utf8')) as unknown);
     const spec = template.spec.podTemplate.spec;
     const container = z.record(z.string(), z.unknown()).parse(z.array(z.unknown()).parse(spec['containers'])[0]);
+    if (process.env['COMPUTER_TEST_IMAGE']) { container['image'] = process.env['COMPUTER_TEST_IMAGE']; container['imagePullPolicy'] = 'Never'; }
     if (withComputer) {
       const services = await readFile('spikes/s0-1b-proxy-gvisor/services.mjs', 'utf8');
       const provider = services.slice(services.indexOf('let index = 0;')).replace('/spike/probe.mjs', '/workspace/probe.mjs').replace("!text.includes('AFTER_RELEASE')", "!text.includes('explicitly returned computer control')").replace("}).listen(9003, '0.0.0.0');", "}).listen(3000, '0.0.0.0');");

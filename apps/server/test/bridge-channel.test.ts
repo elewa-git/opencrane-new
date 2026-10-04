@@ -1,6 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { BudgetActor, envelope } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
+import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
@@ -246,7 +247,7 @@ it('pauses both conversations, fences preparing turns and waits for local tools 
     await once(socket, 'open'); socket.send(JSON.stringify({ type: 'resume', since: 0 }));
     for (const conversation of ['one', 'two']) socket.send(JSON.stringify({ type: 'turn', id: conversation, conversationId: conversation, assistantId: 'assistant', text: 'Work', token: 'preparing', expiresAt: Date.now()+60000 }));
     await until(() => received.filter(row => row['type'] === 'agent.turn_started').length === 2);
-    socket.send(JSON.stringify({ type: 'pause', id: 'takeover' }));
+    socket.send(JSON.stringify({ type: 'pause', id: 'takeover', version: 3 }));
     await until(() => received.filter(row => row['type'] === 'agent.turn_failed').length === 2);
     expect(received.some(row => row['type'] === 'paused')).toBe(false);
     socket.send(JSON.stringify({ type: 'turn', id: 'third', conversationId: 'three', assistantId: 'assistant', text: 'Forbidden', token: 'preparing', expiresAt: Date.now()+60000 }));
@@ -254,4 +255,73 @@ it('pauses both conversations, fences preparing turns and waits for local tools 
     expect(toolsStopped).toBe(true); expect(threads).toBe(2);
     expect(received.find(row => row['type'] === 'paused')).toMatchObject({ id: 'takeover' });
   } finally { finishTools(); socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('orders committed takeover effects and keeps a stale pause from overriding release across restart', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/takeover-order-`);
+  let localPaused = false, arrive!: () => void, finish!: () => void;
+  const arriving = new Promise<void>(resolve => { arrive = resolve; });
+  const delayed = new Promise<void>(resolve => { finish = resolve; });
+  const driver = { journal: `${directory}/reports`, credential: () => ({ value: 'test', expiresAt: Date.now() + 60000 }),
+    rpc: () => Promise.resolve({}), grant: () => Promise.resolve(),
+    localControl: async (action: 'pause' | 'resume') => {
+      if (action === 'pause') { arrive(); await delayed; }
+      localPaused = action === 'pause';
+    } };
+  const server = createServer(); let channel = bridgeChannel(server, driver);
+  try {
+    const pause: (id: string, version: number) => Promise<void> = channel.pause;
+    const release: (id: string, version: number) => Promise<void> = channel.release;
+    const pausing = pause('lease', 3); await arriving;
+    const releasing = release('lease', 5);
+    finish(); await Promise.all([pausing, releasing]);
+    expect(localPaused).toBe(false);
+    expect(existsSync(`${directory}/reports.paused`)).toBe(false);
+    await channel.close(); channel = bridgeChannel(server, driver);
+    const stalePause: (id: string, version: number) => Promise<void> = channel.pause;
+    await stalePause('lease', 3);
+    expect(localPaused).toBe(false);
+    expect(existsSync(`${directory}/reports.paused`)).toBe(false);
+  } finally { finish(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+it('waits for every pause effect to settle after an interrupt failure before applying release', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/takeover-failure-order-`), server = createServer();
+  let finish!: () => void, interrupted!: () => void, failInterrupt = true, localPauses = 0, localPaused = false;
+  const delayed = new Promise<void>(resolve => { finish = resolve; });
+  const failing = new Promise<void>(resolve => { interrupted = resolve; });
+  const channel = bridgeChannel(server, {
+    journal: `${directory}/reports`, credential: () => ({ value: 'test', expiresAt: Date.now() + 60000 }),
+    async localControl(action) { if (action === 'pause') { localPauses++; await delayed; } localPaused = action === 'pause'; },
+    grant(_thread, _conversation, token) {
+      if (!token && failInterrupt) { interrupted(); return Promise.reject(new Error('Drop failed')); }
+      return Promise.resolve();
+    },
+    rpc(method, params) {
+      if (method === 'thread/start') return Promise.resolve({ thread: { id: 'thread' } });
+      if (method === 'turn/start') return Promise.resolve({ turn: { id: 'turn' } });
+      channel.notification({ method: 'turn/completed', params: { threadId: params['threadId'], turn: { status: 'interrupted' } } });
+      return Promise.resolve({});
+    },
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, { headers: { 'x-bridge-token': 'test' } });
+  socket.on('message', raw => {
+    const input = z.record(z.string(), z.unknown()).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '{}'));
+    if (input['type'] === 'agent.turn_started') socket.send(JSON.stringify({ type: 'ack', sequence: input['sequence'], token: 'turn', expiresAt: Date.now() + 60000 }));
+  });
+  try {
+    await once(socket, 'open'); socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    socket.send(JSON.stringify({ type: 'turn', id: 'work', conversationId: 'chat', assistantId: 'assistant', text: 'Work', token: 'preparing', expiresAt: Date.now() + 60000 }));
+    await until(() => existsSync(`${directory}/reports.executions`));
+    const pausing = channel.pause('lease', 3).catch(() => 'failed'); await failing;
+    failInterrupt = false;
+    const releasing = channel.release('lease', 5);
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(localPauses).toBe(1);
+    finish(); expect(await pausing).toBe('failed'); await releasing;
+    expect(localPaused).toBe(false);
+    expect(existsSync(`${directory}/reports.paused`)).toBe(false);
+  } finally { finish(); socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
 });

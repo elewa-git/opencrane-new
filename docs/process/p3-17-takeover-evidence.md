@@ -15,8 +15,8 @@ input, translates standard pointer messages for Kasm, and refuses clipboard.
 
 Leases last at most two minutes and require authorised renewal. Disconnect,
 expiry, revocation and crash close writer access and leave work paused. Reconnect
-cannot recreate a writer. Release closes tunnels first, checks local quiescence,
-records its caller, and resumes only authorised checked work with fresh turns and
+cannot recreate a writer. Release closes tunnels first and records its caller. Its committed reaction
+checks local quiescence and resumes only authorised checked work with fresh turns and
 tokens. A changed requester can explicitly release the closed same-conversation
 lease. Missing terminal reports close as failed; external effects remain observed
 or uncertain, and approvals/writes are never silently replayed.
@@ -25,7 +25,10 @@ or uncertain, and approvals/writes are never silently replayed.
 
 `takeover.requested/started/renewed/failed/ended` share a computer stream and carry
 requester, computer generation/Pod, conversation, lease and affected turns.
-Conditional appends fence racing admissions. Common gateway credentials reject
+Conditional appends fence racing admissions. Pauses react only to committed
+takeover events; rejected requests have no execution effect. The bridge orders
+pause and resume by committed computer-stream version, retaining release
+checkpoints across restart. Common gateway credentials reject
 paused work and permanently reject turns predating the last intent after release.
 Startup recovers abandoned transitions through trusted Pod pause, records crash,
 and retries unavailable pause without admitting a writer. Paused lifecycle
@@ -40,6 +43,12 @@ read the marker at boot. Release reactions are idempotent and create a new
 message asking the assistant to inspect the desktop and retain unknown outcomes.
 
 ## Evidence
+
+The table below records the original implementation. The subsequent independent
+review pass 1 found execution ordering and keyboard escape blockers. Their
+reproductions, fixes and current check results are recorded in the
+[review-fix receipt](p3-17-review-fixes-evidence.md). Review pass 2 for these
+fixes is NOT RUN.
 
 TDD started with failing requester/pause, bridge and browser journeys. The live
 probe exposed root's missing CAP_KILL; the same-UID helper fixed it. Fault tests

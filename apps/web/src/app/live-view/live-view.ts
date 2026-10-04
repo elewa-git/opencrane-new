@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, input, signal, viewChild, type OnDestroy, type OnChanges, type SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, signal, viewChild, type AfterViewInit, type OnDestroy, type OnChanges, type SimpleChanges } from '@angular/core';
 import type RFB from '@novnc/novnc/lib/rfb.js';
 
 @Component({
@@ -11,10 +11,12 @@ import type RFB from '@novnc/novnc/lib/rfb.js';
     @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
     <p role="status" aria-live="polite">{{ controlState() }}</p>
     @if (controlState() === 'Agent paused') { <p>Control closed safely. Release to resume checked work, or leave the agent paused. Uncertain external actions will not be retried.</p> }
+    @if (controlState() === 'You are in control') { <p>Press F8 to leave desktop keyboard control and reach Release and Renew control.</p> }
     <div class="display" #display tabindex="0" [attr.aria-label]="controlState() === 'You are in control' ? 'Computer display · keyboard and pointer control' : 'Read-only computer display'" [hidden]="state() !== 'Viewing'"></div>
     <div class="tools control">
     @if (canControl() && !leaseId) { <button type="button" (click)="takeControl()" [disabled]="busy()">Take control</button> }
-    @if (leaseId) { <button type="button" (click)="release()" [disabled]="busy()">Release</button>
+    @if (controlState() === 'You are in control') { <button type="button" (click)="keyboard()">Use desktop keyboard</button> }
+    @if (leaseId) { <button #releaseButton type="button" (click)="release()" [disabled]="busy()">Release</button>
       @if (controlState() === 'You are in control') { <button type="button" (click)="renew()" [disabled]="busy()">Renew control</button><span>Lease ends {{ expiresAt() }} · at most two minutes</span> }
     }
     </div>
@@ -28,9 +30,11 @@ import type RFB from '@novnc/novnc/lib/rfb.js';
     button:focus-visible,.display:focus-visible{outline:3px solid #138a9b;outline-offset:3px}.display{height:min(60vh,600px);width:100%;overflow:auto;background:#172a2d}
     .display[hidden]{display:none}.tools{justify-content:flex-start;margin-top:12px}@media(max-width:500px){header>button,.control>button{width:100%}section{padding:12px}.display{height:300px}}`,
 })
-export class LiveView implements OnDestroy, OnChanges {
+export class LiveView implements AfterViewInit, OnDestroy, OnChanges {
   readonly conversationId = input.required<string>();
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
+  private readonly releaseButton = viewChild<ElementRef<HTMLButtonElement>>('releaseButton');
+  private readonly keyboardEvents = new AbortController();
   private readonly display = viewChild.required<ElementRef<HTMLElement>>('display');
   protected readonly state = signal('Disconnected');
   protected readonly fit = signal(true);
@@ -43,11 +47,21 @@ export class LiveView implements OnDestroy, OnChanges {
   private socket: WebSocket | undefined;
   private attempt = 0;
   protected watch(): void { this.dialog().nativeElement.showModal(); void this.open(); }
+  protected keyboard(): void { this.viewer?.focus(); }
   protected zoom(fit: boolean): void { this.fit.set(fit); if (this.viewer) this.viewer.scaleViewport = fit; }
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['conversationId'] && !changes['conversationId'].firstChange) { this.dialog().nativeElement.close(); this.close('Disconnected'); this.leaseId = undefined; this.controlState.set(''); }
   }
-  ngOnDestroy(): void { this.close('Disconnected'); }
+  ngAfterViewInit(): void {
+    const leaveKeyboard = (event: KeyboardEvent) => {
+      if (event.code !== 'F8' || this.controlState() !== 'You are in control') return;
+      // Capture both edges before noVNC can forward the reserved key.
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (event.type === 'keydown') { this.viewer?.blur(); this.releaseButton()?.nativeElement.focus(); }
+    };
+    for (const type of ['keydown', 'keyup'] as const) this.dialog().nativeElement.addEventListener(type, leaveKeyboard, { capture: true, signal: this.keyboardEvents.signal });
+  }
+  ngOnDestroy(): void { this.keyboardEvents.abort(); this.close('Disconnected'); }
   protected close(state: string): void {
     this.canControl.set(false);
     if (this.leaseId && this.controlState() !== 'Returning control') this.controlState.set('Agent paused');
@@ -78,7 +92,7 @@ export class LiveView implements OnDestroy, OnChanges {
       viewer.addEventListener('connect', () => {
         if (attempt !== this.attempt) return;
         this.state.set('Viewing');
-        if (writer) { this.controlState.set('You are in control'); viewer.focus(); }
+        if (writer) this.controlState.set('You are in control');
         else void this.controlStatus();
       });
       viewer.addEventListener('disconnect', () => { if (attempt === this.attempt) this.close('Disconnected'); });

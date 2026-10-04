@@ -140,9 +140,13 @@ conversation. The self-contained `LiveView` component opens a native dialog with
 fit/actual-size viewing and Connecting, Viewing, Disconnected and Access changed
 states. Participants need an explicit shared-desktop grant; a refused admission
 shows **Not available**. Revocation closes the connection and clears pixels.
-Escape closes the dialog and restores focus to its entry. Changing conversation
+In read-only viewing, Escape closes the dialog and restores focus to its entry. Changing conversation
 or destroying the component cancels admission and closes the old connection.
-All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed
+While controlling, activate Use desktop keyboard to send keys to the desktop.
+F8 leaves desktop keyboard input and focuses Release; Tab
+reaches Renew control and Shift+Tab returns to Release. F8 is reserved locally
+and neither its press nor release is forwarded to the desktop. Escape then
+closes the dialog. All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed
 core and the authenticated proxy. Viewers remain read-only; the current requester
 can use Take control after every thread and local tool is paused. Release returns
 checked work with fresh turns; disconnect leaves the agent paused. Renewal is

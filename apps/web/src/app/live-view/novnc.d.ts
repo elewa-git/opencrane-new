@@ -7,5 +7,6 @@ declare module '@novnc/novnc/lib/rfb.js' {
     focusOnClick: boolean;
     disconnect(): void;
     focus(): void;
+    blur(): void;
   }
 }
