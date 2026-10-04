@@ -1,6 +1,6 @@
 <!-- Message and workspace structure adapted from OpenCrane 1 10abd0ef6; visual values from the chat handoff. -->
 <div class="workspace" [class.panel-open]="panel()">
-  <nav class="rail" aria-label="Sessions" [class.mobile-open]="rail()">
+  <nav class="rail" aria-label="Sessions">
     <div class="brand"><svg width="23" height="17" viewBox="0 0 32 24" aria-hidden="true"><polygon points="10,16 3,5 13,15" fill="#0d8ba0"/><polygon points="3,5 0,7.5 4.5,8.5" fill="#f47920"/><polygon points="11,15 16,3 19,15" fill="#22c7dd"/><polygon points="9,16 21,15 17,21 11,21" fill="#0db5cc"/><polygon points="19,15 30,7 22,20" fill="#66d7e6"/></svg><strong>Open<span>Crane</span></strong><button type="button" aria-label="Find a session" (click)="searchDialog.showModal()"><kbd>⌘K</kbd></button></div>
     <span class="sr-only" role="status" aria-live="polite">{{ chat.railLoading() ? 'Loading sessions' : chat.railUnavailable() ? 'Sessions unavailable' : 'Sessions loaded' }}</span>
     <div class="rail-content" [attr.aria-busy]="chat.railLoading()">
@@ -8,15 +8,7 @@
       <button type="button" class="ask" (click)="newSession()"><oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd></button>
       <h2>Projects</h2><p class="empty-rail">No project sessions</p>
       <h2>Personal</h2>
-      @if (chat.railLoading()) {
-        <div class="rail-card rail-loading" aria-hidden="true"><h2>Loading</h2><oc-grain-loader /><oc-grain-loader /><oc-grain-loader /><span class="sr-only">Loading sessions</span></div>
-      } @else if (chat.railUnavailable()) {
-        <div class="rail-card"><strong><span class="offline-dot"></span> Can't reach your pod</strong><p>Your conversations are safe.</p><p class="retry-countdown">Retrying in {{ chat.retryIn() }}s</p><button type="button" (click)="chat.load()">Retry now</button></div>
-      } @else if (!chat.assistantId() && !chat.denied()) {
-        <div class="rail-card"><strong>No assistant assigned</strong><p>Your account is in, but no agent is provisioned yet.</p><small>pod: … · waiting</small></div>
-      } @else if (!chat.conversations().length && !chat.denied()) {
-        <div class="rail-card rail-empty"><svg width="36" height="28" viewBox="0 0 32 24" aria-hidden="true"><path d="m3 5 10 10 3-12 3 12 11-8-8 13-5 1-6-5Z" fill="#9fdde8"/><path d="m3 5-3 3h5" fill="#f47920"/></svg><strong>No conversations yet</strong><p>Start one and it will live here.</p><button type="button" (click)="newSession()">New session</button></div>
-      }
+      <ng-container [ngTemplateOutlet]="railStatus" />
       @for (conversation of chat.conversations(); track conversation.conversationId; let index = $index) {
         <button type="button" class="session-row" [class.active]="chat.selected() === conversation.conversationId" [attr.aria-current]="chat.selected() === conversation.conversationId ? 'page' : null" [style.--row]="index > 40 ? 40 : index" (click)="select(conversation.conversationId)">
           @if (rowStatus(conversation.conversationId, conversation.status) === 'working') {
@@ -34,9 +26,19 @@
     <footer class="rail-footer"><a href="/org/integrations"><oc-icon name="settings" /> Settings</a><a class="current-user" href="/account"><span class="avatar user">{{ initials() }}</span><span><strong>{{ chat.displayName() }}</strong><small>{{ organisation }} · Personal</small></span></a></footer>
   </nav>
   <main class="main" ocPaperSurface="main">
-    <header class="workspace-header"><button class="navigation-toggle" type="button" id="navigation-toggle" aria-label="Open session navigation" [attr.aria-expanded]="rail()" (click)="rail.set(!rail())"><oc-icon name="menu" /></button>@if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }<h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>@if (!chat.selected()) { <span class="draft-label">Draft</span> }
+    <header class="workspace-header">
+      <button #navigationOpener class="navigation-toggle" type="button" id="navigation-toggle"
+        aria-label="Open session navigation" aria-controls="workspace-navigation"
+        [attr.aria-expanded]="rail()" (click)="rail.set(!rail())"><oc-icon name="menu" /></button>
+      @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
+      <h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>
+      @if (!chat.selected()) { <span class="draft-label">Draft</span> }
       <span class="header-status" aria-live="polite">@if (chat.active()) { <oc-icon name="agent" /> Agent working }</span>
-      <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span><button id="panel-toggle" type="button" aria-label="Session panel" [attr.aria-expanded]="panel()" (click)="togglePanel()"><oc-icon name="panel" /></button>
+      <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span>
+      <button #panelOpener id="panel-toggle" type="button" aria-label="Session panel"
+        [attr.aria-expanded]="panelExpanded()" (click)="togglePanel()">
+        <oc-icon name="panel" />
+      </button>
     </header>
     <span class="sr-only" role="status" aria-live="polite">{{ chat.loading() ? 'Loading conversation…' : chat.denied() ? 'Conversation access changed' : 'Conversation loaded' }}</span>
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
@@ -93,11 +95,62 @@
       <p class="composer-footnote">Your personal Agent · private to you</p>
     </div>
   </main>
-  @if (panel()) { <aside class="session-panel desktop-panel" aria-label="Session panel"><ng-container [ngTemplateOutlet]="panelContent" /></aside> }
-  <dialog class="panel-dialog" #panelDialog aria-label="Session panel"><ng-container [ngTemplateOutlet]="panelContent" [ngTemplateOutletContext]="{ mobile: true }" /></dialog>
-  <ng-template #panelContent let-mobile="mobile">
+  @if (desktop() && panel()) { <aside class="session-panel desktop-panel" aria-label="Session panel"><ng-container [ngTemplateOutlet]="panelContent" /></aside> }
+  <oc-navigation-menu id="workspace-navigation" [open]="rail()" label="Sessions"
+    [items]="navigationItems()" [activeHref]="activeHref()" [returnFocusTo]="navigationOpener"
+    (closed)="navigationClosed()">
+    @if (rail()) {
+      <ng-container [ngTemplateOutlet]="railStatus" />
+      <button type="button" class="mobile-ask" (click)="newSession()">
+        <oc-icon name="agent" /> Ask your agent
+      </button>
+    }
+  </oc-navigation-menu>
+  <oc-hinge-drawer [open]="panelOverlay()" title="Session panel" [returnFocusTo]="panelOpener"
+    (closed)="sessionPanelClosed()">
+    <!-- Keep screenshot references in the viewer while this drawer is closed. -->
+    <ng-container [ngTemplateOutlet]="panelContent" />
+  </oc-hinge-drawer>
+  <ng-template #railStatus>
+    @if (chat.railLoading()) {
+      <div class="rail-card rail-loading" aria-hidden="true">
+        <h2>Loading</h2>
+        <oc-grain-loader /><oc-grain-loader /><oc-grain-loader />
+        <span class="sr-only">Loading sessions</span>
+      </div>
+    } @else if (chat.railUnavailable()) {
+      <div class="rail-card">
+        <strong><span class="offline-dot"></span> Can't reach your pod</strong>
+        <p>Your conversations are safe.</p>
+        <p class="retry-countdown">Retrying in {{ chat.retryIn() }}s</p>
+        <button type="button" (click)="chat.load()">Retry now</button>
+      </div>
+    } @else if (!chat.assistantId() && !chat.denied()) {
+      <div class="rail-card">
+        <strong>No assistant assigned</strong>
+        <p>Your account is in, but no agent is provisioned yet.</p>
+        <small>pod: … · waiting</small>
+      </div>
+    } @else if (!chat.conversations().length && !chat.denied()) {
+      <div class="rail-card rail-empty">
+        <svg width="36" height="28" viewBox="0 0 32 24" aria-hidden="true">
+          <path d="m3 5 10 10 3-12 3 12 11-8-8 13-5 1-6-5Z" fill="#9fdde8"/>
+          <path d="m3 5-3 3h5" fill="#f47920"/>
+        </svg>
+        <strong>No conversations yet</strong>
+        <p>Start one and it will live here.</p>
+        <button type="button" (click)="newSession()">New session</button>
+      </div>
+    }
+  </ng-template>
+  <ng-template #panelContent>
     @if (chat.selected()) { <a class="audit-link" [href]="'/history/' + chat.selected()">Action history</a> }
-    <header class="panel-header"><strong>Session</strong><span class="panel-scope"><span class="scope" aria-hidden="true">▱<br>▱<br>▱<br><b>▬</b></span> personal</span>@if (mobile) { <button type="button" class="close-panel" (click)="panelDialog.close()" aria-label="Close session panel"><oc-icon name="close" /></button> }</header>
+    <header class="panel-header">
+      <strong>Session</strong>
+      <span class="panel-scope">
+        <span class="scope" aria-hidden="true">▱<br>▱<br>▱<br><b>▬</b></span> personal
+      </span>
+    </header>
     @if (chat.selected() && !chat.denied()) { <oc-live-view [conversationId]="chat.selected()" (saved)="chat.refresh()" /> }
     <div class="panel-tabs" role="tablist" aria-label="Session views"><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'" (click)="panelTab.set('files')">Files<small>{{ files().length + chat.attachments().length }}</small></button><button type="button" role="tab" [attr.aria-selected]="panelTab() === 'activity'" (click)="panelTab.set('activity')">Activity<small>{{ activity().length }}</small></button></div>
     @if (panelTab() === 'files') {

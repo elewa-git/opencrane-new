@@ -1,0 +1,32 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": 16,
+  "environment": "Built Angular assets; Chromium; read fixtures; no stack",
+  "checks": [
+    "Title focus",
+    "Focus trap",
+    "Inert background",
+    "Nested Escape and Back restore focus",
+    "Native menu links and navigation dismissal",
+    "Arrow keys, Home/End and wrapping",
+    "44px phone targets",
+    "Full phone viewport",
+    "No horizontal overflow",
+    "2px focus ring",
+    "Right and left hinge origins",
+    "16px crease shadow",
+    "12px sheet dog-ear",
+    "Immediate reduced-motion entrances",
+    "Refused computer view clears pixels",
+    "650px menu and 800px panel resize and dismissal",
+    "Activity jump focuses transcript"
+  ]
+}

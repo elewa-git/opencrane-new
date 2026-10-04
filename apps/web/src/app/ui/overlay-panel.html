@@ -1,0 +1,16 @@
+<dialog [ocOverlay]="open()" #overlay="ocOverlay" ocPaperSurface="plain" [ocDogEar]="foldedCorner"
+  [returnFocusTo]="returnFocusTo()" (overlayClosed)="closed.emit()"
+  [attr.aria-labelledby]="overlay.titleId"
+  [attr.aria-describedby]="description() ? overlay.descriptionId : null">
+  <header>
+    <button type="button" class="back" (click)="overlay.dismiss()">‹ Back</button>
+    <div class="heading">
+      <h2 [id]="overlay.titleId" tabindex="-1">{{ title() }}</h2>
+      @if (description()) { <p [id]="overlay.descriptionId">{{ description() }}</p> }
+    </div>
+    <button type="button" class="close" (click)="overlay.dismiss()"
+      [attr.aria-label]="'Close ' + title()">×</button>
+  </header>
+  <section class="body"><ng-content /></section>
+  <footer><ng-content select="[overlayFooter]" /></footer>
+</dialog>

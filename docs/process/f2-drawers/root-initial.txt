@@ -1,0 +1,91 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+/tmp/opencrane-nats.CkN8Lw/archive.tar.gz: OK
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/f2-drawers
+
+ ❯ apps/server/test/live-view.test.ts (15 tests | 1 failed) 94768ms
+   × bounds redemption of pre-issued tickets and rejects reuse without opening another desktop 8620ms
+ ❯ apps/server/test/screenshots.test.ts (2 tests | 1 failed) 78471ms
+   × captures once, scans and stores a PNG whose file and preview survive replay 37808ms
+ ❯ apps/web/test/chat-browser.test.ts (3 tests | 1 failed) 113748ms
+   × qualifies the chat frames and keyboard/stream/reload paths in Chromium 30021ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/live-view.test.ts > bounds redemption of pre-issued tickets and rejects reuse without opening another desktop
+TimeoutError: timeout
+ ❯ timeout node_modules/@nats-io/nats-core/build/src/util.ts:82:29
+ ❯ new RequestOne node_modules/@nats-io/nats-core/build/src/request.ts:143:25
+ ❯ NatsConnectionImpl.request node_modules/@nats-io/nats-core/build/src/nats.ts:436:17
+ ❯ StreamAPIImpl._request node_modules/@nats-io/jetstream/build/src/jsbaseclient_api.ts:152:33
+ ❯ StreamAPIImpl.info node_modules/@nats-io/jetstream/build/src/jsmstream_api.ts:573:26
+ ❯ EventStore.head libs/event-store/src/jetstream.ts:348:40
+    346|       return (await this.manager.streams.getMessage(streamName, { last…
+    347|     }
+    348|     return (await this.manager.streams.info(streamName)).state.last_se…
+       |                                        ^
+    349|   }
+    350| }
+ ❯ EventStore.subscribe libs/event-store/src/jetstream.ts:319:46
+ ❯ apps/server/test/live-view.test.ts:101:22
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/3]⎯
+
+ FAIL  apps/server/test/screenshots.test.ts > captures once, scans and stores a PNG whose file and preview survive replay
+AssertionError: expected { status: 'refused', …(1) } to deeply equal { status: 'appended', …(2) }
+
+- Expected
++ Received
+
+  {
+-   "fileId": "ecf0d6f5f07ab873570beda243e52912f5b8b9edcccd2e3beefd0e6d65a50139",
+-   "sequence": 10,
+-   "status": "appended",
++   "error": "Screenshot could not be saved. Retry.",
++   "status": "refused",
+  }
+
+ ❯ apps/server/test/screenshots.test.ts:50:73
+     48|     expect(replies.map(reply => reply.json<unknown>())).toEqual([resul…
+     49|     expect(result.statusCode).toBe(201);
+     50|     expect((await app.inject({ method: 'POST', url, headers })).json()…
+       |                                                                         ^
+     51|     const rows = await history(nats.store, 'conversation-chat', 'test'…
+     52|     expect(rows.filter(row => row.event.type === 'file.uploaded')).toH…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/3]⎯
+
+ FAIL  apps/web/test/chat-browser.test.ts > qualifies the chat frames and keyboard/stream/reload paths in Chromium
+Error: Command failed: /usr/bin/node scripts/check-chat-browser.mjs
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+locator.waitFor: Error: strict mode violation: getByText('Can\'t reach your pod', { exact: true }) resolved to 2 elements:
+    1) <strong _ngcontent-ng-c2757667523="">…</strong> aka getByRole('navigation', { name: 'Sessions' }).getByText('Can\'t reach your pod')
+    2) <strong _ngcontent-ng-c2757667523="">…</strong> aka locator('#workspace-navigation').getByText('Can\'t reach your pod')
+
+Call log:
+  - waiting for getByText('Can\'t reach your pod', { exact: true }) to be visible
+
+    at /home/jente/dev/wt/f2-drawers/scripts/check-chat-browser.mjs:101:77 {
+  log: [
+    "  - waiting for getByText('Can\\'t reach your pod', { exact: true }) to be visible"
+  ]
+}
+
+Node.js v22.23.3
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/3]⎯
+
+
+ Test Files  3 failed | 82 passed | 4 skipped (89)
+      Tests  3 failed | 1445 passed | 15 skipped (1463)
+   Start at  16:44:24
+   Duration  1722.25s (tests 95%, import 5%)
+
+    Isolate  89 workers spawned · ~440ms startup each (spawn + environment, per file)
+             at least ~19.12s faster with isolate: false — reuses workers across files instead of one per file

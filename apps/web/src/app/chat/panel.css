@@ -30,7 +30,7 @@
 .session-panel { display: flex; flex-direction: column; min-height: 0; }
 .panel-header { flex-shrink: 0; }.panel-header strong { font-size: 13px; color: #2b3133; }
 .panel-header .panel-scope { margin-left: auto; display: flex; align-items: center; gap: 6px; }
-.panel-header .close-panel { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; margin-right: -12px; }
+
 .panel-tabs { display: flex; padding: 10px 12px; gap: 8px; border-bottom: 1px solid #dee3e4; }
 .panel-tabs button { border-radius: 6px; padding: 5px 12px; font-size: 12px; text-align: left; min-width: 64px; }
 .panel-tabs [aria-selected=true] { background: white; color: #16191a; font-weight: 600; }

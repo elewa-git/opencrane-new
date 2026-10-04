@@ -1,0 +1,22 @@
+:host { display: block; min-width: 0; }
+.entry { margin: 12px 18px; width: calc(100% - 36px); text-align: left; }
+p { font-size: 14px; color: var(--oc-ink-muted); }
+button {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--oc-border-input);
+  border-radius: var(--oc-radius-button);
+  background: var(--oc-surface-raised);
+  color: var(--oc-ink-default);
+  font: inherit;
+}
+.display {
+  height: min(60dvh, 600px);
+  width: 100%;
+  overflow: auto;
+  background: var(--oc-ink-strong);
+}
+.display[hidden] { display: none; }
+.tools { display: flex; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 600px) { .tools button { width: 100%; } }

@@ -29,7 +29,8 @@
     "lint:fixtures": "python3 infra/odoo/boundary.py",
     "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture",
     "test:chat:production": "NO_COLOR=1 node scripts/check-chat-production.mjs",
-    "visual:f1-foundation": "node scripts/check-f1-foundation.mjs"
+    "visual:f1-foundation": "node scripts/check-f1-foundation.mjs",
+    "visual:f2-drawers": "node scripts/check-f2-drawers.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -16,3 +16,12 @@ oc-workspace button:active, oc-workspace a:active, oc-workspace summary:active {
 @media(prefers-reduced-motion:reduce) {
   *,*::before,*::after { animation:none!important;transition:none!important;scroll-behavior:auto!important; }
 }
+
+@keyframes oc-menu-hinge {
+  from { transform: perspective(1200px) rotateY(26deg) translateX(-14px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@keyframes oc-sheet-lift {
+  from { transform: translateY(24px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}

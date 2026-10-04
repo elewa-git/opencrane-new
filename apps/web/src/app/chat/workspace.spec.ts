@@ -2,6 +2,15 @@ import { TestBed } from '@angular/core/testing';
 import { Workspace } from './workspace';
 import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 
+function openPanelDialog(this: HTMLDialogElement): void {
+  this.setAttribute('open', '');
+}
+
+function closePanelDialog(this: HTMLDialogElement): void {
+  this.removeAttribute('open');
+  this.dispatchEvent(new Event('close'));
+}
+
 afterEach(() => { vi.restoreAllMocks(); history.replaceState({}, '', '/'); });
 it('renders streamed replies, wake progress and durable Stop, then replays the stopped partial', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
@@ -82,8 +91,16 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
     row: { id: 'upload', position: 2, type: 'file.uploaded', time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', fileId: 'file', uploadedBy: 'me', name: 'project.pdf', mime: 'application/pdf' } } }) }));
   await fixture.whenStable();
   expect(root.querySelector('.transcript .file-card')?.textContent).toContain('project.pdf');
+  const drawer = root.querySelector('oc-hinge-drawer dialog');
+  if (!drawer) throw new Error('Missing panel drawer');
+  const dialogMethods = { showModal: openPanelDialog, close: closePanelDialog };
+  Object.assign(drawer, dialogMethods);
+  root.querySelector<HTMLButtonElement>('#panel-toggle')!.click();
+  await fixture.whenStable();
   expect(root.querySelector('.panel-section')?.textContent).toContain('Attached by you');
   expect(root.querySelector('.panel-section')?.textContent).toContain('project.pdf');
+  drawer.querySelector<HTMLButtonElement>('.back')!.click();
+  await fixture.whenStable();
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position: 3,
     row: { id: 'delivered', position: 3, type: 'file.delivered', time: '2026-10-03T10:00:02Z', data: { fileId: 'file' } } }) }));
   composer.value = 'a'.repeat(32000); composer.dispatchEvent(new Event('input')); await fixture.whenStable();

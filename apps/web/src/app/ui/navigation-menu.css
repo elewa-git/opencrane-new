@@ -1,0 +1,28 @@
+dialog {
+  inset: 0 auto 0 0;
+  margin: 0;
+  width: min(390px, 100vw);
+  max-width: 100vw;
+  height: 100dvh;
+  max-height: 100dvh;
+  background: var(--oc-surface-rail);
+  box-shadow: 16px 0 16px -8px #16191a33;
+  transform-origin: left center;
+}
+dialog[open] { animation: oc-menu-hinge 420ms var(--oc-ease-fold); }
+nav { padding: 12px 10px; overflow: auto; }
+a {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  padding: 12px 18px;
+  border-radius: var(--oc-radius-button);
+  color: var(--oc-ink-strong);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+a[aria-current] { background: var(--oc-surface-raised); box-shadow: var(--oc-shadow-active-nav); }
+@media (max-width: 700px) {
+  dialog { width: 100%; }
+  .close { display: block; }
+}

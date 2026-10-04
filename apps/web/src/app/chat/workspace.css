@@ -3,7 +3,7 @@
 .workspace { height: 100%; display: grid; grid-template-rows: minmax(0,1fr); grid-template-columns: 236px minmax(0,1fr); overflow: hidden; color: #2b3133; background: #eceff0; }
 .workspace.panel-open { grid-template-columns: 236px minmax(0,1fr) 300px; }
 button,a,summary { -webkit-tap-highlight-color: transparent; }
-button:focus-visible,a:focus-visible,summary:focus-visible,section:focus-visible { outline: 2px solid #0db5cc; outline-offset: 2px; }
+button:focus-visible,a:focus-visible,summary:focus-visible,section:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
 button:active { transform: translateY(1px); transition: transform 90ms var(--oc-ease-standard); }
 .rail { display: flex; flex-direction: column; background: #eef1f2; border-right: 1px solid #d9dfe0; min-height: 0; }
 .brand { display: flex; align-items: center; gap: 8px; height: 56px; min-height: 56px; padding: 0 16px; border-bottom: 1px solid #e6eaeb; font-size: 15px; }
@@ -54,18 +54,17 @@ h1 { min-width: 0; flex: 1; font-size: 15px; font-weight: 600; white-space: nowr
 .skeleton { padding: 18px; font-size: 13px; }
 .rail-loading oc-grain-loader { margin: 8px 0; }
 .skeleton oc-grain-loader { margin-top: 12px; }
-.navigation-toggle { display: none; }dialog { border: 1px solid #d9dfe0; border-radius: 12px; color: #2b3133; }dialog::backdrop { background: #16191a55; }.panel-dialog { width: min(360px,100vw); max-height: 90dvh; padding: 0; background: #f3f6f6; }.close-panel { float: right; width: 44px; height: 44px; }.search-dialog { width: min(460px,92vw); }.search-dialog label { display: block; }.search-dialog input { width: 100%; min-height: 44px; margin: 16px 0; }.search-dialog button { display: block; min-height: 44px; }.search-dialog form button { margin-left: auto; min-width: 44px; }
+.navigation-toggle { display: none; }dialog { border: 1px solid #d9dfe0; border-radius: 12px; color: #2b3133; }dialog::backdrop { background: #16191a55; }.search-dialog { width: min(460px,92vw); }.search-dialog label { display: block; }.search-dialog input { width: 100%; min-height: 44px; margin: 16px 0; }.search-dialog button { display: block; min-height: 44px; }.search-dialog form button { margin-left: auto; min-width: 44px; }
 @media(max-width:1099px) { .workspace.panel-open { grid-template-columns: 236px minmax(0,1fr); }.desktop-panel { display: none; } }
 @media(max-width:700px) {
   .workspace,.workspace.panel-open { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr); }
   .navigation-toggle { display: inline-flex; align-items: center; justify-content: center; }
   .navigation-toggle oc-icon { width: 18px; height: 18px; }
-  .rail { display: none; }.rail.mobile-open { display: flex; position: absolute; inset: 56px 32px 0 0; z-index: 10; box-shadow: 12px 0 40px #16191a33; }
-  .rail .brand { display: none; }.rail button,.rail a { min-height: 44px; }
+  .rail { display: none; }
+  .rail-card button { min-height: 44px; min-width: 44px; }
   .workspace-header { padding: 0 12px; gap: 6px; }.workspace-header h1 { font-size: 13px; }.workspace-header>.avatar { display: none; }
   .workspace-header button { min-width: 44px; min-height: 44px; }.header-status { font-size: 11px; }
   .transcript { padding: 16px 16px 12px; }.recipient button { min-width: 44px; min-height: 44px; }.recipient { min-height: 44px; }
-  .panel-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
 }
 
 .row-status { color: #81888a; font-size: 11px; margin-left: auto; white-space: nowrap; }
@@ -87,3 +86,18 @@ oc-file-preview { position: absolute; }
 .upload-status { display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:#616a6c;padding:8px 0;overflow-wrap:anywhere; }
 .upload-status button { min-width:44px;min-height:44px; }
 .upload-status progress { accent-color:#0d8ba0;max-width:100%; }
+
+.mobile-ask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: calc(100% - 20px);
+  min-height: 44px;
+  margin: 12px 10px 0;
+  padding: 8px 18px;
+  border: 1px dashed var(--oc-accent-border);
+  border-radius: var(--oc-radius-button);
+  background: var(--oc-info-notice);
+  color: var(--oc-accent-dark);
+  text-align: left;
+}
