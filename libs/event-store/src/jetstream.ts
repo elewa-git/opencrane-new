@@ -209,7 +209,7 @@ export class EventStore {
     let backoff = 25;
     while (performance.now() < deadline) {
       try {
-        return await this.attempt(event, command.expectedSequence, deadline);
+        return await this.attempt(event, command.expectedSequence, deadline, command.expectedSubject);
       } catch (error) {
         if (!isEventStoreUnavailable(error)) {
           throw new Error("Event append failed", { cause: error });
@@ -240,6 +240,7 @@ export class EventStore {
     event: EventEnvelope,
     expectedSequence: number,
     deadline: number,
+    expectedSubject?: string,
   ): Promise<AppendResult> {
     const previous = await this.previous(event, deadline);
     if (previous) {
@@ -252,7 +253,8 @@ export class EventStore {
     try {
       const ack = await this.client.publish(subject, JSON.stringify(event), {
         msgID: event.id,
-        expect: { streamName, lastSubjectSequence: expectedSequence },
+        expect: { streamName, lastSubjectSequence: expectedSequence,
+          ...(expectedSubject ? { lastSubjectSequenceSubject: readSubject(expectedSubject) } : {}) },
         timeout: Math.min(requestMs, deadline - performance.now()),
         retries: 1,
       });

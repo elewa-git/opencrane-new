@@ -389,7 +389,7 @@ Record the source commit in each copied file's header or README.
 11. **Dev-only build data packages** (owner, 2026-10-01): transitive build-time data packages under CC-BY or CC0 (caniuse-lite, spdx data, mdn-data, from the Angular toolchain) are accepted. They never ship in a silo's runtime images, which stay OSI-only.
 12. **Kubernetes-native computers** (owner, 2026-10-01): no cloud-specific feature or Pod Snapshot is required; suspend keeps the encrypted volume and resume mounts it in a warm Agent Sandbox Pod.
 
-13. **First-member bootstrap** (owner, 2026-10-02): installation prints a single-use token expiring after 24 hours; the first authenticated user in the configured Zitadel organisation to claim it becomes owner through one event. Any previous owner disables this path. Ownership transfer is #24. The dev stack keeps its explicit owner bootstrap.
+13. **First-member bootstrap** (owner, 2026-10-02): installation prints a single-use token expiring after 24 hours; the first authenticated user in the configured Zitadel organisation to claim it becomes owner through one event. This is for a fresh silo: any membership history disables this path, with expected sequence zero across member streams checked in the same append. Ownership transfer is #24. The dev stack keeps its explicit owner bootstrap.
 
 ## Risks
 

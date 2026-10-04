@@ -141,11 +141,17 @@ and identity binding are separate work.
 Owner decision, 2 October 2026: production installation prints a one-time token
 with a 24-hour expiry. Only its hash and expiry live in a private local file.
 `POST /api/silo/claim` requires a same-origin authenticated session from the
-configured Zitadel organisation. One conditional append at expected sequence
-zero records `silo.owner_bootstrapped` on `member-bootstrap-owner`, including
-that OIDC identity and owner role. All simultaneous claims compete on this one
-stream. Any historical owner admission or promotion disables bootstrap, including
-a removed owner; ownership transfer belongs to #24. Neither the token nor its
+configured Zitadel organisation. The token creates the first owner of a fresh
+silo. Any membership history disables bootstrap, including pending invitations
+and removed members; an existing member cannot claim ownership with the token.
+One conditional append at expected sequence zero across `member-*` records
+`silo.owner_bootstrapped` on `member-bootstrap-owner`, including that OIDC
+identity and owner role. Identity bindings live on member streams, so this same
+append checks that the claimant's binding stream and all other member streams
+are still empty. Concurrent claims or membership writes cause a conflict without
+an event or token consumption. Historical owner refusals retain `owner_exists`
+or `token_used`; other membership history returns `members_exist`.
+Ownership transfer belongs to #24. Neither the token nor its
 hash is event data. Projection/reactions treat this event as a joined owner,
 including identity binding, personal assistant and initial model grants. The
 model process seeds the installation's default paying group as for every owner.

@@ -80,6 +80,45 @@ it('refuses an existing owner even when that member came through the dev invitat
   expect(await nats.store.head()).toBe(1);
 });
 
+it('refuses an existing non-owner member without changing their identity binding or role', async () => {
+  const { event } = await import('@opencrane/event-store/testing');
+  const { databases } = await import('@opencrane/authz/testing');
+  const { connectMemberFeed, members, pgDb, ProjectionRunner } = await import('@opencrane/projections');
+  const { createLogger } = await import('@opencrane/observability');
+  const dbs = await databases();
+  const feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
+  const runner = new ProjectionRunner(pgDb(dbs.queue), nats.store, createLogger('bootstrap-test', { level: 'silent' }));
+  try {
+    await runner.initialise(members);
+    expect((await nats.store.append({ expectedSequence: 0, event: {
+      ...event('invite-alice', 'member-alice', 'member.invited'), silo: 'test',
+      data: { memberId: 'alice', invitationId: 'invite-alice', email: 'alice@example.test', role: 'member',
+        invitedBy: 'admin', invitedIdentity: { issuer: config.issuerUrl, sub: session.sub },
+        expiresAt: new Date(clock.getTime() + 60_000).toISOString() },
+    } })).status).toBe('appended');
+    const joined = await app.inject({ method: 'POST', url: '/members/join',
+      payload: { memberId: 'alice', invitationId: 'invite-alice', commandId: 'join-alice', displayName: 'Alice' },
+      headers: { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(config, session)}` } });
+    expect(joined.statusCode).toBe(200);
+    await runner.run(members);
+    expect(await feed.memberId('test', config.issuerUrl, session.sub)).toBe('alice');
+    const original = [{ position: 1, member: { memberId: 'alice', email: 'alice@example.test', displayName: null,
+      role: 'member', status: 'invited' } }, { position: 2, member: { memberId: 'alice', email: 'alice@example.test',
+      displayName: 'Alice', role: 'member', status: 'joined' } }];
+    expect(await feed.read('test', 0)).toEqual(original);
+    const response = await claim();
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'members_exist' });
+    expect(await nats.store.head()).toBe(2);
+    await runner.run(members);
+    expect(await feed.memberId('test', config.issuerUrl, session.sub)).toBe('alice');
+    expect(await feed.read('test', 0)).toEqual(original);
+    await runner.rebuild(members);
+    expect(await feed.memberId('test', config.issuerUrl, session.sub)).toBe('alice');
+    expect(await feed.read('test', 0)).toEqual(original);
+  } finally { await feed.close(); await dbs.close(); }
+});
+
 it('refuses another organisation even when the dev identity exception allows it to sign in', async () => {
   await app.close();
   const exceptional = { ...config, extraIdentities: [{ issuer: config.issuerUrl, subject: session.sub }] };
@@ -97,6 +136,46 @@ it('allows exactly one winner across two HTTP servers racing the same token', as
     expect(responses.map(r => r.statusCode).sort()).toEqual([201, 409]);
     expect(await nats.store.head()).toBe(1);
   } finally { await other.close(); }
+});
+
+it.each(['alice', 'bob'])('refuses a claim by %s when a member binds after the history read', async sub => {
+  const { event } = await import('@opencrane/event-store/testing');
+  let reachedAppend!: () => void, resumeAppend!: () => void;
+  const reached = new Promise<void>(resolve => { reachedAppend = resolve; });
+  const resume = new Promise<void>(resolve => { resumeAppend = resolve; });
+  await app.close();
+  app = buildServer(config, { membership: { silo: 'test', now: () => clock, store: {
+    readStream: (...args) => nats.store.readStream(...args),
+    async append(command) {
+      reachedAppend();
+      await resume;
+      return nats.store.append(command);
+    },
+  } } });
+  const claiming = claim({ ...session, sub }).then(response => response);
+  try {
+    await reached;
+    expect((await nats.store.append({ expectedSequence: 0, event: {
+      ...event('invite-racing-alice', 'member-alice', 'member.invited'), silo: 'test',
+      data: { memberId: 'alice', invitationId: 'invite-alice', email: 'alice@example.test', role: 'member',
+        invitedBy: 'admin', invitedIdentity: { issuer: config.issuerUrl, sub: session.sub },
+        expiresAt: new Date(clock.getTime() + 60_000).toISOString() },
+    } })).status).toBe('appended');
+    expect((await nats.store.append({ expectedSequence: 1, event: {
+      ...event('join-racing-alice', 'member-alice', 'member.joined'), silo: 'test',
+      principal: { kind: 'human', id: session.sub },
+      data: { memberId: 'alice', invitationId: 'invite-alice', email: 'alice@example.test',
+        displayName: 'Alice', role: 'member' },
+    } })).status).toBe('appended');
+  } finally { resumeAppend(); }
+  const response = await claiming;
+  expect(response.statusCode).toBe(409);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'concurrent_claim' });
+  expect(await nats.store.head()).toBe(2);
+  const bootstrap = [];
+  for await (const row of nats.store.readStream('member-bootstrap-owner')) bootstrap.push(row);
+  expect(bootstrap).toEqual([]);
+  expect((await claim()).json()).toEqual({ status: 'refused', reason: 'members_exist' });
 });
 
 it('limits failed guesses across authenticated identities and allows attempts after one minute', async () => {

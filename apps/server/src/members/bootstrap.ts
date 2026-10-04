@@ -8,24 +8,26 @@ import { sessionFor, type MembershipOptions } from './routes.ts';
 const inputSchema = z.object({ token: z.string().min(1).max(128), displayName: z.string().trim().min(1).max(200),
   email: z.email().max(254) }).strict();
 
-async function claimedBy(options: MembershipOptions) {
+async function bootstrapRefusal(options: MembershipOptions, sub: string) {
   // ponytail: scan membership history only during installation; index if this grows beyond bootstrap.
+  let hasMembers = false;
   for await (const { event } of options.store.readStream('member-*', 1, performance.now() + 10_000)) {
     if (event.silo !== options.silo) throw new Error('Bootstrap silo mismatch');
+    hasMembers = true;
     const data = z.record(z.string(), z.unknown()).parse(event.data);
-    if (event.type === 'silo.owner_bootstrapped') return event.principal?.id ?? 'existing';
+    if (event.type === 'silo.owner_bootstrapped') return event.principal?.id === sub ? 'token_used' : 'owner_exists';
     if ((event.type === 'member.joined' && data['role'] === 'owner') ||
-      (event.type === 'member.role_changed' && data['newRole'] === 'owner')) return 'existing';
+      (event.type === 'member.role_changed' && data['newRole'] === 'owner')) return 'owner_exists';
   }
-  return undefined;
+  return hasMembers ? 'members_exist' : undefined;
 }
 
 type ClaimResult = { status: 'refused'; reason: string } | { status: 'claimed'; memberId: string; sequence: number };
 
 async function claimSilo(options: MembershipOptions, issuer: string, sub: string,
   input: z.infer<typeof inputSchema>, tokenFile: string | undefined, now: () => Date): Promise<ClaimResult> {
-  const owner = await claimedBy(options);
-  if (owner) return { status: 'refused', reason: owner === sub ? 'token_used' : 'owner_exists' };
+  const reason = await bootstrapRefusal(options, sub);
+  if (reason) return { status: 'refused', reason };
   if (!tokenFile) throw new Error('Bootstrap token file is not configured');
   const stored = await readBootstrapToken(tokenFile);
   if (stored.silo !== options.silo) throw new Error('Bootstrap token silo mismatch');
@@ -33,7 +35,8 @@ async function claimSilo(options: MembershipOptions, issuer: string, sub: string
   const digest = createHash('sha256').update(input.token).digest();
   if (!timingSafeEqual(digest, Buffer.from(stored.hash, 'hex'))) return { status: 'refused', reason: 'wrong_token' };
   const id = randomUUID();
-  const result = await options.store.append({ expectedSequence: 0, event: {
+  // Identity bindings live on member streams; fence all of them to keep the silo fresh.
+  const result = await options.store.append({ expectedSequence: 0, expectedSubject: 'member-*', event: {
     id, commandId: id, type: 'silo.owner_bootstrapped', subject: 'member-bootstrap-owner',
     silo: options.silo, source: 'opencrane-server', time: now().toISOString(), principal: { kind: 'human', id: sub },
     data: { memberId: 'bootstrap-owner', email: input.email, displayName: input.displayName,

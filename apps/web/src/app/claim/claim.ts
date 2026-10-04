@@ -4,10 +4,11 @@ import { z } from 'zod';
 const messages: Record<string, string> = {
   token_used: 'This token has already been used.',
   owner_exists: 'This silo already has an owner. Ask them for an invitation.',
+  members_exist: 'This silo already has members. The installation token can only claim a fresh silo.',
   token_expired: 'This token has expired. Ask the installer for a new token.',
   wrong_token: 'That token is incorrect. Check it with the installer.',
   wrong_organisation: 'Use an account from this silo’s organisation.',
-  concurrent_claim: 'Someone else claimed this silo at the same time.',
+  concurrent_claim: 'This silo changed while you were claiming it. Try again.',
   rate_limited: 'Too many attempts. Wait one minute before trying again.',
   no_session: 'Your session has expired. Sign in again to claim.',
   wrong_origin: 'This request came from another site. Reload this page.',

@@ -35,14 +35,42 @@ control PostgreSQL 17 at port 55432. No dev or production stack was operated.
 - NOT RUN: fresh production installation and real Zitadel token claim. The user
   prohibited operating stacks. Production secret-file provisioning and ingress
   rate limiting across multiple replicas require live qualification.
-- PASS: independent review pass 1 found no blockers in the requested scope.
-  Its disposable NATS probe identified a non-blocking limitation: a trusted
-  provisioning command can admit an owner on another member stream after the
-  claim's history read. Installers must choose one bootstrap method; the two
-  token-claim race is fenced. Do not run dev owner provisioning and token claiming
-  concurrently.
+- FAIL: independent review pass 1 found that an existing non-owner member could
+  claim the token, receive a second active membership and lose identity access.
+  The fix and verification are recorded below. The earlier no-blocker claim was
+  incorrect.
 - NOT RUN: ownership transfer (#24); outside this feature.
 
 Repeat the tests using the commands in the [server contract](../../apps/server/README.md#first-owner-bootstrap-12).
 The first HTTP tracer failed with 404 before the route existed; the first browser
 tracer failed because the Claim this silo heading did not exist.
+
+## Review pass 1 correction
+
+Date: 4 October 2026. Base: `b2b371c`, with this correction on
+`work/bootstrap-token`. Environment: the same worktree and PostgreSQL control
+database; disposable NATS/PostgreSQL fixtures only. No stack was operated.
+
+The #12 token admits the first owner of a fresh silo. The chosen rule refuses
+all membership history, including invitations and removed members, rather than
+promoting an existing member. Identity bindings live on member streams, so the
+single append requires expected sequence zero across `member-*`, including the
+claimant's binding stream. This also fences concurrent trusted provisioning.
+
+- PASS: the new HTTP regression failed first with HTTP 201 instead of 409.
+  After the guard, it returns `members_exist`, appends no event and preserves
+  the original identity binding and member role through projection and replay.
+- FAIL then PASS: deterministic races admit a non-owner after the claim's history
+  read, before its append. Both the bound identity and an unrelated claimant
+  initially received HTTP 201. The native category sequence expectation now
+  refuses both without a bootstrap event; a retry reports `members_exist`.
+- PASS: repository lint, all-workspace typecheck, event catalogue (83 types),
+  web production build and web tests (11 files, 56 tests). Existing bundle/CSS
+  budget and noVNC warnings remain. Command logs are in
+  `/tmp/bootstrap-review-{lint,typecheck,web-build,web-tests}.log`.
+- PASS: `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2`
+  with the default test timeout: 77 files passed, three skipped; 1,366 tests
+  passed, 14 skipped, in 1,123.82 seconds. All 20 bootstrap tests passed,
+  including the browser journey. Log: `/tmp/bootstrap-review-root-tests.log`.
+- NOT RUN: the 14 existing opt-in tests skipped by their live/provider flags.
+- NOT RUN: review pass 2 and fresh-install qualification. Stacks remain untouched.

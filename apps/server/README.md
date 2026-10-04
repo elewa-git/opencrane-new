@@ -434,7 +434,7 @@ terminal with output capture disabled; never put the token in argv, a URL, logs
 or events. An existing file is refused, so repeated installation cannot rotate
 credentials silently. For an expired or lost token on an unclaimed silo, the
 operator may remove that private file and rerun the command. Event history still
-prevents a new claim after an owner has ever existed. Back up the event store;
+prevents a new claim after any membership history exists. Back up the event store;
 losing this hash file after a successful claim does not reopen bootstrap.
 
 Set the same `BOOTSTRAP_TOKEN_FILE` and `SILO_ID` on the server, along with its
@@ -451,7 +451,18 @@ The model process seeds `installation-default` (or `DEFAULT_PAYING_GROUP_ID`)
 as the default personal paying group using its existing budget events.
 
 `POST /api/silo/claim` accepts only `{token, displayName, email}` with an exact
-same-origin session. Refusals include `token_used`, `owner_exists`,
+same-origin session. The token creates the first owner of a fresh silo: any
+membership history, including pending invitations and removed members, disables
+this path. An existing member cannot use it to gain ownership. This follows the
+owner decision on #12; it is not a recovery or promotion command.
+
+Identity bindings live on member streams. The same conditional append requires
+expected sequence zero across `member-*`, including every identity's binding
+stream, using NATS' native subject-filter expectation. A membership write between
+the history read and append therefore refuses the claim without recording an
+event or consuming the token. No projection freshness is needed for this check.
+
+Refusals include `token_used`, `owner_exists`, `members_exist`,
 `token_expired`, `wrong_token`, `wrong_organisation`, `concurrent_claim`,
 `no_session`, `wrong_origin` and `invalid_request`. Five submissions per minute
 share a process-wide installation budget across identities; HTTP 429 carries
@@ -464,8 +475,7 @@ All claim replies use `Cache-Control: no-store`.
 The existing dev stack retains its explicit invitation/join owner bootstrap
 for `jente@elewa.ke`; see its [instructions](../../infra/dev-stack/README.md#zitadel-sign-in).
 This production token path never uses the dev external-identity exception.
-Ownership transfer remains #24. Do not run trusted owner provisioning and the
-token claim concurrently; the production install uses the token method alone.
+Ownership transfer remains #24. The production install uses the token method alone.
 
 ```sh
 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres \

@@ -11,6 +11,8 @@ export interface StoredEvent {
 export interface AppendCommand {
   event: unknown;
   expectedSequence: number;
+  /** Check the whole event category (for example member-*) instead of only this entity. */
+  expectedSubject?: string;
 }
 export type AppendResult =
   | { status: "appended"; sequence: number }
@@ -48,6 +50,10 @@ export function validateCommand(
     return undefined;
   }
   const event = parsed.event;
+  if (command.expectedSubject !== undefined && command.expectedSubject !== event.subject
+    && command.expectedSubject !== `${getEventDefinition(event.type)?.stream}-*`) {
+    return undefined;
+  }
   if (
     !event.commandId ||
     !event.principal ||
