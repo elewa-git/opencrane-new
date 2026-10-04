@@ -1,0 +1,16 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run libs/models/test/gateway.test.ts --maxWorkers=2 -t a forged computer restart after agent.turn_failed
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 77 skipped (78)
+   Start at  12:01:19
+   Duration  15.66s (tests 53%, transform 31%, import 16%)
+
+  Transform  transforming modules took 4.72s · 31% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

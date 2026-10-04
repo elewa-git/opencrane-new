@@ -1,0 +1,57 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+ ❯ apps/server/test/approvals.test.ts (22 tests | 1 failed | 1 skipped) 177852ms
+   × opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart 17863ms
+ ❯ apps/server/test/bridge-channel.test.ts (5 tests | 1 failed) 18409ms
+   × recovers the server connector from the NATS report sequence without gaps or duplicate events 17855ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/approvals.test.ts > opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart
+AssertionError: expected [ 200, 503 ] to deeply equal [ 200, 403 ]
+
+- Expected
++ Received
+
+  [
+    200,
+-   403,
++   503,
+  ]
+
+ ❯ apps/server/test/approvals.test.ts:66:45
+     64|     const renewed = await f.issue();
+     65|     const retry = await Promise.all([f.call(undefined, renewed), f.cal…
+     66|     expect(retry.map(r => r.status).sort()).toEqual([200, 403]);
+       |                                             ^
+     67|     expect(f.received()).toBe(1); expect(f.upstreamBody()).toBe(f.body…
+     68|     await f.restart();
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  apps/server/test/bridge-channel.test.ts > recovers the server connector from the NATS report sequence without gaps or duplicate events
+Error: Timed out waiting for service outcome
+ ❯ until libs/authz/test/services.ts:38:13
+     36|   while (!(await check())) {
+     37|     if (performance.now() >= deadline) {
+     38|       throw new Error("Timed out waiting for service outcome");
+       |             ^
+     39|     }
+     40|     await delay(20);
+ ❯ apps/server/test/bridge-channel.test.ts:96:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  2 failed | 80 passed | 3 skipped (85)
+      Tests  2 failed | 1404 passed | 14 skipped (1420)
+   Start at  11:19:11
+   Duration  1457.25s (tests 95%, import 4%, transform 1%)
+
+    Isolate  85 workers spawned · ~369ms startup each (spawn + environment, per file)
+             at least ~15.32s faster with isolate: false — reuses workers across files instead of one per file

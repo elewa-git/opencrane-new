@@ -1,5 +1,8 @@
 # Secondary bootstrap qualification (#12)
 
+The earlier rounds below are historical. The latest source and live results are
+recorded under [requalification on main](#requalification-on-main).
+
 Date: 4 October 2026. Source: review-approved `a3ef79c`, plus the secondary-only
 bootstrap override and runnable journey in this change. Rebase onto `origin/main`
 completed without conflicts; its head was already the branch's base `39fe9da`.
@@ -120,11 +123,13 @@ PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- apps/s
 Claim a secondary stack only, then run:
 
 ```sh
-stack_id=$(infra/dev-stack/claim.sh) || exit 1
+set -e
+until stack_id=$(infra/dev-stack/claim.sh); do sleep 60; done
 export DEV_STACK_ID="$stack_id"
 export ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
 export DEV_OWNER_BOOTSTRAP=0
-infra/dev-stack/up.sh --id "$DEV_STACK_ID" --fresh
+trap 'infra/dev-stack/down.sh --id "$DEV_STACK_ID"' EXIT
+infra/dev-stack/up.sh --fresh
 node --experimental-strip-types infra/dev-stack/bootstrap-journey.ts
 ```
 
@@ -137,3 +142,126 @@ token hash, and admits the second CI user as an ordinary member through invitati
 and the shipped join command. That member's claim must append no ownership event.
 Both phases finish with `down.sh --id "$DEV_STACK_ID"` in the journey's `finally`;
 startup failures must also be followed by that teardown command.
+
+## Requalification on main
+
+Date: 4 October 2026. Application source:
+`b74a97b5c47cd136a4b7953ca1f98ae8f8fb3531`, rebased onto `origin/main`
+`65364a03b59babb3cacddd24978732edca831e5f` (#111). The rebase completed
+without conflicts. Before qualification, the working tree was clean and neither
+rebase state directory existed. Independent review pass 3 (astra) found no
+blockers, as supplied by the owner; no additional review pass was started.
+
+Bootstrap-event support remains in `libs/models` beside main's exact-subject
+authority reads and fences. No authority implementation was duplicated, and no
+application code, assertion or deadline was changed during this requalification.
+
+Environment: this worktree, Node 22.23.3, clean `npm ci`, PostgreSQL at
+`127.0.0.1:55432`, disposable service fixtures and a busy shared host.
+
+| Source check | Result | Seconds | Evidence |
+| --- | --- | --- | --- |
+| `npm run lint` | PASS | 232.89 | [Log](requalified-lint.txt) |
+| `npm run typecheck` | PASS | 170.40 | [Log](requalified-typecheck.txt) |
+| `npm run check:events` | PASS, 86 types | 1.20 | [Log](requalified-events.txt) |
+| `npm test -w apps/web -- --watch=false` | PASS, 60 tests / 11 files | 28.12 | [Log](requalified-web-tests.txt) |
+| `npm run build -w apps/web` | PASS | 19.14 | [Log](requalified-web-build.txt) |
+
+The first complete root run used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2`.
+It was **FAIL**: 1,404 tests passed, two failed and 14 were skipped; 80 files
+passed, two failed and three were skipped, in 1,457.25 runner seconds. The losing
+parallel approval retry returned 503 instead of 403; bridge replay timed out
+waiting for its second report. [Complete result](requalified-root-tests.txt).
+
+Both failed cases then passed in isolation with the same PostgreSQL URL,
+`--maxWorkers=2` and unchanged timeouts: [approval retry](requalified-approval-focused.txt)
+(18.02 command seconds) and [bridge replay](requalified-bridge-focused.txt)
+(8.70 command seconds). These focused passes do not turn the failed full run
+into a PASS.
+
+The second full-suite attempt was **PARTIAL**: it was stopped with SIGINT after
+the forged-restart case failed during gateway fixture startup (`Gateway stopped`),
+before its refusal assertion ran. Exit 130; 930.06 command seconds. It is not a
+completed or passing suite. [Failure excerpt](requalified-root-tests-rerun.txt).
+That case then passed twice in isolation, again without code or deadline changes:
+[first run](requalified-gateway-focused-1.txt) (19.49 command seconds) and
+[second run](requalified-gateway-focused-2.txt) (16.43 command seconds). The
+underlying startup error was not reproduced or repaired.
+
+The subsequent complete root rerun was **PASS**: 82 files passed and three were
+skipped; 1,406 tests passed and 14 were skipped, in 1,501.04 runner seconds
+(1,504.52 command seconds). It used the same PostgreSQL URL, `--maxWorkers=2`
+and `--reporter=verbose`; default test timeouts and application deadlines were
+unchanged. [Final result](requalified-root-tests-final.txt). All earlier failing
+cases passed in this complete run.
+
+The 14 existing opt-in conditions remain **NOT RUN**. The focused runs' extra
+skips are cases deselected by their name filters, not additional full-suite gaps.
+
+### First fresh attempt after the rebase
+
+Secondary stack `1`, 12:29–12:32 UTC. **FAIL** overall: fresh startup and the
+real Zitadel owner claim passed, including the identity binding and OpenFGA owner
+permission. The combined chat/upload step stopped at
+`Native PDF viewer did not render its first page`; token reuse and second-user
+refusals were **NOT RUN** on this attempt. `down.sh --id 1` completed and removed
+the secondary directory.
+
+The bootstrap fixture still launched Chromium's headless shell, which cannot
+render the native PDF preview added to the shared chat journey by uploads #79.
+Its first browser launch now uses the full `chromium` channel, matching
+`browser-signin.ts`. This is the only fixture-code change after the source gates;
+application code, assertions and deadlines remain unchanged.
+
+Evidence: [startup](requalified-startup-attempt1.txt),
+[journey](requalified-journey-attempt1.txt), [safe diagnostic](requalified-pdf-failure.txt),
+[teardown](requalified-teardown-attempt1.txt) and [run metadata](requalified-live-attempt1.json).
+
+### Corrected fresh secondary qualification
+
+**PASS**, 12:51–12:58 UTC, secondary stack `1`. Application source was the
+same `b74a97b`; the fixture included the full-Chromium selection above. The
+claim loop waited while both secondary slots belonged to other worktrees.
+`DEV_STACK_ID=1`,
+`ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key` and
+`DEV_OWNER_BOOTSTRAP=0` were set. Both installations used `up.sh --fresh` on
+that claimed slot. Only the local stub model was configured. The owner stack and
+host networking were not operated or changed.
+
+- PASS: the fresh silo had no membership history. Installation printed one token,
+  held only in memory; its private file contained only the hash and expiry.
+- PASS: real Zitadel sign-in and claim returned HTTP 201. The CI subject was bound
+  to the sole joined `bootstrap-owner`, with role `owner` and OpenFGA owner access.
+- PASS: Chromium chat at 1280px streamed `Hello from your computer.`, retained the
+  completed reply after reload, and retained Stop's partial reply after reload.
+  First token: **15,776 ms**; completion: **17,586 ms**.
+- PASS: the inherited upload journey recovered one deliberately lost successful
+  response without a duplicate file, rendered the native PDF preview, answered
+  Willow-47 through the stub after MarkItDown conversion, and refused EICAR,
+  forbidden types and oversized files. PDF, text and image previews passed.
+- PASS: the same token returned HTTP 409, `token_used`, and the input was cleared.
+  Another signed-in CI user returned HTTP 409, `owner_exists`. History contained
+  exactly one membership event, `silo.owner_bootstrapped`, by the claimant.
+- PASS: another fresh installation on the same slot retained only the token hash.
+  The second CI user joined as an ordinary member through invitation and the
+  shipped `/members/join` command. Their claim returned HTTP 409, `members_exist`,
+  and cleared the input. Membership history contained only `member.invited` and
+  `member.joined`; the refusal appended no ownership event.
+- PASS: claim and refusal screens fitted 1280px and 390px. Chat interaction ran
+  at 1280px and was captured at both widths after the upload checks. Current
+  [owner](claimed-390.png), [stub chat with PDF answer](stub-chat-1280.png),
+  [token reuse](token-used-390.png) and [members refusal](members-exist-390.png)
+  screenshots replace the earlier snapshots. No screenshot contains a token.
+- PASS: `down.sh --id 1` ran in the journey's `finally`. Follow-up checks found no
+  secondary directory, Compose containers or computer/gateway namespaces.
+
+Evidence: [startup](requalified-startup.txt), [complete journey](requalified-journey.txt),
+[teardown](requalified-teardown.txt), [run metadata](requalified-live.json) and
+[image inventory with computer digest](images.json). Startup took 88.60 command
+seconds; the complete journey, including its second fresh installation and
+teardown, took 303.64 command seconds.
+
+Source readiness and the requested fresh secondary qualification are **PASS**.
+The earlier failed and partial attempts remain recorded above. The 14 opt-in root
+conditions and production installation remain **NOT RUN**; no paid provider was used.

@@ -1,0 +1,114 @@
+Command: PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2 --reporter=verbose
+Default timeouts and application deadlines unchanged.
+Final result excerpt; full local log: /tmp/bootstrap-requalification-root-final.log
+
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2 --reporter=verbose
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+ ✓ libs/auth/test/codec.test.ts > createEnvelopeCodec > rejects an authentication tag that is too long 5ms
+ ✓ libs/auth/test/codec.test.ts > createEnvelopeCodec > rejects a nonce cut down to 4 bytes 7ms
+ ✓ libs/observability/test/handler-log-no-span.test.ts > runHandler with no tracer provider registered > omits trace_id from the logged fields rather than logging the all-zero no-op span id 7ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > treats authorization, Authorization, ... as sensitive 12ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > treats password, PASSWORD, ... as sensitive 2ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > treats token, accessToken, ... as sensitive 1ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > treats API_KEY, APIKey, ... as sensitive 15ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > treats DATABASE_URL, connectionString, ... as sensitive 4ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > leaves ordinary names alone, and names that only refer to a secret or count one 6ms
+ ✓ libs/observability/test/names.test.ts > isSensitiveFieldName > keeps a number under a name ending in "tokens" (a usage count), but not a string or a list 8ms
+ ✓ libs/auth/test/cookies.test.ts > serializeCookie > defaults to HttpOnly, Secure, SameSite=Lax, Path=/ 5ms
+ ✓ libs/auth/test/cookies.test.ts > serializeCookie > can drop Secure for local http development 2ms
+ ✓ libs/auth/test/cookies.test.ts > clearCookie > sets Max-Age=0 1ms
+ ✓ libs/auth/test/cookies.test.ts > parseCookieHeader > parses several cookies from one header 2ms
+ ✓ libs/auth/test/cookies.test.ts > parseCookieHeader > returns an empty object for a missing header 1ms
+ ✓ libs/auth/test/cookies.test.ts > parseCookieHeader > never throws on a malformed percent-escape from a tampered value 2ms
+ ✓ libs/observability/test/telemetry.test.ts > resolveTelemetryEnabled > is off by default, on when an endpoint is set, and off again when it is set but empty (a blank Helm value renders as "") 3ms
+ ✓ libs/observability/test/telemetry.test.ts > resolveTelemetryEnabled > lets an explicit `enabled` option override the environment either way 1ms
+ ✓ libs/observability/test/telemetry.test.ts > startTelemetry / shutdownTelemetry > starts no SDK when no collector is configured, then starts one SDK once when an endpoint is set, even if called twice, and names the service 3ms
+ ✓ libs/observability/test/telemetry.test.ts > startTelemetry / shutdownTelemetry > flushes the SDK on shutdown and can start again; a failed flush (collector unreachable) does not reject but goes to onError 5ms
+ ✓ libs/observability/test/telemetry.test.ts > startTelemetry / shutdownTelemetry > is safe to call shutdownTelemetry when it was never started, with or without onError 1ms
+ ✓ apps/web/test/chat-state.test.ts > replays streamed text once, replaces completion and keeps the stopped partial across reload 9ms
+ ✓ libs/models/test/gateway.test.ts > uses lifecycle credentials and refuses expired, pre-resume and pre-loss grants before reserving 13117ms
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > admits the checked computer template and rejects a forged Pod identity source
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.ready (delete: both, retain disk: false)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: both, retain disk: false)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.ready (delete: both, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: both, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.ready (delete: sandboxclaim, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: sandbox, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > recovers deleted resources while computer.resumed (delete: sandboxclaim, retain disk: true)
+ ↓ apps/ops/test/lifecycle-k3d.test.ts > qualifies the event-driven lifecycle on k3d gVisor
+ ↓ apps/server/test/bridge-k3d.test.ts > streams a joined member reply and wakes the suspended k3d computer on another message
+ ✓ libs/models/test/gateway.test.ts > accepts a re-observed Ready computer after a legacy resume without generation 6088ms
+ ↓ apps/server/test/live-view-k3d.test.ts > opens desktop pixels with the deployed service account and refuses permissions outside its namespace
+ ↓ apps/server/test/live-view-k3d.test.ts > renders real gVisor pixels at desktop and phone widths through the authenticated proxy
+ ✓ libs/models/test/gateway.test.ts > refuses readiness that does not match the current claim: {"computerId":"old-computer","generation":2} 5139ms
+ ✓ libs/models/test/gateway.test.ts > refuses readiness that does not match the current claim: {"computerId":"computer","generation":1} 5710ms
+ ✓ libs/models/test/gateway.test.ts > refuses readiness that does not match the current claim: {"computerId":"computer"} 4943ms
+ ✓ libs/models/test/gateway.test.ts > admits one last reservation under daily 1 / monthly 2000 cents and clearly refuses the next call 10478ms
+ ✓ libs/models/test/gateway.test.ts > admits one last reservation under daily 2000 / monthly 1 cents and clearly refuses the next call 9345ms
+ ✓ libs/models/test/gateway.test.ts > retains an in-flight reservation across gateway kill and actor recovery, recording uncertainty after timeout 6784ms
+ ✓ libs/models/test/gateway.test.ts > recovers old-tariff usage after an upgrade and continues past an unknown model 11349ms
+ ✓ libs/models/test/gateway.test.ts > records exhaustion once even when decision audit appends fail and callers retry 5453ms
+ ✓ libs/models/test/gateway.test.ts > does not duplicate exhaustion after its append succeeds but the acknowledgement is lost 4642ms
+ ✓ libs/models/test/gateway.test.ts > keeps an overrun charged during an alert outage and repairs the alert after recovery 7396ms
+ ✓ libs/models/test/gateway.test.ts > leaves money reserved on settlement failure and retries the recorded effect idempotently 6629ms
+ ✓ libs/models/test/gateway.test.ts > releases an observed provider 400 rejection without usage or consuming the cap 9125ms
+ ✓ libs/models/test/gateway.test.ts > releases an observed provider 401 rejection without usage or consuming the cap 8957ms
+ ✓ libs/models/test/gateway.test.ts > releases an observed provider 404 rejection without usage or consuming the cap 7975ms
+ ✓ libs/models/test/gateway.test.ts > releases an observed provider 429 rejection without usage or consuming the cap 8421ms
+ ✓ libs/models/test/gateway.test.ts > releases an observed provider 500 rejection without usage or consuming the cap 7673ms
+ ✓ libs/models/test/gateway.test.ts > retains the reservation for an ambiguous provider outcome 408 7014ms
+ ✓ libs/models/test/gateway.test.ts > retains the reservation for an ambiguous provider outcome 504 7427ms
+ ✓ libs/models/test/gateway.test.ts > retains the reservation for an ambiguous provider outcome -1 7603ms
+ ✓ libs/models/test/gateway.test.ts > rolls UTC periods without forgetting outstanding reservations 9240ms
+ ↓ libs/models/test/gateway.test.ts > makes exactly three approved real OpenAI calls and records only tokens and cents
+ ✓ libs/models/test/gateway.test.ts > settles cached input reported by the real gateway at its discounted rate 7663ms
+ ✓ libs/models/test/gateway.test.ts > caps expensive Astra before reaching OpenAI with daily 700 / monthly 20000 3891ms
+ ✓ libs/models/test/gateway.test.ts > caps expensive Astra before reaching OpenAI with daily 20000 / monthly 700 6129ms
+ ✓ libs/models/test/gateway.test.ts > accepts the native Codex text request shape while retaining the bounded Responses contract 6089ms
+ ✓ libs/models/test/gateway.test.ts > admits every pinned model through the decision and gateway under the same caps 18318ms
+ ✓ libs/models/test/gateway.test.ts > a forged computer restart after agent.turn_completed stays refused without a reservation 5184ms
+ ✓ libs/models/test/gateway.test.ts > a forged computer restart after agent.turn_failed stays refused without a reservation 5858ms
+ ✓ libs/models/test/gateway.test.ts > refuses a valid signed grant installed under another actual Codex thread before reserving 8270ms
+ ✓ libs/models/test/gateway.test.ts > admits routed Sol tool declarations and settings while refusing malformed or unknown fields 8404ms
+ ✓ libs/models/test/gateway.test.ts > admits the native code-mode text-block result so a successful file read reaches the provider 10506ms
+ ✓ libs/models/test/gateway.test.ts > admits local custom tools at both Codex declaration locations, without hosted tools 11442ms
+ ✓ libs/models/test/gateway.test.ts > enforces reviewed tool modes at the real gateway, including the first automatic write 23039ms
+ ✓ libs/models/test/gateway.test.ts > uses the current requester on a team assistant and refuses removed team membership before OpenFGA catches up 10175ms
+ ✓ libs/models/test/gateway.test.ts > serialises concurrent reservations at the global monthly ceiling and replays one charge 11392ms
+ ✓ libs/models/test/gateway.test.ts > serialises concurrent reservations at the paying_group monthly ceiling and replays one charge 12203ms
+ ✓ libs/models/test/gateway.test.ts > serialises concurrent reservations at the assistant monthly ceiling and replays one charge 10402ms
+ ✓ libs/models/test/gateway.test.ts > resets at the exact UTC month boundary, holds unknown money and attributes late usage to the original group and month 11204ms
+ ✓ libs/models/test/gateway.test.ts > fixes multiplicity at one and gives a clear reason for absent, fractional, conflicting and unsupported bounds before dispatch 9729ms
+ ✓ libs/models/test/gateway.test.ts > resets the daily safety cap at UTC midnight within a month while keeping outstanding reservations 7625ms
+ ✓ libs/models/test/gateway.test.ts > explains a real model call by ids and rebuilds the same decision, outcome and charge 8408ms
+ ✓ libs/models/test/gateway.test.ts > keeps forged JWT failures distinct from a caller-selected request through ingestion and replay 10271ms
+ ✓ libs/models/test/gateway.test.ts > keeps the trusted decision id on authenticated refusals through gateway ingestion and replay 10376ms
+ ✓ libs/models/test/gateway.test.ts > retains safe JWT correlation, denies an audit outage and alerts once for unmatched gateway effects 7992ms
+ ✓ libs/models/test/gateway.test.ts > keeps an admitted model call uncertain when the recording upstream loses its reply 7337ms
+
+ Test Files  82 passed | 3 skipped (85)
+      Tests  1406 passed | 14 skipped (1420)
+   Start at  12:02:40
+   Duration  1501.04s (tests 95%, import 5%, transform 1%)
+
+    Isolate  85 workers spawned · ~397ms startup each (spawn + environment, per file)
+             at least ~16.48s faster with isolate: false — reuses workers across files instead of one per file
+
+
+Previously failing cases in this complete run:
+ ✓ apps/server/test/approvals.test.ts > opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart 29308ms
+ ✓ apps/server/test/bridge-channel.test.ts > recovers the server connector from the NATS report sequence without gaps or duplicate events 2289ms
+ ✓ libs/models/test/gateway.test.ts > a forged computer restart after agent.turn_failed stays refused without a reservation 5858ms
+
+Inherited exact-authority regression measurements (local service fixtures, 30 samples per route):
+{"seeded":0,"route":"model","samples":30,"p50Ms":217.69011900000078,"p95Ms":302.18338100000074,"authorityEvents":15,"authorityStreamReads":8}
+{"seeded":0,"route":"mcp","samples":30,"p50Ms":149.83032399999865,"p95Ms":214.25352999999814,"authorityEvents":23,"authorityStreamReads":10}
+{"seeded":0,"route":"destinationAuthority","samples":30,"p50Ms":55.919770000000426,"p95Ms":108.6409679999997,"authorityEvents":6,"authorityStreamReads":4}
+{"seeded":100000,"route":"model","samples":30,"p50Ms":207.2985700000063,"p95Ms":299.0694619999995,"authorityEvents":15,"authorityStreamReads":8}
+{"seeded":100000,"route":"mcp","samples":30,"p50Ms":176.0026199999993,"p95Ms":238.47887600000104,"authorityEvents":23,"authorityStreamReads":10}
+{"seeded":100000,"route":"destinationAuthority","samples":30,"p50Ms":63.85065400000167,"p95Ms":105.95086699999956,"authorityEvents":6,"authorityStreamReads":4}

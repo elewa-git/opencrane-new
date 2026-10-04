@@ -1,0 +1,16 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run apps/server/test/bridge-channel.test.ts --maxWorkers=2 -t recovers the server connector
+
+ RUN  v5.0.3 /home/jente/dev/wt/bootstrap-token
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 4 skipped (5)
+   Start at  11:44:15
+   Duration  6.79s (tests 45%, transform 32%, import 23%)
+
+  Transform  transforming modules took 2.08s · 32% of tracked time, re-done on every run
+             persist transforms across runs with fsModuleCache: true
+             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns

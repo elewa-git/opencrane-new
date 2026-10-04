@@ -1,0 +1,3 @@
+FAIL: Native PDF viewer did not render its first page.
+The private error was checked for this exact assertion; secret output was not copied.
+The bootstrap fixture launched the headless shell; the inherited upload journey requires full Chromium.

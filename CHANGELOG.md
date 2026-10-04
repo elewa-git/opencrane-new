@@ -15,6 +15,11 @@
 
 - Live viewers keep a valid permission lease when an older authority check is late, including during connection setup; revocation deadlines stay unchanged ([#77 evidence](docs/process/i77-live-view.md)).
 - Work is under way to publish reviewed MCP tools, let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
+- The first authenticated member can claim a fresh silo as owner with an installation token that expires after 24 hours. Reuse and claims after membership exists are refused (#12).
+
+### Fixed or improved
+
+- Work is under way to publish reviewed MCP tools, let an owner take over a computer, and control computer egress.
 
 ### Known limits
 

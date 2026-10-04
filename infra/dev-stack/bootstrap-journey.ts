@@ -86,7 +86,7 @@ try {
   const record = await readFile(tokenFile, 'utf8');
   assert(!record.includes(token), 'Private file holds only the hash');
   console.log('PASS npm run bootstrap-token -w apps/server; install output: [REDACTED]');
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, channel: 'chromium' });
   const ownerContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const page = await ownerContext.newPage();
   page.setDefaultTimeout(90_000);

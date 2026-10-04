@@ -1,0 +1,2 @@
+PASS listener check: all secondary host ports on loopback
+Stack ready: http://127.0.0.1:25106/org/integrations (Zitadel sign-in)

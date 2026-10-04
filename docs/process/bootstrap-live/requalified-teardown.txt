@@ -1,0 +1,2 @@
+PASS down.sh --id 1 completed in the journey finally; secondary directory absent.
+PASS follow-up: secondary directory, Compose containers and computer/gateway namespaces are absent.
