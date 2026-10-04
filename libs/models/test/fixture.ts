@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { onTestFinished } from 'vitest';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
@@ -20,6 +21,34 @@ import { modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage
 export let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
 afterAll(async () => { await fga.close(); });
+
+function registerGatewayCleanup(
+  child: ChildProcess,
+  stop: (signal?: NodeJS.Signals) => Promise<void>,
+) {
+  function removeSignalHandlers() {
+    process.removeListener('SIGTERM', stopOnSigterm);
+    process.removeListener('SIGINT', stopOnSigint);
+  }
+  async function stopChild() {
+    await stop('SIGKILL');
+    removeSignalHandlers();
+  }
+  async function stopChildAndForwardSignal(signal: NodeJS.Signals) {
+    await stopChild();
+    process.kill(process.pid, signal);
+  }
+  function stopOnSigterm() {
+    void stopChildAndForwardSignal('SIGTERM');
+  }
+  function stopOnSigint() {
+    void stopChildAndForwardSignal('SIGINT');
+  }
+  process.once('SIGTERM', stopOnSigterm);
+  process.once('SIGINT', stopOnSigint);
+  child.once('close', removeSignalHandlers);
+  onTestFinished(stopChild);
+}
 async function freePort() {
   const server = createServer(); server.listen(0, '::'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
@@ -121,7 +150,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
     mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed', upstream: `127.0.0.1:${address.port}` }],
-    ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }) };
+    ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }),
+    onChildSpawn: registerGatewayCleanup };
   let gateway: Awaited<ReturnType<typeof startGateway>>;
   for (let attempt = 0; ; attempt++) {
     try {
@@ -170,16 +200,39 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
         '"extAuthz":{"policies":{"http":{"requestTimeout":"10s"}},');
       await writeFile(options.configFile, config);
       const child = spawn(options.binary, ['-f', options.configFile], { stdio: 'ignore' });
-      const stopChildOnWorkerExit = () => {
-        if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-      };
-      process.once('exit', stopChildOnWorkerExit);
-      const exited = once(child, 'exit');
-      gateway = { healthy: () => child.exitCode === null && child.signalCode === null, stop: async () => {
+      function stopSlowGateway() {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill('SIGKILL');
+        }
+      }
+      function slowGatewayHealthy() {
+        return child.exitCode === null && child.signalCode === null;
+      }
+      async function stopSlowGatewayNormally() {
         if (child.exitCode === null && child.signalCode === null) child.kill();
         await exited;
-        process.removeListener('exit', stopChildOnWorkerExit);
-      } };
+      }
+      function removeSlowGatewaySignalHandlers() {
+        process.removeListener('SIGTERM', stopSlowGatewayOnSigterm);
+        process.removeListener('SIGINT', stopSlowGatewayOnSigint);
+      }
+      function stopSlowGatewayOnSigterm() {
+        stopSlowGateway();
+        process.kill(process.pid, 'SIGTERM');
+      }
+      function stopSlowGatewayOnSigint() {
+        stopSlowGateway();
+        process.kill(process.pid, 'SIGINT');
+      }
+      process.once('SIGTERM', stopSlowGatewayOnSigterm);
+      process.once('SIGINT', stopSlowGatewayOnSigint);
+      child.once('close', removeSlowGatewaySignalHandlers);
+      onTestFinished(stopSlowGateway);
+      const exited = once(child, 'exit');
+      gateway = {
+        healthy: slowGatewayHealthy,
+        stop: stopSlowGatewayNormally,
+      };
       await until(async () => {
         try { return (await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok; }
         catch { return false; }

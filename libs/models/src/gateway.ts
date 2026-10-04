@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
@@ -154,7 +154,10 @@ function nativeUsage(line: string, id: string) {
 }
 
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
-  port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string; mcpRoutes?: McpRoute[] }) {
+  port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string;
+  mcpRoutes?: McpRoute[];
+  onChildSpawn?: (child: ChildProcess, stop: (signal?: NodeJS.Signals) => Promise<void>) => void;
+}) {
   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';
   const expected = AGENTGATEWAY_SHA256_BY_BUILD[build];
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
@@ -162,11 +165,6 @@ export async function startGateway(options: { binary: string; configFile: string
   const child = spawn(options.binary, ['-f', options.configFile], {
     env: { PATH: process.env['PATH'] ?? '/usr/bin:/bin', RUST_LOG: 'info', NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
-  const stopChildOnWorkerExit = () => {
-    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
-  };
-  const removeWorkerExitHandler = () => process.removeListener('exit', stopChildOnWorkerExit);
-  process.once('exit', stopChildOnWorkerExit);
   let writes = Promise.resolve(), failed = false;
   let errorLine = '';
   let stderrBuffer = '';
@@ -195,11 +193,13 @@ export async function startGateway(options: { binary: string; configFile: string
   const closed = once(child, 'close');
   const stop = async (signal: NodeJS.Signals = 'SIGTERM') => {
     if (child.exitCode === null && child.signalCode === null) child.kill(signal);
-    await closed; await writes; lines.close(); removeWorkerExitHandler();
+    await closed; await writes; lines.close();
   };
+  options.onChildSpawn?.(child, stop);
   try {
     for (let i = 0; i < 100; i++) {
       if (child.exitCode !== null || child.signalCode !== null || failed) {
+        await stop();
         const status = child.signalCode ? `signal ${child.signalCode}` : `exit code ${child.exitCode}`;
         const diagnostic = errorLine ? `: ${errorLine}` : '';
         throw new Error(`Gateway stopped (${status})${diagnostic}`);

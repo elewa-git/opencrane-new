@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { once } from "node:events";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OpenFgaClient, ConsistencyPreference } from "@openfga/sdk";
@@ -448,18 +448,20 @@ describe("PostgreSQL-backed rebuild cleanup", () => {
     });
     let firstListCompleted = false;
     let createCommittedAfterFirstList = false;
-    const proxy = createServer((request, response) => {
-      void (async () => {
+    function proxyRequest(request: IncomingMessage, response: ServerResponse) {
+      void handleProxyRequest(request, response);
+    }
+    async function handleProxyRequest(request: IncomingMessage, response: ServerResponse) {
+      try {
         const chunks = [];
         for await (const chunk of request) chunks.push(Buffer.from(chunk));
-        if (
-          request.method === "GET" &&
-          request.url?.startsWith("/stores") &&
-          firstListCompleted
-        ) {
+        const isStoreList = request.method === "GET" && request.url?.startsWith("/stores");
+        if (isStoreList && firstListCompleted) {
+          // The retry list must wait until the lost create response is known to have committed.
           await createCommitted;
         }
-        if (request.method === "POST" && request.url === "/stores") {
+        const isStoreCreate = request.method === "POST" && request.url === "/stores";
+        if (isStoreCreate) {
           await allowCreate;
         }
         const upstream = await fetch(`${service.apiUrl}${request.url ?? ""}`, {
@@ -468,7 +470,7 @@ describe("PostgreSQL-backed rebuild cleanup", () => {
           ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
         });
         const body = await upstream.text();
-        if (request.method === "POST" && request.url === "/stores") {
+        if (isStoreCreate) {
           createCommittedAfterFirstList = firstListCompleted;
           markCreateCommitted();
           response.destroy();
@@ -476,12 +478,15 @@ describe("PostgreSQL-backed rebuild cleanup", () => {
         }
         response.writeHead(upstream.status, { "content-type": "application/json" });
         response.end(body);
-        if (request.method === "GET" && request.url?.startsWith("/stores")) {
+        if (isStoreList) {
           firstListCompleted = true;
           releaseCreate();
         }
-      })().catch(() => response.destroy());
-    });
+      } catch {
+        response.destroy();
+      }
+    }
+    const proxy = createServer(proxyRequest);
     proxy.listen(0, "127.0.0.1");
     await once(proxy, "listening");
     const address = proxy.address();
@@ -503,6 +508,10 @@ describe("PostgreSQL-backed rebuild cleanup", () => {
         before.stores.map(({ id }) => id).sort(),
       );
     } finally {
+      await stopProxy();
+    }
+
+    async function stopProxy() {
       proxy.closeAllConnections();
       await new Promise<void>((resolve) => proxy.close(() => resolve()));
     }

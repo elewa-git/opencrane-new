@@ -8,14 +8,53 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
 import { startGateway } from '../src/gateway.ts';
 
+const mockState = vi.hoisted(() => ({ exitBeforeStderrDrain: false }));
+
 vi.mock('node:child_process', () => ({
   spawn: () => {
     const child = new EventEmitter(), stdout = new PassThrough(), stderr = new PassThrough();
-    return Object.assign(child, { stdout, stderr, exitCode: null, signalCode: null,
+    const spawned = Object.assign(child, { stdout, stderr, exitCode: null as number | null,
+      signalCode: null as NodeJS.Signals | null,
       kill() { stdout.end(); stderr.end(); child.emit('close', 0); return true; },
     });
+    if (mockState.exitBeforeStderrDrain) {
+      setTimeout(() => {
+        spawned.exitCode = 1;
+        child.emit('exit', 1, null);
+        setTimeout(() => {
+          stderr.write('Error: Address already in use\n');
+          stdout.end();
+          stderr.end();
+          child.emit('close', 1, null);
+        }, 10);
+      }, 0);
+    }
+    return spawned;
   },
 }));
+
+it('drains stderr before building the gateway failure', async () => {
+  mockState.exitBeforeStderrDrain = true;
+  const directory = await mkdtemp(`${tmpdir()}/gateway-start-stderr-`);
+  const binary = resolve(`spikes/s0-1c-real-model-smoke/.tools/agentgateway-${
+    process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64'
+  }`);
+  try {
+    await expect(startGateway({
+      binary,
+      configFile: `${directory}/config.json`,
+      usageFile: `${directory}/usage.jsonl`,
+      keyFile: `${directory}/key`,
+      port: 1,
+      readinessPort: 1,
+      decisionUrl: 'http://127.0.0.1:1',
+      issuer: 'https://test.invalid',
+    })).rejects.toThrow('Gateway stopped (exit code 1): Error: Address already in use');
+  } finally {
+    mockState.exitBeforeStderrDrain = false;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 it('waits for the request listener even when the readiness listener is already ready', async () => {
   let checks = 0, started = false;
