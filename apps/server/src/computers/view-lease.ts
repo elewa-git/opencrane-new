@@ -99,6 +99,11 @@ export class ViewLease<Computer> {
     return this.state === 'valid';
   }
 
+  validUntilAt(): number | undefined {
+    if (this.validUntil === -Infinity) return undefined;
+    return this.validUntil;
+  }
+
   stop() {
     this.state = 'stopped';
     clearInterval(this.interval);
@@ -142,8 +147,8 @@ export class ViewLease<Computer> {
       return;
     }
     const now = this.clock.now();
-    // After a stall Node runs expired timers before I/O, where a denial may be waiting.
-    // A late success earns no lease time, even when its deadline timer has not run yet.
+    // Expired lapse and deadline timers normally run before a waiting denial or stale success
+    // is read. A success can still be processed late inside the same task, and it earns nothing.
     if (now - startedAt > viewCheckMs) return;
     this.allows(now);
     if (this.isStopped()) return;

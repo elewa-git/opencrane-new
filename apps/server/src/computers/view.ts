@@ -1,4 +1,7 @@
-import { timeStage, viewTiming, type DesktopTiming } from './view-timing.ts';
+import {
+  checkFailureDetails, checkOutcome, relativeLeaseExpiry, timeStage, viewTiming,
+  leaseCheckDetails, type DesktopTiming,
+} from './view-timing.ts';
 import { viewerStream, desktopStream } from './rfb.ts';
 import { confirmAccess, deadline, monotonicClock, ViewAccessUnconfirmed, ViewLease } from './view-lease.ts';
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
@@ -45,6 +48,7 @@ interface ViewerSession {
   expiresAt: number;
   timing: Timing;
   upgradeAt: number;
+  sessionStartedAt: number;
   lease: ViewLease<Computer>;
   expiryTimer: ReturnType<typeof setTimeout>;
   stop: (reason: StopReason) => void;
@@ -139,28 +143,25 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     conversationId: string,
     timing: ReturnType<typeof viewTiming>,
     phase: 'admission' | 'upgrade' | 'post_audit' | 'renewal',
+    sessionStartedAt?: number,
+    leaseValidUntil?: () => number | undefined,
   ) {
-    const details = { phase, checkedAt: performance.now() };
-    function outcomeForCheckError(error: unknown) {
-      if (error instanceof ViewCheckUnavailable) return 'unavailable' as const;
-      return 'denied' as const;
-    }
-    function detailsForCheckError(error: unknown) {
-      const failure: typeof details & {
-        boundary?: 'event_store' | 'authorisation' | 'deadline';
-      } = { ...details };
-      if (error instanceof ViewCheckUnavailable) failure.boundary = error.boundary;
-      return failure;
-    }
+    const checkedAtMonotonic = performance.now();
     async function runCheck() {
       return deadline(viewAccess(accessOptions, memberId, conversationId));
     }
     function reportCheckSucceeded(durationMs: number) {
+      const details = leaseCheckDetails(
+        phase, checkedAtMonotonic, leaseValidUntil?.(), sessionStartedAt,
+      );
       timing('lease_check', 'ok', durationMs, details);
     }
     function reportCheckFailed(error: unknown, durationMs: number) {
-      const outcome = outcomeForCheckError(error);
-      const failure = detailsForCheckError(error);
+      const outcome = checkOutcome(error);
+      const validUntilAt = leaseValidUntil?.();
+      const failure = checkFailureDetails(
+        phase, checkedAtMonotonic, validUntilAt, sessionStartedAt, error,
+      );
       timing('lease_check', outcome, durationMs, failure);
     }
     return timeStage(runCheck, undefined, reportCheckSucceeded, reportCheckFailed);
@@ -207,10 +208,13 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     return { started, auditData, sequence: result.sequence };
   }
 
-  function startViewerSession(
-    request: IncomingMessage, socket: Duplex, head: Buffer, ticket: Ticket,
-    computer: Computer, audit: StartAudit, expiresAt: number, timing: Timing, upgradeAt: number,
-  ) {
+  type StartViewerSessionOptions = {
+    request: IncomingMessage; socket: Duplex; head: Buffer; ticket: Ticket;
+    computer: Computer; audit: StartAudit; expiresAt: number; timing: Timing; upgradeAt: number;
+  };
+  function startViewerSession(options: StartViewerSessionOptions) {
+    const { request, socket, head, ticket, computer, audit, expiresAt, timing, upgradeAt } = options;
+    const sessionStartedAt = monotonicClock.now();
     let firstCheck = true;
     function check() {
       let phase: 'post_audit' | 'renewal' = 'renewal';
@@ -218,7 +222,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         firstCheck = false;
         phase = 'post_audit';
       }
-      return checkAccess(ticket.memberId, ticket.conversationId, timing, phase);
+      return checkAccess(ticket.memberId, ticket.conversationId, timing, phase,
+        sessionStartedAt, lease.validUntilAt.bind(lease));
     }
     function resumed() {
       timing('lease_resume', 'ok');
@@ -228,7 +233,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       }
     }
     function renewed() {
-      /* The lease engine owns renewal; PR 1 sends no notices. */
+      /* The lease engine owns renewal; this session sends no renewal notices. */
     }
     function paused() {
       timing('lease_pause', 'unavailable');
@@ -250,11 +255,11 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       stopSession(session, 'disconnected');
     }
     const events = { resumed, renewed, paused, denied, unconfirmed };
-    const lease = new ViewLease(check, computer, events);
+    const lease: ViewLease<Computer> = new ViewLease(check, computer, events);
     const expiryTimer = setTimeout(expired, Math.max(0, expiresAt - monotonicClock.now()));
     const session: ViewerSession = {
       request, socket, head, ticket, computer, audit, expiresAt, timing, upgradeAt,
-      lease, expiryTimer, stop, stopped: false, desktopOpening: false,
+      lease, expiryTimer, stop, stopped: false, desktopOpening: false, sessionStartedAt,
     };
     stops.add(stop);
     socket.once('close', disconnected);
@@ -267,7 +272,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   }
 
   async function openDesktop(session: ViewerSession) {
-    if (!canDeliver(session)) return;
+    if (!deliverableOrStopSession(session)) return;
     session.upstreamAt = performance.now();
     const { timing } = session;
     function open() {
@@ -299,7 +304,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
   }
 
-  function canDeliver(session: ViewerSession) {
+  function deliverableOrStopSession(session: ViewerSession) {
     if (session.stopped) return false;
     const now = monotonicClock.now();
     if (now >= session.expiresAt) {
@@ -349,7 +354,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       stopSession(session, 'upstream');
     }
     function forwardViewer(bytes: Buffer) {
-      if (!canDeliver(session)) return;
+      if (!deliverableOrStopSession(session)) return;
       if (desktop.writableLength + bytes.length > 4 * 1024 * 1024) {
         stopSession(session, 'slow_viewer');
         return;
@@ -367,7 +372,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     let receivedBytes = false;
     let forwardedFrame = false;
     function forwardDisplay(bytes: Buffer, framebuffer: boolean) {
-      if (!canDeliver(session)) return;
+      if (!deliverableOrStopSession(session)) return;
       if (!room(bytes.length + 14)) {
         stopSession(session, 'slow_viewer');
         return;
@@ -399,7 +404,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   function stopSession(session: ViewerSession, reason: StopReason) {
     if (session.stopped) return;
     session.stopped = true;
-    session.timing('stop', reason);
+    session.timing('stop', reason, 0,
+      relativeLeaseExpiry(session.lease.validUntilAt(), session.sessionStartedAt));
     session.lease.stop();
     clearTimeout(session.expiryTimer);
     stops.delete(session.stop);
@@ -474,8 +480,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       }
       const computer = await confirmAccess(check);
       const audit = await appendStartAudit(ticket, computer, timing);
-      startViewerSession(request, socket, head, ticket, computer, audit,
-        expiresAt, timing, upgradeAt);
+      startViewerSession({ request, socket, head, ticket, computer, audit,
+        expiresAt, timing, upgradeAt });
     } catch (error) {
       timing('websocket_upgrade', 'error', performance.now() - upgradeAt);
       if (error instanceof ViewAccessUnconfirmed) {

@@ -1,10 +1,51 @@
 import type { FastifyBaseLogger } from 'fastify';
+import { ViewCheckUnavailable } from './view-access.ts';
 
 export type DesktopTiming = (
   stage: 'pod_lookup',
   outcome: 'started' | 'ok' | 'error',
   durationMs: number,
 ) => void;
+
+export function relativeLeaseExpiry(
+  validUntilAt: number | undefined,
+  sessionStartedAt: number | undefined,
+) {
+  if (validUntilAt === undefined || sessionStartedAt === undefined) return {};
+  return { validUntil: validUntilAt - sessionStartedAt };
+}
+
+export function checkOutcome(error: unknown) {
+  if (error instanceof ViewCheckUnavailable) return 'unavailable' as const;
+  return 'denied' as const;
+}
+
+export function checkFailureDetails(
+  phase: 'admission' | 'upgrade' | 'post_audit' | 'renewal',
+  checkedAtMonotonic: number,
+  validUntilAt: number | undefined,
+  sessionStartedAt: number | undefined,
+  error: unknown,
+) {
+  const failure = leaseCheckDetails(
+    phase, checkedAtMonotonic, validUntilAt, sessionStartedAt,
+  );
+  if (error instanceof ViewCheckUnavailable) return { ...failure, boundary: error.boundary };
+  return failure;
+}
+
+export function leaseCheckDetails(
+  phase: 'admission' | 'upgrade' | 'post_audit' | 'renewal',
+  checkedAtMonotonic: number,
+  validUntilAt: number | undefined,
+  sessionStartedAt: number | undefined,
+) {
+  return {
+    phase,
+    checkedAtMonotonic,
+    ...relativeLeaseExpiry(validUntilAt, sessionStartedAt),
+  };
+}
 
 type Stage = 'ticket_issue' | 'websocket_upgrade' | 'start_audit' | 'upstream_open'
   | 'pod_lookup' | 'first_upstream_bytes' | 'first_browser_frame'
@@ -15,7 +56,7 @@ type Outcome = 'started' | 'ok' | 'unavailable' | 'denied' | 'error'
 interface Details {
   boundary?: 'event_store' | 'authorisation' | 'deadline';
   phase?: 'admission' | 'upgrade' | 'post_audit' | 'renewal';
-  checkedAt?: number;
+  checkedAtMonotonic?: number;
   validUntil?: number;
 }
 

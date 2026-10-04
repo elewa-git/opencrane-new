@@ -83,6 +83,55 @@ function leaseCases() {
   }
   it('ignores a success processed 1,201 ms after its start before deadline timers run', ignoresLateSuccess);
 
+  async function lateSuccessDoesNotExtendAValidLease() {
+    const second = pendingCheck();
+    const notifications = events();
+    let calls = 0;
+    function check() {
+      calls++;
+      if (calls === 1) return Promise.resolve(computer);
+      return second.promise;
+    }
+    const lease = new ViewLease(check, computer, notifications);
+    lease.start();
+    await vi.advanceTimersByTimeAsync(250);
+    expect(lease.allows()).toBe(true);
+    vi.setSystemTime(Date.now() + 1451);
+    const clock = vi.spyOn(performance, 'now');
+    clock.mockReturnValue(1451);
+    second.resolve(computer);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(notifications.renewed).not.toHaveBeenCalled();
+    expect(lease.allows(1500)).toBe(false);
+    lease.stop();
+  }
+  it('does not renew a valid lease from a late success', lateSuccessDoesNotExtendAValidLease);
+
+  async function lapseBeforeLateSuccess() {
+    const third = pendingCheck();
+    const notifications = events();
+    let calls = 0;
+    function check() {
+      calls++;
+      if (calls === 3) return third.promise;
+      if (calls === 2) return Promise.reject(new ViewCheckUnavailable('authorisation'));
+      return Promise.resolve(computer);
+    }
+    const lease = new ViewLease(check, computer, notifications);
+    lease.start();
+    await vi.advanceTimersByTimeAsync(500);
+    vi.setSystemTime(Date.now() + 1550);
+    const clock = vi.spyOn(performance, 'now');
+    clock.mockReturnValue(1550);
+    third.resolve(computer);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(notifications.paused).toHaveBeenCalledTimes(1);
+    expect(notifications.renewed).not.toHaveBeenCalled();
+    lease.stop();
+  }
+  it('lapses before processing a success after lease expiry', lapseBeforeLateSuccess);
+
   async function gatesSendsAtLapse() {
     const pending = pendingCheck();
     const notifications = events();
@@ -156,6 +205,39 @@ function leaseCases() {
     expect(lease.allows()).toBe(false);
   }
   it('treats a changed computer as a denial', deniesChangedComputer);
+
+  async function lateChangedComputerIsDenied() {
+    const changed = pendingCheck();
+    const notifications = events();
+    const lease = new ViewLease(changed.check, computer, notifications);
+    lease.start();
+    vi.setSystemTime(Date.now() + 1201);
+    const clock = vi.spyOn(performance, 'now');
+    clock.mockReturnValue(1201);
+    changed.resolve({ computerId: 'other', generation: 1 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(notifications.denied).toHaveBeenCalledTimes(1);
+    expect(notifications.resumed).not.toHaveBeenCalled();
+    lease.stop();
+  }
+  it('denies a late result for a changed computer', lateChangedComputerIsDenied);
+
+  function capsInFlightChecks() {
+    const pending: ReturnType<typeof pendingCheck>[] = [];
+    const notifications = events();
+    function check() {
+      const attempt = pendingCheck();
+      pending.push(attempt);
+      return attempt.promise;
+    }
+    const lease = new ViewLease(check, computer, notifications);
+    lease.start();
+    vi.advanceTimersByTime(1500);
+    expect(pending).toHaveLength(5);
+    lease.stop();
+  }
+  it('does not exceed the in-flight check limit', capsInFlightChecks);
 
   async function endsUnconfirmedAccess() {
     const notifications = events();

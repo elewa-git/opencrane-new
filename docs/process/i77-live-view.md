@@ -214,9 +214,11 @@ The server emits JSON records with `operation: "view.timing"` at info level,
 except successful lease renewals under 250 ms, which use debug level.
 `sessionId` joins ticket issuance to upgrade, audit, pod lookup, first upstream
 bytes, first framebuffer forwarding, lease checks and stopping. Timing records
-do not include a conversation ID. Lease checks include their phase, caller's
-`checkedAt`, starting lease expiry, outcome and duration; there is no separate
-start record because the outcome contains the elapsed duration. Unavailable checks distinguish `event_store`,
+do not include a conversation ID. Lease checks include their phase, monotonic
+`checkedAtMonotonic`, the current lease expiry as milliseconds from session
+start, outcome and duration. Stop records include the lease expiry as well.
+There is no separate start record because the outcome contains the elapsed
+duration. Unavailable checks distinguish `event_store`,
 `authorisation` and `deadline`; raw errors are never logged. The desktop helper
 ignores stderr entirely because it can contain credentials or an unbounded
 line. `first_upstream_bytes` records the Kasm connection becoming useful to the
