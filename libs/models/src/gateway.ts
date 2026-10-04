@@ -112,15 +112,34 @@ export function gatewayUsage(line: string) {
     if (status === undefined) return undefined;
     // JWT failures have no decision. Refusals use the decision's response id, never a request header.
     const requestId = status === 401 ? undefined : z.uuid().safeParse(/\bdecisionRequestId="([^"]+)"/u.exec(line)?.[1]).data;
-    return { id: requestId ?? randomUUID(),
-      outcome: status >= 400 ? 'error' : 'unknown', reason: status === 401 ? 'jwt_failed' : status >= 400 ? 'dispatch_denied' : 'observation_missing' };
+    return refusalObservation(requestId ?? randomUUID(), status);
   }
   const usage = nativeUsage(line, id);
   if (usage) return usage;
-  if (definiteRejection(line, status)) return { id, outcome: 'error' };
+  return providerFailureObservation(id, line, status);
+}
+function providerFailureObservation(id: string, line: string, status?: number) {
   const maybeDispatched = status !== undefined && MAYBE_DISPATCHED.has(status);
-  const transportFailed = /\berror=/u.test(line) || maybeDispatched;
-  return { id, uncertainReason: transportFailed ? 'transport_failure' : 'missing_usage' };
+  const hasTransportError = /\berror=/u.test(line);
+  // A rejection without usage is treated as zero cost; it does not prove the provider did not run.
+  const isDefiniteRejection = status !== undefined && status >= 400 && status < 600 &&
+    !maybeDispatched && !hasTransportError;
+  if (isDefiniteRejection) return { id, outcome: 'error' as const };
+  const transportFailed = hasTransportError || maybeDispatched;
+  const uncertainReason = transportFailed ? 'transport_failure' as const : 'missing_usage' as const;
+  return { id, uncertainReason };
+}
+function refusalObservation(id: string, status: number) {
+  const outcome = status >= 400 ? 'error' : 'unknown';
+  let reason: 'jwt_failed' | 'dispatch_denied' | 'observation_missing';
+  if (status === 401) {
+    reason = 'jwt_failed';
+  } else if (status >= 400) {
+    reason = 'dispatch_denied';
+  } else {
+    reason = 'observation_missing';
+  }
+  return { id, outcome, reason };
 }
 function nativeUsage(line: string, id: string) {
   const token = z.int().nonnegative();
@@ -134,13 +153,6 @@ function nativeUsage(line: string, id: string) {
   return parsed.data;
 }
 
-function definiteRejection(line: string, status?: number) {
-  // Only a clean rejection proves the provider did not run; transport errors and timeouts do not.
-  const isHttpError = status !== undefined && status >= 400 && status < 600;
-  const mayHaveDispatched = status !== undefined && MAYBE_DISPATCHED.has(status);
-  const hasTransportError = /\berror=/u.test(line);
-  return isHttpError && !mayHaveDispatched && !hasTransportError;
-}
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string; mcpRoutes?: McpRoute[] }) {
   const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';

@@ -25,7 +25,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       if (memberId) fresh.include(`member-${memberId}`, `conversation-${conversationId}`);
       if (!memberId || !(await auth.check(memberId, 'member')).allowed || !(await auth.conversation(memberId, conversationId, 'read')).allowed) return reply.code(403).send({ status: 'refused' });
       if (!await accessApplied(options, memberId, conversationId)) return reply.code(403).send({ status: 'refused' });
-      // Bind the token to this session cookie and conversation to prevent cross-session replay.
+      // The token covers the whole Cookie header and conversation, blocking reuse across either.
       const csrf = createHmac('sha256', config.cookieSecret)
         .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
         .digest('hex');
@@ -58,7 +58,7 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
       return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : result.status === 'step_up_required' ? 428 : 409).send({ status: result.status });
 }
 
-// Reason unknown, see #141.
+// D07 requires verified OIDC auth_time within five minutes; #141 tracks the configurable age question.
 const APPROVAL_STEP_UP_MAX_AGE_SECONDS = 300;
 
 function isRecentStepUp(session: SessionData, approvalId: string): boolean {
@@ -74,7 +74,8 @@ function isRecentStepUp(session: SessionData, approvalId: string): boolean {
   return Date.now() / 1000 - session.authTime <= APPROVAL_STEP_UP_MAX_AGE_SECONDS;
 }
 
-// Both checks protect the state-changing approval request from cross-site use and token replay.
+// Origin blocks cross-site posts; the token blocks reuse across sessions or conversations.
+// Replays within the same session and conversation remain valid.
 function isApprovalCsrfValid(req: FastifyRequest, config: AuthConfig, expectedToken: string): boolean {
   const expectedOrigin = new URL(config.redirectUri).origin;
   const submittedOrigin = req.headers.origin;
@@ -83,6 +84,7 @@ function isApprovalCsrfValid(req: FastifyRequest, config: AuthConfig, expectedTo
 }
 
 async function accessApplied(options: ChatOptions, memberId: string, conversationId: string) {
+  // Do not serve approval state until every relevant access change has reached OpenFGA.
   const auth = memberAuthorisation(options.binding);
   const rows = [...await history(options.store, `member-${memberId}`, options.silo),
     ...await history(options.store, `conversation-${conversationId}`, options.silo)];

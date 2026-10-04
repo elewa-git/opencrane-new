@@ -15,7 +15,7 @@ const auditPrefixes = [
   'connection.',
   'egress.',
   'takeover.',
-  // These projections expose safe lifecycle summaries.
+  // These event families expose safe lifecycle summaries.
   'team.',
   'assistant.',
   'grant.',

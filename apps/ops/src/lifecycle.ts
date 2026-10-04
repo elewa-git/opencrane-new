@@ -163,19 +163,21 @@ async function reconcileComputer(store: EventStore, kube: SandboxClient,
 }
 
 async function lastActivity(store: EventStore, silo: string, assistantId: string): Promise<number> {
-  const conversations = new Set<string>(), pending = new Set<string>();
+  const conversations = new Set<string>(), openTurnIds = new Set<string>();
   let time = 0;
   for await (const { event } of readEvents(store, 1, await store.head())) {
     if (event.silo !== silo) continue;
     if (event.type === 'conversation.created' && field(event.data, 'assistantId') === assistantId) conversations.add(event.subject);
     if (!conversations.has(event.subject)) continue;
-    if (event.type === 'message.posted') pending.add(event.id);
+    if (event.type === 'message.posted') openTurnIds.add(event.id);
     // A turn id is the id of the message.posted event that started it.
-    if (['agent.turn_completed', 'agent.turn_failed'].includes(event.type)) pending.delete(field(event.data, 'turnId'));
+    if (['agent.turn_completed', 'agent.turn_failed'].includes(event.type)) {
+      openTurnIds.delete(field(event.data, 'turnId'));
+    }
     time = Math.max(time, Date.parse(event.time));
   }
   // A posted turn without a terminal event keeps this computer active.
-  return pending.size ? Infinity : time;
+  return openTurnIds.size ? Infinity : time;
 }
 
 async function observeReady(store: EventStore, state: ComputerState, events: StoredEvent[],

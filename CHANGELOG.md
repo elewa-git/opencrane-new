@@ -14,8 +14,8 @@
 
 ### Fixed or improved
 
-- Gateway accounting retains uncertain charges and audit output keeps free text out.
-  Named comments and constants explain these rules while budget limits keep their existing values.
+- Added comments and names for the existing gateway accounting and audit rules; behaviour and
+  budget limits are unchanged.
 - Owners and admins can read populated monetary-effect lists through one bounded replay. The P3-15 backend records evidence-backed resolutions, retains uncertain reservations and preserves larger late usage charges; its designed screen and fresh-install qualification remain pending.
 
 - Live viewers keep a valid permission lease when an older authority check is late, including during connection setup; revocation deadlines stay unchanged ([#77 evidence](docs/process/i77-live-view.md)).

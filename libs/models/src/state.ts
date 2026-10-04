@@ -6,7 +6,8 @@ import type { Projection, Query } from '@opencrane/projections';
 // Integer euro cents per billion tokens retain the $0.125 cache-write rate exactly.
 export const priceTableId = 'openai-2026-10-02-all-eur95';
 export const shortContextTokens = 272_000;
-// Requests and unmeasured reservations use the full supported model context.
+// This is the context ceiling: larger requests are refused, and unmeasured
+// reservations reserve the full ceiling.
 const MAX_CONTEXT_TOKENS = 1_050_000;
 // Reserve at long-context rates before the tier boundary to leave rendering headroom.
 const LONG_CONTEXT_RESERVATION_MARGIN = 0.9;
@@ -130,7 +131,7 @@ export function totals(state: BudgetState, now = new Date(), scope?: { scope: 'p
   let today = 0n, monthly = 0n, reserved = 0n;
   for (const r of state.reservations) {
     if (scope && (scope.scope === 'paying_group' ? r.call.payingGroupId : r.call.assistantId) !== scope.scopeId) continue;
-    // Unknown outcomes stay reserved until reconciliation proves the final charge.
+    // Unsettled calls stay reserved. Conflicting evidence keeps the full hold permanently.
     if (r.settledCents === undefined || r.outcomeUnknown) reserved += BigInt(r.amountCents);
     if (r.settledCents !== undefined) {
       if (r.time.startsWith(day)) today += BigInt(r.settledCents);

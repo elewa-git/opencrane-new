@@ -6,8 +6,8 @@ import { body, json, record } from './http.ts';
 
 // Reason unknown, see #138.
 const CALLER_CREDENTIAL_LIFETIME_MS = 600_000;
-// Reason unknown, see #138.
 const MAX_TURN_GRANT_LIFETIME_MS = 120_000;
+// This matches the 120-second turn-token cap in libs/auth/src/tokens.ts.
 // Reason unknown, see #138.
 const UPSTREAM_REQUEST_TIMEOUT_MS = 120_000;
 
@@ -25,7 +25,10 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
       else if (req.url === '/grant') {
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
-            input['expires'] <= Date.now() || input['expires'] > Date.now() + MAX_TURN_GRANT_LIFETIME_MS) throw new Error('Bad grant');
+            input['expires'] <= Date.now() ||
+            input['expires'] > Date.now() + MAX_TURN_GRANT_LIFETIME_MS) {
+          throw new Error('Bad grant');
+        }
         deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
         turns.set(input['thread'], { computer: input['computer'], token: input['token'], expires: input['expires'] });
       } else { json(res, { error: 'path' }, 404); return; }
