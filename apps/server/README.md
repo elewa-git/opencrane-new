@@ -418,6 +418,7 @@ receipt evidence with `POST /api/org/effects/:permitId/resolve`.
 [The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
+
 ## First-owner bootstrap (#12)
 
 A production install generates one random 256-bit token with a 24-hour expiry:

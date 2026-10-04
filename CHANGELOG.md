@@ -8,6 +8,7 @@
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - Members with desktop access can take a screenshot from a conversation's viewer, open it from chat or the session panel, and find it again after reload.
+- The first authenticated member can claim a fresh silo as owner with an installation token that expires after 24 hours. Reuse and claims after membership exists are refused (#12).
 
 ### Fixed or improved
 
@@ -15,14 +16,10 @@
 
 - Live viewers keep a valid permission lease when an older authority check is late, including during connection setup; revocation deadlines stay unchanged ([#77 evidence](docs/process/i77-live-view.md)).
 - Work is under way to publish reviewed MCP tools, let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
-- The first authenticated member can claim a fresh silo as owner with an installation token that expires after 24 hours. Reuse and claims after membership exists are refused (#12).
-
-### Fixed or improved
-
-- Work is under way to publish reviewed MCP tools, let an owner take over a computer, and control computer egress.
 
 ### Known limits
 
+- Authority checks still need exact, fast reads at scale and fresh-install qualification ([#70](https://github.com/elewa-git/opencrane-new/issues/70)). Complete MCP startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for other open qualification.
 - Screenshots passed the retained secondary journey at 1280px and 390px, but fresh capture and complete startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [screenshot receipt](docs/process/p3-18-screenshots.md#final-rebase-and-secondary-stack-qualification--4-october-2026) and [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for the qualification limits.
 
 Technical note: in-flight work has no merged PR number yet.
