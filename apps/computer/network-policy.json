@@ -29,10 +29,6 @@
           {
             "protocol": "TCP",
             "port": 8081
-          },
-          {
-            "protocol": "TCP",
-            "port": 6901
           }
         ]
       }

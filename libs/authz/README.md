@@ -95,3 +95,9 @@ Rebuild into a new OpenFGA store/model binding before switching a running silo.
 Use `grantStream(resourceType, resourceId)` for both grant and revoke commands.
 The reaction refuses any other subject. This gives the existing worker one
 ordering key per resource; splitting a permission across streams is unsafe.
+
+Desktop views additionally require a `shared_desktop` member grant, independently
+of conversation participation. Grant events use `grantStream('shared_desktop',
+computerId)` and project the resource's `use` tuple. The viewer also checks current
+event history for an explicit member grant, so team/assistant grants and delayed
+revocations cannot admit a viewer.

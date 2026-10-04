@@ -1,3 +1,4 @@
+import { liveViewPath } from './computers/view.ts';
 // Attaches a plain `ws` WebSocket server to Fastify's underlying HTTP
 // server. We use `ws` directly (no Fastify WebSocket plugin) per the
 // Phase 1 task: a tiny Fastify + ws skeleton, nothing more.
@@ -64,8 +65,7 @@ export function attachWebSocketServer(
   const allowedOrigin = new URL(authConfig.redirectUri).origin;
   const sessions = new WeakMap<IncomingMessage, SessionData>();
   const wss = new WebSocketServer({
-    server: httpServer,
-    path: WEBSOCKET_PATH,
+    noServer: true,
     maxPayload: 16 * 1024,
     verifyClient: (info, callback) => {
       if (info.req.headers.origin !== allowedOrigin) {
@@ -89,6 +89,15 @@ export function attachWebSocketServer(
         callback(false, 401, 'Unauthorized');
       }
     },
+  });
+
+  // Separate upgrade owners must not reject each other's paths.
+  httpServer.on('upgrade', (request, socket, head) => {
+    if (request.url?.split('?')[0] !== WEBSOCKET_PATH) {
+      if (!liveViewPath.test(request.url ?? '') || httpServer.listenerCount('upgrade') === 1) socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
+      return;
+    }
+    wss.handleUpgrade(request, socket, head, client => wss.emit('connection', client, request));
   });
 
   const connect = (socket: WebSocket, request: IncomingMessage) => {

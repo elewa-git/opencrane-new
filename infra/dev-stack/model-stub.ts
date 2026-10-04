@@ -2,6 +2,7 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import { z } from 'zod';
 const calls: Array<{ body: string; requestId: string }> = [];
 const server = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/approval-calls') {
@@ -30,6 +31,11 @@ const server = createServer((req, res) => {
         if (body.length > 1_048_576) { res.writeHead(413); res.end(); return; }
       }
     }
+    const input = body ? z.object({ input: z.union([z.string(), z.array(z.object({
+      role: z.string().optional(), content: z.unknown().optional(),
+    }))]) }).parse(JSON.parse(body)).input : '';
+    const currentPrompt = typeof input === 'string' ? input : JSON.stringify(input.findLast(item => item.role === 'user')?.content ?? '');
+    const pauseOnStop = currentPrompt.includes('Say hello again.');
     const stopped = new AbortController();
     res.once('close', () => stopped.abort());
     res.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -40,7 +46,7 @@ const server = createServer((req, res) => {
     for (const delta of ['Hello ', 'from your ', 'computer.']) {
       emit({ type: 'response.output_text.delta', delta });
       // This journey prompt exercises Stop against a still-streaming provider.
-      const pause = delta === 'Hello ' && body.includes('Say hello again.');
+      const pause = delta === 'Hello ' && pauseOnStop;
       await delay(pause ? 30_000 : 500, undefined, { signal: stopped.signal });
     }
     emit({ type: 'response.output_item.done', item: { id: message, type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Hello from your computer.' }] } });

@@ -28,7 +28,7 @@ export async function enterLoginName(page: Page, name: string) {
     }
   }
 }
-async function login(page: Page, origin: string, user: User, selectRememberedAccount = false) {
+async function login(page: Page, origin: string, user: User, selectRememberedAccount = false, retryNetworkChange = true) {
   let step = 'home', transport = '';
   const failed = (request: BrowserRequest) => {
     const code = request.failure()?.errorText ?? '';
@@ -49,6 +49,8 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
       if (await account.isVisible()) await account.click();
     }
     await credentials.first().waitFor();
+    // Let the provider finish loading before typing; hydration can replace the input.
+    await page.waitForLoadState('networkidle');
     if (await page.locator('input[name=loginName]').isVisible()) {
       step = 'username';
       await enterLoginName(page, user.login);
@@ -64,6 +66,11 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     step = 'return';
     await page.waitForURL((url) => url.origin === origin && !url.pathname.startsWith('/auth/'));
   } catch {
+    // Container/network changes can invalidate Chromium's connection during the journey.
+    if (retryNetworkChange && transport === 'net::ERR_NETWORK_CHANGED') {
+      page.off('requestfailed', failed);
+      return login(page, origin, user, selectRememberedAccount, false);
+    }
     await page.screenshot({ path: `${directory}/signin-failure.png` });
     const location = new URL(page.url());
     throw new Error(`Login did not complete at ${step} (${location.origin}${location.pathname}; ${transport})`);

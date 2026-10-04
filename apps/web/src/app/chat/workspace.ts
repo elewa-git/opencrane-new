@@ -10,8 +10,9 @@ import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
+import { LiveView } from '../live-view/live-view';
 
-@Component({ selector: 'oc-workspace', imports: [ApprovalCards, FoldLoader, ChatComposer, FilePreview, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
+@Component({ selector: 'oc-workspace', imports: [ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView, NgTemplateOutlet, ChatIcon], providers: [ChatSession, WebSocketService],
   templateUrl: './workspace.html', styleUrls: ['./workspace.css', './transcript.css', './panel.css'], changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(document:keydown)': 'shortcut($event)' } })
 export class Workspace implements OnInit {

@@ -1,4 +1,5 @@
 import { registerApprovalRoutes } from './chat/approvals.ts';
+import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 // Builds the Fastify instance. Kept separate from main.ts so tests can
 // build a server without binding a real port.
 import Fastify, { LogController, type FastifyBaseLogger, type FastifyInstance } from 'fastify';
@@ -21,6 +22,7 @@ export interface BuildServerOptions {
   chat?: ChatOptions;
   integrations?: IntegrationOptions;
   computers?: ComputerOptions;
+  liveView?: LiveViewOptions;
   /** The process entrypoint owns bounded cleanup; embedded servers close telemetry here. */
   processOwnsTelemetry?: boolean;
 }
@@ -55,6 +57,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);
+  registerLiveView(app, authConfig, options.liveView);
 
   registerApprovalRoutes(app, authConfig, options.chat);
 

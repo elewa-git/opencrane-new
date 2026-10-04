@@ -31,7 +31,7 @@ const security = [
     : `(v.name == '${v.name}' && has(v.emptyDir) && ${v.emptyDir.medium ? `v.emptyDir.medium == 'Memory' && v.emptyDir.sizeLimit == '16Mi'` : '!has(v.emptyDir.medium)'})`).join(' || ')})`,
   `variables.p.volumes.all(v, !has(v.hostPath) && !has(v.secret) && !has(v.projected) && !has(v.configMap) && !has(v.csi))`,
   `variables.p.containers.all(c, size(c.volumeMounts) == ${spec.containers[0].volumeMounts.length} && c.volumeMounts.all(v, (!has(v.mountPropagation) || v.mountPropagation == 'None') && !has(v.subPath) && !has(v.subPathExpr) && (${spec.containers[0].volumeMounts.map(v => `(v.name == '${v.name}' && v.mountPath == '${v.mountPath}')`).join(' || ')})))`,
-  `variables.p.containers.all(c, size(c.env) == 1 && c.env[0].name == 'GATEWAY' && has(c.env[0].valueFrom) && has(c.env[0].valueFrom.configMapKeyRef) && c.env[0].valueFrom.configMapKeyRef.name == 'computer-runtime' && c.env[0].valueFrom.configMapKeyRef.key == 'gateway')`,
+  `variables.p.containers.all(c, size(c.env) == 2 && c.env[0].name == 'GATEWAY' && has(c.env[0].valueFrom) && has(c.env[0].valueFrom.configMapKeyRef) && c.env[0].valueFrom.configMapKeyRef.name == 'computer-runtime' && c.env[0].valueFrom.configMapKeyRef.key == 'gateway' && c.env[1].name == 'POD_UID' && has(c.env[1].valueFrom) && has(c.env[1].valueFrom.fieldRef) && c.env[1].valueFrom.fieldRef.fieldPath == 'metadata.uid')`,
 ];
 const policies = [
   ['sandbox', 'agents.x-k8s.io', ['sandboxes'], 'object.spec.podTemplate.spec', [

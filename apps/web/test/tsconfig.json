@@ -1,5 +1,5 @@
 {
   "extends": "../../../tsconfig.base.json",
-  "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "types": ["node"] },
-  "include": ["."]
+  "compilerOptions": { "module": "ESNext", "moduleResolution": "Bundler", "types": ["node"], "lib": ["ES2023", "DOM"] },
+  "include": [".", "../src/app/live-view/novnc.d.ts"]
 }

@@ -40,6 +40,30 @@ async function open(scenario, width = 390) {
   else await stable(page); return { page, fixture };
 }
 try {
+  // A conversation's desktop entry is keyboard reachable in both session panels.
+  for (const width of [1280, 390]) {
+    const { page } = await open('live', width);
+    await page.route('**/api/conversations/chat/view', route => route.fulfill({ status: 403, contentType: 'application/json', body: '{"status":"refused"}' }));
+    if (width === 390) {
+      await page.getByRole('button', { name: 'Session panel', exact: true }).focus();
+      await page.keyboard.press('Enter');
+    }
+    const entry = page.getByRole('button', { name: 'Watch your computer', exact: true });
+    await entry.waitFor({ timeout: 5000 });
+    const target = await entry.boundingBox(); assert(target.width >= 44 && target.height >= 44);
+    await entry.focus(); await page.keyboard.press('Enter');
+    const viewer = page.getByRole('dialog', { name: 'Computer view', exact: true });
+    await viewer.getByText('Not available', { exact: true }).waitFor();
+    assert((await viewer.innerText()).includes('shared-desktop grant'));
+    assert.equal(await viewer.locator('canvas').count(), 0);
+    await page.keyboard.press('Escape');
+    assert.equal(await entry.evaluate(node => node === globalThis.document.activeElement), true);
+    if (width === 390) await page.keyboard.press('Escape');
+    await page.keyboard.press('Control+n');
+    await page.getByText('Draft', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Watch your computer', exact: true }).count(), 0, 'A draft has no desktop entry');
+    await page.close();
+  }
   // Regression: constrain each column and its controls, even with an unbroken first message.
   const long = await open('long-title');
   for (const selector of ['.workspace-header', '.transcript', '.composer-dock', '#panel-toggle', '.send']) {

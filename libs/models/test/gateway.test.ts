@@ -108,6 +108,8 @@ it.each([
 
 it('releases undispatched reservations when authority is revoked after the allow audit', async () => {
   const f = await fixture(50, 50);
+  // Expiry crosses both UTC midnight and the month boundary.
+  f.advance(Date.parse('2026-10-31T23:59:00Z') - f.actor.now().getTime());
   let replacement: Awaited<ReturnType<typeof startDecision>> | undefined;
   const append = f.nats.store.append.bind(f.nats.store);
   try {
@@ -137,7 +139,7 @@ it('releases undispatched reservations when authority is revoked after the allow
       reservationId: r.id, permitId: r.id, settledCents: 0, outcome: 'not_dispatched',
     })));
     f.advance(); await f.actor.expire();
-    expect.soft(totals(f.actor.state)).toMatchObject({ reservedCents: 0, todayCents: 0, monthCents: 0 });
+    expect.soft(totals(f.actor.state, f.actor.now())).toMatchObject({ reservedCents: 0, todayCents: 0, monthCents: 0 });
     for (const r of f.actor.state.reservations) {
       expect.soft(await history(f.nats.store, `effect-${r.id}`, 'test')).toEqual([]);
     }
@@ -145,7 +147,7 @@ it('releases undispatched reservations when authority is revoked after the allow
     const recovered = new BudgetActor(f.nats.store, 'test', f.actor.now); await recovered.start();
     replacement = await startDecision(recovered, f.identity, f.binding, Number(new URL(f.options.decisionUrl).port));
     await recovered.expire();
-    expect.soft(totals(recovered.state)).toEqual({ reservedCents: 0, todayCents: 0, monthCents: 0,
+    expect.soft(totals(recovered.state, recovered.now())).toEqual({ reservedCents: 0, todayCents: 0, monthCents: 0,
       dailyCeilingCents: 50, ceilingCents: 50 });
     expect((await f.call()).status).toBe(200);
     await until(async () => {
@@ -153,7 +155,7 @@ it('releases undispatched reservations when authority is revoked after the allow
       return recovered.state.reservations.every(r => r.settledCents !== undefined);
     });
     expect(f.received()).toBe(1);
-    expect(totals(recovered.state)).toMatchObject({ reservedCents: 0, todayCents: 1, monthCents: 1,
+    expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0, todayCents: 1, monthCents: 1,
       dailyCeilingCents: 50, ceilingCents: 50 });
     await f.runner.rebuild(budgets); expect(await readBudget(f.db, 'test')).toEqual(recovered.state);
   } finally { await replacement?.close(); await f.close(); }

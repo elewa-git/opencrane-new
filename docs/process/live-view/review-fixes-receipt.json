@@ -1,0 +1,136 @@
+{
+  "date": "2026-10-03T09:44:50.730368+00:00",
+  "sourceBase": "290ae4f",
+  "sourceSha256": {
+    "apps/ops/src/lifecycle.ts": "b4efddf0cd069613b670b043a4c1470da89e47735c31401767121833dcecf724",
+    "apps/ops/test/lifecycle-k3d.test.ts": "9a0412a9695712d177ec1b83f5f0e44f46bf54631ab8bc6e2693d09404a3b285",
+    "apps/ops/test/wake.test.ts": "93165cf1fcc891c7d79499980130b7f81525d7050d4599b77cc1aeff3761b32e",
+    "apps/server/src/computers/desktop.ts": "a8b8d0343474ffd28924c58474ba111f1ce5f0473f861f9748331a93019586b7",
+    "apps/server/src/computers/view.ts": "a53b417e2b8bfaf560742758ad2d8286cfeffa45f50e9b1e4b3f14f19ac4a14b",
+    "apps/server/test/live-view-k3d.test.ts": "920d591681aa0f1def426529e550a76f5647a48499563590d48831cfab9ec020",
+    "apps/server/test/live-view.test.ts": "bf4b953d23e21592a0760dc0ef1c06d12c366779d6d5d086047f800f7859e3cc",
+    "apps/server/test/support/desktop-pod.ts": "4281df621ee348596128cb70425715bc23cd5553f3d6325a4fe9c2378f68d63c",
+    "apps/web/src/app/live-view/live-view.ts": "390c9d33fbe7c78e66fb5d8883c4e81167e3fc840d8404503443a962e1465637",
+    "infra/dev-stack/computer-admission.mjs": "81e83ca4da65c1f0f20f9339d2e86abf836267ad620ae587957d1908639bc06e",
+    "infra/dev-stack/computer-worker-rbac.yaml": "45cab6fe7323bf163eff418ed73d8c98a5f3c64272e634ad9de7c4cd62cf9e4b",
+    "apps/server/test/live-view-proxy.test.ts": "e50f45927b93d2c5117794ea8ace5d1df4f695ffefefde83745da47abd47b2dd"
+  },
+  "liveViewer": {
+    "date": "2026-10-03T09:32:26.479Z",
+    "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:afb9835f5ed42662307e4826f76efd47abb02a23d86180af877b8a11947b0597",
+    "namespace": "p316-view-b14a098f",
+    "hashes": [
+      "828bc6d7a10a757304d6976585b675b1a1cc1eaf986bc09edf15db55bbf29212",
+      "828bc6d7a10a757304d6976585b675b1a1cc1eaf986bc09edf15db55bbf29212"
+    ],
+    "revokedMs": 247.921623000002,
+    "framebuffer": {
+      "pixels": 480000,
+      "hash": "1da2045d29e9c2f7479da7062624c622369d55ad2d64663357651c4c98b60589"
+    },
+    "audit": [
+      {
+        "sequence": 11,
+        "id": "5f583374-c8e8-4153-8b4a-58195930a644",
+        "type": "computer.view_started",
+        "principal": {
+          "id": "alice",
+          "kind": "human"
+        },
+        "data": {
+          "sessionId": "8ff05fdc-03b1-4b67-9e2d-4051e077b9ff",
+          "conversationId": "chat",
+          "computerId": "desktop",
+          "assistantId": "assistant",
+          "memberId": "alice",
+          "generation": 1,
+          "expiresAt": "2026-10-03T09:33:50.221Z"
+        }
+      },
+      {
+        "sequence": 30,
+        "id": "49c5736b-bce1-4983-97f7-b202162aa7f6",
+        "type": "computer.view_stopped",
+        "principal": {
+          "id": "alice",
+          "kind": "human"
+        },
+        "data": {
+          "sessionId": "8ff05fdc-03b1-4b67-9e2d-4051e077b9ff",
+          "conversationId": "chat",
+          "computerId": "desktop",
+          "assistantId": "assistant",
+          "memberId": "alice",
+          "generation": 1,
+          "expiresAt": "2026-10-03T09:33:50.221Z",
+          "reason": "disconnected"
+        }
+      }
+    ],
+    "slowViewer": {
+      "frames": 32,
+      "rssBefore": 278958080,
+      "peakRss": 338243584,
+      "code": 1013
+    },
+    "expiry": "PASS",
+    "wrongOrigin": "PASS",
+    "directNetwork": "PASS",
+    "serverReadOnly": "PASS",
+    "protocolAttacks": "PASS",
+    "status": "PASS"
+  },
+  "identity": "computer-lifecycle service account from the tracked namespaced Role; short-lived token",
+  "lifecycleQualification": {
+    "status": "PASS",
+    "tests": 2,
+    "seconds": 130.55,
+    "unrelatedRepairCases": "NOT RUN (7 skipped)"
+  },
+  "namespaceCleanup": "PASS",
+  "productChatMounting": "NOT RUN; blocker 5 deferred",
+  "hostedCI": "NOT RUN; branch not pushed",
+  "completedAt": "2026-10-03T09:51:10.620040+00:00",
+  "checks": {
+    "lint": {
+      "status": "PASS",
+      "warnings": 6
+    },
+    "typecheck": {
+      "status": "PASS",
+      "scope": "all workspaces"
+    },
+    "check:events": {
+      "status": "PASS",
+      "eventTypes": 76
+    },
+    "npm test -- --maxWorkers=2": {
+      "status": "PASS",
+      "passedFiles": 65,
+      "passedTests": 1038,
+      "skippedTests": 13,
+      "seconds": 483.25
+    },
+    "web build": {
+      "status": "PASS",
+      "warning": "existing component CSS budget"
+    },
+    "web tests": {
+      "status": "PASS",
+      "tests": 43
+    },
+    "live viewer build": {
+      "status": "PASS",
+      "warning": "existing noVNC CommonJS import"
+    },
+    "live viewer k3d": {
+      "status": "PASS",
+      "tests": 2,
+      "seconds": 108.84
+    }
+  },
+  "initialFailures": {
+    "gatewayStartup": "First full run failed at gateway startup; isolated reproduction and final complete run passed.",
+    "lifecycleAdmission": "Initial live runs and focused dry-run rejected the checked Pod template until POD_UID admission was fixed."
+  }
+}

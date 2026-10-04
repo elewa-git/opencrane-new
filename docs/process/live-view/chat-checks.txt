@@ -1,0 +1,59 @@
+3 October 2026, Node 22.23.3.
+Base cc8d8c0; rebased review-fix head 7e65b3e plus the source overlay in chat-source.json.
+No external model provider; MODELS_REAL_CALL=0.
+
+Final-source gates:
+  npm ci: PASS after rebase
+  npm run lint: PASS; seven existing function-length warnings
+  npm run typecheck: PASS; all workspaces
+  npm run check:events: PASS; 78 event types agree
+  npm run build -w apps/web: PASS; existing bundle/CSS and noVNC CommonJS warnings
+  npm run test -w apps/web -- --watch=false: PASS; 8 files, 47 tests
+  npx tsc -p infra/dev-stack/tsconfig.json: PASS
+
+Test-first regressions:
+  Conversation browser entry: RED missing entry; GREEN desktop and 390px overlay.
+  Slow positive authority: RED 403 admission; GREEN with the 1200ms check deadline.
+  Late authority renewal: RED revoke took 2175ms; GREEN lease starts at check start.
+  Slow authorised stream (400ms event read plus 650ms authority reply):
+    RED CLOSED after 3.5 seconds with 500ms starts and two checks;
+    GREEN OPEN and desktop bytes forwarded with 250ms starts and five checks.
+  Repeated authority history:
+    RED second authorised admission 403 with 100ms per historical event;
+    GREEN 200 after live-tail reads, then 403 on revoke before projection.
+  Missing authority checkpoint:
+    RED 200 after warmed computer history disappears;
+    GREEN 403 after checkpoint continuity validation.
+  Viewer API file: PASS; 11 tests, 59.03s; one retry permitted.
+  Capacity helper resolves refused/closed upgrades; audit and upper bound asserted.
+  Stub with historical Stop and a new prompt: PASS completed within five seconds.
+
+Full-suite attempt history (PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres):
+  Earlier overlap source: PASS; 68 files / 1061 tests passed, 3 files / 13 tests skipped; 1237.40s.
+  Loaded attempt: FAIL unchanged gateway tool-mode case; interrupted after its first file.
+  Later no-retry attempt: FAIL; 67 passed / 1 failed / 3 skipped files;
+    1061 passed / 1 failed / 13 skipped tests; 1051.45s.
+    Gateway monthly budget case admitted zero requests instead of one.
+  Focused daily/monthly budget retest: PASS; 2 tests, 17.09s.
+  MODELS_REAL_CALL=0 PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --no-file-parallelism --testTimeout=15000 --retry=1 --reporter=verbose
+  Final-source full suite: PASS; 68 passed / 3 skipped files;
+    1063 passed / 13 skipped tests; 1078.30s; one retried test.
+    Gateway reviewed-tool-modes case passed on one retry (46.369s total).
+    All eleven viewer API cases passed without a retry in this full run.
+  No assertion or runtime authority deadline relaxed.
+
+Secondary qualification:
+  Fresh/plain pair before continuity guard: PASS; stack 2, owner untouched.
+  Final-source stack 1: PASS up.sh --fresh, plain up.sh and down.sh --id 1.
+  Fresh viewer receipts 22:32 UTC; revoke 1280px 341ms / 390px 334ms.
+  Repeat viewer receipts 22:36–22:37 UTC; revoke 1280px 430ms / 390px 412ms.
+  Final teardown 2026-10-03T22:40:34Z; owner stack untouched.
+  Earlier plain attempts failed on interrupted assistant replies before streaming;
+    one followed desktop viewing. Allowed model decisions were recorded; cause unresolved.
+  Each failed secondary was torn down. Passive repeat observer sends no commands,
+    records only numeric status codes/fixed error categories and stopped before teardown.
+  Only the selected secondary namespace and loopback origin are used.
+
+Independent review pass 2: PASS before final scheduling/tail/continuity corrections.
+Owner assessment of those later corrections remains before landing; no third independent pass.
+Hosted CI: NOT RUN. No push.

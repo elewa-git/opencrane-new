@@ -312,3 +312,11 @@ MCP routes. The default is empty. Deployment configuration owns these destinatio
 callers cannot supply them. Set `CONVERSATION_KEYS_DIR` to the same private directory
 as the server so the decision process can encrypt and verify approval reviews.
 The dev stack routes its credential-free recording fixture to its loopback stub.
+
+Read-only desktop sessions use `POST /api/conversations/:id/view` and
+`/ws/conversations/:id/view` for the WebSocket. The POST requires the session, exact Origin and
+`x-opencrane-view: 1`; redeem its ticket once as WebSocket subprotocols
+`binary, <ticket>`, with the same session and Origin. Both conversation participation
+and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`
+and `KUBE_NAMESPACE` for its private Pod stream. See the
+[live-view contract and evidence](../../docs/process/live-view-evidence.md).

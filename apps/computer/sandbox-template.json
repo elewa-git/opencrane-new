@@ -29,6 +29,14 @@
                     "key": "gateway"
                   }
                 }
+              },
+              {
+                "name": "POD_UID",
+                "valueFrom": {
+                  "fieldRef": {
+                    "fieldPath": "metadata.uid"
+                  }
+                }
               }
             ],
             "securityContext": {

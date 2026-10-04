@@ -7,7 +7,8 @@
     "dev": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build",
     "typecheck": "tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json",
-    "test": "ng test"
+    "test": "ng test",
+    "build:live-view-test": "ng build --browser test/live-view-main.ts --ts-config test/tsconfig.live-view.json --output-path dist/live-view"
   },
   "dependencies": {
     "@angular/common": "21.2.24",
@@ -16,6 +17,7 @@
     "@angular/platform-browser": "21.2.24",
     "@fontsource/dm-mono": "5.3.0",
     "@fontsource/dm-sans": "5.3.0",
+    "@novnc/novnc": "1.5.0",
     "@opencrane/protocol": "0.1.0",
     "rxjs": "7.8.2",
     "tslib": "2.8.1",
