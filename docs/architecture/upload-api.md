@@ -7,7 +7,9 @@ P2-6: the workspace attach menu sends one file at a time with progress, refusal 
 Both operations use the member's existing session cookie. They require current
 OpenFGA membership and conversation permission, and the event stream must show an
 open `agent_session` created by that member. Other members' conversations and
-other organisations are refused, including when a participant has read access.
+other organisations are refused for ordinary uploads, including when a participant
+has read access. P3-18 screenshots are the exception: current participants can
+list and reopen screenshot files, and capture also requires a shared-desktop grant.
 
 `POST /api/conversations/:conversationId/files` takes one raw file:
 
@@ -58,7 +60,8 @@ converted PDF paths are ready for the later file-view/preview integration.
 
 `GET /api/conversations/:conversationId/files/view?path=<listed path>` downloads
 only an original named by a committed `file.uploaded` event. `&preview=true`
-uses inline disposition. The same session, membership and ownership checks apply;
+uses inline disposition. The same session and current membership checks apply;
+ordinary uploads require ownership, while screenshots require current participation;
 arbitrary workspace paths and rejected files return 404. Bytes come from the
 server's promoted MinIO object, never from the computer. Responses use the inspected
 MIME, `nosniff` and private/no-store caching. The existing Open Terminal-style modal
@@ -74,6 +77,34 @@ no converted text path. Only uploads recorded before the message are included,
 with the newest 100 attachment entries per turn and an explicit count of older
 entries omitted from context. Retrying an upload
 retains its key and bytes on the page; reloading discards an uncommitted selection.
+
+## Screenshot capture
+
+`POST /api/conversations/:conversationId/screenshots` uses the session cookie,
+exact configured Origin, `X-OpenCrane-View: 1` and a stable `Idempotency-Key`.
+It takes no body or arbitrary URL/path/dimensions. Current participants also need
+the shared-desktop audience grant. Capture uses one non-incremental framebuffer
+request over the authenticated desktop proxy and fixed PNG encoding. The existing
+inspection/scanner and 20 MiB file limit apply. The desktop transport limits raw
+pixels to 4 MiB, each dimension to 4096, capture to ten seconds, and each server
+to four concurrent captures. Current access and generation are rechecked before
+promotion and conditional append.
+
+A `file.uploaded` screenshot includes `screenshot: {computerId, generation,
+capturedAt, width, height}` with the existing author, conversation, MIME, byte size
+and SHA-256. Its list row includes that metadata without an object key. Reload
+and projection replay restore the PNG; no replay repeats capture or scanning.
+Participants get screenshot-only lists in conversations they did not create.
+Removing a participant/member or expiring the session refuses a previously usable
+preview/download URL. There is no public or signed object-store/Kasm URL.
+
+Success returns 201 with `{status:"appended", fileId, sequence}`. Capture access
+and input failures return 400/401/403; scan rejection returns 422, append contention
+409, and unavailable capture, scanner, storage or capacity returns 503. An uncertain
+reply is retried with the same key; an infected verdict is terminal for that key,
+and a new explicit capture uses a new key. No failure appears as a saved file.
+[Evidence](../process/p3-18-screenshots.md) separates fixture qualification from a
+fresh deployed silo. No continuous recording or automatic collection is implemented.
 
 ## Flow and recovery
 

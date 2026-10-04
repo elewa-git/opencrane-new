@@ -412,6 +412,16 @@ also completes through the stub provider while the viewer is open. Revoking the
 grant closes the socket, clears pixels and records the stop audit. Keyboard
 opening, Escape, fit/actual-size and 44px targets are checked. Screenshots and
 receipts go to `docs/process/live-view/conversation-*`.
+
+For screenshot qualification on a claimed secondary, run
+`node --experimental-strip-types infra/dev-stack/screenshot-journey.ts fresh`
+after `up.sh --fresh`, then use `repeat` after plain `up.sh`. Real Zitadel sessions
+capture the deployed desktop, open the saved image from the conversation and panel,
+and reload at 1280px and 390px. Repeat also reopens the fresh run's screenshot
+when capture passed; otherwise it records that persistence check as NOT RUN.
+A signed-in non-participant with a desktop grant is refused viewing, capture and
+file access. Receipts and screenshots go to `docs/process/p3-18-live/`.
+
 ## Browser upload qualification
 
 The browser starts a draft, attaches `project.pdf` through the native file picker,

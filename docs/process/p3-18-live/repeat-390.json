@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-04T11:07:26.628Z",
+  "source": "bd938b53ff9f193c4bc54347ee8156d05b466bb4",
+  "journeySha256": "cad67fd884cec9e7622119441c00ea3fab7697c57e5801cec01f4dcb55e288e5",
+  "run": "repeat",
+  "stackId": "1",
+  "namespace": "opencrane-dev-1",
+  "origin": "http://127.0.0.1:25106",
+  "width": 390,
+  "image": "k3d-ocn-registry:5000/opencrane/computer@sha256:688db3cbc1558d8ab2f5ffb2cd008ab05390489b83cc41effd6e0fb028189d77",
+  "conversationId": "0a95e3da-4044-4f79-bd4f-ee2f3e3d8fc6",
+  "memberId": "zitadel-member",
+  "computer": {
+    "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+    "generation": 1
+  },
+  "file": {
+    "conversationId": "0a95e3da-4044-4f79-bd4f-ee2f3e3d8fc6",
+    "fileId": "2176cf918f5a0e160ab01a2dfb3a1c5aae141a20e5caaad014b93ca72a7043d6",
+    "uploadedBy": "zitadel-member",
+    "name": "Screenshot-2176cf918f5a.png",
+    "size": 4147,
+    "sha256": "93f484cf694f5bea1f39367ba3b314631078ab3ffcd2384b666ede5e2d253d81",
+    "screenshot": {
+      "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+      "generation": 1,
+      "capturedAt": "2026-10-04T11:07:16.844Z",
+      "width": 800,
+      "height": 600
+    },
+    "mime": "image/png",
+    "objectKey": "dev/0a95e3da-4044-4f79-bd4f-ee2f3e3d8fc6/2176cf918f5a0e160ab01a2dfb3a1c5aae141a20e5caaad014b93ca72a7043d6/93f484cf694f5bea1f39367ba3b314631078ab3ffcd2384b666ede5e2d253d81"
+  },
+  "captureMs": 5061,
+  "participant": "PASS",
+  "conversationAndPanel": "PASS",
+  "reload": "PASS",
+  "retainedFreshScreenshot": "NOT RUN",
+  "nonParticipant": {
+    "memberId": "zitadel-owner",
+    "desktopGranted": true,
+    "capture": 403,
+    "view": 403,
+    "file": 403
+  },
+  "status": "PASS"
+}

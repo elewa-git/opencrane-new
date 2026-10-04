@@ -52,7 +52,7 @@ function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>): void 
     }
 }
 
-const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(), mime: z.string(), uploadedBy: z.string() });
+const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(), mime: z.string(), uploadedBy: z.string(), screenshot: z.object({ computerId: z.string(), generation: z.number(), capturedAt: z.string() }).optional() });
 export function uploadedFile(row: ChatRow) {
   if (row.type !== 'file.uploaded') return undefined;
   const parsed = attachment.safeParse(row.data);

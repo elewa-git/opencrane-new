@@ -31,6 +31,8 @@ export class Workspace implements OnInit {
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');
   protected readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('panelDialog');
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
+  protected readonly screenshots = computed(() => this.chat.attachments().filter(file => file.screenshot));
+  protected readonly uploads = computed(() => this.chat.attachments().filter(file => !file.screenshot));
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
   protected readonly reason = computed(() => this.chat.rows().some(row => row.type === 'conversation.closed') ? 'This session is closed. Start a new session to continue.' : this.chat.denied() ? 'Sign in to send messages.' : this.chat.loading() ? 'Loading your workspace…' : this.chat.railUnavailable() ? 'Reconnect to your pod to start a session.' : !this.chat.selected() && !this.recipient() ? 'Choose your agent to start a session.' : !this.chat.assistantId() ? 'Your personal agent is being prepared. Refresh shortly.' : '');
@@ -75,6 +77,8 @@ export class Workspace implements OnInit {
   protected words(status: string): string { return ({ working: 'Working', done: 'Done', stopped: 'Stopped', failed: 'Failed', closed: 'Closed', open: 'Open' } as Record<string, string>)[status] ?? 'Open'; }
   protected time(value: string): string { return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }
+  protected isScreenshot(path: string): boolean { return this.screenshots().some(file => file.path === path); }
+  protected screenshotUrl(path: string): string { return `/api/conversations/${encodeURIComponent(this.chat.selected())}/files/view?preview=true&path=${encodeURIComponent(path)}`; }
   protected name(path: string): string { return path.split('/').at(-1) ?? path; }
   protected type(path: string): string { return path.split('.').at(-1)?.toUpperCase().slice(0, 5) ?? 'FILE'; }
   protected textParts(text: string): { text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui' }[] {

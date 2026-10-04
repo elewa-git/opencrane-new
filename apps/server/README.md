@@ -387,3 +387,28 @@ bucket-scoped STS lease); `CLAMD_HOST` defaults to `127.0.0.1`, `CLAMD_PORT` to
 projection separately. The computer receives clean bytes through the server's
 bridge and holds no object-store credentials. [Evidence and qualification](../../docs/process/upload-evidence.md)
 cover real-service tests and the pending fresh-install journey.
+
+## Authorised screenshots
+
+`POST /api/conversations/:conversationId/screenshots` takes no body. Supply the
+session cookie, exact configured Origin, `x-opencrane-view: 1` and a stable
+`idempotency-key`. Current participation and the shared-desktop audience grant are
+checked against events and OpenFGA, before capture and again before saving. The
+existing namespace-scoped authenticated desktop proxy supplies one framebuffer;
+there is no caller-selected URL, path or encoding. Dimensions are at most 4096
+per axis and at most 4 MiB of raw pixels, with a ten-second framebuffer deadline
+and at most four concurrent captures per server.
+
+A clean scan stores a PNG using the existing 20 MiB file path and appends one
+`file.uploaded` with capture metadata. Success is 201; input, access, scan and
+capacity failures return 400/401/403/422/503, and append conflicts return 409. Retry
+an uncertain command using the same key. Participants reopen screenshots through
+the authenticated file-view endpoint; ordinary uploads retain creator-only access.
+No Kasm credentials, public image URL or signed object-store URL reaches the browser.
+Enable both existing desktop and upload configurations; no new dependency is added.
+
+Run `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/screenshots.test.ts --maxWorkers=2`.
+After the web build, `SCREENSHOT_BROWSER=1` with the same database runs
+`apps/server/test/screenshot-browser.test.ts` against disposable real Kasm, scan
+and storage fixtures. It requires the existing `ocn-upload-computer:test` image.
+See the [P3-18 evidence](../../docs/process/p3-18-screenshots.md) for remaining qualification.

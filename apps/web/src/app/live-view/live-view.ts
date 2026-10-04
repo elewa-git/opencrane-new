@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, input, signal, viewChild, type OnDestroy, type OnChanges, type SimpleChanges } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild, type OnDestroy, type OnChanges, type SimpleChanges } from '@angular/core';
 import type RFB from '@novnc/novnc/lib/rfb.js';
 
 @Component({
@@ -10,7 +10,8 @@ import type RFB from '@novnc/novnc/lib/rfb.js';
     <p role="status" aria-live="polite">{{ state() }}</p>
     @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
     <div class="display" #display tabindex="0" aria-label="Read-only computer display" [hidden]="state() !== 'Viewing'"></div>
-    @if (state() === 'Viewing') { <div class="tools"><button type="button" [attr.aria-pressed]="fit()" (click)="zoom(true)">Fit</button>
+    <p role="status" aria-live="polite">{{ captureStatus() }}</p>
+    @if (state() === 'Viewing') { <div class="tools"><button type="button" [disabled]="capturing()" (click)="capture()">Screenshot</button><button type="button" [attr.aria-pressed]="fit()" (click)="zoom(true)">Fit</button>
       <button type="button" [attr.aria-pressed]="!fit()" (click)="zoom(false)">Actual size · zoom</button></div> }
     </section></dialog>`,
   styles: `:host{display:block;min-width:0}.entry{margin:12px 18px;width:calc(100% - 36px);text-align:left}
@@ -22,6 +23,11 @@ import type RFB from '@novnc/novnc/lib/rfb.js';
 })
 export class LiveView implements OnDestroy, OnChanges {
   readonly conversationId = input.required<string>();
+  readonly saved = output<void>();
+  protected readonly capturing = signal(false);
+  protected readonly captureStatus = signal('');
+  private captureKey = '';
+  private captureAbort: AbortController | undefined;
   private readonly dialog = viewChild.required<ElementRef<HTMLDialogElement>>('dialog');
   private readonly display = viewChild.required<ElementRef<HTMLElement>>('display');
   protected readonly state = signal('Disconnected');
@@ -32,12 +38,32 @@ export class LiveView implements OnDestroy, OnChanges {
   protected watch(): void { this.dialog().nativeElement.showModal(); void this.open(); }
   protected zoom(fit: boolean): void { this.fit.set(fit); if (this.viewer) this.viewer.scaleViewport = fit; }
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['conversationId'] && !changes['conversationId'].firstChange) { this.dialog().nativeElement.close(); this.close('Disconnected'); }
+    if (changes['conversationId'] && !changes['conversationId'].firstChange) { this.dialog().nativeElement.close(); this.close('Disconnected'); this.captureKey = ''; this.captureStatus.set(''); }
   }
   ngOnDestroy(): void { this.close('Disconnected'); }
   protected close(state: string): void {
+    this.captureAbort?.abort(); this.capturing.set(false);
     this.attempt++; this.viewer?.disconnect(); this.socket?.close();
     this.viewer = undefined; this.socket = undefined; this.display().nativeElement.replaceChildren(); this.state.set(state);
+  }
+  protected async capture(): Promise<void> {
+    if (this.capturing() || this.state() !== 'Viewing') return;
+    const attempt = this.attempt;
+    this.captureKey ||= crypto.randomUUID();
+    this.captureAbort = new AbortController(); this.capturing.set(true); this.captureStatus.set('Capturing and scanning…');
+    try {
+      const response = await fetch(`/api/conversations/${encodeURIComponent(this.conversationId())}/screenshots`, {
+        method: 'POST', headers: { 'x-opencrane-view': '1', 'idempotency-key': this.captureKey },
+        signal: AbortSignal.any([this.captureAbort.signal, AbortSignal.timeout(90_000)]),
+      });
+      if (attempt !== this.attempt) return;
+      if (response.status === 422) this.captureKey = '';
+      await captureReply(response);
+      if (attempt !== this.attempt) return;
+      this.captureKey = ''; this.captureStatus.set('Screenshot saved'); this.saved.emit();
+    } catch (error) {
+      if (attempt === this.attempt) this.captureStatus.set(error instanceof Error && error.name !== 'AbortError' && error.name !== 'TimeoutError' ? error.message : 'Screenshot could not be saved. Retry.');
+    } finally { if (attempt === this.attempt) this.capturing.set(false); }
   }
   private async open(): Promise<void> {
     const attempt = ++this.attempt; this.state.set('Connecting');
@@ -60,4 +86,13 @@ export class LiveView implements OnDestroy, OnChanges {
       viewer.addEventListener('disconnect', () => { if (attempt === this.attempt) this.close('Disconnected'); });
     } catch { if (attempt === this.attempt) this.close('Disconnected'); }
   }
+}
+
+async function captureReply(response: Response): Promise<void> {
+  const result: unknown = await response.json();
+  if (!response.ok) {
+    const message = result && typeof result === 'object' && 'error' in result && typeof result.error === 'string' ? result.error : 'Screenshot could not be saved. Retry.';
+    throw new Error(message);
+  }
+  if (!result || typeof result !== 'object' || !('status' in result) || result.status !== 'appended') throw new Error('Screenshot could not be saved. Retry.');
 }

@@ -1,3 +1,4 @@
+import { registerScreenshots } from './computers/screenshots.ts';
 import { registerApprovalRoutes } from './chat/approvals.ts';
 import { registerLiveView, type LiveViewOptions } from './computers/view.ts';
 import { registerFileRoutes, type FileOptions } from './files/routes.ts';
@@ -63,6 +64,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
 
   registerApprovalRoutes(app, authConfig, options.chat);
   registerFileRoutes(app, authConfig, options.files);
+  registerScreenshots(app, authConfig, options.files, options.liveView);
 
   return app;
 }

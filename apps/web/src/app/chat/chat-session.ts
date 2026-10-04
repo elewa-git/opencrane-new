@@ -39,7 +39,7 @@ export class ChatSession implements OnDestroy {
   readonly uploadError = signal('');
   readonly uploading = signal(false);
   private readonly pendingDelivery = signal('');
-  readonly uploadPending = computed(() => [...this.attachments().map(file => file.fileId), this.pendingDelivery()].filter(Boolean)
+  readonly uploadPending = computed(() => [...this.attachments().filter(file => !file.screenshot).map(file => file.fileId), this.pendingDelivery()].filter(Boolean)
     .some(id => !this.rows().some(row => row.type === 'file.delivered' && row.data['fileId'] === id)));
   private uploadFile: { file: File; key: string; conversation: string } | undefined;
   private transfer: ReturnType<typeof sendUpload> | undefined;
@@ -110,6 +110,9 @@ export class ChatSession implements OnDestroy {
       await this.deliver(); this.queued.set(false); return true;
     } catch (error) { this.queued.set(true); this.fail(error); return false; }
     finally { this.busy.set(false); }
+  }
+  async refresh(): Promise<void> {
+    try { await this.catchUp(this.selected(), this.revision); } catch (error) { this.fail(error); }
   }
   reconnect(): void { this.socket.connect(); }
   async stop(): Promise<void> {
