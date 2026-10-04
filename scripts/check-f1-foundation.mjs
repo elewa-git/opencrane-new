@@ -269,6 +269,10 @@ async function checkEditors(page, width, motion) {
   await page.getByRole('button', { name: 'Discover tools' }).click();
   await page.getByText('This address was refused.', { exact: false }).waitFor();
   assert.equal(await page.locator('oc-mcp-install [data-state]').getAttribute('data-state'), 'refused');
+  assert.equal(await page.getByRole('button', { name: 'Check status' }).count(), 0);
+  assert.equal(await page.getByLabel('Server URL').isEnabled(), true);
+  await page.getByLabel('Server URL').fill('https://corrected.example/mcp');
+  assert.equal(await page.getByLabel('Server URL').inputValue(), 'https://corrected.example/mcp');
   await checkStatusRegions(page);
   await capture(page, 'mcp-install', width, motion);
 }
@@ -300,6 +304,17 @@ async function checkWorkspace(browser, width, motion, scenario) {
     assert.equal(await page.locator('.citation-paper').first().evaluate(cornerSize), '6px');
     await capture(page, name, width, motion);
     if (scenario === 'streaming') return;
+    if (width === 390) {
+      await page.getByRole('button', { name: 'Session panel', exact: true }).click();
+    }
+    const sessionFile = page.locator('.panel-file.oc-dogear:visible').first();
+    await sessionFile.focus();
+    const sessionFileRing = await sessionFile.evaluate(focusRing);
+    assert.equal(sessionFileRing[0], '2px');
+    assert(['rgb(13, 181, 204)', 'rgb(10, 132, 151)'].includes(sessionFileRing[1]));
+    assert.equal(sessionFileRing[2], '2px');
+    assert.equal(await sessionFile.evaluate((node) => globalThis.getComputedStyle(node).clipPath), 'none');
+    if (width === 390) await page.keyboard.press('Escape');
     await page.route('**/api/conversations/chat/files/view?*', previewReply);
     await page.locator('.file-card').getByRole('button', { name: 'Open', exact: true }).click();
     await page.getByText('Preview ready', { exact: true }).waitFor();

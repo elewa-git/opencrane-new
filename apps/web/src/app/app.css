@@ -81,7 +81,9 @@ h1, h2, p { margin: 0; } h1 { font: var(--oc-type-page); letter-spacing: var(--o
   .tabs { flex-wrap: nowrap; overflow-x: auto; }
   .tabs button { white-space: nowrap; }
 }
-.stale .register-row { opacity: .6; }
+.stale .register-row { background: #f1f3f3; }
+.stale .register-row .tile,
+.stale .register-row [data-glyph] { opacity: .6; }
 .refresh-notice { border: 1px solid var(--oc-warning-border); border-radius: 8px; }
 .notice-glyph {
   width: 12px;

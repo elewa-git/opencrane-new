@@ -36,7 +36,8 @@ References: `/home/jente/dev/design-handoffs/v2/` and the corresponding
   register fields, two Tools links and top-level refresh control remain; search,
   the redesigned navigation and complete row composition belong to F3.
 - **Shared glyph/paper/loading rules: PASS.** The design source's glyph sizes,
-  individual strokes and colours, fold gradient and reduced-motion forms are
+  individual strokes and colours, including paused text `#8a5d1f` and paused
+  glyph `#b0661a`, fold gradient and reduced-motion forms are
   used. Checking/Applying, state actions and specimen text use `#0a6f7e`:
   **5.85:1 on white and 5.49:1 on `#f6f8f8`**. `#0a8497` remains the focus colour.
 - **WRK-01/02/03/84 and the workspace paper rules: PARTIAL screen match.** The

@@ -12,7 +12,7 @@
 @if (phase() !== 'access' && !serverId) {
   <form [attr.aria-busy]="busy()" (submit)="submit($event)">
     <label for="remote-url">Server URL</label>
-    <input id="remote-url" type="url" required autocomplete="off" placeholder="https://mcp.example.com/mcp" [value]="locator()" (input)="locator.set($any($event.target).value)" [disabled]="phase() !== 'draft'" />
+    <input id="remote-url" type="url" required autocomplete="off" placeholder="https://mcp.example.com/mcp" [value]="locator()" (input)="locator.set($any($event.target).value)" [disabled]="phase() !== 'draft' && phase() !== 'refused'" />
     <p>Use an HTTPS address without passwords or access tokens.</p>
     @if (phase() === 'draft') { <button type="submit" [disabled]="busy()">Discover tools</button> }
   </form>
@@ -21,7 +21,7 @@
   <oc-shared-state [kind]="presentationState()" [message]="message()" [detail]="refusalDetail()"
     [changeReference]="changeRef()" [showAction]="false" />
 </div>
-@if (phase() !== 'draft' && phase() !== 'access') { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
+@if (phase() !== 'draft' && phase() !== 'access' && phase() !== 'refused') { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
 @if (inventory(); as inventory) {
   <section aria-label="Tool inventory" [attr.aria-busy]="busy()">
     <h2>{{ inventory.serverInfo.name }} · {{ inventory.serverInfo.version }}</h2>

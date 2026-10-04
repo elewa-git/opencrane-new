@@ -70,3 +70,19 @@ it('uses the accessible state text colour for checking, actions and the specimen
   expect(stateCss).toMatch(/\.state-action\s*\{[^}]*var\(--oc-accent-dark\)/u);
   expect(specimenCss).toMatch(/\.interaction\s*\{[^}]*var\(--oc-accent-dark\)/u);
 });
+
+it('keeps paused text readable and uses amber only for its glyph', () => {
+  const stateCss = readCss('../src/app/shared-state/shared-state.css');
+  const pausedText = luminance('#8a5d1f');
+  const white = luminance('#ffffff');
+  const raised = luminance('#f6f8f8');
+  expect((white + 0.05) / (pausedText + 0.05)).toBeGreaterThanOrEqual(4.5);
+  expect((raised + 0.05) / (pausedText + 0.05)).toBeGreaterThanOrEqual(4.5);
+  expect(stateCss).toMatch(/\[data-glyph-name='paused'\] \.message\s*\{[^}]*#8a5d1f/u);
+  expect(stateCss).toMatch(/\[data-glyph-name='paused'\] \.glyph\s*\{[^}]*#b0661a/u);
+});
+
+it('keeps stale row text at full opacity', () => {
+  expect(shellCss).toMatch(/\.stale \.register-row\s*\{[^}]*background:\s*#f1f3f3/u);
+  expect(shellCss).not.toMatch(/\.stale \.register-row\s*\{[^}]*opacity:/u);
+});
