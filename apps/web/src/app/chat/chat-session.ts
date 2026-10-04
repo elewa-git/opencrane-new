@@ -44,8 +44,11 @@ export class ChatSession implements OnDestroy {
   private uploadFile: { file: File; key: string; conversation: string } | undefined;
   private transfer: ReturnType<typeof sendUpload> | undefined;
   private creationId = '';
+  /** Feed generation; a change invalidates event positions and clears the old transcript. */
   private generation = 0;
+  /** Latest event position applied; subscriptions resume after this cursor. */
   private position = 0;
+  /** Bumped on session switch or destroy; mismatched async work belongs to an old session. */
   private revision = 0;
   private pending: { id: string; conversationId: string; text: string } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));

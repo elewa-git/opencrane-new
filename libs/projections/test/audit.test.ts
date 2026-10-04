@@ -1,12 +1,30 @@
 import { z } from 'zod';
 import { expect, it } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { eventRegistry, getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, readAudit, rebuildAuditProjection, ProjectionRunner } from '../src/index.ts';
+import { isAuditEventType } from '../src/audit.ts';
 import { database } from './database.ts';
 
 const canary = 'private-approval-bearer-arguments-canary';
+function auditAllowListMatchesPreviousRule(): void {
+  const previousPattern = [
+    '^(silo\\.owner_bootstrapped|decision\\.|budget\\.(reserved|settled|ceiling_set|exhausted)|',
+    'effect\\.|approval\\.|tool\\.approval_requested|credential\\.released|mcp\\.|connection\\.|',
+    'egress\\.|takeover\\.|security\\.alert_raised|gateway\\.observation_recorded|',
+    'agent\\.(command_ran|file_changed)|',
+    'member\\.(joined|role_changed|removed)|team\\.|assistant\\.|grant\\.|',
+    'computer\\.(claimed|ready|suspended|resumed|lost|retired))',
+  ].join('');
+  const previousAllowList = new RegExp(previousPattern, 'u');
+
+  for (const event of eventRegistry) {
+    expect(isAuditEventType(event.type)).toBe(previousAllowList.test(event.type));
+  }
+}
+it('keeps the audit allow-list equivalent for every registered event type', auditAllowListMatchesPreviousRule);
+
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {
   const definition = getEventDefinition(type);
   expect(definition, `typed ${type} contract`).toBeDefined();

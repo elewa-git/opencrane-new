@@ -48,7 +48,8 @@ export function registerScreenshots(app: FastifyInstance, config: AuthConfig, fi
 
 async function authoriseCapture(config: AuthConfig, files: FileOptions, view: LiveViewOptions, request: FastifyRequest) {
   const session = sessionFor(request, config, new Date());
-  if (!session || session.orgId !== config.expectedOrgId || !isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId }) || request.headers.origin !== new URL(config.redirectUri).origin || request.headers['x-opencrane-view'] !== '1' || files.silo !== view.silo || files.store !== view.store || files.binding.silo !== files.silo) throw new Error('Access changed');
+  // Bind capture to the signed-in identity, CSRF marker, origin and matching silo resources.
+  if (!isCaptureIdentityCurrent(config, files, view, request, session)) throw new Error('Access changed');
   const id = z.string().regex(/^[\w-]{1,200}$/u);
   const { conversationId } = z.object({ conversationId: id }).parse(request.params);
   const key = id.parse(request.headers['idempotency-key']);
@@ -63,6 +64,43 @@ async function authoriseCapture(config: AuthConfig, files: FileOptions, view: Li
   const fileId = createHash('sha256').update(JSON.stringify([files.silo, conversationId, memberId, `screenshot-${key}`])).digest('hex');
   return { computer, memberId, conversationId, fileId, key, fresh };
 }
+
+function isCaptureIdentityCurrent(
+  config: AuthConfig,
+  files: FileOptions,
+  view: LiveViewOptions,
+  request: FastifyRequest,
+  session: ReturnType<typeof sessionFor>,
+): session is NonNullable<ReturnType<typeof sessionFor>> {
+  if (!session) {
+    return false;
+  }
+  if (session.orgId !== config.expectedOrgId) {
+    return false;
+  }
+  const identity = { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId };
+  if (!isIdentityAllowed(config, identity)) {
+    return false;
+  }
+  const expectedOrigin = new URL(config.redirectUri).origin;
+  if (request.headers.origin !== expectedOrigin) {
+    return false;
+  }
+  if (request.headers['x-opencrane-view'] !== '1') {
+    return false;
+  }
+  if (files.silo !== view.silo) {
+    return false;
+  }
+  if (files.store !== view.store) {
+    return false;
+  }
+  if (files.binding.silo !== files.silo) {
+    return false;
+  }
+  return true;
+}
+
 async function captureFile(files: FileOptions, view: LiveViewOptions, context: Awaited<ReturnType<typeof authoriseCapture>>): Promise<Result> {
   const { computer, memberId, conversationId, fileId, key, fresh } = context;
   const captured = await captureDesktop(await view.open(computer));

@@ -2,7 +2,8 @@ import { budgets, settlementHandler, modelGrantHandler, initialiseBudgetProjecti
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
-import { connectProjectionDb, ProjectionRunner, auditTrail, groups, members, mcpCatalogue, computers, conversations, files } from '@opencrane/projections';
+import { connectProjectionDb, ProjectionRunner, auditTrail, groups, members, mcpCatalogue, computers,
+  conversations, files } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
 import { memberAuthorisation } from '@opencrane/authz';
 import { tokenIssuer } from '@opencrane/auth';
@@ -55,7 +56,11 @@ try {
   } else {
     const projection = mode === 'files' ? files : mode === 'audit' ? auditTrail : mode === 'conversations' ? conversations : mode === 'members' ? members : mode === 'budgets' ? budgets : mode === 'computers' ? computers : mcpCatalogue;
     const runner = new ProjectionRunner(db.db, store, logger);
-    await db.db.lock!('initialise', (locked) => new ProjectionRunner(locked, store, logger).initialise(projection));
+    // Workers may initialise the same schema together, so hold the DB lock through migration.
+    await db.db.lock!('initialise', async (locked) => {
+      const lockedRunner = new ProjectionRunner(locked, store, logger);
+      await lockedRunner.initialise(projection);
+    });
     async function initialiseGroups(locked: import('@opencrane/projections').Db) {
       const groupRunner = new ProjectionRunner(locked, store, logger);
       await groupRunner.initialise(groups);

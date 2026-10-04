@@ -25,13 +25,18 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       if (memberId) fresh.include(`member-${memberId}`, `conversation-${conversationId}`);
       if (!memberId || !(await auth.check(memberId, 'member')).allowed || !(await auth.conversation(memberId, conversationId, 'read')).allowed) return reply.code(403).send({ status: 'refused' });
       if (!await accessApplied(options, memberId, conversationId)) return reply.code(403).send({ status: 'refused' });
-      const csrf = createHmac('sha256', config.cookieSecret).update(JSON.stringify(['approval', req.headers.cookie, conversationId])).digest('hex');
+      // The token covers the whole Cookie header and conversation, blocking reuse across either.
+      const csrf = createHmac('sha256', config.cookieSecret)
+        .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
+        .digest('hex');
       if (req.method === 'GET') {
         const cards = await approvalCards(options.store, options.silo, conversationId, memberId, options.keys);
         await fresh();
         return reply.send({ cards, csrf });
       }
-      if (req.headers.origin !== new URL(config.redirectUri).origin || req.headers['x-csrf-token'] !== csrf) return reply.code(403).send({ status: 'refused' });
+      if (!isApprovalCsrfValid(req, config, csrf)) {
+        return reply.code(403).send({ status: 'refused' });
+      }
       return await decide(req, reply, options, session, memberId, conversationId, fresh);
 
     } catch (error) { return reply.code(error instanceof z.ZodError ? 400 : 503).send({ status: 'unavailable' }); }
@@ -48,12 +53,38 @@ async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOpt
       if (createHash('sha256').update(text).digest('hex') !== request.reviewDigest) throw new Error('Review unavailable');
       fresh.include(`computer-${request.assistantId}`);
       await currentAuthority(options.store, options.binding, memberId, request.assistantId, conversationId, 'mcp_server', request.serverId, fresh);
-      const recent = session.stepUpApproval === input.approvalId && session.authTime > 0 && session.authTime <= Date.now() / 1000 && Date.now() / 1000 - session.authTime <= 300;
+      const recent = isRecentStepUp(session, input.approvalId);
       const result = await decideApproval(options.store, options.silo, input.approvalId, memberId, input.decision, recent, fresh);
       return reply.code(result.status === 'appended' ? 200 : result.status === 'unavailable' ? 503 : result.status === 'step_up_required' ? 428 : 409).send({ status: result.status });
 }
 
+// D07 requires verified OIDC auth_time within five minutes; #141 tracks the configurable age question.
+const APPROVAL_STEP_UP_MAX_AGE_SECONDS = 300;
+
+function isRecentStepUp(session: SessionData, approvalId: string): boolean {
+  if (session.stepUpApproval !== approvalId) {
+    return false;
+  }
+  if (session.authTime <= 0) {
+    return false;
+  }
+  if (session.authTime > Date.now() / 1000) {
+    return false;
+  }
+  return Date.now() / 1000 - session.authTime <= APPROVAL_STEP_UP_MAX_AGE_SECONDS;
+}
+
+// Origin blocks cross-site posts; the token blocks reuse across sessions or conversations.
+// Replays within the same session and conversation remain valid.
+function isApprovalCsrfValid(req: FastifyRequest, config: AuthConfig, expectedToken: string): boolean {
+  const expectedOrigin = new URL(config.redirectUri).origin;
+  const submittedOrigin = req.headers.origin;
+  const submittedToken = req.headers['x-csrf-token'];
+  return submittedOrigin === expectedOrigin && submittedToken === expectedToken;
+}
+
 async function accessApplied(options: ChatOptions, memberId: string, conversationId: string) {
+  // Do not serve approval state until every relevant access change has reached OpenFGA.
   const auth = memberAuthorisation(options.binding);
   const rows = [...await history(options.store, `member-${memberId}`, options.silo),
     ...await history(options.store, `conversation-${conversationId}`, options.silo)];

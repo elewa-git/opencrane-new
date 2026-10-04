@@ -8,6 +8,30 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { envelope, history, type BudgetActor } from './actor.ts';
 
+// These responses can arrive after an upstream request has already run.
+const MAYBE_DISPATCHED = new Set([408, 504]);
+// Every other header, including authorization and x-turn-token, is deliberately dropped.
+const MCP_UPSTREAM_HEADERS = [
+  '"content-type":"application/json"',
+  '"accept":"application/json"',
+  '"mcp-protocol-version":request.headers["mcp-protocol-version"]',
+  '"mcp-method":request.headers["mcp-method"]',
+  '"mcp-tool-name":request.headers["mcp-tool-name"]',
+  '"x-request-id":request.headers["x-request-id"]',
+];
+// The model provider receives no caller headers or turn token after authz checks the request.
+const MODEL_UPSTREAM_HEADERS = [
+  '"content-type":"application/json"',
+  '"accept":"text/event-stream"',
+  '"x-request-id":request.headers["x-request-id"]',
+];
+// agentgateway v1.5.0. Checksum source and update steps:
+// spikes/s0-2-gateway/scripts/fetch-tools.sh.
+const AGENTGATEWAY_SHA256_BY_BUILD = {
+  'linux-amd64': 'daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b',
+  'darwin-arm64': 'da432d35bd696da0564f7b2b6bbc783542b6b9c616d6c0c4d4c3daef9dfa11a1',
+};
+
 function logNumber(line: string, field: string): number | undefined {
   const value = new RegExp(`\\b${field}=(\\d+)(?=\\s|$)`, 'u').exec(line)?.[1];
   const number = value === undefined ? undefined : Number(value);
@@ -27,7 +51,7 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
         includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
         protocol: { http: { path: JSON.stringify(`/authorize${path}`), includeResponseHeaders: ['x-request-id'] } },
         failureMode: { denyWithStatus: 503 } },
-      transformations: { request: { replace: '{"content-type":"application/json", "accept":"application/json", "mcp-protocol-version":request.headers["mcp-protocol-version"], "mcp-method":request.headers["mcp-method"], "mcp-tool-name":request.headers["mcp-tool-name"], "x-request-id":request.headers["x-request-id"]}' } },
+      transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },
     }, backends: [{ host: route.upstream }] };
 }
 function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string, mcpRoutes: McpRoute[] = []) {
@@ -48,7 +72,7 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
           includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
           protocol: { http: { path: '"/authorize"', includeResponseHeaders: ['x-reservation-id', 'x-request-id'],
             metadata: { reservationId: 'response.headers["x-reservation-id"]' } } }, failureMode: { denyWithStatus: 503 } },
-        transformations: { request: { replace: '{"content-type":"application/json", "accept":"text/event-stream", "x-request-id":request.headers["x-request-id"]}' } },
+        transformations: { request: { replace: `{${MODEL_UPSTREAM_HEADERS.join(', ')}}` } },
       }, backends: [{ ai: { name: 'openai', provider: { openAI: {} }, ...(upstream ? { hostOverride: upstream } : {}) },
         policies: { backendAuth: { key: { file: keyFile } }, ai: { routes: { '/v1/responses': 'responses' }, overrides: { service_tier: 'default' } } } }],
     }],
@@ -88,13 +112,34 @@ export function gatewayUsage(line: string) {
     if (status === undefined) return undefined;
     // JWT failures have no decision. Refusals use the decision's response id, never a request header.
     const requestId = status === 401 ? undefined : z.uuid().safeParse(/\bdecisionRequestId="([^"]+)"/u.exec(line)?.[1]).data;
-    return { id: requestId ?? randomUUID(),
-      outcome: status >= 400 ? 'error' : 'unknown', reason: status === 401 ? 'jwt_failed' : status >= 400 ? 'dispatch_denied' : 'observation_missing' };
+    return refusalObservation(requestId ?? randomUUID(), status);
   }
   const usage = nativeUsage(line, id);
   if (usage) return usage;
-  if (definiteRejection(line, status)) return { id, outcome: 'error' };
-  return { id, uncertainReason: /\berror=/u.test(line) || status === 408 || status === 504 ? 'transport_failure' : 'missing_usage' };
+  return providerFailureObservation(id, line, status);
+}
+function providerFailureObservation(id: string, line: string, status?: number) {
+  const maybeDispatched = status !== undefined && MAYBE_DISPATCHED.has(status);
+  const hasTransportError = /\berror=/u.test(line);
+  // A rejection without usage is treated as zero cost; it does not prove the provider did not run.
+  const isDefiniteRejection = status !== undefined && status >= 400 && status < 600 &&
+    !maybeDispatched && !hasTransportError;
+  if (isDefiniteRejection) return { id, outcome: 'error' as const };
+  const transportFailed = hasTransportError || maybeDispatched;
+  const uncertainReason = transportFailed ? 'transport_failure' as const : 'missing_usage' as const;
+  return { id, uncertainReason };
+}
+function refusalObservation(id: string, status: number) {
+  const outcome = status >= 400 ? 'error' : 'unknown';
+  let reason: 'jwt_failed' | 'dispatch_denied' | 'observation_missing';
+  if (status === 401) {
+    reason = 'jwt_failed';
+  } else if (status >= 400) {
+    reason = 'dispatch_denied';
+  } else {
+    reason = 'observation_missing';
+  }
+  return { id, outcome, reason };
 }
 function nativeUsage(line: string, id: string) {
   const token = z.int().nonnegative();
@@ -108,13 +153,10 @@ function nativeUsage(line: string, id: string) {
   return parsed.data;
 }
 
-function definiteRejection(line: string, status?: number) {
-  return status !== undefined && status >= 400 && status < 600 && status !== 408 && status !== 504 && !/\berror=/u.test(line);
-}
 export async function startGateway(options: { binary: string; configFile: string; usageFile: string; keyFile: string;
   port: number; readinessPort: number; decisionUrl: string; issuer: string; upstream?: string; mcpRoutes?: McpRoute[] }) {
-  const expected = process.platform === 'linux' ? 'daca5cda76e8c5ab0c1a75912fecf2d6365095403f810db72029c49d14a37e7b'
-    : 'da432d35bd696da0564f7b2b6bbc783542b6b9c616d6c0c4d4c3daef9dfa11a1';
+  const build = process.platform === 'linux' ? 'linux-amd64' : 'darwin-arm64';
+  const expected = AGENTGATEWAY_SHA256_BY_BUILD[build];
   if (createHash('sha256').update(await readFile(options.binary)).digest('hex') !== expected) throw new Error('Gateway digest mismatch');
   await writeFile(options.configFile, JSON.stringify(gatewayConfig(options.port, options.readinessPort, options.decisionUrl, options.keyFile, options.issuer, options.upstream, options.mcpRoutes)), { mode: 0o600 });
   const child = spawn(options.binary, ['-f', options.configFile], {

@@ -5,6 +5,10 @@ import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDa
 import { registerHandler } from '@opencrane/handlers';
 import { applyBudget, costCents, data, emptyBudget, models, totals, type BudgetState, type ModelCall } from './state.ts';
 
+// After 180 seconds without settlement evidence, record effect.uncertain as settle_timeout.
+// Issue #144 tracks why this existing delay is set to 180 seconds.
+const SETTLE_TIMEOUT_MS = 180_000;
+
 export async function history(store: EventStore, subject: string, silo: string, deadline = Infinity) {
   const rows = [];
   for await (const row of store.readStream(subject, 1, deadline)) {
@@ -96,6 +100,7 @@ export class BudgetActor {
       const applicable = [{ scope: 'global' as const, scopeId: '', ...totals(this.state, this.now()) },
         ...this.state.ceilings.filter(c => (c.scope === 'paying_group' ? call.payingGroupId : call.assistantId) === c.scopeId)
           .map(c => ({ ...c, ...totals(this.state, this.now(), c) }))];
+      // Compare cents as integers and include unsettled reservations to prevent concurrent overspend.
       const exceeded = applicable.find(t =>
         (t.scope === 'global' && BigInt(t.todayCents) + BigInt(t.reservedCents) + BigInt(amountCents) > BigInt(t.dailyCeilingCents)) ||
         BigInt(t.monthCents) + BigInt(t.reservedCents) + BigInt(amountCents) > BigInt(t.ceilingCents!));
@@ -118,6 +123,7 @@ export class BudgetActor {
       const r = this.state.reservations.find(r => r.id === id);
       if (!r) throw new Error('Unmatched reservation');
       if (r.settledCents !== undefined) throw new Error('Reservation already settled');
+      // Call only before the permit has left this process for dispatch.
       await this.append('budget.settled', { reservationId: id, permitId: id, settledCents: 0, outcome: 'not_dispatched' });
     });
   }
@@ -211,7 +217,10 @@ export class BudgetActor {
   }
   async expire() {
     for (const r of this.state.reservations) {
-      if (r.settledCents === undefined && this.now().getTime() - Date.parse(r.time) > 180_000) await this.effect(r.id);
+      if (r.settledCents === undefined &&
+          this.now().getTime() - Date.parse(r.time) > SETTLE_TIMEOUT_MS) {
+        await this.effect(r.id);
+      }
     }
   }
   async computerLostRecorded(subject: string, eventId: string) {
