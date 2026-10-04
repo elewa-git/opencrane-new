@@ -40,7 +40,8 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
       if (!grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
       if (req.url !== '/v1/responses' || req.method !== 'POST') { json(res, { error: 'route' }, 404); return; }
       const payload = record(await body(req));
-      payload['max_output_tokens'] = 128;
+      // Reasoning and tool-call syntax share this bound with the visible answer.
+      payload['max_output_tokens'] = 2000;
       const raw = JSON.stringify(payload);
       const outgoing = request(`${gateway}/v1/responses`, { method: 'POST', headers: {
         'content-type': 'application/json', authorization: `Bearer ${grant.computer}`,

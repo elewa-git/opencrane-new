@@ -1,6 +1,6 @@
 import type { EventEnvelope } from '@opencrane/events';
 import { createHash } from 'node:crypto';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
 
@@ -10,8 +10,8 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   const auth = memberAuthorisation(binding);
   const head = await store.head(), facts = [], receipts: string[] = [];
   let active = true;
-  // ponytail: scan relevant history; use a fenced IAM projection when these histories grow.
-  const subjects = [`member-${requester}`, `assistant-${assistant}`, 'team-*', 'conversation-*', 'grant-*'];
+  // IAM handlers enforce these entity subjects. Keep unrelated traffic out of the freshness window.
+  const subjects = [`member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, 'team-*', grantStream(resourceType, resourceId)];
   const histories = await Promise.all(subjects.map(async subject => {
     const rows = [];
     for await (const row of store.readStream(subject)) {
@@ -20,6 +20,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
     }
     return rows;
   }));
+  // ponytail: replay entity/team histories; use a fenced IAM projection if those grow too large.
   for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
     const e = row.event, d = data(e);
     if (e.silo !== binding.silo) continue;
@@ -60,10 +61,22 @@ export async function authorityFence(store: EventStore, started: number,
   // ponytail: model decisions use category heads; narrow further if unrelated IAM changes cause contention.
   const heads = await Promise.all(subjects.map(subject => store.head(subject)));
   return async () => {
-    if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
-    const current = await Promise.all(subjects.map(subject => store.head(subject)));
-    if (current.some((head, index) => head !== heads[index]) || performance.now() - started > 2000) {
-      throw new Error('Authority changed or snapshot expired');
+    while (true) {
+      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
+      const current = await Promise.all(subjects.map(subject => store.head(subject)));
+      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
+      if (current.every((head, index) => head === heads[index])) return;
+      if (current.some((head, index) => index !== 3 && head !== heads[index]) || current[3]! < heads[3]!) {
+        throw new Error('Authority changed');
+      }
+      // Output reports can arrive beside their model continuation. They grant no authority.
+      for await (const row of store.readStream('conversation-*', heads[3]! + 1, started + 2000)) {
+        if (row.sequence > current[3]!) break;
+        if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
+          'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) throw new Error('Authority changed');
+      }
+      heads[3] = current[3]!;
+      // Check every category again: a revocation may have arrived during that read.
     }
   };
 }

@@ -6,11 +6,12 @@ Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
 The checked template pins the tested release image at
-`sha256:09bc88153ccc6e72fee754dd171235f1aecf988e3b0df62bf7f278d6155df4ac`.
+`sha256:24298d7546b149db86b1ce26828576add20a96842b6d35084beeba3a3e2c2916`.
 This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
 credential through the Kubernetes Pod proxy; the bridge atomically stores it in
 `/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
-proxy control socket accepts per-thread grants. The OS layer is unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
+proxy control socket accepts per-thread grants. Model requests have a 2,000-token
+output ceiling, including reasoning and tool-call syntax. The OS layer is unchanged from the P2-1 [licence and image evidence](evidence.json); that receipt
 names the earlier image. The lifecycle k3d test checks delivery on the current digest. P2-3 adds the reviewed MIT `ws` package for the bridge channel.
 
 ## Build and check
@@ -28,6 +29,16 @@ shellcheck apps/computer/build.sh apps/computer/test/licences.sh
 `build.sh` collects and checks notices, publishes a qualification digest, updates
 the tracked manifest, runs the real k3d checks and only then moves `p2-1`. A
 failed licence or image check cannot publish the release.
+
+CI prepares the upload test with `sh scripts/build-test-computer.sh`. It rebuilds
+the desktop/Codex base from public pins, then uses the production Dockerfile and
+lockfiles to create `ocn-upload-computer:test` locally. No private registry, running
+stack or pre-existing image is required. This test image is never published;
+release builds keep the reviewed S0.5 base by default. Run the same preparation
+before `npm test` on a clean Linux amd64 development machine. Hosted CI caches
+the build layers, including the base and compiler stages, with Docker Bake.
+The scanner fixture builds `infra/clamav` from its pinned public digest, including
+offline signatures and excluding UnRAR.
 
 The image retains Node 22.23.1, Codex 0.159.2, Chromium 154 and KasmVNC 1.5.0
 from the pinned S0.5 digest. Added apt packages use the signed 1 October 2026
@@ -136,11 +147,19 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
 
 ## Processes and storage
 
-- The root supervisor accepts only a fixed native exec-server launch over a
-  private Unix socket in root-owned `/run/executor` (0750, group 1000). `tool-user.c` is unchanged from S0.1b; the executable is
-  reused from the pinned base. UID 1001 inherits `no_new_privs` and the same
-  seccomp rules denying sockets, process inspection and alternative syscall ABIs.
+- The root supervisor accepts fixed native exec-server and code-mode host launches
+  over separate private Unix sockets in root-owned `/run/executor` (0750, group
+  1000). Both pass through `tool-user.c`: UID/GID 1001, no supplementary groups,
+  a cleared environment, `no_new_privs` and the same S0.1b seccomp rules denying
+  sockets, process inspection and alternative syscall ABIs. The image builds this
+  launcher separately; compiler packages never enter the runtime. Codex starts
+  only an IPC connector in place of its bundled host; the supervisor alone starts
+  the relocated native host. Model-written JavaScript never runs as UID 1000.
 - The bridge, Codex and authenticated loopback model proxy use UID 1000.
+  The code-mode host and normal shell tools are enabled; tool output defaults to
+  2,000 tokens and the proxy bounds each model response to 2,000 output tokens.
+  Hosted web search stays disabled. Uploaded document context is described in
+  [the upload contract](../../docs/architecture/upload-api.md#http-interface).
   The bridge initialises the real app-server and exposes `/health` on TCP 8081.
   Health requires initialised Codex and a listening desktop; required child exits
   terminate the container. A ready report is emitted when the first health check confirms both.
@@ -171,7 +190,7 @@ MCP and browser egress brokering remain later work. No provider key is embedded.
 `sandbox-template.json` uses agent-sandbox v1beta1, gVisor and S0.5's 512 MiB
 limit. It declares `networkPolicyManagement: Unmanaged`; apply
 `network-policy.json` before creating a pool. The policy permits TCP 3000 egress
-only to `app=opencrane-gateway` and TCP 8081/6901 ingress only from
+only to `app=opencrane-gateway` and TCP 8081 ingress only from
 `app=opencrane-server`, both in the same namespace. There is no DNS exception.
 The gateway is the documented `computer-runtime` ConfigMap parameter, key
 `gateway`. Create it in the computer namespace with the real gateway Pod IP

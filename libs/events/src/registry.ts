@@ -1,6 +1,7 @@
 import { auditEvents } from './audit-events.ts';
 import { mcpEvents } from './mcp-events.ts';
 import { decisionEvents } from './decision-events.ts';
+import { fileEvents } from './file-events.ts';
 // The event-type registry: every event type named in
 // docs/architecture/events.md, in code. This is the contract CI checks:
 // scripts/check-event-catalogue.mjs fails the build if this list and the
@@ -26,6 +27,7 @@ import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 export const eventRegistry: readonly EventDefinition[] = [
+  ...fileEvents,
   ...identityEvents,
   ...decisionEvents,
   ...auditEvents,
@@ -179,20 +181,6 @@ export const eventRegistry: readonly EventDefinition[] = [
     'The bridge reported that a turn failed.',
     data.agentTurnFailedDataSchema,
     { conversationId: 'conv_1', turnId: 'turn_1', reason: 'model_error' },
-  ),
-  event(
-    'agent.message_completed',
-    'conversation',
-    'The bridge reported a completed assistant message.',
-    data.agentMessageCompletedDataSchema,
-    {
-      conversationId: 'conv_1',
-      turnId: 'turn_1',
-      messageId: 'msg_1',
-      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0',
-      keyId: 'key:1',
-      contentType: 'text',
-    },
   ),
   event(
     'agent.reasoning_summarised',

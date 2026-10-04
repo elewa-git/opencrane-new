@@ -66,6 +66,22 @@
     "unresolved": []
   },
   {
+    "name": "@opencrane/models",
+    "version": "0.1.0",
+    "type": "npm",
+    "category": "application-osi",
+    "licences": [
+      "AGPL-3.0-or-later"
+    ],
+    "resolved": [
+      "AGPL-3.0-or-later"
+    ],
+    "archives": [],
+    "bundled": [],
+    "result": "PASS",
+    "unresolved": []
+  },
+  {
     "name": "adduser",
     "version": "3.134",
     "type": "deb",

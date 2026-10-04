@@ -69,6 +69,68 @@ it('clearly refuses a request too large for any context tier before reservation 
   } finally { await f.close(); }
 }, 40_000);
 
+it('admits an authorised call after unrelated audit and chat history grows', async () => {
+  const f = await fixture();
+  try {
+    for (let batch = 0; batch < 50; batch++) await Promise.all(Array.from({ length: 100 }, async (_, index) => {
+      const requestId = randomUUID();
+      const event = index % 2 ? envelope('test', `conversation-${requestId}`, 'agent.message_delta', {
+        conversationId: requestId, turnId: 'turn-other', messageId: 'message-other',
+        ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text',
+      }) : envelope('test', `decision-${requestId}`, 'decision.recorded', {
+        requestId, route: 'model', outcome: 'deny', reason: 'approval_required', contextDigest: '0'.repeat(64),
+      });
+      expect((await f.nats.store.append({ event, expectedSequence: 0 })).status).toBe('appended');
+    }));
+    expect((await f.call()).status).toBe(200);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 60_000);
+
+it('admits Codex tool results with item IDs so uploaded text reaches the model', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const output = { type: 'function_call_output', id: 'output_read', call_id: 'call_read', output: 'Project code: Willow-47.' };
+  try {
+    expect((await f.call({}, { input: [
+      { type: 'reasoning', id: 'rs_read', summary: [], content: null, encrypted_content: 'opaque-provider-state' },
+      { type: 'message', role: 'assistant', phase: 'commentary', content: 'I will read the uploaded text.' },
+      { type: 'function_call', id: 'fc_read', call_id: 'call_read', name: 'exec_command', arguments: '{"cmd":"cat /workspace/project.pdf.md"}' }, output,
+    ] })).status).toBe(200);
+    await f.settled();
+    expect(f.received()).toBe(1);
+    expect((await f.call({}, { input: [{ ...output, unexpected: true }] })).status).toBe(403);
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 60_000);
+
+it('admits custom tool continuations while refusing unknown fields', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const call = { type: 'custom_tool_call', id: 'custom_read', status: 'completed', call_id: 'call_read', name: 'exec', input: 'text(await tools.exec_command({cmd: "cat /workspace/project.pdf.md"}))' };
+  const output = { type: 'custom_tool_call_output', id: 'output_read', call_id: 'call_read', output: 'Code mode host is disabled.' };
+  try {
+    expect((await f.call({}, { input: [call, output] })).status).toBe(200);
+    await f.settled();
+    expect(f.received()).toBe(1);
+    for (const item of [call, output]) {
+      expect((await f.call({}, { input: [{ ...item, unexpected: true }] })).status).toBe(403);
+    }
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 60_000);
+
+it('admits a tool continuation when independent history reads are slow', async () => {
+  const f = await fixture();
+  const readStream = f.nats.store.readStream.bind(f.nats.store);
+  const slow = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
+    if (['computer-assistant', 'assistant-assistant', 'conversation-conversation'].includes(args[0])) await delay(450);
+    yield* readStream(...args);
+  });
+  try {
+    expect((await f.call({}, { input: [{ type: 'function_call_output', call_id: 'read', output: 'Project code: Willow-47.' }] })).status).toBe(200);
+    expect(f.received()).toBe(1);
+  } finally { slow.mockRestore(); await f.close(); }
+}, 40_000);
+
 it('fresh installation grants Phase 2 chat through reactions', async () => {
   const f = await fixture(20000, 20000, false, 'gpt-6.1-sol', false, 'reactions');
   try {
@@ -151,9 +213,9 @@ it('upgrade then OpenFGA replay restores Phase 2 chat without duplicate grants',
 }, 40_000);
 
 it.each([
-  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 2100, revoke: true },
-  { name: 'revocation during a history read within the freshness budget', pauseMs: 10, revoke: true },
-  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 2100, revoke: false },
+  { name: 'revocation after a delayed history read exceeds two seconds', pauseMs: 2200, revoke: true },
+  { name: 'revocation during a history read within the freshness budget', pauseMs: 20, revoke: true },
+  { name: 'a history read exceeds the freshness budget without a revocation', pauseMs: 2200, revoke: false },
 ])('does not dispatch a running decision: $name', async ({ pauseMs, revoke }) => {
   const f = await fixture();
   try {
@@ -163,12 +225,13 @@ it.each([
     const capturing = new Promise<void>(resolve => { captured = resolve; });
     const resuming = new Promise<void>(resolve => { resume = resolve; });
     const readStream = f.nats.store.readStream.bind(f.nats.store);
+    let paused = false;
     const slowHistory = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
-      if (args[0] === 'member-alice') {
-        captured();
-        await resuming;
-        await delay(pauseMs);
-      }
+      if (paused || args[0] !== grantStream('model', 'gpt-6-luna')) { yield* readStream(...args); return; }
+      paused = true;
+      captured();
+      await resuming;
+      await delay(pauseMs);
       yield* readStream(...args);
     });
     try {
@@ -186,6 +249,72 @@ it.each([
       expect(f.actor.state.reservations).toHaveLength(1);
     } finally { resume(); slowHistory.mockRestore(); }
   } finally { await f.close(); }
+}, 40_000);
+
+it.each([
+  { type: 'agent.command_ran', payload: { commandDigest: 'a'.repeat(64), exitCode: 0 } },
+  { type: 'agent.file_changed', payload: { path: 'notes/summary.md', changeType: 'created' } },
+  { type: 'agent.reasoning_summarised', payload: { ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' } },
+  ...['agent.message_delta', 'agent.message_completed'].map(type => ({ type,
+    payload: { messageId: 'message', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1', contentType: 'text' } })),
+])('admits a tool continuation when its $type report arrives during admission', async ({ type, payload }) => {
+  const f = await fixture();
+  const append = f.nats.store.append.bind(f.nats.store);
+  const race = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
+    const result = await append(command);
+    if (z.object({ type: z.literal('decision.recorded'), data: z.object({ outcome: z.literal('allow') }) }).safeParse(command.event).success) {
+      await f.append('conversation-conversation', type, {
+        conversationId: 'conversation', turnId: 'turn', ...payload,
+      });
+    }
+    return result;
+  });
+  try { expect((await f.call()).status).toBe(200); expect(f.received()).toBe(1); }
+  finally { race.mockRestore(); await f.close(); }
+}, 40_000);
+
+it.each([
+  { type: 'conversation.closed', payload: { conversationId: 'conversation', closedBy: 'alice' } },
+  { type: 'participant.removed', payload: { conversationId: 'conversation', participantId: 'alice', removedBy: 'alice' } },
+  { type: 'agent.turn_stop_requested', payload: { conversationId: 'conversation', turnId: 'turn', requestedBy: 'alice' } },
+])('refuses a continuation when $type arrives beside its command report', async ({ type, payload }) => {
+  const f = await fixture();
+  const append = f.nats.store.append.bind(f.nats.store);
+  const race = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
+    const result = await append(command);
+    if (z.object({ type: z.literal('decision.recorded'), data: z.object({ outcome: z.literal('allow') }) }).safeParse(command.event).success) {
+      await f.append('conversation-conversation', 'agent.command_ran', {
+        conversationId: 'conversation', turnId: 'turn', commandDigest: 'a'.repeat(64), exitCode: 0,
+      });
+      await f.append('conversation-conversation', type, payload);
+    }
+    return result;
+  });
+  try { expect((await f.call()).status).toBe(503); expect(f.received()).toBe(0); }
+  finally { race.mockRestore(); await f.close(); }
+}, 40_000);
+
+it('refuses a grant revocation arriving while the command report is read', async () => {
+  const f = await fixture();
+  const append = f.nats.store.append.bind(f.nats.store);
+  const readStream = f.nats.store.readStream.bind(f.nats.store);
+  const race = vi.spyOn(f.nats.store, 'append').mockImplementation(async command => {
+    const result = await append(command);
+    if (z.object({ type: z.literal('decision.recorded'), data: z.object({ outcome: z.literal('allow') }) }).safeParse(command.event).success) {
+      await f.append('conversation-conversation', 'agent.command_ran', {
+        conversationId: 'conversation', turnId: 'turn', commandDigest: 'a'.repeat(64), exitCode: 0,
+      });
+    }
+    return result;
+  });
+  const duringRead = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (...args) {
+    yield* readStream(...args);
+    if (args[0] === 'conversation-*') await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
+    });
+  });
+  try { expect((await f.call()).status).toBe(503); expect(f.received()).toBe(0); }
+  finally { race.mockRestore(); duringRead.mockRestore(); await f.close(); }
 }, 40_000);
 
 it('releases undispatched reservations when authority is revoked after the allow audit', async () => {
@@ -370,7 +499,7 @@ it('retains an in-flight reservation across gateway kill and actor recovery, rec
   const f = await fixture(25, 200);
   try {
     f.hold(); const call = f.call().catch(() => ({ status: 502 }));
-    await until(() => f.received() === 1); await f.restart(); await call;
+    await until(() => f.received() === 1); await f.restart('SIGKILL'); await call;
     f.advance(); await f.actor.expire();
     const r = f.actor.state.reservations[0]!;
     expect((await history(f.nats.store, `effect-${r.id}`, 'test')).map(r => r.event.type)).toContain('effect.uncertain');
@@ -674,6 +803,41 @@ it('admits routed Sol tool declarations and settings while refusing malformed or
   } finally { await f.close(); }
 }, 40_000);
 
+it('admits the native code-mode text-block result so a successful file read reaches the provider', async () => {
+  const f = await fixture();
+  const output = { type: 'custom_tool_call_output', id: 'ctco_read', call_id: 'call_read', output: [
+    { type: 'input_text', text: 'Script completed\nWall time 0.2 seconds\nOutput:\n' },
+    { type: 'input_text', text: '{"exit_code":0,"output":"Project code: Willow-47."}' },
+  ] };
+  try {
+    expect((await f.call({}, { input: [output] })).status).toBe(200);
+    await f.settled(); expect(f.received()).toBe(1);
+    for (const invalid of [[{ type: 'input_image', image_url: 'https://hosted.invalid/image' }], [{ type: 'input_text', text: 'text', unknown: true }]]) {
+      expect((await f.call({}, { input: [{ ...output, output: invalid }] })).status).toBe(403);
+    }
+    expect(f.received()).toBe(1);
+  } finally { await f.close(); }
+}, 40_000);
+
+it('admits local custom tools at both Codex declaration locations, without hosted tools', async () => {
+  const f = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  const local = { type: 'custom', name: 'exec', description: 'Run code',
+    format: { type: 'grammar', syntax: 'lark', definition: 'start: /.+/' } };
+  const namespace = { type: 'namespace', name: 'functions', tools: [local] };
+  try {
+    for (const tools of [[local], [namespace]]) {
+      expect((await f.call({}, { tools })).status).toBe(200);
+      await f.settled();
+    }
+    for (const tools of [[{ type: 'web_search' }], [{ ...namespace, tools: [{ type: 'file_search', vector_store_ids: ['remote'] }] }], [{ ...local, unknown: true }]]) {
+      expect((await f.call({}, { tools })).status).toBe(403);
+      expect((await f.call({}, { input: [{ type: 'additional_tools', id: 'tools', role: 'developer', tools }] })).status).toBe(403);
+    }
+    expect((await f.call({}, { tools: [local], max_output_tokens: 2001 })).status).toBe(403);
+    expect(f.received()).toBe(2);
+  } finally { await f.close(); }
+}, 40_000);
+
 it('enforces reviewed tool modes at the real gateway, including the first automatic write', async () => {
   const f = await fixture();
   try {
@@ -731,9 +895,10 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       const revoke = await f.append(grantStream(resourceType!, resourceId!), 'grant.revoked', { resourceType, resourceId, granteeId, revokedBy: 'alice' });
       const invoke = resourceType === 'model' ? () => f.call() : () => call('write');
       expect((await invoke()).status).toBe(403); // Refuse while OpenFGA lags too.
+      // The bound ends when access is refused, before projection work and another request.
+      expect(performance.now() - start).toBeLessThan(2000);
       await f.auth.handler.handle(revoke, f.db);
       expect((await invoke()).status).toBe(403);
-      expect(performance.now() - start).toBeLessThan(2000);
       expect(f.received()).toBe(1);
       const restore = await f.append(grantStream(resourceType!, resourceId!), 'grant.given', { resourceType, resourceId, granteeId,
         granteeKind: granteeId === 'alice' ? 'member' : 'assistant', grantedBy: 'alice' });

@@ -38,6 +38,7 @@ export async function chatJourney(server: string, headers: { origin: string; coo
     return { firstTokenMs, completeMs: Math.round(performance.now() - start) };
   };
   return {
+    conversationId,
     message,
     async reconnect() {
       const last = rows.filter(r => r.type === 'event').at(-1)!; socket.terminate(); await once(socket, 'close');

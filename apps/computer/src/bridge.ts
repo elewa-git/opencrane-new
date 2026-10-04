@@ -1,3 +1,4 @@
+import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
@@ -24,6 +25,7 @@ model_provider = "local"
 approval_policy = "on-request"
 sandbox_mode = "danger-full-access"
 web_search = "disabled"
+tool_output_token_limit = 2000
 [model_providers.local]
 name = "local authenticated proxy"
 base_url = "http://127.0.0.1:8080/v1"
@@ -39,7 +41,9 @@ memories = false
 apps = false
 plugins = false
 remote_plugin = false
-code_mode_host = false
+code_mode_host = true
+shell_tool = true
+unified_exec = true
 shell_snapshot = false
 `);
 const child = spawn('codex', ['app-server', '--stdio'], { cwd: '/workspace', env: {
@@ -108,6 +112,7 @@ const server = createServer((req, res) => {
 }).listen(8081, '0.0.0.0');
 
 const channel = bridgeChannel(server, {
+  file: receiveFile,
   journal: '/home/agent/codex/bridge-reports.jsonl',
   credential() {
     const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);

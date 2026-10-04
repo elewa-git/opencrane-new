@@ -1,8 +1,9 @@
+import { sendUpload } from './upload';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { transcript } from './chat-state';
+import { transcript, uploadedFile } from './chat-state';
 
 class ReadFailure extends Error {
   readonly status: number;
@@ -32,6 +33,17 @@ export class ChatSession implements OnDestroy {
   readonly connected = this.socket.isConnected;
   readonly turns = computed(() => transcript(this.rows(), this.memberId()));
   readonly active = computed(() => this.turns().filter(turn => turn.author === 'agent' && turn.state === 'working').at(-1));
+  readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
+  readonly uploadName = signal('');
+  readonly uploadProgress = signal(0);
+  readonly uploadError = signal('');
+  readonly uploading = signal(false);
+  private readonly pendingDelivery = signal('');
+  readonly uploadPending = computed(() => [...this.attachments().map(file => file.fileId), this.pendingDelivery()].filter(Boolean)
+    .some(id => !this.rows().some(row => row.type === 'file.delivered' && row.data['fileId'] === id)));
+  private uploadFile: { file: File; key: string; conversation: string } | undefined;
+  private transfer: ReturnType<typeof sendUpload> | undefined;
+  private creationId = '';
   private generation = 0;
   private position = 0;
   private revision = 0;
@@ -73,9 +85,9 @@ export class ChatSession implements OnDestroy {
     finally { this.loading.set(false); this.railLoading.set(false); }
   }
   async select(id: string): Promise<void> {
-    if (this.busy() || this.pending) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
+    if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     const revision = ++this.revision;
-    this.socket.disconnect(); this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
+    this.clearUpload(); this.socket.disconnect(); this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
     history.replaceState({}, '', `/workspace?conversation=${encodeURIComponent(id)}`);
     try {
@@ -85,14 +97,14 @@ export class ChatSession implements OnDestroy {
     finally { if (revision === this.revision) this.loading.set(false); }
   }
   newSession(): void {
-    if (this.busy() || this.pending) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
-    ++this.revision; this.socket.disconnect(); this.selected.set(''); this.rows.set([]); this.error.set('');
+    if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
+    ++this.revision; this.clearUpload(); this.socket.disconnect(); this.selected.set(''); this.rows.set([]); this.error.set('');
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
     history.replaceState({}, '', '/workspace');
   }
   async send(text: string): Promise<boolean> {
-    if (!text.trim() || this.busy() || this.active() || this.denied() || !this.assistantId()) return false;
-    if (!this.pending) this.pending = { id: crypto.randomUUID(), conversationId: this.selected() || crypto.randomUUID(), text: text.trim() };
+    if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending() || this.denied() || !this.assistantId()) return false;
+    if (!this.pending) this.pending = { id: crypto.randomUUID(), conversationId: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()), text: text.trim() };
     this.busy.set(true); this.error.set('');
     try {
       await this.deliver(); this.queued.set(false); return true;
@@ -109,7 +121,7 @@ export class ChatSession implements OnDestroy {
     } catch (error) { this.fail(error); }
     finally { this.busy.set(false); }
   }
-  ngOnDestroy(): void { ++this.revision; this.subscription.unsubscribe(); this.socket.disconnect(); }
+  ngOnDestroy(): void { this.transfer?.abort(); ++this.revision; this.subscription.unsubscribe(); this.socket.disconnect(); }
 
   private async list(): Promise<void> {
     const value = chatListSchema.parse(await this.request('/api/conversations'));
@@ -117,23 +129,45 @@ export class ChatSession implements OnDestroy {
   }
   private async deliver(): Promise<void> {
     const command = this.pending!;
-    if (!this.selected()) {
-      await this.request('/api/conversations', { id: `create-${command.conversationId}`, conversationId: command.conversationId, assistantId: this.assistantId(), mode: 'agent_session' });
-      // Creation's access projection is asynchronous. Read until visible, with a fixed deadline.
-      for (let attempt = 0; attempt < 50; attempt++) {
-        await this.list();
-        if (this.conversations().some(row => row.conversationId === command.conversationId)) break;
-        if (attempt === 49) throw new Error('Creation catch-up timed out');
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      this.selected.set(command.conversationId);
-      history.replaceState({}, '', `/workspace?conversation=${command.conversationId}`);
-    }
+    await this.ensureConversation(command.conversationId);
     await this.request(`/api/conversations/${command.conversationId}/messages`, { id: command.id, text: command.text });
     // An optimistic row uses the same id as the durable event and is replaced on catch-up.
     this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, { id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(), data: { text: command.text, authorId: this.memberId() } }]);
     this.pending = undefined;
     this.socket.connect();
+  }
+  private async ensureConversation(conversationId: string): Promise<void> {
+    if (this.selected() && this.selected() !== conversationId) throw new Error('Retry belongs to another session');
+    if (!this.selected()) {
+      await this.request('/api/conversations', { id: `create-${conversationId}`, conversationId: conversationId, assistantId: this.assistantId(), mode: 'agent_session' });
+      // Creation's access projection is asynchronous. Read until visible, with a fixed deadline.
+      for (let attempt = 0; attempt < 50; attempt++) {
+        await this.list();
+        if (this.conversations().some(row => row.conversationId === conversationId)) break;
+        if (attempt === 49) throw new Error('Creation catch-up timed out');
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      this.selected.set(conversationId);
+      history.replaceState({}, '', `/workspace?conversation=${conversationId}`);
+    }
+  }
+  async upload(file?: File): Promise<void> {
+    if (this.pending || this.uploading() || this.busy() || this.denied() || !this.assistantId()) return;
+    if (file) this.uploadFile = { file, key: crypto.randomUUID(), conversation: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()) };
+    const pending = this.uploadFile; if (!pending) return;
+    this.uploadName.set(pending.file.name); this.uploadProgress.set(0); this.uploadError.set(''); this.uploading.set(true);
+    try {
+      if (pending.file.size > 20 * 1024 * 1024) throw new Error('File too large. Maximum size is 20 MiB.');
+      await this.ensureConversation(pending.conversation);
+      this.socket.connect();
+      this.transfer = sendUpload(pending.conversation, pending.file, pending.key, percent => this.uploadProgress.set(percent));
+      this.pendingDelivery.set(await this.transfer.completed);
+      this.uploadProgress.set(100); this.uploadFile = undefined;
+    } catch (error) { this.uploadError.set(error instanceof Error ? error.message : 'Upload unavailable. Retry.'); }
+    finally { this.uploading.set(false); }
+  }
+  private clearUpload(): void {
+    this.uploadFile = undefined; this.pendingDelivery.set(''); this.creationId = ''; this.uploadName.set(''); this.uploadError.set('');
   }
   private async catchUp(id: string, revision: number): Promise<void> {
     let more = true;
@@ -168,7 +202,7 @@ export class ChatSession implements OnDestroy {
   }
   private updateSummary(): void {
     const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
-    const title = turns.find(turn => turn.author === 'you' || turn.author === 'person')?.text;
+    const title = turns.find(turn => (turn.author === 'you' || turn.author === 'person') && turn.text)?.text;
     const status = this.rows().some(row => row.type === 'conversation.closed') ? 'closed' : latest?.state ?? 'open';
     this.conversations.update(rows => rows.map(row => row.conversationId === this.selected() ? { ...row, ...(title ? { title: sessionSlug(title) } : {}), status } : row));
   }

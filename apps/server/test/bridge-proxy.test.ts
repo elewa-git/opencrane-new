@@ -37,7 +37,11 @@ it('passes the actual proxy thread to admission even when a grant is installed w
   const actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000);
   const decision = await startDecision(actor, { jwks: tokens.jwks, issuer }, binding);
   // Relay only the HTTP gateway boundary; admission, signed credentials and NATS are real.
+  let forwarded: unknown;
   const gateway = createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => { forwarded = JSON.parse(Buffer.concat(chunks).toString()) as unknown; });
     const outgoing = request(`${decision.url}/authorize`, { method: 'POST', headers: req.headers }, upstream => { res.writeHead(upstream.statusCode ?? 500); upstream.pipe(res); });
     outgoing.on('error', () => { res.writeHead(502); res.end(); }); req.pipe(outgoing);
   });
@@ -57,5 +61,6 @@ it('passes the actual proxy thread to admission even when a grant is installed w
     expect((await call('other-thread')).status).toBe(403); expect(actor.state.reservations).toHaveLength(0);
     await install('thread', 'conversation');
     expect((await call('thread')).status).toBe(200); expect(actor.state.reservations).toHaveLength(1);
+    expect(forwarded).toMatchObject({ max_output_tokens: 2000 });
   } finally { await local.close(); await decision.close(); gateway.closeAllConnections(); gateway.close(); await nats.close(); await fga.close(); await rm(directory, { recursive: true, force: true }); }
 }, 40_000);

@@ -31,8 +31,8 @@ export class Workspace implements OnInit {
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');
   protected readonly dialog = viewChild<ElementRef<HTMLDialogElement>>('panelDialog');
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
-  protected readonly files = computed(() => [...new Set(this.chat.turns().flatMap(turn => turn.files))]);
-  protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you')?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
+  protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
+  protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
   protected readonly reason = computed(() => this.chat.rows().some(row => row.type === 'conversation.closed') ? 'This session is closed. Start a new session to continue.' : this.chat.denied() ? 'Sign in to send messages.' : this.chat.loading() ? 'Loading your workspace…' : this.chat.railUnavailable() ? 'Reconnect to your pod to start a session.' : !this.chat.selected() && !this.recipient() ? 'Choose your agent to start a session.' : !this.chat.assistantId() ? 'Your personal agent is being prepared. Refresh shortly.' : '');
   private lastTranscript = '';
   constructor() {

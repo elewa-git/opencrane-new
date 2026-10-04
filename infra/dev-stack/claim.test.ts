@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 const exec = promisify(execFile);
 test('claim skips a slot with a held port and leaves it unclaimed', async () => {
   const home = await mkdtemp(`${tmpdir()}/dev-stack-claim-`);
-  // Last port in the block: checking just the browser or database is insufficient.
+  // Model-stub port: checking just the browser or database is insufficient.
   const held = createServer().listen(25110, '127.0.0.1');
   try {
     await once(held, 'listening');

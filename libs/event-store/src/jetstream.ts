@@ -280,7 +280,7 @@ export class EventStore {
     }
   }
 
-  /** Finite history at the head observed on entry; fromSequence is inclusive and global. */
+  /** Finite entity/category history (for example team-*); fromSequence is inclusive and global. */
   async *readStream(
     subject: string,
     fromSequence = 1,

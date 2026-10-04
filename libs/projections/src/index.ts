@@ -28,3 +28,4 @@ export { auditTrail, readAudit } from './audit.ts';
 export { rebuildAuditProjection } from './audit-rebuild.ts';
 
 export { conversationKeys } from './keys.ts';
+export { files, listFiles } from './files.ts';

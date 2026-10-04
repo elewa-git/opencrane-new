@@ -60,11 +60,13 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
   `overrun: { model, reservedCents, settledCents }`. All ceilings use that actual
   spend on later admissions, including after recovery. Alert retries do not charge
   twice; an alert outage cannot erase the settled cost.
-  Only inline text and local function calls are accepted. Media, hosted tools,
+  Only inline text and local function/custom calls are accepted. Media, hosted tools,
   stored history, background requests, multiple completions and premium tiers
   fail closed. The caller supplies `stream: true` and `max_output_tokens` from
   16 (the [API minimum](https://developers.openai.com/api/reference/java/resources/beta/subresources/responses/methods/create))
-  to 2,000. The gateway fixes the service tier to standard pricing.
+  to 2,000. Codex function/custom call history, string or text-block custom results, tool-result IDs, reasoning
+  continuations and assistant message phases are preserved; unknown fields remain refused. The gateway fixes the
+  service tier to standard pricing.
 - IAM uses current requester ∩ assistant resource grants in live OpenFGA.
   The claimed computer generation, ready state, conversation and active turn
   are read from events on every call. JWTs are ES256, with strict expiry;
@@ -175,7 +177,7 @@ P2-3 also verifies the native Codex text request shape through the real gateway:
 nullable message ids, input/output text, reasoning summaries, local function
 selection, parallel calls and cache/client metadata. Native Sol text turns also
 carry strictly checked tool declarations (including namespaces and Lark custom
-tools), `all_turns` reasoning context and text verbosity. These fields do not relax
+tools), top-level local custom tools and namespaces, `all_turns` reasoning context and text verbosity. These fields do not relax
 the output limit or admit media, hosted tools or stored-history references.
 
 ## Per-tool policy (P3-1)
@@ -206,11 +208,16 @@ event receipt must exist before a projection
 can authorise; lag denies. A two-second freshness budget starts when the decision
 request arrives. Cheap authority-category head reads fence the snapshot before
 reservation (inside the budget queue) and again after the audit, before admission.
-Any change or expired budget denies. Category heads conservatively refuse
+Any authority change or expired budget denies. Command, file, reasoning and
+message output reports do not change authority; when those advance the conversation
+head, admission checks all category heads again after reading them. Stop, turn
+lifecycle, participant and conversation changes still refuse admission.
+Category heads conservatively refuse
 unrelated IAM changes too; budget and audit traffic do not invalidate them. Memory scopes are empty. Personal work retains the
 installation's paying group; team turns require an explicit paying-group binding; there is no fabricated credential/profile.
-The simple event-head scan has linear history cost; replace it with a fenced IAM
-projection before high-volume operation. Egress can reuse this resource check.
+Independent assistant, conversation, active-turn and IAM reads run together under
+that fence. Entity/team reads and budget appends still have linear history cost;
+use a fenced IAM projection before high-volume operation. Egress can reuse this resource check.
 Each allow/ask/deny appends `decision.recorded` before forwarding; append failure
 denies. A decision is admission, not proof of an observed effect.
 

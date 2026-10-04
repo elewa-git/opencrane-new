@@ -21,20 +21,29 @@ const turnSchema = z.object({ ...common, typ: z.literal('turn'), conversation: i
   delegation: z.array(id).length(1) });
 const textContent = z.object({ type: z.enum(['input_text', 'output_text']), text: z.string() }).strict();
 const message = z.object({ type: z.literal('message').optional(), id: z.string().nullable().optional(), role: z.enum(['user', 'assistant', 'system', 'developer']),
-  content: z.union([z.string(), z.array(textContent)]) }).strict();
+  content: z.union([z.string(), z.array(textContent)]), phase: z.enum(['commentary', 'final_answer']).nullable().optional() }).strict();
+const reasoningItem = z.object({ type: z.literal('reasoning'), id: z.string(),
+  summary: z.array(z.object({ type: z.literal('summary_text'), text: z.string() }).strict()),
+  encrypted_content: z.string().nullable().optional(),
+  content: z.array(z.object({ type: z.literal('reasoning_text'), text: z.string() }).strict()).nullable().optional(),
+  status: z.enum(['in_progress', 'completed', 'incomplete']).optional() }).strict();
 const functionTool = z.object({ type: z.literal('function'), name: z.string(), description: z.string().optional(),
   parameters: z.record(z.string(), z.unknown()), strict: z.boolean().optional() }).strict();
 const tool = z.union([functionTool, z.object({ type: z.literal('custom'), name: z.string(), description: z.string().optional(),
   format: z.object({ type: z.literal('grammar'), syntax: z.literal('lark'), definition: z.string() }).strict() }).strict()]);
+const localTool = z.union([tool, z.object({ type: z.literal('namespace'), name: z.string(), description: z.string().optional(),
+  tools: z.array(tool) }).strict()]);
 const additionalTools = z.object({ type: z.literal('additional_tools'), id: z.string(), role: z.literal('developer'),
-  tools: z.array(z.union([tool, z.object({ type: z.literal('namespace'), name: z.string(), description: z.string().optional(),
-    tools: z.array(tool) }).strict()])) }).strict();
+  tools: z.array(localTool) }).strict();
 const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired).map(row => row.id)), stream: z.literal(true),
-  input: z.union([z.string(), z.array(z.union([message, additionalTools,
-    z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string() }).strict(),
+  input: z.union([z.string(), z.array(z.union([message, additionalTools, reasoningItem,
+    z.object({ type: z.literal('custom_tool_call'), call_id: z.string(), name: z.string(), input: z.string(), id: z.string().optional(),
+      status: z.enum(['in_progress', 'completed', 'incomplete']).optional() }).strict(),
+    z.object({ type: z.literal('custom_tool_call_output'), call_id: z.string(), output: z.union([z.string(), z.array(textContent)]), id: z.string().optional() }).strict(),
+    z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string(), id: z.string().optional() }).strict(),
     z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
   instructions: z.string().optional(), max_output_tokens: z.int().min(16).max(2000), n: z.literal(1).optional(),
-  tools: z.array(functionTool).optional(),
+  tools: z.array(localTool).optional(),
   reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional(),
     context: z.literal('all_turns').optional() }).strict().optional(),
   text: z.object({ verbosity: z.enum(['low', 'medium', 'high']) }).strict().optional(),
@@ -59,17 +68,20 @@ async function readBody(req: IncomingMessage) {
 async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string): Promise<ModelCall> {
   const permission = await memberAuthorisation(binding).check(t.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
-  const assistant = (await history(actor.store, `assistant-${c.assistant}`, actor.silo)).find(r => r.event.type === 'assistant.created');
+  const [assistants, conversation, turn, authority] = await Promise.all([
+    history(actor.store, `assistant-${c.assistant}`, actor.silo),
+    history(actor.store, `conversation-${t.conversation}`, actor.silo),
+    activeTurn(actor, c, t),
+    currentAuthority(actor.store, binding, t.requester, c.assistant, t.conversation, resourceType, resourceId),
+  ]);
+  const assistant = assistants.find(r => r.event.type === 'assistant.created');
   if (!assistant) throw new Error('Assistant refused');
-  const conversation = await history(actor.store, `conversation-${t.conversation}`, actor.silo);
   const created = conversation.find(r => r.event.type === 'conversation.created');
   if (!created || data(created.event)['assistantId'] !== c.assistant ||
       conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Conversation refused');
-  const turn = await activeTurn(actor, c, t);
   const payingGroupId = data(turn.event)['payingGroupId'];
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
   if (data(assistant.event)['kind'] === 'team') await (await payingGroupAuthority(actor.store, actor.silo, t.requester, payingGroupId, binding))();
-  const authority = await currentAuthority(actor.store, binding, t.requester, c.assistant, t.conversation, resourceType, resourceId);
   return { model: t.model, payingGroupId, priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
     conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
     contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed, authority, payingGroupId])).digest('hex') };

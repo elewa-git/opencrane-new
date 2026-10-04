@@ -26,8 +26,8 @@ function trustedParent(path: string) {
   if (st.uid !== 0 || (st.mode & 0o022)) { closeSync(fd); throw new Error(`Unsafe parent: ${path}`); }
   return fd;
 }
-if (process.argv[2] === 'connect') {
-  const socket = connect('/run/executor/exec.sock');
+if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
+  const socket = connect(process.argv[2] === 'connect-host' ? '/run/executor/host.sock' : '/run/executor/exec.sock');
   process.stdin.pipe(socket); socket.pipe(process.stdout);
   socket.on('error', () => process.exit(1));
 } else {
@@ -60,23 +60,26 @@ if (process.argv[2] === 'connect') {
     return child;
   };
   process.on('SIGTERM', () => stop(0)); process.on('SIGINT', () => stop(0));
-  rmSync('/run/executor/exec.sock', { force: true });
+  for (const name of ['exec', 'host']) rmSync(`/run/executor/${name}.sock`, { force: true });
   for (const name of ['control', 'app']) rmSync(`/run/codex/${name}.sock`, { force: true });
-  const server = createServer(socket => {
-    const child = watch(spawn('/usr/local/bin/tool-user', [], { stdio: ['pipe', 'pipe', 'inherit'] }), false);
+  const executor = (args: string[]) => createServer(socket => {
+    const child = watch(spawn('/usr/local/bin/tool-user', args, { stdio: ['pipe', 'pipe', 'inherit'] }), false);
     if (!child.stdin || !child.stdout) throw new Error('Missing executor pipes');
     socket.pipe(child.stdin); child.stdout.pipe(socket);
     child.stdin.on('error', () => socket.destroy());
-    socket.on('error', () => child.kill()); socket.on('close', () => child.kill());
+    // EOF shuts down the executor without signalling across UIDs (CAP_KILL is dropped).
+    socket.on('error', () => child.stdin?.destroy()); socket.on('close', () => child.stdin?.destroy());
   });
   // Only UID 1000 can traverse this root-owned directory. No path-based socket chmod/chown.
   process.umask(0o111);
-  server.listen('/run/executor/exec.sock', () => {
-    process.umask(0o077);
-    watch(spawn('/usr/bin/setpriv', ['--no-new-privs', '/usr/local/bin/node', '--experimental-strip-types', '/app/src/desktop.ts'], { stdio: 'inherit' }), true);
-    watch(spawn('/usr/local/bin/node', ['--experimental-strip-types', '/app/src/bridge.ts'], {
-      uid: 1000, gid: 1000, stdio: 'inherit',
-      env: { PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'], MODEL: process.env['MODEL'] ?? 'stub-model' },
-    }), true);
+  executor(['host']).listen('/run/executor/host.sock', () => {
+    executor([]).listen('/run/executor/exec.sock', () => {
+      process.umask(0o077);
+      watch(spawn('/usr/bin/setpriv', ['--no-new-privs', '/usr/local/bin/node', '--experimental-strip-types', '/app/src/desktop.ts'], { stdio: 'inherit' }), true);
+      watch(spawn('/usr/local/bin/node', ['--experimental-strip-types', '/app/src/bridge.ts'], {
+        uid: 1000, gid: 1000, stdio: 'inherit',
+        env: { PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'], MODEL: process.env['MODEL'] ?? 'stub-model' },
+      }), true);
+    });
   });
 }

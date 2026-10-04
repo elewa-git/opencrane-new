@@ -1,3 +1,5 @@
+import { turnInput } from './turn-input.ts';
+import { filePackets, type WorkspaceFile } from './files.ts';
 import type { Server, IncomingMessage } from 'node:http';
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { timingSafeEqual, createHash } from 'node:crypto';
@@ -10,23 +12,26 @@ export interface BridgeReport {
   type: string; commandDigest?: string; exitCode?: number; threadId?: string; messageId?: string; text?: string;
 }
 interface Driver {
+  file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
   rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
   credential(): { value: string; expiresAt: number };
   journal: string;
 }
-interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number; taskKind: string }
+interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number; taskKind: string; attachments?: unknown; omittedAttachments: number }
 function string(value: Record<string, unknown>, name: string): string {
   const result = value[name]; if (typeof result !== 'string' || !result) throw new Error('Invalid bridge field'); return result;
 }
 function turn(value: Record<string, unknown>): Turn {
   const expiresAt = value['expiresAt'];
   const taskKind = value['taskKind'] ?? 'chat_turn';
+  const omittedAttachments = value['omittedAttachments'] ?? 0;
+  if (typeof omittedAttachments !== 'number' || !Number.isSafeInteger(omittedAttachments) || omittedAttachments < 0) throw new Error('Invalid attachment count');
   if (typeof taskKind !== 'string') throw new Error('Invalid task kind');
   modelForTask(taskKind); // Reject unknown task kinds at the bridge boundary.
   if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) throw new Error('Expired turn');
   return { id: string(value, 'id'), conversationId: string(value, 'conversationId'), assistantId: string(value, 'assistantId'),
-    text: string(value, 'text'), token: string(value, 'token'), expiresAt, taskKind };
+    text: string(value, 'text'), token: string(value, 'token'), expiresAt, taskKind, attachments: value['attachments'], omittedAttachments };
 }
 function stored(line: string): BridgeReport {
   const value = record(JSON.parse(line) as unknown), sequence = value['sequence'];
@@ -88,7 +93,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
       }
       appendFileSync(`${driver.journal}.executions`, input.id + '\n', { mode: 0o600, flush: true });
       executions.add(input.id);
-      const result = record(await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: input.text, text_elements: [] }] }));
+      const result = record(await driver.rpc('turn/start', { threadId: thread, model: modelForTask(input.taskKind), input: [{ type: 'text', text: await turnInput(input.text, input.conversationId, input.attachments, undefined, input.omittedAttachments), text_elements: [] }] }));
       await rememberTurn(input, thread, result);
     } catch {
       report(input, 'agent.turn_failed');
@@ -130,6 +135,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
   } });
   wss.on('connection', next => {
     socket?.terminate(); socket = next; resumed = false;
+    const receive = filePackets(driver.file ? (file, bytes) => driver.file!(file, bytes) : (() => Promise.reject(new Error('File receiver unavailable'))));
     const expiry = setTimeout(() => next.close(4001, 'Credential expired'), Math.max(1, driver.credential().expiresAt - Date.now()));
     next.once('close', () => clearTimeout(expiry)); next.on('error', () => next.terminate());
     next.on('message', bytes => {
@@ -138,6 +144,9 @@ export function bridgeChannel(server: Server, driver: Driver) {
         const input = record(JSON.parse((Buffer.isBuffer(bytes) ? bytes : Buffer.concat(Array.isArray(bytes) ? bytes : [Buffer.from(bytes)])).toString()) as unknown);
         if (input['type'] === 'resume') resume(input['since']);
         else if (input['type'] === 'ack') acknowledge(input['sequence'], input);
+        else if (typeof input['type'] === 'string' && input['type'].startsWith('file_') && resumed) {
+          void receive(input).then(receipt => { if (receipt && next.readyState === next.OPEN) next.send(JSON.stringify(receipt)); }).catch(() => next.close(1008, 'File delivery refused'));
+        }
         else if (input['type'] === 'turn' && resumed) void start(turn(input));
         else if (input['type'] === 'stop' && resumed) void interrupt(input).catch(() => next.close(1011, 'Interrupt unavailable'));
         else throw new Error('Invalid message');

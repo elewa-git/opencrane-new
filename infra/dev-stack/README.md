@@ -63,6 +63,7 @@ so those servers cannot keep an operation lock held after the command finishes.
 | MinIO API / console | 49000 / 49001 | 25103 / 25104 | 25203 / 25204 |
 | Server / browser | 48000 / 44200 | 25105 / 25106 | 25205 / 25206 |
 | Model gateway / decision / readiness / stub | 43000–43003 | 25107–25110 | 25207–25210 |
+| ClamAV | 43310 | 25111 | 25211 |
 
 Relay namespaces append `-gateway`. Each stack has its own namespace-only lifecycle
 ServiceAccount and RBAC, NATS CA/certificates/NKeys, PostgreSQL passwords (including
@@ -351,11 +352,14 @@ mid-stream and its partial text survives reload. Both 1280px and 390px use real
 sign-in; live screenshots go to `docs/design/chat/live/`. The journey records
 first-token and completion times, including a message sent to a suspended computer.
 The stub spaces deltas by 500ms
-so Chromium can observe intermediate renders. For the secondary journey’s cancellation
+so Chromium can observe intermediate renders. For the journey’s cancellation
 prompt (`Say hello again.`), the stub pauses for up to 30 seconds after its first
 delta, ending the wait when cancelled. This makes the real browser Stop check
-predictable under concurrent load; the same partial-text assertion still applies. Their overall journey timeout is ten minutes, with 90 seconds for event and
-computer readiness under concurrent load (owner: 30 seconds). No OpenAI credentials are read.
+predictable under concurrent load; the same partial-text assertion still applies. The overall journey timeout is fifteen minutes, with 120 seconds for event and
+computer readiness. No OpenAI credentials are read.
+The stub fixture sets a 4,000-cent daily ceiling through a budget event so fresh
+and warm journeys fit alongside the worst-case reservations retained by Stop.
+It does not invent usage receipts or release uncertain reservations.
 The receipt is [chat UI evidence](../../docs/process/chat-ui-evidence.md).
 
 Secondary journeys also prove monthly budgets through the real owner and member
@@ -408,3 +412,22 @@ also completes through the stub provider while the viewer is open. Revoking the
 grant closes the socket, clears pixels and records the stop audit. Keyboard
 opening, Escape, fit/actual-size and 44px targets are checked. Screenshots and
 receipts go to `docs/process/live-view/conversation-*`.
+## Browser upload qualification
+
+The browser starts a draft, attaches `project.pdf` through the native file picker,
+waits for delivery, previews the promoted original and asks for its project code.
+The prompt does not contain the answer. The stub requests `exec_command` and only
+answers Willow-47 after Codex returns the MarkItDown text. The journey also checks
+reload, EICAR/type/size refusals and text/image previews, at 1280px and 390px.
+It drops the first upload response after the server handles it, clicks Retry and
+checks that only one attachment exists. The size check selects a real sparse file
+through the native picker rather than copying 20 MiB through Playwright.
+If a response is lost, the journey clicks the shipped Retry control at most twice
+with a one-second pause. Known type, size and malware refusals are never retried.
+Full Chromium supplies its native PDF viewer; headless-shell cannot render PDFs.
+Screenshots are `docs/design/chat/live/upload-*.png` and `preview-*.png`.
+The [upload receipt](../../docs/process/upload-evidence.md) records the results.
+The ordinary journey never uses a paid provider.
+Its login fixture retries Chromium `ERR_NETWORK_CHANGED` at most twice; recovery
+after submitted credentials must still have a valid server session, followed by
+the normal identity, organisation and cookie assertions.

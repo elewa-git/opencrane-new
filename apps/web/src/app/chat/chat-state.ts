@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
@@ -14,6 +15,11 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
   for (const row of rows) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
+    const file = uploadedFile(row);
+    if (file) {
+      turns.push({ id: row.id, author: file.uploadedBy === memberId ? 'you' : 'person', text: '', time: row.time, state: 'done', tools: [], files: [file.path] });
+      continue;
+    }
     const data = row.data;
     if (row.type === 'message.posted') {
       turns.push({ id: row.id, author: data.authorId === memberId ? 'you' : 'person', text: data.text ?? '', time: row.time, state: 'done', tools: [], files: [] });
@@ -44,4 +50,13 @@ function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>): void 
       parts.set(id, (row.type === 'agent.message_delta' ? parts.get(id) ?? '' : '') + (data.text ?? ''));
       turn.text = [...parts.values()].join('\n\n');
     }
+}
+
+const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(), mime: z.string(), uploadedBy: z.string() });
+export function uploadedFile(row: ChatRow) {
+  if (row.type !== 'file.uploaded') return undefined;
+  const parsed = attachment.safeParse(row.data);
+  if (!parsed.success) return undefined;
+  const file = parsed.data, path = `uploads/${file.conversationId}/${file.fileId}/${file.name}`;
+  return { ...file, path, textPath: file.mime === 'application/pdf' ? `${path}.md` : path };
 }

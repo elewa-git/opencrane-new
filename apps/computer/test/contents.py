@@ -13,7 +13,8 @@ for path in ['/tmp/node-compile-cache', '/home/codex/caller', '/home/codex/token
              '/usr/local/bin/npm', '/root/.npm', '/tmp/npm', '/tmp/collect-licences.py']:
     assert not Path(path).exists(), path
 for name in ['/usr/local/bin/node', '/usr/local/bin/tool-user', '/usr/bin/setpriv',
-             '/app/src/entrypoint.ts', '/app/src/desktop.ts']:
+             '/app/src/entrypoint.ts', '/app/src/desktop.ts', '/usr/local/libexec/codex-code-mode-host',
+             '/spike/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex-code-mode-host']:
     path = Path(name).resolve(strict=True)
     for part in [path, *path.parents]:
         st = part.stat()

@@ -376,3 +376,14 @@ until P3-9; publication, grants and calls are outside this ticket. The local HTT
 DNS rebinding and browser fixtures use no external MCP endpoints. Run
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/inventory.test.ts apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts --maxWorkers=2`.
 See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).
+
+## Conversation uploads
+
+The [upload API](../../docs/architecture/upload-api.md) documents raw-byte POST
+and replayable GET on `/api/conversations/:conversationId/files`. Enable it with
+the chat configuration, `MINIO_URL` and `MINIO_CREDENTIALS_FILE` (a rotating,
+bucket-scoped STS lease); `CLAMD_HOST` defaults to `127.0.0.1`, `CLAMD_PORT` to
+`43310`. Provision private `quarantine` and `files` buckets and run the `files`
+projection separately. The computer receives clean bytes through the server's
+bridge and holds no object-store credentials. [Evidence and qualification](../../docs/process/upload-evidence.md)
+cover real-service tests and the pending fresh-install journey.

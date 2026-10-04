@@ -20,3 +20,29 @@ it('sends on Enter, keeps Shift+Enter and IME composition, and swaps Send for St
   expect(root.textContent).toContain('Stop');
   expect(root.querySelector('[aria-label="Participants"]')).toBeNull();
 });
+
+it('chooses an upload from the attach menu', async () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  await fixture.whenStable();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No root');
+  root.querySelector<HTMLButtonElement>('[aria-label="Attach"]')!.click();
+  await fixture.whenStable();
+  const upload = [...root.querySelectorAll('button')].find(button => button.textContent?.includes('Upload from computer'))!;
+  expect(upload.textContent).not.toContain('Coming soon');
+  const chooser = root.querySelector<HTMLInputElement>('input[type=file]');
+  expect(chooser).not.toBeNull();
+  const clicked = vi.spyOn(chooser!, 'click'); upload.click();
+  expect(clicked).toHaveBeenCalledOnce();
+});
+
+it('keeps file selection disabled while a message is queued for retry', async () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  fixture.componentRef.setInput('queued', true);
+  await fixture.whenStable();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No root');
+  root.querySelector<HTMLButtonElement>('[aria-label="Attach"]')!.click();
+  await fixture.whenStable();
+  expect([...root.querySelectorAll('button')].find(button => button.textContent?.includes('Upload from computer'))!.disabled).toBe(true);
+});

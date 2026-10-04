@@ -181,6 +181,9 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
+| `file.uploaded` | upload command after a clean scan and promotion | conversation files, conversations | deliver bytes over the bridge; wake a suspended computer |
+| `file.rejected` | upload command after an infected verdict | conversations | refuse the upload clearly; no bytes stored |
+| `file.delivered` | command after the computer acknowledges verified bytes | conversation files, conversations | browser may show the workspace path and delivery outcome (`saved` or `kept_existing`); reconnects skip acknowledged files |
 | `conversation.closed` | command | conversations | tell the computer to stop work for it |
 
 Bridge reports describe activity; they never open model admission. The server's

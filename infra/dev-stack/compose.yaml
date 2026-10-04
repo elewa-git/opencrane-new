@@ -41,6 +41,17 @@ services:
     env_file: ${DEV_STACK_DIR}/minio.env
     ports: ["127.0.0.1:${MINIO_PORT}:9000", "127.0.0.1:${MINIO_CONSOLE_PORT}:9001"]
     volumes: ["minio:/data"]
+  clamav:
+    image: opencrane-clamav:1.5.2-no-unrar
+    build: ../clamav
+    entrypoint: [/usr/sbin/clamd, --config-file=/etc/clamav/upload.conf]
+    ports: ["127.0.0.1:${CLAMD_PORT:-43310}:3310"]
+    volumes: ["../clamav/clamd.conf:/etc/clamav/upload.conf:ro"]
+    healthcheck:
+      test: [CMD, clamdscan, --config-file=/etc/clamav/upload.conf, --ping=1]
+      interval: 5s
+      timeout: 3s
+      retries: 30
 volumes:
   postgres:
   nats:
