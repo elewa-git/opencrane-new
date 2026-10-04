@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import type { EventEnvelope } from '@opencrane/events';
+import { computerWorkPaused, type EventEnvelope } from '@opencrane/events';
 import { readEvents } from '@opencrane/projections';
 import { registerHandler } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
@@ -99,6 +99,7 @@ export async function suspendComputer(store: Store, state: ComputerState): Promi
   const subject = `computer-${state.assistantId}`;
   const events = await history(store, subject);
   const current = events.findLast(r => isLifecycleEvent(r.event))!.event;
+  if (computerWorkPaused(events.map(r => r.event))) return current;
   const busy = new Set<string>();
   for (const { event } of events) {
     if (event.type === 'computer.turn_started') busy.add(field(event.data, 'turnId'));
@@ -113,6 +114,7 @@ export async function resumeComputer(store: Store, tokens: Tokens,
   silo: string, assistantId: string): Promise<IssuedToken> {
   const subject = `computer-${assistantId}`;
   let events = await history(store, subject);
+  if (computerWorkPaused(events.map(r => r.event))) throw new Error('Computer paused');
   const current = events.findLast(r => isLifecycleEvent(r.event))?.event;
   if (!current || current.silo !== silo) throw new Error('Computer not found');
   if (current.type === 'computer.suspended') {
@@ -127,10 +129,27 @@ export async function resumeComputer(store: Store, tokens: Tokens,
     tokenId: field(grant.data, 'tokenId') });
 }
 
+async function refreshPaused(store: EventStore, kube: SandboxClient, state: ComputerState, events: StoredEvent[], tokens: Tokens, sink: CredentialSink) {
+  const subject = `computer-${state.assistantId}`;
+  // A paused computer still observes Pod loss; replacement never authorises agent work.
+  const sandbox = await kube.state(state.computerId);
+  if (!sandbox?.podUid || sandbox.podUid !== readyPodUid(state)) await append(store, state.latest, events, 'computer.lost', subject,
+    { assistantId: state.assistantId, computerId: state.computerId });
+  else if (sandbox.ready) {
+    const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
+    // Refresh private control credentials without reopening the event-backed work fence.
+    await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, assistantId: state.assistantId,
+      computerId: state.computerId, generation: generation(events), tokenId: field(grant.data, 'tokenId') }));
+  }
+}
+
 async function reconcileComputer(store: EventStore, kube: SandboxClient,
   state: ComputerState, tokens: Tokens, sink: CredentialSink, idleMs: number) {
   const subject = `computer-${state.assistantId}`;
   const events = await history(store, subject);
+  if (computerWorkPaused(events.map(r => r.event)) && state.latest.type === 'computer.ready') {
+    await refreshPaused(store, kube, state, events, tokens, sink); return;
+  }
   if (events.findLast(r => isLifecycleEvent(r.event))?.event.id !== state.latest.id) return;
   const data = { assistantId: state.assistantId, computerId: state.computerId };
   if (state.latest.type === 'computer.suspended') {

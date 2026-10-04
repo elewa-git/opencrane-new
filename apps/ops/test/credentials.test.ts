@@ -8,7 +8,7 @@ import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
 import { tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
-import type { EventEnvelope } from '@opencrane/events';
+import { getEventDefinition, type EventEnvelope } from '@opencrane/events';
 import { computerCredentials } from '@opencrane/auth';
 import { field, history, lifecycleHandlers, resumeComputer, suspendComputer } from '../src/lifecycle.ts';
 
@@ -148,6 +148,18 @@ routes:
     expect((await request(beforeLoss.computer.value, replacement.turn.value)).status).toBe(403);
     currentTurnId = beforeLoss.turn.id;
     expect((await request(replacement.computer.value, beforeLoss.turn.value)).status).toBe(403);
+    currentTurnId = replacement.turn.id;
+    const oldTurn = await tokens.verify(replacement.turn.value, 'decision-service');
+    await append('computer.turn_started', { conversationId: 'thread-one', turnId: oldTurn['turn'], requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn' });
+    await append('takeover.requested', Object.assign({}, getEventDefinition('takeover.requested')!.example, { assistantId, computerId, generation: 2 }));
+    await append('takeover.failed', Object.assign({}, getEventDefinition('takeover.failed')!.example, { assistantId, computerId, generation: 2 }));
+    await append('takeover.ended', Object.assign({}, getEventDefinition('takeover.ended')!.example, { assistantId, computerId, generation: 2 }));
+    expect((await request(replacement.computer.value, replacement.turn.value)).status).toBe(403);
+    const newTurn = await credentials.turn({ assistantId, conversationId: 'thread-one', turnId: 'checked-recovery', requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn', model: 'gpt-6.1-sol' });
+    await append('computer.turn_started', { conversationId: 'thread-one', turnId: 'checked-recovery', requesterId: 'alice', threadId: 'thread-one', task: 'chat_turn' });
+    currentTurnId = newTurn.id;
+    expect((await request(replacement.computer.value, newTurn.value)).status).toBe(200);
+
   } finally {
     await execFile('docker', ['rm', '-f', container]).catch(() => undefined);
     await Promise.all(servers.map(close));

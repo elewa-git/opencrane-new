@@ -945,6 +945,8 @@ it('keeps the trusted decision id on authenticated refusals through gateway inge
       expect(requestId).not.toBe(forged);
     }
     expect(new Set(requestIds).size).toBe(2);
+    // Wait for the receipt being tested before deliberately killing the gateway.
+    await until(async () => { try { return (await readFile(f.options.usageFile, 'utf8')).split('\n').slice(0, -1).length >= 2; } catch { return false; } });
     await f.restart();
     const evidence = z.array(z.object({ id: z.uuid(), outcome: z.literal('error'), reason: z.literal('dispatch_denied') }))
       .parse((await readFile(f.options.usageFile, 'utf8')).trim().split('\n').map(line => JSON.parse(line) as unknown));

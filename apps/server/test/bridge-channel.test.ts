@@ -219,3 +219,39 @@ it('retries a failed Stop after turn/start returns, retaining the active turn an
     expect(interrupts).toBe(2);
   } finally { socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
 });
+
+it('pauses both conversations, fences preparing turns and waits for local tools to stop', async () => {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-pause-`), server = createServer();
+  let threads = 0, toolsStopped = false, finishTools!: () => void;
+  const local = new Promise<void>(resolve => { finishTools = () => { toolsStopped = true; resolve(); }; });
+  const received: Record<string, unknown>[] = [];
+  const channel = bridgeChannel(server, {
+    journal: `${directory}/reports`, credential: () => ({ value: 'test', expiresAt: Date.now()+60000 }),
+    async grant() {}, async localControl(action) { if (action === 'pause') await local; },
+    rpc(method, params) {
+      if (method === 'thread/start') return Promise.resolve({ thread: { id: `thread-${++threads}` } });
+      if (method === 'turn/start') return Promise.resolve({ turn: { id: `turn-${threads}` } });
+      channel.notification({ method: 'turn/completed', params: { threadId: params['threadId'], turn: { status: 'interrupted' } } });
+      return Promise.resolve({});
+    },
+  });
+  server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
+  const socket = new WebSocket(`ws://127.0.0.1:${address.port}/bridge`, { headers: { 'x-bridge-token': 'test' } });
+  socket.on('message', raw => {
+    const value = z.record(z.string(), z.unknown()).parse(JSON.parse(Buffer.isBuffer(raw) ? raw.toString() : '{}')); received.push(value);
+    if (value['type'] === 'agent.turn_started') socket.send(JSON.stringify({ type: 'ack', sequence: value['sequence'], token: 'turn', expiresAt: Date.now()+60000 }));
+  });
+  try {
+    await once(socket, 'open'); socket.send(JSON.stringify({ type: 'resume', since: 0 }));
+    for (const conversation of ['one', 'two']) socket.send(JSON.stringify({ type: 'turn', id: conversation, conversationId: conversation, assistantId: 'assistant', text: 'Work', token: 'preparing', expiresAt: Date.now()+60000 }));
+    await until(() => received.filter(row => row['type'] === 'agent.turn_started').length === 2);
+    socket.send(JSON.stringify({ type: 'pause', id: 'takeover' }));
+    await until(() => received.filter(row => row['type'] === 'agent.turn_failed').length === 2);
+    expect(received.some(row => row['type'] === 'paused')).toBe(false);
+    socket.send(JSON.stringify({ type: 'turn', id: 'third', conversationId: 'three', assistantId: 'assistant', text: 'Forbidden', token: 'preparing', expiresAt: Date.now()+60000 }));
+    finishTools(); await until(() => received.some(row => row['type'] === 'paused'));
+    expect(toolsStopped).toBe(true); expect(threads).toBe(2);
+    expect(received.find(row => row['type'] === 'paused')).toMatchObject({ id: 'takeover' });
+  } finally { finishTools(); socket.terminate(); await channel.close(); server.close(); await rm(directory, { recursive: true, force: true }); }
+});

@@ -10,6 +10,10 @@ import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand } from './turns.ts';
 import { chatHistory } from './commands.ts';
+import { computerWorkPaused } from '@opencrane/events';
+import { memberAuthorisation } from '@opencrane/authz';
+import { computerControl } from '../computers/desktop.ts';
+import { resumeAfterRelease } from './release.ts';
 import { recordReport, reportPosition, ReportRejected } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
 
@@ -65,24 +69,53 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
 }
 
 /** One outbound socket per computer; polling durable messages recovers a server restart without resending completed turns. */
-export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'>, tokens: Tokens, kube: SandboxClient, proxyUrl: string, signal: AbortSignal, logger: Logger = createLogger('bridge')) {
+export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> & Partial<Pick<ChatOptions, 'binding'>>, tokens: Tokens, kube: SandboxClient, proxyUrl: string, signal: AbortSignal, logger: Logger = createLogger('bridge')) {
   const refused = new Set<string>();
   const links = new Map<string, Awaited<ReturnType<typeof connectBridge>>>();
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
+  const released = new Set<string>();
+  const releasing = new Map<string, Promise<void>>();
+  const control = computerControl(kube.kubeconfig, kube.namespace);
+  async function releaseComputer(lifecycle: Awaited<ReturnType<typeof history>>, current: NonNullable<Awaited<ReturnType<typeof history>>[number]['event']>) {
+    const end = lifecycle.findLast(row => row.event.type.startsWith('takeover.'))?.event;
+    if (end?.type === 'takeover.ended' && !released.has(end.id)) {
+      if (await unavailableComputer(current, z.object({ assistantId: z.string() }).parse(current.data).assistantId)) return true;
+      let work = releasing.get(end.id);
+      if (!work) {
+        work = (async () => {
+          const ready = z.object({ computerId: z.string(), generation: z.int(), podUid: z.string() }).parse(current.data);
+          await control(ready, 'resume', z.object({ leaseId: z.string() }).parse(end.data).leaseId);
+          if (!options.binding) throw new Error('Release authority unavailable');
+          await resumeAfterRelease(options, end, memberAuthorisation(options.binding));
+          released.add(end.id);
+        })().finally(() => releasing.delete(end.id));
+        releasing.set(end.id, work);
+      }
+      await work; return true;
+    }
+    return false;
+  }
+  async function heldComputer(lifecycle: Awaited<ReturnType<typeof history>>, current: Awaited<ReturnType<typeof history>>[number]['event']) {
+    return computerWorkPaused(lifecycle.map(r => r.event)) || await releaseComputer(lifecycle, current);
+  }
+  async function unavailableComputer(current: Awaited<ReturnType<typeof history>>[number]['event'], assistantId: string) {
+    if (current.type === 'computer.suspended') await resumeComputer(options.store, tokens, options.silo, assistantId);
+    return current.type !== 'computer.ready';
+  }
   try {
     while (!signal.aborted) {
       const conversations = await listConversations(options.db, options.silo);
       await Promise.all(conversations.map(async conversation => {
         try {
           const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
-          const message = rows.find(r => r.event.type === 'message.posted' && !rows.some(t =>
+          const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
+          const current = lifecycle.findLast(row => /^(computer\.(claimed|ready|suspended|resumed|lost|retired))$/u.test(row.event.type))?.event;
+          const closed = new Set(lifecycle.filter(row => row.event.type === 'computer.turn_closed' && row.event.silo === options.silo)
+            .map(row => z.object({ turnId: z.string() }).parse(row.event.data).turnId));
+          const message = rows.find(r => r.event.type === 'message.posted' && !closed.has(r.event.id) && !rows.some(t =>
             ['agent.turn_completed', 'agent.turn_failed'].includes(t.event.type) && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id) &&
             (!rows.some(t => t.event.type === 'agent.turn_stop_requested' && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id) ||
               rows.some(t => t.event.type === 'agent.turn_started' && z.object({ turnId: z.string() }).parse(t.event.data).turnId === r.event.id)));
-          const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
-          const current = lifecycle.findLast(row => !row.event.type.startsWith('computer.turn_'))?.event;
-          const closed = new Set(lifecycle.filter(row => row.event.type === 'computer.turn_closed' && row.event.silo === options.silo)
-            .map(row => z.object({ turnId: z.string() }).parse(row.event.data).turnId));
           if (!current) return;
           const computer = z.object({ computerId: z.string() }).parse(current.data);
           // Recover a server crash between a terminal report and its separate lifecycle command.
@@ -93,9 +126,8 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
             await turnCommand(options.store, { silo: options.silo, ...computer, assistantId: conversation.assistantId },
               { ...terminal, conversationId: conversation.conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
           }
-          if (!message) return;
-          if (current.type === 'computer.suspended') { await resumeComputer(options.store, tokens, options.silo, conversation.assistantId); return; }
-          if (current.type !== 'computer.ready') return;
+          if (await heldComputer(lifecycle, current)) return;
+          if (!message || await unavailableComputer(current, conversation.assistantId)) return;
           if (refused.has(computer.computerId)) return;
           let link = links.get(computer.computerId);
           if (!link || link.socket.readyState !== link.socket.OPEN) {

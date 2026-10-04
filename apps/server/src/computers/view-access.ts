@@ -1,7 +1,15 @@
+import type { Duplex } from 'node:stream';
+import type { connectMemberFeed } from '@opencrane/projections';
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
+
+export interface LiveViewOptions extends ViewAccessOptions {
+  feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
+  control?: ((computer: { computerId: string; generation: number; podUid?: string | undefined }, action: 'pause' | 'resume', leaseId: string) => Promise<void>) | undefined;
+  open(computer: { computerId: string; generation: number; podUid?: string | undefined }, writer?: boolean): Promise<Duplex>;
+}
 
 const identity = z.object({ assistantId: z.string() });
 const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
@@ -73,7 +81,7 @@ function participatesIn(conversation: StoredEvent[], data: unknown, memberId: st
 
 async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: string) {
   const lifecycle = await history(store, `computer-${assistantId}`, silo);
-  const latest = lifecycle.findLast(r => !r.event.type.startsWith('computer.turn_'))?.event;
+  const latest = lifecycle.findLast(r => !r.event.type.startsWith('computer.turn_') && !r.event.type.startsWith('takeover.'))?.event;
   if (latest?.type !== 'computer.ready') throw new Error('Computer unavailable');
   const computer = ready.parse(latest.data);
   const claimed = ready.parse(lifecycle.findLast(r => r.event.type === 'computer.claimed')?.event.data);

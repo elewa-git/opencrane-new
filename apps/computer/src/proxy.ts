@@ -1,20 +1,30 @@
 // Promoted from S0.1b: the capability authenticates Codex; grants stay per thread.
-import { createServer, request } from 'node:http';
-import { chmodSync, writeFileSync } from 'node:fs';
+import { createServer, request, type IncomingMessage } from 'node:http';
+import { chmodSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
 interface Grant { computer: string; token: string; expires: number }
-export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }) {
+export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }, pauseFile = '/home/agent/codex/bridge-reports.jsonl.paused') {
   const caller = randomBytes(32).toString('hex');
   let deadline = Date.now() + 600_000;
   const turns = new Map<string, Grant>();
+  let pauseId = existsSync(pauseFile) ? readFileSync(pauseFile, 'utf8').trim() : undefined;
+  let paused = Boolean(pauseId);
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
+  function controlPause(req: IncomingMessage): boolean {
+    if (req.method !== 'POST' || !['/pause', '/resume'].includes(req.url ?? '')) return false;
+    const id = req.headers['x-pause-id'];
+    if (typeof id !== 'string' || (req.url === '/resume' && pauseId !== id)) throw new Error('Pause changed');
+    turns.clear(); paused = req.url === '/pause'; pauseId = id; return true;
+  }
   const control = createServer((req, res) => {
     void (async () => {
       const input = record(await body(req));
+      if (controlPause(req)) { json(res, { ok: true }); return; }
       if (req.method !== 'POST' || typeof input['thread'] !== 'string') throw new Error('Bad request');
       if (req.url === '/drop') turns.delete(input['thread']);
       else if (req.url === '/grant') {
+        if (paused) throw new Error('Computer paused');
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
             input['expires'] <= Date.now() || input['expires'] > Date.now() + 120_000) throw new Error('Bad grant');
@@ -37,11 +47,12 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
       }
       const thread = req.headers['session-id'];
       const grant = typeof thread === 'string' ? turns.get(thread) : undefined;
-      if (!grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
+      if (paused || !grant || Date.now() >= grant.expires) { json(res, { error: 'no live turn' }, 403); return; }
       if (req.url !== '/v1/responses' || req.method !== 'POST') { json(res, { error: 'route' }, 404); return; }
       const payload = record(await body(req));
       payload['max_output_tokens'] = 128;
       const raw = JSON.stringify(payload);
+      if (paused || turns.get(String(thread)) !== grant || Date.now() >= grant.expires) throw new Error('Turn changed');
       const outgoing = request(`${gateway}/v1/responses`, { method: 'POST', headers: {
         'content-type': 'application/json', authorization: `Bearer ${grant.computer}`,
         'x-turn-token': grant.token, 'session-id': String(thread),

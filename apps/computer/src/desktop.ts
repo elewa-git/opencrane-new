@@ -1,10 +1,12 @@
 // S0.5's desktop, with ephemeral passwords and the same trusted UID boundary.
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
+import { mkdirSync, writeFileSync, chmodSync, rmSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 if (!process.setgroups || !process.setgid || !process.setuid) throw new Error('Linux required');
 process.setgroups([]); process.setgid(1002); process.setuid(1002);
 mkdirSync('/tmp/.X11-unix', { recursive: true }); chmodSync('/tmp/.X11-unix', 0o1777);
+// The supervisor owns the sole X server; a container restart can retain its stale socket and lock.
+rmSync('/tmp/.X1-lock', { force: true }); rmSync('/tmp/.X11-unix/X1', { force: true });
 process.env['HOME'] = '/home/desktop';
 mkdirSync('/home/desktop/.vnc', { recursive: true, mode: 0o700 });
 const passwords = Object.fromEntries(['viewer', 'requester'].map(name => [name, randomBytes(24).toString('hex')]));

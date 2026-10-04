@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
 import { createServer, request } from 'node:http';
 import { writeFileSync, chmodSync, renameSync, readFileSync } from 'node:fs';
+import { timingSafeEqual } from 'node:crypto';
 import { createInterface } from 'node:readline';
 import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
@@ -79,6 +80,17 @@ netServer(socket => {
   socket.on('close', () => { client = undefined; child.stdout.resume(); });
 }).listen('/run/codex/app.sock', () => chmodSync('/run/codex/app.sock', 0o600));
 const server = createServer((req, res) => {
+  if (req.method === 'POST' && ['/pause', '/resume'].includes(req.url ?? '')) {
+    void (async () => {
+      const credential = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
+      const expected = Buffer.from(String(credential['value'])), actual = Buffer.from(String(req.headers['x-bridge-token'] ?? ''));
+      if (typeof credential['expiresAt'] !== 'number' || credential['expiresAt'] <= Date.now() || actual.length !== expected.length || !timingSafeEqual(actual, expected)) throw new Error('Not authorised');
+      const input = record(await body(req)), leaseId = input['leaseId'];
+      if (typeof leaseId !== 'string' || !/^[\w-]{1,200}$/u.test(leaseId)) throw new Error('Invalid pause id');
+      if (req.url === '/pause') await channel.pause(leaseId); else await channel.release(leaseId);
+      json(res, { quiescent: true });
+    })().catch(() => json(res, { error: 'paused' }, 503)); return;
+  }
   if (req.url === '/credentials' && req.method === 'POST') {
     void (async () => {
       const token = record(await body(req));
@@ -109,6 +121,16 @@ const server = createServer((req, res) => {
 
 const channel = bridgeChannel(server, {
   journal: '/home/agent/codex/bridge-reports.jsonl',
+  async localControl(action, leaseId) {
+    const call = (socketPath: string) => new Promise<void>((resolve, reject) => {
+      const req = request({ socketPath, path: `/${action}`, method: 'POST', headers: { 'x-pause-id': leaseId } }, res => {
+        res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error('Local control refused')));
+      });
+      req.on('error', reject); req.setTimeout(6000, () => req.destroy(new Error('Local control timeout'))); req.end('{}');
+    });
+    await call('/run/codex/control.sock');
+    await call('/run/executor/pause.sock');
+  },
   credential() {
     const value = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
     if (typeof value['value'] !== 'string' || typeof value['expiresAt'] !== 'number') throw new Error('Missing credential');

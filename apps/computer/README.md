@@ -222,3 +222,12 @@ before execution. Prepared messages survive replacement and retry; a separate
 fsynced execution marker prevents automatically repeating uncertain effects.
 Older journals without that marker distinction remain uncertain. Saved Codex threads resume on the same PVC. Reports carry no turn
 or computer credential. See [bridge evidence](../../docs/process/bridge-evidence.md).
+
+P3-17 adds private pause/resume endpoints checked by the current computer
+credential. The bridge writes a persistent pause marker, interrupts all active
+turns, clears grants and asks the supervisor to fence execution and stop every
+UID 1001 process. The fixed helper uses the tool UID to signal tools; no CAP_KILL
+is added. Restart reads the marker before admitting tools or model requests.
+Private control credentials continue refreshing while the event-backed work
+fence is closed. Only an explicit audited release admits fresh checked turns.
+[Takeover evidence and current image digest](../../docs/process/p3-17-takeover-evidence.md).

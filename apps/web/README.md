@@ -143,7 +143,12 @@ shows **Not available**. Revocation closes the connection and clears pixels.
 Escape closes the dialog and restores focus to its entry. Changing conversation
 or destroying the component cancels admission and closes the old connection.
 All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed
-core and the authenticated proxy; it provides no control or clipboard path.
+core and the authenticated proxy. Viewers remain read-only; the current requester
+can use Take control after every thread and local tool is paused. Release returns
+checked work with fresh turns; disconnect leaves the agent paused. Renewal is
+explicit, with a maximum two-minute lease. Control adds keyboard/pointer input
+only, with 44px buttons and clear pause/recovery states; clipboard stays refused.
+See the [takeover contract and evidence](../../docs/process/p3-17-takeover-evidence.md).
 
 `npm run build:live-view-test -w apps/web` builds a separate browser qualification
 host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.

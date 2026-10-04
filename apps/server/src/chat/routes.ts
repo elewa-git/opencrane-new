@@ -20,12 +20,18 @@ export async function chatRows(options: ChatOptions, conversationId: string, sin
     ON f.silo = c.silo AND f.data->>'assistantId' = c.assistant_id
     WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`, [options.silo, conversationId]);
   const state = computers.rows[0]?.status;
-  return { ...result, computerState: state === 'ready' ? 'ready' : 'starting your computer', rows: result.rows.map(row => {
+  return { ...result, computerState: computerState(state), rows: result.rows.map(row => {
     const data = z.record(z.string(), z.unknown()).parse(row.data);
     if (!('ciphertext' in data)) return row;
     const { ciphertext: _ciphertext, keyId: _keyId, ...rest } = data;
     return { ...row, data: { ...rest, text: options.keys.decrypt(options.silo, conversationId, data) } };
   }) };
+}
+function computerState(state?: string): string {
+  if (state === 'ready') return 'ready';
+  if (state === 'taking_control') return 'Taking control';
+  if (state === 'controlling' || state === 'paused') return 'Agent paused';
+  return 'starting your computer';
 }
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
   app.get('/api/chat', handler);

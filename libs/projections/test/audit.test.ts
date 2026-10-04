@@ -32,7 +32,7 @@ it('joins forthcoming typed families, withholds private details and keeps absent
       ['approval.expired', { approvalId: 'approval' }],
       ['credential.released', { requestId: 'request', permitId: 'permit' }],
       ['mcp.tools_changed', {}], ['mcp.server_published', {}], ['egress.observed', { outcome: 'unknown' }],
-      ['takeover.started', { requestedBy: 'alice' }], ['takeover.ended', {}],
+      ['takeover.started', { requestedBy: 'alice', conversationId: 'conversation', turnId: 'turn' }], ['takeover.ended', { requestedBy: 'alice', conversationId: 'conversation', turnId: 'turn' }],
     ] as const) {
       const record = fixture(type, type, payload);
       await append(type.startsWith('approval.') ? { ...record, correlation: {} } : type.startsWith('takeover.') ? { ...record, correlation: { conversation: 'conversation', turn: 'turn' } } : record);
@@ -42,8 +42,8 @@ it('joins forthcoming typed families, withholds private details and keeps absent
     // Unrelated conversation and silo must never join even when ids collide across silos.
     await append({ ...fixture('approval.decided', 'foreign', { reason: canary }), silo: 'other' });
     await append(fixture('decision.recorded', 'foreign-conversation', { requestId: 'other', conversationId: 'other', requesterId: 'bob' }, false));
-    await append({ ...fixture('takeover.started', 'foreign-turn', { requestedBy: 'alice' }, false), correlation: { conversation: 'other', turn: 'turn' } });
-    await append({ ...fixture('takeover.started', 'foreign-requester', { requestedBy: 'bob' }, false), correlation: { conversation: 'conversation', turn: 'turn' } });
+    await append({ ...fixture('takeover.started', 'foreign-turn', { requestedBy: 'alice', conversationId: 'other', turnId: 'turn' }, false), correlation: { conversation: 'other', turn: 'turn' } });
+    await append({ ...fixture('takeover.started', 'foreign-requester', { requestedBy: 'bob', conversationId: 'conversation', turnId: 'turn' }, false), correlation: { conversation: 'conversation', turn: 'turn' } });
     await append(fixture('message.posted', 'private-message', { ciphertext: Buffer.from(canary).toString('base64') }));
     await runner.run(auditTrail);
     const before = await readAudit(db.db, 'test', { conversationId: 'conversation', requesterId: 'alice' });

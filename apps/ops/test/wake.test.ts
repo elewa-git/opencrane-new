@@ -143,3 +143,35 @@ it('continues reconciliation across all view audits and replays them safely afte
     stop.abort(); await outcome; vi.restoreAllMocks(); await nats.close(); await rm(directory, { recursive: true, force: true });
   }
 });
+
+it('refreshes expired control credentials while keeping a paused computer fenced', async () => {
+  const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/paused-credentials-`), stop = new AbortController();
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  await writeFile(`${directory}/key.pem`, key.privateKey, { mode: 0o600 });
+  let now = Math.floor(Date.now() / 1000);
+  const tokens = await tokenIssuer({ privateKeyPath: `${directory}/key.pem`, issuer: 'https://wake.test/', computerTtlSeconds: 2, now: () => now });
+  const original = await tokens.computer({ silo: 'test', assistantId: 'asst_1', computerId: 'computer_1', generation: 1, tokenId: 'token:test' });
+  const subject = 'computer-asst_1', kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  vi.spyOn(kube, 'state').mockResolvedValue({ uid: 'sandbox', podUid: 'pod', ready: true, suspended: false });
+  vi.spyOn(kube, 'mode').mockRejectedValue(new Error('Paused computer must stay running for recovery'));
+  let delivered = false;
+  let outcome: Promise<unknown> = Promise.resolve();
+  try {
+    for (const type of ['computer.claimed', 'computer.ready', 'takeover.requested', 'takeover.failed']) {
+      const rows = await history(nats.store, subject);
+      expect((await nats.store.append({ expectedSequence: rows.at(-1)?.sequence ?? 0, event: envelope('test', subject, type,
+        Object.assign({}, getEventDefinition(type)!.example, { assistantId: 'asst_1', computerId: 'computer_1', ...(type === 'computer.claimed' ? { generation: 1, tokenId: 'token:test' } : {}), ...(type === 'computer.ready' ? { podUid: 'pod' } : {}) })) })).status).toBe('appended');
+    }
+    now += 3;
+    await expect(tokens.verify(original.value, computerTokenAudience)).rejects.toThrow();
+    outcome = watchComputers(nats.store, kube, tokens, async (_id, token) => {
+      expect(token.expiresAt).toBeGreaterThan(original.expiresAt);
+      await expect(tokens.verify(token.value, computerTokenAudience, original.id)).resolves.toBeDefined();
+      delivered = true; stop.abort();
+    }, 'test', 0, stop.signal).catch((error: unknown) => error);
+    await until(() => delivered, 3000);
+    expect(await outcome).toBeUndefined();
+    await expect(resumeComputer(nats.store, tokens, 'test', 'asst_1')).rejects.toThrow('paused');
+    expect((await history(nats.store, subject)).at(-1)?.event.type).toBe('takeover.failed');
+  } finally { stop.abort(); await outcome; vi.restoreAllMocks(); await nats.close(); await rm(directory, { recursive: true, force: true }); }
+});

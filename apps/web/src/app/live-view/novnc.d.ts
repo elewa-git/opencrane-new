@@ -6,5 +6,6 @@ declare module '@novnc/novnc/lib/rfb.js' {
     resizeSession: boolean;
     focusOnClick: boolean;
     disconnect(): void;
+    focus(): void;
   }
 }

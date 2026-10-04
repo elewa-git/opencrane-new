@@ -144,7 +144,7 @@ SSO membership path. Invitation creation and identity binding are separate work.
 | `computer.retired` | server | computers | delete snapshots after retention |
 | `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata on `view-<attemptId>`; no connection or lifecycle effect. |
 | `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | Audit on `view-<sessionId>`; no lifecycle effect or replayed connection. Start records a maximum two-minute lease and stop records its reason. |
-| `takeover.started` / `takeover.ended` | live-view proxy | computers, audit | pause / resume the agent |
+| `takeover.requested` / `takeover.started` / `takeover.renewed` / `takeover.failed` / `takeover.ended` | live-view proxy | computers, audit | fence and pause every thread, audit the lease; resume only on explicit release |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 
 Computer credentials are short-lived signed tokens. `computer.claimed` and
@@ -174,7 +174,7 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | --- | --- | --- | --- |
 | `conversation.created` | command | conversations (immutable `mode`: `agent_session`, `direct` or `group`; Phase 2 accepts only `agent_session`; missing mode in older events reads as `agent_session`) | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
-| `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
+| `message.posted` | person, or the system for routines and checked takeover release | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
 | `agent.turn_stop_requested` | member command | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |
 | `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |

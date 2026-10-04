@@ -1,7 +1,7 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { BudgetActor, envelope } from '@opencrane/models';
-import { tokenIssuer } from '@opencrane/auth';
+import { tokenIssuer, turnTokenAudience } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
 import { conversations, pgDb, ProjectionRunner } from '@opencrane/projections';
 import { SandboxClient } from '../../ops/src/kubernetes.ts';
@@ -12,7 +12,10 @@ import { tmpdir } from 'node:os';
 import { WebSocketServer } from 'ws';
 import { expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
-import { databases, until } from '@opencrane/authz/testing';
+import { databases, until, openfga } from '@opencrane/authz/testing';
+import { createStore } from '@opencrane/authz';
+import { getEventDefinition } from '@opencrane/events';
+import * as desktop from '../src/computers/desktop.ts';
 import { connectBridge, watchBridges } from '../src/chat/bridge.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 import { chatCommand, chatHistory } from '../src/chat/commands.ts';
@@ -206,7 +209,7 @@ it('surfaces a permanent report rejection and stops automatic reconnect attempts
   } finally { stop.abort(); await work; await fixture.close(); await dbs.close(); }
 });
 
-it('wakes another conversation without rereading the archive of an already closed turn', async () => {
+it.each([false, true])('wakes another conversation after watcher restart (released: %s)', async afterRelease => {
   const fixture = await replayFixture(), dbs = await databases(), stop = new AbortController();
   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
   await writeFile(`${fixture.directory}/key.pem`, key.privateKey, { mode: 0o600 });
@@ -228,6 +231,16 @@ it('wakes another conversation without rereading the archive of an already close
   await recordReport(fixture.store, fixture.keys, fixture.context, started);
   await recordReport(fixture.store, fixture.keys, fixture.context, completed);
   await turnCommand(fixture.store, fixture.context, { ...completed, status: 'completed' });
+  const fgaFixture = afterRelease ? await openfga() : undefined;
+  const binding = fgaFixture ? await createStore(fgaFixture.apiUrl, 'test') : undefined;
+  if (afterRelease) {
+    vi.spyOn(desktop, 'computerControl').mockReturnValue(() => Promise.resolve());
+    for (const type of ['takeover.requested', 'takeover.ended']) expect((await fixture.store.append({
+      expectedSequence: (await history(fixture.store, 'computer-assistant')).at(-1)!.sequence,
+      event: envelope('test', 'computer-assistant', type, Object.assign({}, getEventDefinition(type)!.example,
+        { assistantId: 'assistant', computerId: 'computer', conversationId: 'alice', requestedBy: 'alice', turnId: 'message-alice' })),
+    })).status).toBe('appended');
+  }
   await suspendComputer(fixture.store, { ...fixture.context, latest: ready, ready });
   let release!: () => void;
   const archiveBlocked = new Promise<void>(resolve => { release = resolve; });
@@ -235,23 +248,40 @@ it('wakes another conversation without rereading the archive of an already close
   const read = fixture.store.readStream.bind(fixture.store);
   // The first snapshot is available; later archive reads are stalled at the NATS boundary.
   const reading = vi.spyOn(fixture.store, 'readStream').mockImplementation(async function* (...args) {
-    if (args[0] === 'conversation-alice') {
+    if (!afterRelease && args[0] === 'conversation-alice') {
       if (archiveRead) await archiveBlocked;
       archiveRead = true;
     }
     yield* read(...args);
   });
+  let granted: string | undefined, sent = false;
+  if (afterRelease) fixture.wss.on('connection', socket => socket.on('message', raw => {
+    const bytes = Buffer.isBuffer(raw) ? raw : Buffer.concat(Array.isArray(raw) ? raw : [Buffer.from(raw)]);
+    const value: unknown = JSON.parse(bytes.toString());
+    if (typeof value !== 'object' || value === null) return;
+    if (Reflect.get(value, 'id') === 'message-bob' && !sent) {
+      sent = true;
+      socket.send(JSON.stringify({ sequence: 3, previousSequence: 0, conversationId: 'bob', turnId: 'message-bob',
+        assistantId: 'assistant', type: 'agent.turn_started', threadId: 'bob-after-release' }));
+    }
+    const token: unknown = Reflect.get(value, 'token');
+    if (Reflect.get(value, 'type') === 'ack' && typeof token === 'string') granted = token;
+  }));
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
-  const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db }, tokens, kube, fixture.url, stop.signal);
+  const work = watchBridges({ silo: 'test', store: fixture.store, keys: fixture.keys, db, ...(binding ? { binding } : {}) }, tokens, kube, fixture.url, stop.signal);
   try {
     await until(async () => (await history(fixture.store, 'computer-assistant')).at(-1)?.event.type === 'computer.resumed', 3000);
     const result = await fixture.store.append({ expectedSequence: (await history(fixture.store, 'computer-assistant')).at(-1)!.sequence,
       event: { ...ready, id: 'new-ready', commandId: 'new-ready', data: { computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'new-pod' } } });
     expect(result.status).toBe('appended');
     await until(() => fixture.messages.some(message => typeof message === 'object' && message !== null && Reflect.get(message, 'id') === 'message-bob'), 3000);
+    if (afterRelease) {
+      await until(() => granted !== undefined, 3000);
+      expect(await tokens.verify(granted!, turnTokenAudience)).toMatchObject({ turn: 'message-bob', requester: 'bob', thread: 'bob-after-release' });
+    }
     expect((await history(fixture.store, 'computer-assistant')).filter(row => row.event.type === 'computer.turn_closed')).toHaveLength(1);
   } finally {
-    release(); stop.abort(); await work; reading.mockRestore(); vi.restoreAllMocks(); await fixture.close(); await dbs.close();
+    release(); stop.abort(); await work; reading.mockRestore(); vi.restoreAllMocks(); await fixture.close(); await dbs.close(); await fgaFixture?.close();
   }
 });

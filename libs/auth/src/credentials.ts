@@ -1,6 +1,7 @@
 import type { IncomingHttpHeaders } from 'node:http';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { z } from 'zod';
+import { computerWorkPaused } from '@opencrane/events';
 import { computerTokenAudience, turnTokenAudience, type tokenIssuer, type tokenVerifier } from './tokens.ts';
 
 type Verifier = ReturnType<typeof tokenVerifier> & Partial<Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'turn'>>;
@@ -15,7 +16,8 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       if (item.event.silo !== silo) throw new Error('Computer silo mismatch');
       events.push(item);
     }
-    const latest = events.findLast(r => !r.event.type.startsWith('computer.turn_'));
+    if (computerWorkPaused(events.map(r => r.event))) throw new Error('Computer paused');
+    const latest = events.findLast(r => !r.event.type.startsWith('computer.turn_') && !r.event.type.startsWith('takeover.'));
     if (latest?.event.type !== 'computer.ready') throw new Error('Computer is not ready');
     const claim = state.parse(events.findLast(({ event }) => event.type === 'computer.claimed')?.event.data);
     const recorded = grant.parse(events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))?.event.data);
@@ -27,7 +29,14 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
         throw new Error('Computer generation mismatch');
       }
     }
-    return { ...current, sequence: latest.sequence };
+    return { ...current, sequence: latest.sequence, events };
+  }
+  function checkTurnFence(events: StoredEvent[], turnId: unknown) {
+    const fence = events.findLast(r => r.event.type === 'takeover.requested');
+    const started = events.findLast(r => r.event.type === 'computer.turn_started' &&
+      z.object({ turnId: z.string() }).parse(r.event.data).turnId === turnId);
+    // A released fence never revives credentials belonging to an interrupted turn.
+    if (fence && (!started || started.sequence <= fence.sequence)) throw new Error('Turn interrupted by takeover');
   }
   return {
     async turn(input: { assistantId: string; conversationId: string; turnId: string; requesterId: string; threadId: string; task: string; model: string }) {
@@ -42,6 +51,7 @@ export function computerCredentials(store: Pick<EventStore, 'readStream'>, token
       const turn = await tokens.verify(turnValue, turnTokenAudience, activeTurnId);
       if (typeof computer['assistant'] !== 'string') throw new Error('Missing assistant');
       const current = await active(computer['assistant']);
+      checkTurnFence(current.events, turn['turn']);
       if (computer['typ'] !== 'computer' || turn['typ'] !== 'turn' || computer['silo'] !== silo || turn['silo'] !== silo ||
           computer.jti !== current.tokenId || computer['computer'] !== current.computerId || computer['generation'] !== current.generation ||
           turn['computerTokenId'] !== current.tokenId || turn['assistant'] !== computer['assistant'] ||

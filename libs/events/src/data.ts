@@ -188,13 +188,18 @@ export const computerLostDataSchema = z.object({ assistantId: id, computerId: id
 
 export const computerRetiredDataSchema = z.object({ assistantId: id, computerId: id }).strict();
 
-export const takeoverStartedDataSchema = z
-  .object({ assistantId: id, computerId: id, requestedBy: id })
-  .strict();
-
-export const takeoverEndedDataSchema = z
-  .object({ assistantId: id, computerId: id, endedBy: id })
-  .strict();
+const takeoverData = z.object({
+  assistantId: id, computerId: id, generation: z.int().positive(), podUid: id.optional(),
+  requestedBy: id, conversationId: id, turnId: id, leaseId: id, expiresAt: z.iso.datetime(),
+  affectedTurns: z.array(z.object({ conversationId: id, turnId: id, threadId: id.optional(), requesterId: id }).strict()),
+}).strict();
+export const takeoverRequestedDataSchema = takeoverData;
+export const takeoverStartedDataSchema = takeoverData;
+export const takeoverRenewedDataSchema = takeoverData;
+export const takeoverFailedDataSchema = takeoverData.extend({ reason: z.literal('pause_failed') });
+export const takeoverEndedDataSchema = takeoverData.extend({ endedBy: id, reason: z.enum([
+  'released', 'disconnected', 'expired', 'access_changed', 'protocol', 'slow_viewer', 'upstream', 'shutdown', 'crash',
+]) });
 
 // A computer profile is one computer image plus the Codex built-in tool
 // settings that go with it (owner decision 9). Publishing a profile whose tools

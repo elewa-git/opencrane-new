@@ -1,5 +1,6 @@
 import type { Server, IncomingMessage } from 'node:http';
-import { appendFileSync, existsSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { modelForTask } from '@opencrane/models/routing';
@@ -14,6 +15,7 @@ interface Driver {
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
   credential(): { value: string; expiresAt: number };
   journal: string;
+  localControl?: (action: 'pause' | 'resume', leaseId: string) => Promise<void>;
 }
 interface Turn { id: string; conversationId: string; assistantId: string; text: string; token: string; expiresAt: number; taskKind: string }
 function string(value: Record<string, unknown>, name: string): string {
@@ -45,6 +47,8 @@ export function bridgeChannel(server: Server, driver: Driver) {
   const reports: BridgeReport[] = existsSync(driver.journal) ? readFileSync(driver.journal, 'utf8').trim().split('\n').filter(Boolean).map(stored) : [];
   const executions = new Set(existsSync(`${driver.journal}.executions`) ? readFileSync(`${driver.journal}.executions`, 'utf8').trim().split('\n') : []);
   let socket: WebSocket | undefined, resumed = false;
+  let pauseId = existsSync(`${driver.journal}.paused`) ? readFileSync(`${driver.journal}.paused`, 'utf8').trim() : undefined;
+  let paused = Boolean(pauseId);
   const active = new Map<string, Turn>();
   const cancelled = new Set<string>();
   const codexTurns = new Map<string, string>();
@@ -65,7 +69,12 @@ export function bridgeChannel(server: Server, driver: Driver) {
   for (const item of [...reports]) {
     if (item.type === 'agent.turn_started' && (executions.has(item.turnId) || item.previousSequence === undefined) && !reports.some(r => r.turnId === item.turnId && ['agent.turn_completed', 'agent.turn_failed'].includes(r.type))) report(item, 'agent.turn_failed');
   }
+  const cancelledTurn = (input: Turn) => paused || cancelled.has(input.id);
+  async function prepareGrant(thread: string, input: Turn, grant: { token: string; expiresAt: number }) {
+    if (!paused) await driver.grant(thread, input.conversationId, grant.token, grant.expiresAt);
+  }
   async function start(input: Turn) {
+    if (paused) return;
     if (reports.some(r => r.turnId === input.id && ['agent.turn_completed', 'agent.turn_failed'].includes(r.type)) || [...active.values()].some(t => t.id === input.id)) return;
     if ([...active.values()].some(t => t.conversationId === input.conversationId)) return;
     // Mark preparation immediately; a second request cannot start the same conversation during thread/start.
@@ -81,8 +90,8 @@ export function bridgeChannel(server: Server, driver: Driver) {
       const grant = await new Promise<{ token: string; expiresAt: number }>(resolve => {
         waiting.set(sequence, resolve); if (previousStart) send(previousStart);
       });
-      await driver.grant(thread, input.conversationId, grant.token, grant.expiresAt);
-      if (cancelled.has(input.id)) {
+      await prepareGrant(thread, input, grant);
+      if (cancelledTurn(input)) {
         report(input, 'agent.turn_failed'); active.delete(thread);
         await driver.grant(thread, input.conversationId, '', 0); return;
       }
@@ -122,6 +131,34 @@ export function bridgeChannel(server: Server, driver: Driver) {
     resumed = true;
     for (const item of reports) if (item.sequence > since || waiting.has(item.sequence)) send(item);
   }
+  async function pause(leaseId: string) {
+    pauseId = leaseId; paused = true;
+    writeFileSync(`${driver.journal}.paused`, leaseId, { mode: 0o600, flush: true });
+    if (!driver.localControl) throw new Error('Local pause unavailable');
+    const local = driver.localControl('pause', leaseId);
+    for (const input of active.values()) cancelled.add(input.id);
+    // Wake prepared turns without minting a grant. A late acknowledgement cannot restart them.
+    for (const resolve of waiting.values()) resolve({ token: '', expiresAt: 0 });
+    waiting.clear();
+    await Promise.all([local, ...[...active].map(async ([thread, input]) => {
+      await driver.grant(thread, input.conversationId, '', 0);
+      const turnId = codexTurns.get(input.id);
+      if (turnId) await driver.rpc('turn/interrupt', { threadId: thread, turnId });
+    })]);
+    const deadline = Date.now() + 10_000;
+    while (active.size) {
+      if (Date.now() >= deadline) throw new Error('Pause timeout');
+      await delay(20);
+    }
+  }
+  async function release(leaseId: string) {
+    if (!paused) return;
+    if (leaseId !== pauseId) throw new Error('Pause changed');
+    if (active.size || !driver.localControl) throw new Error('Not quiescent');
+    await driver.localControl('resume', leaseId);
+    if (leaseId !== pauseId) throw new Error('Pause changed');
+    rmSync(`${driver.journal}.paused`, { force: true }); paused = false;
+  }
   const wss = new WebSocketServer({ server, path: '/bridge', maxPayload: 128 * 1024, verifyClient: (info: { req: IncomingMessage }) => {
     try {
       const credential = driver.credential(), expected = Buffer.from(credential.value), actual = Buffer.from(String(info.req.headers['x-bridge-token'] ?? ''));
@@ -140,6 +177,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
         else if (input['type'] === 'ack') acknowledge(input['sequence'], input);
         else if (input['type'] === 'turn' && resumed) void start(turn(input));
         else if (input['type'] === 'stop' && resumed) void interrupt(input).catch(() => next.close(1011, 'Interrupt unavailable'));
+        else if (input['type'] === 'pause' && resumed) void pause(string(input, 'id')).then(() => next.send(JSON.stringify({ type: 'paused', id: input['id'] })), () => next.close(1011, 'Pause unavailable'));
         else throw new Error('Invalid message');
       } catch { next.close(1008, 'Invalid bridge message'); }
     });
@@ -150,6 +188,7 @@ export function bridgeChannel(server: Server, driver: Driver) {
         if (completed['type'] === 'agentMessage' && typeof completed['text'] === 'string') report(input, 'agent.message_completed', { messageId: String(completed['id']), text: completed['text'] });
   }
   return {
+    pause, release,
     notification(value: unknown) {
       const event = record(value), params = record(event['params'] ?? {}), thread = params['threadId'];
       if (typeof thread !== 'string') return;

@@ -321,6 +321,14 @@ and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`
 and `KUBE_NAMESPACE` for its private Pod stream. See the
 [live-view contract and evidence](../../docs/process/live-view-evidence.md).
 
+Requester control uses `POST /api/conversations/:id/control` with the same cookie,
+Origin and view header, and JSON `{action: "start" | "status" | "renew" | "release"}`.
+Renew/release also require `leaseId`; start can omit the body. Redeem the returned
+one-use ticket on `/ws/conversations/:id/control`. Only the current requester with
+view authority can start/renew; a newly authorised requester can explicitly release
+a closed same-conversation lease. No writer survives reconnect or server restart.
+See the [takeover contract and evidence](../../docs/process/p3-17-takeover-evidence.md).
+
 ## Remote MCP registration (P3-3)
 
 Owner/Admin `POST /api/org/integrations` accepts `{locator}` with the exact session

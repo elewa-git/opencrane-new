@@ -1,6 +1,7 @@
 import { history, payingGroupAuthority } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { computerWorkPaused } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { chatHistory } from './commands.ts';
 import { ReportRejected } from './reports.ts';
@@ -40,7 +41,8 @@ export async function turnCommand(store: EventStore, context: { silo: string; co
 }
 
 function checkStart(events: StoredEvent[], rows: StoredEvent[], computerId: string, turnId: string) {
-  const current = events.findLast(r => !r.event.type.startsWith('computer.turn_'));
+  if (computerWorkPaused(events.map(r => r.event))) throw new Error('Computer paused');
+  const current = events.findLast(r => !r.event.type.startsWith('computer.turn_') && !r.event.type.startsWith('takeover.'));
   if (current?.event.type !== 'computer.ready' || z.object({ computerId: z.string() }).parse(current.event.data).computerId !== computerId) throw new Error('Computer is not ready');
   if (rows.some(r => ['agent.turn_completed', 'agent.turn_failed'].includes(r.event.type) && z.object({ turnId: z.string() }).parse(r.event.data).turnId === turnId)) throw new ReportRejected('Turn is closed');
 }

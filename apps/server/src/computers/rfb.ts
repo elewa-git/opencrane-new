@@ -1,5 +1,5 @@
 // S0.5's byte-stream allowlist. WebSocket messages are not RFB message boundaries.
-export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => void) {
+export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => void, writer = false) {
   let pending: Buffer = Buffer.alloc(0), stage = 0, refused = false;
   return (bytes: Buffer) => {
     if (refused) return;
@@ -7,7 +7,7 @@ export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => voi
     if (pending.length + bytes.length > 8192) return reject();
     pending = Buffer.concat([pending, bytes]);
     while (pending.length) {
-      const size = messageSize(pending, stage);
+      const size = messageSize(pending, stage, writer);
       if (size < 0) return reject();
       if (!size) return;
       if (pending.length < size) return;
@@ -15,14 +15,25 @@ export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => voi
       if (stage < 3 && !message.equals(stage === 0 ? Buffer.from('RFB 003.008\n') : Buffer.from([1]))) return reject();
       if (!validDisplayMessage(stage, message)) return reject();
       // Raw display only: do not negotiate clipboard, continuous updates or Kasm extensions.
-      forward(stage === 3 && message[0] === 2 ? Buffer.from([2, 0, 0, 1, 0, 0, 0, 0]) : message);
+      forward(clientMessage(message, stage, writer));
       pending = pending.subarray(size);
       if (stage < 3) stage++;
     }
   };
 }
 
-function messageSize(bytes: Buffer, stage: number): number {
+function clientMessage(message: Buffer, stage: number, writer: boolean): Buffer {
+  if (stage !== 3) return message;
+  if (writer && message[0] === 5) {
+    // Kasm extends the standard pointer packet with a 16-bit mask and scroll deltas.
+    const pointer = Buffer.alloc(11); pointer[0] = 5; pointer.writeUInt16BE(message[1]!, 1); message.copy(pointer, 3, 2, 6); return pointer;
+  }
+  return message[0] === 2 ? Buffer.from([2, 0, 0, 1, 0, 0, 0, 0]) : message;
+}
+
+function messageSize(bytes: Buffer, stage: number, writer: boolean): number {
+  if (stage === 3 && writer && bytes[0] === 4) return 8;
+  if (stage === 3 && writer && bytes[0] === 5) return 6;
   if (stage < 3) return stage === 0 ? 12 : 1;
   if (bytes[0] === 0) return 20;
   if (bytes[0] === 3) return 10;

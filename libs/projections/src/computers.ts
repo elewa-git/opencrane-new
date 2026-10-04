@@ -5,6 +5,7 @@ import type { Projection } from './runner.ts';
 const eventTypes = new Set([
   'assistant.created', 'computer.claimed', 'computer.ready', 'computer.suspended',
   'computer.resumed', 'computer.lost', 'computer.retired',
+  'takeover.requested', 'takeover.started', 'takeover.renewed', 'takeover.failed', 'takeover.ended',
 ]);
 export const replayComputersTable = 'computers_replay';
 
@@ -46,7 +47,7 @@ function computerProjection(name: string, table: string): Projection {
         return;
       }
       if (event.subject !== `computer-${assistantId}`) throw new Error('Computer subject mismatch');
-      const status = ({ 'computer.claimed': 'claiming', 'computer.ready': 'ready',
+      const status = event.type.startsWith('takeover.') ? takeoverStatus(event.type, data) : ({ 'computer.claimed': 'claiming', 'computer.ready': 'ready',
         'computer.suspended': 'suspended', 'computer.resumed': 'starting',
         'computer.lost': 'lost', 'computer.retired': 'retired' } as Record<string, string>)[event.type];
       const claimed = event.type === 'computer.claimed';
@@ -65,6 +66,12 @@ function computerProjection(name: string, table: string): Projection {
 
 export const computers = computerProjection('computers', 'computers');
 export const replayComputers = computerProjection('computers-replay', replayComputersTable);
+
+function takeoverStatus(type: string, data: unknown): string {
+  if (type === 'takeover.requested') return 'taking_control';
+  if (type === 'takeover.started' || type === 'takeover.renewed') return 'controlling';
+  return type === 'takeover.ended' && field(data, 'reason') === 'released' ? 'ready' : 'paused';
+}
 
 export interface ComputerDbRow extends Record<string, unknown> {
   assistant_id: string; owner_id: string; kind: 'personal' | 'team'; computer_id: string | null;

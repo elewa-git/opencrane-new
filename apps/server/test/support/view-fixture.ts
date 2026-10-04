@@ -13,7 +13,7 @@ import { buildServer } from '../../src/server.ts';
 import { testAuthConfig } from './test-auth-config.ts';
 
 
-export async function viewFixture(open: LiveViewOptions['open'], redirectUri?: string) {
+export async function viewFixture(open: LiveViewOptions['open'], redirectUri?: string, control?: LiveViewOptions['control']) {
   const nats = await natsFixture(), dbs = await databases(), fga = await openfga();
   const config = { ...testAuthConfig(), expectedOrgId: 'org-test', ...(redirectUri ? { redirectUri } : {}) };
   const binding = await createStore(fga.apiUrl, 'test'), auth = memberAuthorisation(binding), db = pgDb(dbs.queue);
@@ -26,8 +26,9 @@ export async function viewFixture(open: LiveViewOptions['open'], redirectUri?: s
     return event;
   };
   const directory = await mkdtemp(`${tmpdir()}/view-keys-`), keys = conversationKeys(directory);
-  const app = buildServer(config, { chat: { silo: 'test', store: nats.store, binding, feed, db, keys }, liveView: { silo: 'test', store: nats.store, binding, feed,
-    open } });
+  const chat = { silo: 'test', store: nats.store, binding, feed, db, keys };
+  const app = buildServer(config, { chat, liveView: { silo: 'test', store: nats.store, binding, feed,
+    open, ...(control ? { control } : {}) } });
     await append('member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' } });
     await append('member-alice', 'member.joined', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', displayName: 'Alice' }, true);
     await append('member-bob', 'member.invited', { memberId: 'bob', invitationId: 'invite-bob', email: 'b@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'bob' } });
@@ -38,5 +39,5 @@ export async function viewFixture(open: LiveViewOptions['open'], redirectUri?: s
     await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'desktop', sandboxUid: 'sandbox', generation: 1, tokenId: 'token:test' });
     await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'desktop', generation: 1, podUid: 'fixture' });
   await runner.initialise(conversations); await runner.run(conversations); await runner.initialise(computers); await runner.run(computers);
-  return { app, config, append, nats, binding, fga, close: async () => { await app.close(); await feed.close(); await nats.close(); await dbs.close(); await fga.close(); await rm(directory, { recursive: true, force: true }); } };
+  return { app, config, append, nats, binding, fga, keys, chat, projectConversations: () => runner.run(conversations), close: async () => { await app.close(); await feed.close(); await nats.close(); await dbs.close(); await fga.close(); await rm(directory, { recursive: true, force: true }); } };
 }
