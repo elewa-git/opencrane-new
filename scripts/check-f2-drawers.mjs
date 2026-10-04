@@ -253,9 +253,9 @@ async function checkNavigation(page, motion) {
   assert(box.width >= 44 && box.height >= 44, '44px menu trigger');
   assert.equal(await opener.getAttribute('aria-controls'), 'workspace-navigation');
   await opener.click();
-  assert.equal(await opener.getAttribute('aria-expanded'), 'true');
   const menu = page.getByRole('dialog', { name: 'Sessions', exact: true });
   await menu.waitFor();
+  assert.equal(await opener.getAttribute('aria-expanded'), 'true');
   const title = menu.locator(':scope > header h2');
   assert(await title.evaluate(focused));
   const style = await menu.evaluate(appearance);
