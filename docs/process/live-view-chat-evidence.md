@@ -173,3 +173,56 @@ pass is requested.
 
 Hosted CI is NOT RUN; this branch is not pushed. Managed-cluster TLS/HA, takeover,
 control, clipboard and the wider Phase 3 qualification are outside this journey.
+
+## Hosted CI correction — 4 October 2026
+
+Receipt: 2026-10-04, rebased source `e12b24e` plus the three corrections below.
+The rebase onto `b8aee57` completed; both audit and live-view routes and journeys
+were retained. Independent review of the correction and conflict resolutions: PASS.
+Linux shared host, Node **22.23.3**, npm **10.9.9** (matching the failed hosted run),
+`CI=true`, `NO_COLOR=1`, `FORCE_COLOR=0`, and `taskset -c 0,1` for every workflow
+command. Angular cache was removed before the fresh install. PostgreSQL was a
+separate disposable `postgres:17.6-alpine` service on loopback port 5432.
+
+Three separate causes were found:
+
+- Angular's coloured ready line inserts ANSI codes between the colon and port.
+  The old substring check never reports ready despite HTTP 200. Forcing colour
+  reproduced the same proxy timeout. The test now waits for HTTP readiness,
+  retains frontend output on failure, and exercises coloured output explicitly.
+  Both configured proxies pass the viewer and general WebSockets and view audit.
+- The chat check read the DOM immediately after the New session shortcut, before
+  Angular's zoneless render. It now waits for the visible Draft state before the
+  unchanged assertion that a draft has no desktop entry.
+- The gateway test advanced its budget clock by 181 seconds but read totals using
+  real time. The failed hosted run crossed UTC midnight. The regression now crosses
+  both midnight and the month boundary deliberately, and totals use the actor's
+  injected clock. It failed before this correction and passed afterwards.
+
+No expectation was obsolete or loosened. No timeout was increased and no retry
+was used. The original focused run under no-colour conditions passed 56 tests;
+its paid-provider test was skipped. Focused corrected checks passed both proxies,
+chat qualification and the reservation-release regression.
+
+The exact workflow commands then passed from another clean install:
+
+| Command | Result | Seconds |
+| --- | --- | --- |
+| `npm ci` | PASS | 57.93 |
+| `sh scripts/fetch-lychee.sh && .tools/lychee --version` | PASS | 0.07 |
+| `sh scripts/fetch-nats.sh` | PASS | 0.05 |
+| `npx playwright install --with-deps chromium` | PASS | 13.15 |
+| `npm run lint` | PASS | 125.61 |
+| `npm run typecheck` | PASS | 116.41 |
+| `docker info` | PASS | 0.26 |
+| `npm test` | PASS | 1218.89 |
+| `npm run check:events` | PASS | 0.54 |
+| `npm run build -w apps/web` | PASS | 18.98 |
+| `npm run test -w apps/web` | PASS | 16.96 |
+
+Root tests: **1,136 passed**, 13 gated tests skipped, 73 files; Angular tests:
+**51 passed**, 10 files; event catalogue: **81 types agree**. Lint retains seven
+existing function-length warnings. Full command logs, timings and tested file
+SHA-256 hashes are in `/tmp/p3-16-ci-20261004/` on the builder host.
+Fresh-stack qualification for the rebased source: **NOT RUN** by this correction;
+no stack was operated. The hosted rerun after pushing remains separate evidence.

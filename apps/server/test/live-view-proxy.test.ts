@@ -46,13 +46,15 @@ it.each(['web', 'dev-stack'])('opens the viewer through the configured %s fronte
       { env: { ...process.env, DEV_STACK_DIR: `${directory}/stack`, SERVER_PORT: new URL(backend).port } });
       proxy = `${directory}/stack/proxy.json`;
     }
-    frontend = spawn('node', ['../../node_modules/@angular/cli/bin/ng.js', 'serve', '--host=127.0.0.1', `--port=${port}`, `--proxy-config=${proxy}`, '--watch=false', '--prebundle=false'], { cwd: 'apps/web', stdio: ['ignore', 'pipe', 'pipe'] });
+    // Exercise the coloured ready output emitted on hosted runners.
+    frontend = spawn('node', ['../../node_modules/@angular/cli/bin/ng.js', 'serve', '--host=127.0.0.1', `--port=${port}`, `--proxy-config=${proxy}`, '--watch=false', '--prebundle=false'], { cwd: 'apps/web', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, NO_COLOR: '', FORCE_COLOR: '1' } });
     frontend.stdout?.on('data', (bytes: Buffer) => { output += bytes.toString(); });
     frontend.stderr?.on('data', (bytes: Buffer) => { output += bytes.toString(); });
-    await until(() => {
+    await until(async () => {
       if (frontend?.exitCode !== null) throw new Error(`Frontend exited: ${output}`);
-      return output.includes(`127.0.0.1:${port}`);
-    }, 90_000);
+      try { return (await fetch(origin, { signal: AbortSignal.timeout(1000) })).ok; }
+      catch { return false; }
+    }, 90_000).catch((cause: unknown) => { throw new Error(`Frontend did not become ready: ${output}`, { cause }); });
     await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     const cookie = encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 });
     const headers = { origin, cookie: `${fixture.config.cookieName}=${cookie}`, 'x-opencrane-view': '1' };

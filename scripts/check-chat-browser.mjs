@@ -60,6 +60,7 @@ try {
     assert.equal(await entry.evaluate(node => node === globalThis.document.activeElement), true);
     if (width === 390) await page.keyboard.press('Escape');
     await page.keyboard.press('Control+n');
+    await page.getByText('Draft', { exact: true }).waitFor();
     assert.equal(await page.getByRole('button', { name: 'Watch your computer', exact: true }).count(), 0, 'A draft has no desktop entry');
     await page.close();
   }
