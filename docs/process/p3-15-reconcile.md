@@ -1,7 +1,7 @@
 # P3-15 backend: monetary reconciliation
 
 Scope: issue [#56](https://github.com/elewa-git/opencrane-new/issues/56), spec #41,
-D21. Branch `work/p3-15-reconcile`, based on `ed8066f` from main. Backend only:
+D21. Branch `work/p3-15-reconcile`, rebased onto `65364a0` from main (#111, issue #70). Backend only:
 the owner requires Claude Design prompt 3 before building the resolution screen.
 No styled or unstyled screen, stack changes, paid calls or live deployment.
 
@@ -63,7 +63,7 @@ empty evidence, fractional/negative/unsafe amounts; 404 unknown reservation;
 or insufficient evidence; 503 unavailable authority or event store. A 202 confirms
 recording only. Conflicts preserve both the full hold and the largest recorded charge.
 
-## Source evidence
+## Original source evidence before rebase
 
 Tests run at the confirmed command/event-store, projection/replay, budget actor,
 gateway settlement and HTTP seams. The new suite first demonstrated the dropped
@@ -75,9 +75,11 @@ Existing gateway fixtures stream final SSE usage through the pinned real gateway
 including cached input and cache writes. New regression vectors ignore gateway
 timestamps with dropped fractional zeros, month boundaries and malformed values.
 
-Independent review: pass 1 **FAIL** found JSON rounding before integer validation;
-pass 2 **PASS** verified the fix and found no remaining blockers. Effect routes
-retain raw JSON in an isolated parser scope. The existing lossless reader rejects
+The original receipt reported two money-validation review passes and a verified
+JSON-rounding fix. That report did not qualify the populated list or a green root
+gate. The current independent feature review pass 1 is **FAIL**; its correction
+evidence follows below, without claiming a reviewer verification pass. Effect
+routes retain raw JSON in an isolated parser scope. The existing lossless reader rejects
 fractional/underflow number text before conversion for both settlement and receipt
 amounts. Six raw HTTP vectors return 400 with unchanged effect heads. The HTTP
 regression also applies the recorded resolution through the actual decision HTTP
@@ -87,10 +89,10 @@ A later gate regression check also found that expiry repeated an already-recorde
 native uncertainty. A small deduplication guard preserves the first uncertainty
 while still recording new final usage. The same tests caught property-order
 differences after the lint cleanup; payloads now pass through their event schema
-before comparing them, matching stored event field order. That guard is test-verified after the
-second independent review; no third review was run.
+before comparing them, matching stored event field order. That guard was
+test-verified after the original money-validation checks.
 
-Final source checks use Node **22.23.3**. No stack or host network was changed.
+The original source checks used Node **22.23.3**. No stack or host network was changed.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
@@ -115,8 +117,71 @@ The unchanged slow-authority live-view case also failed in isolation (403 rather
 than 200). The shared host reported load averages around 24–28; that is a condition,
 not proof that every failure is environmental. The full root gate is **not green**;
 landing requires a fresh green root run. Source qualification remains **PARTIAL**.
-Main advanced to `65364a0` (#111, authority-read optimisation) during this build;
-this branch retains its original `ed8066f` base. Rebase and requalification are
-left to integration; no PR was opened and no push was made.
+At that original receipt, main had advanced to `65364a0` (#111, authority-read
+optimisation), while this branch still had its `ed8066f` base. The correction
+receipt below supersedes that base and gate status.
 Fresh-install journey, designed desktop/390px resolution view and real-provider
 resolution: **NOT RUN**. This backend does not close the full P3-15 capability.
+
+## Independent feature review pass 1 corrections — 4 October 2026
+
+The populated-list blocker was reproduced before implementation: the new HTTP
+regression returned **503**, where **200 within 2,000 ms** was required. It creates
+50 reservations through the budget actor, records 25 held and 25 settled effects,
+and checks the complete list and both held/settled detail reads through HTTP.
+It also checks safe cache headers, literal amounts/states and unchanged event heads.
+The fixture uses real disposable NATS, OpenFGA and PostgreSQL; it makes no provider call.
+
+The listing now uses **one finite replay**, through a captured event-log head,
+using the existing reader's batches of at most 64 requests. It builds the budget
+and groups effect evidence in memory, then formats each reservation without any
+per-item I/O. A two-second deadline bounds the replay. Detail reads retain exact
+budget/effect subjects and share one two-second deadline. The role fence still
+runs before returning a response. This bounded replay can refuse when a silo's
+whole log outgrows two seconds; a replayable effect projection is the next step
+if that ceiling is reached.
+
+`git rebase origin/main` completed successfully from `3047e9e` onto `65364a0`.
+The rebased parent is `f3a6581`; `git merge-base --is-ancestor origin/main HEAD`
+returned 0, and no rebase directory remained. Node is **22.23.3**. Tests use
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`. No stack or host networking was changed; only normal test fixtures ran.
+
+The first corrected-source HTTP rerun also failed at shared-host load around 28:
+the populated read returned 503 and the existing resolution test timed out.
+Those failures are recorded, not counted as passes. A lower-load rerun and the
+full gate results follow.
+
+The corrected HTTP rerun passed at **11:38:54 UTC**, after the two-minute load
+poll recorded **14.48**: **2 tests passed / 18 not selected**, 30.67 s including
+fixture setup. The populated-list and both detail requests returned **200 in
+less than 2,000 ms**. The existing resolution/refusal journey also passed.
+The full root suite started at **11:39:33 UTC**, only after a separate load
+check recorded **13.56**, with `--maxWorkers=2` and the PostgreSQL URL above.
+
+| Corrected-source check | Result | Evidence |
+| --- | --- | --- |
+| `npm run lint` | PASS | All six checks; existing warnings only |
+| `npm run typecheck` | PASS | Every workspace; rerun after the final test edit |
+| `npm run check:events` | PASS | 85 catalogue/registry event types |
+| Populated-list and resolution HTTP regressions | PASS | 50 reservations, 25 held / 25 settled; list and both details under 2 s |
+| `npm run test -w apps/web -- --watch=false` | PASS | 11 files / 60 tests; 24.84 s |
+| `npm run build -w apps/web` | PASS | 33.238 s; existing bundle/style/CommonJS warnings |
+| `PG_TEST_URL=… npm test -- --maxWorkers=2` | PASS | 80 files passed / 3 skipped; 1,403 tests passed / 14 skipped; 1,140.60 s |
+
+Source under test is rebased parent `f3a6581` plus the correction diff. SHA-256:
+
+```text
+448187412872024b11c8bb0de15596c762d61b6d1c1a96ff131a20f11004bd8b  libs/models/src/reconciliation.ts
+05f4900ea0c9b03bd34c11d2014d228c9f52df5116461f3fb18f92eaa9c1da76  libs/models/src/actor.ts
+f7147f30a25cade4e7da6a0cfc96a63203a4ce73a4082fe044afd850168435cf  apps/server/test/integrations.test.ts
+```
+
+The root process exited **0**. This fresh green run supersedes the original red
+root gate; the listing regression passed before the full run and again as part
+of that run. No unchanged test failed in this gate, so no `origin/main` comparison
+was needed. Skipped opt-in conditions remain **NOT RUN**, including paid-provider
+and stack-dependent journeys. Source checks are **PASS**. Independent reviewer
+verification of these corrections remains pending; this builder run is not a
+review pass. The designed resolution screen, fresh-install journey and
+real-provider resolution remain **NOT RUN**, so full P3-15 qualification is
+**PARTIAL**. No stack or host networking was changed.

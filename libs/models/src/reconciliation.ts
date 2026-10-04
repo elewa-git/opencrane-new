@@ -1,28 +1,35 @@
 import { z } from 'zod';
 import { effectResolvedDataSchema, effectObservedDataSchema, effectUncertainDataSchema } from '@opencrane/events';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history } from './actor.ts';
 import { losslessJson, type JsonValue } from './lossless-json.ts';
 import { authorityFence } from './authority.ts';
-import { applyBudget, data, emptyBudget } from './state.ts';
+import { applyBudget, data, emptyBudget, type BudgetState } from './state.ts';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 export const resolutionCommandSchema = z.object({ commandId: id, expectedSequence: z.int().nonnegative(),
   outcome: z.enum(['settled', 'released']), settledCents: z.int().nonnegative(),
   evidence: effectResolvedDataSchema.shape.evidence }).strict();
 
-async function reservation(store: EventStore, silo: string, permitId: string) {
+async function reservation(store: EventStore, silo: string, permitId: string, deadline: number) {
   const state = emptyBudget();
-  for (const row of await history(store, `budget-${silo}`, silo)) applyBudget(state, row.event, row.sequence);
+  for (const row of await history(store, `budget-${silo}`, silo, deadline)) applyBudget(state, row.event, row.sequence);
   return state.reservations.find(r => r.id === permitId);
 }
 
 /** Reads recorded evidence only. No provider call or external-action retry belongs here. */
 export async function readEffect(store: EventStore, silo: string, permitId: string) {
   id.parse(permitId);
-  const r = await reservation(store, silo, permitId);
+  const deadline = performance.now() + 2000;
+  const r = await reservation(store, silo, permitId, deadline);
   if (!r) return undefined;
-  const rows = await history(store, `effect-${permitId}`, silo);
+  const rows = await history(store, `effect-${permitId}`, silo, deadline);
+  if (performance.now() >= deadline) throw new Error('Effect read expired');
+  return effectStatus(r, rows);
+}
+
+function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[]) {
+  const permitId = r.id;
   const observed = rows.filter(row => row.event.type === 'effect.observed').map(row => ({
     eventId: row.event.id, ...effectObservedDataSchema.parse(row.event.data),
   }));
@@ -43,10 +50,28 @@ export async function readEffect(store: EventStore, silo: string, permitId: stri
 }
 
 export async function listEffects(store: EventStore, silo: string) {
-  const ids = (await history(store, `budget-${silo}`, silo)).filter(r => r.event.type === 'budget.reserved')
-    .map(r => z.string().parse(data(r.event)['permitId']));
-  // ponytail: replay reservations for this admin read; index them when history makes this slow.
-  return Promise.all(ids.map(permitId => readEffect(store, silo, permitId)));
+  const deadline = performance.now() + 2000;
+  const signal = AbortSignal.timeout(2000);
+  const head = await store.head();
+  const budget = emptyBudget();
+  const effects = new Map<string, StoredEvent[]>();
+  // ponytail: bounded log replay; use an effect projection when history outgrows two seconds.
+  if (head > 0) {
+    for await (const row of store.subscribe(1, signal)) {
+      if (row.sequence > head) break;
+      if (row.event.silo === silo) {
+        if (row.event.subject === `budget-${silo}`) applyBudget(budget, row.event, row.sequence);
+        if (row.event.subject.startsWith('effect-')) {
+          const rows = effects.get(row.event.subject) ?? [];
+          rows.push(row);
+          effects.set(row.event.subject, rows);
+        }
+      }
+      if (row.sequence === head) break;
+    }
+  }
+  if (performance.now() >= deadline) throw new Error('Effect read expired');
+  return budget.reservations.map(r => effectStatus(r, effects.get(`effect-${r.id}`) ?? []));
 }
 
 /** The HTTP adapter supplies session identity; the command rechecks the event-backed role. */

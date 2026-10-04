@@ -5,9 +5,9 @@ import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDa
 import { registerHandler } from '@opencrane/handlers';
 import { applyBudget, costCents, data, emptyBudget, models, totals, type BudgetState, type ModelCall } from './state.ts';
 
-export async function history(store: EventStore, subject: string, silo: string) {
+export async function history(store: EventStore, subject: string, silo: string, deadline = Infinity) {
   const rows = [];
-  for await (const row of store.readStream(subject)) {
+  for await (const row of store.readStream(subject, 1, deadline)) {
     if (row.event.silo !== silo) throw new Error('Wrong silo');
     rows.push(row);
   }

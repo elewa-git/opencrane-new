@@ -288,5 +288,7 @@ The command conditionally appends one evidence-backed resolution on the effect
 stream; `settle-budget` applies it through the fenced budget actor. Conflicting
 observations preserve the largest charge and retain the full reservation.
 Status reads replay safe metadata and evidence references without provider calls.
+Lists use one finite, batched log replay; details read the exact budget and effect
+subjects. Both reads are bounded to two seconds and fail closed on expiry.
 [The HTTP contract and source evidence](../../docs/process/p3-15-reconcile.md)
 cover the screen binding, refusals and remaining live qualification.

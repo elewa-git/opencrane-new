@@ -663,6 +663,48 @@ it('projects protected discovery as Needs input and replays inventory without an
   } finally { await remote.close(); }
 });
 
+it('lists 50 held and settled reservations and reads their details within the authority deadline', async () => {
+  const permits: string[] = [];
+  for (let index = 0; index < 50; index++) {
+    const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+      computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private-conversation',
+      turnId: 'private-turn', threadId: 'private-thread', payingGroupId: 'personal-default', contextDigest: '0'.repeat(64) }, 10);
+    permits.push(permitId);
+    await actor.effect(permitId, index < 25 ? undefined : { inputTokens: 1, outputTokens: 1 });
+    if (index >= 25) {
+      const observed = (await history(nats.store, `effect-${permitId}`, 'test')).find(row => row.event.type === 'effect.observed')!;
+      await actor.settleRecorded(permitId, observed.event.id);
+    }
+  }
+  const head = await nats.store.head();
+  const started = performance.now();
+  const response = await app.inject({ url: '/api/org/effects', headers: headers('oidc-alice') });
+  const listMs = performance.now() - started;
+  expect(response.statusCode).toBe(200);
+  expect(listMs).toBeLessThan(2000);
+  expect(response.headers['cache-control']).toBe('no-store');
+  const { effects } = response.json<{ effects: { permitId: string; state: string; settledCents: number | null; reasons: string[] }[] }>();
+  expect(effects).toHaveLength(50);
+  expect(effects.map(effect => effect.permitId)).toEqual(permits);
+  for (const effect of effects.slice(0, 25)) {
+    expect(effect).toMatchObject({ state: 'outcome_unknown', settledCents: null, reasons: ['settle_timeout'] });
+  }
+  for (const effect of effects.slice(25)) {
+    expect(effect).toMatchObject({ state: 'settled', settledCents: 1, reasons: [] });
+  }
+  const detailMs: number[] = [];
+  for (const index of [0, 49]) {
+    const detailStarted = performance.now();
+    const detail = await app.inject({ url: `/api/org/effects/${permits[index]!}`, headers: headers('oidc-amina') });
+    detailMs.push(performance.now() - detailStarted);
+    expect(detail.statusCode).toBe(200);
+    expect(detailMs.at(-1)).toBeLessThan(2000);
+    expect(detail.json()).toMatchObject(effects[index]!);
+  }
+  expect(await nats.store.head()).toBe(head);
+  console.info('Effect HTTP timings (ms)', { listMs, detailMs });
+}, 60_000);
+
 it('exposes safe effect evidence to Owner/Admin, refuses other identities and records a resolution without dispatch', async () => {
   const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
     computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice', conversationId: 'private-conversation',
