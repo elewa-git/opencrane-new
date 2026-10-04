@@ -9,6 +9,9 @@ import { Workspace } from './chat/workspace';
 import { SignIn } from './sign-in/sign-in';
 import { WebSocketService } from './core/websocket.service';
 import { SharedState } from './shared-state/shared-state';
+import { StateSpecimen } from './shared-state/state-specimen';
+import { PaperSurface } from './ui/paper';
+import { GrainLoader } from './ui/grain-loader';
 
 type Tab = 'all' | 'attention' | 'review';
 type LoadState = 'loading' | 'ready' | 'failed' | 'retrying' | 'access';
@@ -26,7 +29,7 @@ const STATE_EXAMPLES: ReadonlyArray<{ kind: SharedStateKind; name: string; messa
 ];
 
 @Component({
-  selector: 'app-root', imports: [Claim, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
+  selector: 'app-root', imports: [Claim, StateSpecimen, PaperSurface, GrainLoader, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen, ModelsScreen, AuditScreen], templateUrl: './app.html', styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush, host: { '[class.workspace-root]': 'workspacePage' },
 })
 export class App implements OnInit {
@@ -67,9 +70,11 @@ export class App implements OnInit {
   protected tabKeydown(event: KeyboardEvent): void {
     const tabs: Tab[] = ['all', 'attention', 'review'];
     const current = tabs.indexOf(this.selectedTab());
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
-      : event.key === 'ArrowRight' ? (current + 1) % tabs.length
-        : event.key === 'ArrowLeft' ? (current + tabs.length - 1) % tabs.length : -1;
+    let next = -1;
+    if (event.key === 'Home') next = 0;
+    if (event.key === 'End') next = tabs.length - 1;
+    if (event.key === 'ArrowRight') next = (current + 1) % tabs.length;
+    if (event.key === 'ArrowLeft') next = (current + tabs.length - 1) % tabs.length;
     if (next < 0) return;
     event.preventDefault();
     const tab = tabs[next]!;

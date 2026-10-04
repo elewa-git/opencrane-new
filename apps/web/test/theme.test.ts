@@ -34,7 +34,7 @@ describe('theme tokens', () => {
     expect(tokens.get('--oc-primary-contrast')).toBe('#16191a');
     expect(tokens.get('--oc-primary-hover')).toBe('var(--oc-accent-hover)');
     expect(tokens.get('--oc-primary-active')).toBe('var(--oc-primary-700)');
-    expect(tokens.get('--oc-radius-button')).toBe('7px');
+    expect(tokens.get('--oc-radius-button')).toBe('8px');
   });
 
   it('never refer to a token that is not defined (such as PrimeNG ones, which are not installed)', () => {

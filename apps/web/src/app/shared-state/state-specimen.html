@@ -1,0 +1,31 @@
+<h1>Shared state vocabulary</h1>
+<p>Every state uses a glyph and words, never colour alone. These are illustrative examples.</p>
+<div class="state-table" role="table" aria-label="Shared state vocabulary">
+  <div class="state-header" role="row">
+    <span role="columnheader">How it reads</span>
+    <span role="columnheader">What the person needs</span>
+    <span role="columnheader">Interaction</span>
+  </div>
+  @for (example of examples; track example.kind) {
+    <div class="state-row" role="row">
+      <div role="cell">
+        <oc-shared-state [kind]="example.kind" [message]="example.message"
+          [safeToRetry]="example.safe ?? false" [showAction]="false"
+          [evidenceAt]="example.evidenceAt" [timestamp]="example.timestamp"
+          [changeReference]="example.changeReference" />
+      </div>
+      <span role="cell" data-label="Needs">{{ example.need }}</span>
+      <span role="cell" class="interaction" data-label="Interaction">{{ example.interaction }}</span>
+    </div>
+  }
+</div>
+<section class="paper-example" [ocDogEar]="true" aria-labelledby="paper-heading">
+  <h2 id="paper-heading">Paper and progress</h2>
+  <p>Cards stay plain. Main surfaces carry rice paper. The folded corner is 12px.</p>
+  <div class="loaders">
+    <span><oc-fold-loader /> Folding…</span>
+    <span><oc-flutter-loader /> Assistant working</span>
+    <span class="grain-example"><oc-grain-loader width="140px" /> Loading…</span>
+  </div>
+  <hr [ocCrease]="true" aria-label="Completed example" />
+</section>

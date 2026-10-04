@@ -5,7 +5,7 @@
 @if (!serverId) {
 <div class="sources" aria-label="Server source">
   <div class="unavailable"><strong>Catalogue</strong><p>Not available yet</p></div>
-  <div class="selected"><strong>● Remote server (URL)</strong><p>A server hosted by you or a provider</p></div>
+  <div class="selected" [ocDogEar]="true"><strong>● Remote server (URL)</strong><p>A server hosted by you or a provider</p></div>
   <div class="unavailable"><strong>Package (OCI image)</strong><p>Not available yet</p></div>
 </div>
 }
@@ -17,8 +17,10 @@
     @if (phase() === 'draft') { <button type="submit" [disabled]="busy()">Discover tools</button> }
   </form>
 }
-<p role="status" aria-live="polite">{{ message() }}</p>
-@if (changeRef()) { <p>Change reference <code>{{ changeRef() }}</code></p> }
+<div role="status" aria-live="polite" [attr.aria-busy]="busy()">
+  <oc-shared-state [kind]="presentationState()" [message]="message()"
+    [changeReference]="changeRef()" [showAction]="false" />
+</div>
 @if (phase() !== 'draft' && phase() !== 'access') { <button type="button" [disabled]="busy()" (click)="check()">{{ busy() ? 'Checking status…' : 'Check status' }}</button> }
 @if (inventory(); as inventory) {
   <section aria-label="Tool inventory">
@@ -28,7 +30,7 @@
       <h3>{{ readOnly ? 'Read' : 'Changes data or unclear' }}</h3>
       @for (tool of inventory.tools; track tool.name) {
         @if ((tool.readOnly && !tool.destructive) === readOnly) {
-          <article><strong>{{ tool.name }}</strong><p>− Blocked · Unreviewed</p>
+          <article><strong>{{ tool.name }}</strong><oc-shared-state kind="blocked" message="Unreviewed" [showAction]="false" />
             <details><summary>Review definition and digest</summary><code>{{ tool.revision }}</code><pre>{{ tool.definition }}</pre></details>
           </article>
         }

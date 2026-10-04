@@ -8,7 +8,7 @@
     <label>Turn id<input aria-label="Turn id filter" type="search" [value]="turnId" (input)="turnId = $any($event.target).value" maxlength="300"></label>
     <button id="apply-audit-filters" type="submit" [attr.aria-disabled]="state() === 'loading'">Apply filters</button>
   </form>
-  <div role="status" aria-live="polite">
+  <div role="status" aria-live="polite" [attr.aria-busy]="state() === 'loading'">
     @if (state() === 'loading') { <oc-shared-state kind="checking" message="Loading history…" /> }
     @else if (state() === 'unavailable') { <oc-shared-state kind="failed" message="History unavailable" detail="We could not read the audit trail. Refresh to check status." [showAction]="false" /> }
     @else if (state() === 'access') { <oc-shared-state kind="access_changed" message="Access changed" detail="Sign in or ask for access. Protected details have been cleared." [showAction]="false" /> }

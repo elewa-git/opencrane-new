@@ -1,0 +1,26 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": 16,
+  "environment": "Built Angular assets; Chromium; intercepted read fixtures; no stack",
+  "checks": [
+    "Eleven families",
+    "Silent repeated rows",
+    "Single progress region",
+    "44px phone tabs",
+    "Arrow keys and Home",
+    "2px focus ring",
+    "Refresh retains focus and rows",
+    "No overflow",
+    "12px dog-ear",
+    "42% rice texture",
+    "Static reduced-motion loaders"
+  ]
+}
