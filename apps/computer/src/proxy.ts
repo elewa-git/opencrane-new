@@ -3,10 +3,18 @@ import { createServer, request } from 'node:http';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
+
+// Reason unknown, see #138.
+const CALLER_CREDENTIAL_LIFETIME_MS = 600_000;
+// Reason unknown, see #138.
+const MAX_TURN_GRANT_LIFETIME_MS = 120_000;
+// Reason unknown, see #138.
+const UPSTREAM_REQUEST_TIMEOUT_MS = 120_000;
+
 interface Grant { computer: string; token: string; expires: number }
 export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }) {
   const caller = randomBytes(32).toString('hex');
-  let deadline = Date.now() + 600_000;
+  let deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
   const turns = new Map<string, Grant>();
   writeFileSync(options.callerPath, caller, { mode: 0o600 });
   const control = createServer((req, res) => {
@@ -17,8 +25,8 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
       else if (req.url === '/grant') {
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
-            input['expires'] <= Date.now() || input['expires'] > Date.now() + 120_000) throw new Error('Bad grant');
-        deadline = Date.now() + 600_000;
+            input['expires'] <= Date.now() || input['expires'] > Date.now() + MAX_TURN_GRANT_LIFETIME_MS) throw new Error('Bad grant');
+        deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
         turns.set(input['thread'], { computer: input['computer'], token: input['token'], expires: input['expires'] });
       } else { json(res, { error: 'path' }, 404); return; }
       json(res, { ok: true });
@@ -50,7 +58,7 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
         res.writeHead(upstream.statusCode ?? 502, upstream.headers); upstream.pipe(res);
         res.on('close', () => upstream.destroy());
       });
-      outgoing.setTimeout(120_000, () => outgoing.destroy());
+      outgoing.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => outgoing.destroy());
       outgoing.on('error', () => { if (!res.headersSent) res.writeHead(502); res.end(); });
       outgoing.end(raw);
     })().catch(() => { if (!res.headersSent) res.writeHead(400); res.end(); });

@@ -83,6 +83,7 @@ export async function decideApproval(store: EventStore, silo: string, approvalId
   const current = await readApproval(store, silo, approvalId, now);
   if (current.request.requesterId !== memberId) throw new Error('Requester only');
   if (current.state !== 'requested') return { status: 'conflict' } as const;
+  // Sensitive approvals marked for step-up need a recent authentication before approval.
   if (decision === 'approved' && current.request.stepUp && !recentAuth) return { status: 'step_up_required' } as const;
   await fresh();
   return store.append({ event: { ...envelope(silo, `approval-${approvalId}`, 'approval.decided', { approvalId, decidedBy: memberId, decision }),

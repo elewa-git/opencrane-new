@@ -5,7 +5,57 @@ import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 
 // Free text never enters this projection, including approval reasons and tool arguments.
-const families = /^(silo\.owner_bootstrapped|decision\.|budget\.(reserved|settled|ceiling_set|exhausted)|effect\.|approval\.|tool\.approval_requested|credential\.released|mcp\.|connection\.|egress\.|takeover\.|security\.alert_raised|gateway\.observation_recorded|agent\.(command_ran|file_changed)|member\.(joined|role_changed|removed)|team\.|assistant\.|grant\.|computer\.(claimed|ready|suspended|resumed|lost|retired))/u;
+const auditPrefixes = [
+  // Decisions and effects have typed, safe audit metadata.
+  'decision.',
+  'effect.',
+  // Approval and connection events carry lifecycle evidence without private review text.
+  'approval.',
+  'mcp.',
+  'connection.',
+  'egress.',
+  'takeover.',
+  // These projections expose safe lifecycle summaries.
+  'team.',
+  'assistant.',
+  'grant.',
+];
+const auditTypes = new Set([
+  // Budget records expose amounts and outcomes without request content.
+  'budget.reserved',
+  'budget.settled',
+  'budget.ceiling_set',
+  'budget.exhausted',
+  // Security and gateway records explain refused or observed work.
+  'tool.approval_requested',
+  'credential.released',
+  'security.alert_raised',
+  'gateway.observation_recorded',
+  // These exact types are the safe computer and membership summaries.
+  'agent.command_ran',
+  'agent.file_changed',
+  'member.joined',
+  'member.role_changed',
+  'member.removed',
+  'computer.claimed',
+  'silo.owner_bootstrapped',
+  'computer.ready',
+  'computer.suspended',
+  'computer.resumed',
+  'computer.lost',
+  'computer.retired',
+]);
+export function isAuditEventType(type: string): boolean {
+  if (auditTypes.has(type)) {
+    return true;
+  }
+  for (const prefix of auditPrefixes) {
+    if (type.startsWith(prefix)) {
+      return true;
+    }
+  }
+  return false;
+}
 const identifier = z.string().regex(/^[\w:.-]{1,300}$/u);
 const safeId = (value: unknown) => identifier.safeParse(value).data;
 const amount = (value: unknown) => z.number().int().nonnegative().safe().safeParse(value).data;
@@ -39,14 +89,13 @@ export const auditTrail: Projection = {
   },
   async drop(db) { await db.query('DROP TABLE IF EXISTS audit_entries'); },
   async apply(db, event, position) {
-    if (!families.test(event.type)) return;
+    if (!isAuditEventType(event.type)) return;
     const d = z.record(z.string(), z.unknown()).parse(event.data);
     const call = z.record(z.string(), z.unknown()).safeParse(d['modelCall']).data ?? {};
     const request = firstId(d['requestId'], call['requestId'], event.correlation.request);
     const permit = firstId(d['permitId'], event.correlation.permit);
     const approval = firstId(d['approvalId'], event.correlation.approval);
-    const anchor = event.type === 'security.alert_raised' || event.type === 'decision.recorded' || (event.type === 'gateway.observation_recorded' && !permit)
-      || (!request && !permit && !approval && !event.type.startsWith('effect.'));
+    const anchor = isAnchor(event, request, permit, approval);
     const digest = z.string().regex(/^[a-f0-9]{64}$/u).safeParse(d['contextDigest']).data;
     await db.query(`INSERT INTO audit_entries VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       ON CONFLICT (silo, event_id) DO NOTHING`, [event.silo, event.id, position, anchor, request, permit, approval,
@@ -56,6 +105,25 @@ export const auditTrail: Projection = {
       event.type === 'decision.recorded' ? d['outcome'] : null, digest, JSON.stringify(metadata(event, d, position))].map(value => value ?? null));
   },
 };
+
+function isAnchor(event: EventEnvelope, request: string | undefined, permit: string | undefined,
+  approval: string | undefined): boolean {
+  // Decisions and alerts always start rows; correlated records attach to their action.
+  // Uncorrelated effects stay evidence, while a gateway observation without a permit needs a row.
+  if (event.type === 'security.alert_raised') {
+    return true;
+  }
+  if (event.type === 'decision.recorded') {
+    return true;
+  }
+  if (event.type === 'gateway.observation_recorded' && !permit) {
+    return true;
+  }
+  if (request || permit || approval) {
+    return false;
+  }
+  return !event.type.startsWith('effect.');
+}
 
 /** Indexed anchors plus their relevant evidence. Positions order events; gateway time is never read. */
 export async function readAudit(db: Query, silo: string, filter: AuditFilter & { conversationId?: string; requesterId?: string } = {}) {

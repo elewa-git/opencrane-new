@@ -6,6 +6,10 @@ import type { Projection, Query } from '@opencrane/projections';
 // Integer euro cents per billion tokens retain the $0.125 cache-write rate exactly.
 export const priceTableId = 'openai-2026-10-02-all-eur95';
 export const shortContextTokens = 272_000;
+// Requests and unmeasured reservations use the full supported model context.
+const MAX_CONTEXT_TOKENS = 1_050_000;
+// Reserve at long-context rates before the tier boundary to leave rendering headroom.
+const LONG_CONTEXT_RESERVATION_MARGIN = 0.9;
 const perTokens = 1_000_000_000;
 function rates(input: number, cached: number | null, writes: number | null, output: number) {
   return { inputCents: input * 95, cachedInputCents: cached === null ? null : cached * 95,
@@ -50,11 +54,11 @@ export function costCents(model: string, inputTokens: number, outputTokens: numb
     BigInt(outputTokens) * BigInt(price.outputCents));
 }
 // Callers without a measured input bound still reserve the full supported context.
-export function reservationCents(model: string, outputBound: number, inputBound = 1_050_000): number {
+export function reservationCents(model: string, outputBound: number, inputBound = MAX_CONTEXT_TOKENS): number {
   if (models.some(row => row.id === model && row.retired)) throw new Error('Retired model');
   if (![inputBound, outputBound].every(n => Number.isSafeInteger(n) && n >= 0) || outputBound === 0) throw new Error('Invalid bound');
-  // Reserve long rates above 90% of the tier boundary, leaving room for rendering drift.
-  const price = priceFor(model, inputBound > shortContextTokens * 0.9 ? shortContextTokens + 1 : inputBound);
+  const price = priceFor(model, inputBound > shortContextTokens * LONG_CONTEXT_RESERVATION_MARGIN
+    ? shortContextTokens + 1 : inputBound);
   return roundedCents(BigInt(inputBound) * BigInt(Math.max(price.inputCents, price.cacheWriteCents ?? 0)) +
     BigInt(outputBound) * BigInt(price.outputCents));
 }
@@ -72,7 +76,7 @@ export function requestReservationCents(body: { model: string; max_output_tokens
     return value;
   });
   const inputBound = Buffer.byteLength(serialised, 'utf8') + 2048 + 64 * items;
-  if (inputBound + body.max_output_tokens * (body.n ?? 1) > 1_050_000) {
+  if (inputBound + body.max_output_tokens * (body.n ?? 1) > MAX_CONTEXT_TOKENS) {
     throw new ModelRequestRefused('Model request refused: input and output bounds exceed the 1,050,000-token context');
   }
   return reservationCents(body.model, body.max_output_tokens * (body.n ?? 1), inputBound);
@@ -126,6 +130,7 @@ export function totals(state: BudgetState, now = new Date(), scope?: { scope: 'p
   let today = 0n, monthly = 0n, reserved = 0n;
   for (const r of state.reservations) {
     if (scope && (scope.scope === 'paying_group' ? r.call.payingGroupId : r.call.assistantId) !== scope.scopeId) continue;
+    // Unknown outcomes stay reserved until reconciliation proves the final charge.
     if (r.settledCents === undefined || r.outcomeUnknown) reserved += BigInt(r.amountCents);
     if (r.settledCents !== undefined) {
       if (r.time.startsWith(day)) today += BigInt(r.settledCents);

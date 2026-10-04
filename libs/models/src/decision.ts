@@ -103,6 +103,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
   const server = createServer((req, res) => {
     const started = performance.now();
     let auditedContext: { requesterId: string; assistantId: string } | undefined;
+    // This records that a write was started; it does not mean the audit succeeded.
     let auditAttempted = false;
     const requestId = randomUUID(), route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
     let contextDigest = createHash('sha256').update('unverified').digest('hex');

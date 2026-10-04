@@ -17,8 +17,8 @@ export const flowSchema = z
     codeVerifier: z.string().min(1),
     /** Sanitised local path to return to after login. */
     returnTo: z.string(),
-    /** Unix seconds: when `/auth/login` started this flow. */
     stepUp: z.object({ approvalId: z.string().regex(/^[a-f0-9]{64}$/u), sub: z.string(), sessionDigest: z.string() }).strict().optional(),
+    /** Unix seconds: when `/auth/login` started this flow. */
     createdAt: z.number().int().nonnegative(),
   })
   .strict();

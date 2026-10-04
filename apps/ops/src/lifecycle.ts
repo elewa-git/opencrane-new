@@ -170,9 +170,11 @@ async function lastActivity(store: EventStore, silo: string, assistantId: string
     if (event.type === 'conversation.created' && field(event.data, 'assistantId') === assistantId) conversations.add(event.subject);
     if (!conversations.has(event.subject)) continue;
     if (event.type === 'message.posted') pending.add(event.id);
+    // A turn id is the id of the message.posted event that started it.
     if (['agent.turn_completed', 'agent.turn_failed'].includes(event.type)) pending.delete(field(event.data, 'turnId'));
     time = Math.max(time, Date.parse(event.time));
   }
+  // A posted turn without a terminal event keeps this computer active.
   return pending.size ? Infinity : time;
 }
 
@@ -183,7 +185,7 @@ async function observeReady(store: EventStore, state: ComputerState, events: Sto
   const previousPodUid = readyPodUid(state);
   if (!sandbox?.podUid || (previousPodUid !== undefined && sandbox.podUid !== previousPodUid)) {
     await append(store, state.latest, events, 'computer.lost', subject, data);
-  } else if (state.ready && Date.now() - Math.max(Date.parse(state.ready.time), await lastActivity(store, state.latest.silo, state.assistantId)) >= idleMs) {
+  } else if (await isIdle(store, state, idleMs)) {
     await suspendComputer(store, state);
   } else if (sandbox.ready) {
     const grant = events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))!.event;
@@ -192,6 +194,17 @@ async function observeReady(store: EventStore, state: ComputerState, events: Sto
     if (!previousPodUid || (typeof state.ready?.data === 'object' && state.ready.data !== null && !('generation' in state.ready.data))) await append(store, state.latest, events, 'computer.ready', subject,
       { ...data, generation: generation(events), podUid: sandbox.podUid, sandboxUid: sandbox.uid });
   }
+}
+
+async function isIdle(store: EventStore, state: ComputerState, idleMs: number): Promise<boolean> {
+  if (!state.ready) {
+    return false;
+  }
+  // Do not count the event scan itself as idle time.
+  const checkedAt = Date.now();
+  const lastActivityAt = await lastActivity(store, state.latest.silo, state.assistantId);
+  const idleSince = Math.max(Date.parse(state.ready.time), lastActivityAt);
+  return checkedAt - idleSince >= idleMs;
 }
 
 export function watchComputers(store: EventStore, kube: SandboxClient,
