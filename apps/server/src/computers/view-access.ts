@@ -62,16 +62,46 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const auth = memberAuthorisation(options.binding);
-  // Read independent authority sources together; every result must still pass.
-  const [member, computer, permission] = await Promise.all([
+  const authorityReads = [
     history(store, `member-${memberId}`, silo),
     conversationDesktop(options, memberId, conversationId, auth),
     auth.conversation(memberId, conversationId, 'read'),
-  ]);
-  if (member.at(-1)?.event.type === 'member.removed' ||
-      (permission.status === 'ok' && !permission.allowed)) throw new Error('Access changed');
-  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');
+  ] as const;
+  // Wait for every authority source: an outage must not hide an explicit denial.
+  const results = await Promise.allSettled(authorityReads);
+  const [memberResult, computerResult, permissionResult] = results;
+  const memberRemoved = memberResult.status === 'fulfilled' &&
+    memberResult.value.at(-1)?.event.type === 'member.removed';
+  const conversationDenied = permissionResult.status === 'fulfilled' &&
+    permissionResult.value.status === 'ok' && !permissionResult.value.allowed;
+  if (memberRemoved || conversationDenied) {
+    throw new Error('Access changed');
+  }
+  for (const result of results) {
+    if (result.status !== 'rejected') {
+      continue;
+    }
+    const error: unknown = result.reason;
+    if (!(error instanceof ViewCheckUnavailable) && !isEventStoreUnavailable(error)) {
+      throw error;
+    }
+  }
+  // Failed reads grant no authority, even when the remaining reads allow access.
+  settledRead(memberResult);
+  const computer = settledRead(computerResult);
+  const permission = settledRead(permissionResult);
+  if (permission.status === 'unavailable') {
+    throw new ViewCheckUnavailable('Authority unavailable');
+  }
   return computer;
+}
+
+function settledRead<Value>(result: PromiseSettledResult<Value>): Value {
+  if (result.status === 'rejected') {
+    const error: unknown = result.reason;
+    throw error;
+  }
+  return result.value;
 }
 
 async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,

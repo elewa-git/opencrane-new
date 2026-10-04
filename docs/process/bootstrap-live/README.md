@@ -276,3 +276,41 @@ teardown, took 303.64 command seconds.
 Source readiness and the requested fresh secondary qualification are **PASS**.
 The earlier failed and partial attempts remain recorded above. The 14 opt-in root
 conditions and production installation remain **NOT RUN**; no paid provider was used.
+
+## Mixed denial and unavailability correction
+
+Date: 4 October 2026. Source: rebased `2af7a03` plus the correction in this
+commit; main `d46928d` (P4-1 groups, #137). Environment: this worktree on
+Linux, Node 22.23.3, PostgreSQL control database at port 55432 and disposable
+service fixtures. This is source verification, not a fresh installation.
+
+The rebase completed. Main is an ancestor of this branch; changelog entries,
+ledger rows and benchmark records from both sides were retained. Live-view
+checks retain parallel authority reads, group desktop grants and their fences,
+bootstrap-event support and transient-store failure classification. P4-1's
+receipt-aware desktop batch replaces the earlier direct desktop check.
+
+An unavailable desktop result previously rejected the parallel read before a
+conversation denial could be evaluated. The viewer stayed open until its lease
+expired. All reads now settle before a decision: explicit denial first,
+unavailable next, allowed last. A failed read cannot renew the lease.
+
+- FAIL then PASS: the WebSocket regression covers conversation denial beside
+  desktop unavailability and desktop denial beside conversation unavailability,
+  with either response arriving first. Before the fix, both conversation-denial
+  cases closed only after 1,445–1,478 ms. After the fix, all four cases close
+  with `access_changed` before the unchanged 1,000 ms assertion.
+- PASS: repository lint, all-workspace typecheck and event catalogue (86 types).
+- PASS: web tests, 11 files / 60 tests; web production build. Existing size and
+  noVNC module warnings remain.
+- PASS: the three live-view files and all three bootstrap files, 6 files /
+  55 tests, with the supplied `PG_TEST_URL` and `--maxWorkers=2`.
+- PASS: full root suite with the supplied `PG_TEST_URL`, `--maxWorkers=2`
+  and unchanged timeouts: 88 files / 1,475 tests passed, 4 files / 15 tests
+  skipped, in 1,343.53 seconds. Integer load average was 9 before starting.
+- NOT RUN: the 15 existing opt-in root conditions, a new fresh-install
+  journey or paid-provider qualification.
+
+[Regression, focused and root logs](denial-priority-tests.txt) retain the red/green
+proof and final suite result. Gate logs are `/tmp/bootstrap-{lint,typecheck,events,web-tests,web-build}.log`;
+the full-suite log is `/tmp/bootstrap-root-tests.log` on this builder host.
