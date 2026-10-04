@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 const fileRefusals = {
   unauthenticated: { statusCode: 401, message: 'Unauthenticated' },
   conversation_refused: { statusCode: 403, message: 'Conversation refused' },
@@ -35,5 +37,37 @@ export class FileUnavailable extends Error {
     super('Dependency unavailable', options);
     this.name = 'FileUnavailable';
     this.kind = kind;
+  }
+}
+
+export function isDependencyOutage(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if ('code' in error) {
+    switch (error.code) {
+      case 'ECONNREFUSED':
+      case 'ETIMEDOUT':
+      case 'ServiceUnavailable':
+      case 'SlowDown':
+      case 'RequestTimeout':
+        return true;
+    }
+  }
+  return 'statusCode' in error && error.statusCode === 503;
+}
+
+export function parseFileInput<Schema extends z.ZodType>(
+  schema: Schema,
+  value: unknown,
+): z.infer<Schema> {
+  try {
+    return schema.parse(value);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const cause = { cause: error };
+      throw new FileRefusal('invalid_request', cause);
+    }
+    throw error;
   }
 }

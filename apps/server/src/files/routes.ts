@@ -17,7 +17,12 @@ import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { fileCommand, ownConversation } from './commands.ts';
-import { FileRefusal, FileUnavailable } from './refusals.ts';
+import {
+  FileRefusal,
+  FileUnavailable,
+  isDependencyOutage,
+  parseFileInput,
+} from './refusals.ts';
 import { inspectFile } from './types.ts';
 
 export interface FileOptions extends Omit<ChatOptions, 'keys'> {
@@ -110,7 +115,7 @@ async function handleFileView(
   }
   try {
     const { memberId, conversationId } = await authorise(options, config, request);
-    const { path, preview } = parseRequest(viewQuery, request.query);
+    const { path, preview } = parseFileInput(viewQuery, request.query);
     const rows = await ownConversation(options.store, options.silo, conversationId, memberId, true);
     const file = findFileAtPath(rows, conversationId, path);
     if (!file) {
@@ -126,7 +131,11 @@ async function handleFileView(
     try {
       stream = await options.objects.getObject('files', file.objectKey);
     } catch (error) {
-      throw new FileUnavailable('object_store', { cause: error });
+      if (isDependencyOutage(error)) {
+        const cause = { cause: error };
+        throw new FileUnavailable('object_store', cause);
+      }
+      throw error;
     }
     let disposition = 'attachment';
     if (preview === 'true') {
@@ -175,12 +184,10 @@ async function handleFileRequest(
       const response = { rows };
       return reply.send(response);
     }
-    const name = parseRequest(filename, request.headers['x-file-name']);
-    const key = parseRequest(id, request.headers['idempotency-key']);
-    if (!Buffer.isBuffer(request.body) || !request.body.length) {
-      const response = { status: 'invalid_request' };
-      reply.code(400);
-      return reply.send(response);
+    const name = parseFileInput(filename, request.headers['x-file-name']);
+    const key = parseFileInput(id, request.headers['idempotency-key']);
+    if (!Buffer.isBuffer(request.body)) {
+      throw new FileRefusal('invalid_request');
     }
     const result = await uploadFile(options, memberId, conversationId, key, name, request.body);
     const status = uploadStatus(result.status);
@@ -222,7 +229,7 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   if (wrongOrganisation || wrongSilo || wrongOrigin) {
     throw new FileRefusal('conversation_refused');
   }
-  const { conversationId } = parseRequest(conversationParams, request.params);
+  const { conversationId } = parseFileInput(conversationParams, request.params);
   const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
   if (!memberId) {
     throw new FileRefusal('conversation_refused');
@@ -258,17 +265,6 @@ function uploadStatus(status: UploadStatus) {
       return 503;
     case 'conflict':
       return 409;
-  }
-}
-
-function parseRequest<Schema extends z.ZodType>(schema: Schema, value: unknown): z.infer<Schema> {
-  try {
-    return schema.parse(value);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new FileRefusal('invalid_request', { cause: error });
-    }
-    throw error;
   }
 }
 
@@ -344,6 +340,9 @@ export async function uploadFile(
   screenshot?: UploadedFile['screenshot'],
   fresh?: () => Promise<void>,
 ) {
+  if (!bytes.length) {
+    throw new FileRefusal('invalid_request');
+  }
   if (bytes.length > limit) {
     throw new FileRefusal('file_too_large');
   }
@@ -377,7 +376,11 @@ export async function uploadFile(
     try {
       await options.objects.putObject('files', objectKey, bytes, bytes.length, metadata);
     } catch (error) {
-      throw new FileUnavailable('object_store', { cause: error });
+      if (isDependencyOutage(error)) {
+        const cause = { cause: error };
+        throw new FileUnavailable('object_store', cause);
+      }
+      throw error;
     }
     type = 'file.uploaded';
     eventData = { ...data, mime, objectKey };

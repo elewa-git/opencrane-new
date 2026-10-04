@@ -3,6 +3,26 @@ import { expect, it } from 'vitest';
 import { fileCommand } from '../src/files/commands.ts';
 import { FileRefusal } from '../src/files/refusals.ts';
 
+async function malformedCommand() {
+  const store = {
+    async *readStream() {
+      await Promise.resolve();
+      yield* [] as StoredEvent[];
+      throw new Error('Malformed input must be refused before reading');
+    },
+    async append() {
+      await Promise.resolve();
+      throw new Error('Malformed input must be refused before appending');
+    },
+  } satisfies Pick<EventStore, 'readStream' | 'append'>;
+  const malformed = { conversationId: 'conversation' };
+  const command = fileCommand(store, 'test', 'alice', 'malformed', 'file.uploaded', malformed);
+  await expect(command).rejects.toBeInstanceOf(FileRefusal);
+  await expect(command).rejects.toMatchObject({ kind: 'invalid_request', statusCode: 400 });
+}
+
+it('refuses malformed command input with typed 400 before reading or appending', malformedCommand);
+
 it('returns a typed 403 refusal for delivery without a matching upload', async () => {
   const conversation: StoredEvent = {
     sequence: 1,

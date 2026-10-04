@@ -20,7 +20,8 @@ helper use the same files-local refusal kind and status. The existing service
 test also checks the helper's typed 413 refusal. Access, reused keys and content
 refusals use typed errors; the files routes no longer match error message text.
 Inspection failures retain their cause internally and give a stable 415 message.
-Unknown dependency errors retain the sanitised 503 response.
+The initial implementation reported unknown dependency errors as 503. The review
+fix below replaces that classification with a sanitised 500.
 
 The rendered workspace tests pass for both an oversized selection refused by the
 browser and an upload receiving HTTP 413. Both show “File too large. Maximum size
@@ -102,3 +103,52 @@ suite and alone. This is the same five-second OpenFGA fixture timing issue
 recorded under #136 in [wake-latency-evidence.md](wake-latency-evidence.md).
 No source, fixture or timeout was changed. The root suite result remains
 **FAIL** because of these unrelated failures.
+
+## Review pass 2 blocker fixes
+
+Date: 4 October 2026. Branch `work/i117-upload-413`, based on `58b4865`,
+with the fixes in this receipt's commit. The owner authorised closing the
+remaining pass 2 blockers before one focused verification. This receipt records
+builder checks, not another independent review pass.
+
+The focused tests were written before the production fixes. They reproduced
+unexpected object-store `TypeError` responses of 503 during upload and download,
+an oversized invalid scanner reply reported as 503, an empty helper upload
+reported as a typed 415 instead of 400, and malformed command input escaping as
+`ZodError`. Confirmed connection-refusal, timeout and service-unavailable cases
+already passed; those assertions remain as guards against losing the typed 503.
+A separate HTTP fixture also reproduced MinIO's SDK discarding a service's 503
+status and throwing an ordinary retry error.
+
+The final implementation marks confirmed outages at the storage/scanner boundary
+and preserves unknown failures for the stable, sanitised 500 response. The
+object-store transport marks HTTP 503 before the SDK can discard its status.
+Request and command input share the typed input parser, and an empty upload
+raises `invalid_request` with status 400 before content inspection. Scanner
+callbacks and the changed integration request builders now have names and
+readable steps. No dependency was added.
+
+The service test command used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and
+`npx vitest run` with `--maxWorkers=2`, selecting `apps/server/test/upload.test.ts`,
+`upload-refusals.test.ts`, `file-command-refusals.test.ts`,
+`file-upload-failures.test.ts`, `file-storage-failures.test.ts` and
+`file-scanner.test.ts` from that same directory.
+
+| Command / qualification | Observed | Result |
+| --- | --- | --- |
+| Focused upload and files tests above | 20 tests passed in 6 files; 103.44 s | PASS |
+| Files tests after fixture readability cleanup, same PostgreSQL URL | 13 tests passed in 5 files; 20.66 s | PASS |
+| Upload integration rerun after naming gate callbacks, same PostgreSQL URL | 7 tests passed; 79.90 s | PASS |
+| `npm run lint` | Code, dependencies, unused code, docs, links and fixtures pass | PASS |
+| `npm run test -w apps/web -- --watch=false` | 62 tests passed in 12 files | PASS |
+| `npm run typecheck` | All workspaces compile after correcting test timer options | PASS |
+| `npm run check:events` | 85 event types agree | PASS |
+| Full root suite | Skipped at the owner's request; CI owns the next full run | NOT RUN |
+| Fresh-install browser journey | No stack was claimed or changed | NOT RUN |
+
+Normal disposable NATS, PostgreSQL, OpenFGA, MinIO, ClamAV and computer fixtures
+ran. No second daemon, owner stack or host networking settings were changed.
+The earlier full-suite failures above remain historical failures; the focused
+passes do not turn the full root gate green. Hosted CI and the owner's focused
+verification remain outstanding before landing.

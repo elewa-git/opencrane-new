@@ -6,7 +6,7 @@ import {
 } from '@opencrane/events';
 import { z } from 'zod';
 import { chatHistory } from '../chat/commands.ts';
-import { FileRefusal } from './refusals.ts';
+import { FileRefusal, parseFileInput } from './refusals.ts';
 
 const conversationDetails = z.object({
   createdBy: z.string(),
@@ -91,7 +91,7 @@ export async function fileCommand(
   fresh?: () => Promise<void>,
 ) {
   const definition = getEventDefinition(type)!;
-  const data = definition.dataSchema.parse(value);
+  const data = parseFileInput(definition.dataSchema, value);
   const context = fileContext.parse(data);
   const allowParticipant = type === 'file.delivered' || context.screenshot !== undefined;
   const rows = await ownConversation(
