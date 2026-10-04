@@ -39,7 +39,65 @@ it('maps a refused MCP address to Refused rather than Draft', async () => {
   expect(element.querySelector('[data-state]')?.getAttribute('data-state')).toBe('refused');
   expect(element.querySelector('.message')?.textContent).toContain('This address was refused');
   expect(element.textContent).not.toContain('Draft');
+  expect(input.disabled).toBe(false);
+  expect(element.textContent).not.toContain('Check status');
 });
+
+it.each(['button', 'form'])('submits an edited refused address through the %s',
+  async function submitCorrectedAddress(submission) {
+    const acceptedChange = { changeRef: 'corrected-change' };
+    const acceptedBody = JSON.stringify(acceptedChange);
+    const acceptedOptions = { status: 202 };
+    const acceptedRegistration = new Response(acceptedBody, acceptedOptions);
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    fetch.mockResolvedValueOnce(rejectedCapture(400));
+    fetch.mockResolvedValueOnce(acceptedRegistration);
+    const fixture = TestBed.createComponent(McpInstall);
+    fixture.detectChanges();
+    const element = rootOf(fixture);
+    const input = element.querySelector<HTMLInputElement>('input');
+    const form = element.querySelector('form');
+    if (!input || !form) throw new Error('Missing source form');
+    input.value = 'https://private.example/mcp';
+    input.dispatchEvent(new Event('input'));
+    const submissionOptions = { cancelable: true };
+    const refusedSubmission = new Event('submit', submissionOptions);
+    form.dispatchEvent(refusedSubmission);
+    await fixture.whenStable();
+    expect(element.querySelector('[data-state]')?.getAttribute('data-state')).toBe('refused');
+
+    input.value = 'https://corrected.example/mcp';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(input.value).toBe('https://corrected.example/mcp');
+    expect(element.querySelector('[data-state]')?.getAttribute('data-state')).toBe('draft');
+    expect(element.textContent).not.toContain('This address was refused');
+    const discover = element.querySelector<HTMLButtonElement>('button[type=submit]');
+    if (!discover) throw new Error('Missing Discover tools button');
+    expect(discover.textContent).toContain('Discover tools');
+    if (submission === 'button') {
+      discover.click();
+    } else {
+      // jsdom does not submit forms on Enter; dispatch the browser's submit event.
+      const correctedSubmission = new Event('submit', submissionOptions);
+      form.dispatchEvent(correctedSubmission);
+    }
+    await fixture.whenStable();
+
+    const correctedSource = { locator: 'https://corrected.example/mcp' };
+    const correctedBody = JSON.stringify(correctedSource);
+    const correctedRequest = {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: correctedBody,
+    };
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(fetch).toHaveBeenLastCalledWith('/api/org/integrations', correctedRequest);
+    expect(element.querySelector('[data-state]')?.getAttribute('data-state')).toBe('checking');
+    expect(element.textContent).toContain('Validating the server and discovering tools');
+    expect(element.textContent).toContain('corrected-change');
+  },
+);
 
 it('shows a readable fallback for a loaded file with no rendered preview', async () => {
   vi.spyOn(globalThis, 'fetch').mockResolvedValue(

@@ -27,6 +27,13 @@ export class McpInstall implements OnInit {
       this.message.set('Outcome unknown. Check status to restore your change.');
     }
   }
+  protected editAddress(address: string): void {
+    this.locator.set(address);
+    if (this.phase() === 'refused') {
+      this.phase.set('draft');
+      this.message.set('Enter the server address to discover its tools.');
+    }
+  }
   protected async submit(event: Event) {
     event.preventDefault(); if (this.busy() || this.phase() !== 'draft') return;
     try {

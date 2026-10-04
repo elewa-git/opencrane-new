@@ -12,7 +12,10 @@
 @if (phase() !== 'access' && !serverId) {
   <form [attr.aria-busy]="busy()" (submit)="submit($event)">
     <label for="remote-url">Server URL</label>
-    <input id="remote-url" type="url" required autocomplete="off" placeholder="https://mcp.example.com/mcp" [value]="locator()" (input)="locator.set($any($event.target).value)" [disabled]="phase() !== 'draft' && phase() !== 'refused'" />
+    <input id="remote-url" type="url" required autocomplete="off"
+      placeholder="https://mcp.example.com/mcp" [value]="locator()"
+      (input)="editAddress($any($event.target).value)"
+      [disabled]="phase() !== 'draft' && phase() !== 'refused'" />
     <p>Use an HTTPS address without passwords or access tokens.</p>
     @if (phase() === 'draft') { <button type="submit" [disabled]="busy()">Discover tools</button> }
   </form>

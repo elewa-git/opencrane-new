@@ -229,10 +229,9 @@ select {
 }
 .oc-dogear {
 	position: relative;
-}
-.oc-dogear:focus {
-	outline: 2px solid var(--oc-focus-ring);
-	outline-offset: 2px;
+	/* Clip the paper inside its focusable wrapper so the outer ring stays visible. */
+	clip-path: polygon(0 0, calc(100% - var(--oc-dogear-size)) 0,
+		100% var(--oc-dogear-size), 100% 100%, 0 100%);
 }
 .oc-dogear::after {
 	content: '';

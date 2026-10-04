@@ -107,7 +107,15 @@
         @if (screenshots().length) { <h2>Screenshots · {{ screenshots().length }}</h2> }
         @for (file of screenshots(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt="Computer desktop" loading="lazy"><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
-        @for (file of files(); track file) { <button type="button" class="panel-file created" [ocDogEar]="true" (click)="preview.set(file)"><span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span><span class="file-name">{{ name(file) }}</span><small>saved</small></button> }
+        @for (file of files(); track file) {
+          <button type="button" class="panel-file created" (click)="preview.set(file)">
+            <span class="panel-file-paper" [ocDogEar]="true">
+              <span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span>
+              <span class="file-name">{{ name(file) }}</span>
+              <small>saved</small>
+            </span>
+          </button>
+        }
         @if (!files().length && !chat.attachments().length) { <p>Files created in this session will appear here.</p> }
       </section>
       <section class="panel-section"><h2>Decisions · 0</h2><p>No decisions yet.</p></section>

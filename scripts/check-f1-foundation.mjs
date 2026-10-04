@@ -92,6 +92,52 @@ function cornerSize(node) {
   return globalThis.getComputedStyle(node, '::after').width;
 }
 
+function foldClip(node) {
+  return globalThis.getComputedStyle(node).clipPath;
+}
+
+function focusVisible(node) {
+  return node.matches(':focus-visible');
+}
+
+function outlineStyle(node) {
+  return globalThis.getComputedStyle(node).outlineStyle;
+}
+
+function clearSelection() {
+  const selection = globalThis.getSelection();
+  selection?.removeAllRanges();
+}
+
+async function checkFold(paper, size) {
+  assert.equal(await paper.evaluate(cornerSize), `${size}px`);
+  const clip = await paper.evaluate(foldClip);
+  assert(clip.startsWith('polygon('), 'The paper clips its folded corner');
+  assert(clip.includes(`calc(100% - ${size}px)`), 'The clip follows the fold size');
+}
+
+async function checkKeyboardRing(button) {
+  assert.equal(await button.evaluate(focusVisible), true, 'Keyboard focus is visible');
+  const ring = await button.evaluate(focusRing);
+  assert.equal(ring[0], '2px');
+  assert(['rgb(13, 181, 204)', 'rgb(10, 132, 151)'].includes(ring[1]));
+  assert.equal(ring[2], '2px');
+  assert.equal(await button.evaluate(foldClip), 'none', 'The focus ring is outside the clip');
+}
+
+async function checkPointerRing(page, button) {
+  await button.hover();
+  await page.mouse.down();
+  assert.equal(await button.evaluate(retainsFocus), true, 'Pointer press focuses the button');
+  assert.equal(await button.evaluate(focusVisible), false, 'Pointer focus is not keyboard focus');
+  const style = await button.evaluate(outlineStyle);
+  assert.equal(style, 'none', 'Pointer focus does not draw a keyboard ring');
+  // Release outside the button so this focus check does not open its preview.
+  await page.mouse.move(0, 0);
+  await page.mouse.up();
+  await page.evaluate(clearSelection);
+}
+
 function flatGrain(node) {
   return globalThis.getComputedStyle(node).backgroundImage;
 }
@@ -121,7 +167,8 @@ async function checkSpecimen(page, width, motion) {
     'rgb(10, 111, 126)');
   assert.equal(await page.locator('.state-row [aria-live]').count(), 0, 'Repeated rows are silent');
   assert.deepEqual(await page.locator('main').evaluate(textureStyle), ['0.42', '280px auto', 'none']);
-  assert.equal(await page.locator('.paper-example').evaluate(cornerSize), '12px');
+  const specimenPaper = page.locator('.paper-example');
+  await checkFold(specimenPaper, 12);
   for (const selector of ['oc-fold-loader', 'oc-flutter-loader', 'oc-grain-loader', '.spinner']) {
     const loader = page.locator(selector).first();
     const count = await loader.evaluate(animationCount);
@@ -243,6 +290,33 @@ async function refuseInstall(route) {
   await route.fulfill({ status: 400, json: { status: 'refused' } });
 }
 
+function correctedInstallRequest(request) {
+  if (request.method() !== 'POST') return false;
+  const url = new URL(request.url());
+  if (url.pathname !== '/api/org/integrations') return false;
+  const body = request.postDataJSON();
+  return body.locator === 'https://corrected.example/mcp';
+}
+
+async function submitCorrectedInstall(page, submission) {
+  const address = page.getByLabel('Server URL');
+  await address.fill('https://corrected.example/mcp');
+  assert.equal(await address.inputValue(), 'https://corrected.example/mcp');
+  const draftState = page.locator('oc-mcp-install [data-state=draft]');
+  await draftState.waitFor();
+  const discover = page.getByRole('button', { name: 'Discover tools' });
+  assert.equal(await discover.isVisible(), true);
+  const request = page.waitForRequest(correctedInstallRequest);
+  if (submission === 'button') {
+    await discover.click();
+  } else {
+    await address.press('Enter');
+  }
+  await request;
+  const refusedState = page.locator('oc-mcp-install [data-state=refused]');
+  await refusedState.waitFor();
+}
+
 async function refuseView(route) {
   await route.fulfill({ status: 403, json: { status: 'refused' } });
 }
@@ -271,8 +345,10 @@ async function checkEditors(page, width, motion) {
   assert.equal(await page.locator('oc-mcp-install [data-state]').getAttribute('data-state'), 'refused');
   assert.equal(await page.getByRole('button', { name: 'Check status' }).count(), 0);
   assert.equal(await page.getByLabel('Server URL').isEnabled(), true);
-  await page.getByLabel('Server URL').fill('https://corrected.example/mcp');
-  assert.equal(await page.getByLabel('Server URL').inputValue(), 'https://corrected.example/mcp');
+  await submitCorrectedInstall(page, 'button');
+  await submitCorrectedInstall(page, 'Enter');
+  const sourceCard = page.locator('.sources .selected');
+  await checkFold(sourceCard, 12);
   await checkStatusRegions(page);
   await capture(page, 'mcp-install', width, motion);
 }
@@ -301,19 +377,33 @@ async function checkWorkspace(browser, width, motion, scenario) {
       await page.getByRole('button', { name: 'Open session navigation' }).click();
     }
     const name = scenario === 'streaming' ? 'workspace-flutter' : 'chat-dogears';
-    assert.equal(await page.locator('.citation-paper').first().evaluate(cornerSize), '6px');
+    const citationPapers = page.locator('.citation-paper');
+    const citationPaper = citationPapers.first();
+    await checkFold(citationPaper, 6);
     await capture(page, name, width, motion);
     if (scenario === 'streaming') return;
+    const citations = page.locator('.citation');
+    const citation = citations.first();
+    await checkPointerRing(page, citation);
+    await page.keyboard.press('Tab');
+    await citation.focus();
+    await checkKeyboardRing(citation);
+    await capture(page, 'citation-focus', width, motion);
+    const fileCards = page.locator('.file-card.oc-dogear');
+    const fileCard = fileCards.first();
+    await checkFold(fileCard, 12);
     if (width === 390) {
       await page.getByRole('button', { name: 'Session panel', exact: true }).click();
     }
-    const sessionFile = page.locator('.panel-file.oc-dogear:visible').first();
+    const sessionFiles = page.locator('.panel-file.created:visible');
+    const sessionFile = sessionFiles.first();
+    await checkPointerRing(page, sessionFile);
+    await page.keyboard.press('Tab');
     await sessionFile.focus();
-    const sessionFileRing = await sessionFile.evaluate(focusRing);
-    assert.equal(sessionFileRing[0], '2px');
-    assert(['rgb(13, 181, 204)', 'rgb(10, 132, 151)'].includes(sessionFileRing[1]));
-    assert.equal(sessionFileRing[2], '2px');
-    assert.equal(await sessionFile.evaluate((node) => globalThis.getComputedStyle(node).clipPath), 'none');
+    await checkKeyboardRing(sessionFile);
+    const sessionPaper = sessionFile.locator('.panel-file-paper');
+    await checkFold(sessionPaper, 12);
+    await capture(page, 'panel-file-focus', width, motion);
     if (width === 390) await page.keyboard.press('Escape');
     await page.route('**/api/conversations/chat/files/view?*', previewReply);
     await page.locator('.file-card').getByRole('button', { name: 'Open', exact: true }).click();
@@ -355,17 +445,21 @@ try {
   const revisionOutput = execFileSync('git', ['rev-parse', 'HEAD'], gitOptions);
   const revision = revisionOutput.trim();
   const result = {
-    result: 'PASS', date: new Date().toISOString(), source: `Working tree based on ${revision}`,
+    result: 'PASS', date: new Date().toISOString(), source: revision,
     screenComparison: 'PARTIAL: shared treatments match; existing screens retain their fields and shells',
     freshInstall: false, liveQualification: 'NOT RUN: intercepted fixtures only', widths: [1280, 390], motion: ['no-preference', 'reduce'],
-    captures: 48, environment: 'Built Angular assets; Chromium; intercepted read fixtures; no stack',
+    captures: 56, environment: 'Built Angular assets; Chromium; intercepted protocol fixtures; no stack',
     checks: ['Eleven families', 'Silent repeated rows', 'Single progress region', '44px phone tabs',
       'Arrow keys and Home', '2px focus ring', 'Refresh retains focus and rows', 'No overflow',
       'Busy content excludes status regions', 'Specific call-site states',
-      '80px desktop rows', 'Composer focus ring', 'Citation dog-ears', '12px dog-ear', '42% rice texture', 'Static reduced-motion loaders'],
+      '80px desktop rows', 'Composer focus ring',
+      'Corrected refused address submits by button and Enter',
+      'Citation and session file keyboard focus outside clipped folds',
+      'Pointer focus does not draw a keyboard ring',
+      'Citation dog-ears', '12px dog-ear', '42% rice texture', 'Static reduced-motion loaders'],
   };
   await writeFile(`${output}/visual.json`, JSON.stringify(result, null, 2) + '\n');
-  console.log('PASS F1 foundation: 48 captures, states, register, keyboard and reduced motion');
+  console.log('PASS F1 foundation: 56 captures, states, register, keyboard and reduced motion');
 } finally {
   await browser.close();
 }
