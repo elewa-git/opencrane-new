@@ -3,7 +3,17 @@ import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { authorityFence, payingGroupAuthority } from '@opencrane/models';
 export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
-export class ViewCheckUnavailable extends Error {}
+export class ViewCheckUnavailable extends Error {
+  readonly boundary: 'event_store' | 'authorisation' | 'deadline';
+
+  constructor(
+    boundary: 'event_store' | 'authorisation' | 'deadline',
+    options?: ErrorOptions,
+  ) {
+    super('View authority unavailable', options);
+    this.boundary = boundary;
+  }
+}
 
 const identity = z.object({ assistantId: z.string() });
 const ready = identity.extend({ computerId: z.string(), generation: z.int().positive(), podUid: z.string().optional() });
@@ -52,7 +62,7 @@ export async function viewAccess(options: ViewAccessOptions, memberId: string, c
   } catch (error) {
     // Store outages preserve an existing lease until it expires, including during fence reads.
     if (isEventStoreUnavailable(error)) {
-      throw new ViewCheckUnavailable('Authority unavailable', { cause: error });
+      throw new ViewCheckUnavailable('event_store', { cause: error });
     }
     throw error;
   }
@@ -91,7 +101,7 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   const computer = settledRead(computerResult);
   const permission = settledRead(permissionResult);
   if (permission.status === 'unavailable') {
-    throw new ViewCheckUnavailable('Authority unavailable');
+    throw new ViewCheckUnavailable('authorisation');
   }
   return computer;
 }
@@ -116,7 +126,7 @@ async function conversationDesktop(options: ViewAccessOptions, memberId: string,
   const desktop = await desktopAccess(options, memberId, conversationId, computer.computerId);
   const permission = await auth.view(
     memberId, conversationId, computer.computerId, desktop.receipts);
-  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('Authority unavailable');
+  if (permission.status === 'unavailable') throw new ViewCheckUnavailable('authorisation');
   if (!permission.allowed) throw new Error('Access changed');
   await desktop.fresh();
   return computer;

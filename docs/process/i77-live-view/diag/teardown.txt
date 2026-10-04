@@ -1,0 +1,4 @@
+EXIT-trap down.sh --id 2 completed.
+Read-only teardown verification: PASS
+Secondary directory present: False
+Secondary Compose containers remaining: 0

@@ -1,0 +1,20 @@
+[
+  {
+    "stage": "admission_response",
+    "elapsedMs": 7362,
+    "status": 403
+  },
+  {
+    "stage": "admission_response",
+    "elapsedMs": 10759,
+    "status": 200
+  },
+  {
+    "stage": "browser_socket_created",
+    "elapsedMs": 10865
+  },
+  {
+    "stage": "browser_socket_closed",
+    "elapsedMs": 13821
+  }
+]

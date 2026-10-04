@@ -13,10 +13,11 @@ import { connectProjectionDb } from '@opencrane/projections';
 import { authEnv, directory, readEnv } from './config.ts';
 import { secondary, stackId } from './identity.ts';
 import { browserSessions } from './browser-signin.ts';
+import { browserViewTimings, collectViewTimings } from './live-view-timings.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
 
 assert(secondary, 'Repeated qualification requires a claimed secondary stack');
-const output = 'docs/process/i77-live-view';
+const output = process.argv[2] ?? 'docs/process/i77-live-view';
 await mkdir(output, { recursive: true });
 const settings = await readEnv('settings'), binding = await readEnv('binding');
 const silo = settings['SILO_ID']!, origin = settings['ORIGIN']!;
@@ -95,8 +96,9 @@ try {
     let result = 'PASS', failure: string | undefined;
     let journeyPauses: unknown;
     let journeyPauseMs: unknown;
+    const conversationId = randomUUID();
+    const stopTimings = browserViewTimings(page, conversationId);
     try {
-      const conversationId = randomUUID();
       const response: APIResponse = await page.request.post(`${origin}/api/conversations`, { headers: { origin },
         data: { id: randomUUID(), conversationId, assistantId: computer.assistant_id } });
       assert.equal(response.status(), 200);
@@ -118,12 +120,25 @@ try {
       process.exitCode = 1;
     }
     const serverRunDelayAfter = await serverRunDelay();
-    const receipt = { date: new Date().toISOString(), run, width, stackId, result, beforeLoad,
+    const browserTimings = stopTimings();
+    await writeFile(`${output}/run-${run}-browser.json`, JSON.stringify(browserTimings, null, 2) + '\n');
+    let sessionId: string | undefined;
+    for (const timing of browserTimings) {
+      if (timing.stage === 'admission_response' && timing.sessionId) {
+        sessionId = timing.sessionId;
+        break;
+      }
+    }
+    const timingRecords = await collectViewTimings(sessionId ?? '', `${output}/run-${run}-timings.jsonl`);
+    const receipt = {
+      conversationId, sessionId, timingRecords, date: new Date().toISOString(), run, width, stackId,
+      result, beforeLoad,
       cpuPressureSomeAvg10, serverRunDelayDelta: String(serverRunDelayAfter - serverRunDelayBefore),
       afterLoad: loadavg(),
       ...(journeyPauses === undefined ? {} : { pauses: journeyPauses }),
       ...(journeyPauseMs === undefined ? {} : { pauseMs: journeyPauseMs }),
-      durationMs: Math.round(performance.now() - started), ...(failure ? { failure } : {}) };
+      durationMs: Math.round(performance.now() - started), ...(failure ? { failure } : {}),
+    };
     await appendFile(`${output}/runs.jsonl`, JSON.stringify(receipt) + '\n');
     console.log(JSON.stringify(receipt));
   }

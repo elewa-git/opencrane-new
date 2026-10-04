@@ -16,6 +16,8 @@
 
 - Added comments and names for the existing gateway accounting and audit rules; behaviour and
   budget limits are unchanged.
+- Live-view diagnostics now correlate admission, desktop startup, first-frame forwarding and every permission check without logging credentials or pixels ([#77 diagnosis](docs/process/i77-live-view.md#post-admission-diagnosis--4-october-2026)); the loaded live batch still fails qualification.
+
 - Owners and admins can read populated monetary-effect lists through one bounded replay. The P3-15 backend records evidence-backed resolutions, retains uncertain reservations and preserves larger late usage charges; its designed screen and fresh-install qualification remain pending.
 
 - Live viewers keep a valid permission lease when an older authority check is late, including during connection setup; revocation deadlines stay unchanged ([#77 evidence](docs/process/i77-live-view.md)).

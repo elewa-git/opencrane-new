@@ -1,0 +1,32 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-diag
+
+
+ Test Files  83 passed | 4 skipped (87)
+      Tests  1415 passed | 15 skipped (1430)
+   Start at  15:16:51
+   Duration  1262.20s (tests 96%, import 3%)
+
+    Isolate  87 workers spawned · ~258ms startup each (spawn + environment, per file)
+             at least ~10.97s faster with isolate: false — reuses workers across files instead of one per file
+
+Final HEAD fd3b233 rerun:
+
+ Test Files  2 failed | 84 passed | 4 skipped (90)
+      Tests  2 failed | 1448 passed | 15 skipped (1465)
+   Duration  1764.12s (tests 95%, import 5%)
+
+Failure 1: ticket redemption test timed out waiting for the NATS stream head.
+Failure 2: authority-volume timing was 1026.987792ms against a 1000ms bound.
+
+Single-worker retry:
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 1 passed | 14 skipped (16)
+
+The ticket redemption timeout case passed. The authority-volume test then
+received HTTP 403 from its decision service before completing its measurements.

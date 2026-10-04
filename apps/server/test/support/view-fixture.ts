@@ -8,12 +8,17 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history } from '@opencrane/models';
 import { pgDb, connectMemberFeed, members, conversations, computers, ProjectionRunner } from '@opencrane/projections';
+import type { LogDestination } from '@opencrane/observability';
 import { createLogger } from '@opencrane/observability';
 import { buildServer } from '../../src/server.ts';
 import { testAuthConfig } from './test-auth-config.ts';
 
 
-export async function viewFixture(open: LiveViewOptions['open'], redirectUri?: string) {
+export async function viewFixture(
+  open: LiveViewOptions['open'],
+  redirectUri?: string,
+  logDestination?: LogDestination,
+) {
   const nats = await natsFixture(), dbs = await databases(), fga = await openfga();
   const config = { ...testAuthConfig(), expectedOrgId: 'org-test', ...(redirectUri ? { redirectUri } : {}) };
   const binding = await createStore(fga.apiUrl, 'test'), auth = memberAuthorisation(binding), db = pgDb(dbs.queue);
@@ -26,8 +31,12 @@ export async function viewFixture(open: LiveViewOptions['open'], redirectUri?: s
     return event;
   };
   const directory = await mkdtemp(`${tmpdir()}/view-keys-`), keys = conversationKeys(directory);
-  const app = buildServer(config, { chat: { silo: 'test', store: nats.store, binding, feed, db, keys }, liveView: { silo: 'test', store: nats.store, binding, feed,
-    open } });
+  const serverOptions = {
+    ...(logDestination ? { logDestination } : {}),
+    chat: { silo: 'test', store: nats.store, binding, feed, db, keys },
+    liveView: { silo: 'test', store: nats.store, binding, feed, open },
+  };
+  const app = buildServer(config, serverOptions);
     await append('member-alice', 'member.invited', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'alice' } });
     await append('member-alice', 'member.joined', { memberId: 'alice', invitationId: 'invite', email: 'a@example.test', role: 'member', displayName: 'Alice' }, true);
     await append('member-bob', 'member.invited', { memberId: 'bob', invitationId: 'invite-bob', email: 'b@example.test', role: 'member', invitedBy: 'owner', invitedIdentity: { issuer: config.issuerUrl, sub: 'bob' } });
