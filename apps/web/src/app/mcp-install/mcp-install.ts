@@ -31,7 +31,7 @@ export class McpInstall implements OnInit {
     try {
       const response = await fetch('/api/org/integrations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ locator: this.locator() }) });
       if (this.access(response)) return;
-      if (response.status === 400) { this.phase.set('draft'); this.message.set('× This address was refused. Nothing was registered.'); sessionStorage.removeItem('mcp-registration'); return; }
+      if (response.status === 400) { this.phase.set('draft'); this.message.set('× This address was refused. Use a public HTTPS hostname; IP addresses, including private addresses, are not accepted. Nothing was registered.'); sessionStorage.removeItem('mcp-registration'); return; }
       if (!response.ok) throw new Error('Unknown');
       const raw: unknown = await response.json();
       this.changeRef.set(z.object({ changeRef: z.string() }).parse(raw).changeRef);
