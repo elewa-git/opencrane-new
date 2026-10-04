@@ -1,0 +1,5 @@
+:host { display: grid; gap: 16px; min-width: 0; }
+h1 { margin: 0; font: var(--oc-type-page); }
+p { overflow-wrap: anywhere; }
+button { min-height: 44px; padding: 8px 16px; border: 1px solid var(--oc-border-input); }
+a { color: var(--oc-accent-dark); }

@@ -2,7 +2,7 @@
   (click)="watch()">Watch your computer</button>
 <oc-modal-sheet kind="computer" backLabel="" [open]="viewOpen()" title="Computer view"
   description="Read-only · shared desktop" [returnFocusTo]="opener" (closed)="panelClosed()">
-  @if (state() === 'Not available') {
+  @if (state() === 'Unavailable') {
     <p>A conversation participant needs a shared-desktop grant and a ready computer to watch.
       Ask the desktop owner for access.</p>
   }
@@ -15,6 +15,15 @@
     <button type="button" class="retry" (click)="retry()">Try again</button>
   }
   @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
+  @if (state() === 'Viewing') {
+    <div class="tools">
+      <button type="button" [disabled]="capturing()" (click)="capture()">Screenshot</button>
+      <button type="button" [attr.aria-pressed]="fit()" (click)="zoom(true)">Fit</button>
+      <button type="button" [attr.aria-pressed]="!fit()" (click)="zoom(false)">
+        Actual size · zoom
+      </button>
+    </div>
+  }
   <div class="display" #display tabindex="0" aria-label="Read-only computer display"
     [attr.aria-busy]="state() === 'Connecting' || capturing()"
     [hidden]="state() !== 'Viewing'"></div>
@@ -24,13 +33,4 @@
         [evidenceAt]="capturedAt()" [showAction]="false" />
     }
   </div>
-  @if (state() === 'Viewing') {
-    <div class="tools" overlayFooter>
-      <button type="button" [disabled]="capturing()" (click)="capture()">Screenshot</button>
-      <button type="button" [attr.aria-pressed]="fit()" (click)="zoom(true)">Fit</button>
-      <button type="button" [attr.aria-pressed]="!fit()" (click)="zoom(false)">
-        Actual size · zoom
-      </button>
-    </div>
-  }
 </oc-modal-sheet>

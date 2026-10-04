@@ -9,7 +9,8 @@ function readCss(path: string): string {
 }
 
 const globalCss = readCss('../src/styles.css');
-const shellCss = readCss('../src/app/app.css');
+const shellCss = readCss('../src/app/organisation/organisation-shell.css');
+const registerCss = readCss('../src/app/integrations/integration-register.css');
 
 const tokens = new Map<string, string>();
 for (const [, name, value] of globalCss.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
@@ -38,15 +39,21 @@ describe('theme tokens', () => {
   });
 
   it('never refer to a token that is not defined (such as PrimeNG ones, which are not installed)', () => {
-    const used = [...(globalCss + shellCss).matchAll(/var\(\s*(--[\w-]+)/g)].map((match) => match[1]!);
-    expect([...new Set(used)].filter((name) => !tokens.has(name))).toEqual([]);
+    const source = globalCss + shellCss + registerCss;
+    const matches = Array.from(source.matchAll(/var\(\s*(--[\w-]+)/g));
+    const used = matches.map(tokenName);
+    const unique = Array.from(new Set(used));
+    const missing = unique.filter(undefinedToken);
+    expect(missing).toEqual([]);
   });
 });
 
 describe('shell buttons', () => {
   it('use the preset radius and a hover colour that keeps the dark text readable', () => {
-    expect(shellCss).toMatch(/\.button\s*\{[^}]*border-radius:\s*var\(--oc-radius-control\)/);
-    expect(shellCss).toMatch(/\.button\.primary:hover\s*\{[^}]*background:\s*var\(--oc-accent-hover\)/);
+    const buttonRadius = /\.button\s*\{[^}]*border-radius:\s*var\(--oc-radius-control\)/;
+    const buttonHover = /\.button\.primary:hover\s*\{[^}]*background:\s*var\(--oc-accent-hover\)/;
+    expect(registerCss).toMatch(buttonRadius);
+    expect(registerCss).toMatch(buttonHover);
 
     const ink = luminance(tokens.get('--oc-primary-contrast')!);
     const hover = luminance(tokens.get('--oc-accent-hover')!);
@@ -83,6 +90,16 @@ it('keeps paused text readable and uses amber only for its glyph', () => {
 });
 
 it('keeps stale row text at full opacity', () => {
-  expect(shellCss).toMatch(/\.stale \.register-row\s*\{[^}]*background:\s*#f1f3f3/u);
-  expect(shellCss).not.toMatch(/\.stale \.register-row\s*\{[^}]*opacity:/u);
+  const staleBackground = /\.stale \.register-row\s*\{[^}]*background:\s*var\(--oc-neutral-soft\)/u;
+  const staleOpacity = /\.stale \.register-row\s*\{[^}]*opacity:/u;
+  expect(registerCss).toMatch(staleBackground);
+  expect(registerCss).not.toMatch(staleOpacity);
 });
+
+function tokenName(match: RegExpMatchArray): string {
+  return match[1]!;
+}
+
+function undefinedToken(name: string): boolean {
+  return !tokens.has(name);
+}

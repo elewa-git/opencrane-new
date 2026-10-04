@@ -1,7 +1,16 @@
 /* Shared overlay entrances follow the v2 handoff. */
-@keyframes oc-hinge { from { transform: perspective(1200px) rotateY(-26deg) translateX(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes oc-hinge {
+  from {
+    transform: perspective(1200px) rotateY(-26deg) translateX(14px);
+    opacity: 0;
+  }
+  to { transform: none; opacity: 1; }
+}
 @keyframes oc-menu-hinge {
-  from { transform: perspective(1200px) rotateY(26deg) translateX(-14px); opacity: 0; }
+  from {
+    transform: perspective(1200px) rotateY(26deg) translateX(-14px);
+    opacity: 0;
+  }
   to { transform: none; opacity: 1; }
 }
 @keyframes oc-sheet-lift {

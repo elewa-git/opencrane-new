@@ -23,6 +23,8 @@ button {
 .display[hidden] { display: none; }
 .tools { display: flex; gap: 12px; flex-wrap: wrap; }
 @media (max-width: 600px) {
-  .tools button,
+  .display { flex: none; aspect-ratio: 4 / 3; }
+  .tools { gap: 6px; margin: 12px 0; }
+  .tools button { flex: 1; padding: 8px; font-size: 12px; }
   .retry { width: 100%; }
 }

@@ -4,7 +4,7 @@ import { extname, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chatFixture } from './chat-fixture.mjs';
 
-const output = resolve('docs/process/f2-drawers');
+const output = resolve(process.env.F2_CAPTURE_DIR ?? 'docs/process/f2-drawers');
 const build = resolve('apps/web/dist/web/browser');
 const overlayBuild = resolve('apps/web/dist/overlays/browser');
 const captures = [];
@@ -73,6 +73,7 @@ function appearance(node) {
     radius: style.borderRadius,
     background: style.backgroundColor,
     crease: globalThis.getComputedStyle(node, '::before').backgroundImage,
+    creaseDisplay: globalThis.getComputedStyle(node, '::before').display,
   };
 }
 
@@ -232,7 +233,7 @@ async function checkComputer(page, width, motion) {
   await opener.focus();
   await page.keyboard.press('Enter');
   const drawer = page.getByRole('dialog', { name: 'Computer view', exact: true });
-  const refused = drawer.getByText('Not available', { exact: true });
+  const refused = drawer.getByText('Unavailable', { exact: true });
   await refused.waitFor();
   await checkPanel(page, drawer, width, motion, 'oc-sheet-lift');
   await checkComputerBounds(drawer, width);
@@ -311,6 +312,8 @@ async function checkNavigation(page, motion) {
   await page.waitForURL('**/workspace?conversation=research');
   const openMenus = page.locator('oc-navigation-menu dialog[open]');
   assert.equal(await openMenus.count(), 0);
+  const selectedComposer = page.getByRole('textbox', { name: 'Message your agent' });
+  assert(await selectedComposer.evaluate(focused), 'Session selection focuses the composer');
   await opener.click();
   const ask = menu.locator('.ask');
   await ask.click();
@@ -554,6 +557,12 @@ async function checkComputerStates(page, width, motion) {
     assert(display.width > 1000, 'Desktop pixels are not constrained to a 480px drawer');
     assert(display.height > 600, 'The display fills the remaining sheet height');
   }
+  if (width === 390) {
+    const display = await sheet.locator('.display').boundingBox();
+    const tools = await sheet.locator('.tools').boundingBox();
+    assert(display.width > display.height, 'Phone display stays landscape');
+    assert(tools.y + tools.height <= display.y, 'Phone toolbar precedes the display');
+  }
   await capture(page, 'computer-viewing', width, motion);
   fixture.revoke();
   await sheet.getByText('Access changed', { exact: true }).waitFor();
@@ -587,7 +596,11 @@ async function checkSharedPanels(page, width, motion) {
     assert.equal(await close.count(), 1, 'Cancel has no spoken chevron');
     const style = await panel.evaluate(appearance);
     if (kind === 'drawer') {
-      assert(style.crease.includes('90deg'));
+      if (width === 390) {
+        assert.equal(style.creaseDisplay, 'none');
+      } else {
+        assert(style.crease.includes('90deg'));
+      }
       assert(style.shadow.includes('-28px'));
       const box = await panel.boundingBox();
       assert.equal(style.origin, `${box.width}px ${box.height / 2}px`);

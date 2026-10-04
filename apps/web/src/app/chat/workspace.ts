@@ -71,6 +71,7 @@ export class Workspace implements OnInit {
         const element = this.transcriptElement()?.nativeElement;
         if (element) requestAnimationFrame(() => { element.scrollTop = element.scrollHeight; });
       }
+      this.focusPendingComposer();
     });
   }
   ngOnInit(): void { void this.chat.load(); }
@@ -84,15 +85,23 @@ export class Workspace implements OnInit {
   }
   protected navigationClosed(): void {
     this.rail.set(false);
-    if (!this.focusComposerAfterNavigation) return;
+  }
+  private focusPendingComposer(): void {
+    if (!this.focusComposerAfterNavigation || this.rail() || this.chat.loading()) {
+      return;
+    }
+    if (document.querySelector('dialog[open]')) {
+      return;
+    }
+    // Wait for the selected session to render an enabled composer outside the modal.
     this.focusComposerAfterNavigation = false;
     this.focusComposer();
   }
   protected select(id: string): void {
+    this.focusComposerAfterNavigation = true;
     void this.chat.select(id);
     this.rail.set(false);
     this.searchDialog()?.nativeElement.close();
-    this.focusComposer();
   }
   protected togglePanel(): void {
     if (!this.desktop()) {

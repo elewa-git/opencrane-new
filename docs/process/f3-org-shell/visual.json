@@ -1,0 +1,42 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": [
+    "integrations-1280-no-preference.png",
+    "overview-1280-no-preference.png",
+    "models-1280-no-preference.png",
+    "spending-1280-no-preference.png",
+    "integration-tools-1280-no-preference.png",
+    "integrations-1280-reduce.png",
+    "overview-1280-reduce.png",
+    "models-1280-reduce.png",
+    "spending-1280-reduce.png",
+    "integration-tools-1280-reduce.png",
+    "integrations-390-no-preference.png",
+    "menu-390-no-preference.png",
+    "overview-390-no-preference.png",
+    "models-390-no-preference.png",
+    "spending-390-no-preference.png",
+    "integration-tools-390-no-preference.png",
+    "integrations-390-reduce.png",
+    "menu-390-reduce.png",
+    "overview-390-reduce.png",
+    "models-390-reduce.png",
+    "spending-390-reduce.png",
+    "integration-tools-390-reduce.png"
+  ],
+  "environment": "Built Angular assets; Chromium; disposable read fixtures; no stack",
+  "comparedFrames": [
+    "INT-03",
+    "INT-37",
+    "OVR-01"
+  ],
+  "scope": "Shell geometry and supported screen moves; unavailable design bodies are explicit"
+}

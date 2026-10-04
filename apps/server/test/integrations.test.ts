@@ -311,8 +311,15 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.locator('.register-row').first().waitFor();
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.getByRole('link', { name: 'Models & budgets', exact: true }).click();
-    await page.getByRole('heading', { name: 'Models & budgets' }).waitFor();
+    await page.getByRole('link', { name: 'Models & providers', exact: true }).click();
+    await page.getByRole('heading', { name: 'Models & providers' }).waitFor();
+    expect(await page.locator('#monthly-ceiling').count()).toBe(0);
+    const organisationNavigation = page.getByRole('navigation', {
+      name: 'Organisation settings', exact: true,
+    });
+    const spendingLink = organisationNavigation.getByRole('link', { name: 'Spending', exact: true });
+    await spendingLink.click();
+    await page.getByRole('heading', { name: 'Spending', exact: true }).waitFor();
     await page.getByLabel('Monthly ceiling (euro cents)').fill('30000');
     const budgetSaved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/org/models'));
     await page.getByRole('button', { name: 'Save budget' }).click();
@@ -321,7 +328,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
-      const controls = page.locator('oc-models input, oc-models select, oc-models button');
+      const controls = page.locator('oc-spending input, oc-spending select, oc-spending button');
       for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
       await page.screenshot({ path: `/tmp/p3-13-budgets-${width}.png`, fullPage: true });
     }

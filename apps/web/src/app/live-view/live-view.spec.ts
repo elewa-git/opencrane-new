@@ -14,7 +14,8 @@ it('clears the desktop and explains a refused view without offering control', as
   Object.assign(element.querySelector('dialog')!, { showModal: vi.fn(), close: vi.fn() });
   element.querySelector<HTMLButtonElement>('button')!.click();
   await fixture.whenStable();
-  expect(element.textContent).toContain('Not available');
+  expect(element.textContent).toContain('Unavailable');
+  expect(element.querySelector('[data-state=refused]')).not.toBeNull();
   expect(element.textContent).toContain('Read-only');
   expect(element.querySelector('canvas')).toBeNull();
   expect(element.textContent).not.toMatch(/Take control|Clipboard/u);

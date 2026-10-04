@@ -327,10 +327,10 @@ async function previewReply(route) {
 
 async function checkEditors(page, width, motion) {
   await page.route('**/api/org/models', modelsReply);
-  await page.goto(`${origin}/org/models`);
-  await page.getByText('Budgets loaded', { exact: true }).waitFor();
+  await page.goto(`${origin}/org/spending`);
+  await page.getByText('Spending loaded', { exact: true }).waitFor();
   await checkStatusRegions(page);
-  await capture(page, 'models', width, motion);
+  await capture(page, 'spending', width, motion);
   await page.route('**/api/org/integrations/installed/tools', policyReply);
   await page.goto(`${origin}/org/integrations/installed/tools`);
   await page.getByText('Choose a mode, then save the tool.', { exact: true }).waitFor();
@@ -414,7 +414,7 @@ async function checkWorkspace(browser, width, motion, scenario) {
     await page.route('**/api/conversations/chat/view', refuseView);
     if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
     await page.getByRole('button', { name: 'Watch your computer', exact: true }).click();
-    await page.getByText('Not available', { exact: true }).waitFor();
+    await page.getByText('Unavailable', { exact: true }).waitFor();
     await checkStatusRegions(page);
     await capture(page, 'live-view', width, motion);
   } finally {

@@ -1,0 +1,13 @@
+<h1>Models & providers</h1>
+<div role="status" aria-live="polite">
+  <oc-shared-state [kind]="kind()" [message]="message()"
+    [evidenceAt]="loadedAt()" [showAction]="false" />
+</div>
+@if (kind() !== 'access_changed') {
+  <button type="button" (click)="load()" [disabled]="kind() === 'checking'">Check status</button>
+  <section aria-label="Pinned models">
+    @for (model of models(); track model.id) { <p>{{ model.id }}</p> }
+  </section>
+}
+<p>Provider and routing editing is not available yet.
+  Manage budgets in <a href="/org/spending">Spending</a>.</p>
