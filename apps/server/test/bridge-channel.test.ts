@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from 'node:crypto';
 import { BudgetActor, envelope } from '@opencrane/models';
+import { isEventStoreUnavailable } from '@opencrane/event-store';
 import { tokenIssuer } from '@opencrane/auth';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -89,16 +90,42 @@ it('recovers the server connector from the NATS report sequence without gaps or 
   await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
   await nats.store.append({ expectedSequence: 0, event: envelope('test', 'assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: 'alice', kind: 'personal' }) });
   let link = await connectBridge(options, connection, tokens);
+  let reconnect = false;
+  function closed(code: number) {
+    reconnect = code === 1011;
+  }
+  link.socket.on('close', closed);
+  async function waitForPosition(expected: number) {
+    async function reachedPosition() {
+      try {
+        // Match the production connector's next-poll recovery after unavailable persistence.
+        if (reconnect) {
+          await link.settled();
+          link = await connectBridge(options, connection, tokens);
+          link.socket.on('close', closed);
+          reconnect = false;
+        }
+        return await reportPosition(nats.store, 'test', 'computer') === expected;
+      } catch (error) {
+        if (isEventStoreUnavailable(error)) {
+          return false;
+        }
+        throw error;
+      }
+    }
+    await until(reachedPosition);
+  }
   try {
     link.socket.send(JSON.stringify({ type: 'turn', id: 'message', conversationId: 'conversation', assistantId: 'assistant', text: 'Hello', token: 'short-lived-turn', expiresAt: Date.now()+60_000 }));
-    await until(async () => await reportPosition(nats.store, 'test', 'computer') === 1);
+    await waitForPosition(1);
     channel.notification({ method: 'item/agentMessage/delta', params: { threadId: 'thread', itemId: 'reply', delta: 'Hello back' } });
-    await until(async () => await reportPosition(nats.store, 'test', 'computer') === 2);
+    await waitForPosition(2);
     link.socket.terminate(); await once(link.socket, 'close'); await link.settled();
     channel.notification({ method: 'item/completed', params: { threadId: 'thread', item: { type: 'agentMessage', id: 'reply', text: 'Hello back' } } });
     channel.notification({ method: 'turn/completed', params: { threadId: 'thread', turn: { status: 'completed' } } });
     link = await connectBridge(options, connection, tokens);
-    await until(async () => await reportPosition(nats.store, 'test', 'computer') === 4);
+    link.socket.on('close', closed);
+    await waitForPosition(4);
     const reports = (await chatHistory(nats.store, 'test', 'conversation')).flatMap(r => r.event.report ? [r.event.report.sequence] : []);
     expect(reports).toEqual([1, 2, 3, 4]);
   } finally { link.socket.terminate(); await channel.close(); server.close(); await nats.close(); await rm(directory, { recursive: true, force: true }); }

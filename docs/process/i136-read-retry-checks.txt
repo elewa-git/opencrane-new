@@ -1,0 +1,103 @@
+Issue #136 source-check summaries — 4 October 2026 UTC
+Branch work/i136-read-retry, base 1354051f9c07135905cd5cde80f27724f37f78eb.
+All checks use nice -n 10; test runs use --maxWorkers=2.
+Integration/root PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres.
+Root start load 9.74; no live-view qualification process running.
+The containing commit supplies the final source; fresh install NOT RUN.
+
+Initial head stall: RED
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  17:41:37
+   Duration  5.75s (tests 53%, transform 33%, import 13%)
+
+History stalls: RED
+ Test Files  1 failed (1)
+      Tests  2 failed | 1 passed (3)
+   Start at  17:42:31
+   Duration  8.58s (tests 71%, transform 17%, import 12%)
+
+Subscription stall: RED
+ Test Files  1 failed (1)
+      Tests  1 failed | 3 passed (4)
+   Start at  17:43:09
+   Duration  6.36s (tests 87%, transform 8%, import 5%)
+
+Outage bound: RED
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 skipped (5)
+   Start at  17:43:50
+   Duration  2.59s (tests 58%, transform 29%, import 13%)
+
+Final event-store checks: PASS
+ Test Files  2 passed (2)
+      Tests  27 passed (27)
+   Start at  17:56:59
+   Duration  68.29s (tests 94%, transform 4%, import 2%)
+
+Initial integration batch: FAIL
+ Test Files  2 failed | 17 passed | 2 skipped (21)
+      Tests  2 failed | 218 passed | 5 skipped (225)
+   Start at  17:49:17
+   Duration  783.56s (tests 96%, import 3%, transform 1%)
+
+Loaded integration batch: FAIL
+ Test Files  2 failed | 17 passed | 2 skipped (21)
+      Tests  3 failed | 217 passed | 5 skipped (225)
+   Start at  18:03:31
+   Duration  746.03s (tests 97%, import 2%, transform 1%)
+
+Approval failed-case reruns: PASS
+ Test Files  1 passed (1)
+      Tests  4 passed | 23 skipped (27)
+   Start at  18:09:47
+   Duration  55.48s (tests 88%, transform 8%, import 5%)
+
+Gateway failed-case rerun: PASS
+ Test Files  1 passed (1)
+      Tests  1 passed | 79 skipped (80)
+   Start at  18:15:57
+   Duration  22.37s (tests 81%, transform 13%, import 6%)
+
+Final lint: PASS
+✔ no dependency violations found (299 modules, 1085 dependencies cruised)
+
+npm notice run lint:unused
+npm notice run knip
+Configuration hints (2)
+**/.tools/**                 knip.json  Remove from ignore
+setpriv       apps/computer  knip.json  Remove from ignoreBinaries
+npm notice run lint:docs
+npm notice run markdownlint-cli2
+markdownlint-cli2 v0.23.3 (markdownlint v0.41.1)
+Finding: *.md docs/**/*.md apps/*/README.md libs/*/README.md !docs/design/chat/README.md !docs/design/handoff-v2/[0-9]*/README.md
+Linting: 90 files
+Summary: 0 issues in 0 files
+npm notice run lint:links
+npm notice run sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'apps/*/README.md' 'libs/*/README.md'
+🔍 811 Total (in 0s) ✅ 677 OK 🚫 0 Errors 👻 134 Excluded
+
+npm notice run lint:fixtures
+npm notice run python3 infra/odoo/boundary.py
+PASS fixture images and build files have no external direct dependencies
+
+Final typecheck: PASS
+npm notice run tsc --noEmit -p tsconfig.app.json && tsc --noEmit -p tsconfig.spec.json && tsc --noEmit -p test/tsconfig.json
+npm notice run @opencrane/auth@0.1.0 typecheck
+npm notice run @opencrane/authz@0.1.0 typecheck
+npm notice run @opencrane/event-store@0.1.0 typecheck
+npm notice run @opencrane/events@0.1.0 typecheck
+npm notice run @opencrane/handlers@0.1.0 typecheck
+npm notice run @opencrane/models@0.1.0 typecheck
+npm notice run @opencrane/observability@0.1.0 typecheck
+npm notice run @opencrane/projections@0.1.0 typecheck
+npm notice run @opencrane/protocol@0.1.0 typecheck
+
+Event catalogue: PASS
+check:events — OK: 86 event types agree between the registry and the catalogue.
+
+Full root suite: PASS
+ Test Files  89 passed | 4 skipped (93)
+      Tests  1486 passed | 15 skipped (1501)
+   Start at  18:18:19
+   Duration  1571.07s (tests 95%, import 5%)

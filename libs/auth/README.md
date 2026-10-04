@@ -70,5 +70,7 @@ table. Model admission refuses a request whose model differs from the grant.
 An optional active turn token id further narrows `check`; model admission
 reads only server-owned `computer.turn_started` / `computer.turn_closed` authority
 and checks live permissions before reserving money. A closed turn cannot reopen.
+`check(headers, activeTurnId, deadline)` also accepts an absolute `performance.now()`
+deadline so its event reads stop retrying with the caller's authority check.
 Old readiness events without a generation fail closed until the reconciler observes
 and records readiness again. Token values never enter events or projections.

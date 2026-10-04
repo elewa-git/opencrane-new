@@ -2,7 +2,12 @@ import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { authorityFence, payingGroupAuthority } from '@opencrane/models';
-export interface ViewAccessOptions { silo: string; store: EventStore; binding: Binding; }
+export interface ViewAccessOptions {
+  silo: string;
+  store: EventStore;
+  binding: Binding;
+  deadline?: number;
+}
 export class ViewCheckUnavailable extends Error {
   readonly boundary: 'event_store' | 'authorisation' | 'deadline';
 
@@ -29,14 +34,14 @@ function saveHistory(cache: Map<string, StoredEvent[]>, key: string, rows: Store
   cache.set(key, rows);
 }
 
-async function history(store: EventStore, subject: string, silo: string) {
+async function history(store: EventStore, subject: string, silo: string, deadline = Infinity) {
   let cache = histories.get(store);
   if (!cache) { cache = new Map(); histories.set(store, cache); }
   const key = JSON.stringify([silo, subject]);
   const rows = [...(cache.get(key) ?? [])];
   const previous = rows.at(-1); let confirmed = !previous;
   // Confirm the saved checkpoint before reading its live tail.
-  for await (const row of store.readStream(subject, previous?.sequence ?? 1)) {
+  for await (const row of store.readStream(subject, previous?.sequence ?? 1, deadline)) {
     if (row.event.silo !== silo) {
       throw new Error('Wrong silo');
     }
@@ -57,8 +62,11 @@ async function history(store: EventStore, subject: string, silo: string) {
 
 /** Check authority as well as its projection: delayed revocations must fail closed. */
 export async function viewAccess(options: ViewAccessOptions, memberId: string, conversationId: string) {
+  // Retries share the existing check deadline, rather than starting a new budget per history.
+  const deadline = Math.min(options.deadline ?? Infinity, performance.now() + 1200);
+  const boundedOptions = { ...options, deadline };
   try {
-    return await checkViewAccess(options, memberId, conversationId);
+    return await checkViewAccess(boundedOptions, memberId, conversationId);
   } catch (error) {
     // Store outages preserve an existing lease until it expires, including during fence reads.
     if (isEventStoreUnavailable(error)) {
@@ -73,7 +81,7 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const auth = memberAuthorisation(options.binding);
   const authorityReads = [
-    history(store, `member-${memberId}`, silo),
+    history(store, `member-${memberId}`, silo, options.deadline),
     conversationDesktop(options, memberId, conversationId, auth),
     auth.conversation(memberId, conversationId, 'read'),
   ] as const;
@@ -117,7 +125,7 @@ function settledRead<Value>(result: PromiseSettledResult<Value>): Value {
 async function conversationDesktop(options: ViewAccessOptions, memberId: string, conversationId: string,
   auth: ReturnType<typeof memberAuthorisation>) {
   const { store, silo } = options;
-  const conversation = await history(store, `conversation-${conversationId}`, silo);
+  const conversation = await history(store, `conversation-${conversationId}`, silo, options.deadline);
   const created = conversation.find(r => r.event.type === 'conversation.created');
   if (!created || conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Access changed');
   const assistantId = identity.parse(created.event.data).assistantId;
@@ -142,8 +150,8 @@ function participatesIn(conversation: StoredEvent[], data: unknown, memberId: st
   return participates;
 }
 
-async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: string) {
-  const lifecycle = await history(store, `computer-${assistantId}`, silo);
+async function currentComputer({ store, silo, deadline }: ViewAccessOptions, assistantId: string) {
+  const lifecycle = await history(store, `computer-${assistantId}`, silo, deadline);
   const latest = lifecycle.findLast(r => !r.event.type.startsWith('computer.turn_'))?.event;
   if (latest?.type !== 'computer.ready') throw new Error('Computer unavailable');
   const computer = ready.parse(latest.data);
@@ -152,8 +160,8 @@ async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: 
   return computer;
 }
 
-async function desktopGrants(store: EventStore, silo: string, resource: string) {
-  const grants = await history(store, resource, silo);
+async function desktopGrants(store: EventStore, silo: string, resource: string, deadline?: number) {
+  const grants = await history(store, resource, silo, deadline);
   const current = new Map<string, { kind: string; eventId: string }>();
   for (const { event } of grants) {
     const data = grant.parse(event.data);
@@ -167,7 +175,7 @@ async function desktopGrants(store: EventStore, silo: string, resource: string) 
   return current;
 }
 async function belongsToGroup(options: ViewAccessOptions, groupId: string, memberId: string) {
-  const rows = await history(options.store, `team-${groupId}`, options.silo);
+  const rows = await history(options.store, `team-${groupId}`, options.silo, options.deadline);
   function matchesMember(row: StoredEvent) {
     if (!row.event.type.startsWith('team.member_')) return false;
     const data = z.object({ memberId: z.string() }).parse(row.event.data);
@@ -181,8 +189,8 @@ async function desktopAccess(options: ViewAccessOptions, memberId: string,
   const { store, silo } = options;
   const resource = grantStream('shared_desktop', computerId);
   const subjects = [`member-${memberId}`, `conversation-${conversationId}`, resource];
-  const fresh = await authorityFence(store, performance.now(), subjects);
-  const current = await desktopGrants(store, silo, resource);
+  const fresh = await authorityFence(store, performance.now(), subjects, options.deadline);
+  const current = await desktopGrants(store, silo, resource, options.deadline);
   const direct = current.get(memberId);
   if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
   const groupFences: (() => Promise<void>)[] = [];
@@ -191,7 +199,8 @@ async function desktopAccess(options: ViewAccessOptions, memberId: string,
     if (source.kind !== 'team') continue;
     // Use current event membership even when IAM has not applied a removal yet.
     if (!await belongsToGroup(options, groupId, memberId)) continue;
-    const groupFence = await payingGroupAuthority(store, silo, memberId, groupId, options.binding);
+    const groupFence = await payingGroupAuthority(
+      store, silo, memberId, groupId, options.binding, options.deadline);
     groupFences.push(groupFence);
     receipts.push(source.eventId);
   }

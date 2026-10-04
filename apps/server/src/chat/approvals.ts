@@ -24,13 +24,17 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
       const auth = memberAuthorisation(options.binding);
       if (memberId) fresh.include(`member-${memberId}`, `conversation-${conversationId}`);
       if (!memberId || !(await auth.check(memberId, 'member')).allowed || !(await auth.conversation(memberId, conversationId, 'read')).allowed) return reply.code(403).send({ status: 'refused' });
-      if (!await accessApplied(options, memberId, conversationId)) return reply.code(403).send({ status: 'refused' });
+      if (!await accessApplied(options, memberId, conversationId, fresh.deadline)) {
+        return reply.code(403).send({ status: 'refused' });
+      }
       // The token covers the whole Cookie header and conversation, blocking reuse across either.
       const csrf = createHmac('sha256', config.cookieSecret)
         .update(JSON.stringify(['approval', req.headers.cookie, conversationId]))
         .digest('hex');
       if (req.method === 'GET') {
-        const cards = await approvalCards(options.store, options.silo, conversationId, memberId, options.keys);
+        const cards = await approvalCards(
+          options.store, options.silo, conversationId, memberId, options.keys,
+          undefined, fresh.deadline);
         await fresh();
         return reply.send({ cards, csrf });
       }
@@ -46,7 +50,8 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
 async function decide(req: FastifyRequest, reply: FastifyReply, options: ChatOptions, session: SessionData,
   memberId: string, conversationId: string, fresh: Awaited<ReturnType<typeof authorityFence>>) {
       const input = z.object({ approvalId: z.string().regex(/^[a-f0-9]{64}$/u), decision: z.enum(['approved', 'rejected']) }).strict().parse(req.body);
-      const { request } = await readApproval(options.store, options.silo, input.approvalId);
+      const { request } = await readApproval(
+        options.store, options.silo, input.approvalId, undefined, fresh.deadline);
       if (request.conversationId !== conversationId || request.requesterId !== memberId) return reply.code(403).send({ status: 'refused' });
       const text = options.keys.decrypt(options.silo, conversationId, request);
       approvalReviewSchema.parse(JSON.parse(text));
@@ -83,11 +88,14 @@ function isApprovalCsrfValid(req: FastifyRequest, config: AuthConfig, expectedTo
   return submittedOrigin === expectedOrigin && submittedToken === expectedToken;
 }
 
-async function accessApplied(options: ChatOptions, memberId: string, conversationId: string) {
+async function accessApplied(options: ChatOptions, memberId: string, conversationId: string,
+  deadline: number) {
   // Do not serve approval state until every relevant access change has reached OpenFGA.
   const auth = memberAuthorisation(options.binding);
-  const rows = [...await history(options.store, `member-${memberId}`, options.silo),
-    ...await history(options.store, `conversation-${conversationId}`, options.silo)];
+  const memberRows = await history(options.store, `member-${memberId}`, options.silo, deadline);
+  const conversationRows = await history(
+    options.store, `conversation-${conversationId}`, options.silo, deadline);
+  const rows = [...memberRows, ...conversationRows];
   const access = rows.filter(r => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed', 'conversation.created', 'participant.added', 'participant.removed'].includes(r.event.type));
   return (await Promise.all(access.map(r => auth.applied(r.event.id)))).every(Boolean);
 }

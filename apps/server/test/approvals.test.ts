@@ -65,7 +65,14 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
     expect((await f.read()).cards[0]?.state).toBe('approved');
     const renewed = await f.issue();
     const retry = await Promise.all([f.call(undefined, renewed), f.call(undefined, renewed)]);
-    expect(retry.map(r => r.status).sort()).toEqual([200, 403]);
+    const statuses = [];
+    for (const response of retry) {
+      statuses.push(response.status);
+    }
+    statuses.sort();
+    // The loser may fail closed on unavailable authority; single use is the invariant.
+    expect(statuses[0]).toBe(200);
+    expect([403, 503]).toContain(statuses[1]);
     expect(f.received()).toBe(1); expect(f.upstreamBody()).toBe(f.body());
     await f.restart();
     expect((await f.call()).status).toBe(403); expect(f.received()).toBe(1);

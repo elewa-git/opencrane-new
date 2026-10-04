@@ -14,10 +14,16 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   let active = true;
   const subjects = [`member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, grantStream(resourceType, resourceId)];
   fresh.include(...subjects, ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
-  const histories = await Promise.all(subjects.map(subject => readAt(store, subject, fresh.head)));
+  const snapshotHead = fresh.head;
+  const deadline = fresh.deadline;
+  function readSubject(subject: string) {
+    return readAt(store, subject, snapshotHead, deadline);
+  }
+  const histories = await Promise.all(subjects.map(readSubject));
   const teams = authorityTeams(histories.flat(), binding.silo);
   fresh.include(...teams);
-  histories.push(...await Promise.all([...teams].map(subject => readAt(store, subject, fresh.head))));
+  const teamReads = [...teams].map(readSubject);
+  histories.push(...await Promise.all(teamReads));
   for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
     const e = row.event, d = data(e);
     if (e.silo !== binding.silo) continue;
@@ -68,18 +74,30 @@ function relevant(e: EventEnvelope, requester: string, assistant: string, conver
       (e.type.startsWith('grant.') && d['resourceType'] === resourceType && d['resourceId'] === resourceId);
 }
 
-async function readAt(store: EventStore, subject: string, head: number) {
+async function readAt(store: EventStore, subject: string, head: number, deadline: number) {
   const rows: StoredEvent[] = [];
-  for await (const row of store.readStream(subject, 1)) {
-    if (row.sequence > head) break;
-    rows.push(row);
+  try {
+    for await (const row of store.readStream(subject, 1, deadline)) {
+      if (row.sequence > head) {
+        break;
+      }
+      rows.push(row);
+    }
+  } catch (error) {
+    // Keep the authority failure reason when its deadline stops a pending store read.
+    if (performance.now() >= deadline) {
+      throw new Error('Authority snapshot expired', { cause: error });
+    }
+    throw error;
   }
   return rows;
 }
 
 /** Add exact subjects as they are discovered; all are fenced against the same starting head. */
-export async function authorityFence(store: EventStore, started: number, subjects: string[] = []) {
-  const head = await store.head();
+export async function authorityFence(store: EventStore, started: number,
+  subjects: string[] = [], callerDeadline = Infinity) {
+  const deadline = Math.min(started + 2000, callerDeadline);
+  const head = await store.head(undefined, deadline);
   const watched = new Set<string>();
   const include = (...subjects: string[]) => {
     for (const subject of subjects) {
@@ -91,19 +109,29 @@ export async function authorityFence(store: EventStore, started: number, subject
   const outputHeads = new Map<string, number>();
   const fresh = async () => {
     while (true) {
-      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
-      const current = await Promise.all([...watched].map(async subject => ({ subject, sequence: await store.head(subject) })));
-      const changed = current.filter(({ subject, sequence }) => sequence > (outputHeads.get(subject) ?? head));
-      if (performance.now() - started > 2000) throw new Error('Authority snapshot expired');
+      if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+      async function readSubjectHead(subject: string) {
+        const sequence = await store.head(subject, deadline);
+        return { subject, sequence };
+      }
+      const headReads = [...watched].map(readSubjectHead);
+      const current = await Promise.all(headReads);
+      function hasChanged({ subject, sequence }: { subject: string; sequence: number }) {
+        return sequence > (outputHeads.get(subject) ?? head);
+      }
+      const changed = current.filter(hasChanged);
+      if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
       if (!changed.length) return;
       for (const { subject, sequence } of changed) {
-        await checkOutputReports(store, subject, (outputHeads.get(subject) ?? head) + 1, sequence, started + 2000);
+        const fromSequence = (outputHeads.get(subject) ?? head) + 1;
+        await checkOutputReports(store, subject, fromSequence, sequence, deadline);
         outputHeads.set(subject, sequence);
       }
       // Recheck every exact subject: revocation may have arrived while reading reports.
     }
   };
-  return Object.assign(fresh, { include, head });
+  const snapshot = { include, head, deadline };
+  return Object.assign(fresh, snapshot);
 }
 
 async function checkOutputReports(store: EventStore, subject: string, from: number, to: number, deadline: number) {
