@@ -317,7 +317,8 @@ it('recovers a started turn from a legacy journal without execution markers', as
   const socket = await openBridgeSocket(server);
   addReportCollector(socket, reports);
   try {
-    socket.send(JSON.stringify({ type: 'resume', since: 1 }));
+    const resumeAfterFirstReport = { type: 'resume', since: 1 };
+    socket.send(JSON.stringify(resumeAfterFirstReport));
     await until(reportContainsType(reports, 'agent.turn_failed'));
     expect(reports).toEqual([{ sequence: 2, type: 'agent.turn_failed' }]);
   } finally {
@@ -620,10 +621,12 @@ it('retries a failed Stop after turn/start returns, retaining the active turn an
     socket.send(JSON.stringify(stop));
     // A subsequent replay response proves the preceding Stop frame was processed.
     const reportCountBeforeReplay = reports.length;
+    const replayArrived = () => reports.length > reportCountBeforeReplay;
+    const interruptSent = () => interrupts === 1;
     socket.send(JSON.stringify(resume));
-    await until(() => reports.length > reportCountBeforeReplay);
+    await until(replayArrived);
     releaseTurnStart({ turn: { id: 'codex-turn' } });
-    await until(() => interrupts === 1);
+    await until(interruptSent);
     expect(reports.some(isFailedTurnReport)).toBe(false);
     socket.terminate();
     socket = await openBridgeSocket(server);
