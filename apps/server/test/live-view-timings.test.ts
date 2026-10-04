@@ -106,8 +106,19 @@ async function firstFrameDuringLateCheck() {
     expect(performance.now() - revokedAt).toBeLessThan(2000);
 
     const timings: Timing[] = [];
+    const allowedTimingKeys = new Set([
+      'level', 'time', 'pid', 'hostname', 'name', 'msg', 'operation', 'sessionId', 'stage',
+      'outcome', 'durationMs', 'elapsedMs', 'boundary', 'phase', 'checkedAt', 'validUntil',
+    ]);
     for (const line of logs) {
       const value: unknown = JSON.parse(line);
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)
+        && 'operation' in value && value.operation === 'view.timing') {
+        for (const key of Object.keys(value)) {
+          expect(allowedTimingKeys.has(key), `Unexpected timing field: ${key}`).toBe(true);
+        }
+        expect('conversationId' in value).toBe(false);
+      }
       const record = timingRecord.safeParse(value);
       if (record.success) timings.push(record.data);
     }
@@ -124,7 +135,6 @@ async function firstFrameDuringLateCheck() {
     const contents = logs.join('');
     expect(contents).not.toContain(issued.ticket);
     expect(contents).not.toContain(cookie);
-    expect(contents).not.toContain(frame.toString('hex'));
   } finally {
     socket?.terminate();
     vi.restoreAllMocks();

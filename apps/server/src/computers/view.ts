@@ -1,4 +1,4 @@
-import { viewTiming, type DesktopTiming } from './view-timing.ts';
+import { timeStage, viewTiming, type DesktopTiming } from './view-timing.ts';
 import { viewerStream, desktopStream } from './rfb.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -62,7 +62,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     let memberId: string | undefined;
     const conversationId = admissionPath.exec(request.url)?.[1];
     const sessionId = randomUUID();
-    const timing = viewTiming(app.log, sessionId, conversationId);
+    const timing = viewTiming(app.log, sessionId);
     const admissionAt = performance.now();
     timing('ticket_issue', 'started');
     try {
@@ -85,35 +85,54 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
   });
   if (!options) { wss.close(); return; }
+  const accessOptions = options;
   async function checkAccess(
     memberId: string,
     conversationId: string,
     timing: ReturnType<typeof viewTiming>,
     phase: 'admission' | 'upgrade' | 'post_audit' | 'renewal',
     validUntil?: number,
+    checkedAt = Date.now(),
   ) {
-    const startedAt = performance.now();
-    const details = { phase, checkedAt: Date.now(), ...(validUntil ? { validUntil } : {}) };
-    timing('lease_check', 'started', 0, details);
-    try {
-      const current = await deadline(viewAccess(options!, memberId, conversationId));
-      timing('lease_check', 'ok', performance.now() - startedAt, details);
-      return current;
-    } catch (error) {
-      const outcome = error instanceof ViewCheckUnavailable ? 'unavailable' : 'denied';
-      const failure = {
-        ...details,
-        ...(error instanceof ViewCheckUnavailable ? { boundary: error.boundary } : {}),
-      };
-      timing('lease_check', outcome, performance.now() - startedAt, failure);
-      throw error;
+    const details: { phase: typeof phase; checkedAt: number; validUntil?: number } = {
+      phase,
+      checkedAt,
+    };
+    if (validUntil !== undefined) details.validUntil = validUntil;
+    function outcomeForCheckError(error: unknown) {
+      if (error instanceof ViewCheckUnavailable) return 'unavailable' as const;
+      return 'denied' as const;
     }
+    function detailsForCheckError(error: unknown) {
+      const failure: typeof details & {
+        boundary?: 'event_store' | 'authorisation' | 'deadline';
+      } = { ...details };
+      if (error instanceof ViewCheckUnavailable) failure.boundary = error.boundary;
+      return failure;
+    }
+    async function runCheck() {
+      return deadline(viewAccess(accessOptions, memberId, conversationId));
+    }
+    function reportCheckSucceeded(durationMs: number) {
+      timing('lease_check', 'ok', durationMs, details);
+    }
+    function reportCheckFailed(error: unknown, durationMs: number) {
+      const outcome = outcomeForCheckError(error);
+      const failure = detailsForCheckError(error);
+      timing('lease_check', outcome, durationMs, failure);
+    }
+    return timeStage(runCheck, undefined, reportCheckSucceeded, reportCheckFailed);
   }
   function redeem(headers: IncomingHttpHeaders, conversationId: string) {
-      const { cookie } = authenticate(headers);
-      const protocols = headers['sec-websocket-protocol']?.split(',').map(s => s.trim());
-      const key = protocols?.[1] ?? '', ticket = tickets.get(key); tickets.delete(key);
-      if (protocols?.[0] !== 'binary' || !ticket || ticket.cookie !== cookie || ticket.redeemBy <= Date.now() || ticket.conversationId !== conversationId) throw new Error('Invalid ticket');
+    const { cookie } = authenticate(headers);
+    const protocols = headers['sec-websocket-protocol']?.split(',').map(s => s.trim());
+    const key = protocols?.[1] ?? '';
+    const ticket = tickets.get(key);
+    tickets.delete(key);
+    if (protocols?.[0] !== 'binary' || !ticket || ticket.cookie !== cookie
+      || ticket.redeemBy <= Date.now() || ticket.conversationId !== conversationId) {
+      throw new Error('Invalid ticket');
+    }
     return ticket;
   }
   app.server.on('upgrade', (request, socket, head) => {
@@ -124,11 +143,12 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     if (opening + stops.size >= 16) { void refusal('capacity', match[1]).then(refuse); return; }
     opening++; let reserved = true;
     const upgradeAt = performance.now();
-    let timing = viewTiming(app.log, randomUUID(), match[1]);
+    // Keep rejected upgrades correlatable before a ticket supplies the admitted session id.
+    let timing = viewTiming(app.log, randomUUID());
     void (async () => {
       if (!options) throw new Error('View unavailable');
       const ticket = redeem(request.headers, match[1]!);
-      timing = viewTiming(app.log, ticket.sessionId, ticket.conversationId);
+      timing = viewTiming(app.log, ticket.sessionId);
       timing('websocket_upgrade', 'started');
       const computer = await checkAccess(
         ticket.memberId, ticket.conversationId, timing, 'upgrade',
@@ -137,19 +157,27 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       const { podUid: _podUid, ...auditData } = data;
       const started = envelope(options.silo, `view-${ticket.sessionId}`, 'computer.view_started', auditData);
       started.source = 'opencrane-server'; started.principal = { kind: 'human', id: ticket.memberId }; started.correlation = { conversation: ticket.conversationId };
-      const auditAt = performance.now();
-      timing('start_audit', 'started');
-      let result;
-      try {
-        const command = { event: started, expectedSequence: 0 };
-        result = await options.store.append(command);
-        const outcome = result.status === 'appended' ? 'ok' : 'error';
-        timing('start_audit', outcome, performance.now() - auditAt);
-      } catch (error) {
-        timing('start_audit', 'error', performance.now() - auditAt);
-        throw error;
+      const command = { event: started, expectedSequence: 0 };
+      async function appendStartAudit() {
+        const result = await accessOptions.store.append(command);
+        if (result.status !== 'appended') throw new Error('Audit unavailable');
+        return result;
       }
-      if (result.status !== 'appended') throw new Error('Audit unavailable');
+      function reportAuditStarted() {
+        timing('start_audit', 'started');
+      }
+      function reportAuditSucceeded(durationMs: number) {
+        timing('start_audit', 'ok', durationMs);
+      }
+      function reportAuditFailed(_error: unknown, durationMs: number) {
+        timing('start_audit', 'error', durationMs);
+      }
+      const result = await timeStage(
+        appendStartAudit,
+        reportAuditStarted,
+        reportAuditSucceeded,
+        reportAuditFailed,
+      );
       // Include the check after the start audit in the limit of five outstanding checks.
       let viewer: WebSocket | undefined, upstream: Duplex | undefined, stopped = false, checking = 1;
       let validUntil = Date.now() + 1500, renewedAt = 0;
@@ -178,7 +206,9 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         if (checking >= 5) return;
         checking++;
         const checkedAt = Date.now();
-        void checkAccess(ticket.memberId, ticket.conversationId, timing, 'renewal', validUntil).then(current => {
+        void checkAccess(
+          ticket.memberId, ticket.conversationId, timing, 'renewal', validUntil, checkedAt,
+        ).then(current => {
           if (JSON.stringify(current) !== JSON.stringify(computer)) return stop('access_changed');
           // A delayed reply must not extend the age of the authority snapshot.
           renewedAt = Math.max(renewedAt, checkedAt);
@@ -195,7 +225,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         // Audit persistence can wait long enough for authority or the cookie to expire.
         const checkedAt = Date.now();
         const current = await checkAccess(
-          ticket.memberId, ticket.conversationId, timing, 'post_audit', validUntil,
+          ticket.memberId, ticket.conversationId, timing, 'post_audit', validUntil, checkedAt,
         ).catch((error: unknown) => {
           // A newer, successful post-audit check can satisfy this same admission fence.
           // Its lease already ends at or after checkedAt + 1500; this grants no extra time.
@@ -205,14 +235,24 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         if (Date.now() >= ticket.expires) { stop('expired'); return; }
         validUntil = Math.max(validUntil, checkedAt + 1500);
         const upstreamAt = performance.now();
-        timing('upstream_open', 'started');
-        try {
-          upstream = await options.open(computer, timing);
-          timing('upstream_open', 'ok', performance.now() - upstreamAt);
-        } catch (error) {
-          timing('upstream_open', 'error', performance.now() - upstreamAt);
-          throw error;
+        async function openUpstream() {
+          return accessOptions.open(computer, timing);
         }
+        function reportUpstreamStarted() {
+          timing('upstream_open', 'started');
+        }
+        function reportUpstreamSucceeded(durationMs: number) {
+          timing('upstream_open', 'ok', durationMs);
+        }
+        function reportUpstreamFailed(_error: unknown, durationMs: number) {
+          timing('upstream_open', 'error', durationMs);
+        }
+        upstream = await timeStage(
+          openUpstream,
+          reportUpstreamStarted,
+          reportUpstreamSucceeded,
+          reportUpstreamFailed,
+        );
         if (stopped || socket.destroyed || upstream.destroyed) { upstream.destroy(); stop('upstream'); return; }
         wss.handleUpgrade(request, socket, head, ws => {
           viewer = ws;

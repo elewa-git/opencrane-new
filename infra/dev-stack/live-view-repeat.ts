@@ -122,13 +122,23 @@ try {
     const serverRunDelayAfter = await serverRunDelay();
     const browserTimings = stopTimings();
     await writeFile(`${output}/run-${run}-browser.json`, JSON.stringify(browserTimings, null, 2) + '\n');
-    const timingRecords = await collectViewTimings(conversationId, `${output}/run-${run}-timings.jsonl`);
-    const receipt = { conversationId, timingRecords, date: new Date().toISOString(), run, width, stackId, result, beforeLoad,
+    let sessionId: string | undefined;
+    for (const timing of browserTimings) {
+      if (timing.stage === 'admission_response' && timing.sessionId) {
+        sessionId = timing.sessionId;
+        break;
+      }
+    }
+    const timingRecords = await collectViewTimings(sessionId ?? '', `${output}/run-${run}-timings.jsonl`);
+    const receipt = {
+      conversationId, sessionId, timingRecords, date: new Date().toISOString(), run, width, stackId,
+      result, beforeLoad,
       cpuPressureSomeAvg10, serverRunDelayDelta: String(serverRunDelayAfter - serverRunDelayBefore),
       afterLoad: loadavg(),
       ...(journeyPauses === undefined ? {} : { pauses: journeyPauses }),
       ...(journeyPauseMs === undefined ? {} : { pauseMs: journeyPauseMs }),
-      durationMs: Math.round(performance.now() - started), ...(failure ? { failure } : {}) };
+      durationMs: Math.round(performance.now() - started), ...(failure ? { failure } : {}),
+    };
     await appendFile(`${output}/runs.jsonl`, JSON.stringify(receipt) + '\n');
     console.log(JSON.stringify(receipt));
   }

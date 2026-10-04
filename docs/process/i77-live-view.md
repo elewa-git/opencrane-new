@@ -210,31 +210,30 @@ was relaxed, and no speculative behavioural fix was applied.
 
 ### Safe timing records
 
-The server emits JSON records with `operation: "view.timing"` at info level.
-`sessionId` joins ticket issuance to upgrade, audit, pod lookup, desktop
-connection, first upstream bytes, first framebuffer forwarding, lease checks
-and stopping. Lease checks include their phase, start time, starting lease
-expiry, outcome and duration. Unavailable checks distinguish `event_store`,
+The server emits JSON records with `operation: "view.timing"` at info level,
+except successful lease renewals under 250 ms, which use debug level.
+`sessionId` joins ticket issuance to upgrade, audit, pod lookup, first upstream
+bytes, first framebuffer forwarding, lease checks and stopping. Timing records
+do not include a conversation ID. Lease checks include their phase, caller's
+`checkedAt`, starting lease expiry, outcome and duration; there is no separate
+start record because the outcome contains the elapsed duration. Unavailable checks distinguish `event_store`,
 `authorisation` and `deadline`; raw errors are never logged. The desktop helper
-emits one fixed stderr marker on Kasm WebSocket open. All other stderr is
-ignored. Tickets, cookies, credentials, request headers and desktop content
-are excluded from these records.
+ignores stderr entirely because it can contain credentials or an unbounded
+line. `first_upstream_bytes` records the Kasm connection becoming useful to the
+viewer. Tickets, cookies, credentials, request headers and desktop content are
+excluded from these records.
 
 Timings have specific meanings:
 
 - `time` is the logger's wall-clock timestamp. `elapsedMs` starts again on
   upgrade; join admission and upgrade by `time` and `sessionId`.
-- `upstream_open` means the duplex transport was created. `desktop_connect`
-  spans kubectl exec, in-pod Node startup and Kasm's WebSocket handshake; the
-  transport may exist before Kasm connects.
+- `upstream_open` means the duplex transport was created. `first_upstream_bytes`
+  is the first signal that the remote desktop has connected and sent RFB data.
 - `first_upstream_bytes` is the first RFB data, normally the greeting.
   `first_browser_frame` is the first complete framebuffer update accepted by
   `ws.send`, measured from upstream opening. It can be an empty update; it is
   not delivery acknowledgement or proof of decoded browser pixels. The existing
   browser journey separately checks decoded, non-uniform pixels.
-- `desktop_connect:error` means the child exited before its success marker was
-  observed. It can follow a lease-triggered termination, and stderr can race
-  child exit. It must not be interpreted alone as a Kasm failure.
 
 From an already claimed secondary, collect ten runs with:
 
@@ -319,6 +318,10 @@ ms** of runnable wait. This is direct server CPU-starvation evidence, rather
 than an inference from load average alone. Sampling began during run 5; these
 scheduler values must not be assigned to runs 1–4.
 
+Across all scheduler samples, runnable wait ranged from **95 to 1,521 ms** per
+two seconds. Failing runs 5–7 had **901–1,264 ms average runnable wait** per
+two seconds, compared with **370–622 ms** in passing runs 8–10.
+
 The [NATS cgroup readings](i77-live-view/diag/nats-cpu.jsonl) recorded only
 **88.638 ms cumulative quota throttling** across **5,758 quota periods** at
 **14:59:27 UTC**. Host CPU pressure
@@ -369,10 +372,11 @@ no secondary-2 directory or Compose containers; see the
 [teardown receipt](i77-live-view/diag/teardown.txt). The initial live source
 hashes are retained in [source-sha256.txt](i77-live-view/diag/source-sha256.txt).
 Later production edits only expanded helper bodies and named option objects
-for clarity. Both independent review passes found no functional, security or evidence
-blocker. Their requested clarity fixes and timing caveats were addressed; the
-second pass left only two line wraps, which were then applied. No third pass
-was used.
+for clarity. The review findings and resulting fixes are recorded in draft PR
+[#139](https://github.com/elewa-git/opencrane-new/pull/139). The live batch
+used earlier `view.ts` and `desktop.ts` sources; its measurements qualify that
+source snapshot only. The full root suite was rerun on final HEAD after the
+source fixes, so its result covers the final source revision.
 
 Source validation is recorded separately below; live qualification remains
 FAIL regardless of source-gate results.
@@ -386,9 +390,9 @@ Before the full root suite, the separate [load check](i77-live-view/diag/root-lo
 waited two minutes for **17.13 → 12.12**, then started at **15:16:49 UTC**.
 [Command receipts](i77-live-view/diag/gates.txt) retain exit codes and wall times.
 
-The first two lint attempts caught unsafe JSON narrowing in the new diagnostic
-test, then its intermediate correction. The final test validates log records
-with the already-installed Zod schema parser; no lint rule was disabled.
+The three earlier lint attempts covered intermediate diagnostic-test source
+revisions. They do not describe the final source. The final lint result below
+covers final HEAD; the root suite was also rerun on final HEAD.
 
 | Check | Result | Wall seconds |
 | --- | --- | ---: |
@@ -397,13 +401,24 @@ with the already-installed Zod schema parser; no lint rule was disabled.
 | `npm run check:events` | PASS; 85 types agree | 1.51 |
 | `npm run test -w apps/web` | PASS; 60 tests / 11 files | 34.93 |
 | Infra TypeScript check | PASS | 24.97 |
-| Full root suite, `--maxWorkers=2` | PASS; 1,415 passed / 15 skipped; 83 files passed / 4 skipped | 1,384.34 including load wait |
+| Earlier full root suite, `--maxWorkers=2` | PASS; 1,415 passed / 15 skipped; 83 files passed / 4 skipped | 1,384.34 including load wait |
 
 The root command wall time includes the **120 s** load wait. Vitest itself
 started at **15:16:51 UTC** and ran for **1,262.20 s**. The skipped opt-in
 conditions remain **NOT RUN**; the full-suite result does not turn the failed
 live batch into a pass. The [root summary](i77-live-view/diag/root-tests.txt)
 and [final production source hashes](i77-live-view/diag/final-source-sha256.txt)
-retain the check's source/evidence context.
+retain the check's source/evidence context. That earlier root run preceded the
+review fixes and does not qualify the final source.
 
-All required source gates are **PASS**. Live qualification remains **FAIL**.
+On the final production-source revision, lint, typecheck and `check:events` all **PASS**. The
+live-view batch had **33 passed, 2 skipped and 1 timed out**: the 1,250 ms
+admission-deadline case timed out in the concurrent batch, while both deadline
+cases passed when run alone; a single-worker retry also passed the ticket
+redemption case that had timed out in the root run. The full root suite had **1,448 passed, 15
+skipped and 2 failed** across 90 files: a NATS request timed out during ticket
+redemption, and the authority-volume timing check measured 1,026.99 ms against
+its 1,000 ms bound. A single-worker retry of the volume test then received a
+403 unavailable response from its decision service. The host was under
+concurrent test load; these are failed runs, not passes. Live qualification
+remains **FAIL**.

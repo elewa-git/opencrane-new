@@ -7,6 +7,17 @@ infra: exit 0; 24.97 seconds; exit 0
 lint-final: exit 1; Command exited with non-zero status 1
 188.91 seconds; exit 1
 root: exit 0; 1384.34 seconds; exit 0
+final-head-production-source: fd3b233
+final-head-lint: exit 0; 8 existing size warnings
+final-head-typecheck: exit 0
+final-head-events: exit 0; 85 types agree
+final-head-live-view: exit 1; 33 passed, 2 skipped, 1 timed out in concurrent run
+final-head-live-view-deadline-isolated: exit 0; 2 passed, 13 skipped
+final-head-root: exit 1; 1448 passed, 15 skipped, 2 failed; 90 files
+final-head-root-failures: NATS request timeout; authority-volume 1026.99 ms over 1000 ms bound
+final-head-ticket-timeout-retry: exit 0; 1 passed
+final-head-authority-volume-retry: exit 1; decision service returned 403 unavailable
+final-receipt-markdownlint: exit 0; 0 issues
 lint-clean: exit 1; Command exited with non-zero status 1
 87.89 seconds; exit 1
 typecheck-final: exit 0; 78.23 seconds; exit 0

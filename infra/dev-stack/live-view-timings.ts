@@ -4,20 +4,28 @@ import { directory } from './config.ts';
 
 // Rebuild an allowlisted record instead of copying arbitrary server log fields.
 // Session identifiers correlate requests without retaining tickets or cookies.
-export async function collectViewTimings(conversationId: string, output: string) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+export async function collectViewTimings(sessionId: string, output: string) {
   const contents = await readFile(`${directory}/server.log`, 'utf8');
   const records: Record<string, unknown>[] = [];
-  const fields = ['time', 'sessionId', 'conversationId', 'stage', 'outcome', 'durationMs',
+  const fields = ['time', 'sessionId', 'stage', 'outcome', 'durationMs',
     'elapsedMs', 'phase', 'checkedAt', 'validUntil', 'boundary'];
   for (const line of contents.split('\n')) {
     if (!line.startsWith('{')) continue;
-    let value: Record<string, unknown>;
-    try { value = JSON.parse(line) as Record<string, unknown>; }
-    catch { continue; }
-    if (value['operation'] !== 'view.timing' || value['conversationId'] !== conversationId) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (!isRecord(parsed)) continue;
+    if (parsed['operation'] !== 'view.timing' || parsed['sessionId'] !== sessionId) continue;
     const record: Record<string, unknown> = {};
     for (const field of fields) {
-      const item = value[field];
+      const item = parsed[field];
       if (typeof item === 'string' || typeof item === 'number') record[field] = item;
     }
     records.push(record);
@@ -26,14 +34,15 @@ export async function collectViewTimings(conversationId: string, output: string)
     return JSON.stringify(record);
   }
   const lines = records.map(serialise);
-  await writeFile(output, lines.join('\n') + '\n');
+  const contentsToWrite = lines.length > 0 ? `${lines.join('\n')}\n` : '';
+  await writeFile(output, contentsToWrite);
   return records.length;
 }
 
 
 export function browserViewTimings(page: Page, conversationId: string) {
   const began = performance.now();
-  const records: { stage: string; elapsedMs: number; status?: number }[] = [];
+  const records: { stage: string; elapsedMs: number; status?: number; sessionId?: string }[] = [];
   const cleanups: (() => void)[] = [];
   function record(stage: string, status?: number) {
     const entry = {
@@ -45,8 +54,25 @@ export function browserViewTimings(page: Page, conversationId: string) {
   function response(reply: Response) {
     const path = new URL(reply.url()).pathname;
     if (path === `/api/conversations/${conversationId}/view`) {
-      record('admission_response', reply.status());
+      void recordAdmission(reply);
     }
+  }
+  async function recordAdmission(reply: Response) {
+    const entry = {
+      stage: 'admission_response',
+      elapsedMs: Math.round(performance.now() - began),
+      status: reply.status(),
+    };
+    try {
+      const value: unknown = await reply.json();
+      if (isRecord(value) && typeof value['sessionId'] === 'string') {
+        records.push({ ...entry, sessionId: value['sessionId'] });
+        return;
+      }
+    } catch {
+      // Refused admissions do not return an admitted session identifier.
+    }
+    records.push(entry);
   }
   function socketOpened(socket: WebSocket) {
     if (new URL(socket.url()).pathname !== `/ws/conversations/${conversationId}/view`) return;

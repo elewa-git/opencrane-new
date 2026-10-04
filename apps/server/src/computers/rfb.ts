@@ -34,7 +34,10 @@ function messageSize(bytes: Buffer, stage: number): number {
 
 const frameLimit = 4 * 1024 * 1024;
 /** Raw framebuffer framing also removes Kasm's private join/leave notices. */
-export function desktopStream(forward: (bytes: Buffer, framebuffer: boolean) => void, refuse: () => void) {
+export function desktopStream(
+  forward: (bytes: Buffer, framebuffer: boolean) => void,
+  refuse: () => void,
+) {
   let pending: Buffer = Buffer.alloc(0), stage = 0, refused = false, width = 0, height = 0;
   return (bytes: Buffer) => {
     if (refused) return;

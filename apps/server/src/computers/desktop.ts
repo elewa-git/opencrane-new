@@ -1,12 +1,12 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { createInterface } from 'node:readline';
 import { Duplex } from 'node:stream';
 import { z } from 'zod';
 import type { LiveViewOptions } from './view.ts';
+import { timeStage } from './view-timing.ts';
 
 // Runs inside the selected Pod. Passwords never cross the Kubernetes connection.
-// Stderr contains fixed timing markers; stdout remains the unmodified RFB stream.
+// Stderr is ignored because it may contain credentials or grow without line breaks.
 const connect = `import { readFileSync } from 'node:fs';
 import WebSocket, { createWebSocketStream } from '/app/node_modules/ws/wrapper.mjs';
 if (process.env['POD_UID'] !== expectedUid) process.exit(1);
@@ -17,10 +17,6 @@ const ws = new WebSocket('ws://127.0.0.1:6901/websockify', 'binary', {
   headers: { authorization: 'Basic '+Buffer.from('viewer:'+viewer).toString('base64') },
   perMessageDeflate: false, maxPayload: 4194304, handshakeTimeout: 5000,
 });
-function connected() {
-  process.stderr.write('desktop-connected\\n');
-}
-ws.once('open', connected);
 const stream = createWebSocketStream(ws);
 stream.on('error', () => process.exit(1)); ws.on('close', () => process.exit(0));
 process.stdin.pipe(stream).pipe(process.stdout);
@@ -38,6 +34,57 @@ const podSchema = z.object({
 const podsSchema = z.object({ items: z.array(podSchema) });
 const execute = promisify(execFile);
 
+function matchesPod(pod: z.infer<typeof podSchema>, computer: {
+  computerId: string;
+  podUid?: string | undefined;
+}) {
+  return pod.metadata.name === computer.computerId
+    && pod.metadata.uid === computer.podUid
+    && !pod.metadata.deletionTimestamp
+    && pod.metadata.labels?.['app'] === 'computer';
+}
+
+function stageStarted(observe: Parameters<LiveViewOptions['open']>[1]) {
+  observe?.('pod_lookup', 'started', 0);
+}
+
+function stageSucceeded(
+  observe: Parameters<LiveViewOptions['open']>[1],
+  durationMs: number,
+) {
+  observe?.('pod_lookup', 'ok', durationMs);
+}
+
+function stageFailed(
+  observe: Parameters<LiveViewOptions['open']>[1],
+  durationMs: number,
+) {
+  observe?.('pod_lookup', 'error', durationMs);
+}
+
+function destroyStream(stream: Duplex) {
+  stream.destroy(new Error('Desktop transport unavailable'));
+}
+
+function stopChild(child: ReturnType<typeof spawn>) {
+  child.kill();
+}
+
+function desktopStream(child: ReturnType<typeof spawn>) {
+  if (!child.stdin || !child.stdout) {
+    throw new Error('Desktop transport streams unavailable');
+  }
+  const streams = { readable: child.stdout, writable: child.stdin };
+  const stream = Duplex.from(streams);
+  stream.on('error', () => stopChild(child));
+  child.stdin.on('error', () => stream.destroy());
+  child.stdout.on('error', () => stream.destroy());
+  child.once('error', () => destroyStream(stream));
+  child.once('exit', () => stream.destroy());
+  stream.once('close', () => stopChild(child));
+  return stream;
+}
+
 /** Authenticated Kubernetes stream; no Kasm port-forward, Service or browser credential. */
 export function desktopConnection(kubeconfig: string, namespace: string): LiveViewOptions['open'] {
   if (!kubeconfig || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(namespace)) {
@@ -51,66 +98,35 @@ export function desktopConnection(kubeconfig: string, namespace: string): LiveVi
     if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(computer.computerId) || !computer.podUid) {
       throw new Error('Unbound desktop');
     }
-    const lookupAt = performance.now();
-    observe?.('pod_lookup', 'started', 0);
-    try {
+    async function lookupPod() {
       const lookupArgs = [...args, 'get', 'pods', '-l', 'app=computer', '-o', 'json'];
       const limits = { timeout: 5000, maxBuffer: 2_000_000 };
       const result = await execute('kubectl', lookupArgs, limits);
       const value: unknown = JSON.parse(result.stdout);
       const pods = podsSchema.parse(value);
-      function matches(pod: z.infer<typeof podSchema>) {
-        return pod.metadata.name === computer.computerId
-          && pod.metadata.uid === computer.podUid
-          && !pod.metadata.deletionTimestamp
-          && pod.metadata.labels?.['app'] === 'computer';
+      function matchesCurrentPod(pod: z.infer<typeof podSchema>) {
+        return matchesPod(pod, computer);
       }
-      if (!pods.items.some(matches)) throw new Error('Desktop generation changed');
-      observe?.('pod_lookup', 'ok', performance.now() - lookupAt);
-    } catch (error) {
-      observe?.('pod_lookup', 'error', performance.now() - lookupAt);
-      throw error;
+      const podMatches = pods.items.some(matchesCurrentPod);
+      if (!podMatches) throw new Error('Desktop generation changed');
     }
-    const connectAt = performance.now();
-    observe?.('desktop_connect', 'started', 0);
+    function reportLookupStarted() {
+      stageStarted(observe);
+    }
+    function reportLookupSucceeded(durationMs: number) {
+      stageSucceeded(observe, durationMs);
+    }
+    function reportLookupFailed(_error: unknown, durationMs: number) {
+      stageFailed(observe, durationMs);
+    }
+    await timeStage(lookupPod, reportLookupStarted, reportLookupSucceeded, reportLookupFailed);
     const script = `const expectedUid = ${JSON.stringify(computer.podUid)};\n${connect}`;
     const command = [...args, 'exec', '-i', computer.computerId, '-c', 'computer', '--',
       'node', '--input-type=module', '-e', script];
-    const processOptions = { stdio: ['pipe', 'pipe', 'pipe'] as ['pipe', 'pipe', 'pipe'] };
+    const stdio = ['pipe', 'pipe', 'ignore'] as const;
+    const processOptions = { stdio: [...stdio] };
     const child = spawn('kubectl', command, processOptions);
-    const streams = { readable: child.stdout, writable: child.stdin };
-    const stream = Duplex.from(streams);
-    const messageOptions = { input: child.stderr };
-    const messages = createInterface(messageOptions);
-    let connected = false;
-    function marker(line: string) {
-      // Discard all other stderr, which may contain credentials or command arguments.
-      if (line !== 'desktop-connected' || connected) return;
-      connected = true;
-      observe?.('desktop_connect', 'ok', performance.now() - connectAt);
-    }
-    function kill() {
-      child.kill();
-      messages.close();
-    }
-    function destroy() {
-      stream.destroy();
-    }
-    function failed() {
-      stream.destroy(new Error('Desktop transport unavailable'));
-    }
-    function exited() {
-      if (!connected) observe?.('desktop_connect', 'error', performance.now() - connectAt);
-      destroy();
-    }
-    messages.on('line', marker);
-    stream.on('error', kill);
-    child.stdin.on('error', destroy);
-    child.stdout.on('error', destroy);
-    child.once('error', failed);
-    child.once('exit', exited);
-    stream.once('close', kill);
-    return stream;
+    return desktopStream(child);
   }
   return open;
 }
