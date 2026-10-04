@@ -3,9 +3,25 @@
 .panel-header { height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 18px; border-bottom: 1px solid #dee3e4; font-size: 11px; color: #616a6c; }
 .panel-header>span:last-child { margin-left: auto; }.scope { font-size: 6px; line-height: 3px; color: #c9d0d1; }.scope b { color: #16191a; }
 .panel-section { padding: 20px 18px; }
-<<<<<<< HEAD
-.panel-section h2 { font-size: 10px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: #91989a; }.panel-section h2 span { color: #91989a; font-weight: 400; }
-.panel-section>p { font-size: 11px; color: #81888a; line-height: 1.6; }.folder { font-family: var(--oc-font-mono); }
+.panel-section h2 {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--oc-ink-muted);
+}
+.panel-section h2 span {
+  color: var(--oc-ink-muted);
+  font-weight: 400;
+}
+.panel-section>p {
+  font-size: 11px;
+  color: var(--oc-ink-muted);
+  line-height: 1.6;
+}
+.folder {
+  font-family: var(--oc-font-mono);
+}
 .panel-file,
 .panel-file-paper {
   display: flex;
@@ -27,28 +43,6 @@
 .panel-file>span:last-child {
   min-width: 0;
 }
-=======
-.panel-section h2 {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--oc-ink-muted);
-}
-.panel-section h2 span {
-  color: var(--oc-ink-muted);
-  font-weight: 400;
-}
-.panel-section>p {
-  font-size: 11px;
-  color: var(--oc-ink-muted);
-  line-height: 1.6;
-}
-.folder {
-  font-family: var(--oc-font-mono);
-}
-.panel-file { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 0; text-align: left; font-size: 12px; overflow-wrap: anywhere; }.panel-file>span:last-child { min-width: 0; }
->>>>>>> ccba5ae (🩹 Fix F2 review findings and overlay regressions)
 .person { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 12px; }
 .session-panel { display: flex; flex-direction: column; min-height: 0; }
 .panel-header { flex-shrink: 0; }.panel-header strong { font-size: 13px; color: #2b3133; }
@@ -57,17 +51,12 @@
 .panel-tabs { display: flex; padding: 10px 12px; gap: 8px; border-bottom: 1px solid #dee3e4; }
 .panel-tabs button { border-radius: 6px; padding: 5px 12px; font-size: 12px; text-align: left; min-width: 64px; }
 .panel-tabs [aria-selected=true] { background: white; color: #16191a; font-weight: 600; }
-<<<<<<< HEAD
-.panel-tabs small { display: block; color: #0a94a7; font: 10px var(--oc-font-mono); margin-top: 2px; }
-=======
 .panel-tabs small {
   display: block;
   color: var(--oc-accent-dark);
   font: 10px var(--oc-font-mono);
   margin-top: 2px;
 }
-.panel-file { background: white; border: 1px solid #dee3e4; border-radius: 7px; padding: 8px; min-height: 36px; margin-top: 8px; }
->>>>>>> ccba5ae (🩹 Fix F2 review findings and overlay regressions)
 .panel-file small { margin: 0 4px 0 auto; color: #2a7d4f; }
 .panel-footnote {
   margin-top: auto;
