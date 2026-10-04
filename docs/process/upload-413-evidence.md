@@ -76,3 +76,29 @@ Fresh-install browser upload qualification is **NOT RUN**: this task forbids
 touching a stack. Source checks and disposable fixtures do not qualify that
 journey. Independent review and hosted CI remain for the orchestrator before
 landing. The shared HTTP guard belongs to #121 and is outside this change.
+
+## #117 branch qualification rerun
+
+Date: 4 October 2026. Branch `work/i117-upload-413`, commit `d703e30`.
+Environment: existing shared dev host and normal disposable test fixtures.
+The PostgreSQL test URL was `postgres://postgres:test@127.0.0.1:55432/postgres`.
+Before the root suite, `cut -d. -f1 /proc/loadavg` returned **11**, below the
+required threshold of 16. No daemon, stack or host networking settings were
+changed.
+
+| Command / qualification | Observed | Result |
+| --- | --- | --- |
+| `PG_TEST_URL=… npx vitest run apps/server/test/upload.test.ts --maxWorkers=2` | 7 passed; 78.24 s | PASS |
+| `PG_TEST_URL=… npm test -- --maxWorkers=2` | 1,385 passed, 15 skipped, 2 failed in 86 files; 1,346.38 s | FAIL |
+| Isolated approvals case, `apps/server/test/approvals.test.ts -t 'opens one encrypted Ask card and forwards approved lossless bytes once across tabs, retries and restart' --maxWorkers=1` | 1 passed, 21 skipped; 20.92 s | PASS |
+| Isolated OpenFGA case, `libs/authz/test/projection.test.ts -t 'cleans a rebuild store when the create response is lost at the HTTP boundary' --maxWorkers=1` | Failed again at its 5-second timeout; 1 failed, 10 skipped; 11.36 s | FAIL |
+
+The focused upload tests pass. The full-suite approvals failure was a 503 in
+the test `opens one encrypted Ask card and forwards approved lossless bytes
+once across tabs, retries and restart`; it passed alone. The other full-suite
+failure was the unchanged authorisation test `cleans a rebuild store when the
+create response is lost at the HTTP boundary`. It timed out both in the full
+suite and alone. This is the same five-second OpenFGA fixture timing issue
+recorded under #136 in [wake-latency-evidence.md](wake-latency-evidence.md).
+No source, fixture or timeout was changed. The root suite result remains
+**FAIL** because of these unrelated failures.
