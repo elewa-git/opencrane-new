@@ -94,6 +94,7 @@ async function watchFakeView(status: number) {
 async function unconfirmedBrowserAdmission() {
   const { fixture, element, request } = await watchFakeView(503);
   expect(element.textContent).toContain('Failed');
+  expect(element.querySelector('oc-shared-state [data-state="failed"]')).not.toBeNull();
   expect(element.textContent).toContain("Access checks didn't answer in time");
   const retry = element.querySelector<HTMLButtonElement>('.retry');
   expect(retry?.textContent).toContain('Try again');

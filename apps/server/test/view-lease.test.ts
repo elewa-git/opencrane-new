@@ -233,6 +233,7 @@ function leaseCases() {
     }
     const lease = new ViewLease(check, computer, notifications);
     lease.start();
+    // Synchronous time advancement leaves promise callbacks queued, like a stalled server.
     vi.advanceTimersByTime(1500);
     expect(pending).toHaveLength(5);
     lease.stop();
