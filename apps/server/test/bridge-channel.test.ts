@@ -224,7 +224,7 @@ it('replays reports written before a channel restart without executing the turn 
     const replayResume = { type: 'resume', since: 1 };
     socket.send(JSON.stringify(replayResume));
     await until(reportContainsSequenceAndText(reports, 2, 'Saved'));
-    const replayedReports = reports.filter(isSecondSequenceReport);
+    const replayedReports = reports.filter(hasSecondSequence);
     expect(replayedReports).toEqual([
       { sequence: 2, type: 'agent.message_delta', text: 'Saved' },
     ]);
@@ -304,7 +304,8 @@ it('recovers a started turn from a legacy journal without execution markers', as
     type: 'agent.turn_started',
     threadId: 'thread',
   };
-  await writeFile(journal, `${JSON.stringify(legacyStartedReport)}\n`);
+  const legacyStartedPacket = `${JSON.stringify(legacyStartedReport)}\n`;
+  await writeFile(journal, legacyStartedPacket);
 
   const channel = bridgeChannel(server, {
     rpc: rejectUnexpectedExecution,
@@ -421,7 +422,7 @@ it('refuses a different turn delivered to an occupied conversation', async () =>
     const replay = { type: 'resume', since: 0 };
     socket.send(JSON.stringify(replay));
     await until(reportContainsType(reports, 'agent.turn_completed'));
-    expect(reports.some(isAdditionalStartedReport)).toBe(false);
+    expect(reports.some(isAdditionalTurnStartedReport)).toBe(false);
   } finally {
     socket.terminate();
     await channel.close();
@@ -491,7 +492,9 @@ async function openBridgeSocket(server: ReturnType<typeof createServer>) {
     await once(server, 'listening');
   }
   const address = server.address();
-  if (!address || typeof address === 'string') throw new Error('No port');
+  if (!address || typeof address === 'string') {
+    throw new Error('No port');
+  }
   const url = `ws://127.0.0.1:${address.port}/bridge`;
   const socket = new WebSocket(url, { headers: { 'x-bridge-token': 'test' } });
   await once(socket, 'open');
@@ -561,11 +564,11 @@ function reportContainsSequenceAndText(
   };
 }
 
-function isSecondSequenceReport(report: BridgeReportSummary) {
+function hasSecondSequence(report: BridgeReportSummary) {
   return report.sequence === 2;
 }
 
-function isAdditionalStartedReport(report: BridgeReportSummary) {
+function isAdditionalTurnStartedReport(report: BridgeReportSummary) {
   return report.type === 'agent.turn_started' && report.sequence > 1;
 }
 
@@ -574,9 +577,10 @@ it('retries a failed Stop after turn/start returns, retaining the active turn an
   const server = createServer();
   let releaseTurnStart!: (value: unknown) => void;
   let interrupts = 0;
-  const turnStart = new Promise<unknown>(resolve => {
+  function captureTurnStartRelease(resolve: (value: unknown) => void) {
     releaseTurnStart = resolve;
-  });
+  }
+  const turnStart = new Promise<unknown>(captureTurnStartRelease);
   const reports: BridgeReportSummary[] = [];
   const channel = bridgeChannel(server, {
     rpc(method) {

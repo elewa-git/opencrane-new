@@ -76,10 +76,9 @@ async function readAttachmentContext(
       const bytes = await read(paths.textPath, remainingBytes + 1);
       truncated = bytes.length > remainingBytes;
       // Drop a split final UTF-8 character rather than exceeding the byte allowance.
-      content = new TextDecoder('utf-8', { fatal: true }).decode(
-        bytes.subarray(0, remainingBytes),
-        { stream: true },
-      );
+      const decoder = new TextDecoder('utf-8', { fatal: true });
+      const allowedBytes = bytes.subarray(0, remainingBytes);
+      content = decoder.decode(allowedBytes, { stream: true });
       remainingBytes -= Buffer.byteLength(content);
     } catch {
       unavailable = true;

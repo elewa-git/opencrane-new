@@ -127,10 +127,15 @@ export function reportJournal(driver: JournalDriver) {
 
   function load() {
     const reportLines = readReportLines(driver.journal);
-    for (const line of reportLines) reports.push(parseStoredReport(line));
+    for (const line of reportLines) {
+      const report = parseStoredReport(line);
+      reports.push(report);
+    }
 
     const executionLines = readExecutionLines(`${driver.journal}.executions`);
-    for (const turnId of executionLines) executions.add(turnId);
+    for (const turnId of executionLines) {
+      executions.add(turnId);
+    }
   }
 
   function findLast(predicate: (report: BridgeReport) => boolean) {

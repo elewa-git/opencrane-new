@@ -227,7 +227,9 @@ export function bridgeSocket(
 
   function close() {
     function closeWebSocketServer(resolve: () => void) {
-      for (const client of wss.clients) client.terminate();
+      for (const client of wss.clients) {
+        client.terminate();
+      }
       function resolveClosed() {
         resolve();
       }
