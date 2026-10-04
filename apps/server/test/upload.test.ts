@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import { uploadPdf } from './support/upload-pdf.ts';
 import { expect, it } from 'vitest';
 import { inspectFile } from '../src/files/types.ts';
+import { uploadFile } from '../src/files/routes.ts';
 
 it('accepts document content and refuses a disguised executable or archive', async () => {
   expect(await inspectFile('notes.txt', Buffer.from('Meeting at ten.'))).toBe('text/plain');
@@ -133,6 +134,16 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, origin: 'https://other.test' }, payload: Buffer.from('test') })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers: { ...headers, 'x-file-name': 'escape.exe' }, payload: Buffer.from('MZbinary') })).statusCode).toBe(415);
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.alloc(20 * 1024 * 1024 + 1) })).statusCode).toBe(413);
+    const oversizedBytes = Buffer.alloc(20 * 1024 * 1024 + 1);
+    const expectedSizeRefusal = {
+      kind: 'file_too_large',
+      statusCode: 413,
+      message: 'File too large. Maximum size is 20 MiB.',
+    };
+    const oversizedUpload = uploadFile(
+      options, 'alice', 'conversation', 'oversized-helper', 'notes.txt', oversizedBytes,
+    );
+    await expect(oversizedUpload).rejects.toMatchObject(expectedSizeRefusal);
     const { until: wait } = await import('@opencrane/authz/testing');
     let release: () => void = () => {};
     const gate = new Promise<void>(resolve => { release = resolve; });

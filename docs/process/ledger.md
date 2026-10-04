@@ -52,6 +52,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-04 | #79 | Upload fresh-install handback | Latest fresh main journey after the budget/MCP rebase | FAIL | No-grant desktop viewer timed out; restored service health PASS | [upload-evidence.md](upload-evidence.md) |
 | 2026-10-04 | #79 | Rendered Office previews | Office document preview qualification | NOT RUN | — | [upload-evidence.md](upload-evidence.md) |
 | 2026-10-04 | #79 | Upload latest local full suite after final rebase | Latest local serial root suite; hosted CI later passed per PR body | FAIL | 1,373 passed, 14 skipped, 2 failed | [upload-evidence.md](upload-evidence.md) |
+| 2026-10-04 | Pending (#117) | Oversize upload refusals | HTTP 413, typed helper refusal and rendered size feedback; lint, typecheck, events and web checks PASS; root suite FAIL; fresh-install NOT RUN | PARTIAL | 1 HTTP regression; 62 web tests; 3 full root attempts FAIL outside the changed module | [upload-413-evidence.md](upload-413-evidence.md) |
 
 ## Phase 3
 

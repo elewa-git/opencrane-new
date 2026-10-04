@@ -32,7 +32,7 @@ committed upload do not repeat scanning or create another event.
 | 400 | missing/invalid headers, unsafe basename or empty body |
 | 401 / 403 | missing session / membership, origin or conversation refused |
 | 409 | event-stream contention or key reused for another file |
-| 413 | request exceeds 20 MiB |
+| 413 | request exceeds 20 MiB: `{status:"refused", error:"File too large. Maximum size is 20 MiB."}` |
 | 415 | unsupported or mismatched content/filename; unsafe Office container |
 | 422 | `{status:"infected", error:"File rejected: malware detected", fileId}` |
 | 503 | storage, scanner, authorisation or event store unavailable; no clean verdict is assumed |
