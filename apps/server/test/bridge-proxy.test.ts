@@ -1,5 +1,4 @@
 import { createServer, request } from 'node:http';
-import { connect } from 'node:net';
 import { once } from 'node:events';
 import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
@@ -29,10 +28,7 @@ it('aborts the client when the model upstream cuts an SSE response short', async
     await expect(reader.read()).rejects.toMatchObject({ name: 'TypeError' });
     expect(Date.now() - startedAt).toBeLessThan(2000);
   } finally {
-    await fixture.local.close();
-    fixture.gateway.closeAllConnections();
-    await closeServer(fixture.gateway);
-    await rm(fixture.directory, { recursive: true, force: true });
+    await closeProxyStreamFixture(fixture);
   }
 });
 
@@ -47,10 +43,7 @@ it('ends a normal completed model response cleanly', async () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('response.completed');
   } finally {
-    await fixture.local.close();
-    fixture.gateway.closeAllConnections();
-    await closeServer(fixture.gateway);
-    await rm(fixture.directory, { recursive: true, force: true });
+    await closeProxyStreamFixture(fixture);
   }
 });
 
@@ -92,42 +85,23 @@ async function installProxyGrant(controlSocket: string) {
     token: 'turn-token',
     expires: Date.now() + 60_000,
   };
-  const body = JSON.stringify(grant);
-  const lines = [
-    'POST /grant HTTP/1.1',
-    'Host: localhost',
-    'Content-Type: application/json',
-    `Content-Length: ${Buffer.byteLength(body)}`,
-    'Connection: close',
-    '',
-    body,
-  ];
-  const requestText = lines.join('\r\n');
   await new Promise<void>((resolve, reject) => {
-    const socket = connect(controlSocket);
-    const chunks: Buffer[] = [];
-    socket.once('connect', sendGrant);
-    socket.on('data', collectResponse);
-    socket.once('end', checkGrantResponse);
-    socket.once('error', reject);
-
-    function sendGrant() {
-      socket.end(requestText);
-    }
-
-    function collectResponse(chunk: Buffer) {
-      chunks.push(chunk);
-    }
-
-    function checkGrantResponse() {
-      const responseText = Buffer.concat(chunks).toString();
-      if (!responseText.includes('200 OK')) {
-        reject(new Error('Proxy grant refused'));
-        return;
-      }
-      resolve();
-    }
+    const grantRequest = request({ socketPath: controlSocket, path: '/grant', method: 'POST' }, response => {
+      response.resume();
+      response.on('end', () => response.statusCode === 200
+        ? resolve()
+        : reject(new Error('Proxy grant installation refused')));
+    });
+    grantRequest.on('error', reject);
+    grantRequest.end(JSON.stringify(grant));
   });
+}
+
+async function closeProxyStreamFixture(fixture: Awaited<ReturnType<typeof proxyStreamFixture>>) {
+  await fixture.local.close();
+  fixture.gateway.closeAllConnections();
+  await closeServer(fixture.gateway);
+  await rm(fixture.directory, { recursive: true, force: true });
 }
 
 async function closeServer(server: ReturnType<typeof createServer>) {

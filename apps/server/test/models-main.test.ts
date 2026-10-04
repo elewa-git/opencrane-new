@@ -53,7 +53,23 @@ it('stops with a non-zero exit when a usage line is malformed', async () => {
     await waitForUsageEvent(nats.store, fixture.initialUsageId);
     await appendFile(fixture.usageFile, '{malformed usage line}\n');
     await waitForProcessExit(fixture.child);
-    expect(fixture.child.exitCode).not.toBe(0);
+    expect(fixture.child.exitCode).toBe(1);
+  } finally {
+    await stopModelsFixture(fixture);
+    await nats.close();
+    await dbs.close();
+  }
+}, 60_000);
+
+it('exits when NATS stays unavailable beyond the reconnect window', async () => {
+  const nats = await natsFixture();
+  const dbs = await databases();
+  const fixture = await runningModelsFixture(nats, await dbs.postgres());
+  try {
+    await waitForUsageEvent(nats.store, fixture.initialUsageId);
+    await nats.stop();
+    await waitForProcessExit(fixture.child, 20_000);
+    expect(fixture.child.exitCode).toBe(1);
   } finally {
     await stopModelsFixture(fixture);
     await nats.close();
@@ -139,9 +155,9 @@ async function waitForUsageEvent(store: Awaited<ReturnType<typeof natsFixture>>[
   throw new Error('Later usage line was not ingested');
 }
 
-async function waitForProcessExit(child: ChildProcess) {
+async function waitForProcessExit(child: ChildProcess, timeoutMs = 5000) {
   if (child.exitCode !== null || child.signalCode !== null) return;
-  await Promise.race([once(child, 'exit'), delay(5000)]);
+  await Promise.race([once(child, 'exit'), delay(timeoutMs)]);
 }
 
 async function stopModelsFixture(fixture: { child: ChildProcess; directory: string }) {

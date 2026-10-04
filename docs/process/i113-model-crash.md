@@ -1,6 +1,6 @@
 # Issue 113: model stream recovery
 
-Date: 2026-10-04. Base: `f6d959f` (`main`).
+Date: 2026-10-04. Base: `089fa31` (`main`).
 
 ## Change
 

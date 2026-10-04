@@ -61,6 +61,7 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
         'x-turn-token': grant.token, 'session-id': String(thread),
       } }, upstream => {
         res.writeHead(upstream.statusCode ?? 502, upstream.headers);
+        // pipeline also destroys the upstream on client disconnect, stopping model spend.
         pipeline(upstream, res, () => undefined);
       });
       outgoing.setTimeout(UPSTREAM_REQUEST_TIMEOUT_MS, () => outgoing.destroy());
