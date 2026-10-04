@@ -36,6 +36,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-02 | #39 | Bridge full journey after fixes | Fresh full product, production image and paid-provider journey | NOT RUN | — | [bridge-replay-evidence.md](bridge-replay-evidence.md) |
 | 2026-10-02 | #39 | Bridge final live journey | Fresh and repeat dev-stack journeys, real paid turn and image | PASS | Fresh 200.11 s; repeat 144.01 s; one real turn | [bridge-evidence.md](bridge-evidence.md) |
 | 2026-10-02 | #39 | Real chat provider check | One authorised gpt-6.1-sol turn | PASS | 7.204 s; 3 cents settled | [bridge-evidence.md](bridge-evidence.md) |
+| 2026-10-04 | #126 | Readable computer channel | Characterisation, bridge/replay/reconnect tests and source gates | PARTIAL | Focused tests PASS; both full root runs had unrelated service-fixture failures, and each failed case passed alone | [i126-computer-channel-evidence.md](i126-computer-channel-evidence.md) |
 | 2026-10-02 | #66 | Fresh/repeat stack journey | Fresh and repeat core journeys and restored owner stack | PASS | — | [chat-stack-evidence.txt](chat-stack-evidence.txt) |
 | 2026-10-03 | #64 | Wake latency | Stub wake-to-first-token before/after optimisation | PASS | 11.462 s baseline; 8.944 s after; five runs | [wake-latency-evidence.md](wake-latency-evidence.md) |
 | 2026-10-03 | #64 | Wake repair qualification | Missing Kubernetes object recovery and final repeated wake | PASS | 9.120 s median; range 8.981–10.597 s | [wake-latency-evidence.md](wake-latency-evidence.md) |

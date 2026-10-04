@@ -24,6 +24,7 @@
 - Live viewers keep a valid permission lease when an older authority check is late, including during connection setup; revocation deadlines stay unchanged ([#77 evidence](docs/process/i77-live-view.md)).
 - Oversize file uploads return HTTP 413 with a clear size limit, and chat shows “File too large” ([#117](https://github.com/elewa-git/opencrane-new/issues/117)).
 - Work is under way to publish reviewed MCP tools, let an owner take over a computer, control computer egress, and use a bootstrap token for the first owner.
+- The computer bridge separates report journalling, turn running and socket message handling; behaviour is unchanged (#126).
 
 ### Known limits
 
