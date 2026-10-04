@@ -155,6 +155,63 @@ after the required integer one-minute load check passed. It completed **PASS**:
 **1,391 passed / 14 skipped**, **80 files passed / 3 skipped**, **1,120.85 s**
 wall time (**1,118.99 s** Vitest). The opt-in tests remain NOT RUN.
 
+## Quiet-box qualification
+
+This batch ran on 4 October 2026 from branch `work/i77-quiet`, on secondary
+stack **2**. The first `/proc/loadavg` reading was **10.79 / 10.75 / 9.74**
+with **8 CPUs**. The one-minute value exceeded 8, so I waited **6 minutes**,
+checking every 2 minutes. The readings were **8.83 / 10.22 / 9.69** at 2
+minutes, **9.82 / 9.29 / 9.36** at 4 minutes, then **6.09 / 8.52 / 9.10**
+at 6 minutes. The initial qualification therefore began below the requested
+one-minute threshold. Per-run host load rose to about **8.4–10.7** during the
+repetitions; this was a lower-load run than the earlier 15–30 batches, but the
+host did not remain below 8 throughout. [Host readings](i77-live-view/quiet/host-load.txt)
+and [raw run records](i77-live-view/quiet/runs.jsonl) retain all three load
+averages for each run.
+
+The first claimed secondary stack's fresh startup failed during its built-in
+journey and its EXIT trap stopped the stack. A second fresh startup also
+reported that broad journey failure after the viewer services were available;
+the repeat harness then completed all ten repetitions. Its EXIT trap ran
+`down.sh --id 2`; a follow-up status showed the secondary services stopped.
+No owner-stack command was run, and no Docker daemon or network settings were
+changed.
+
+This batch passed **8/10**, so live qualification remains **FAIL**. The
+per-run receipts and failure screenshots are in
+[the quiet run directory](i77-live-view/quiet/).
+
+| Run | Width | Load before → after (1m) | Result | Revocation to cleared pixels |
+| --- | ---: | ---: | --- | ---: |
+| 1 | 390 | 9.68 → 9.95 | PASS | 560 ms |
+| 2 | 1280 | 9.95 → 10.67 | PASS | 419 ms |
+| 3 | 390 | 10.67 → 10.54 | PASS | 431 ms |
+| 4 | 1280 | 10.54 → 10.52 | PASS | 395 ms |
+| 5 | 390 | 10.52 → 10.15 | PASS | 467 ms |
+| 6 | 1280 | 10.15 → 9.48 | PASS | 632 ms |
+| 7 | 390 | 9.48 → 8.48 | FAIL; no successful admission response observed within 30 s | — |
+| 8 | 1280 | 8.48 → 8.45 | PASS | 1,368 ms |
+| 9 | 390 | 8.45 → 9.45 | PASS | 500 ms |
+| 10 | 1280 | 9.45 → 8.74 | FAIL; admission returned HTTP 200, but “Viewing” did not appear within 20 s | — |
+
+The failures do not both fit a slow-admission-read explanation. Run 7 timed
+out while waiting for an HTTP 200 admission response, which is consistent with
+a delayed or refused admission. Run 10 did receive HTTP 200 from admission at
+about **9.45** one-minute load, then failed to show the viewer state. That
+failure happens after the admission response and points towards a post-admission
+viewer/session path, so load or a slow admission read alone does not explain
+this batch. The evidence leans towards a logic or connection-state failure,
+but does not prove its precise cause.
+
+The repeat harness wrote overall run duration, result, failure text, and host
+load, but it did not emit per-request admission or internal authority-read
+timings for these failures. The existing safe
+[admission timing record](i77-live-view/admission-times.jsonl) was not updated
+by this batch and describes earlier requests; those timings cannot be assigned
+to runs 7 or 10. No internal authority timing is claimed here. The harness
+needs to retain safe per-request timing metadata before the remaining failure
+can be fully separated into authority latency and viewer logic.
+
 ## Source gates and review
 
 Independent source review: **PASS**, no blocking findings in either of the two passes. The reviewer checked

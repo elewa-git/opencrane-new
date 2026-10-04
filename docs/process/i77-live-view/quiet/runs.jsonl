@@ -1,0 +1,10 @@
+{"date":"2026-10-04T14:33:18.361Z","run":1,"width":390,"stackId":"2","result":"PASS","beforeLoad":[9.68,9.14,9.23],"afterLoad":[9.95,9.23,9.26],"durationMs":17441}
+{"date":"2026-10-04T14:33:32.067Z","run":2,"width":1280,"stackId":"2","result":"PASS","beforeLoad":[9.95,9.23,9.26],"afterLoad":[10.67,9.43,9.33],"durationMs":13699}
+{"date":"2026-10-04T14:33:47.268Z","run":3,"width":390,"stackId":"2","result":"PASS","beforeLoad":[10.67,9.43,9.33],"afterLoad":[10.54,9.47,9.34],"durationMs":15197}
+{"date":"2026-10-04T14:34:06.318Z","run":4,"width":1280,"stackId":"2","result":"PASS","beforeLoad":[10.54,9.47,9.34],"afterLoad":[10.52,9.55,9.37],"durationMs":19050}
+{"date":"2026-10-04T14:34:23.436Z","run":5,"width":390,"stackId":"2","result":"PASS","beforeLoad":[10.52,9.55,9.37],"afterLoad":[10.15,9.51,9.36],"durationMs":17117}
+{"date":"2026-10-04T14:34:44.504Z","run":6,"width":1280,"stackId":"2","result":"PASS","beforeLoad":[10.15,9.51,9.36],"afterLoad":[9.48,9.41,9.33],"durationMs":21067}
+{"date":"2026-10-04T14:35:33.865Z","run":7,"width":390,"stackId":"2","result":"FAIL","beforeLoad":[9.48,9.41,9.33],"afterLoad":[8.48,9.2,9.27],"durationMs":49361,"failure":"page.waitForResponse: Timeout 30000ms exceeded while waiting for event \"response\""}
+{"date":"2026-10-04T14:36:03.411Z","run":8,"width":1280,"stackId":"2","result":"PASS","beforeLoad":[8.48,9.2,9.27],"afterLoad":[8.45,9.11,9.23],"durationMs":29545}
+{"date":"2026-10-04T14:36:30.159Z","run":9,"width":390,"stackId":"2","result":"PASS","beforeLoad":[8.45,9.11,9.23],"afterLoad":[9.45,9.26,9.28],"durationMs":26747}
+{"date":"2026-10-04T14:37:17.198Z","run":10,"width":1280,"stackId":"2","result":"FAIL","beforeLoad":[9.45,9.26,9.28],"afterLoad":[8.74,9.09,9.22],"durationMs":47036,"failure":"locator.waitFor: Timeout 20000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('dialog', { name: 'Computer view', exact: true }).getByText('Viewing', { exact: true }) to be visible\u001b[22m\n"}

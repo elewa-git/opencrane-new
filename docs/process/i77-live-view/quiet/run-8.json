@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-04T14:36:03.373Z",
+  "width": 1280,
+  "origin": "http://127.0.0.1:25206",
+  "stackId": "2",
+  "namespace": "opencrane-dev-2",
+  "conversationId": "5eb70e11-2ba8-4599-bf6b-2cfa361d56dc",
+  "computer": {
+    "assistant_id": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+    "computer_id": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+    "generation": 2
+  },
+  "member": "zitadel-member",
+  "generation": 2,
+  "framebuffer": {
+    "width": 800,
+    "height": 600,
+    "sha256": "0cffb2141fcb40cef0931e8f3d23b1cebe60d35e5e236288344602cceb01f1b6"
+  },
+  "sessionId": "dda2f8fe-5486-4707-84a8-834e2e0d03ef",
+  "audit": [
+    {
+      "id": "6e44e4d2-87a2-434e-a021-bc5e2a4c35c1",
+      "type": "computer.view_started",
+      "principal": {
+        "id": "zitadel-member",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "dda2f8fe-5486-4707-84a8-834e2e0d03ef",
+        "conversationId": "5eb70e11-2ba8-4599-bf6b-2cfa361d56dc",
+        "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "memberId": "zitadel-member",
+        "generation": 2,
+        "expiresAt": "2026-10-04T14:37:58.858Z"
+      }
+    },
+    {
+      "id": "5f18dbc7-c4f8-42aa-8e70-4ab68f48d260",
+      "type": "computer.view_stopped",
+      "principal": {
+        "id": "zitadel-member",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "dda2f8fe-5486-4707-84a8-834e2e0d03ef",
+        "conversationId": "5eb70e11-2ba8-4599-bf6b-2cfa361d56dc",
+        "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "memberId": "zitadel-member",
+        "generation": 2,
+        "expiresAt": "2026-10-04T14:37:58.858Z",
+        "reason": "access_changed"
+      }
+    }
+  ],
+  "revokedMs": 1368,
+  "noGrant": "PASS",
+  "keyboard": "PASS",
+  "targets44px": "PASS",
+  "assistantStubTurn": "PASS",
+  "status": "PASS"
+}

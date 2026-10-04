@@ -1,0 +1,5 @@
+Initial host reading before waiting: 10.79 10.75 9.74; nproc: 8
+After 2 minutes: 8.83 10.22 9.69; nproc: 8
+After 4 minutes: 9.82 9.29 9.36; nproc: 8
+After 6 minutes: 6.09 8.52 9.10; nproc: 8
+Waited 6 minutes, checking every 2 minutes, then claimed a secondary stack.
