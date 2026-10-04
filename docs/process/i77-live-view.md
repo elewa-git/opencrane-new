@@ -190,3 +190,220 @@ Node **22.23.3**, own worktree installation, PostgreSQL fixtures at
 Timings include command startup except where labelled Vitest. Earlier red/green runs and private command logs are retained at
 `/tmp/i77-*.log`; the measurements and verdicts above are the retained public
 evidence, not links that depend on those temporary files.
+
+## Post-admission diagnosis — 4 October 2026
+
+**Status: PARTIAL; live qualification FAIL (4/10).** This investigation started
+from `bacbfdbe46ba042040a2491ad0bbacffc185a764` on `work/i77-diag`, including
+PR #128. It read the quiet batch at `7a92027` on `origin/work/i77-quiet`:
+8/10 passed, with one missing successful admission response and one HTTP 200
+followed by no Viewing. Those old runs have no internal timing records, so their
+exact cause cannot be established retrospectively.
+
+The new batch reproduced the HTTP-200/no-Viewing symptom. **The demonstrated
+failure is lease expiry during desktop startup, or before the first frame,
+when authority checks cannot complete in time.** It is not evidence that an
+old failed check overrides a newer, still-valid lease. The box was CPU-starved
+during this batch; direct scheduler measurements below establish starvation of
+the secondary server process. No authority, admission or revocation deadline
+was relaxed, and no speculative behavioural fix was applied.
+
+### Safe timing records
+
+The server emits JSON records with `operation: "view.timing"` at info level.
+`sessionId` joins ticket issuance to upgrade, audit, pod lookup, desktop
+connection, first upstream bytes, first framebuffer forwarding, lease checks
+and stopping. Lease checks include their phase, start time, starting lease
+expiry, outcome and duration. Unavailable checks distinguish `event_store`,
+`authorisation` and `deadline`; raw errors are never logged. The desktop helper
+emits one fixed stderr marker on Kasm WebSocket open. All other stderr is
+ignored. Tickets, cookies, credentials, request headers and desktop content
+are excluded from these records.
+
+Timings have specific meanings:
+
+- `time` is the logger's wall-clock timestamp. `elapsedMs` starts again on
+  upgrade; join admission and upgrade by `time` and `sessionId`.
+- `upstream_open` means the duplex transport was created. `desktop_connect`
+  spans kubectl exec, in-pod Node startup and Kasm's WebSocket handshake; the
+  transport may exist before Kasm connects.
+- `first_upstream_bytes` is the first RFB data, normally the greeting.
+  `first_browser_frame` is the first complete framebuffer update accepted by
+  `ws.send`, measured from upstream opening. It can be an empty update; it is
+  not delivery acknowledgement or proof of decoded browser pixels. The existing
+  browser journey separately checks decoded, non-uniform pixels.
+- `desktop_connect:error` means the child exited before its success marker was
+  observed. It can follow a lease-triggered termination, and stderr can race
+  child exit. It must not be interpreted alone as a Kasm failure.
+
+From an already claimed secondary, collect ten runs with:
+
+```sh
+node --experimental-strip-types infra/dev-stack/live-view-repeat.ts docs/process/i77-live-view/diag
+```
+
+The optional argument selects the output directory. Each run retains an
+allowlisted server timing JSONL file and browser admission-status/connection
+milestones, including failures. The collector reads only the selected
+secondary's `server.log`. No browser frame payload is recorded.
+
+### What failed after HTTP 200
+
+[Run 1 timings](i77-live-view/diag/run-1-timings.jsonl) and
+[browser milestones](i77-live-view/diag/run-1-browser.json) show:
+
+1. Ticket issuance succeeded in **61 ms**. Upgrade authority took **87 ms**,
+   start-audit persistence **25 ms**, and post-audit authority **189 ms**.
+2. Pod lookup took **1,129 ms**. The browser WebSocket upgraded successfully
+   in **1,486 ms**. Kasm connection was still pending; no upstream bytes or
+   framebuffer were forwarded.
+3. The last successful renewal started at `1791125872679` and completed in
+   **987 ms**. Its permission snapshot therefore expired at `1791125874179`.
+   Other checks became unavailable: an event-store failure after **750 ms**
+   and check deadlines after **1,286 ms** and **1,221 ms**.
+4. The server stopped at `1791125874434`, **255 ms after** the stored lease
+   expiry. The desktop child then exited. A later positive check arrived at
+   `1791125874910`, **476 ms after stopping**; it correctly did not reopen the
+   viewer. Browser records show HTTP 200, socket creation and socket close,
+   with no received bytes.
+
+[Run 3](i77-live-view/diag/run-3-timings.jsonl) reached Kasm and received its
+first bytes after **1,606 ms**, but authority expired before the first complete
+frame. [Run 4](i77-live-view/diag/run-4-timings.jsonl) again expired before any
+upstream bytes. Its last successful snapshot expired at `1791125979223`;
+subsequent event-store checks failed after **711 ms** and **628 ms**, and it
+stopped at `1791125979373`.
+
+[Run 5](i77-live-view/diag/run-5-timings.jsonl) received a ticket, then the
+upgrade authority check failed at the event-store boundary after **1,069 ms**.
+It never wrote a start audit or opened a desktop. HTTP 200 admission therefore
+does not by itself establish successful WebSocket admission.
+
+[Run 7](i77-live-view/diag/run-7-timings.jsonl) forwarded a frame at
+`1791126047458`, then expired **157 ms later** while the browser was trying to
+focus the zoom control. Two event-store failures and a **1,171 ms** successful
+check left only a short remaining lease. Later successful checks arrived after
+stopping. This distinguishes a first-frame success followed by lost authority
+from a desktop that never connected.
+The [run 1](i77-live-view/diag/run-1-failure.png) and
+[run 7](i77-live-view/diag/run-7-failure.png) screenshots both show Access changed
+with the protected canvas removed.
+
+### Host evidence and deterministic controls
+
+The load gate passed at **5.64 / 4.78 / 6.24** immediately before claiming
+secondary **2**. The earlier failed claim was at **6.27**. Both slots contained
+only old ownership markers from `i77-quiet`; slot 2 had no containers or pods.
+Its normal `down.sh --id 2` entrypoint, run from the recorded worktree, released
+that completed secondary. This work then claimed it through `claim.sh`, set
+`DEV_STACK_ID=2` and the requested `ZITADEL_KEY_FILE`, and ran `up.sh --fresh`.
+The shell EXIT trap retained `down.sh --id 2` responsibility. No owner-stack,
+Docker daemon, containerd, firewall, bridge or routing setting was changed.
+
+The fresh broad journey failed, and the focused harness subsequently completed
+all ten runs. Despite the initial gate, one-minute load during the repetitions
+was **17.89–25.80**. This was a loaded batch, not a repeat of the quiet batch. Structured logging also adds some work; this
+batch is not a measurement of the uninstrumented server.
+[Host gate readings](i77-live-view/diag/host-load.txt) and
+[run records](i77-live-view/diag/runs.jsonl) retain the measurements.
+
+The retained [sampling script](i77-live-view/diag/scheduler-probe.py) produced
+[scheduler samples](i77-live-view/diag/scheduler.jsonl) by reading the secondary
+server's main thread and NATS main thread from `/proc/<pid>/schedstat` every
+two seconds, together with `/proc/pressure/cpu`. Field meanings follow the
+[Linux scheduler statistics](https://docs.kernel.org/scheduler/sched-stats.html)
+and [pressure documentation](https://docs.kernel.org/accounting/psi.html). Between **15:00:28.049** and
+**15:00:30.056 UTC**, the server spent **1,521 ms runnable but waiting for CPU**
+and only **445 ms executing**. Adjacent two-second intervals show **979–1,483
+ms** of runnable wait. This is direct server CPU-starvation evidence, rather
+than an inference from load average alone. Sampling began during run 5; these
+scheduler values must not be assigned to runs 1–4.
+
+The [NATS cgroup readings](i77-live-view/diag/nats-cpu.jsonl) recorded only
+**88.638 ms cumulative quota throttling** across **5,758 quota periods** at
+**14:59:27 UTC**. Host CPU pressure
+at that time was **79.91% over ten seconds**. NATS quota throttling is therefore
+not a supported explanation for the multi-second delays. These records do not
+measure the desktop's individual scheduling wait or isolate NATS processing
+latency from server scheduling. The proven conclusions are server starvation
+and missed authority checks; attributing every old quiet failure specifically
+to Kasm or NATS would go beyond the evidence.
+
+The eight existing delay/outage regressions passed before live qualification.
+The added public HTTP/WebSocket control forwards a complete fragmented
+framebuffer across a **1,400 ms** delayed check while other renewals succeed,
+then verifies explicit revocation within **2,000 ms**. A second control reproduces
+HTTP 200 and successful WebSocket upgrade followed by closure before the first
+bytes when NATS replies remain unavailable. That is the required refusal path,
+not a failing assertion to remove by extending the lease. No new functional
+bug was established, so there is no claimed red-to-green behavioural fix.
+
+### Ten-run results
+
+Every row links its timing records; the adjacent `run-N-browser.json` file
+contains browser milestones. First-frame durations are measured from upstream
+opening. Two numbers mean the initial view and the reopened view during the
+assistant turn, in that order. A dash means the stage was not reached.
+
+| Run | Width | Load before → after | Upgrade ms | First frame ms | Result |
+| --- | ---: | --- | --- | --- | --- |
+| [1](i77-live-view/diag/run-1-timings.jsonl) | 390 | 21.66 → 23.13 | 1,486 | — | FAIL; lease expired before first bytes |
+| [2](i77-live-view/diag/run-2-timings.jsonl) | 1280 | 23.13 → 21.48 | 1,170 / 2,011 | 2,944 / 2,681 | PASS; revoked in 604 ms |
+| [3](i77-live-view/diag/run-3-timings.jsonl) | 390 | 21.48 → 22.45 | 876 | — | FAIL; first bytes received, lease expired before frame |
+| [4](i77-live-view/diag/run-4-timings.jsonl) | 1280 | 22.45 → 25.19 | 2,810 | — | FAIL; lease expired before first bytes |
+| [5](i77-live-view/diag/run-5-timings.jsonl) | 390 | 25.19 → 25.61 | — | — | FAIL; upgrade authority unavailable |
+| [6](i77-live-view/diag/run-6-timings.jsonl) | 1280 | 25.80 → 25.80 | — | — | FAIL; conversation creation HTTP 409, no viewer attempt |
+| [7](i77-live-view/diag/run-7-timings.jsonl) | 390 | 25.80 → 25.00 | 1,337 | 3,814 | FAIL; lease expired after frame, before zoom control |
+| [8](i77-live-view/diag/run-8-timings.jsonl) | 1280 | 25.00 → 21.46 | 1,383 / 1,251 | 1,978 / 2,193 | PASS; revoked in 986 ms |
+| [9](i77-live-view/diag/run-9-timings.jsonl) | 390 | 21.46 → 20.10 | 371 / 352 | 1,987 / 1,621 | PASS; revoked in 808 ms |
+| [10](i77-live-view/diag/run-10-timings.jsonl) | 1280 | 20.10 → 17.89 | 1,123 / 582 | 1,300 / 2,137 | PASS; revoked in 857 ms |
+
+The four passing journeys do not close #77. A successful fresh-install
+qualification, including a ten-run batch without competing CPU starvation,
+remains outstanding. The correct next operational step is to provide CPU
+capacity for authority checks and desktop startup within the existing limits;
+this change does not alter shared-host services or resource settings.
+
+Final teardown: **PASS**. The trap completed and a read-only follow-up found
+no secondary-2 directory or Compose containers; see the
+[teardown receipt](i77-live-view/diag/teardown.txt). The initial live source
+hashes are retained in [source-sha256.txt](i77-live-view/diag/source-sha256.txt).
+Later production edits only expanded helper bodies and named option objects
+for clarity. Both independent review passes found no functional, security or evidence
+blocker. Their requested clarity fixes and timing caveats were addressed; the
+second pass left only two line wraps, which were then applied. No third pass
+was used.
+
+Source validation is recorded separately below; live qualification remains
+FAIL regardless of source-gate results.
+
+### Final source gates
+
+Node **22.23.3**, an independent `npm ci` installation in this worktree, and
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+The [validation gate](i77-live-view/diag/gates-load.txt) passed at **15.96**.
+Before the full root suite, the separate [load check](i77-live-view/diag/root-load.txt)
+waited two minutes for **17.13 → 12.12**, then started at **15:16:49 UTC**.
+[Command receipts](i77-live-view/diag/gates.txt) retain exit codes and wall times.
+
+The first two lint attempts caught unsafe JSON narrowing in the new diagnostic
+test, then its intermediate correction. The final test validates log records
+with the already-installed Zod schema parser; no lint rule was disabled.
+
+| Check | Result | Wall seconds |
+| --- | --- | ---: |
+| `npm run lint` (final) | PASS; eight existing size-warning locations | 87.85 |
+| `npm run typecheck` (final) | PASS | 78.23 |
+| `npm run check:events` | PASS; 85 types agree | 1.51 |
+| `npm run test -w apps/web` | PASS; 60 tests / 11 files | 34.93 |
+| Infra TypeScript check | PASS | 24.97 |
+| Full root suite, `--maxWorkers=2` | PASS; 1,415 passed / 15 skipped; 83 files passed / 4 skipped | 1,384.34 including load wait |
+
+The root command wall time includes the **120 s** load wait. Vitest itself
+started at **15:16:51 UTC** and ran for **1,262.20 s**. The skipped opt-in
+conditions remain **NOT RUN**; the full-suite result does not turn the failed
+live batch into a pass. The [root summary](i77-live-view/diag/root-tests.txt)
+and [final production source hashes](i77-live-view/diag/final-source-sha256.txt)
+retain the check's source/evidence context.
+
+All required source gates are **PASS**. Live qualification remains **FAIL**.

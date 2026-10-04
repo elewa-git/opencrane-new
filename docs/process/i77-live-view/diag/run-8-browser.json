@@ -1,0 +1,41 @@
+[
+  {
+    "stage": "admission_response",
+    "elapsedMs": 4252,
+    "status": 403
+  },
+  {
+    "stage": "admission_response",
+    "elapsedMs": 6747,
+    "status": 200
+  },
+  {
+    "stage": "browser_socket_created",
+    "elapsedMs": 6798
+  },
+  {
+    "stage": "browser_first_bytes",
+    "elapsedMs": 9165
+  },
+  {
+    "stage": "browser_socket_closed",
+    "elapsedMs": 10334
+  },
+  {
+    "stage": "admission_response",
+    "elapsedMs": 16082,
+    "status": 200
+  },
+  {
+    "stage": "browser_socket_created",
+    "elapsedMs": 16092
+  },
+  {
+    "stage": "browser_first_bytes",
+    "elapsedMs": 18436
+  },
+  {
+    "stage": "browser_socket_closed",
+    "elapsedMs": 19970
+  }
+]

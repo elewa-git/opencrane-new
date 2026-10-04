@@ -1,0 +1,13 @@
+lint: exit 1; Command exited with non-zero status 1
+178.17 seconds; exit 1
+typecheck: exit 0; 146.48 seconds; exit 0
+events: exit 0; 1.51 seconds; exit 0
+web: exit 0; 34.93 seconds; exit 0
+infra: exit 0; 24.97 seconds; exit 0
+lint-final: exit 1; Command exited with non-zero status 1
+188.91 seconds; exit 1
+root: exit 0; 1384.34 seconds; exit 0
+lint-clean: exit 1; Command exited with non-zero status 1
+87.89 seconds; exit 1
+typecheck-final: exit 0; 78.23 seconds; exit 0
+lint-complete: exit 0; 87.85 seconds; exit 0

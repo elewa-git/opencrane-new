@@ -78,6 +78,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-04 | #78 | MCP independent review | Two-pass review of inventory fixes | PASS | — | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
 | 2026-10-04 | Pending (#59) | P3-18 screenshots | Retained secondary capture, conversation/panel previews, reload and non-participant refusal; fresh qualification incomplete | PARTIAL | 1280px and 390px PASS; capture 5,061–6,065 ms; 403 refusals; fresh capture and complete startups FAIL after bounded reruns; teardown PASS | [p3-18-screenshots.md](p3-18-screenshots.md#final-rebase-and-secondary-stack-qualification--4-october-2026) |
 | 2026-10-04 | — | #77 live-view authority delays | Eight delay/control cases and two source reviews pass; live batches 3/10 and 5/10 | PARTIAL | All source gates pass; root suite 1,391 passed / 14 skipped; live revocations 395–1,158 ms; #77 remains open | [i77-live-view.md](i77-live-view.md) |
+| 2026-10-04 | — | #77 post-admission diagnosis | Safe timing records and ten fresh-secondary repetitions; captured lease expiry before desktop bytes and before/after first frame | PARTIAL | Root 1,415 passed / 15 skipped; live 4/10; revoked in 604–986 ms; server runnable wait 1,521 ms per 2 s | [Diagnosis and runs](i77-live-view.md#post-admission-diagnosis--4-october-2026) |
 
 ## Infrastructure
 

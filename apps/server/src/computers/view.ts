@@ -1,3 +1,4 @@
+import { viewTiming, type DesktopTiming } from './view-timing.ts';
 import { viewerStream, desktopStream } from './rfb.ts';
 import type { IncomingHttpHeaders } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -11,7 +12,10 @@ import { viewAccess, ViewCheckUnavailable, type ViewAccessOptions } from './view
 
 export interface LiveViewOptions extends ViewAccessOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
-  open(computer: { computerId: string; generation: number; podUid?: string | undefined }): Promise<Duplex>;
+  open(
+    computer: { computerId: string; generation: number; podUid?: string | undefined },
+    observe?: DesktopTiming,
+  ): Promise<Duplex>;
 }
 type Ticket = { cookie: string; memberId: string; conversationId: string; sessionId: string; expires: number; redeemBy: number };
 type StopReason = 'disconnected' | 'access_changed' | 'expired' | 'protocol' | 'slow_viewer' | 'upstream' | 'shutdown';
@@ -20,7 +24,7 @@ export const liveViewPath = /^\/ws\/conversations\/([\w-]{1,200})\/view$/u;
 function deadline<T>(work: Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     // Include event reads around OpenFGA's one-second call; the desktop lease remains 1.5 seconds.
-    const timer = setTimeout(() => reject(new ViewCheckUnavailable('View check timeout')), 1200);
+    const timer = setTimeout(() => reject(new ViewCheckUnavailable('deadline')), 1200);
     void work.then(resolve, reject).finally(() => clearTimeout(timer));
   });
 }
@@ -57,21 +61,54 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     let memberId: string | undefined;
     const conversationId = admissionPath.exec(request.url)?.[1];
+    const sessionId = randomUUID();
+    const timing = viewTiming(app.log, sessionId, conversationId);
+    const admissionAt = performance.now();
+    timing('ticket_issue', 'started');
     try {
       const { session, cookie } = authenticate(request.headers);
       if (!conversationId || request.headers['x-opencrane-view'] !== '1') throw new Error('CSRF check failed');
       memberId = (await deadline(options.feed.memberId(options.silo, config.issuerUrl, session.sub))) ?? undefined;
       if (!memberId) throw new Error('Member required');
-      await deadline(viewAccess(options, memberId, conversationId));
+      await checkAccess(memberId, conversationId, timing, 'admission');
       for (const [key, value] of tickets) if (value.redeemBy <= Date.now()) tickets.delete(key);
       if (tickets.size >= 1024 || stops.size + opening >= 16) throw new Error('View capacity');
-      const ticket = randomBytes(32).toString('hex'), sessionId = randomUUID();
+      const ticket = randomBytes(32).toString('hex');
       tickets.set(ticket, { cookie, memberId, conversationId, sessionId,
         expires: Math.min(session.exp * 1000, Date.now() + 120_000), redeemBy: Date.now() + 15_000 });
+      timing('ticket_issue', 'ok', performance.now() - admissionAt);
       return { ticket, sessionId };
-    } catch { return reply.code(403).send({ status: 'refused', attemptId: await refusal('admission', conversationId, memberId) }); }
+    } catch {
+      timing('ticket_issue', 'denied', performance.now() - admissionAt);
+      const attemptId = await refusal('admission', conversationId, memberId);
+      return reply.code(403).send({ status: 'refused', attemptId });
+    }
   });
   if (!options) { wss.close(); return; }
+  async function checkAccess(
+    memberId: string,
+    conversationId: string,
+    timing: ReturnType<typeof viewTiming>,
+    phase: 'admission' | 'upgrade' | 'post_audit' | 'renewal',
+    validUntil?: number,
+  ) {
+    const startedAt = performance.now();
+    const details = { phase, checkedAt: Date.now(), ...(validUntil ? { validUntil } : {}) };
+    timing('lease_check', 'started', 0, details);
+    try {
+      const current = await deadline(viewAccess(options!, memberId, conversationId));
+      timing('lease_check', 'ok', performance.now() - startedAt, details);
+      return current;
+    } catch (error) {
+      const outcome = error instanceof ViewCheckUnavailable ? 'unavailable' : 'denied';
+      const failure = {
+        ...details,
+        ...(error instanceof ViewCheckUnavailable ? { boundary: error.boundary } : {}),
+      };
+      timing('lease_check', outcome, performance.now() - startedAt, failure);
+      throw error;
+    }
+  }
   function redeem(headers: IncomingHttpHeaders, conversationId: string) {
       const { cookie } = authenticate(headers);
       const protocols = headers['sec-websocket-protocol']?.split(',').map(s => s.trim());
@@ -86,25 +123,48 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     const refuse = () => socket.end('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
     if (opening + stops.size >= 16) { void refusal('capacity', match[1]).then(refuse); return; }
     opening++; let reserved = true;
+    const upgradeAt = performance.now();
+    let timing = viewTiming(app.log, randomUUID(), match[1]);
     void (async () => {
       if (!options) throw new Error('View unavailable');
       const ticket = redeem(request.headers, match[1]!);
-      const computer = await deadline(viewAccess(options, ticket.memberId, ticket.conversationId));
+      timing = viewTiming(app.log, ticket.sessionId, ticket.conversationId);
+      timing('websocket_upgrade', 'started');
+      const computer = await checkAccess(
+        ticket.memberId, ticket.conversationId, timing, 'upgrade',
+      );
       const data = { ...computer, sessionId: ticket.sessionId, memberId: ticket.memberId, conversationId: ticket.conversationId, expiresAt: new Date(ticket.expires).toISOString() };
       const { podUid: _podUid, ...auditData } = data;
       const started = envelope(options.silo, `view-${ticket.sessionId}`, 'computer.view_started', auditData);
       started.source = 'opencrane-server'; started.principal = { kind: 'human', id: ticket.memberId }; started.correlation = { conversation: ticket.conversationId };
-      const result = await options.store.append({ event: started, expectedSequence: 0 });
+      const auditAt = performance.now();
+      timing('start_audit', 'started');
+      let result;
+      try {
+        const command = { event: started, expectedSequence: 0 };
+        result = await options.store.append(command);
+        const outcome = result.status === 'appended' ? 'ok' : 'error';
+        timing('start_audit', outcome, performance.now() - auditAt);
+      } catch (error) {
+        timing('start_audit', 'error', performance.now() - auditAt);
+        throw error;
+      }
       if (result.status !== 'appended') throw new Error('Audit unavailable');
       // Include the check after the start audit in the limit of five outstanding checks.
       let viewer: WebSocket | undefined, upstream: Duplex | undefined, stopped = false, checking = 1;
       let validUntil = Date.now() + 1500, renewedAt = 0;
       const stop = (reason: StopReason) => {
-        if (stopped) return; stopped = true; clearInterval(timer); stops.delete(stop);
+        if (stopped) return;
+        const lease = { validUntil };
+        timing('stop', reason, 0, lease);
+        stopped = true; clearInterval(timer); stops.delete(stop);
         upstream?.destroy();
         if (viewer) { viewer.close(reason === 'access_changed' || reason === 'expired' ? 4003 : reason === 'slow_viewer' ? 1013 : 1000, reason);
           const reap = setTimeout(() => viewer?.terminate(), 1000); reap.unref(); viewer.once('close', () => clearTimeout(reap));
-        } else socket.destroy();
+        } else {
+          timing('websocket_upgrade', reason, performance.now() - upgradeAt);
+          socket.destroy();
+        }
         const event = { ...started, id: randomUUID(), commandId: randomUUID(), type: 'computer.view_stopped', time: new Date().toISOString(), data: { ...auditData, reason } };
         const audit = options.store.append({ event, expectedSequence: result.sequence }).then(outcome => {
           if (outcome.status !== 'appended') throw new Error('View stop audit unavailable');
@@ -118,7 +178,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         if (checking >= 5) return;
         checking++;
         const checkedAt = Date.now();
-        void deadline(viewAccess(options, ticket.memberId, ticket.conversationId)).then(current => {
+        void checkAccess(ticket.memberId, ticket.conversationId, timing, 'renewal', validUntil).then(current => {
           if (JSON.stringify(current) !== JSON.stringify(computer)) return stop('access_changed');
           // A delayed reply must not extend the age of the authority snapshot.
           renewedAt = Math.max(renewedAt, checkedAt);
@@ -134,7 +194,9 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       try {
         // Audit persistence can wait long enough for authority or the cookie to expire.
         const checkedAt = Date.now();
-        const current = await deadline(viewAccess(options, ticket.memberId, ticket.conversationId)).catch((error: unknown) => {
+        const current = await checkAccess(
+          ticket.memberId, ticket.conversationId, timing, 'post_audit', validUntil,
+        ).catch((error: unknown) => {
           // A newer, successful post-audit check can satisfy this same admission fence.
           // Its lease already ends at or after checkedAt + 1500; this grants no extra time.
           return error instanceof ViewCheckUnavailable && renewedAt >= checkedAt && Date.now() < validUntil ? computer : undefined;
@@ -142,10 +204,19 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         if (stopped || !current || JSON.stringify(current) !== JSON.stringify(computer)) { stop('access_changed'); return; }
         if (Date.now() >= ticket.expires) { stop('expired'); return; }
         validUntil = Math.max(validUntil, checkedAt + 1500);
-        upstream = await options.open(computer);
+        const upstreamAt = performance.now();
+        timing('upstream_open', 'started');
+        try {
+          upstream = await options.open(computer, timing);
+          timing('upstream_open', 'ok', performance.now() - upstreamAt);
+        } catch (error) {
+          timing('upstream_open', 'error', performance.now() - upstreamAt);
+          throw error;
+        }
         if (stopped || socket.destroyed || upstream.destroyed) { upstream.destroy(); stop('upstream'); return; }
         wss.handleUpgrade(request, socket, head, ws => {
           viewer = ws;
+          timing('websocket_upgrade', 'ok', performance.now() - upgradeAt);
           // bufferedAmount includes the socket queue and queued WebSocket frames.
           // Leave room for ws's automatic close reply or protocol-error frame (at most 127 bytes).
           const room = (frameBytes: number) => !stopped && ws.bufferedAmount + frameBytes + 127 <= 4 * 1024 * 1024;
@@ -166,15 +237,36 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
             if (!binary || !Buffer.isBuffer(bytes)) return stop('protocol');
             accept(bytes);
           });
-          const display = desktopStream((bytes: Buffer) => {
+          let receivedBytes = false;
+          let forwardedFrame = false;
+          function forwardDisplay(bytes: Buffer, framebuffer: boolean) {
             if (Date.now() >= validUntil || Date.now() >= ticket.expires) return stop('access_changed');
             if (!room(bytes.length + 14)) return stop('slow_viewer');
             ws.send(bytes);
-          }, () => stop('protocol'));
-          upstream!.on('data', display);
+            if (framebuffer && !forwardedFrame) {
+              forwardedFrame = true;
+              timing('first_browser_frame', 'ok', performance.now() - upstreamAt);
+            }
+          }
+          function refuseDisplay() {
+            stop('protocol');
+          }
+          const display = desktopStream(forwardDisplay, refuseDisplay);
+          function receive(bytes: Buffer) {
+            if (!receivedBytes) {
+              receivedBytes = true;
+              timing('first_upstream_bytes', 'ok', performance.now() - upstreamAt);
+            }
+            display(bytes);
+          }
+          upstream!.on('data', receive);
         });
       } catch { stop('upstream'); }
-    })().catch(async () => { await refusal('upgrade', match[1]); refuse(); }).finally(() => { if (reserved) opening--; });
+    })().catch(async () => {
+      timing('websocket_upgrade', 'error', performance.now() - upgradeAt);
+      await refusal('upgrade', match[1]);
+      refuse();
+    }).finally(() => { if (reserved) opening--; });
   });
   app.addHook('preClose', async () => {
     for (const stop of stops) stop('shutdown'); tickets.clear();

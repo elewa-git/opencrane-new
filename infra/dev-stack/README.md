@@ -424,6 +424,14 @@ grant closes the socket, clears pixels and records the stop audit. Keyboard
 opening, Escape, fit/actual-size and 44px targets are checked. Screenshots and
 receipts go to `docs/process/live-view/conversation-*`.
 
+For ten instrumented live-view repetitions on a claimed secondary, run
+`node --experimental-strip-types infra/dev-stack/live-view-repeat.ts <output-directory>`.
+The directory defaults to `docs/process/i77-live-view`; choose a new directory
+to retain an earlier batch. Each run records safe server stage/lease timings
+and browser admission/connection milestones. See the
+[diagnostic receipt](../../docs/process/i77-live-view.md#safe-timing-records)
+for field meanings and collection limits.
+
 For screenshot qualification on a claimed secondary, run
 `node --experimental-strip-types infra/dev-stack/screenshot-journey.ts fresh`
 after `up.sh --fresh`, then use `repeat` after plain `up.sh`. Real Zitadel sessions
