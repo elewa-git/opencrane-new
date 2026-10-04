@@ -137,10 +137,14 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
 
 ## Processes and storage
 
-- The root supervisor accepts only a fixed native exec-server launch over a
-  private Unix socket in root-owned `/run/executor` (0750, group 1000). `tool-user.c` is unchanged from S0.1b; the executable is
-  reused from the pinned base. UID 1001 inherits `no_new_privs` and the same
-  seccomp rules denying sockets, process inspection and alternative syscall ABIs.
+- The root supervisor accepts fixed native exec-server and code-mode host launches
+  over separate private Unix sockets in root-owned `/run/executor` (0750, group
+  1000). Both pass through `tool-user.c`: UID/GID 1001, no supplementary groups,
+  a cleared environment, `no_new_privs` and the same S0.1b seccomp rules denying
+  sockets, process inspection and alternative syscall ABIs. The image builds this
+  launcher separately; compiler packages never enter the runtime. Codex starts
+  only an IPC connector in place of its bundled host; the supervisor alone starts
+  the relocated native host. Model-written JavaScript never runs as UID 1000.
 - The bridge, Codex and authenticated loopback model proxy use UID 1000.
   The code-mode host and normal shell tools are enabled; tool output defaults to
   2,000 tokens and the proxy bounds each model response to 2,000 output tokens.

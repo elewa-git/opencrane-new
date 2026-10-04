@@ -27,6 +27,7 @@ template = json.loads(path.read_text())
 template['spec']['podTemplate']['spec']['containers'][0]['image'] = Path('.state/image.txt').read_text().strip()
 path.write_text(json.dumps(template, indent=2) + '\n')
 PYTHON
+node --experimental-strip-types test/exec-host.mjs
 node test/run.mjs
 docker tag ocn-computer-runtime 127.0.0.1:5001/opencrane/computer:p2-1
 docker push 127.0.0.1:5001/opencrane/computer:p2-1

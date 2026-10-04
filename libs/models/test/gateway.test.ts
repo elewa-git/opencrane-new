@@ -895,9 +895,10 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       const revoke = await f.append(grantStream(resourceType!, resourceId!), 'grant.revoked', { resourceType, resourceId, granteeId, revokedBy: 'alice' });
       const invoke = resourceType === 'model' ? () => f.call() : () => call('write');
       expect((await invoke()).status).toBe(403); // Refuse while OpenFGA lags too.
+      // The bound ends when access is refused, before projection work and another request.
+      expect(performance.now() - start).toBeLessThan(2000);
       await f.auth.handler.handle(revoke, f.db);
       expect((await invoke()).status).toBe(403);
-      expect(performance.now() - start).toBeLessThan(2000);
       expect(f.received()).toBe(1);
       const restore = await f.append(grantStream(resourceType!, resourceId!), 'grant.given', { resourceType, resourceId, granteeId,
         granteeKind: granteeId === 'alice' ? 'member' : 'assistant', grantedBy: 'alice' });

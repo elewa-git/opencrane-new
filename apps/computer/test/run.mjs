@@ -23,7 +23,10 @@ await apply({ apiVersion: 'v1', kind: 'Namespace', metadata: { name: ns } });
 try {
   await apply({ apiVersion: 'v1', kind: 'ConfigMap', metadata: { name: 'fixtures' }, data: {
     'config.yaml': readFileSync('spikes/s0-1b-proxy-gvisor/gateway.yaml', 'utf8'),
-    'services.mjs': readFileSync('spikes/s0-1b-proxy-gvisor/services.mjs', 'utf8').replace('/spike/probe.mjs', '/workspace/probe.mjs'),
+    'services.mjs': readFileSync('spikes/s0-1b-proxy-gvisor/services.mjs', 'utf8')
+      .replace("item.type === 'function_call_output'", "['function_call_output', 'custom_tool_call_output'].includes(item.type)")
+      .replace("const item = { type: 'function_call', name: 'exec_command', call_id: `call_${index}`, arguments: JSON.stringify({ cmd: 'node /spike/probe.mjs', max_output_tokens: 3000 }) };",
+        "const item = { type: 'custom_tool_call', name: 'exec', call_id: `call_${index}`, input: 'text(await tools.exec_command({cmd: \"node /workspace/probe.mjs\", max_output_tokens: 3000}))' };"),
   } });
   await apply({ apiVersion: 'v1', kind: 'Pod', metadata: { name: 'backend', labels: { app: 'opencrane-gateway', server: 'test' } }, spec: {
     automountServiceAccountToken: false, terminationGracePeriodSeconds: 0,
@@ -56,7 +59,24 @@ try {
     podName = await resume({ k, apply, exec, template, pass });
     await k('label', 'pod/backend', 'app=opencrane-gateway', '--overwrite');
   }
-  const probeSource = readFileSync('spikes/s0-1b-proxy-gvisor/probe.mjs', 'utf8').replace('/run/codex/exec.sock', '/run/executor/exec.sock');
+  const probeSource = readFileSync('spikes/s0-1b-proxy-gvisor/probe.mjs', 'utf8').replace('/run/codex/exec.sock', '/run/executor/exec.sock') + `
+let hosts = 0;
+for (const pid of readdirSync('/proc').filter(name => /^\\d+$/.test(name))) {
+  let cmd;
+  try { cmd = readFileSync('/proc/'+pid+'/cmdline', 'utf8').split('\\0')[0]; } catch { continue; }
+  if (cmd !== 'codex-code-mode-host') continue;
+  const info = readFileSync('/proc/'+pid+'/status', 'utf8');
+  assert.match(info, /Uid:\\s+1001\\s+1001\\s+1001\\s+1001/);
+  assert.match(info, /NoNewPrivs:\\s+1/);
+  assert.deepEqual(readFileSync('/proc/'+pid+'/environ', 'utf8').split('\\0').filter(Boolean).map(value => value.split('=')[0]).sort(), ['CODEX_HOME', 'HOME', 'PATH', 'SHELL']);
+  for (const path of ['/home/codex/caller', '/run/codex/computer.json', '/home/agent/codex']) {
+    assert.throws(() => readFileSync('/proc/'+pid+'/root'+path), { code: 'EACCES' });
+  }
+  hosts++;
+}
+assert.equal(hosts, 1, 'custom exec must run in its isolated native host');
+console.log('HOST_ISOLATION_PASS');
+`;
   await exec(podName, `import {writeFileSync} from 'node:fs';writeFileSync('/workspace/probe.mjs',${JSON.stringify(probeSource)},{mode:0o644});`);
   const pod = JSON.parse(await k('get', 'pod', podName, '-o', 'json'));
   const pods = JSON.parse(await command('docker', ['exec', 'k3d-ocn-server-0', 'crictl', 'pods', '-o', 'json']));
@@ -89,12 +109,14 @@ try {
     const message = await until(() => messages.find(m => m.id === id), method);
     assert.equal(message.error, undefined); return message.result;
   };
-  const thread = (await rpc('thread/start', { cwd: '/workspace' })).thread.id;
+  const thread = (await rpc('thread/start', { cwd: '/workspace', model: 'gpt-6.1-sol' })).thread.id;
   await control('grant', await admin('issue', { thread, ttl: 120000 }));
   await rpc('turn/start', { threadId: thread, input: [{ type: 'text', text: 'ISOLATION: run the probe.', text_elements: [] }] });
   const end = await until(() => messages.find(m => m.method === 'turn/completed'), 'probe turn', 120000);
   assert.equal(end.params.turn.status, 'completed');
-  assert.match(await exec('backend', "console.log(require('fs').readFileSync('/tmp/model.jsonl','utf8'))".replace("require('fs')", "(await import('node:fs'))")), /ISOLATION_PASS/);
+  const requests = (await exec('backend', "console.log((await import('node:fs')).readFileSync('/tmp/model.jsonl','utf8'))")).trim().split('\n').map(line => JSON.parse(line));
+  const outputs = requests.flatMap(request => request.body.input ?? []).filter(item => item.type === 'custom_tool_call_output');
+  assert.match(JSON.stringify(outputs), /HOST_ISOLATION_PASS/);
   await control('drop', { thread });
   const localCall = value => exec(podName, `import {readFileSync} from 'node:fs';process.setgroups([]);process.setgid(1000);process.setuid(1000);console.log((await fetch('http://127.0.0.1:8080/v1/responses',{method:'POST',headers:{authorization:'Bearer '+readFileSync('/home/codex/caller','utf8'),'session-id':${JSON.stringify(thread)}},body:'{}'})).status)`, value);
   assert.equal(await localCall({}), '403');
@@ -104,7 +126,7 @@ try {
   assert.equal(await localCall({}), '403');
   await control('drop', {thread});
   pass('proxy grants', 'dropped thread, overlong grant and cross-thread token refused; unauthenticated caller refused below');
-  pass('executor isolation', 'real Codex-requested native exec-server command: UID 1001, seccomp EPERM for proxy/gateway/IPv6, private files and process tokens denied');
+  pass('executor isolation', 'real custom exec host and native exec-server: UID 1001, no_new_privs, clean host environment and private filesystem; shell seccomp EPERM for proxy/gateway/IPv6 and process tokens denied');
   assert.equal(await exec(podName, "console.log((await fetch('http://127.0.0.1:8080/v1/responses',{method:'POST',body:'{}'})).status)"), '401');
   const check = readFileSync('apps/computer/test/desktop.mjs', 'utf8');
   assert.match(await input('kubectl', ['-n', ns, 'exec', '-i', podName, '--', 'setpriv', '--no-new-privs', 'node', '--input-type=module'], check), /DESKTOP_PASS/);

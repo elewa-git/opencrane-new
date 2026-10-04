@@ -1,10 +1,11 @@
-// The supervisor starts this once per exec-server connection, never setuid.
+// The supervisor starts this once per executor connection, never setuid.
 // No sockets can be created by the executor or any of its descendants.
 #define _GNU_SOURCE
 #include <errno.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include <grp.h>
 #include <sys/prctl.h>
@@ -13,7 +14,9 @@
 #include <linux/filter.h>
 #include <linux/seccomp.h>
 #define DENY(n) BPF_JUMP(BPF_JMP+BPF_JEQ+BPF_K, n, 0, 1), BPF_STMT(BPF_RET+BPF_K, SECCOMP_RET_ERRNO | EPERM)
-int main(void) {
+int main(int argc, char **argv) {
+  const int host = argc == 2 && strcmp(argv[1], "host") == 0;
+  if (argc != 1 && !host) return 1;
   if (setgroups(0, NULL) || setgid(1001) || setuid(1001)) { perror("drop user"); return 1; }
   struct sock_filter rules[] = {
     BPF_STMT(BPF_LD+BPF_W+BPF_ABS, offsetof(struct seccomp_data, arch)),
@@ -35,6 +38,10 @@ int main(void) {
   setenv("HOME", "/home/tool", 1); setenv("CODEX_HOME", "/home/tool/.codex", 1);
   setenv("PATH", "/usr/local/bin:/usr/bin:/bin", 1); setenv("SHELL", "/bin/bash", 1);
   if (chdir("/workspace")) { perror("chdir"); return 1; }
+  if (host) {
+    execl("/usr/local/libexec/codex-code-mode-host", "codex-code-mode-host", NULL);
+    perror("exec host"); return 1;
+  }
   execl("/usr/local/bin/codex", "codex", "exec-server", "--listen", "stdio://", NULL);
   perror("exec-server"); return 1;
 }

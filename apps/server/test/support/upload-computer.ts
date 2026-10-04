@@ -40,6 +40,7 @@ export async function uploadComputer() {
     };
     await credentials();
     return { get url() { return url; }, close, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', container!); await start(); await credentials(); },
+      exec: (...args: string[]) => docker('exec', container!, ...args),
       pause: () => docker('pause', container!), resume: () => docker('unpause', container!),
       read: (path: string) => docker('exec', container!, 'cat', path),
       write: (path: string, text: string) => docker('exec', '-u', '1001', container!, '/opt/python/bin/python', '-c', 'import pathlib,sys; path=pathlib.Path(sys.argv[1]); path.parent.mkdir(parents=True,exist_ok=True); path.write_bytes(sys.argv[2].encode())', path, text),

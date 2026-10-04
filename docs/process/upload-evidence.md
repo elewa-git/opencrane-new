@@ -1,5 +1,79 @@
 # P2-6 upload evidence
 
+## Custom exec host isolation — 4 October 2026
+
+Source: `work/upload`, starting at `bb7af88`. The focused review receipt
+`/tmp/upload-independent-host-env.log` proved that the JavaScript host inherited
+UID 1000 and `PROXY_CALLER_TOKEN`, with `NoNewPrivs=0`. Shell isolation alone did
+not qualify this boundary.
+
+The new `apps/computer/test/exec-host.mjs` failed first with **1000 !== 1001**
+(`/tmp/upload-host-boundary-red.log`). It installs a trusted probe at the native
+host entrypoint in a disposable computer, checks the launch before executing the
+real host, then requests the same custom `exec`/`tools.exec_command` shape as the
+real PDF request. This does not substitute the shell executor for the host.
+
+The shared native launcher now has two fixed targets. Both drop to UID/GID 1001,
+clear supplementary groups and the environment, set `no_new_privs`, and install
+S0.1b's socket/process-inspection-denying seccomp filter. Codex at UID 1000 starts
+only an IPC connector; the root supervisor launches the relocated native host.
+The compiler stays in a build stage. No runtime dependency or licence exception
+was added. Model request construction and document context remain unchanged.
+
+- **PASS** host boundary and PDF stub: `/tmp/upload-host-boundary-green.log`.
+  UID 1001, `NoNewPrivs=1`, restrictive seccomp in addition to Docker's filter,
+  exact non-credential environment, protected Codex/desktop files and process
+  environments, and `EPERM` for IPv4, IPv6 and Unix sockets. The native host runs
+  with the checked identity and the stub answers **Willow-47** from file content.
+- **PASS** fresh and resumed gVisor image: `/tmp/upload-host-gvisor.log` and
+  `apps/computer/.state/checks.json`. Both request real custom exec and inspect
+  the native host's identity, environment and private filesystem view. Desktop,
+  document conversion, hostile PVCs and network isolation also pass.
+- The first gVisor run **FAIL**ed because the old fixture selected `stub-model`,
+  whose Codex metadata does not enable custom exec. The fixture now selects
+  `gpt-6.1-sol` through the same local stub; no external provider is contacted.
+- **PASS** licence gate, 384/384 packages: `/tmp/upload-host-image.log`.
+  Final source/content checks: `/tmp/upload-host-contents.log`; shell checks:
+  `/tmp/upload-host-shellcheck.log`.
+- Independent fix verification found no further production-code blocker. Its
+  remaining qualification finding was the fixture model selection above.
+  **PASS** two connector EOF/host-exit/restart checks:
+  `/tmp/upload-host-lifecycle-review.log`. Cancellation during an executing
+  JavaScript cell was not separately qualified.
+- **PASS** lint (five existing warnings), workspace typecheck and event catalogue:
+  `/tmp/upload-host-{lint,typecheck,events}.log`.
+
+The first full root run **FAIL**ed with 1,145 passed, ten skipped and one
+failure (`/tmp/upload-host-tests.log`). Both daily/monthly budget concurrency
+cases passed. The failure was the gateway revocation latency assertion:
+2,264 ms for event append, an already-refused request, projection work and a
+second refused request. The diagnostic run measured actual first-refusal latency
+at 97–171 ms and separately measured the projection and second request
+(`/tmp/upload-host-gateway-diagnosis.log`). The unchanged two-second bound now
+ends at the first refusal, which is when revocation has taken effect; both
+before/after-projection 403 checks remain. No security timeout was widened.
+The budget assertion now includes every response status/body if its earlier
+six-versus-seven mismatch recurs. That mismatch did not reproduce in either the
+full run or the diagnostic run, so no budget behaviour change is claimed.
+
+**PASS** final full root suite on the final source: **1,146 passed, ten skipped**,
+70 passed test files and two skipped. Command:
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2`.
+Receipt: `/tmp/upload-host-tests-final.log`, 850 seconds. The independently
+verified timing correction, both budget cases and the real-computer PDF upload
+journey are included. Final changed-test lint/typecheck and Markdown checks also
+pass (`/tmp/upload-host-gateway-lint.log`, `/tmp/upload-host-models-typecheck.log`,
+`/tmp/upload-host-docs-final.log`).
+
+Qualified and published image:
+`sha256:2a387e36ff44f6bd75f80e2bcffe3b0f9443e601efab5051cb32b13d10a637b9`.
+The registry release and qualification manifests, tracked sandbox template and
+fresh/resumed receipt have the same digest. Publication log:
+`/tmp/upload-host-publish.log`.
+
+No paid turn was needed or sent. The owner stack and its main checkout were not
+changed; all new execution evidence uses disposable computers and local stubs.
+
 ## Reliable document context — 4 October 2026
 
 Source: `work/upload`, starting at `6ba292e`. No dependency was added.
