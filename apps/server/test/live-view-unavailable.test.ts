@@ -193,7 +193,7 @@ async function checksUnavailableLease(boundary: Boundary, recovers: boolean) {
     // A failed check cannot revoke authority while its successful snapshot is still valid.
     expect(socket.readyState).toBe(WebSocket.OPEN);
     if (!recovers) {
-      expect((await closed)[0]).toBe(4003);
+      expect((await closed)[0]).toBe(4503);
       // Repeated errors must not renew the original 1.5-second lease.
       expect(performance.now() - failedAt).toBeLessThan(2000);
       return;

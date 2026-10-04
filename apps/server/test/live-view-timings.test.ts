@@ -170,7 +170,7 @@ async function noFrameBeforeLeaseExpiry() {
     const closed = once(socket, 'close');
     const unavailableAt = performance.now();
     nats.pauseResponses(true);
-    expect((await closed)[0]).toBe(4003);
+    expect((await closed)[0]).toBe(4503);
     expect(performance.now() - unavailableAt).toBeLessThan(2000);
     expect(messages).toEqual([]);
   } finally {

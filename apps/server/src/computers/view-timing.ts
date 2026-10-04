@@ -8,7 +8,7 @@ export type DesktopTiming = (
 
 type Stage = 'ticket_issue' | 'websocket_upgrade' | 'start_audit' | 'upstream_open'
   | 'pod_lookup' | 'first_upstream_bytes' | 'first_browser_frame'
-  | 'lease_check' | 'stop';
+  | 'lease_check' | 'lease_pause' | 'lease_resume' | 'stop';
 type Outcome = 'started' | 'ok' | 'unavailable' | 'denied' | 'error'
   | 'disconnected' | 'access_changed' | 'expired' | 'protocol' | 'slow_viewer'
   | 'upstream' | 'shutdown';
