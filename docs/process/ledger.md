@@ -93,6 +93,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-04 | Not opened (#56) | P3-15 monetary reconciliation backend (original receipt) | Actor, command/event store, replay, native usage and safe HTTP fixtures pass; original full root test gate fails | PARTIAL | 18 actor/regression tests; 11 gateway tests; HTTP regression; root run 32 failed / 1,362 passed | [p3-15-reconcile.md](p3-15-reconcile.md) |
 | 2026-10-04 | Not opened (#56) | P3-15 full capability | Designed resolution view and fresh-install journey | NOT RUN | Claude Design prompt 3 pending; no stack touched | [p3-15-reconcile.md](p3-15-reconcile.md) |
 | 2026-10-04 | Not opened (#56) | P3-15 backend review corrections | Rebased source gates PASS; populated-list and detail HTTP fixtures PASS; reviewer verification and fresh-install qualification pending | PARTIAL | 50 reservations (25 held / 25 settled), list and details under 2 s; root 1,403 passed / 14 skipped; start load 13.56 | [p3-15-reconcile.md](p3-15-reconcile.md) |
+| 2026-10-04 | Pending (#83) | P4-1 flat groups backend, review pass 1 fixes | Rebased authority design, removal/deadline regressions, real 100,000-event volume benchmark, web tests and all source gates PASS | PARTIAL | Root 1,441 passed / 15 skipped; start load 4; volume p95 model 222.18 ms / MCP 151.66 ms / destination 59.92 ms; 60 web tests; independent pass 2 and fresh install NOT RUN | [p4-1-backend-evidence.md](p4-1-backend-evidence.md) |
 
 ## Still NOT RUN
 

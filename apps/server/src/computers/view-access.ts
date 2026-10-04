@@ -86,33 +86,53 @@ async function currentComputer({ store, silo }: ViewAccessOptions, assistantId: 
   return computer;
 }
 
-async function desktopAccess(options: ViewAccessOptions, memberId: string, conversationId: string, computerId: string) {
-  const { store, silo } = options;
-  const resource = grantStream('shared_desktop', computerId);
-  const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`, `conversation-${conversationId}`, resource]);
+async function desktopGrants(store: EventStore, silo: string, resource: string) {
   const grants = await history(store, resource, silo);
   const current = new Map<string, { kind: string; eventId: string }>();
   for (const { event } of grants) {
-    const d = grant.parse(event.data);
-    if (event.type === 'grant.revoked') current.delete(d.granteeId);
-    else current.set(d.granteeId, { kind: z.object({ granteeKind: z.string() }).parse(event.data).granteeKind, eventId: event.id });
+    const data = grant.parse(event.data);
+    if (event.type === 'grant.revoked') {
+      current.delete(data.granteeId);
+    } else {
+      const grantee = z.object({ granteeKind: z.string() }).parse(event.data);
+      current.set(data.granteeId, { kind: grantee.granteeKind, eventId: event.id });
+    }
   }
+  return current;
+}
+async function belongsToGroup(options: ViewAccessOptions, groupId: string, memberId: string) {
+  const rows = await history(options.store, `team-${groupId}`, options.silo);
+  function matchesMember(row: StoredEvent) {
+    if (!row.event.type.startsWith('team.member_')) return false;
+    const data = z.object({ memberId: z.string() }).parse(row.event.data);
+    return data.memberId === memberId;
+  }
+  const membership = rows.findLast(matchesMember);
+  return membership?.event.type === 'team.member_added';
+}
+async function desktopAccess(options: ViewAccessOptions, memberId: string,
+  conversationId: string, computerId: string) {
+  const { store, silo } = options;
+  const resource = grantStream('shared_desktop', computerId);
+  const subjects = [`member-${memberId}`, `conversation-${conversationId}`, resource];
+  const fresh = await authorityFence(store, performance.now(), subjects);
+  const current = await desktopGrants(store, silo, resource);
   const direct = current.get(memberId);
   if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
   const groupFences: (() => Promise<void>)[] = [];
-  let permitted = false;
   const receipts: string[] = [];
-  for (const [id, source] of current) {
-    if (source.kind === 'team') {
-      // Any pending team removal denies until its IAM receipt exists.
-      const rows = await history(store, `team-${id}`, silo);
-      const member = rows.findLast(r => r.event.type.startsWith('team.member_') && z.object({ memberId: z.string() }).parse(r.event.data).memberId === memberId);
-      if (member?.event.type !== 'team.member_added') continue;
-      groupFences.push(await payingGroupAuthority(store, silo, memberId, id, options.binding));
-      receipts.push(source.eventId);
-      permitted = true;
-    }
+  for (const [groupId, source] of current) {
+    if (source.kind !== 'team') continue;
+    // Use current event membership even when IAM has not applied a removal yet.
+    if (!await belongsToGroup(options, groupId, memberId)) continue;
+    const groupFence = await payingGroupAuthority(store, silo, memberId, groupId, options.binding);
+    groupFences.push(groupFence);
+    receipts.push(source.eventId);
   }
-  if (!permitted) throw new Error('Desktop access required');
-  return { receipts, fresh: async () => { await fresh(); await Promise.all(groupFences.map(fence => fence())); } };
+  if (!receipts.length) throw new Error('Desktop access required');
+  async function checkFresh() {
+    await fresh();
+    for (const groupFence of groupFences) await groupFence();
+  }
+  return { receipts, fresh: checkFresh };
 }

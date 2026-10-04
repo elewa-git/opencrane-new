@@ -56,7 +56,11 @@ try {
     const projection = mode === 'files' ? files : mode === 'audit' ? auditTrail : mode === 'conversations' ? conversations : mode === 'members' ? members : mode === 'budgets' ? budgets : mode === 'computers' ? computers : mcpCatalogue;
     const runner = new ProjectionRunner(db.db, store, logger);
     await db.db.lock!('initialise', (locked) => new ProjectionRunner(locked, store, logger).initialise(projection));
-    if (mode === 'members') await db.db.lock!('initialise', locked => new ProjectionRunner(locked, store, logger).initialise(groups));
+    async function initialiseGroups(locked: import('@opencrane/projections').Db) {
+      const groupRunner = new ProjectionRunner(locked, store, logger);
+      await groupRunner.initialise(groups);
+    }
+    if (mode === 'members') await db.db.lock!('initialise', initialiseGroups);
     if (mode === 'budgets') await initialiseBudgetProjection(db.db, store, logger);
     while (!stop.signal.aborted) {
       await runner.run(projection, { signal: stop.signal });

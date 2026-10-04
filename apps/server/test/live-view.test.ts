@@ -417,11 +417,14 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
     await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();
   }
 }, 30_000);
-it('closes a group-granted live view within two seconds of removal before IAM catches up', async () => {
-  const fixture = await viewFixture(() => {
-    const writable = new PassThrough(); writable.resume();
-    return Promise.resolve(Duplex.from({ readable: new PassThrough(), writable }));
-  });
+async function closesRevokedGroupView() {
+  function openDesktop() {
+    const writable = new PassThrough();
+    writable.resume();
+    const desktop = Duplex.from({ readable: new PassThrough(), writable });
+    return Promise.resolve(desktop);
+  }
+  const fixture = await viewFixture(openDesktop);
   let socket: WebSocket | undefined;
   try {
     await fixture.append('team-viewers', 'team.created', { teamId: 'viewers', name: 'Viewers', createdBy: 'alice' }, true);
@@ -433,16 +436,29 @@ it('closes a group-granted live view within two seconds of removal before IAM ca
     expect(response.statusCode).toBe(200);
     const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', response.json<{ ticket: string }>().ticket], { headers });
-    socket.on('error', () => undefined); await once(socket, 'open');
-    const closed = once(socket, 'close'), removedAt = performance.now();
+    function ignoreSocketError() {
+      // Revocation deliberately closes the connection under test.
+    }
+    socket.on('error', ignoreSocketError);
+    await once(socket, 'open');
+    const closed = once(socket, 'close');
+    const removedAt = performance.now();
     await fixture.append('team-viewers', 'team.member_removed', { teamId: 'viewers', memberId: 'alice', removedBy: 'owner' });
     expect((await closed)[0]).toBe(4003);
     expect(performance.now() - removedAt).toBeLessThan(2000);
     expect((await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).statusCode).toBe(403);
-  } finally { socket?.terminate(); await fixture.close(); }
-}, 30_000);
-it('keeps a direct desktop grant independent of a pending group membership change', async () => {
-  const fixture = await viewFixture(() => Promise.resolve(new PassThrough()));
+  } finally {
+    socket?.terminate();
+    await fixture.close();
+  }
+}
+it('closes a group-granted live view within two seconds of removal before IAM catches up',
+  closesRevokedGroupView, 30_000);
+async function keepsDirectGrantIndependent() {
+  function openDesktop() {
+    return Promise.resolve(new PassThrough());
+  }
+  const fixture = await viewFixture(openDesktop);
   try {
     await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.given', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', granteeKind: 'member', grantedBy: 'owner' }, true);
     await fixture.append('team-viewers', 'team.created', { teamId: 'viewers', name: 'Viewers', createdBy: 'alice' }, true);
@@ -453,5 +469,9 @@ it('keeps a direct desktop grant independent of a pending group membership chang
     const headers = { origin: new URL(fixture.config.redirectUri).origin, 'x-opencrane-view': '1',
       cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     expect((await fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).statusCode).toBe(200);
-  } finally { await fixture.close(); }
-}, 30_000);
+  } finally {
+    await fixture.close();
+  }
+}
+it('keeps a direct desktop grant independent of a pending group membership change',
+  keepsDirectGrantIndependent, 30_000);

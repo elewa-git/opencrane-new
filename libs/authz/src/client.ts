@@ -168,8 +168,19 @@ export class TupleClient {
   /** Require every exact tuple; a missing answer or failed check refuses the batch. */
   async checkAll(tuples: Tuple[]) {
     try {
-      const response = await this.client.batchCheck({ checks: tuples.map((tuple, index) => ({ ...tuple, correlationId: String(index) })) }, consistent);
-      return { allowed: tuples.every((_, index) => response.result.some(result => result.correlationId === String(index) && result.allowed && !result.error)), status: 'ok' as const };
+      function correlatedCheck(tuple: Tuple, index: number) {
+        return { ...tuple, correlationId: String(index) };
+      }
+      const checks = tuples.map(correlatedCheck);
+      const response = await this.client.batchCheck({ checks }, consistent);
+      const answers = new Map<string, (typeof response.result)[number]>();
+      for (const result of response.result) answers.set(result.correlationId, result);
+      let allowed = true;
+      for (let index = 0; index < tuples.length; index++) {
+        const answer = answers.get(String(index));
+        if (!answer?.allowed || answer.error) allowed = false;
+      }
+      return { allowed, status: 'ok' as const };
     } catch (cause) {
       return { allowed: false as const, status: 'unavailable' as const, error: new Error('Authorisation checks unavailable', { cause }) };
     }

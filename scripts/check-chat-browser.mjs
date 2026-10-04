@@ -251,7 +251,15 @@ try {
   await browser.close();
   if (web) {
     web.kill('SIGTERM');
-    const reap = setTimeout(() => web.kill('SIGKILL'), 1000); reap.unref();
-    try { await exited; } finally { clearTimeout(reap); }
+    function reapWeb() {
+      web.kill('SIGKILL');
+    }
+    const reap = setTimeout(reapWeb, 1000);
+    reap.unref();
+    try {
+      await exited;
+    } finally {
+      clearTimeout(reap);
+    }
   }
 }

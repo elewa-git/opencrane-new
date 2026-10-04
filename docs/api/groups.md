@@ -63,9 +63,11 @@ The status route additionally returns 404 for an absent command. Foreign event
 streams fail closed without disclosing their contents.
 
 Revocation fences exact member, assistant, resource and relevant team subjects.
-Lagging or unavailable IAM cannot authorise a call. Group-derived desktop sockets
+The fence starts before permission reads and retains the original two-second
+request budget. Standalone destination-authority checks create and verify their
+own fence. Lagging or unavailable IAM cannot authorise a call. Group-derived desktop sockets
 use the existing bounded lease and close within two seconds of removal. A direct
 grant remains independent of group membership.
 
 [Source qualification and remaining live work](../process/p4-1-backend-evidence.md)
-record the test seams and limits. Screens await Claude Design prompt 4.
+record the test seams and limits. Screens remain outside this backend change.

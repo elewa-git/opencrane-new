@@ -1,98 +1,106 @@
 # P4-1 backend evidence
 
-4 October 2026. Branch `work/p4-1-groups`, based on main
-`f88c93458246fa38315e7d390320d3d2a0882145`. Source receipt; no stack was changed.
-The final local commit identifies the tested source.
+4 October 2026. Issue [#83](https://github.com/elewa-git/opencrane-new/issues/83),
+branch `work/p4-1-groups`. Review corrections rebased the original `05db5bb` onto
+main `e3bf292`, including #70 (`65364a0`), #112, #114 and #115. A second
+rebase includes the newly landed #128 (`da128e2`), preserving unavailable-check
+lease handling in the group desktop path. The final rebase includes #129
+(`bacbfdb`), which changes only design handoff assets and documentation lint
+configuration. Application, test, dependency and runner files are unchanged
+from the passing full root run; documentation gates are checked after this rebase. Rebase completion
+and main ancestry were checked. Changelog, ledger and benchmark history retain
+both main's and the original branch's entries.
 
 ## Scope and contract
 
-[Issue #83](https://github.com/elewa-git/opencrane-new/issues/83), parent
-[#82](https://github.com/elewa-git/opencrane-new/issues/82). The owner's backend-only
-instruction overrides the ticket's whole-screen requirement while Claude Design
-prompt 4 is outstanding. No screen or visual qualification is claimed.
-
 Groups reuse team events and `team#member`, assistant `acts_for` and resource
-`use`. Membership, silo role, conversation participation and private memory remain
-separate. D20 is the Phase 3 paying-group decision: group ids are payer ids,
-personal defaults stay explicit, and shared work never substitutes another payer.
-No money engine, dependency, direct tuple-write route or second change ledger.
+`use`. Membership, silo role, conversation participation and private memory stay
+separate. Group ids are payer ids; personal defaults remain explicit. Commands
+perform one conditional event append. No runtime dependency was added.
 
-The design's binding contract is [the groups HTTP interface](../api/groups.md).
-The members worker also runs the groups projection from its own checkpoint, so
-existing installations rebuild historical group events without a new stack unit.
-PostgreSQL recovery uses `npm run replay -- groups --verify`; OpenFGA recovery
-uses the existing `openfga` replay procedure with decisions and its worker stopped.
-Replay loads no external-effect reactions.
+The [groups HTTP interface](../api/groups.md) owns the API contract. The members
+worker runs the groups projection from its own checkpoint. PostgreSQL recovery
+uses `npm run replay -- groups --verify`; OpenFGA uses the existing replay
+procedure with decisions and its worker stopped. Replay has no external effects.
+The owner scoped this work to the backend. The People screen remains outside
+this change; the new design handoff is available for its separate UI work.
 
-## Verification receipt
+## Independent review pass 1 corrections
 
-Environment: existing PostgreSQL 17 at
-`postgres://postgres:test@127.0.0.1:55432/postgres`, isolated test databases, the
-repository's disposable NATS/OpenFGA fixtures and recording gateway upstream.
-No fresh installation, paid call, host-network change or daemon setup.
+The review at `/home/jente/.fleet/p4-1-review1/last.md` found two blockers and two
+readability findings. These corrections are awaiting independent pass 2.
 
-| Claim | Command or seam | Result |
-| --- | --- | --- |
-| Commands and HTTP | `apps/server/test/groups.test.ts` | PASS: Owner/Admin, duplicate commands, one append, stream races, refused members/silos/Origin, strict request shapes, IdP read-only sources, change reconciliation |
-| Content and IAM replay | Groups suite, existing replay tools | PASS: same group view and allowed/refused tuples after reconstruction |
-| Exact authority subjects | `libs/models/test/authority.test.ts` | PASS: adapter seeded with 100,000 unrelated team events rejects wildcard reads; exact real NATS reads and real OpenFGA checks finish below one second |
-| Group-derived live access | `apps/server/test/live-view.test.ts` | PASS: group desktop grant with separate participation; removal closes the socket within two seconds before IAM catches up; direct grants remain independent |
-| Gateway admission and budgets | Group ceiling test plus real gateway regressions | PASS: silo removal, suspension before fence capture, distinct payer removal after allow audit, no refused call dispatched |
-| Root typecheck | `npm run typecheck` | PASS across all workspaces |
-| Event catalogue | `npm run check:events` | PASS: 85 event types |
-| Root lint | `npm run lint` | PASS: code, dependency direction, unused code, Markdown, links and fixtures; eight non-blocking size warnings |
-| Complete tests | `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npm test -- --maxWorkers=2` | PASS: 1,397 passed, 14 skipped; 78 files passed, three skipped |
-| Fresh-install journey | Not run; owner forbids stack work | NOT RUN |
-| Screens and desktop/390px comparison | Awaiting Claude Design prompt 4 | NOT RUN |
+- Approval HTTP requests capture their fence before identity and IAM reads, using
+  the original request start. Member and participant removals cannot become an
+  authorised baseline even when their IAM removal receipt is already applied.
+- Standalone `currentAuthority` retains main's exact-subject reads, discovery and
+  shared fence. The branch's replacement cache and additional fence API were
+  removed. Main's authority and decision source files are unchanged.
+- Command decisions, payloads, membership checks, group reads and replay switching
+  now use named steps. The other new production paths and test callbacks were
+  expanded using the owner's clarity rule.
 
-The large-history adapter test establishes that unrelated events are never read;
-it is not a 100,000-event live NATS throughput benchmark. Source-ready and
-fresh-install capability completion remain separate claims.
+Red proof restored the reviewed late approval capture and missing standalone
+fence check temporarily. The applied member/participant removals returned 200;
+request expiry also returned 200. The standalone revocation and expiry tests
+returned a stale digest. Restoring main's fence makes those regressions refuse.
+Pending-receipt removal tests deny access in both versions. Time is injected;
+there are no sleeps to create the race.
 
-Independent review: two passes. Pass 1 found the computer/payer admission races
-and an unrelated group dependency in desktop access; targeted regressions failed
-before the fixes. Pass 2 verified the batched fixes and returned PASS with no
-remaining code blockers, conditional on the required gates.
+## Reconciled-source verification
 
-The complete gate run then exposed repeated history reads in model admission.
-Admissions now share each exact history within the request, with the computer
-fence captured before reading event-backed credentials. The slow-read,
-suspension, grant-revocation and separately selected payer regressions pass.
-The older paying-group fixture now includes active silo membership. The earlier
-complete run failed the slow-read case and incomplete paying-group fixture plus
-three fixture wall-clock timeouts; it is not used as a passing receipt. The final
-optimisation was checked with these regressions after the two independent review
-passes.
+Environment: shared Linux development host, Node 22.23.3, existing PostgreSQL at
+`postgres://postgres:test@127.0.0.1:55432/postgres`, disposable test databases,
+NATS/OpenFGA fixtures and a recording gateway upstream. No daemon setup, host
+network change, stack work, paid call or fresh installation.
+The final commit contains this tested source; command logs are retained under
+`/tmp/p4-*.log` on the builder host.
 
-The next complete run exposed the desktop's bounded slow-read case. Its IAM
-checks now use one exact OpenFGA batch for participation, desktop use and grant
-receipts. Missing, failed or refused answers deny access. The existing admission
-deadline and revocation lease are unchanged; slow reads, group removal and direct
-grant independence pass together. This final adapter change is also after the
-independent review passes and is covered by the final gates.
+| Check | Result |
+| --- | --- |
+| Approval, standalone authority and group regressions | PASS in the final full root run |
+| Initial combined six-file run | FAIL: 139 passed, two skipped; existing reasoning-report fixture timed out at 40 s |
+| Focused confirmation | Reasoning-report, month-boundary and security cases PASS; overall FAIL because filtering omitted earlier group-journey setup steps |
+| Web tests | PASS: 11 files, 60 tests |
+| Event catalogue | PASS: 85 event types |
+| Real volume benchmark | PASS: 100,000 unrelated events seeded into NATS, 30 samples per route and baseline |
+| Root lint | PASS: all checks; eight non-blocking size warnings |
+| Root typecheck | PASS across all workspaces |
+| Full root suite | PASS: 84 files, 1,441 tests; four files and 15 opt-in tests skipped; 956.30 s |
+| Fresh-install journey and designed screen | NOT RUN; no stack was touched |
 
-With the final backend, the complete run passed 1,396 tests and failed only the
-existing integration-policy fixture at Vitest's five-second default. That case
-passed in isolation. The default fixture test budget is now 30 seconds; explicit
-service deadlines, revocation assertions and longer test-specific budgets remain
-in place. The complete suite is rerun with the requested two workers.
+The review's month-boundary 403 did not recur in the reconciled combined run or
+focused confirmation. Its retained review log has no response body, so the exact
+old refusal cannot be established. The test now includes response bodies in both
+200 assertions for a useful diagnostic on any recurrence. The budget reset
+implementation is unchanged; the authority path is main's #70 implementation.
+The reasoning-report timeout passed in the focused confirmation without changing
+that implementation or increasing its timeout.
 
-The final input regression accepted a NUL name and then failed the real
-PostgreSQL replay. Both the local command and `team.created` schema now reject it
-before append; the refusal also verifies that the stream head stays unchanged.
+The initial full root suite started at 14:04 UTC after
+`cut -d. -f1 /proc/loadavg` returned **8**, below 16. That run was stopped when #128 landed, so it is NOT RUN to completion.
+The final reconciled run started at 14:11 UTC with integer load **4**. It passed
+using the requested `PG_TEST_URL`, two workers and a verbose reporter. The skipped
+conditions remain unqualified. Source gates: PASS; independent pass 2 and
+fresh-install capability qualification: NOT RUN.
 
-The final backend passed all service cases in the complete run; the remaining
-Chromium case reached PASS internally and hung awaiting Angular shutdown. Its
-disposable fixture now tries SIGTERM, then reaps the child after one second if
-needed. The same browser case passes with bounded cleanup, taking 162 seconds in
-isolation. Its process budget is now five minutes for parallel load; individual
-assertions retain their deadlines. Screens are unchanged.
+## Retained real volume benchmark
 
-The next complete run passed the Chromium case and 1,395 other tests, but the
-existing audit browser fixture timed out waiting for its loading state. That
-fixture passed in isolation on unchanged source. This failed run is recorded
-separately; the complete gate is rerun without further source changes.
+Main's `libs/models/test/authority-volume.test.ts` is unchanged. It checks seeded
+store size, exact reads, identical authority event counts, p95 below half the
+service deadline and every sample below the full deadline. A test allocating
+100,000 objects without seeding the store was removed during reconciliation.
 
-The final complete gate passed: 1,397 tests passed and 14 were skipped, with all
-78 runnable test files passing. Lint, typecheck and the event catalogue check
-also passed. Source-ready: PASS. Fresh-install capability qualification: NOT RUN.
+| Seeded unrelated events | Route | p50 ms | p95 ms | Authority events / reads |
+| --- | --- | --- | --- | --- |
+| 0 | Model | 176.62 | 245.83 | 15 / 8 |
+| 0 | MCP | 116.91 | 173.98 | 23 / 10 |
+| 0 | Destination authority | 50.13 | 66.68 | 6 / 4 |
+| 100,000 | Model | 156.41 | 222.18 | 15 / 8 |
+| 100,000 | MCP | 119.16 | 151.66 | 23 / 10 |
+| 100,000 | Destination authority | 43.33 | 59.92 | 6 / 4 |
+
+Measured again in the final full root run. The earlier standalone benchmark also
+passed with `PG_TEST_URL` as above and
+`npx vitest run libs/models/test/authority-volume.test.ts --maxWorkers=2 --reporter=verbose --silent=false`.
+These are local source measurements, not fresh-install qualification.
