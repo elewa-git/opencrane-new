@@ -129,9 +129,12 @@ comes from `apps/server/test/integrations.test.ts` with real API dependencies.
 and routing editing explicitly unavailable. `/org/spending` owns the existing budget
 summary and single editor. It displays global and configured paying-group/assistant
 monthly ceilings, current charges and held reservations, and edits safe integer EUR
-cents through the unchanged `/api/org/models` API. Conflicts or an unknown save
-outcome require a status read before another edit; access loss clears the details.
-The authenticated browser journey covers 1280px and 390px.
+cents through the unchanged `/api/org/models` API. It lists only effects that need
+review, keeps running calls in a waiting count, and reads recorded evidence before
+resolving an effect. Settle and release commands use one structured evidence entry;
+the page never repeats a resolve POST after an uncertain reply. Access loss clears
+budgets, effect references and the open drawer. The authenticated browser journey
+covers 1280px, 390px and 320px.
 
 The chat's 8g approval cards restore from the authenticated approval endpoint above
 the composer. Requested cards show every reviewed field, expiry and conditional

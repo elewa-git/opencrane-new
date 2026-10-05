@@ -1,0 +1,231 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390,
+    320
+  ],
+  "reducedMotion": true,
+  "captures": [
+    "SPD-01-1280-normal.png",
+    "SPD-03-1280-normal.png",
+    "SPD-06-1280-normal.png",
+    "SPD-07-1280-normal.png",
+    "SPD-08-1280-normal.png",
+    "SPD-09-1280-normal.png",
+    "SPD-20-1280-normal.png",
+    "SPD-21-1280-normal.png",
+    "SPD-22-1280-normal.png",
+    "SPD-23-1280-normal.png",
+    "SPD-24-1280-normal.png",
+    "SPD-25-1280-normal.png",
+    "SPD-26-1280-normal.png",
+    "SPD-27-1280-normal.png",
+    "SPD-28-1280-normal.png",
+    "SPD-30-1280-normal.png",
+    "SPD-31-1280-normal.png",
+    "SPD-32-1280-normal.png",
+    "SPD-33-1280-normal.png",
+    "SPD-34-1280-normal.png",
+    "SPD-35-1280-normal.png",
+    "SPD-01-1280-reduce.png",
+    "SPD-03-1280-reduce.png",
+    "SPD-06-1280-reduce.png",
+    "SPD-07-1280-reduce.png",
+    "SPD-08-1280-reduce.png",
+    "SPD-09-1280-reduce.png",
+    "SPD-20-1280-reduce.png",
+    "SPD-21-1280-reduce.png",
+    "SPD-22-1280-reduce.png",
+    "SPD-23-1280-reduce.png",
+    "SPD-24-1280-reduce.png",
+    "SPD-25-1280-reduce.png",
+    "SPD-26-1280-reduce.png",
+    "SPD-27-1280-reduce.png",
+    "SPD-28-1280-reduce.png",
+    "SPD-30-1280-reduce.png",
+    "SPD-31-1280-reduce.png",
+    "SPD-32-1280-reduce.png",
+    "SPD-33-1280-reduce.png",
+    "SPD-34-1280-reduce.png",
+    "SPD-35-1280-reduce.png",
+    "SPD-01-390-normal.png",
+    "SPD-03-390-normal.png",
+    "SPD-06-390-normal.png",
+    "SPD-07-390-normal.png",
+    "SPD-08-390-normal.png",
+    "SPD-09-390-normal.png",
+    "SPD-20-390-normal.png",
+    "SPD-21-390-normal.png",
+    "SPD-22-390-normal.png",
+    "SPD-23-390-normal.png",
+    "SPD-24-390-normal.png",
+    "SPD-25-390-normal.png",
+    "SPD-26-390-normal.png",
+    "SPD-27-390-normal.png",
+    "SPD-28-390-normal.png",
+    "SPD-30-390-normal.png",
+    "SPD-31-390-normal.png",
+    "SPD-32-390-normal.png",
+    "SPD-33-390-normal.png",
+    "SPD-34-390-normal.png",
+    "SPD-35-390-normal.png",
+    "SPD-01-390-reduce.png",
+    "SPD-03-390-reduce.png",
+    "SPD-06-390-reduce.png",
+    "SPD-07-390-reduce.png",
+    "SPD-08-390-reduce.png",
+    "SPD-09-390-reduce.png",
+    "SPD-20-390-reduce.png",
+    "SPD-21-390-reduce.png",
+    "SPD-22-390-reduce.png",
+    "SPD-23-390-reduce.png",
+    "SPD-24-390-reduce.png",
+    "SPD-25-390-reduce.png",
+    "SPD-26-390-reduce.png",
+    "SPD-27-390-reduce.png",
+    "SPD-28-390-reduce.png",
+    "SPD-30-390-reduce.png",
+    "SPD-31-390-reduce.png",
+    "SPD-32-390-reduce.png",
+    "SPD-33-390-reduce.png",
+    "SPD-34-390-reduce.png",
+    "SPD-35-390-reduce.png",
+    "SPD-01-320-normal.png",
+    "SPD-03-320-normal.png",
+    "SPD-06-320-normal.png",
+    "SPD-07-320-normal.png",
+    "SPD-08-320-normal.png",
+    "SPD-09-320-normal.png",
+    "SPD-20-320-normal.png",
+    "SPD-21-320-normal.png",
+    "SPD-22-320-normal.png",
+    "SPD-23-320-normal.png",
+    "SPD-24-320-normal.png",
+    "SPD-25-320-normal.png",
+    "SPD-26-320-normal.png",
+    "SPD-27-320-normal.png",
+    "SPD-28-320-normal.png",
+    "SPD-30-320-normal.png",
+    "SPD-31-320-normal.png",
+    "SPD-32-320-normal.png",
+    "SPD-33-320-normal.png",
+    "SPD-34-320-normal.png",
+    "SPD-35-320-normal.png",
+    "SPD-01-320-reduce.png",
+    "SPD-03-320-reduce.png",
+    "SPD-06-320-reduce.png",
+    "SPD-07-320-reduce.png",
+    "SPD-08-320-reduce.png",
+    "SPD-09-320-reduce.png",
+    "SPD-20-320-reduce.png",
+    "SPD-21-320-reduce.png",
+    "SPD-22-320-reduce.png",
+    "SPD-23-320-reduce.png",
+    "SPD-24-320-reduce.png",
+    "SPD-25-320-reduce.png",
+    "SPD-26-320-reduce.png",
+    "SPD-27-320-reduce.png",
+    "SPD-28-320-reduce.png",
+    "SPD-30-320-reduce.png",
+    "SPD-31-320-reduce.png",
+    "SPD-32-320-reduce.png",
+    "SPD-33-320-reduce.png",
+    "SPD-34-320-reduce.png",
+    "SPD-35-320-reduce.png"
+  ],
+  "environment": "Built Angular assets, Chromium and mocked HTTP routes; no dev stack",
+  "frames": [
+    {
+      "id": "SPD-01",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-03",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-06",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-07",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-08",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-09",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-20",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-21",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-22",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-23",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-24",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-25",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-26",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-27",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-28",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-30",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-31",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-32",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-33",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-34",
+      "result": "adapted"
+    },
+    {
+      "id": "SPD-35",
+      "result": "adapted"
+    }
+  ],
+  "adaptation": "Every compared SPD frame is marked adapted to the P3-15 contract.",
+  "checks": [
+    "No horizontal scroll at 320px and 390px",
+    "Visible controls are at least 44px",
+    "Escape returns focus to the row opener",
+    "Reduced motion captures are included"
+  ]
+}

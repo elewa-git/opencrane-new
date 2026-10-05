@@ -1,0 +1,27 @@
+<section aria-label="Recorded evidence">
+  <h3>Recorded evidence</h3>
+  @if (conflict()) { <p>⚠ Conflicting evidence</p> }
+  @if (observations().length === 0) { <p>No usage records are available.</p> }
+  @for (observation of observations(); track observation.eventId) {
+    <article>
+      <strong>{{ observation.outcome === 'success' ? 'Success' : 'Error' }}</strong>
+      <span>{{ money(observation.costCents) }} ({{ observation.costCents }} cents)</span>
+      @if (observation.usage; as usage) {
+        <p>Input {{ usage.inputTokens }} · Output {{ usage.outputTokens }} tokens</p>
+        @if (usage.cachedInputTokens !== undefined) {
+          <p>Cached input {{ usage.cachedInputTokens }} tokens</p>
+        }
+        @if (usage.cacheWriteTokens !== undefined) {
+          <p>Cache write {{ usage.cacheWriteTokens }} tokens</p>
+        }
+      }
+    </article>
+  }
+  @if (resolution(); as recorded) {
+    <article>
+      <strong>Resolution recorded</strong>
+      <p>{{ recorded.outcome === 'settled' ? 'Settled' : 'Released' }}
+        {{ money(recorded.settledCents) }} ({{ recorded.settledCents }} cents)</p>
+    </article>
+  }
+</section>

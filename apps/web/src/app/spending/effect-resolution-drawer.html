@@ -1,0 +1,125 @@
+@if (effect(); as current) {
+  <oc-hinge-drawer [open]="true" [title]="'Resolve ' + current.permitId"
+    [description]="money(current.reservedCents) + ' reserved'" backLabel="Back"
+    [returnFocusTo]="opener()" (closed)="markClosed()">
+    <div class="drawer-content">
+      <div role="status" aria-live="polite">
+        @if (readState() === 'reading') { Reading recorded evidence for {{ current.permitId }}… }
+        @else { {{ message() }} }
+      </div>
+      <dl class="facts">
+        <div><dt>Reference</dt><dd class="mono">{{ current.permitId }}</dd></div>
+        <div><dt>Model</dt><dd>{{ current.model }}</dd></div>
+        <div><dt>Price table</dt><dd>{{ current.priceTableId }}</dd></div>
+        <div><dt>Reserved at</dt><dd>{{ utcDateTime(current.reservedAt) }}</dd></div>
+        <div><dt>Held</dt><dd>{{ money(current.reservedCents) }}
+          ({{ current.reservedCents }} cents)</dd></div>
+        <div><dt>Reasons</dt><dd>{{ reasons() }}</dd></div>
+        <div><dt>State</dt><dd>{{ current.label }}</dd></div>
+      </dl>
+      <oc-effect-evidence-list [observations]="current.observations"
+        [resolution]="current.resolution" [conflict]="current.conflict" />
+      @if (current.state === 'outcome_unknown' && current.resolution === null
+        && current.observations.length > 0 && !resolvable()) {
+        @if (amounts().length > 1) {
+          <p role="alert">Usage records disagree ({{ amounts().join(' vs ') }} cents). The hold stays.</p>
+        } @else {
+          <p role="alert">Can't confirm with this evidence. The hold stays.</p>
+        }
+      } @else if (submitState() === 'already' && current.resolution !== null) {
+        <p role="alert">This hold was already resolved: {{ current.resolution.outcome === 'settled'
+          ? 'Settled' : 'Released' }} {{ money(current.resolution.settledCents) }}.
+          Your resolution was not applied.</p>
+      } @else if (submitState() === 'matching') {
+        <p>A resolution matching yours is recorded.</p>
+      } @else if (current.resolution !== null && current.state === 'outcome_unknown') {
+        <p role="alert">A resolution is recorded, but a later usage record does not match it.
+          This can't be resolved here. The hold stays.</p>
+      }
+      @if (formAvailable()) {
+        <form id="resolution-form" (submit)="onSubmit($event)">
+          <fieldset [disabled]="submitState() === 'saving' || readState() === 'reading'">
+            <legend>Resolve this hold</legend>
+            <label><input type="radio" name="outcome" value="settled"
+              [checked]="outcome() === 'settled'" (change)="outcome.set('settled')" /> Settle</label>
+            <label><input type="radio" name="outcome" value="released"
+              [checked]="outcome() === 'released'" [disabled]="!releasable()"
+              (change)="outcome.set('released')" /> Release</label>
+            @if (!releasable()) {
+              <p>Usage with a cost was recorded, so the hold can't be released.</p>
+            }
+            @if (amounts().length === 1) {
+              <p>Recorded usage: {{ money(amounts()[0]!) }} ({{ amounts()[0] }} cents).
+                The settled amount must match it.</p>
+            }
+            @if (outcome() === 'settled') {
+              <label for="settle-cents">Settled amount (whole euro cents)</label>
+              <input id="settle-cents" inputmode="numeric" [value]="centsText()"
+                (input)="setCentsFromEvent($event)"
+                [attr.aria-invalid]="centsError() ? 'true' : null"
+                [attr.aria-describedby]="centsError() ? 'settle-cents-error' : null" />
+              @if (centsError(); as error) { <p id="settle-cents-error" class="error">{{ error }}</p> }
+              @if ((parseAmount() ?? 0) > current.reservedCents) {
+                <p role="alert">This is more than the {{ money(current.reservedCents) }} hold.
+                  The full amount will be recorded.</p>
+              }
+            }
+            <label for="receipt-reference">Receipt or dispatch reference</label>
+            <textarea id="receipt-reference" rows="2" [value]="referenceText()"
+              (input)="setReferenceFromEvent($event)"
+              [attr.aria-invalid]="referenceError() ? 'true' : null"
+              [attr.aria-describedby]="referenceError() ? 'reference-error' : null"></textarea>
+            @if (referenceError(); as error) { <p id="reference-error" class="error">{{ error }}</p> }
+            <label for="receipt-digest">Receipt SHA-256 hash</label>
+            <textarea id="receipt-digest" rows="2" [value]="digestText()"
+              (input)="setDigestFromEvent($event)"
+              [attr.aria-invalid]="digestError() ? 'true' : null"
+              [attr.aria-describedby]="digestError() ? 'digest-help digest-error' : 'digest-help'"></textarea>
+            <p id="digest-help">The SHA-256 hash of the receipt you hold, not the receipt itself.</p>
+            @if (digestError(); as error) { <p id="digest-error" class="error">{{ error }}</p> }
+            @if (outcome() === 'released') {
+              <label><input type="checkbox" aria-required="true" [checked]="checkedNotDispatched()"
+                [attr.aria-invalid]="notDispatchedError() ? 'true' : null"
+                [attr.aria-describedby]="notDispatchedError() ? 'not-dispatched-error' : null"
+                (change)="setNotDispatchedFromEvent($event)" />
+                I hold a record showing this call was never sent</label>
+              @if (notDispatchedError(); as error) {
+                <p id="not-dispatched-error" class="error">{{ error }}</p>
+              }
+            }
+          </fieldset>
+          <footer overlayFooter>
+            <button type="submit" form="resolution-form" [disabled]="!submitAllowed()">
+              @if (outcome() === 'settled') { Settle {{ money(parseAmount() ?? 0) }}
+                ({{ parseAmount() ?? 0 }} cents) }
+              @else { Release the {{ money(current.reservedCents) }} hold }
+            </button>
+            <button type="button" class="cancel" [disabled]="submitState() === 'saving'"
+              (click)="markClosed()">Cancel</button>
+          </footer>
+        </form>
+      } @else {
+        <button type="button" class="refresh" [disabled]="readState() === 'reading'"
+          (click)="refresh.emit()">Check status</button>
+      }
+    </div>
+  </oc-hinge-drawer>
+} @else {
+  <oc-hinge-drawer [open]="true" [title]="'Resolve ' + permitId()"
+    description="Recorded spend evidence" backLabel="Back" [returnFocusTo]="opener()"
+    (closed)="markClosed()">
+    <div role="status" aria-live="polite">
+      @if (readState() === 'reading') {
+        Reading recorded evidence for {{ permitId() }}…
+      } @else if (readState() === 'not_found') {
+        This hold could not be found.
+      } @else {
+        Could not read this hold. Check status to read it again.
+      }
+    </div>
+    <footer overlayFooter>
+      <button type="button" [disabled]="readState() === 'reading'"
+        (click)="refresh.emit()">Check status</button>
+    </footer>
+  </oc-hinge-drawer>
+}

@@ -1,0 +1,18 @@
+<article [ocDogEar]="true">
+  <h2>{{ label() }}</h2>
+  <p class="period">{{ period() }}</p>
+  <dl>
+    @if (ceilingCents() !== undefined) {
+      <div><dt>Limit</dt><dd>{{ money(ceilingCents()!) }} ({{ ceilingCents() }} cents)</dd></div>
+    }
+    <div><dt>Settled</dt><dd>{{ money(settledCents()) }} ({{ settledCents() }} cents)</dd></div>
+    <div><dt>Reserved</dt><dd>{{ money(reservedCents()) }} ({{ reservedCents() }} cents)</dd></div>
+    @if (available() !== undefined) {
+      <div><dt>Available</dt><dd>
+        @if (available()! >= 0) { {{ money(available()!) }} ({{ available() }} cents) }
+        @else { None available }
+      </dd></div>
+    }
+  </dl>
+  <div class="bar" aria-hidden="true"><span [style.width]="barWidth()"></span></div>
+</article>

@@ -42,7 +42,7 @@ unfinished branch exist. Recheck branch status when starting implementation.
 | B: budgets/models | **Exists:** `GET /api/org/models` returns registry, task routing, price table and budget summary; POST forwards an integer-cent budget command with `commandId`, `expectedSequence`, scope and applicable ceiling/default-payer fields to the existing actor. This is not a provider-key lifecycle API. Root/routine joins and personal default-payer editing need work. |
 | H: history | **Exists:** `GET /api/org/history` and `GET /api/conversations/:conversationId/history`. Filters are `before`, `requestId`, `turnId`, `decision`; rows distinguish decision and outcome, with safe records and optional cents. No general overview task endpoint or arbitrary change-id lookup. |
 | V: computer/files | **Exists:** `POST /api/conversations/:conversationId/view`, then `/ws/conversations/:conversationId/view` with the returned ticket; read-only proxy. `POST /api/conversations/:conversationId/screenshots` takes no body, Origin, `x-opencrane-view: 1` and `idempotency-key`. `GET/POST /api/conversations/:conversationId/files`; `GET /api/conversations/:conversationId/files/view?path=…&preview=true`. `GET /api/org/computers` is an admin inventory, not takeover authority. |
-| E: effects | **In review:** [PR #114](https://github.com/elewa-git/opencrane-new/pull/114), `GET /api/org/effects`, `GET /api/org/effects/:permitId`, `POST /api/org/effects/:permitId/resolve`. Read the [branch HTTP contract](https://github.com/elewa-git/opencrane-new/blob/work/p3-15-reconcile/docs/process/p3-15-reconcile.md). Owner/Admin only; monetary reconciliation, not an Odoo retry/readback endpoint. |
+| E: effects | **Exists (merged in #114):** `GET /api/org/effects`, `GET /api/org/effects/:permitId`, `POST /api/org/effects/:permitId/resolve`. Read the [HTTP contract](https://github.com/elewa-git/opencrane-new/blob/main/docs/process/p3-15-reconcile.md). Owner/Admin only; monetary reconciliation, not an Odoo retry/readback endpoint. |
 | G: groups | **Branch available:** `GET/POST /api/groups`, `GET/POST /api/groups/:groupId`, `GET /api/groups/:groupId/changes/:commandId`. Read [docs/api/groups.md on its branch](https://github.com/elewa-git/opencrane-new/blob/work/p4-1-groups/docs/api/groups.md) and `apps/server/src/members/group-routes.ts` there. All reads and writes require Owner/Admin; no general member search. |
 
 Future API descriptions in the ticket tables name the owning capability, not
@@ -290,14 +290,14 @@ Their parent owns HTTP and emits/reloads typed results; money stays integer cent
 
 | Ticket / issue | State ids | Components | API binding and UI-only work left |
 | --- | --- | --- | --- |
-| P3-15 [#56](https://github.com/elewa-git/opencrane-new/issues/56) | SPD-01, SPD-03, SPD-06–09, SPD-20–28, SPD-30–35 | SpendingSummary, MoneyCard, EffectResolutionDrawer, EffectEvidenceList, HingeDrawer | E **in review**, B **exists**. First build unknown-effects list and resolution drawer; show held/settled separately, original permit, recorded observations, structured evidence entry, safe integer validation, pending reaction, conflicts, role loss and Check status. Broader SPD summary attribution waits for P4-26. |
+| P3-15 [#56](https://github.com/elewa-git/opencrane-new/issues/56) | SPD-01, SPD-03, SPD-06–09, SPD-20–28, SPD-30–35 | SpendingSummary, MoneyCard, EffectResolutionDrawer, EffectEvidenceList, HingeDrawer | E **exists**, B **exists**. First build unknown-effects list and resolution drawer; show held/settled separately, original permit, recorded observations, structured evidence entry, safe integer validation, pending reaction, conflicts, role loss and Check status. Broader SPD summary attribution waits for P4-26. |
 | P4-26 [#108](https://github.com/elewa-git/opencrane-new/issues/108) | SPD-01–09, SPD-04-RM, SPD-20–28, SPD-30–35, SPD-40–46, SPD-50–54 | SpendingSummary, MoneyCard, BudgetLimitForm, EffectResolutionDrawer, BudgetStopNotice | B **exists**, E **in review**, G **branch available**. Named assistant/payer choices, root/routine joins, personal default and hard-stop consequences **need building** with P4-11/P4-24. Finish scope selection, lowering review, zero, rollover and linked chat; reuse the P3-15 drawer. |
 
-Bind E exactly: list `{ effects }`; detail supplies `sequence`, `state`,
+Bind E exactly: row E **exists (merged in #114)**. List `{ effects }`; detail supplies `sequence`, `state`,
 `reservedAt`, `reservedCents`, nullable `settledCents`, model/price table,
 observations/resolution and `csrf`. Resolve with `commandId`,
 `expectedSequence`, `outcome: settled|released`, `settledCents`, and 1–10
-structured evidence entries. A provider receipt has `reference`, SHA-256 `digest`
+exactly one structured evidence entry. A provider receipt has `reference`, SHA-256 `digest`
 and `amountCents`; release needs `dispatch_record` with `notDispatched: true`
 and zero settlement. POST includes Origin and detail's `X-CSRF-Token`.
 A 202 means recorded, not settled: reread the original permit through

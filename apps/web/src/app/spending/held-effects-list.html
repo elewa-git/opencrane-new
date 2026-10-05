@@ -1,0 +1,47 @@
+<section aria-labelledby="held-effects-heading">
+  <header>
+    <div>
+      <h2 id="held-effects-heading">Held for review</h2>
+      <p>Work title, requester and assistant aren't shown here yet.</p>
+      @if (waitingCount() > 0) {
+        <p>{{ waitingCount() }} calls still waiting for final usage.</p>
+      }
+    </div>
+  </header>
+  @if (loadState() === 'loading' && !hasLoaded()) {
+    <p role="status">Loading held spend…</p>
+    <div class="skeletons" aria-hidden="true">
+      <oc-grain-loader height="64px" /><oc-grain-loader height="64px" />
+    </div>
+  } @else if (loadState() === 'unavailable' && !hasLoaded()) {
+  } @else if (loadState() === 'failed' && effects().length === 0) {
+    <p>Spend evidence could not be loaded.</p>
+  } @else if (effects().length === 0) {
+    <p>No uncertain effects. Nothing is waiting for final usage.</p>
+  } @else {
+    <table>
+      <thead><tr><th scope="col">Reference</th><th scope="col">Held</th>
+        <th scope="col">State</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+      <tbody>
+        @for (effect of effects(); track effect.permitId) {
+          <tr>
+            <td data-label="Reference">
+              <strong class="mono">{{ effect.permitId }}</strong>
+              <span>{{ effect.model }}</span>
+              <time [attr.datetime]="effect.reservedAt">{{ utcDateTime(effect.reservedAt) }}</time>
+            </td>
+            <td data-label="Held">{{ money(effect.reservedCents) }}
+              ({{ effect.reservedCents }} cents)</td>
+            <td data-label="State">
+              @if (recorded(effect)) { <span>◷ Recorded, waiting to apply</span> }
+              @for (reason of reasons(effect); track reason) { <span>{{ reason }}</span> }
+            </td>
+            <td class="action">
+              <button type="button" (click)="check(effect.permitId, $event)">Check status</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

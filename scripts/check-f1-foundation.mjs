@@ -307,6 +307,10 @@ async function modelsReply(route) {
   await route.fulfill({ json: { budget, models: [{ id: 'Installed model' }] } });
 }
 
+async function effectsReply(route) {
+  await route.fulfill({ json: { effects: [] } });
+}
+
 async function policyReply(route) {
   await route.fulfill({ json: policy });
 }
@@ -353,6 +357,7 @@ async function previewReply(route) {
 
 async function checkEditors(page, width, motion) {
   await page.route('**/api/org/models', modelsReply);
+  await page.route('**/api/org/effects', effectsReply);
   await page.goto(`${origin}/org/spending`);
   await page.getByText('Spending loaded', { exact: true }).waitFor();
   await checkStatusRegions(page);
