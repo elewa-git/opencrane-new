@@ -26,16 +26,26 @@ flowchart LR
 - Checks permissions before returning private information or changing data.
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
-- Runs a separate models process that checks budgets and sends allowed model requests through agentgateway.
+- Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
+  and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that
+  every model request passes through.
+- Lets admins connect a model provider, store its key safely and check that the key works.
+- Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
 - Provides the one-time command used to claim a new installation.
 
 ## Processes it handles
 
 1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie.
-2. **The first owner claims a new installation.** They enter a one-time token after signing in. The server checks it and records the new owner.
-3. **A person chats with an assistant.** The server sends the turn to that person's computer and streams reports back to the browser. The person can stop the turn.
+2. **The first owner claims a new installation.** An operator runs the one-time command,
+   which prints a token. The first person signs in and enters that token on the claim page.
+   The server checks it and records them as the owner.
+3. **A person chats with an assistant.** The server sends the turn to that person's
+   computer and passes the assistant's progress back to the browser as it arrives. The
+   person can stop the turn.
 4. **An admin adds a tool server.** The server checks the remote address, lists its tools and leaves them blocked until an admin reviews them.
-5. **A model request arrives.** The models process checks the available budget and starts agentgateway for allowed requests.
+5. **An assistant asks an AI model for help.** The request goes through agentgateway, the
+   AI gateway. The gateway asks the models process whether the budget allows it, and only
+   then sends it on to the model provider.
 
 ## How to run or test it
 
@@ -44,6 +54,9 @@ npm start -w apps/server
 npm run models -w apps/server
 npm run typecheck -w apps/server
 ```
+
+These need the dev stack's settings. To run the whole system, use
+infra/dev-stack/up.sh (see [infra/dev-stack](../../infra/dev-stack/README.md)).
 
 ## Where to read more
 

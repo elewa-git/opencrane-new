@@ -28,6 +28,10 @@ apps/computer/build.sh
 shellcheck apps/computer/build.sh apps/computer/test/licences.sh
 ```
 
+Both image commands need Docker and the dev stack's local Kubernetes cluster.
+`build:image` also runs the image tests and updates `sandbox-template.json` with
+the new image. `test:image` needs an image built first.
+
 `build.sh` collects and checks notices, publishes a qualification digest, updates
 the tracked manifest, runs the real k3d checks and only then moves `p2-1`. A
 failed licence or image check cannot publish the release.

@@ -2,7 +2,7 @@
 
 For people, read [README.md](README.md) first.
 
-`@opencrane/ops` rebuilds the `members`, `mcp-catalogue`, `computers`, `budgets` and `audit` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `mcp-catalogue`, `computers`, `budgets` and `audit` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -150,6 +150,8 @@ reload. No chat reaction runs during replay. Bridge delivery reads durable poste
 messages, invokes the existing resume command, and waits for Ready before issuing
 a turn. The idle timer accounts for pending messages and recent conversation
 activity. Pod-proxy GET permission permits the server's inbound bridge WebSocket.
+
+`npm run worker -w apps/ops -- files` runs the conversation files projection.
 
 Server-owned `computer.turn_started` and `computer.turn_closed` events share the
 computer stream with suspension. A live turn prevents suspension; competing

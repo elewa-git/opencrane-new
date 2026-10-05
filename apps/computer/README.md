@@ -2,7 +2,7 @@
 
 ## What this is
 
-A private cloud computer where each person's assistant does its work. Kubernetes, the service that runs containers, starts it with Codex, OpenAI's coding agent, a browser and a remote desktop.
+A private cloud computer where each person's assistant does its work. Each computer is a locked-down Linux container. It holds Codex (OpenAI's coding agent), a web browser and a remote desktop. Kubernetes, the system that runs containers, starts one for each person.
 
 ## Where it fits
 
@@ -21,7 +21,7 @@ flowchart LR
 - Builds the container image with Codex, a browser, a remote desktop and document tools.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
 - Keeps files in the person's workspace when the computer pauses and starts again.
-- Limits model access to requests with a live, short-lived permission.
+- Lets Codex reach the AI gateway only while the current chat turn holds a valid short-lived pass.
 - Separates the assistant, file tools and desktop into different Linux users.
 - Supplies the Kubernetes files that restrict network access.
 - Checks the image's licences before publishing it.
@@ -40,6 +40,10 @@ npm run build:image -w apps/computer
 npm run test:image -w apps/computer
 npm run typecheck -w apps/computer
 ```
+
+Both image commands need Docker and the dev stack's local Kubernetes cluster.
+`build:image` also runs the image tests and updates `sandbox-template.json` with the
+new image.
 
 ## Where to read more
 

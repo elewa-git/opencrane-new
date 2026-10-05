@@ -21,7 +21,8 @@ flowchart LR
 
 ## What it is responsible for
 
-- Keeps member, group, conversation, file, computer, budget and history tables up to date.
+- Keeps the member, group, tool catalogue, conversation, file, computer, budget and
+  history tables up to date.
 - Updates permissions and sets up a new member's assistant and computer.
 - Starts computers, gives them short-lived access keys and pauses idle ones.
 - Settles model spending after a model request.
@@ -31,9 +32,13 @@ flowchart LR
 ## Processes it handles
 
 1. **A change is recorded.** A worker reads the event and updates the matching PostgreSQL table. Replaying the events can rebuild that table.
-2. **A member joins.** The dispatcher updates permissions, gives the member model access and claims a computer for their assistant.
-3. **A computer sits idle.** The worker pauses it after the idle period. When new work arrives, it starts the computer again.
-4. **An operator rebuilds a table.** The replay command builds a copy and checks it before replacing the current table.
+2. **A member joins.** The [dispatcher](../../GLOSSARY.md#dispatcher) is the background
+   program that reacts to each new event. It updates permissions, gives the member model
+   access and claims a computer for their assistant.
+3. **A computer sits idle.** After 15 minutes without activity (by default), the worker
+   pauses it. When a new message arrives, the server asks for the computer back and the
+   worker starts it again.
+4. **An operator rebuilds a table.** The replay command reads every saved event again, builds a fresh copy of the table and checks it before swapping it in.
 
 ## How to run or test it
 
@@ -42,6 +47,9 @@ npm run worker -w apps/ops -- members
 npm run worker -w apps/ops -- dispatcher
 npm run replay -- members --dry-run
 ```
+
+These need the dev stack's settings. To run the whole system, use
+infra/dev-stack/up.sh (see [infra/dev-stack](../../infra/dev-stack/README.md)).
 
 ## Where to read more
 

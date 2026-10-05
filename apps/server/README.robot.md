@@ -29,6 +29,70 @@ client-secret indirection, scopes, cookie settings and provider claim names.
 `OTEL_EXPORTER_OTLP_ENDPOINT` enables optional trace export when set.
 Disabling secure cookies or allowing insecure OIDC HTTP is only for local testing.
 
+## Settings
+
+The server, models and one-time bootstrap command read these environment variables.
+“When needed” means a feature or connection is enabled. A process refuses to start if
+one of its required settings is missing.
+
+| Variable | Process | Required | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `PORT` | Server | No | `8080` | HTTP port. |
+| `HOST` | Server | No | `0.0.0.0` | Address for the HTTP listener. |
+| `SHUTDOWN_GRACE_MS` | Server | No | `10000` | Maximum time allowed for a clean shutdown. |
+| `NODE_ENV` | Server | No | None | Selects production sign-in rules and the development model-decision URL. |
+| `OIDC_ISSUER_URL` | Server | Yes | None | Sign-in provider address. |
+| `OIDC_CLIENT_ID` | Server | Yes | None | Client name registered with the sign-in provider. |
+| `OIDC_REDIRECT_URI` | Server | Yes | None | Sign-in return address. |
+| `OIDC_COOKIE_SECRET` | Server | Yes | None | Secret of at least 32 bytes for browser cookies. |
+| `OIDC_CLIENT_SECRET_ENV_VAR` | Server | No | None | Name of the environment variable holding the provider secret. |
+| `OIDC_POST_LOGOUT_REDIRECT_URI` | Server | No | None | Address to open after provider sign-out. |
+| `OIDC_EXPECTED_ORG_ID` | Server | Production, or with NATS | None | Organisation allowed to sign in to this silo. |
+| `OIDC_EXTRA_IDENTITIES` | Server | No | Empty list | JSON list of exact issuer and subject exceptions to the organisation check. |
+| `OIDC_SCOPES` | Server | No | `openid profile email` | Sign-in details requested from the provider. |
+| `OIDC_COOKIE_NAME` | Server | No | `oc_session` | Browser session cookie name. |
+| `OIDC_FLOW_COOKIE_NAME` | Server | No | `oc_auth_flow` | Sign-in flow cookie name. |
+| `OIDC_COOKIE_SECURE` | Server | No | `true` | Requires HTTPS for browser cookies. |
+| `OIDC_SESSION_MAX_AGE_SECONDS` | Server | No | `43200` | Browser session lifetime. |
+| `OIDC_ORG_CLAIM` | Server | No | `org_id` | Provider claim containing the organisation id. |
+| `OIDC_ROLES_CLAIM` | Server | No | `roles` | Provider claim containing role names. |
+| `OIDC_STEP_UP_MAX_AGE_SECONDS` | Server | No | `300` | Maximum age of a recent sign-in for sensitive actions. |
+| `OIDC_ALLOW_INSECURE_REQUESTS` | Server | No | `false` | Allows plain HTTP to the provider for local use. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Server | No | Unset | Sends tracing data to this collector when set. |
+| `NATS_URL` | Both | Models yes; server when events are enabled | None | NATS event-log address, without credentials. |
+| `NATS_NKEY_SEED_FILE` | Both | Yes when using NATS | None | Path to the NATS client key file. |
+| `NATS_CA_FILE` | Both | Yes when using NATS | None | Path to the NATS certificate authority file. |
+| `NATS_CERT_FILE` | Both | Yes when using NATS | None | Path to the client's NATS certificate. |
+| `NATS_KEY_FILE` | Both | Yes when using NATS | None | Path to the private key for the client certificate. |
+| `NATS_INBOX_PREFIX` | Both | Yes when using NATS | None | Prefix for private NATS reply subjects. |
+| `SILO_ID` | All three | Models yes; server with events; bootstrap command | None | Id of the silo whose events and projections are used. |
+| `DATABASE_URL` | Both | Models yes; server when projections are enabled | None | PostgreSQL connection address. |
+| `OPENFGA_API_URL` | Both | Models yes; server with projections | None | OpenFGA permission service address. |
+| `OPENFGA_STORE_ID` | Both | Models yes; server with projections | None | OpenFGA store used by this silo. |
+| `OPENFGA_MODEL_ID` | Both | Models yes; server with projections | None | OpenFGA permission model used by this silo. |
+| `CONVERSATION_KEYS_DIR` | Both | No | Unset | Directory of keys for private conversation content. |
+| `MINIO_CREDENTIALS_FILE` | Server | No | Unset | Enables file storage with credentials read from this file. |
+| `MINIO_URL` | Server | Required with MinIO credentials | None | MinIO object-storage address. |
+| `CLAMD_HOST` | Server | No | `127.0.0.1` | Address of the file scanner. |
+| `CLAMD_PORT` | Server | No | `43310` | Port of the file scanner. |
+| `KUBECONFIG` | Server | Required for chat computers | None | Path to Kubernetes access settings. |
+| `KUBE_NAMESPACE` | Server | Required for chat computers | None | Kubernetes namespace holding computers. |
+| `TOKEN_SIGNING_KEY_FILE` | Server | Required with chat or budget checks | None | Path to the private token-signing key. |
+| `TOKEN_ISSUER` | Both | Models yes; server with chat or budget checks | None | Name that appears as the token issuer. |
+| `MODEL_DECISION_URL` | Server | No | Development URL in development; otherwise unset | Address of the models decision service. |
+| `PROVIDER_SECRETS_DIR` | Both | No | Unset | Directory holding model-provider keys. |
+| `MODEL_STATE_DIR` | Models | Yes | None | Directory for model gateway state and usage records. |
+| `MODEL_JWKS_FILE` | Models | Yes | None | Path to the public keys used to check signed tokens. |
+| `DEFAULT_PAYING_GROUP_ID` | Models | No | `installation-default` | Group charged for personal assistant use by default. |
+| `MODEL_DECISION_PORT` | Models | Yes | None | Port for model budget decisions. |
+| `MODEL_GATEWAY_PORT` | Models | Yes | None | Local port for the AI gateway. |
+| `AGENTGATEWAY_BINARY` | Models | Yes | None | Path to the agentgateway program. |
+| `MODEL_KEY_FILE` | Models | No | `.keys/.openai-key` in the repository root | Path to the gateway's default provider key file. |
+| `MODEL_READINESS_PORT` | Models | Yes | None | Port used to check whether the AI gateway is ready. |
+| `MODEL_UPSTREAM` | Models | No | Unset | Optional upstream address for the AI gateway. |
+| `MODEL_MCP_ROUTES` | Models | No | Empty list | JSON list of tool-server routes for the AI gateway. |
+| `BOOTSTRAP_TOKEN_FILE` | Bootstrap command | Yes | None | Private file where the one-time token hash and expiry are stored. |
+
 Set `NATS_URL`, `SILO_ID` and `OIDC_EXPECTED_ORG_ID` to enable membership acceptance.
 `SILO_ID` is the event silo; the OIDC setting pins the session organisation. Startup
 refuses a NATS configuration missing either pin. Provision the silo's `EVENTS`
