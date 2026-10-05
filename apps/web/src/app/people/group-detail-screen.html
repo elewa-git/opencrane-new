@@ -52,7 +52,7 @@
 </div>
 @if (state() === 'ready' && group()) {
   <oc-group-detail [group]="group()!" [canManage]="group()!.membershipSource === 'local'"
-    [pendingMemberId]="pendingMemberId()" [membersUnavailable]="membersUnavailable()"
+    [pendingMemberId]="pendingRemoval()?.memberId" [membersUnavailable]="membersUnavailable()"
     (removeRequested)="openReview($event)" (refreshRequested)="refreshMembers()" />
 }
 <oc-modal-sheet [open]="reviewOpen()" [title]="reviewTitle()" backLabel="Cancel"

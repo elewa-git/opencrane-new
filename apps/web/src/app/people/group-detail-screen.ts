@@ -33,7 +33,6 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
   protected readonly reviewOpen = signal(false);
   protected readonly reviewMember = signal<Member | undefined>(undefined);
   protected readonly pendingRemoval = signal<PendingRemoval | undefined>(undefined);
-  protected readonly pendingMemberId = signal<string | undefined>(undefined);
   protected readonly membersUnavailable = signal(false);
   protected readonly changeReference = signal<string | undefined>(undefined);
   protected readonly lossSentence = lossSentence;
@@ -94,7 +93,6 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.reviewOpen.set(false);
     this.pendingRemoval.set({ commandId: command.commandId,
       memberId: member.memberId, displayName: member.displayName });
-    this.pendingMemberId.set(member.memberId);
     this.receiptSeen = false;
     this.changeReference.set(command.commandId);
     this.actionState.set('applying');
@@ -300,7 +298,6 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     }
     if (result.kind !== 'ok' || !result.value) {
       this.membersUnavailable.set(true);
-      this.pendingMemberId.set(undefined);
       this.pendingRemoval.set(undefined);
       this.reviewMember.set(undefined);
       this.focusHeadingSoon();
@@ -309,7 +306,6 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.acceptGroup(result.value);
     this.membersUnavailable.set(false);
     this.retryAfterNotFound.set(false);
-    this.pendingMemberId.set(undefined);
     this.pendingRemoval.set(undefined);
     this.reviewMember.set(undefined);
     this.focusHeadingSoon();
@@ -359,7 +355,6 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
 
   private clearPendingRemoval(): void {
     this.pendingRemoval.set(undefined);
-    this.pendingMemberId.set(undefined);
     this.receiptSeen = false;
     this.reviewMember.set(undefined);
     this.draftCommand = undefined;
@@ -377,7 +372,6 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.draftCommand = undefined;
     this.pendingRemoval.set(undefined);
     this.changeReference.set(undefined);
-    this.pendingMemberId.set(undefined);
     this.reviewOpen.set(false);
     this.membersUnavailable.set(false);
     this.state.set('access');
