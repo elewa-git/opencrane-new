@@ -4,6 +4,7 @@ import { history } from './actor.ts';
 import { data } from './state.ts';
 
 export class PayingGroupRefused extends Error {}
+export class AuthorityApplying extends Error {}
 function isMemberState(row: StoredEvent) {
   const memberStateTypes = [
     'silo.owner_bootstrapped', 'member.joined', 'member.role_changed', 'member.removed',
@@ -49,18 +50,30 @@ async function requireApplied(binding: Binding, silo: string, requesterId: strin
   groupId: string, groupRows: StoredEvent[], memberRows: StoredEvent[]) {
   if (binding.silo !== silo) throw new PayingGroupRefused('Wrong silo');
   const auth = memberAuthorisation(binding);
+  const memberReceipts = memberRows.filter(needsReceipt);
+  function concernsRequester(row: StoredEvent) {
+    return row.event.type === 'team.created' || data(row.event)['memberId'] === requesterId;
+  }
+  const groupReceipts = groupRows.filter(concernsRequester);
+  const receiptRows = [...groupReceipts, ...memberReceipts];
+  for (const row of receiptRows) {
+    if (!await auth.applied(row.event.id)) {
+      throw new AuthorityApplying('Group membership is still being applied; try again shortly');
+    }
+  }
   const memberPermission = await auth.check(requesterId, 'member');
   const groupPermission = await auth.team(requesterId, groupId);
   if (!memberPermission.allowed || !groupPermission.allowed) {
     throw new PayingGroupRefused('Paying group unavailable or spending permission refused');
   }
-  const memberReceipts = memberRows.filter(needsReceipt);
-  const receiptRows = [...groupRows, ...memberReceipts];
-  for (const row of receiptRows) {
-    if (!await auth.applied(row.event.id)) {
-      throw new PayingGroupRefused('Paying group membership is still being applied; try again shortly');
-    }
-  }
+}
+
+export async function groupMembership(store: EventStore, silo: string, requesterId: string,
+  groupId: string, binding: Binding, deadline = Infinity) {
+  const { groupRows, memberRows } = await readMembership(
+    store, silo, requesterId, groupId, deadline);
+  requireMembership(groupRows, memberRows, requesterId, groupId);
+  await requireApplied(binding, silo, requesterId, groupId, groupRows, memberRows);
 }
 
 /** Shared spending requires both active silo membership and current group membership. */

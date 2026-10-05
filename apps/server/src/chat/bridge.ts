@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand } from './turns.ts';
+import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
 import { recordReport, reportPosition, ReportRejected } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
@@ -137,10 +138,21 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
           const computer = z.object({ computerId: z.string() }).parse(current.data);
           if (rows.some(row => row.event.type === 'conversation.closed')) return;
           await recoverTerminalTurns(options, computer.computerId, conversation.assistantId, conversation.conversationId, rows, closed);
-          const acknowledged = rows.filter(row => row.event.type === 'file.delivered').map(row => fileDeliveredDataSchema.parse(row.event.data))
-            .filter(file => file.computerId === computer.computerId).map(file => file.fileId);
-          const uploads = rows.filter(row => row.event.type === 'file.uploaded').map(row => fileUploadedDataSchema.parse(row.event.data))
-            .filter(file => !acknowledged.includes(file.fileId));
+          const allUploads = await conversationUploads(options, rows);
+          function deliveredHere(row: typeof rows[number]) {
+            if (row.event.type !== 'file.delivered') return false;
+            const delivery = fileDeliveredDataSchema.parse(row.event.data);
+            return delivery.computerId === computer.computerId;
+          }
+          function deliveredId(row: typeof rows[number]) {
+            return fileDeliveredDataSchema.parse(row.event.data).fileId;
+          }
+          const deliveries = rows.filter(deliveredHere);
+          const acknowledged = deliveries.map(deliveredId);
+          function notDelivered(file: z.infer<typeof fileUploadedDataSchema>) {
+            return !acknowledged.includes(file.fileId);
+          }
+          const uploads = allUploads.filter(notDelivered);
           const pendingUpload = uploads.length > 0;
           if (!message && !pendingUpload) return;
           if (current.type === 'computer.suspended') { await resumeComputer(options.store, tokens, options.silo, conversation.assistantId); return; }
@@ -151,14 +163,29 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
             if (!link.delivered.has(file.fileId)) await link.deliver(file, await promotedBytes(options.objects, file));
           }
           if (!message) return;
-          const attachments = rows.filter(row => row.sequence < message.sequence && row.event.type === 'file.uploaded').map(row => {
-            const { fileId, name, mime } = fileUploadedDataSchema.parse(row.event.data); return { fileId, name, mime };
-          });
-          link.socket.send(JSON.stringify({ type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
-            requesterId: z.object({ authorId: z.string() }).parse(message.event.data).authorId,
-            assistantId: conversation.assistantId, text: options.keys.decrypt(options.silo, conversation.conversationId, message.event.data),
-            attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
-            token: 'preparing', expiresAt: Date.now() + 120_000 }));
+          const messageSequence = message.sequence;
+          function beforeMessage(file: z.infer<typeof fileUploadedDataSchema>) {
+            function isUpload(row: typeof rows[number]) {
+              return row.event.type === 'file.uploaded' &&
+                fileUploadedDataSchema.parse(row.event.data).fileId === file.fileId;
+            }
+            const upload = rows.find(isUpload);
+            return upload !== undefined && upload.sequence < messageSequence;
+          }
+          function attachment(file: z.infer<typeof fileUploadedDataSchema>) {
+            return { fileId: file.fileId, name: file.name, mime: file.mime };
+          }
+          const previousUploads = allUploads.filter(beforeMessage);
+          const attachments = previousUploads.map(attachment);
+          const requester = z.object({ authorId: z.string() }).parse(message.event.data);
+          const text = options.keys.decrypt(options.silo, conversation.conversationId,
+            message.event.data);
+          const turn = { type: 'turn', id: message.event.id,
+            conversationId: conversation.conversationId, requesterId: requester.authorId,
+            assistantId: conversation.assistantId, text, attachments: attachments.slice(-100),
+            omittedAttachments: Math.max(0, attachments.length - 100),
+            token: 'preparing', expiresAt: Date.now() + 120_000 };
+          link.socket.send(JSON.stringify(turn));
           sendStop(link.socket, rows, message.event.id, conversation.conversationId);
         } catch { /* Dependency failures retry from the recorded message; no turn is invented. */ }
       }));
@@ -166,6 +193,28 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
     }
   } catch (error) { if (!signal.aborted) throw error; }
   finally { for (const link of links.values()) link.socket.terminate(); await Promise.all([...links.values()].map(link => link.settled())); }
+}
+
+async function conversationUploads(options: Pick<ChatOptions, 'store' | 'silo'>,
+  rows: Awaited<ReturnType<typeof chatHistory>>) {
+  function isCreated(row: typeof rows[number]) {
+    return row.event.type === 'conversation.created';
+  }
+  const created = rows.find(isCreated);
+  const session = z.object({ assistantId: z.string() }).parse(created?.event.data);
+  const event = await creationEvent(options.store, options.silo,
+    `assistant-${session.assistantId}`, 'assistant.created');
+  const assistant = z.object({ kind: z.string() }).parse(event.data);
+  // Keep old team uploads off the shared disk and out of every new turn's input.
+  if (assistant.kind === 'team') return [];
+  function isUpload(row: typeof rows[number]) {
+    return row.event.type === 'file.uploaded';
+  }
+  function uploadedFile(row: typeof rows[number]) {
+    return fileUploadedDataSchema.parse(row.event.data);
+  }
+  const uploads = rows.filter(isUpload);
+  return uploads.map(uploadedFile);
 }
 
 function sendStop(socket: WebSocket, rows: Awaited<ReturnType<typeof chatHistory>>, turnId: string, conversationId: string) {

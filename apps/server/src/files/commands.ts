@@ -5,14 +5,17 @@ import {
   fileUploadedDataSchema,
 } from '@opencrane/events';
 import { z } from 'zod';
+import { creationEvent } from '../chat/private-session.ts';
 import { chatHistory } from '../chat/commands.ts';
 import { FileRefusal, parseFileInput } from './refusals.ts';
 
 const conversationDetails = z.object({
   createdBy: z.string(),
+  assistantId: z.string(),
   mode: z.string().default('agent_session'),
 });
 const participantDetails = z.object({ participantId: z.string() });
+const memberDetails = z.object({ memberId: z.string() });
 const fileContext = z.object({
   conversationId: z.string(),
   screenshot: z.unknown().optional(),
@@ -24,11 +27,20 @@ export async function ownConversation(
   conversationId: string,
   memberId: string,
   allowParticipant = false,
+  uploading = false,
 ) {
   const rows = await chatHistory(store, silo, conversationId);
   await verifyCurrentMember(store, silo, memberId);
   const created = findEventOfType(rows, 'conversation.created');
   const data = conversationDetails.parse(created?.event.data);
+  const event = await creationEvent(store, silo, `assistant-${data.assistantId}`,
+    'assistant.created');
+  const assistant = z.object({ kind: z.string(), ownerId: z.string() }).parse(event.data);
+  if (assistant.kind === 'team') {
+    await requireTeamSession(store, silo, assistant.ownerId, data.createdBy, memberId);
+    if (uploading) throw new FileRefusal('team_files_refused');
+    allowParticipant = false;
+  }
   let allowed = data.createdBy === memberId;
   if (allowParticipant) {
     allowed = currentParticipant(rows, memberId, allowed);
@@ -38,6 +50,19 @@ export async function ownConversation(
     throw new FileRefusal('conversation_refused');
   }
   return rows;
+}
+
+async function requireTeamSession(store: Pick<EventStore, 'readStream'>, silo: string,
+  groupId: string, creatorId: string, memberId: string) {
+  if (creatorId !== memberId) throw new FileRefusal('conversation_refused');
+  let member = false;
+  for await (const row of store.readStream(`team-${groupId}`)) {
+    if (row.event.silo !== silo) throw new FileRefusal('conversation_refused');
+    if (!['team.member_added', 'team.member_removed'].includes(row.event.type)) continue;
+    const membership = memberDetails.parse(row.event.data);
+    if (membership.memberId === memberId) member = row.event.type === 'team.member_added';
+  }
+  if (!member) throw new FileRefusal('conversation_refused');
 }
 
 async function verifyCurrentMember(
@@ -95,7 +120,7 @@ export async function fileCommand(
   const context = fileContext.parse(data);
   const allowParticipant = type === 'file.delivered' || context.screenshot !== undefined;
   const rows = await ownConversation(
-    store, silo, context.conversationId, memberId, allowParticipant,
+    store, silo, context.conversationId, memberId, allowParticipant, true,
   );
   if (type === 'file.delivered') {
     verifyDelivery(rows, data, memberId);

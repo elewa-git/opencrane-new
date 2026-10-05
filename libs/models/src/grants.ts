@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import type { EventStore } from '@opencrane/event-store';
-import type { EventEnvelope } from '@opencrane/events';
+import { assistantCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { grantStream } from '@opencrane/authz';
 import { readEvents } from '@opencrane/projections';
 import { registerHandler } from '@opencrane/handlers';
@@ -17,12 +17,12 @@ function defaultGrantee(trigger: EventEnvelope) {
 }
 
 /** One command, one conditional append; existing grants and revocations win. */
-async function seedGrant(store: EventStore, trigger: EventEnvelope, model: string,
+async function seedGrant(store: EventStore, trigger: EventEnvelope, resourceId: string,
   explicit?: { resourceType: string; granteeId: string; granteeKind: string }) {
   const target = explicit ?? defaultGrantee(trigger);
   const { granteeId, resourceType, granteeKind } = target;
   if (typeof granteeId !== 'string') throw new Error('Missing model grantee');
-  const subject = grantStream(resourceType, model);
+  const subject = grantStream(resourceType, resourceId);
   const rows = await history(store, subject, trigger.silo);
   function matchesGrantee(row: typeof rows[number]) {
     const previous = data(row.event);
@@ -32,11 +32,15 @@ async function seedGrant(store: EventStore, trigger: EventEnvelope, model: strin
     return previous['granteeKind'] === granteeKind;
   }
   if (rows.some(matchesGrantee)) return;
-  const id = `initial-model-grant-${createHash('sha256').update(JSON.stringify([trigger.silo, resourceType, granteeKind, granteeId, model])).digest('hex')}`;
+  const identity = [trigger.silo, resourceType, granteeKind, granteeId, resourceId];
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(identity));
+  const digest = hash.digest('hex');
+  const id = `initial-model-grant-${digest}`;
   let grantedBy = 'installation';
   if (explicit && trigger.principal) grantedBy = trigger.principal.id;
   const event = envelope(trigger.silo, subject, 'grant.given', {
-    resourceType, resourceId: model, granteeId, granteeKind,
+    resourceType, resourceId, granteeId, granteeKind,
     grantedBy,
   }, id);
   const result = await store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
@@ -46,9 +50,7 @@ async function seedGrant(store: EventStore, trigger: EventEnvelope, model: strin
 export function modelGrantHandler(store: EventStore) {
   async function seedSelection(event: EventEnvelope) {
     if (event.type === 'assistant.created' && data(event)['kind'] === 'team') {
-      const schema = z.object({ assistantId: z.string(), ownerId: z.string(),
-        grants: z.array(z.object({ resourceType: z.string(), resourceId: z.string() })).optional() });
-      const shared = schema.parse(event.data);
+      const shared = assistantCreatedDataSchema.parse(event.data);
       // Old team events with no explicit selection grant nothing; ownership is not tool authority.
       for (const grant of shared.grants ?? []) {
         const assistant = { resourceType: grant.resourceType,

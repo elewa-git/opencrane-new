@@ -61,8 +61,7 @@ export function parseTurn(value: Record<string, unknown>): Turn {
   if (requesterId !== undefined && (typeof requesterId !== 'string' || !requesterId)) {
     throw new Error('Invalid requester');
   }
-  return {
-    ...(typeof requesterId === 'string' ? { requesterId } : {}),
+  const turn: Turn = {
     id: requiredString(value, 'id'),
     conversationId: requiredString(value, 'conversationId'),
     assistantId: requiredString(value, 'assistantId'),
@@ -73,6 +72,8 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     attachments: value['attachments'],
     omittedAttachments,
   };
+  if (typeof requesterId === 'string') turn.requesterId = requesterId;
+  return turn;
 }
 
 function containsTurn(turns: Iterable<Turn>, turnId: string) {

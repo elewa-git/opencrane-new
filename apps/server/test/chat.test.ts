@@ -155,7 +155,14 @@ it('closes a turn permanently even if its terminal report arrives before server 
 it('binds personal paying group at admission, keeps it on retries and refuses shared work without a group', async () => {
   const { turnCommand } = await import('../src/chat/turns.ts');
   const { BudgetActor, envelope, history } = await import('@opencrane/models');
+  const { createStore, memberAuthorisation } = await import('@opencrane/authz');
+  const { openfga, databases } = await import('@opencrane/authz/testing');
+  const { pgDb, readEvents } = await import('@opencrane/projections');
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/turn-budget-`);
+  const fga = await openfga();
+  const dbs = await databases();
+  const iam = await createStore(fga.apiUrl, 'test');
+  const auth = memberAuthorisation(iam);
   try {
     const actor = new BudgetActor(nats.store, 'test'); await actor.start(2000, 20000, 'personal-default');
     const joinedMember = envelope('test', 'member-alice', 'member.joined', {
@@ -174,18 +181,31 @@ it('binds personal paying group at admission, keeps it on retries and refuses sh
       await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `create-${kind}`, conversationId: kind, assistantId: kind });
       await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `message-${kind}`, conversationId: kind, text: 'Hello' });
     }
+    for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
+      if (auth.handler.eventTypes.includes(row.event.type)) {
+        await auth.handler.handle(row.event, pgDb(dbs.queue));
+      }
+    }
+    const teamContext = { silo: 'test', assistantId: 'team', computerId: 'team', binding: iam };
     const context = { silo: 'test', assistantId: 'personal', computerId: 'personal' };
     const input = { conversationId: 'personal', turnId: 'message-personal', threadId: 'thread', status: 'started' as const };
     expect(await turnCommand(nats.store, context, input)).toMatchObject({ payingGroupId: 'personal-default' });
     await actor.configure({ scope: 'global', ceilingCents: 20000, defaultPayingGroupId: 'new-default', setBy: 'alice' });
     expect(await turnCommand(nats.store, context, input)).toMatchObject({ payingGroupId: 'personal-default' });
     expect((await history(nats.store, 'computer-personal', 'test')).filter(r => r.event.type === 'computer.turn_started')).toHaveLength(1);
-    await expect(turnCommand(nats.store, { silo: 'test', assistantId: 'team', computerId: 'team' }, { conversationId: 'team', turnId: 'message-team', threadId: 'team-thread', status: 'started' })).rejects.toThrow('Paying group unavailable');
+    await expect(turnCommand(nats.store, teamContext, { conversationId: 'team', turnId: 'message-team', threadId: 'team-thread', status: 'started' })).rejects.toThrow('Paying group unavailable');
     keys.provision('test', 'team-selected');
     await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-selected', conversationId: 'team-selected', assistantId: 'team', payingGroupId: 'sales' });
     await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message-selected', conversationId: 'team-selected', text: 'Hello' });
-    expect(await turnCommand(nats.store, { silo: 'test', assistantId: 'team', computerId: 'team' }, { conversationId: 'team-selected', turnId: 'message-selected', threadId: 'selected-thread', status: 'started' })).toMatchObject({ payingGroupId: 'sales' });
+    const selected = await history(nats.store, 'conversation-team-selected', 'test');
+    await auth.handler.handle(selected[0]!.event, pgDb(dbs.queue));
+    expect(await turnCommand(nats.store, teamContext, { conversationId: 'team-selected', turnId: 'message-selected', threadId: 'selected-thread', status: 'started' })).toMatchObject({ payingGroupId: 'sales' });
     await expect(chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-selected', conversationId: 'team-selected', assistantId: 'team', payingGroupId: 'different' })).rejects.toThrow('Id reused');
 
-  } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await fga.close();
+    await dbs.close();
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
 });

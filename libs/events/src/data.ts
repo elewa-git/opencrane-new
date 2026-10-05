@@ -163,13 +163,18 @@ export const teamMemberRemovedDataSchema = z
 // persists across Pod replacements; `computerId` below names the current
 // Pod/claim, but the stream subject is always the assistant's id.
 
-export const assistantCreatedDataSchema = z
-  .object({ assistantId: id, ownerId: id, kind: z.enum(['personal', 'team']),
-    name: z.string().trim().min(1).max(200).optional(),
-    grants: z.array(z.object({ resourceType: z.enum(['model', 'mcp_server']),
-      resourceId: id }).strict()).min(1).max(32).optional(),
-  })
-  .strict();
+export const assistantGrantSchema = z.discriminatedUnion('resourceType', [
+  z.object({ resourceType: z.literal('model'),
+    resourceId: z.string().regex(/^[\w.-]{1,200}$/u) }).strict(),
+  z.object({ resourceType: z.literal('mcp_server'),
+    resourceId: z.string().regex(/^[\w-]{1,200}$/u) }).strict(),
+]);
+export const assistantCreatedDataSchema = z.object({
+  assistantId: id, ownerId: id, kind: z.enum(['personal', 'team']),
+  payingGroupId: id.optional(),
+  name: z.string().trim().min(1).max(200).refine(hasNoNul).optional(),
+  grants: z.array(assistantGrantSchema).min(1).max(32).optional(),
+}).strict();
 
 export const assistantSettingsChangedDataSchema = z
   .object({

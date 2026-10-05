@@ -1,52 +1,80 @@
 import { z } from 'zod';
-import { authorityFence, history, payingGroupAuthority } from '@opencrane/models';
+import {
+  authorityFence, AuthorityApplying, groupMembership, payingGroupAuthority,
+} from '@opencrane/models';
 import type { EventStore } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { activeMember, GroupRefused } from '../members/groups.ts';
+import { activeMember, readActiveMember, GroupRefused } from '../members/groups.ts';
 
 type SessionAuthorityOptions = { silo: string; store: EventStore; binding: Binding };
+const sessionSchema = z.object({
+  assistantId: z.string(), createdBy: z.string(), payingGroupId: z.string().optional(),
+});
+const assistantSchema = z.object({
+  kind: z.enum(['personal', 'team']), ownerId: z.string(),
+  payingGroupId: z.string().optional(),
+});
 
-/** Private execution is requester-owned even if a participant tuple was added by mistake. */
+// Read only the creation event. Later messages cannot change the session's owner or payer.
+export async function creationEvent(store: Pick<EventStore, 'readStream'>, silo: string,
+  subject: string, type: string, deadline = Infinity) {
+  for await (const row of store.readStream(subject, 1, deadline)) {
+    if (row.event.silo !== silo || row.event.type !== type) {
+      throw new Error('Creation history unavailable');
+    }
+    return row.event;
+  }
+  throw new Error('Creation history unavailable');
+}
+
 export async function privateSessionAuthority(options: SessionAuthorityOptions,
   memberId: string, conversationId: string,
   fresh?: Awaited<ReturnType<typeof authorityFence>>) {
-  const subjects = [`member-${memberId}`, `conversation-${conversationId}`];
-  fresh ??= await authorityFence(options.store, performance.now(), subjects);
-  fresh.include(...subjects);
-  const rows = await history(options.store, `conversation-${conversationId}`,
-    options.silo, fresh.deadline);
-  function isCreated(row: typeof rows[number]) {
-    return row.event.type === 'conversation.created';
-  }
-  const schema = z.object({ assistantId: z.string(), createdBy: z.string(),
-    payingGroupId: z.string().optional() });
-  const created = schema.parse(rows.find(isCreated)?.event.data);
-  const assistantSubject = `assistant-${created.assistantId}`;
-  fresh.include(assistantSubject);
-  const assistants = await history(options.store, assistantSubject, options.silo, fresh.deadline);
-  const assistant = z.object({ kind: z.string(), ownerId: z.string() }).parse(
-    assistants[0]?.event.data);
+  const event = await creationEvent(options.store, options.silo,
+    `conversation-${conversationId}`, 'conversation.created', fresh?.deadline);
+  const created = sessionSchema.parse(event.data);
+  const assistantEvent = await creationEvent(options.store, options.silo,
+    `assistant-${created.assistantId}`, 'assistant.created', fresh?.deadline);
+  const assistant = assistantSchema.parse(assistantEvent.data);
   if (assistant.kind === 'team') {
-    if (created.createdBy !== memberId || !created.payingGroupId) {
+    if (created.createdBy !== memberId) {
       throw new GroupRefused('Private session belongs to another requester');
     }
-    await sharedAssistantAuthority(options, memberId, created.assistantId,
-      created.payingGroupId, fresh);
+    if (fresh) {
+      if (!created.payingGroupId) throw new GroupRefused('Paying group required');
+      await sharedAssistantAuthority(options, memberId, created.assistantId,
+        created.payingGroupId, fresh);
+    } else {
+      await sharedAssistantRead(options, memberId, created.assistantId, assistantEvent);
+    }
   }
-  await fresh();
-  return fresh;
+  await fresh?.();
+}
+
+export async function sharedAssistantRead(options: SessionAuthorityOptions, memberId: string,
+  assistantId: string, event?: Awaited<ReturnType<typeof creationEvent>>) {
+  const created = event ?? await creationEvent(options.store, options.silo,
+    `assistant-${assistantId}`, 'assistant.created');
+  const assistant = assistantSchema.parse(created.data);
+  await readActiveMember(options.store, options.binding, memberId);
+  await groupMembership(options.store, options.silo, memberId, assistant.ownerId, options.binding);
+  const auth = memberAuthorisation(options.binding);
+  if (!await auth.applied(created.id)) {
+    throw new AuthorityApplying('Assistant is still being applied');
+  }
+  if (!(await auth.actsFor(memberId, assistantId)).allowed) {
+    throw new GroupRefused('Assistant authority unavailable');
+  }
 }
 
 export async function sharedAssistantAuthority(options: SessionAuthorityOptions, memberId: string,
   assistantId: string, payingGroupId: string,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>) {
-  const subjects = [`member-${memberId}`, `assistant-${assistantId}`];
-  fresh ??= await authorityFence(options.store, performance.now(), subjects);
-  fresh.include(...subjects);
+  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh.include(`member-${memberId}`, `assistant-${assistantId}`);
   await activeMember(options.store, options.binding, memberId, false, fresh);
-  const rows = await history(options.store, `assistant-${assistantId}`,
-    options.silo, fresh.deadline);
-  const assistant = z.object({ ownerId: z.string() }).parse(rows[0]?.event.data);
+  const event = await creationEvent(options.store, options.silo,
+    `assistant-${assistantId}`, 'assistant.created', fresh.deadline);
+  const assistant = assistantSchema.parse(event.data);
   fresh.include(`team-${assistant.ownerId}`, `team-${payingGroupId}`);
   for (const groupId of new Set([assistant.ownerId, payingGroupId])) {
     const group = await payingGroupAuthority(options.store, options.silo, memberId,
@@ -54,10 +82,11 @@ export async function sharedAssistantAuthority(options: SessionAuthorityOptions,
     await group();
   }
   const auth = memberAuthorisation(options.binding);
-  if (!await auth.applied(rows[0]!.event.id) ||
-      !(await auth.actsFor(memberId, assistantId)).allowed) {
+  if (!await auth.applied(event.id)) {
+    throw new AuthorityApplying('Assistant is still being applied');
+  }
+  if (!(await auth.actsFor(memberId, assistantId)).allowed) {
     throw new GroupRefused('Assistant authority unavailable');
   }
   await fresh();
-  return fresh;
 }

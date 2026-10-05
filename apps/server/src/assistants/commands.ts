@@ -2,16 +2,16 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
-import { getEventDefinition } from '@opencrane/events';
+import { assistantCreatedDataSchema, assistantGrantSchema } from '@opencrane/events';
 import { authorityFence, history, models } from '@opencrane/models';
 import { activeMember, GroupConflict, GroupRefused } from '../members/groups.ts';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 const inputSchema = z.object({
-  commandId: id, assistantId: id, groupId: id,
-  name: z.string().trim().min(1).max(200),
-  grants: z.array(z.object({ resourceType: z.enum(['model', 'mcp_server']),
-    resourceId: z.string().regex(/^[\w.-]{1,200}$/u) }).strict()).min(1).max(32),
+  commandId: id, assistantId: z.string().max(200).regex(/^team-[\w-]+$/u),
+  groupId: id, payingGroupId: id,
+  name: assistantCreatedDataSchema.shape.name.unwrap(),
+  grants: z.array(assistantGrantSchema).min(1).max(32),
 }).strict();
 
 function receipt(row: StoredEvent, assistantId: string) {
@@ -25,7 +25,7 @@ function previous(rows: StoredEvent[], input: z.infer<typeof inputSchema>, membe
   const saved = rows.find(matchesCommand);
   if (!saved) return;
   const expected = { assistantId: input.assistantId, ownerId: input.groupId,
-    kind: 'team', name: input.name, grants: input.grants };
+    kind: 'team', payingGroupId: input.payingGroupId, name: input.name, grants: input.grants };
   if (saved.event.principal?.id !== memberId || saved.event.type !== 'assistant.created' ||
       JSON.stringify(saved.event.data) !== JSON.stringify(expected)) {
     throw new GroupConflict('Command id already used');
@@ -44,11 +44,8 @@ export async function createSharedAssistant(
   fresh ??= await authorityFence(store, performance.now(), subjects);
   fresh.include(...subjects);
   await activeMember(store, binding, memberId, true, fresh);
-  const group = await history(store, `team-${input.groupId}`, binding.silo, fresh.deadline);
-  function isCreated(row: StoredEvent) {
-    return row.event.type === 'team.created';
-  }
-  if (!group.some(isCreated)) throw new GroupRefused('Group unavailable');
+  await requireGroup(store, binding.silo, input.groupId, fresh);
+  await requireGroup(store, binding.silo, input.payingGroupId, fresh);
   const rows = await history(store, subject, binding.silo, fresh.deadline);
   const retried = previous(rows, input, memberId);
   if (retried) {
@@ -56,22 +53,48 @@ export async function createSharedAssistant(
     return retried;
   }
   if (rows.length) throw new GroupConflict('Assistant already exists');
-  for (const grant of input.grants) {
-    if (grant.resourceType === 'model') {
-      function matchesModel(model: typeof models[number]) {
-        return model.id === grant.resourceId && !model.retired;
-      }
-      if (!models.some(matchesModel)) throw new GroupRefused('Model unavailable');
-    } else {
-      const resourceSubject = `mcp-${grant.resourceId}`;
-      fresh.include(resourceSubject);
-      const resource = await history(store, resourceSubject, binding.silo, fresh.deadline);
-      if (!resource.length) throw new GroupRefused('Integration unavailable');
-    }
+  await requireGrantResources(store, binding.silo, input.grants, fresh);
+  return appendCreation(store, binding, memberId, input, fresh);
+}
+
+async function requireGroup(store: EventStore, silo: string, groupId: string,
+  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh.include(`team-${groupId}`);
+  const rows = await history(store, `team-${groupId}`, silo, fresh.deadline);
+  function isCreated(row: StoredEvent) {
+    return row.event.type === 'team.created';
   }
+  if (!rows.some(isCreated)) throw new GroupRefused('Group unavailable');
+}
+
+function matchesModel(resourceId: string) {
+  function activeModel(model: typeof models[number]) {
+    return model.id === resourceId && !model.retired;
+  }
+  return models.some(activeModel);
+}
+
+async function requireGrantResources(store: EventStore, silo: string,
+  grants: z.infer<typeof inputSchema>['grants'],
+  fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  for (const grant of grants) {
+    if (grant.resourceType === 'model') {
+      if (!matchesModel(grant.resourceId)) throw new GroupRefused('Model unavailable');
+      continue;
+    }
+    const subject = `mcp-${grant.resourceId}`;
+    fresh.include(subject);
+    const rows = await history(store, subject, silo, fresh.deadline);
+    if (!rows.length) throw new GroupRefused('Integration unavailable');
+  }
+}
+
+async function appendCreation(store: EventStore, binding: Binding, memberId: string,
+  input: z.infer<typeof inputSchema>, fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  const subject = `assistant-${input.assistantId}`;
   const data = { assistantId: input.assistantId, ownerId: input.groupId,
-    kind: 'team' as const, name: input.name, grants: input.grants };
-  getEventDefinition('assistant.created')!.dataSchema.parse(data);
+    kind: 'team' as const, payingGroupId: input.payingGroupId, name: input.name, grants: input.grants };
+  assistantCreatedDataSchema.parse(data);
   const event = { id: randomUUID(), commandId: input.commandId, subject,
     silo: binding.silo, type: 'assistant.created', source: 'opencrane-server',
     principal: { kind: 'human' as const, id: memberId }, time: new Date().toISOString(), data };

@@ -25,6 +25,7 @@
   resets each month. On phones, the message field sits above full-width, borderless attach and
   send buttons. The session panel leaves out placeholder Decisions and People sections.
 - Shared-assistant backend first half: admins create group-owned assistants with explicit grants and one computer; members get private requester-bound sessions and fixed paying-group admission. Personal credential profiles, screens and fresh-install qualification remain pending (#89).
+- Admins can create a group assistant with selected grants, a fixed paying group and one computer. Members get their own chat transcripts and threads. Screens, personal credentials and fresh-install checks remain pending (#89).
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.
@@ -33,6 +34,11 @@
 - The first authenticated member can claim a fresh silo as owner with an installation token that expires after 24 hours. Reuse and claims after membership exists are refused (#12).
 
 ### Fixed or improved
+
+- Chat lists handle 60 sessions, and transcript reads and live sockets keep working
+  while turns start and end. Access changes still stop writes and new turns.
+- Existing personal sessions start a fresh Codex context on their next turn when
+  their old journal entries have no requester id. Their chat history is retained.
 
 - PDF upload turns no longer hang when the model stream is cut: the models service rides out
   short event-store hiccups, restarts itself after 15 seconds of real outage instead of
@@ -54,6 +60,11 @@
 - The computer bridge separates report journalling, turn running and socket message handling; behaviour is unchanged (#126).
 
 ### Known limits
+
+- All members' turns on a group assistant share one disk and one browser profile.
+  Uploads and attachments are refused until each member has their own workspace.
+  Credentials for individual members must never be written to that disk or profile.
+  Work files and browser activity are shared even when chat transcripts are private.
 
 - Screenshots passed the retained secondary journey at 1280px and 390px, but fresh capture and complete startup journeys still hit live-view failures ([#77](https://github.com/elewa-git/opencrane-new/issues/77)). See the [screenshot receipt](docs/process/p3-18-screenshots.md#final-rebase-and-secondary-stack-qualification--4-october-2026) and [qualification ledger's NOT RUN list](docs/process/ledger.md#still-not-run) for the qualification limits.
 

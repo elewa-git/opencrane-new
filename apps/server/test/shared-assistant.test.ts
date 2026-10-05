@@ -34,10 +34,10 @@ let chat: NonNullable<Parameters<typeof buildServer>[1]>['chat'];
 let counter = 0;
 let delayIdentity: (() => Promise<void>) | undefined;
 const grants = [{ resourceType: 'model', resourceId: 'gpt-6.1-sol' }];
-const creation = { commandId: 'create-shared', assistantId: 'shared', groupId: 'sales',
+const creation = { commandId: 'create-shared', assistantId: 'team-shared', groupId: 'sales', payingGroupId: 'sales',
   name: 'Sales assistant', grants };
 
-async function append(subject: string, type: string, data: unknown) {
+async function append(subject: string, type: string, data: unknown, apply = true) {
   const record = envelope('test', subject, type, data, `shared-fixture-${++counter}`);
   record.source = 'opencrane-server';
   if (type === 'silo.owner_bootstrapped') {
@@ -51,7 +51,7 @@ async function append(subject: string, type: string, data: unknown) {
   const result = await nats.store.append({ event: record,
     expectedSequence: await nats.store.head(subject) });
   expect(result.status).toBe('appended');
-  if (auth.handler.eventTypes.includes(type)) await auth.handler.handle(record, pgDb(dbs.queue));
+  if (apply && auth.handler.eventTypes.includes(type)) await auth.handler.handle(record, pgDb(dbs.queue));
   return record;
 }
 async function memberId(_silo: string, _issuer: string, sub: string) {
@@ -116,26 +116,26 @@ afterAll(close);
 async function createsSharedAssistantOnce() {
   const response = await request('POST', '/api/assistants', creation);
   expect(response.statusCode).toBe(200);
-  expect(response.json()).toMatchObject({ status: 'appended', assistantId: 'shared' });
+  expect(response.json()).toMatchObject({ status: 'appended', assistantId: 'team-shared' });
   expect((await request('POST', '/api/assistants', creation)).json()).toEqual(response.json());
-  const rows = await history(nats.store, 'assistant-shared', 'test');
+  const rows = await history(nats.store, 'assistant-team-shared', 'test');
   expect(rows).toHaveLength(1);
-  expect(rows[0]?.event.data).toEqual({ assistantId: 'shared', ownerId: 'sales',
-    kind: 'team', name: 'Sales assistant', grants });
+  expect(rows[0]?.event.data).toEqual({ assistantId: 'team-shared', ownerId: 'sales',
+    kind: 'team', payingGroupId: 'sales', name: 'Sales assistant', grants });
 }
 it('an admin creates a group assistant once with explicit grants', createsSharedAssistantOnce);
 
 
 async function admitsBootstrappedOwner() {
-  const input = { ...creation, assistantId: 'first-owner-shared', commandId: 'first-owner-create' };
+  const input = { ...creation, assistantId: 'team-first-owner-shared', commandId: 'first-owner-create' };
   expect((await request('POST', '/api/assistants', input, 'bootstrap-owner')).statusCode).toBe(200);
   await append('team-sales', 'team.member_added', {
     teamId: 'sales', memberId: 'bootstrap-owner', addedBy: 'owner',
   });
-  const rows = await history(nats.store, 'assistant-first-owner-shared', 'test');
+  const rows = await history(nats.store, 'assistant-team-first-owner-shared', 'test');
   await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
   const session = { id: 'first-owner-session', conversationId: 'first-owner-session',
-    assistantId: 'first-owner-shared', payingGroupId: 'sales' };
+    assistantId: 'team-first-owner-shared', payingGroupId: 'sales' };
   expect((await request('POST', '/api/conversations', session, 'bootstrap-owner'))
     .statusCode).toBe(200);
 }
@@ -143,14 +143,14 @@ it('the installed first owner can create a group assistant and bind shared work'
   admitsBootstrappedOwner);
 
 async function provisionsExplicitGrantsAndOneComputer() {
-  const rows = await history(nats.store, 'assistant-shared', 'test');
+  const rows = await history(nats.store, 'assistant-team-shared', 'test');
   const created = rows[0]!.event;
   const db = pgDb(dbs.queue);
   await auth.handler.handle(created, db);
   const claim = lifecycleHandlers(nats.store)[1];
   await claim.handle(created, db);
   await claim.handle(created, db);
-  const lifecycle = await history(nats.store, 'computer-shared', 'test');
+  const lifecycle = await history(nats.store, 'computer-team-shared', 'test');
   expect(lifecycle).toHaveLength(1);
   const seed = modelGrantHandler(nats.store);
   await seed.handle(created, db);
@@ -158,36 +158,36 @@ async function provisionsExplicitGrantsAndOneComputer() {
   for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
     if (row.event.type === 'grant.given') await auth.handler.handle(row.event, db);
   }
-  expect((await auth.actsFor('alice', 'shared')).allowed).toBe(true);
-  expect((await auth.actsFor('bob', 'shared')).allowed).toBe(true);
+  expect((await auth.actsFor('alice', 'team-shared')).allowed).toBe(true);
+  expect((await auth.actsFor('bob', 'team-shared')).allowed).toBe(true);
   expect((await auth.use('person', 'bob', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
-  expect((await auth.use('assistant', 'shared', 'model', 'gpt-6-luna')).allowed).toBe(false);
+  expect((await auth.use('assistant', 'team-shared', 'model', 'gpt-6-luna')).allowed).toBe(false);
   const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader);
-  expect((await rebuilt.actsFor('bob', 'shared')).allowed).toBe(true);
-  expect((await rebuilt.use('assistant', 'shared', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
+  expect((await rebuilt.actsFor('bob', 'team-shared')).allowed).toBe(true);
+  expect((await rebuilt.use('assistant', 'team-shared', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
   await runner.run(computers);
-  const detail = await request('GET', '/api/assistants/shared', undefined, 'bob');
+  const detail = await request('GET', '/api/assistants/team-shared', undefined, 'bob');
   expect(detail.statusCode).toBe(200);
   expect(detail.json()).toMatchObject({ rows: [{ ownerId: 'sales', kind: 'team',
     name: 'Sales assistant', status: 'claiming', generation: 1 }] });
-  expect((await auth.desktop('bob', 'shared')).allowed).toBe(false);
+  expect((await auth.desktop('bob', 'team-shared')).allowed).toBe(false);
 }
 it('replays group rights and selected grants and repeated reactions claim one computer',
   provisionsExplicitGrantsAndOneComputer);
 
 async function keepsGrantKindsDistinct() {
-  const input = { ...creation, assistantId: 'sales', commandId: 'sales-assistant' };
+  const input = { ...creation, assistantId: 'team-sales', commandId: 'sales-assistant' };
   expect((await request('POST', '/api/assistants', input)).statusCode).toBe(200);
-  const rows = await history(nats.store, 'assistant-sales', 'test');
+  const rows = await history(nats.store, 'assistant-team-sales', 'test');
   const db = pgDb(dbs.queue);
   await modelGrantHandler(nats.store).handle(rows[0]!.event, db);
   for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
     if (row.event.type === 'grant.given') await auth.handler.handle(row.event, db);
   }
-  expect((await auth.use('assistant', 'sales', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
+  expect((await auth.use('assistant', 'team-sales', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
   expect((await auth.use('person', 'bob', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
   const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader);
-  expect((await rebuilt.use('assistant', 'sales', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
+  expect((await rebuilt.use('assistant', 'team-sales', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
   expect((await rebuilt.use('person', 'bob', 'model', 'gpt-6.1-sol')).allowed).toBe(true);
   const expectedGrant = { resourceType: 'model', resourceId: 'gpt-6.1-sol', relation: 'use' };
   await runner.run(groups);
@@ -197,13 +197,13 @@ async function keepsGrantKindsDistinct() {
   const replayedGroups = await readGroups(db, 'test', 'sales');
   expect(replayedGroups[0]?.access.grants).toContainEqual(expectedGrant);
 }
-it('assistant and owning group with the same id keep distinct resource grants',
+it('assistant and owning group keep distinct resource grants after replay',
   keepsGrantKindsDistinct);
 
 async function refusesAnotherMembersPrivateSession() {
   for (const id of ['alice', 'bob']) {
     const input = { id: `create-${id}`, conversationId: id,
-      assistantId: 'shared', payingGroupId: 'sales' };
+      assistantId: 'team-shared', payingGroupId: 'sales' };
     expect((await request('POST', '/api/conversations', input, id)).statusCode).toBe(200);
     const rows = await history(nats.store, `conversation-${id}`, 'test');
     await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
@@ -224,7 +224,7 @@ async function refusesAnotherMembersPrivateSession() {
   const list = await request('GET', '/api/conversations', undefined, 'bob');
   expect(list.body).not.toContain('Private request from alice');
   expect(list.json()).toMatchObject({ rows: [{ conversationId: 'bob' }] });
-  const retry = { id: 'create-alice', conversationId: 'alice', assistantId: 'shared',
+  const retry = { id: 'create-alice', conversationId: 'alice', assistantId: 'team-shared',
     payingGroupId: 'sales' };
   expect((await request('POST', '/api/conversations', retry, 'alice')).statusCode).toBe(200);
   expect((await request('POST', '/api/conversations', { ...retry, payingGroupId: 'other' },
@@ -273,33 +273,35 @@ async function refusesPrivateWebSocketRead() {
     await feed.close();
   }
 }
-it('refuses another member at the authenticated WebSocket transcript seam',
+it('refuses another member at the authenticated WebSocket transcript route',
   refusesPrivateWebSocketRead);
 
 async function refusesSwappedThreadAtAdmission() {
-  const lifecycle = await history(nats.store, 'computer-shared', 'test');
+  const lifecycle = await history(nats.store, 'computer-team-shared', 'test');
   const data = z.object({ computerId: z.string() }).parse(lifecycle[0]!.event.data);
   const computerId = data.computerId;
-  await append('computer-shared', 'computer.ready', {
-    assistantId: 'shared', computerId, generation: 1, podUid: 'pod',
+  await append('computer-team-shared', 'computer.ready', {
+    assistantId: 'team-shared', computerId, generation: 1, podUid: 'pod',
   });
-  const context = { silo: 'test', computerId, assistantId: 'shared' };
+  const context = { silo: 'test', computerId, assistantId: 'team-shared' };
   const alice = { conversationId: 'alice', turnId: 'message-alice',
     threadId: 'alice-thread', status: 'started' as const };
-  const first = await turnCommand(nats.store, context, alice);
+  await expect(turnCommand(nats.store, context, alice)).rejects.toThrow('binding');
+  const authorisedContext = { ...context, binding: auth.binding };
+  const first = await turnCommand(nats.store, authorisedContext, alice);
   expect(first).toMatchObject({ requesterId: 'alice', payingGroupId: 'sales' });
-  await expect(turnCommand(nats.store, context, { ...alice, conversationId: 'bob',
+  await expect(turnCommand(nats.store, authorisedContext, { ...alice, conversationId: 'bob',
     turnId: 'message-bob' })).rejects.toThrow('Thread');
-  const bob = await turnCommand(nats.store, context, { ...alice, conversationId: 'bob',
+  const bob = await turnCommand(nats.store, authorisedContext, { ...alice, conversationId: 'bob',
     turnId: 'message-bob', threadId: 'bob-thread' });
   expect(bob).toMatchObject({ requesterId: 'bob', payingGroupId: 'sales' });
-  expect(await turnCommand(nats.store, context, alice)).toEqual(first);
-  const busy = await request('GET', '/api/assistants/shared', undefined, 'alice');
+  expect(await turnCommand(nats.store, authorisedContext, alice)).toEqual(first);
+  const busy = await request('GET', '/api/assistants/team-shared', undefined, 'alice');
   expect(busy.json()).toMatchObject({ rows: [{ busy: true }] });
-  await turnCommand(nats.store, context, { ...alice, status: 'completed' });
-  await turnCommand(nats.store, context, { ...alice, conversationId: 'bob',
+  await turnCommand(nats.store, authorisedContext, { ...alice, status: 'completed' });
+  await turnCommand(nats.store, authorisedContext, { ...alice, conversationId: 'bob',
     turnId: 'message-bob', threadId: 'bob-thread', status: 'completed' });
-  const idle = await request('GET', '/api/assistants/shared', undefined, 'alice');
+  const idle = await request('GET', '/api/assistants/team-shared', undefined, 'alice');
   expect(idle.json()).toMatchObject({ rows: [{ busy: false }] });
 }
 it('admits concurrent requester threads and refuses a thread previously bound to another member',
@@ -312,13 +314,115 @@ async function keepsAuthorisedPayerImmutable() {
   await append('team-support', 'team.member_added', {
     teamId: 'support', memberId: 'alice', addedBy: 'owner',
   });
-  const changed = { id: 'create-alice', conversationId: 'alice', assistantId: 'shared',
+  const wrongPayer = { id: 'unrelated-payer', conversationId: 'unrelated-payer',
+    assistantId: 'team-shared', payingGroupId: 'support' };
+  expect((await request('POST', '/api/conversations', wrongPayer, 'alice')).statusCode).toBe(403);
+  const changed = { id: 'create-alice', conversationId: 'alice', assistantId: 'team-shared',
     payingGroupId: 'support' };
-  expect((await request('POST', '/api/conversations', changed, 'alice')).statusCode).toBe(409);
+  expect((await request('POST', '/api/conversations', changed, 'alice')).statusCode).toBe(403);
   const original = await history(nats.store, 'conversation-alice', 'test');
   expect(original[0]?.event.data).toMatchObject({ payingGroupId: 'sales' });
 }
 it('refuses switching to another authorised payer on a retry', keepsAuthorisedPayerImmutable);
+
+async function ignoresOtherMembersPendingChanges() {
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'carol', addedBy: 'owner',
+  }, false);
+  const transcript = await request('GET', '/api/conversations/alice/messages', undefined, 'alice');
+  expect(transcript.statusCode, transcript.body).toBe(200);
+  const list = await request('GET', '/api/conversations', undefined, 'alice');
+  expect(list.statusCode, list.body).toBe(200);
+  expect(list.json()).toMatchObject({ rows: [{ conversationId: 'alice' }] });
+  const assistants = await request('GET', '/api/assistants', undefined, 'alice');
+  expect(assistants.statusCode, assistants.body).toBe(200);
+  const receipt = await request('GET', '/api/assistants/team-shared/changes/create-shared',
+    undefined, 'bob');
+  expect(receipt.statusCode).toBe(403);
+}
+it('keeps own sessions and assistant selection available during another member IAM delay',
+  ignoresOtherMembersPendingChanges);
+
+async function retriesOwnPendingMembership() {
+  if (!chat) throw new Error('Missing chat fixture');
+  await append('team-sales', 'team.member_removed', {
+    teamId: 'sales', memberId: 'alice', removedBy: 'owner',
+  });
+  const pending = await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'alice', addedBy: 'owner',
+  }, false);
+  const feed = await connectMemberFeed(dbs.queue.options.connectionString!);
+  const realtime = { feed, binding: auth.binding, chat: { ...chat, feed } };
+  const socketApp = buildServer(config, { chat });
+  const address = await socketApp.listen({ host: '127.0.0.1', port: 0 });
+  const websocketServer = attachWebSocketServer(socketApp.server, socketApp.log, config, realtime);
+  const session = { sub: 'alice', orgId: 'org-test', roles: [],
+    authTime: 1790856000, exp: 2000000000 };
+  const headers = { origin: 'https://app.example.test',
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, { headers });
+  const messages: string[] = [];
+  function collect(raw: Buffer) {
+    messages.push(raw.toString());
+  }
+  function closeServer(resolve: () => void) {
+    websocketServer.close(resolve);
+  }
+  socket.on('message', collect);
+  try {
+    await once(socket, 'open');
+    const transcript = await request('GET', '/api/conversations/alice/messages', undefined, 'alice');
+    expect(transcript.statusCode).toBe(503);
+    const list = await request('GET', '/api/conversations', undefined, 'alice');
+    expect(list.statusCode, list.body).toBe(503);
+    const selection = await request('GET', '/api/assistants', undefined, 'alice');
+    expect(selection.statusCode).toBe(503);
+    const closed = once(socket, 'close');
+    const subscription = { type: 'subscribe', topic: 'conversation',
+      conversationId: 'alice', since: 0 };
+    socket.send(JSON.stringify(subscription));
+    expect((await closed)[0]).toBe(1013);
+    expect(messages.join(' ')).not.toContain('refused');
+  } finally {
+    socket.terminate();
+    await new Promise<void>(closeServer);
+    await socketApp.close();
+    await feed.close();
+    await auth.handler.handle(pending, pgDb(dbs.queue));
+  }
+  const applied = await request('GET', '/api/conversations/alice/messages', undefined, 'alice');
+  expect(applied.statusCode).toBe(200);
+}
+it('returns retryable HTTP and socket errors for own membership still being applied',
+  retriesOwnPendingMembership);
+
+async function readsAfterPayerRemoval() {
+  const input = { ...creation, commandId: 'team-billing-assistant', assistantId: 'team-billing-assistant',
+    payingGroupId: 'support' };
+  const created = await request('POST', '/api/assistants', input);
+  expect(created.statusCode).toBe(200);
+  const rows = await history(nats.store, 'assistant-team-billing-assistant', 'test');
+  await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
+  const session = { id: 'billing-session', conversationId: 'billing-session',
+    assistantId: 'team-billing-assistant', payingGroupId: 'support' };
+  expect((await request('POST', '/api/conversations', session, 'alice')).statusCode).toBe(200);
+  const sessions = await history(nats.store, 'conversation-billing-session', 'test');
+  await auth.handler.handle(sessions[0]!.event, pgDb(dbs.queue));
+  await runner.run(conversations);
+  await append('team-support', 'team.member_removed', {
+    teamId: 'support', memberId: 'alice', removedBy: 'owner',
+  });
+  const transcript = await request('GET', '/api/conversations/billing-session/messages',
+    undefined, 'alice');
+  expect(transcript.statusCode, transcript.body).toBe(200);
+  const list = await request('GET', '/api/conversations', undefined, 'alice');
+  expect(list.statusCode).toBe(200);
+  expect(list.body).toContain('billing-session');
+  const post = { id: 'payer-removed-message', text: 'Cannot charge support' };
+  expect((await request('POST', '/api/conversations/billing-session/messages', post,
+    'alice')).statusCode).toBe(403);
+}
+it('reads own history after payer removal while refusing new spending', readsAfterPayerRemoval);
 
 async function refusesRevokedOwnerGroupBeforeIamCatchesUp() {
   await append('team-support', 'team.member_added', {
@@ -329,7 +433,7 @@ async function refusesRevokedOwnerGroupBeforeIamCatchesUp() {
   });
   expect((await nats.store.append({ event: record,
     expectedSequence: await nats.store.head('team-sales') })).status).toBe('appended');
-  const input = { id: 'removed-member', conversationId: 'removed-member', assistantId: 'shared',
+  const input = { id: 'removed-member', conversationId: 'removed-member', assistantId: 'team-shared',
     payingGroupId: 'support' };
   expect((await request('POST', '/api/conversations', input, 'bob')).statusCode).toBe(403);
   expect((await request('GET', '/api/conversations/bob/messages', undefined, 'bob'))
@@ -342,7 +446,7 @@ it('refuses a revoked assistant audience even with a different authorised payer 
   refusesRevokedOwnerGroupBeforeIamCatchesUp);
 
 async function serialisesRepeatedCreation() {
-  const first = { ...creation, assistantId: 'race', commandId: 'create-race' };
+  const first = { ...creation, assistantId: 'team-race', commandId: 'create-race' };
   const second = { ...first, commandId: 'create-race-again' };
   const firstRequest = request('POST', '/api/assistants', first);
   const secondRequest = request('POST', '/api/assistants', second);
@@ -353,21 +457,35 @@ async function serialisesRepeatedCreation() {
   const statuses = results.map(status);
   statuses.sort();
   expect(statuses).toEqual([200, 409]);
-  const rows = await history(nats.store, 'assistant-race', 'test');
+  const rows = await history(nats.store, 'assistant-team-race', 'test');
   expect(rows).toHaveLength(1);
   const claim = lifecycleHandlers(nats.store)[1];
   await claim.handle(rows[0]!.event, pgDb(dbs.queue));
   await claim.handle(rows[0]!.event, pgDb(dbs.queue));
-  expect(await history(nats.store, 'computer-race', 'test')).toHaveLength(1);
+  expect(await history(nats.store, 'computer-team-race', 'test')).toHaveLength(1);
   expect((await request('POST', '/api/assistants', {
     ...first, grants: [{ resourceType: 'model', resourceId: 'gpt-6-luna' }],
   })).statusCode).toBe(409);
   expect((await request('POST', '/api/assistants', {
-    ...creation, assistantId: 'forbidden', commandId: 'member-create',
+    ...creation, assistantId: 'team-forbidden', commandId: 'member-create',
   }, 'alice')).statusCode).toBe(403);
 }
 it('racing creation commands cannot claim extra computers and altered retries refuse',
   serialisesRepeatedCreation);
+
+async function validatesCreationInput() {
+  for (const changes of [
+    { assistantId: 'personal-future-member' },
+    { name: 'Sales\0assistant' },
+    { payingGroupId: 'missing-group' },
+    { grants: [{ resourceType: 'mcp_server', resourceId: 'invalid.server' }] },
+  ]) {
+    const input = { ...creation, ...changes, commandId: 'invalid-input' };
+    const response = await request('POST', '/api/assistants', input);
+    expect(response.statusCode).toBe(changes.payingGroupId ? 403 : 400);
+  }
+}
+it('refuses personal ids, NUL names, missing payers and invalid MCP ids', validatesCreationInput);
 
 async function keepsOneRequestDeadline() {
   async function stallIdentityRead() {
@@ -376,9 +494,9 @@ async function keepsOneRequestDeadline() {
   const cases = [
     { url: '/api/conversations', sub: 'alice', subject: 'conversation-late-session',
       input: { id: 'late-session', conversationId: 'late-session',
-        assistantId: 'shared', payingGroupId: 'sales' } },
-    { url: '/api/assistants', sub: 'owner', subject: 'assistant-late-assistant',
-      input: { ...creation, commandId: 'late-assistant', assistantId: 'late-assistant' } },
+        assistantId: 'team-shared', payingGroupId: 'sales' } },
+    { url: '/api/assistants', sub: 'owner', subject: 'assistant-team-late-assistant',
+      input: { ...creation, commandId: 'team-late-assistant', assistantId: 'team-late-assistant' } },
   ];
   delayIdentity = stallIdentityRead;
   const heads = vi.spyOn(nats.store, 'head');

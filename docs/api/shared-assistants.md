@@ -1,104 +1,147 @@
 # Shared assistants HTTP interface
 
-P4-7 backend first half: group ownership, explicit resource grants, one computer,
-private member sessions and fixed paying-group admission. Screens, personal MCP
-credential profiles and fresh-install Codex qualification remain pending.
+Create a group assistant with selected model and MCP access on one computer.
+Members get their own chat transcripts and execution threads. Screens, personal
+MCP credentials and fresh-install checks remain pending.
+
+All members' turns share one disk and one browser profile. Tools can read work
+files written by another member. Uploads and attachments into team-kind sessions
+are refused until each member has their own workspace. Credentials for individual
+members must never be written to that disk or browser profile. Separate threads
+and turn tokens do not isolate files or browser logins.
 
 All routes require a verified silo session and current silo membership. Creation
-and command receipts require Owner/Admin. POST requires the configured application
-Origin. Responses use `no-store`; session role claims cannot grant access.
+and command receipts require an Owner or Admin. POST requires the configured
+application Origin. Responses use `no-store`; session role claims cannot grant access.
 
 ## Assistant selection and creation
 
 | Method and route | Input | Result |
 | --- | --- | --- |
-| `POST /api/assistants` | `{ commandId, assistantId, groupId, name, grants }` | `{ status: "appended", assistantId, sequence, changeId }` |
-| `GET /api/assistants` | None | `{ rows }`: all group assistants for admins, current authorised group assistants for members |
+| `POST /api/assistants` | `{ commandId, assistantId, groupId, payingGroupId, name, grants }` | `{ status: "appended", assistantId, sequence, changeId }` |
+| `GET /api/assistants` | None | `{ rows }`: group assistants for admins, permitted group assistants for members |
 | `GET /api/assistants/:assistantId` | None | Same envelope, zero or one row |
 | `GET /api/assistants/:assistantId/changes/:commandId` | Original command id | Append receipt plus `projection: { content, iam }`, or 404 |
 
-Ids contain 1–200 letters, digits, underscores or hyphens. Names are trimmed,
-non-empty and at most 200 characters. `grants` has 1–32 objects, each containing
-`resourceType` (`model` or `mcp_server`) and `resourceId`. Resource ids additionally
-permit dots for existing model names. Models must be active catalogue entries;
-MCP resources must have an existing event stream. Registration and grants alone
-never make an unpublished, blocked or credential-dependent tool executable.
-Unknown fields are refused; callers cannot choose computer ids or generations.
-Creation bodies are limited to 8 KiB; oversized requests return 413.
+Use 1–200 letters, digits, underscores or hyphens for ids. New team assistant ids
+must start with `team-`; this keeps personal assistant ids available. Trim names,
+keep them non-empty and at most 200 characters, and do not include NUL characters.
+Both the owner group and the admin's chosen paying group must exist in this silo.
+They may be different groups. Members confirm that payer when opening a session;
+they cannot choose another one.
 
-Creation makes one conditional append to `assistant-<assistantId>`:
-`assistant.created` with `kind: "team"`, `ownerId: groupId`, `name` and the explicit
-resource selection. Same-command, same-payload retries return the original receipt.
-Changed retries, existing assistants and racing creation commands return 409.
-Use another assistant id explicitly to request another computer.
+Supply 1–32 grants. Each has `resourceType` (`model` or `mcp_server`) and `resourceId`.
+Model ids may contain dots and must name active catalogue entries. MCP ids contain
+only letters, digits, underscores or hyphens and must have an existing event
+stream. Registration and grants alone never make an unpublished, blocked or
+credential-dependent tool executable. Unknown fields are refused. Callers cannot
+choose computer ids or generations. Creation bodies are limited to 8 KiB;
+oversized requests return 413.
 
-The existing claim reaction owns `computer-<assistantId>`. Duplicate delivery
-cannot claim another computer; Pod loss rotates the generation through the normal
-lifecycle. The grant reaction separately appends `grant.given` for the assistant
-and its owning group to each selected resource stream. Existing grants and
-revocations win over replayed creation. Unselected resources receive no assistant
-grant. Historical team creation events without a selection grant no resources.
-Grants keep assistant and group identities separate even when their ids match.
-Existing revocations have no identity kind and continue to deny every matching id;
-creation replay cannot restore them.
+Creation appends once to `assistant-<assistantId>`. The `assistant.created` event
+stores `kind: "team"`, `ownerId: groupId`, `payingGroupId`, `name` and the selected
+grants. Same-command, same-payload retries return the original receipt. Changed
+retries, existing assistants and racing creation commands return 409. Use another
+assistant id to request another computer.
 
-Rows contain `assistantId`, `ownerId`, `kind`, `computerId`, `generation`,
-`status`, `changedAt`, optional `name`/`grants`, and `busy`. Lifecycle status uses
-`claiming`, `starting`, `ready`, `suspended`, `lost` or `retired`. `busy` means at
-least one recorded admitted turn is still open; it does not expose another
-member's conversation or prevent concurrent private sessions. `grants` describes
-the recorded selection, not current tool permission. Computer projection rows
-are rebuilt from events. IAM replay restores group `acts_for` and resource grants.
+The existing claim reaction manages `computer-<assistantId>`. Repeating the event
+cannot claim another computer. Pod loss replaces it through the normal lifecycle.
+The grant reaction separately appends `grant.given` for the assistant and its
+owning group to each selected resource stream. Unselected resources receive no
+assistant grant. Historical team events without selected grants grant nothing.
+Assistant and group grants remain separate even when their ids match.
+
+Keep these two grant rules visible in the admin creation review screen:
+
+- An earlier revocation for the same id stops the creation reaction from giving
+  that grant again. Creation can still return `appended`; that receipt confirms
+  the assistant was created, not that every selected resource became available.
+- The owner group also gets person-level use of every selected resource. A member
+  can use that resource through the group even after their individual grant was
+  revoked. Show this group-wide access before the admin confirms creation.
+
+Rows include `assistantId`, `ownerId`, `kind`, `computerId`, `generation`,
+`status`, `changedAt`, optional `name`/`grants`/`payingGroupId`, and `busy`.
+Lifecycle status uses `claiming`, `starting`, `ready`, `suspended`, `lost` or
+`retired`. `busy` means a recorded admitted turn remains open on the current
+computer. Loss, retirement or a replacement claim clears old open turns from that
+flag. Reading it still scans the computer's event history. It does not expose
+another member's conversation or prevent simultaneous sessions. `grants` shows
+the recorded selection, not current tool permission. Replay rebuilds computer
+rows, group `acts_for` permission and resource grants.
 
 The change receipt's `content` and `iam` describe application of the creation
-event only. They do not confirm grant reactions, readiness or successful execution.
-Read the original receipt after a lost acknowledgement; 404 does not prove an
-in-flight command cannot still commit. Retry only the original ids and payload.
+event only. IAM is the worker that applies access changes to OpenFGA. The receipt
+does not confirm grant reactions, computer readiness or successful execution.
+Read the original receipt after a lost response. A 404 does not prove an in-flight
+command cannot still commit. Retry only the original ids and payload.
 
-## Private member work and paying group
+## Private chat transcripts and paying group
 
 Use the existing chat routes:
 
 | Method and route | Input | Result |
 | --- | --- | --- |
-| `POST /api/conversations` | `{ id, conversationId, assistantId, payingGroupId }` | Existing conditional append receipt |
+| `POST /api/conversations` | `{ id, conversationId, assistantId, payingGroupId }` | Existing append receipt |
 | `POST /api/conversations/:conversationId/messages` | `{ id, text }` or `{ id, stopTurnId }` | Existing message/stop receipt |
 | `GET /api/conversations` | None | Only the requester's permitted sessions |
-| `GET /api/conversations/:conversationId/messages` | Optional `since` | Authorised private transcript |
+| `GET /api/conversations/:conversationId/messages` | Optional `since` | Permitted private transcript |
 
-Shared work requires an explicit payer and current membership in both the owning
-group and paying group. Creation fixes the creator and payer. A private session
-cannot be read or resumed by another member, including an administrator or someone
-with an accidentally added participant tuple. WebSocket transcript delivery uses
-the same requester check. Never add participants to share private execution;
-shared child transcripts belong to later tickets.
+Creating a session, posting and admitting a new turn require current membership
+in both the owner group and paying group. Session creation records the creator
+and the assistant's fixed payer. Personal work retains the installation default.
+Historical team assistants without a recorded payer keep readable history, but
+cannot open new sessions. No payer is guessed for them.
 
-Admission rechecks exact member, assistant, conversation and relevant group
-subjects with the existing two-second authority fence and shared read deadline.
-Missing, changed or unapplied authority refuses. Each admitted thread belongs to
-one requester and conversation on the assistant's computer. The bridge resumes
-only matching requester history; old journal entries without requester metadata
-start a fresh context when production supplies a requester.
+Reading a chat transcript or listing sessions checks the creator, current owner
+group membership and `acts_for` permission at that time. Losing paying-group
+membership stops new spending but does not hide old transcripts. Reads fetch the
+unchanging creation event once. They do not use the two-second write authority
+fence, which detects access changes before a write. Messages and turn starts or
+ends cannot invalidate a transcript read or disconnect its live socket.
 
-Simultaneous private sessions use separate short-lived tokens. Gateway checks
-retain the live computer generation, thread, conversation, requester/assistant
-intersection, delegation, grants, tool mode/approval and budget. Swapped thread
-tokens and altered requester claims refuse before upstream dispatch. The existing
-budget actor reserves and settles integer euro cents. Shared payer binding survives
-turn retries; a changed payer on a creation retry refuses even if authorised.
-Personal turns retain the installation's configured default and recorded retry
-binding. Desktop access still needs a separate `shared_desktop` grant.
+The creator check applies to chat transcript routes and their WebSocket delivery.
+Even an administrator or an accidentally added participant cannot read or resume
+another member's team chat there. File reads also require the creator and current
+owner-group membership. Approvals, audit and live view still use their existing
+participant checks; they do not add this team creator check. Do not add participants
+to private team sessions. Sharing child transcripts is later work.
 
-## Refusals and qualification limits
+IAM receipts are needed only for the requester's own membership changes and the
+group's creation, not other members' changes. If those changes are still being
+applied, HTTP reads return 503 and the live transcript socket closes with 1013.
+Retry shortly. A list returns the retryable error rather than silently hiding
+that member's sessions. Explicit removal returns 403 or closes with 1008.
 
-401: no session. 400: invalid input. 403: wrong Origin/silo, role, group membership
-or requester. 409: changed retry, existing assistant or concurrent creation.
-503: unavailable infrastructure or invalid history. Protected error responses
-contain only a sanitised `status`. Some existing chat refusals also explain payer
-configuration without disclosing protected content.
+Writes and turn admission still recheck access within one two-second deadline.
+New team turns require an OpenFGA binding so they cannot skip IAM receipts. Each
+admitted thread belongs to one requester and conversation. The bridge resumes
+only matching requester history. Old journal entries without requester metadata
+start a fresh context on their next turn, including existing personal sessions.
+A rejected admission report stops the whole computer bridge until restart. This
+stops every member's sessions on that computer. Bridge reconnect behaviour during
+simultaneous admissions is tracked separately in [#164](https://github.com/elewa-git/opencrane-new/issues/164).
 
-Memory stays disabled. Main currently admits only credential-free MCP connections;
-this slice supplies no invented personal profile or company fallback. Two real
-requester profiles at a recording MCP upstream, actual pinned Codex/gVisor context
-isolation and fresh-install journeys are **NOT RUN**. See the
-[source receipt](../process/p4-7-backend-evidence.md) for checks and remaining work.
+Simultaneous sessions use separate short-lived tokens. Gateway checks still
+include computer generation, thread, conversation, requester and assistant rights,
+grants, approvals and budget. Swapped tokens and changed requester claims are
+refused before dispatch. The budget actor reserves and settles integer euro cents.
+
+Desktop access needs a separate `shared_desktop` grant. That grant shows the
+computer's shared desktop, including every member's browser activity. It does not
+provide a private browser profile.
+
+## Refusals and remaining checks
+
+401 means no session. 400 means invalid input. 403 means wrong Origin or silo,
+missing role or membership, wrong requester, or a team upload or attachment.
+409 means a changed retry, an existing assistant or concurrent creation.
+503 means unavailable infrastructure, invalid history or IAM still applying the
+requester's changes. Protected errors contain a sanitised `status`. Some chat and
+file refusals explain the payer or upload restriction without returning content.
+
+Memory stays disabled. MCP currently admits only credential-free connections.
+This change does not supply personal credentials or a company fallback. Two real
+requester profiles at a recording MCP upstream, pinned Codex/gVisor execution and
+fresh-install journeys are **NOT RUN**. File and browser isolation between members
+is **absent**. See the [check record](../process/p4-7-backend-evidence.md).

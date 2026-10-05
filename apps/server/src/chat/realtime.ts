@@ -1,7 +1,7 @@
 import type { WebSocket } from 'ws';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
 import { GroupRefused } from '../members/groups.ts';
-import { authorityFence, PayingGroupRefused } from '@opencrane/models';
+import { AuthorityApplying, PayingGroupRefused } from '@opencrane/models';
 import { memberAuthorisation } from '@opencrane/authz';
 import { chatRows, type ChatOptions } from './routes.ts';
 
@@ -15,15 +15,12 @@ export function conversationSubscription(socket: WebSocket, session: SessionData
     const drain = async () => {
       if (running || socket.readyState !== socket.OPEN) return; running = true;
       try {
-        const fresh = await authorityFence(options.store, performance.now(),
-          [`conversation-${conversationId}`]);
         const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
         if (!validSession(session, config, memberId) ||
             !(await auth.conversation(memberId, conversationId, 'read')).allowed) {
           send('refused'); socket.close(1008); return;
         }
-        fresh.include(`member-${memberId}`);
-        const result = await chatRows(options, memberId, conversationId, position, fresh);
+        const result = await chatRows(options, memberId, conversationId, position);
         if ((position > 0 && generation !== result.generation) || position > result.position) {
           generation = result.generation; position = 0; send('resync'); socket.close(1013); return;
         }
@@ -34,7 +31,9 @@ export function conversationSubscription(socket: WebSocket, session: SessionData
         }
         if (!ready || state !== result.computerState) { state = result.computerState; send('ready', { computerState: state }); ready = true; }
       } catch (error) {
-        if (isPrivateRefusal(error)) {
+        if (error instanceof AuthorityApplying) {
+          socket.close(1013);
+        } else if (isPrivateRefusal(error)) {
           send('refused');
           socket.close(1008);
         } else {

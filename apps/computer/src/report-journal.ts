@@ -162,13 +162,13 @@ export function reportJournal(driver: JournalDriver) {
     const report: BridgeReport = {
       conversationId: input.conversationId,
       assistantId: input.assistantId,
-      ...(input.requesterId ? { requesterId: input.requesterId } : {}),
       turnId,
       type,
       ...extra,
       previousSequence: previousReport?.sequence ?? 0,
       sequence: reports.length + 1,
     };
+    if (input.requesterId) report.requesterId = input.requesterId;
     const serializedReport = JSON.stringify(report);
     const reportLine = `${serializedReport}\n`;
     appendFileSync(driver.journal, reportLine, { mode: 0o600, flush: true });

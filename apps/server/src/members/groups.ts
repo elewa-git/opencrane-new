@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { Binding } from '@opencrane/authz';
-import { authorityFence, history, activeMember,
+import { authorityFence, history, activeMember, readActiveMember,
   MemberAccessRefused as GroupRefused } from '@opencrane/models';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
@@ -15,7 +15,7 @@ const groupInput = z.discriminatedUnion('action', [
   z.object({ action: z.enum(['add', 'remove']), commandId: id, groupId: id, memberId: id }).strict(),
 ]);
 type GroupInput = z.infer<typeof groupInput>;
-export { GroupRefused, activeMember };
+export { GroupRefused, activeMember, readActiveMember };
 export class GroupConflict extends Error {}
 
 function eventType(input: GroupInput) {

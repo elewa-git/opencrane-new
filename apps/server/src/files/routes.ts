@@ -249,6 +249,7 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   }
   await ownConversation(
     options.store, options.silo, conversationId, memberId, request.method === 'GET',
+    request.method === 'POST',
   );
   return { memberId, conversationId };
 }
@@ -360,7 +361,7 @@ export async function uploadFile(
     ...(screenshot ? { screenshot } : {}),
   };
   const rows = await ownConversation(
-    options.store, options.silo, conversationId, memberId, Boolean(screenshot),
+    options.store, options.silo, conversationId, memberId, Boolean(screenshot), true,
   );
   const previous = findPreviousUpload(rows, fileId);
   if (previous) {

@@ -46,7 +46,7 @@ it('serves private chat commands and reads to joined members, refusing other org
       ['team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }],
       ['team-sales', 'team.member_added', { teamId: 'sales', memberId: 'alice', addedBy: 'alice' }],
       ['team-finance', 'team.created', { teamId: 'finance', name: 'Finance', createdBy: 'alice' }],
-      ['assistant-shared', 'assistant.created', { assistantId: 'shared', ownerId: 'sales', kind: 'team' }],
+      ['assistant-shared', 'assistant.created', { assistantId: 'shared', ownerId: 'sales', kind: 'team', payingGroupId: 'sales' }],
     ] as const) {
       const event = envelope('test', subject, type, data);
       expect((await nats.store.append({ event, expectedSequence: (await history(nats.store, subject, 'test')).at(-1)?.sequence ?? 0 })).status).toBe('appended');

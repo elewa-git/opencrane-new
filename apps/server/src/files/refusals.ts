@@ -3,6 +3,8 @@ import { z } from 'zod';
 const fileRefusals = {
   unauthenticated: { statusCode: 401, message: 'Unauthenticated' },
   conversation_refused: { statusCode: 403, message: 'Conversation refused' },
+  team_files_refused: { statusCode: 403,
+    message: 'Uploads and attachments are unavailable while members share one workspace' },
   id_reused: { statusCode: 409, message: 'Id reused' },
   file_too_large: {
     statusCode: 413,
