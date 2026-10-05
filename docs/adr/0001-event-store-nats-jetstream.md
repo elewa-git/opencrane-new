@@ -43,7 +43,7 @@ proven with a real transactional SQL engine, not a fake.
 | 7 | Follow-up finding: is `Nats-Msg-Id` de-duplication durable enough to rely on for command idempotency? | **NO — finding, with a design fix** | De-dup survives a same-server resend but is **lost across a `nats backup`/`restore` cycle**: the same `Nats-Msg-Id`, resent with the correct post-restore sequence, is accepted as a brand-new message. A "naive retry" that relies only on this header (the exact pattern this spike's own `appendWithRetry` uses on a wrong-sequence rejection) then creates a **duplicate event** for the same logical command. Fix, demonstrated in the same test: a small command ledger in the content database (keyed by the command's own id, checked **before** any append) recognises the retry as already-processed and appends nothing — because that ledger is ordinary Postgres content, backed up on its own schedule, so it survives a JetStream-only restore even though JetStream's de-dup state does not |
 
 Full detail, logs and exact commands are in the spike's
-[README.md](../../spikes/s0-7-jetstream/README.md).
+[the experiment record](../../spikes/s0-7-jetstream/README.robot.md).
 
 ### What this proves for the architecture in events.md
 

@@ -1,7 +1,7 @@
 # ADR 0004: pg-boss for ordered reactions, provisionally
 
 **Status:** Proposed; S0.8 is PARTIAL. 2026-10-01.
-[Evidence and reproducible commands](../../spikes/s0-8-handler-runtime/README.md).
+[Evidence and reproducible commands](../../spikes/s0-8-handler-runtime/README.robot.md).
 This recommendation does not mark the Phase 1 gate as passed.
 
 ## Question and options
