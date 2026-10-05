@@ -15,7 +15,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models -->|starts and configures| gateway["agentgateway<br/>AI gateway"]
+  models <-->|starts gateway and checks calls| gateway["agentgateway<br/>AI gateway"]
 ```
 
 ## What it is responsible for
@@ -33,7 +33,7 @@ flowchart LR
 ## Processes it handles
 
 1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. If the call is allowed, agentgateway sends it to the AI provider.
-2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the held money stays in place for review.
+2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full amount stays held for review. A later report of an unknown result restores money released before an allowed call was sent.
 3. **An admin or owner changes access or spending.** The change is saved as an [event](../../GLOSSARY.md#event): the server saves tool rules and grants, and the models process saves spending limits. Background workers then update OpenFGA and the spending tables.
 
 ## How to run or test it

@@ -127,6 +127,7 @@ export class BudgetActor {
     });
   }
   requireOpenReservation(reservationId: string, fresh: () => Promise<void>) {
+    const appendNotDispatched = this.appendNotDispatched.bind(this);
     const state = this.state;
     function matchesReservation(reservation: BudgetState['reservations'][number]) {
       return reservation.id === reservationId;
@@ -137,7 +138,13 @@ export class BudgetActor {
         throw new Error('Reservation is no longer open');
       }
       // Recheck access after waiting in the queue, within the original time limit.
-      await fresh();
+      try {
+        await fresh();
+      } catch (error) {
+        // Release the hold because no permit has left this process.
+        await appendNotDispatched(reservationId);
+        throw error;
+      }
     }
     return this.serial(checkReservation);
   }
@@ -207,6 +214,15 @@ export class BudgetActor {
       return;
     }
     await this.recordEffectEvidence(reservation, usage, outcome, reason);
+    if (!usage && outcome === 'success' && reservation.settledCents === 0 &&
+        !reservation.outcomeUnknown) {
+      // Hold the full amount again because the allowed call may have been sent.
+      // Retry this write even when its uncertainty record already exists.
+      const payload = {
+        reservationId: id, permitId: id, settledCents: 0, outcome: 'unknown',
+      };
+      await this.append('budget.settled', payload);
+    }
   }
   private async recordEffectEvidence(reservation: BudgetState['reservations'][number],
     usage: ModelUsage | undefined, outcome: 'success' | 'error', reason: string) {

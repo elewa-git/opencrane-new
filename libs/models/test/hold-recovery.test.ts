@@ -244,6 +244,78 @@ async function refusesOrdinaryCallAfterExpiry() {
 it('refuses an ordinary call when expiry released the hold before its allow decision',
   refusesOrdinaryCallAfterExpiry, 60_000);
 
+const lastAccessFailures = ['read_outage', 'time_limit'] as const;
+
+async function releasesAfterLastAccessCheckFails(failure: (typeof lastAccessFailures)[number]) {
+  const current = await fixture();
+  await current.stopDispatch();
+  const append = current.nats.store.append.bind(current.nats.store);
+  const head = current.nats.store.head.bind(current.nats.store);
+  let allowed = false;
+  let checksAfterAllow = 0;
+  const realNow = performance.now.bind(performance);
+  let timeShift = 0;
+
+  function shiftedTime() {
+    return realNow() + timeShift;
+  }
+
+  async function saveAllow(command: AppendCommand): Promise<AppendResult> {
+    const result = await append(command);
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'decision.recorded') {
+      allowed = decisionRecordedDataSchema.parse(parsed.event.data).outcome === 'allow';
+    }
+    return result;
+  }
+
+  function failLastAccessCheck(...args: Parameters<typeof head>) {
+    if (allowed && args[0] === 'member-alice') {
+      checksAfterAllow += 1;
+      if (checksAfterAllow === 2) {
+        if (failure === 'read_outage') {
+          return Promise.reject(new Error('Scripted final access read outage'));
+        }
+        timeShift = 5000;
+      }
+    }
+    return head(...args);
+  }
+
+  const writer = vi.spyOn(current.nats.store, 'append');
+  writer.mockImplementation(saveAllow);
+  const reader = vi.spyOn(current.nats.store, 'head');
+  reader.mockImplementation(failLastAccessCheck);
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockImplementation(shiftedTime);
+  try {
+    const response = await current.call();
+    expect(checksAfterAllow).toBe(2);
+    expect(response.status).toBe(503);
+    expect(current.received()).toBe(0);
+    expect(totals(current.actor.state, current.actor.now())).toMatchObject({
+      reservedCents: 0, monthCents: 0,
+    });
+    writer.mockRestore();
+    reader.mockRestore();
+    clock.mockRestore();
+    const recovered = await recoverActor(current);
+    expect(totals(recovered.state, recovered.now())).toMatchObject({ reservedCents: 0 });
+    const reservation = recovered.state.reservations[0]!;
+    expect(reservation.settledCents).toBe(0);
+    expect(await history(current.nats.store, `effect-${reservation.id}`, 'test')).toEqual([]);
+  } finally {
+    writer.mockRestore();
+    reader.mockRestore();
+    clock.mockRestore();
+    await current.close();
+  }
+}
+
+it.each(lastAccessFailures)(
+  'releases an unsent hold when the access check inside the budget queue fails (%s)',
+  releasesAfterLastAccessCheckFails, 60_000);
+
 async function waitsForRequestWithoutReservationToAge() {
   const current = await fixture();
   await current.stopDispatch();

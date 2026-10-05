@@ -28,16 +28,35 @@ dispatch. That case needs manual resolution.
 The result and dispatch use conditional appends on the same provider stream.
 Gateway admission refuses a finished attempt. Ordinary model admission checks
 that its hold is still open after saving the allow decision. It checks current
-access again inside the budget queue, using the original two-second time limit. It refuses the call
+access again inside the budget queue, using the original two-second time limit.
+If that access check fails, it releases the hold at zero before returning the error.
+No permit has left the process at that point. It refuses the call
 if expiry already released the hold. A disabled budget writer must be
 replaced before expiry can release a hold that was never allowed or sent.
 
-`test/actor.test.ts` covers expiry, repeated checks and budget replay.
+When an allowed call reports an unknown result after a zero-cent release,
+`uncertain()` saves `budget.settled` with `settledCents: 0` and `outcome: unknown`.
+This makes the full reserved amount count against spending limits again without
+claiming a known charge. Duplicate reports do not write another settlement, and
+replay restores the same hold. Without an allow decision, the report raises
+`effect_without_permit` and does not restore the hold.
+
+Provider admission and expiry still run separately. A dispatch can be saved after
+expiry reads the provider stream but before it releases money. Reaching this gap
+requires a clock jump of 180 seconds or more between reservation and admission.
+Later usage or uncertainty restores the hold, but a crash before either report
+can leave the zero-cent release in place. Two leaders serving together with that
+much clock skew can also allow a call before the newer leader releases its hold.
+
+`test/actor.test.ts` covers expiry, late uncertainty, repeated checks and budget replay.
+`test/hold-leadership.test.ts` covers a stale leader allowing a call during expiry
+and the same-actor refusal that prevents that ordering.
 `test/hold-recovery.test.ts` covers two consecutive store failures through
 provider checks and ordinary calls. Ordinary calls have no provider-result
 write: the corresponding case loses the reply after saving the zero-cent
 settlement. `apps/server/test/providers.test.ts` covers a same-id retry during
-a live check through the real gateway. The tests use disposable services and
+a live check and expiry racing admission through the real gateway.
+The tests use disposable services and
 never send a paid model request.
 
 Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle computer and

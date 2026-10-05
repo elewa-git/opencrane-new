@@ -170,3 +170,47 @@ async function keepsHoldWithRecordedEffect() {
 
 it('keeps money held when an effect was recorded without an allow decision',
   keepsHoldWithRecordedEffect);
+
+async function restoresReleasedHoldAfterTransportFailure() {
+  const reservationId = await reserve(false, 'request');
+  await expire();
+  const payload = {
+    requestId: 'request', route: 'model', outcome: 'allow', reason: 'model_allowed',
+    contextDigest: '0'.repeat(64), permitId: reservationId,
+  };
+  const event = envelope('test', 'decision-request', 'decision.recorded', payload);
+  const command = { event, expectedSequence: 0 };
+  expect((await nats.store.append(command)).status).toBe('appended');
+  await actor.uncertain(reservationId, 'transport_failure');
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+  expect(actor.state.reservations[0]).toMatchObject({
+    settledCents: 0, outcomeUnknown: true,
+  });
+  const beforeRetry = await nats.store.head();
+  await actor.uncertain(reservationId, 'transport_failure');
+  await actor.expire();
+  expect(await nats.store.head()).toBe(beforeRetry);
+  const recovered = new BudgetActor(nats.store, 'test', now);
+  await recovered.start();
+  expect(totals(recovered.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+  const effects = await history(nats.store, `effect-${reservationId}`, 'test');
+  expect(effects).toHaveLength(1);
+  expect(effects[0]?.event.data).toMatchObject({ reason: 'transport_failure' });
+  expect(await history(nats.store, `security-${reservationId}`, 'test')).toEqual([]);
+}
+
+it('restores a released hold when an allowed call later reports a transport failure',
+  restoresReleasedHoldAfterTransportFailure);
+
+async function refusesUncertaintyWithoutAllow() {
+  const reservationId = await reserve(false, 'request');
+  await expire();
+  await actor.uncertain(reservationId, 'transport_failure');
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+  expect(await history(nats.store, `effect-${reservationId}`, 'test')).toEqual([]);
+  const alerts = await history(nats.store, `security-${reservationId}`, 'test');
+  expect(alerts[0]?.event.data).toMatchObject({ reason: 'effect_without_permit' });
+}
+
+it('keeps a released hold at zero when uncertainty has no allow decision',
+  refusesUncertaintyWithoutAllow);
