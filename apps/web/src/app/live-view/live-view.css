@@ -22,6 +22,9 @@ button {
 }
 .display[hidden] { display: none; }
 .tools { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.capture-status, .entry-capture-status { width: 100%; min-width: 0; }
+.repeat-capture { width: 100%; min-height: 44px; margin: 8px 0; }
+.retry { min-height: 44px; }
 @media (max-width: 600px) {
   .display { flex: none; aspect-ratio: 4 / 3; }
   .tools { gap: 6px; margin: 12px 0; }

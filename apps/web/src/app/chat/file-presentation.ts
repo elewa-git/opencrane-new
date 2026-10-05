@@ -21,3 +21,42 @@ export function shortTime(value: string): string {
   const date = new Date(value);
   return date.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
+
+export interface ScreenshotFacts {
+  computerId: string;
+  generation: number;
+  capturedAt: string;
+  width: number;
+  height: number;
+  size: number;
+}
+
+const UTC_DATE_OPTIONS: Intl.DateTimeFormatOptions = {
+  day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  timeZone: 'UTC', hourCycle: 'h23',
+};
+
+export function utcDateTime(iso: string): string {
+  return `${new Date(iso).toLocaleString('en-GB', UTC_DATE_OPTIONS)} UTC`;
+}
+
+export function fileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export function imageSize(width: number, height: number): string {
+  return `${width} × ${height}`;
+}
+
+export function screenshotCaption(computerId: string): string {
+  return `Screenshot of ${computerId}. No description of its contents is generated.`;
+}
+
+export function capturedByLine(
+  createdBy: 'you' | 'participant' | 'assistant',
+  facts: ScreenshotFacts,
+): string {
+  if (createdBy !== 'you') return 'Captured by another participant';
+  return `Captured by you · ${utcDateTime(facts.capturedAt)} · ${imageSize(facts.width, facts.height)}`;
+}

@@ -11,7 +11,7 @@ import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
 import { ToolActivityLine } from './tool-activity-line';
 import {
-  ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal,
+  ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
   viewChild, type OnInit,
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
@@ -19,12 +19,16 @@ import { ChatIcon } from './icon';
 import { BrandMark } from '../ui/brand-mark';
 import { sessionSlug } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
+import { ScreenshotCapture, captureView } from './screenshot-capture';
+import { rejectedScreenshotIds, type ChatAttachment } from './chat-state';
 import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
-import { fileName, fileType, fileUrl, shortTime } from './file-presentation';
+import {
+  capturedByLine, fileName, fileType, fileUrl, shortTime, type ScreenshotFacts,
+} from './file-presentation';
 
 @Component({
   selector: 'oc-workspace',
@@ -34,7 +38,7 @@ import { fileName, fileType, fileUrl, shortTime } from './file-presentation';
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
-  providers: [ChatSession, WebSocketService],
+  providers: [ChatSession, WebSocketService, ScreenshotCapture],
   templateUrl: './workspace.html',
   styleUrls: ['./workspace.css', './transcript.css', './panel.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,6 +49,7 @@ import { fileName, fileType, fileUrl, shortTime } from './file-presentation';
 })
 export class Workspace implements OnInit {
   protected readonly chat = inject(ChatSession);
+  protected readonly capture = inject(ScreenshotCapture);
   protected readonly draft = signal('');
   protected readonly recipient = signal(true);
   protected readonly organisation = document.querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
@@ -61,15 +66,30 @@ export class Workspace implements OnInit {
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');
   protected readonly panelOverlay = signal(false);
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
-  protected readonly screenshots = computed(() => this.chat.attachments().filter(file => file.screenshot));
+  protected readonly screenshots = computed(this.screenshotFiles.bind(this));
   protected readonly uploads = computed(() => this.chat.attachments().filter(file => !file.screenshot));
+  protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
+  protected readonly rejectedScreenshotIds = computed(this.rejectedScreenshotFileIds.bind(this));
+  protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
   protected readonly reason = computed(this.composerReason.bind(this));
   private lastTranscript = '';
   private pendingToolFocus = '';
   private focusComposerAfterNavigation = false;
+  private previousCaptureConversation = this.chat.selected();
+  private previousCaptureDenied = this.chat.denied();
   constructor() {
+    effect(() => {
+      const conversationId = this.chat.selected();
+      const denied = this.chat.denied();
+      if (conversationId !== this.previousCaptureConversation || (!this.previousCaptureDenied && denied)) {
+        this.capture.reset();
+        this.preview.set('');
+      }
+      this.previousCaptureConversation = conversationId;
+      this.previousCaptureDenied = denied;
+    });
     afterEveryRender(() => {
       const content = this.chat.turns().map(turn => turn.text + turn.state + turn.files.join() + turn.tools.length).join('');
       if (content !== this.lastTranscript) {
@@ -147,6 +167,66 @@ export class Workspace implements OnInit {
       this.panel.set(true);
     }
   }
+  protected captureBusy(): boolean { return this.capture.state().phase === 'saving'; }
+  protected async startCapture(): Promise<void> {
+    await this.capture.start(this.chat.selected(), this.screenshotIds());
+    await this.chat.refresh();
+  }
+  protected async repeatCapture(): Promise<void> {
+    await this.capture.repeat(this.chat.selected(), this.screenshotIds());
+    await this.chat.refresh();
+  }
+  protected async checkCaptureStatus(): Promise<void> {
+    await this.chat.refresh();
+    this.capture.markChecked();
+    this.showFiles();
+  }
+  protected showCaptureLine(): boolean {
+    const state = this.capture.state();
+    const model = this.captureViewModel();
+    if (!model || this.chat.denied()) return false;
+    if (state.phase === 'saved' && !state.repeated
+      && this.hasTranscriptScreenshot(state.fileId)) {
+      return false;
+    }
+    if (state.phase === 'rejected' && this.rejectedScreenshotIds().includes(state.fileId)) {
+      return false;
+    }
+    return true;
+  }
+  protected hasScreenshot(files: string[]): boolean {
+    for (const path of files) {
+      if (this.isScreenshot(path)) return true;
+    }
+    return false;
+  }
+  protected captureAction(): void {
+    const model = this.captureViewModel();
+    if (model?.kind === 'unknown') {
+      void this.checkCaptureStatus();
+      return;
+    }
+    if (model?.kind === 'failed' && model.safeToRetry) void this.repeatCapture();
+  }
+  protected screenshotFacts(file: ChatAttachment): ScreenshotFacts | undefined {
+    if (!file.screenshot) return undefined;
+    return { ...file.screenshot, size: file.size };
+  }
+  protected screenshotFactsForPath(path: string): ScreenshotFacts | undefined {
+    const file = this.chat.attachments().find(attachment => attachment.path === path);
+    return file ? this.screenshotFacts(file) : undefined;
+  }
+  protected capturedLine(file: ChatAttachment): string {
+    const facts = this.screenshotFacts(file);
+    if (!facts) return 'Saved';
+    const createdBy = file.uploadedBy === this.chat.memberId() ? 'you' : 'participant';
+    return capturedByLine(createdBy, facts);
+  }
+  protected screenshotCreator(path: string): 'you' | 'participant' {
+    const file = this.chat.attachments().find(attachment => attachment.path === path);
+    if (!file || file.uploadedBy !== this.chat.memberId()) return 'participant';
+    return 'you';
+  }
   protected resized(): void {
     this.desktop.set(globalThis.innerWidth >= 1100);
     if (this.desktop()) this.panelOverlay.set(false);
@@ -201,11 +281,49 @@ export class Workspace implements OnInit {
   protected screenshotUrl(path: string): string {
     return fileUrl(this.chat.selected(), path, true);
   }
+  private screenshotFiles(): ChatAttachment[] {
+    return this.chat.attachments().filter(isScreenshotAttachment);
+  }
+  private screenshotFileIds(): string[] {
+    return this.screenshots().map(screenshotIdFromFile);
+  }
+  private pathForFile(fileId: string): string {
+    const file = this.screenshots().find(screenshotWithId.bind(undefined, fileId));
+    return file?.path ?? '';
+  }
+  private hasTranscriptScreenshot(fileId: string): boolean {
+    const screenshotPath = this.pathForFile(fileId);
+    for (const turn of this.chat.turns()) {
+      if (turn.files.includes(screenshotPath)) return true;
+    }
+    return false;
+  }
+  private rejectedScreenshotFileIds(): string[] {
+    return rejectedScreenshotIds(this.chat.rows());
+  }
+  private capturePresentation() {
+    return captureView(this.capture.state(), this.chat.attachments());
+  }
   protected canDownload(path: string): boolean {
     if (this.isClosedConversation()) return false;
     const file = this.chat.attachments().find(attachment => attachment.path === path);
     // Ordinary uploads are private to their uploader; screenshots are readable by session members.
     return !!file && (!!file.screenshot || file.uploadedBy === this.chat.memberId());
+  }
+  protected canDownloadPreview(path: string): boolean {
+    if (this.isClosedConversation()) return false;
+    // The preview keeps its existing download for files made by this conversation's owner.
+    return this.canDownload(path) || this.isOwnedAgentFile(path);
+  }
+  private isOwnedAgentFile(path: string): boolean {
+    if (!this.files().includes(path)) return false;
+    const conversationId = this.chat.selected();
+    for (const conversation of this.chat.conversations()) {
+      if (conversation.conversationId === conversationId) {
+        return conversation.createdBy === this.chat.memberId();
+      }
+    }
+    return false;
   }
   protected name(path: string): string { return fileName(path); }
   protected type(path: string): string { return fileType(path); }
@@ -215,4 +333,16 @@ export class Workspace implements OnInit {
       kind: part.startsWith('```a2ui') ? 'a2ui' : part.startsWith('**') ? 'bold' : /^\[\d+\]$/.test(part) ? 'citation' : 'text',
     }));
   }
+}
+
+function screenshotIdFromFile(file: ChatAttachment): string {
+  return file.fileId;
+}
+
+function screenshotWithId(fileId: string, file: ChatAttachment): boolean {
+  return file.fileId === fileId;
+}
+
+function isScreenshotAttachment(file: ChatAttachment): boolean {
+  return !!file.screenshot;
 }

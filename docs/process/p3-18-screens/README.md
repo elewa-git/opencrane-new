@@ -1,0 +1,72 @@
+# Screenshot screens
+
+Checked on 5 October 2026 from source commit `667d1e4`. The browser checks use
+sample data in Chromium. They do not qualify a fresh installation. The final
+change contains 2,822 changed text lines; PNG captures are not included.
+
+The chat workspace reads saved screenshots from conversation events. The web
+app sends capture requests and shows the same files in the transcript and Files
+panel.
+
+```mermaid
+flowchart TD
+  web[Web app]
+  workspace[Chat workspace]
+  viewer[Computer viewer]
+  shared[Shared UI pieces]
+  server[Server]
+  web --> workspace
+  web --> viewer
+  web --> shared
+  workspace <--> server
+```
+
+The viewer sends one capture request at a time. A saved PNG appears as a
+captioned card with the capture time and image size. The preview shows the image,
+computer id, generation number and download link. A repeated request uses the
+same key and returns the same file. A new Screenshot starts a new request.
+
+The screen checks use intercepted requests and sample event rows. They exercise
+failure, access and revoked states in a local Chromium browser. No live
+dev-stack journey ran, so this receipt is not live qualification.
+
+## Visual comparison
+
+[`visual.json`](visual.json) records 40 captures at 1280px, 390px and 320px,
+including reduced-motion captures at 390px.
+
+| State | Capture | What differs |
+| --- | --- | --- |
+| Empty | `*empty-*` | The existing Files empty state stays unchanged. |
+| Saving | `*saving-*` | Capturing, scanning and saving use one combined state. |
+| Saved | `*saved-*` | Uses “another participant” and replaces friendly computer names with the computer id. |
+| Preview | `*preview-*` | Says “Download original file”. Close stays in the header only. |
+| Retry | `*failed-*` | “Try again” replaces “Capture again” and reuses the key after a 503. |
+| Disconnected | `*disconnected-*`, `*unavailable-*` | Shows both states in the viewer, not the transcript. |
+| Rejected | `*rejected-*` | Shows one refusal without a file name or size-limit text. |
+| Failed thumbnail | `*thumbnail-failed-*` | The card shows its failed preview state and keeps the thumbnail row in Files. |
+| Access check | `*preview-access-check-*` | No “Link expired”; keeps the failed card and asks to check access. |
+| Access revoked | `*revoked-*` | Keeps the access alert above “Files unavailable”. |
+| Repeated request | `*repeated-*` | “Send the same request again” reuses the key and leaves one card. |
+
+## Checks
+
+Report each check as PASS, FAIL, PARTIAL or NOT RUN. Browser fixtures use sample
+data and do not qualify a fresh installation.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Lint | PASS | `nice -n 10 npm run lint`; seven existing warnings and no errors. |
+| Typecheck | PASS | `nice -n 10 npm run typecheck`. |
+| Event catalogue | PASS | `nice -n 10 npm run check:events`; 95 event types agree. |
+| Web and Live View test builds | PASS | `nice -n 10 npm run build -w apps/web`; `nice -n 10 npm run build:live-view-test -w apps/web`. |
+| Angular tests | PASS | `nice -n 10 npm test -w apps/web`; 193 tests passed. |
+| Screenshot visual check | PASS | 40 Chromium captures at 1280px, 390px and 320px; reduced motion at 390px. |
+| Foundation visual check | PASS | 56 captures. |
+| Drawer visual check | PASS | 38 captures. |
+| Organisation shell visual check | PASS | 22 captures. |
+| Settings visual check | PASS | 20 captures. |
+| Workspace visual check | PASS | 18 captures at 1280px, 390px and 320px, including reduced motion. |
+| Chat browser check | PASS | Keyboard, focus, touch targets, streaming, Stop/reload, offline retry and wake state. |
+| Root test suite | FAIL | `PG_TEST_URL` set; `nice -n 10 npm test -- --maxWorkers=2`; 1,761 passed, 13 failed, 15 skipped. |
+| Live journey and fresh-install check | NOT RUN | No secondary dev stack was claimed. These browser checks use sample data. |

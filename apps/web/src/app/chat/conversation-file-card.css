@@ -41,6 +41,48 @@
   text-decoration: none;
 }
 
+.screenshot-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: min(100%, 380px);
+  gap: 10px;
+}
+
+.screenshot-card figure { margin: 0; min-width: 0; }
+.screenshot-card .screenshot-thumbnail,
+.thumbnail-error {
+  display: flex;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  align-items: center;
+  justify-content: center;
+  object-fit: contain;
+  background: #f0f3f3;
+}
+.screenshot-card figcaption,
+.screenshot-card small { overflow-wrap: anywhere; }
+.screenshot-card figcaption { margin-top: 8px; font-size: 13px; }
+.screenshot-file-row { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.screenshot-card .file-name {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.screenshot-card strong { white-space: normal; overflow-wrap: anywhere; }
+.screenshot-card button,
+.screenshot-card a {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--oc-border-input);
+  border-radius: 8px;
+  background: white;
+  font: inherit;
+  text-decoration: none;
+}
+
 @media (max-width: 700px) {
   .file-card .screenshot-thumbnail {
     grid-column: 1 / -1;
@@ -52,6 +94,8 @@
     gap: 8px;
     padding: 10px;
   }
+
+  .file-card.screenshot-card { grid-template-columns: minmax(0, 1fr); }
 
   .file-name {
     white-space: normal;

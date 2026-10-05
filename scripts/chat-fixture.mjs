@@ -19,8 +19,9 @@ export async function chatFixture(page, scenario = 'live') {
       add('decision.recorded', { turnId: human.id, reason: 'budget_exhausted' });
       add('agent.turn_failed', { turnId: human.id });
       add('file.uploaded', { conversationId: 'chat', fileId: 'screen', uploadedBy: 'another-member',
-        name: 'quarterly-screen-capture.png', mime: 'image/png',
-        screenshot: { computerId: 'computer', generation: 1, capturedAt: '2026-10-02T10:42:00Z' } });
+        name: 'quarterly-screen-capture.png', size: 421888, mime: 'image/png',
+        screenshot: { computerId: 'computer', generation: 1, capturedAt: '2026-10-02T10:42:00Z',
+          width: 1440, height: 900 } });
     } else if (scenario !== 'folding') {
       add('agent.command_ran', { turnId: human.id, exitCode: scenario === 'tools' ? 1 : 0, commandDigest: 'a'.repeat(64) });
       const text = scenario === 'a2ui' ? 'Here is the overview.\n\n```a2ui\n{"type":"summary"}\n```'

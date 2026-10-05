@@ -1,5 +1,6 @@
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
+import { NgTemplateOutlet } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -16,6 +17,7 @@ import {
 } from '@angular/core';
 import { LeaseChannel, type LeaseNotice } from './lease-channel';
 import type RFB from '@novnc/novnc/lib/rfb.js';
+import type { CaptureViewModel } from '../chat/screenshot-capture';
 
 type ViewerConstructor = typeof RFB;
 async function loadViewer(): Promise<ViewerConstructor> {
@@ -37,21 +39,19 @@ function stateForCloseCode(code: number) {
 
 @Component({
   selector: 'oc-live-view',
-  imports: [SharedState, ModalSheet],
+  imports: [SharedState, ModalSheet, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './live-view.html',
   styleUrl: './live-view.css',
 })
 export class LiveView implements OnDestroy, OnChanges {
   readonly conversationId = input.required<string>();
-  readonly saved = output<void>();
-  protected readonly capturing = signal(false);
-  protected readonly captureStatus = signal('');
-  protected readonly captureKind = signal<PresentationState>('checking');
-  protected readonly capturedAt = signal<string | undefined>(undefined);
+  readonly capture = input<CaptureViewModel | undefined>();
+  readonly captureBusy = input(false);
+  readonly captureRequested = output<void>();
+  readonly captureRepeated = output<void>();
+  readonly captureStatusChecked = output<void>();
   protected readonly viewedAt = signal<string | undefined>(undefined);
-  private captureKey = '';
-  private captureAbort: AbortController | undefined;
   protected readonly viewOpen = signal(false);
   private readonly display = viewChild.required<ElementRef<HTMLElement>>('display');
   protected readonly state = signal('Disconnected');
@@ -100,15 +100,10 @@ export class LiveView implements OnDestroy, OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['conversationId'] && !changes['conversationId'].firstChange) {
       this.panelClosed();
-      this.captureKey = '';
-      this.captureStatus.set('');
     }
   }
   ngOnDestroy(): void { this.close('Disconnected'); }
   protected close(state: string): void {
-    this.captureAbort?.abort();
-    this.capturing.set(false);
-    this.captureStatus.set('');
     this.attempt++;
     clearTimeout(this.leaseTimer);
     this.clearPicture();
@@ -134,37 +129,19 @@ export class LiveView implements OnDestroy, OnChanges {
     this.display().nativeElement.replaceChildren();
   }
 
-  protected async capture(): Promise<void> {
-    if (this.capturing() || this.state() !== 'Viewing') return;
-    const attempt = this.attempt;
-    this.captureKey ||= crypto.randomUUID();
-    this.captureKind.set('checking');
-    this.capturedAt.set(undefined);
-    this.captureAbort = new AbortController(); this.capturing.set(true); this.captureStatus.set('Capturing and scanning…');
-    try {
-      const response = await fetch(`/api/conversations/${encodeURIComponent(this.conversationId())}/screenshots`, {
-        method: 'POST', headers: { 'x-opencrane-view': '1', 'idempotency-key': this.captureKey },
-        signal: AbortSignal.any([this.captureAbort.signal, AbortSignal.timeout(90_000)]),
-      });
-      if (attempt !== this.attempt) return;
-      if (response.status === 422) this.captureKey = '';
-      await captureReply(response);
-      if (attempt !== this.attempt) return;
-      this.captureKind.set('confirmed');
-      this.capturedAt.set(new Date().toISOString());
-      this.captureKey = ''; this.captureStatus.set('Screenshot saved'); this.saved.emit();
-    } catch (error) {
-      // A closed or replaced view must not change the current capture's state.
-      if (attempt !== this.attempt) return;
-      if (error instanceof CaptureRejection) {
-        this.captureKind.set(error.kind);
-        this.captureStatus.set(error.message);
-      } else {
-        this.captureKind.set('unknown');
-        this.captureStatus.set('Screenshot outcome unknown. Check the session files before continuing.');
-      }
-    } finally { if (attempt === this.attempt) this.capturing.set(false); }
+  protected requestCapture(): void { this.captureRequested.emit(); }
+
+  protected captureAction(): void {
+    if (this.capture()?.kind === 'unknown') {
+      this.captureStatusChecked.emit();
+      return;
+    }
+    if (this.capture()?.kind === 'failed' && this.capture()?.safeToRetry) {
+      this.captureRepeated.emit();
+    }
   }
+
+  protected repeatCapture(): void { this.captureRepeated.emit(); }
   private async open(): Promise<void> {
     const attempt = ++this.attempt;
     this.state.set('Connecting');
@@ -285,35 +262,4 @@ export class LiveView implements OnDestroy, OnChanges {
     this.close(state);
   }
 
-}
-
-class CaptureRejection extends Error {
-  readonly kind: PresentationState;
-
-  constructor(status: number) {
-    super('Screenshot could not be saved. The server rejected the capture.');
-    this.kind = status === 401 || status === 403 || status === 422 ? 'refused' : 'failed';
-  }
-}
-
-async function captureReply(response: Response): Promise<void> {
-  if (!response.ok) {
-    const rejection = new CaptureRejection(response.status);
-    try {
-      const result: unknown = await response.json();
-      if (result && typeof result === 'object' && 'error' in result
-        && typeof result.error === 'string') {
-        rejection.message = result.error;
-      }
-    } catch {
-      // The rejection is definite even when its detail cannot be read.
-      throw rejection;
-    }
-    throw rejection;
-  }
-  const result: unknown = await response.json();
-  if (!result || typeof result !== 'object' || !('status' in result)
-    || result.status !== 'appended') {
-    throw new Error('Capture outcome missing');
-  }
 }

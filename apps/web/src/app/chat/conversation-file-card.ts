@@ -1,6 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { DogEar } from '../ui/paper';
-import { fileName, fileType, fileUrl, shortTime } from './file-presentation';
+import {
+  capturedByLine, fileName, fileType, fileUrl, screenshotCaption, shortTime,
+  type ScreenshotFacts,
+} from './file-presentation';
 
 @Component({
   selector: 'oc-conversation-file-card',
@@ -16,6 +19,7 @@ export class ConversationFileCard {
   readonly createdBy = input.required<'you' | 'participant' | 'assistant'>();
   readonly downloadAllowed = input(false);
   readonly thumbnailUrl = input('');
+  readonly screenshot = input<ScreenshotFacts | undefined>();
   readonly opened = output<string>();
   readonly filesOpened = output<void>();
 
@@ -23,9 +27,29 @@ export class ConversationFileCard {
   protected readonly nameId = computed(this.fileNameId.bind(this));
   protected readonly type = computed(this.displayType.bind(this));
   protected readonly downloadUrl = computed(this.fileDownloadUrl.bind(this));
+  protected readonly thumbnailFailed = signal(false);
+  private readonly attempt = signal(0);
+  protected readonly caption = computed(this.screenshotCaption.bind(this));
+  protected readonly capturedBy = computed(this.captureLine.bind(this));
+  protected readonly thumbnailSource = computed(this.thumbnailPath.bind(this));
+  protected readonly previewButtonLabel = computed(this.previewLabel.bind(this));
+  protected readonly previewButtonName = computed(this.previewName.bind(this));
 
   protected open(): void {
     this.opened.emit(this.path());
+  }
+
+  protected retryThumbnail(): void {
+    this.thumbnailFailed.set(false);
+    this.attempt.update(value => value + 1);
+  }
+
+  protected previewAction(): void {
+    if (this.thumbnailFailed()) {
+      this.retryThumbnail();
+      return;
+    }
+    this.open();
   }
 
   protected showFiles(): void {
@@ -51,5 +75,32 @@ export class ConversationFileCard {
   private fileNameId(): string {
     const safePath = encodeURIComponent(this.path()).replaceAll('%', '-');
     return `file-name-${safePath}`;
+  }
+
+  private screenshotCaption(): string {
+    const facts = this.screenshot();
+    return facts ? screenshotCaption(facts.computerId) : '';
+  }
+
+  private captureLine(): string {
+    const facts = this.screenshot();
+    if (!facts) return '';
+    return capturedByLine(this.createdBy(), facts);
+  }
+
+  private thumbnailPath(): string {
+    const source = this.thumbnailUrl();
+    if (!source || this.attempt() === 0) return source;
+    return `${source}&attempt=${this.attempt()}`;
+  }
+
+  private previewLabel(): string {
+    if (this.thumbnailFailed()) return 'Try preview again';
+    return 'Open preview';
+  }
+
+  private previewName(): string {
+    if (this.thumbnailFailed()) return `Try preview again for ${this.name()}`;
+    return `Open preview of ${this.name()}`;
   }
 }

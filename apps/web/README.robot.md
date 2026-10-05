@@ -165,11 +165,15 @@ core and the authenticated proxy; it provides no control or clipboard path.
 host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
 [Licence and live evidence](../../docs/process/live-view-evidence.md).
 
-The viewer's **Screenshot** button explicitly captures one desktop image. It
-announces capture/scanning progress, disables duplicate clicks and reports a saved
-result only after the file event is committed. Uncertain requests retain the same command key for a retry; a terminal malware
-rejection allows a new capture with a new key. Screenshots appear as PNG thumbnails in the
-conversation and the panel's Screenshots group; Open uses the existing authenticated
-file preview and download. Reload restores them from conversation events. Keyboard
-Enter/Space activates native buttons; Escape closes viewer and preview dialogs.
-The [P3-18 receipt](../../docs/process/p3-18-screenshots.md) records 1280/390px pixel evidence.
+The viewer's **Screenshot** button starts one capture and save request. It shows one
+saving message and disables the button until the request ends. A saved PNG appears in
+the transcript and Files panel with a caption and capture facts. Its preview shows the
+image, the computer id, the generation number and a download link. A 503 offers a
+same-key retry. An unanswered request offers Check status, which reads the feed again,
+and a separate same-key resend. Pressing Screenshot always starts a new capture with
+a new key. A scan rejection appears once in the transcript and does not show the file
+name. A 401 or 403 asks the person to check access; a later denial clears file details
+and closes the preview. Thumbnail and preview failures have their own retry states.
+The [screenshot screen receipt](../../docs/process/p3-18-screens/README.md) records browser
+captures and checks. The [earlier screenshot receipt](../../docs/process/p3-18-screenshots.md)
+records the service journey. Sample browser checks do not qualify a fresh installation.

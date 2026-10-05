@@ -5,7 +5,25 @@ export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
   state: 'working' | 'done' | 'failed' | 'stopped';
   tools: ToolActivityRecord[];
-  files: string[]; budgetStop?: 'budget_exhausted';
+  files: string[]; budgetStop?: 'budget_exhausted'; screenshotRejected?: true;
+}
+
+export interface ChatAttachment {
+  conversationId: string;
+  fileId: string;
+  name: string;
+  size: number;
+  mime: string;
+  uploadedBy: string;
+  screenshot?: {
+    computerId: string;
+    generation: number;
+    capturedAt: string;
+    width: number;
+    height: number;
+  } | undefined;
+  path: string;
+  textPath: string;
 }
 
 export interface ToolActivityRecord {
@@ -26,6 +44,11 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     const file = uploadedFile(row);
     if (file) {
       turns.push({ id: row.id, author: file.uploadedBy === memberId ? 'you' : 'person', text: '', time: row.time, state: 'done', tools: [], files: [file.path] });
+      continue;
+    }
+    const rejected = rejectedScreenshotTurn(row, memberId);
+    if (rejected) {
+      turns.push(rejected);
       continue;
     }
     const data = row.data;
@@ -67,11 +90,48 @@ function addAvailableFile(turn: Turn, data: ChatRow['data']): void {
   turn.files.push(data.path);
 }
 
-const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(), mime: z.string(), uploadedBy: z.string(), screenshot: z.object({ computerId: z.string(), generation: z.number(), capturedAt: z.string() }).optional() });
+const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(),
+  size: z.number(), mime: z.string(), uploadedBy: z.string(), screenshot: z.object({
+    computerId: z.string(), generation: z.number(), capturedAt: z.string(), width: z.number(),
+    height: z.number(),
+  }).optional() });
 export function uploadedFile(row: ChatRow) {
   if (row.type !== 'file.uploaded') return undefined;
   const parsed = attachment.safeParse(row.data);
   if (!parsed.success) return undefined;
   const file = parsed.data, path = `uploads/${file.conversationId}/${file.fileId}/${file.name}`;
   return { ...file, path, textPath: file.mime === 'application/pdf' ? `${path}.md` : path };
+}
+
+function rejectedScreenshot(row: ChatRow): { fileId: string; uploadedBy: string; capturedAt: string } | undefined {
+  if (row.type !== 'file.rejected') return undefined;
+  const parsed = z.object({ fileId: z.string(), uploadedBy: z.string(),
+    screenshot: z.object({ capturedAt: z.string() }) }).safeParse(row.data);
+  if (!parsed.success) return undefined;
+  return { fileId: parsed.data.fileId, uploadedBy: parsed.data.uploadedBy,
+    capturedAt: parsed.data.screenshot.capturedAt };
+}
+
+function rejectedScreenshotTurn(row: ChatRow, memberId: string): Turn | undefined {
+  const rejected = rejectedScreenshot(row);
+  if (!rejected) return undefined;
+  return {
+    id: row.id,
+    author: rejected.uploadedBy === memberId ? 'you' : 'person',
+    text: '',
+    time: row.time,
+    state: 'done',
+    tools: [],
+    files: [],
+    screenshotRejected: true,
+  };
+}
+
+export function rejectedScreenshotIds(rows: ChatRow[]): string[] {
+  const ids: string[] = [];
+  for (const row of rows) {
+    const rejected = rejectedScreenshot(row);
+    if (rejected) ids.push(rejected.fileId);
+  }
+  return ids;
 }

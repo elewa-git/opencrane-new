@@ -1,26 +1,56 @@
-<article class="file-card" [attr.aria-labelledby]="nameId()"
-  [class.created]="createdBy() === 'assistant'" [ocDogEar]="createdBy() === 'assistant'">
-  @if (thumbnailUrl()) {
-    <img class="screenshot-thumbnail" [src]="thumbnailUrl()" alt="Screenshot of the computer desktop"
-      loading="lazy">
-  }
-  <span class="file-type" [attr.data-type]="type()">{{ type() }}</span>
-  <span class="file-name" [id]="nameId()">
-    <strong>{{ name() }}</strong>
-    <small>
-      @if (createdBy() === 'assistant') {
-        <span class="agent-badge" aria-hidden="true">Ag</span>
-        <span class="sr-only">Created by assistant </span>
+@if (screenshot(); as facts) {
+  <article class="file-card screenshot-card" [attr.aria-labelledby]="nameId()"
+    [ocDogEar]="true">
+    <figure>
+      @if (thumbnailFailed()) {
+        <span class="thumbnail-error">Preview couldn't load</span>
+      } @else {
+        <img class="screenshot-thumbnail" [src]="thumbnailSource()" alt=""
+          loading="lazy" (error)="thumbnailFailed.set(true)">
       }
-      {{ time() }}
-    </small>
-  </span>
-  <button type="button" [attr.aria-label]="'Open ' + name()" (click)="open()">Open</button>
-  @if (createdBy() === 'assistant') {
-    <button type="button" aria-label="Open session files" (click)="showFiles()">Files</button>
-  }
-  @if (downloadAllowed()) {
-    <a [href]="downloadUrl()" [download]="name()"
-      [attr.aria-label]="'Download ' + name()">Download</a>
-  }
-</article>
+      <figcaption>{{ caption() }}</figcaption>
+    </figure>
+    <div class="screenshot-file-row">
+      <span class="file-type" data-type="PNG">PNG</span>
+      <span class="file-name" [id]="nameId()">
+        <strong>{{ name() }}</strong>
+        <small>{{ capturedBy() }}</small>
+      </span>
+    </div>
+    <button type="button" [attr.aria-label]="previewButtonName()"
+      (click)="previewAction()">
+      {{ previewButtonLabel() }}
+    </button>
+    @if (downloadAllowed()) {
+      <a [href]="downloadUrl()" [download]="name()"
+        [attr.aria-label]="'Download ' + name()">Download</a>
+    }
+  </article>
+} @else {
+  <article class="file-card" [attr.aria-labelledby]="nameId()"
+    [class.created]="createdBy() === 'assistant'" [ocDogEar]="createdBy() === 'assistant'">
+    @if (thumbnailUrl()) {
+      <img class="screenshot-thumbnail" [src]="thumbnailUrl()"
+        alt="Screenshot of the computer desktop" loading="lazy">
+    }
+    <span class="file-type" [attr.data-type]="type()">{{ type() }}</span>
+    <span class="file-name" [id]="nameId()">
+      <strong>{{ name() }}</strong>
+      <small>
+        @if (createdBy() === 'assistant') {
+          <span class="agent-badge" aria-hidden="true">Ag</span>
+          <span class="sr-only">Created by assistant </span>
+        }
+        {{ time() }}
+      </small>
+    </span>
+    <button type="button" [attr.aria-label]="'Open ' + name()" (click)="open()">Open</button>
+    @if (createdBy() === 'assistant') {
+      <button type="button" aria-label="Open session files" (click)="showFiles()">Files</button>
+    }
+    @if (downloadAllowed()) {
+      <a [href]="downloadUrl()" [download]="name()"
+        [attr.aria-label]="'Download ' + name()">Download</a>
+    }
+  </article>
+}

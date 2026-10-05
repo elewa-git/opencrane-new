@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chatFixture } from './chat-fixture.mjs';
+import { computerFixture } from './computer-fixture.mjs';
 
 const output = resolve(process.env.F2_CAPTURE_DIR ?? 'docs/process/f2-drawers');
 const build = resolve('apps/web/dist/web/browser');
@@ -219,6 +220,7 @@ async function checkFile(page, width, motion) {
   assert(await pageHeading.evaluate(focused),
     'A removed opener falls back to the page heading');
 }
+
 
 function removeElement(node) {
   node.remove();
@@ -462,82 +464,6 @@ async function assertClosed(fixture) {
     setTimeout(fail, 5000).unref();
   }
   await Promise.race([fixture.closed, timeout]);
-}
-
-function exposeFixtureSocketMethods() {
-  const prototype = globalThis.WebSocket.prototype;
-  const inherited = Object.getPrototypeOf(prototype);
-  const properties = [
-    'send', 'close', 'binaryType', 'onerror', 'onmessage', 'onopen',
-  ];
-  // Playwright adds a subclass; noVNC 1.5 checks only the immediate prototype's properties.
-  for (const property of properties) {
-    if (Object.hasOwn(prototype, property)) continue;
-    const descriptor = Object.getOwnPropertyDescriptor(inherited, property);
-    if (descriptor) Object.defineProperty(prototype, property, descriptor);
-  }
-}
-
-async function computerFixture(page) {
-  await page.evaluate(exposeFixtureSocketMethods);
-  let resolveClosed;
-  const closed = new Promise(resolve => { resolveClosed = resolve; });
-  let activeSocket;
-  let release;
-  function holdAdmission(resolve) {
-    release = resolve;
-  }
-  const admission = new Promise(holdAdmission);
-  async function admitView(route) {
-    await admission;
-    const response = { json: { ticket: 'fixture-ticket' } };
-    await route.fulfill(response);
-  }
-  function attachViewer(socket) {
-    activeSocket = socket;
-    // The viewer stays paused until the server confirms access with a lease notice.
-    const accessNotice = '{"lease":"valid","at":0,"until":1500}';
-    socket.send(accessNotice);
-    let step = 0;
-    function handshake() {
-      if (step === 0) {
-        socket.send(Buffer.from([1, 1]));
-      } else if (step === 1) {
-        socket.send(Buffer.alloc(4));
-      } else if (step === 2) {
-        const init = Buffer.alloc(24);
-        init.writeUInt16BE(1024, 0);
-        init.writeUInt16BE(768, 2);
-        init[4] = 32;
-        init[5] = 24;
-        init[7] = 1;
-        init.writeUInt16BE(255, 8);
-        init.writeUInt16BE(255, 10);
-        init.writeUInt16BE(255, 12);
-        init[14] = 16;
-        init[15] = 8;
-        socket.send(init);
-      }
-      step++;
-    }
-    function disconnected() {
-      resolveClosed();
-    }
-    socket.onMessage(handshake);
-    socket.onClose(disconnected);
-
-  }
-  async function start() {
-    const canvas = page.locator('oc-live-view .display canvas');
-    await canvas.waitFor({ state: 'attached' });
-    activeSocket.send(Buffer.from('RFB 003.008\n'));
-  }
-  function revoke() {
-    activeSocket.close({ code: 4003, reason: 'Access changed' });
-  }
-  await page.route('**/api/conversations/*/view', admitView);
-  await page.routeWebSocket('**/ws/conversations/*/view', attachViewer);
-  return { closed, revoke, release, start };
 }
 
 async function checkComputerStates(page, width, motion) {

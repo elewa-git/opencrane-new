@@ -1,5 +1,9 @@
 /* Message structure adapted from OpenCrane 1 10abd0ef6; chat handoff presentation. */
 .message { display: flex; gap: 10px; margin-bottom: 24px; font-size: 14px; }
+.file-turn { justify-content: flex-start; }
+.message.file-turn .message-content { width: 100%; max-width: 100%; flex: 1 1 100%; }
+.capture-line { width: 100%; min-width: 0; }
+.repeat-capture { width: 100%; min-height: 44px; margin: 8px 0; }
 .message-content { min-width: 0; flex: 1; }
 .message header { display: flex; align-items: baseline; gap: 8px; font-size: 12px; margin: 2px 0 6px; }
 time { color: var(--oc-ink-muted); font-size: 11px; }
