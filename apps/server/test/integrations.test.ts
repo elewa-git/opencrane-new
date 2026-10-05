@@ -9,7 +9,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { chromium, type Page } from 'playwright';
+import { chromium, type Page, type Response } from 'playwright';
 import { encodeSession, tokenIssuer } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -282,10 +282,21 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('button', { name: 'Add another server' }).click();
     await page.getByLabel('Server URL', { exact: true }).fill('https://mcp.example.test/protected');
     await page.getByRole('button', { name: 'Discover tools', exact: true }).click();
-    await vi.waitFor(async () => {
+    function isDiscoveryStatus(response: Response) {
+      return response.url().includes('/api/org/integrations/discovery?locator=');
+    }
+    async function checkProtectedDiscovery() {
+      const discovery = page.waitForResponse(isDiscoveryStatus);
       await page.getByRole('button', { name: 'Check status', exact: true }).click();
-      expect(await page.getByText('A scoped validation connection is required.', { exact: false }).count()).toBe(1);
-    }, { timeout: 10_000 });
+      const response = await discovery;
+      expect(response.status()).toBe(200);
+      const status: unknown = await response.json();
+      const expected = { state: 'needs_input', reason: 'connection_required' };
+      expect(status).toMatchObject(expected);
+    }
+    await vi.waitFor(checkProtectedDiscovery, { timeout: 10_000 });
+    // Wait for Angular to apply the response before checking the message on screen.
+    await page.getByText('A scoped validation connection is required.', { exact: false }).waitFor();
     expect(await page.getByRole('region', { name: 'Tool inventory' }).count()).toBe(0);
     await page.getByRole('link', { name: 'Back to integrations' }).click();
     await page.locator('.register-row').first().waitFor();
