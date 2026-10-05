@@ -124,7 +124,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 
 | Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2026-10-05 | Pending (#89) | P4-7 backend first half | Shared creation, replay, private requester threads, payer and swapped-token refusals; remaining credential-profile and fresh-install work explicit | PARTIAL | Lint/typecheck/catalogue PASS; requested suites PARTIAL, affected reruns PASS; four root runs FAIL, latest 1,625 passed / 1 failed / 15 skipped (approved gateway call returned 403); approvals rerun PASS (26 passed, 1 skipped); personal profiles and fresh-install checks NOT RUN; draft, not ready to land | [Backend receipt](p4-7-backend-evidence.md) |
+| 2026-10-05 | Pending (#89) | P4-7 backend first half | Shared creation, private requester threads, fixed payer, long personal chats and per-turn refusals; credential profiles and fresh installation remain pending | PARTIAL | Lint/typecheck/catalogue PASS; requested suites PASS in both root runs; final root FAIL (1,747 passed / 2 failed / 15 skipped): Chromium polling moved to draft #191, and live-view removal returned 4503 instead of 4003; removal case PASS alone on main and this branch; 71 compatibility tests PASS; live profiles and fresh-install checks NOT RUN; draft, not ready to land | [Backend receipt](p4-7-backend-evidence.md) |
 
 ## Still NOT RUN
 
