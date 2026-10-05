@@ -1,7 +1,7 @@
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
-import { payingGroupAuthority, PayingGroupRefused } from './paying-group.ts';
+import { payingGroupAuthority, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from './lossless-json.ts';
@@ -87,7 +87,8 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
   if (data(assistant.event)['kind'] === 'team') {
     if (data(created.event)['createdBy'] !== t.requester) throw new Error('Private requester refused');
-    if (data(created.event)['payingGroupId'] !== payingGroupId) {
+    if (data(created.event)['payingGroupId'] !== payingGroupId ||
+        data(assistant.event)['payingGroupId'] !== payingGroupId) {
       throw new RequestRefused('Shared payer binding mismatch');
     }
     fresh.include(`team-${payingGroupId}`);
@@ -206,7 +207,7 @@ export async function startDecision(
       catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
       res.setHeader('x-request-id', requestId);
       res.writeHead(capped ? 402 : 403);
-      res.end(JSON.stringify({ requestId, error: capped || error instanceof RequestRefused || error instanceof PayingGroupRefused ? error.message : 'Request refused or decision service unavailable' }));
+      res.end(JSON.stringify({ requestId, error: capped || error instanceof RequestRefused || error instanceof PayingGroupRefused || error instanceof AuthorityApplying ? error.message : 'Request refused or decision service unavailable' }));
     });
   });
   server.listen(port, '127.0.0.1'); await once(server, 'listening');

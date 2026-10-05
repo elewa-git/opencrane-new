@@ -24,7 +24,6 @@
   open conversation. The spending-limit message says an Owner or Admin can help, or the limit
   resets each month. On phones, the message field sits above full-width, borderless attach and
   send buttons. The session panel leaves out placeholder Decisions and People sections.
-- Shared-assistant backend first half: admins create group-owned assistants with explicit grants and one computer; members get private requester-bound sessions and fixed paying-group admission. Personal credential profiles, screens and fresh-install qualification remain pending (#89).
 - Admins can create a group assistant with selected grants, a fixed paying group and one computer. Members get their own chat transcripts and threads. Screens, personal credentials and fresh-install checks remain pending (#89).
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
@@ -36,7 +35,15 @@
 ### Fixed or improved
 
 - Chat lists handle 60 sessions, and transcript reads and live sockets keep working
-  while turns start and end. Access changes still stop writes and new turns.
+  while turns start and end. Team writes and new team turns check access after
+  reading history with its own ten-second budget. Personal posts and turn admission
+  keep their existing behaviour. Idle chat sockets reread access when it changes.
+- A payer or membership refusal fails only that shared turn. The bridge stays open
+  for other members. Stop remains available after payer removal.
+- Team screenshots return 403 before capturing the shared desktop. Assistant lists
+  mark whether the caller can start work. Team spending requires the assistant's payer.
+- Group routes return 503 while access changes are still being applied, so clients
+  can retry shortly.
 - Existing personal sessions start a fresh Codex context on their next turn when
   their old journal entries have no requester id. Their chat history is retained.
 

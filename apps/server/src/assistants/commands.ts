@@ -43,7 +43,8 @@ export async function createSharedAssistant(
   const subjects = [`member-${memberId}`, `team-${input.groupId}`];
   fresh ??= await authorityFence(store, performance.now(), subjects);
   fresh.include(...subjects);
-  await activeMember(store, binding, memberId, true, fresh);
+  const administratorAuthority = { requiredRole: 'admin' as const, fresh };
+  await activeMember(store, binding, memberId, administratorAuthority);
   await requireGroup(store, binding.silo, input.groupId, fresh);
   await requireGroup(store, binding.silo, input.payingGroupId, fresh);
   const rows = await history(store, subject, binding.silo, fresh.deadline);

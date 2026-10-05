@@ -19,15 +19,10 @@ function needsReceipt(row: StoredEvent) {
 }
 async function readMembership(store: EventStore, silo: string, requesterId: string,
   groupId: string, deadline: number) {
-  try {
-    const [groupRows, memberRows] = await Promise.all([
-      history(store, `team-${groupId}`, silo, deadline),
-      history(store, `member-${requesterId}`, silo, deadline),
-    ]);
-    return { groupRows, memberRows };
-  } catch {
-    throw new PayingGroupRefused('Paying group unavailable or spending permission refused');
-  }
+  const groupRead = history(store, `team-${groupId}`, silo, deadline);
+  const memberRead = history(store, `member-${requesterId}`, silo, deadline);
+  const [groupRows, memberRows] = await Promise.all([groupRead, memberRead]);
+  return { groupRows, memberRows };
 }
 function requireMembership(groupRows: StoredEvent[], memberRows: StoredEvent[],
   requesterId: string, groupId: string) {
@@ -63,6 +58,9 @@ async function requireApplied(binding: Binding, silo: string, requesterId: strin
   }
   const memberPermission = await auth.check(requesterId, 'member');
   const groupPermission = await auth.team(requesterId, groupId);
+  if (memberPermission.status === 'unavailable' || groupPermission.status === 'unavailable') {
+    throw new Error('IAM unavailable');
+  }
   if (!memberPermission.allowed || !groupPermission.allowed) {
     throw new PayingGroupRefused('Paying group unavailable or spending permission refused');
   }

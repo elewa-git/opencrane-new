@@ -175,7 +175,14 @@ it('binds personal paying group at admission, keeps it on retries and refuses sh
     const keys = conversationKeys(directory);
     for (const kind of ['personal', 'team'] as const) {
       const subject = `assistant-${kind}`;
-      await nats.store.append({ expectedSequence: 0, event: envelope('test', subject, 'assistant.created', { assistantId: kind, ownerId: kind === 'personal' ? 'alice' : 'sales', kind }) });
+      const assistant: { assistantId: string; ownerId: string; kind: string;
+        payingGroupId?: string } = { assistantId: kind, ownerId: 'alice', kind };
+      if (kind === 'team') {
+        assistant.ownerId = 'sales';
+        assistant.payingGroupId = 'sales';
+      }
+      const created = envelope('test', subject, 'assistant.created', assistant);
+      await nats.store.append({ expectedSequence: 0, event: created });
       await nats.store.append({ expectedSequence: 0, event: envelope('test', `computer-${kind}`, 'computer.ready', { assistantId: kind, computerId: kind, generation: 1 }) });
       keys.provision('test', kind);
       await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: `create-${kind}`, conversationId: kind, assistantId: kind });

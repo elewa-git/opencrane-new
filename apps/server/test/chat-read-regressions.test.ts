@@ -1,9 +1,11 @@
+import { turnCommand } from '../src/chat/turns.ts';
+import { BudgetActor } from '@opencrane/models';
 import { WebSocket } from 'ws';
 import { once } from 'node:events';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
-import { afterAll, beforeAll, expect, it } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { encodeSession } from '@opencrane/auth';
@@ -80,6 +82,15 @@ async function initialise() {
   await append('assistant-personal', 'assistant.created', {
     assistantId: 'personal', ownerId: 'alice', kind: 'personal',
   });
+  await append('computer-personal', 'computer.claimed', {
+    assistantId: 'personal', computerId: 'personal-computer', generation: 1,
+    tokenId: 'token:test',
+  });
+  await append('computer-personal', 'computer.ready', {
+    assistantId: 'personal', computerId: 'personal-computer', generation: 1, podUid: 'pod',
+  });
+  const budget = new BudgetActor(nats.store, 'test');
+  await budget.start(2000, 20000, 'personal-default');
   await runner.run(members);
   chat = { silo: 'test', store: nats.store, db, binding,
     feed: { memberId }, keys: conversationKeys(directory) };
@@ -186,12 +197,24 @@ async function streamsDuringTurnChanges() {
   }
   socket.on('message', collect);
   let reporting: Promise<void> | undefined;
+  const reads = vi.spyOn(nats.store, 'readStream');
   try {
     await once(socket, 'open');
     const subscription = { type: 'subscribe', topic: 'conversation',
       conversationId: 'personal-1', since: 0 };
     socket.send(JSON.stringify(subscription));
     await until(receivedReady);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    reads.mockClear();
+    await delay(500);
+    expect(reads.mock.calls).toHaveLength(0);
+    await append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'member', changedBy: 'owner',
+    });
+    function checkedChangedMembership() {
+      return reads.mock.calls.length > 0;
+    }
+    await until(checkedChangedMembership);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     reporting = reportTurns();
     for (let index = 0; index < 4; index++) {
@@ -202,6 +225,7 @@ async function streamsDuringTurnChanges() {
     expect(socket.readyState).toBe(WebSocket.OPEN);
     expect(messages.some(isCompletion)).toBe(true);
   } finally {
+    reads.mockRestore();
     stopped = true;
     await reporting;
     socket.terminate();
@@ -210,3 +234,73 @@ async function streamsDuringTurnChanges() {
   }
 }
 it('keeps a live transcript socket open while turns start and end', streamsDuringTurnChanges);
+
+// Reuse the personal-history probe with assertions on admission, posting and Stop.
+async function usesLongPersonalConversation() {
+  if (!chat) throw new Error('Missing chat fixture');
+  const posted = await request('POST', '/api/conversations/personal-2/messages',
+    { id: 'long-message', text: 'A long answer' }, 'alice');
+  expect(posted.statusCode, posted.body).toBe(200);
+  const events: ReturnType<typeof envelope>[] = [];
+  for (let index = 0; index < 1500; index++) {
+    const data = { conversationId: 'personal-2', turnId: 'long-message', messageId: 'answer',
+      contentType: 'text', ...chat.keys.encrypt('test', 'personal-2', `Part ${index}`) };
+    const record = envelope('test', 'conversation-personal-2', 'agent.message_delta',
+      data, `long-delta-${index}`);
+    record.source = 'computer-bridge';
+    record.principal = { kind: 'agent', id: 'personal' };
+    events.push(record);
+  }
+  for (let offset = 0; offset < events.length; offset += 100) {
+    const batch = events.slice(offset, offset + 100);
+    await nats.seed(batch);
+  }
+  const context = { silo: 'test', assistantId: 'personal', computerId: 'personal-computer' };
+  const input = { conversationId: 'personal-2', turnId: 'long-message',
+    threadId: 'long-thread', status: 'started' as const };
+  const admitted = await turnCommand(nats.store, context, input);
+  expect(admitted?.turnId).toBe('long-message');
+  const followUp = await request('POST', '/api/conversations/personal-2/messages',
+    { id: 'long-follow-up', text: 'Another question' }, 'alice');
+  expect(followUp.statusCode, followUp.body).toBe(200);
+  const stopped = await request('POST', '/api/conversations/personal-2/messages',
+    { id: 'long-stop', stopTurnId: 'long-message' }, 'alice');
+  expect(stopped.statusCode, stopped.body).toBe(200);
+}
+it('admits, posts and stops a personal conversation with 1500 events',
+  usesLongPersonalConversation, 120_000);
+
+// Reuse the follow-up probe to check that messages do not change personal turn access.
+async function admitsWhilePostingFollowUp() {
+  const created = await request('POST', '/api/conversations',
+    { id: 'create-follow-up', conversationId: 'follow-up', assistantId: 'personal' }, 'alice');
+  expect(created.statusCode, created.body).toBe(200);
+  const rows = await history(nats.store, 'conversation-follow-up', 'test');
+  await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
+  const message = await request('POST', '/api/conversations/follow-up/messages',
+    { id: 'initial-message', text: 'Start work' }, 'alice');
+  expect(message.statusCode, message.body).toBe(200);
+  const original = nats.store.readStream.bind(nats.store);
+  let injected = false;
+  async function* readWithFollowUp(subject: string, from?: number, deadline?: number) {
+    if (subject === 'computer-personal' && !injected) {
+      injected = true;
+      const followUp = await request('POST', '/api/conversations/follow-up/messages',
+        { id: 'concurrent-follow-up', text: 'And also this' }, 'alice');
+      expect(followUp.statusCode, followUp.body).toBe(200);
+    }
+    yield* original(subject, from, deadline);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream');
+  reads.mockImplementation(readWithFollowUp);
+  try {
+    const context = { silo: 'test', assistantId: 'personal', computerId: 'personal-computer' };
+    const input = { conversationId: 'follow-up', turnId: 'initial-message',
+      threadId: 'follow-up-thread', status: 'started' as const };
+    const admitted = await turnCommand(nats.store, context, input);
+    expect(admitted?.turnId).toBe('initial-message');
+  } finally {
+    reads.mockRestore();
+  }
+}
+it('admits a personal turn while a follow-up message is posted', admitsWhilePostingFollowUp);

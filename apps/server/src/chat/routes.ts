@@ -1,5 +1,6 @@
 import {
-  creationEvent, privateSessionAuthority, sharedAssistantAuthority,
+  creationEvent, readPrivateSession, writePrivateSession, sharedAssistantAuthority,
+  privateSessionReader,
 } from './private-session.ts';
 import { GroupRefused, readActiveMember } from '../members/groups.ts';
 import { authorityFence, AuthorityApplying, PayingGroupRefused } from '@opencrane/models';
@@ -16,7 +17,6 @@ import { sessionFor } from '../members/routes.ts';
 import { chatCommand, chatInput } from './commands.ts';
 import type { conversationKeys } from './keys.ts';
 
-type WriteAuthority = Awaited<ReturnType<typeof authorityFence>>;
 const conversationParams = z.object({
   conversationId: z.string().regex(/^[\w-]{1,200}$/u).optional(),
 });
@@ -30,10 +30,15 @@ export interface ChatOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
 }
 
-export async function chatRows(options: ChatOptions, memberId: string,
+async function chatRows(options: ChatOptions, memberId: string,
   conversationId: string, since = 0) {
   await readActiveMember(options.store, options.binding, memberId);
-  await privateSessionAuthority(options, memberId, conversationId);
+  await readPrivateSession(options, memberId, conversationId);
+  return chatContent(options, conversationId, since);
+}
+
+// Read content after the caller has checked access to this conversation.
+export async function chatContent(options: ChatOptions, conversationId: string, since = 0) {
   const result = await readConversation(options.db, options.silo, conversationId, since);
   const computers = await options.db.query<{ status: string }>(
     `SELECT c.status FROM computers c JOIN conversation_feed f
@@ -66,16 +71,8 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       return reply.code(403).send({ status: 'refused' });
     }
     try {
-      // Start the write deadline before resolving identity. Slow lookups cannot extend it.
-      let fresh: WriteAuthority | undefined;
-      if (request.method === 'POST') {
-        fresh = await authorityFence(options.store, performance.now());
-      }
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) throw new GroupRefused('Membership required');
-      if (request.method === 'GET') {
-        await readActiveMember(options.store, options.binding, memberId);
-      }
       const auth = memberAuthorisation(options.binding);
       if (!(await auth.check(memberId, 'member')).allowed) {
         throw new GroupRefused('Membership required');
@@ -86,12 +83,10 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         throw new GroupRefused('Conversation refused');
       }
       if (request.method === 'GET') {
+        if (!conversationId) await readActiveMember(options.store, options.binding, memberId);
         return await readChat(request, reply, options, memberId, conversationId);
       }
-      if (!fresh) throw new Error('Write authority unavailable');
-      fresh.include(`member-${memberId}`);
-      if (conversationId) fresh.include(`conversation-${conversationId}`);
-      return await write(request, reply, options, memberId, conversationId, fresh);
+      return await write(request, reply, options, memberId, conversationId);
     } catch (error) {
       return chatRefusal(reply, error);
     }
@@ -108,16 +103,27 @@ async function readChat(request: FastifyRequest, reply: FastifyReply, options: C
   }
   const auth = memberAuthorisation(options.binding);
   const rows = [];
+  const readPrivate = privateSessionReader(options, memberId);
   const conversations = await listConversations(options.db, options.silo);
-  for (const row of conversations) {
-    if (!(await auth.conversation(memberId, row.conversationId, 'read')).allowed) continue;
+  async function readRow(row: typeof conversations[number]) {
+    if (!(await auth.conversation(memberId, row.conversationId, 'read')).allowed) return;
     try {
-      await privateSessionAuthority(options, memberId, row.conversationId);
+      await readPrivate(row.conversationId);
       const details = await summary(options, row.conversationId);
-      rows.push({ ...row, ...details });
+      return { ...row, ...details };
     } catch (error) {
-      // Hide denied rows, but return a retryable error when IAM has not applied our changes.
+      // Hide denied rows, but retry when IAM has not applied the member's changes.
       if (!(error instanceof GroupRefused) && !(error instanceof PayingGroupRefused)) throw error;
+      return;
+    }
+  }
+  // Limit concurrent lookups so large lists do not fill the event store's request queue.
+  for (let offset = 0; offset < conversations.length; offset += 8) {
+    const batch = conversations.slice(offset, offset + 8);
+    const pending = batch.map(readRow);
+    const visible = await Promise.all(pending);
+    for (const row of visible) {
+      if (row) rows.push(row);
     }
   }
   return reply.send({ rows });
@@ -172,20 +178,22 @@ async function summary(options: ChatOptions, conversationId: string) {
 }
 
 async function write(request: FastifyRequest, reply: FastifyReply, options: ChatOptions,
-  memberId: string, conversationId: string | undefined, fresh: WriteAuthority) {
+  memberId: string, conversationId: string | undefined) {
   const body = z.record(z.string(), z.unknown()).parse(request.body);
   if (conversationId) body['conversationId'] = conversationId;
   const input = chatInput.parse(body);
-  if ('assistantId' in input) {
-    if (conversationId) throw new GroupRefused('Conversation already selected');
-    await requireSessionCreation(options, memberId, input, fresh);
-    options.keys.provision(options.silo, input.conversationId);
-  } else {
-    if (!conversationId) return reply.code(400).send({ status: 'invalid_request' });
-    await privateSessionAuthority(options, memberId, conversationId, fresh);
+  async function authorise() {
+    if ('assistantId' in input) {
+      if (conversationId) throw new GroupRefused('Conversation already selected');
+      const fresh = await requireSessionCreation(options, memberId, input);
+      options.keys.provision(options.silo, input.conversationId);
+      return fresh;
+    }
+    if (!conversationId) throw new GroupRefused('Conversation required');
+    return writePrivateSession(options, memberId, conversationId, 'stopTurnId' in input);
   }
   const result = await chatCommand(options.store, options.keys,
-    { silo: options.silo, memberId }, input, fresh);
+    { silo: options.silo, memberId }, input, authorise);
   let statusCode = 409;
   if (result.status === 'appended') statusCode = 200;
   if (result.status === 'unavailable') statusCode = 503;
@@ -193,20 +201,22 @@ async function write(request: FastifyRequest, reply: FastifyReply, options: Chat
 }
 
 async function requireSessionCreation(options: ChatOptions, memberId: string,
-  input: { assistantId: string; payingGroupId?: string | undefined }, fresh: WriteAuthority) {
+  input: { assistantId: string; payingGroupId?: string | undefined }) {
   const auth = memberAuthorisation(options.binding);
   if (!(await auth.actsFor(memberId, input.assistantId)).allowed) {
     throw new GroupRefused('Assistant refused');
   }
-  fresh.include(`assistant-${input.assistantId}`);
   const assistant = await creationEvent(options.store, options.silo,
-    `assistant-${input.assistantId}`, 'assistant.created', fresh.deadline);
+    `assistant-${input.assistantId}`, 'assistant.created');
   const details = assistantDetails.parse(assistant.data);
   if (details.kind !== 'team') return;
   if (!details.payingGroupId || input.payingGroupId !== details.payingGroupId) {
     throw new PayingGroupRefused('Paying group must match the assistant');
   }
+  const fresh = await authorityFence(options.store, performance.now(),
+    [`assistant-${input.assistantId}`, `member-${memberId}`]);
   await sharedAssistantAuthority(options, memberId, input.assistantId, details.payingGroupId, fresh);
+  return fresh;
 }
 
 function chatRefusal(reply: FastifyReply, error: unknown) {

@@ -1,6 +1,7 @@
 import type { EventStore } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { AuthorityApplying, authorityFence } from './authority.ts';
+import { authorityFence } from './authority.ts';
+import { AuthorityApplying } from './paying-group.ts';
 import { currentMembership } from './ownership.ts';
 
 export class MemberAccessRefused extends Error {}

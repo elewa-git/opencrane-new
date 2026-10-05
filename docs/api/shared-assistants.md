@@ -61,7 +61,10 @@ Keep these two grant rules visible in the admin creation review screen:
   revoked. Show this group-wide access before the admin confirms creation.
 
 Rows include `assistantId`, `ownerId`, `kind`, `computerId`, `generation`,
-`status`, `changedAt`, optional `name`/`grants`/`payingGroupId`, and `busy`.
+`status`, `changedAt`, optional `name`/`grants`/`payingGroupId`, `canStartSession`, and `busy`.
+`canStartSession` says whether the caller currently belongs to both groups needed
+to start work. A false value keeps the assistant visible for reading old sessions.
+The admin creation review screen must explain this two-group rule.
 Lifecycle status uses `claiming`, `starting`, `ready`, `suspended`, `lost` or
 `retired`. `busy` means a recorded admitted turn remains open on the current
 computer. Loss, retirement or a replacement claim clears old open turns from that
@@ -91,12 +94,13 @@ Creating a session, posting and admitting a new turn require current membership
 in both the owner group and paying group. Session creation records the creator
 and the assistant's fixed payer. Personal work retains the installation default.
 Historical team assistants without a recorded payer keep readable history, but
-cannot open new sessions. No payer is guessed for them.
+cannot open new sessions, post work or spend through old sessions. No payer is
+guessed for them.
 
 Reading a chat transcript or listing sessions checks the creator, current owner
 group membership and `acts_for` permission at that time. Losing paying-group
-membership stops new spending but does not hide old transcripts. Reads fetch the
-unchanging creation event once. They do not use the two-second write authority
+membership stops new spending but does not hide old transcripts. A session list checks each assistant once per request. A live socket keeps both
+creation events and rereads access only when an access stream changes. They do not use the two-second write authority
 fence, which detects access changes before a write. Messages and turn starts or
 ends cannot invalidate a transcript read or disconnect its live socket.
 
@@ -113,13 +117,20 @@ applied, HTTP reads return 503 and the live transcript socket closes with 1013.
 Retry shortly. A list returns the retryable error rather than silently hiding
 that member's sessions. Explicit removal returns 403 or closes with 1008.
 
-Writes and turn admission still recheck access within one two-second deadline.
+Chat history has its own ten-second read budget. Team writes and new team turn
+admission open a two-second access check after reading that history. They watch
+member, assistant, owner-group and payer streams. Personal posts and turn admission
+keep their existing behaviour and have no new access deadline. Stop checks team
+ownership and access, but skips the payer because stopping does not spend money.
 New team turns require an OpenFGA binding so they cannot skip IAM receipts. Each
 admitted thread belongs to one requester and conversation. The bridge resumes
 only matching requester history. Old journal entries without requester metadata
 start a fresh context on their next turn, including existing personal sessions.
-A rejected admission report stops the whole computer bridge until restart. This
-stops every member's sessions on that computer. Bridge reconnect behaviour during
+A final membership or payer refusal closes only that turn as failed. The bridge
+acknowledges the refusal without a turn token, and the computer drops the waiting
+turn. Other members can continue using the same connection. A lost refusal is
+sent again after reconnect. Invalid reports still stop the whole computer bridge
+until restart. Bridge reconnect behaviour during
 simultaneous admissions is tracked separately in [#164](https://github.com/elewa-git/opencrane-new/issues/164).
 
 Simultaneous sessions use separate short-lived tokens. Gateway checks still

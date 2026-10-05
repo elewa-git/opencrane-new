@@ -136,3 +136,17 @@ async function fencesGroupGrantWithMatchingAssistantId() {
 }
 it('fences a group resource grant even when an assistant grant with the same id follows it',
   fencesGroupGrantWithMatchingAssistantId, 60_000);
+
+async function refusesMissingOrDifferentAssistantPayer() {
+  for (const assistantPayer of [null, 'support']) {
+    const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true, 'manual', assistantPayer);
+    try {
+      expect((await setup.call()).status).toBe(403);
+      expect(setup.received()).toBe(0);
+    } finally {
+      await setup.close();
+    }
+  }
+}
+it('refuses a team model call when its assistant has no payer or a different payer',
+  refusesMissingOrDifferentAssistantPayer, 60_000);

@@ -1237,7 +1237,7 @@ it('refuses suspension during event-backed credential validation',
   refusesSuspensionDuringCredentialRead, 40_000);
 
 async function fencesDistinctPayingGroupAfterAudit() {
-  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true, 'manual', 'finance');
   const originalAppend = setup.nats.store.append.bind(setup.nats.store);
   try {
     await setup.append('team-finance', 'team.created', {

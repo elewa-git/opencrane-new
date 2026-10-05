@@ -1,3 +1,4 @@
+import { AuthorityApplying } from '@opencrane/models';
 import { activeMember, GroupRefused } from '../members/groups.ts';
 import { installWorker } from './install-worker.ts';
 import type { RemoteNetwork } from './remote.ts';
@@ -97,6 +98,9 @@ async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthC
 }
 
 function routeError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  if (error instanceof AuthorityApplying) {
+    return reply.code(503).send({ status: 'unavailable' });
+  }
   if (error instanceof GroupRefused) {
     return reply.code(403).send({ status: 'refused' });
   }

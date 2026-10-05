@@ -178,12 +178,12 @@ export async function natsFixture({ provision = true } = {}) {
     dispatcherConnection,
     env,
     client,
-    /** Publish known-valid fixture envelopes on new subjects, without command retry lookups. */
+    /** Publish known-valid fixture events without command retry lookups. */
     async seed(events: EventEnvelope[]) {
       const js = jetstream(connection);
       await Promise.all(events.map(async event => {
         await js.publish(wireSubject(event.subject), JSON.stringify(event), {
-          msgID: event.id, expect: { streamName: "EVENTS", lastSubjectSequence: 0 },
+          msgID: event.id, expect: { streamName: "EVENTS" },
         });
       }));
     },

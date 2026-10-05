@@ -4,12 +4,14 @@ import { memberAuthorisation } from '@opencrane/authz';
 import { z } from 'zod';
 import { assistantCreatedDataSchema } from '@opencrane/events';
 import { creationEvent, sharedAssistantRead } from '../chat/private-session.ts';
-import { authorityFence, AuthorityApplying, history, PayingGroupRefused } from '@opencrane/models';
+import { authorityFence, AuthorityApplying, history, PayingGroupRefused, groupMembership } from '@opencrane/models';
 import { mapComputerRows, type ComputerDbRow } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
 import { sessionFor } from '../members/routes.ts';
 import { readActiveMember, GroupConflict, GroupRefused } from '../members/groups.ts';
 import { createSharedAssistant } from './commands.ts';
+
+const turnDetails = z.object({ turnId: z.string() });
 
 export function registerAssistantRoutes(
   app: FastifyInstance, config: AuthConfig, options?: ChatOptions,
@@ -91,7 +93,20 @@ async function visibleAssistant(options: ChatOptions, memberId: string,
       throw error;
     }
   }
-  return assistantRow(options, computer, created.data);
+  const details = assistantCreatedDataSchema.parse(created.data);
+  let canStartSession = false;
+  if (details.payingGroupId) {
+    try {
+      for (const groupId of new Set([details.ownerId, details.payingGroupId])) {
+        await groupMembership(options.store, options.silo, memberId, groupId, options.binding);
+      }
+      canStartSession = true;
+    } catch (error) {
+      if (!(error instanceof PayingGroupRefused) && !(error instanceof GroupRefused)) throw error;
+    }
+  }
+  const row = await assistantRow(options, computer, created.data);
+  return { ...row, canStartSession };
 }
 
 async function assistantRow(options: ChatOptions,
@@ -126,7 +141,7 @@ function isBusy(rows: Awaited<ReturnType<typeof history>>) {
       active.clear();
     }
     if (!row.event.type.startsWith('computer.turn_')) continue;
-    const data = z.object({ turnId: z.string() }).parse(row.event.data);
+    const data = turnDetails.parse(row.event.data);
     if (row.event.type === 'computer.turn_started') active.add(data.turnId);
     if (row.event.type === 'computer.turn_closed') active.delete(data.turnId);
   }

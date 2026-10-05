@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
 import { fileUploadedDataSchema, fileRejectedDataSchema } from '@opencrane/events';
 import { sessionFor } from '../members/routes.ts';
+import { FileRefusal } from '../files/refusals.ts';
 import { ownConversation } from '../files/commands.ts';
 import { uploadFile, type FileOptions } from '../files/routes.ts';
 import { viewAccess } from './view-access.ts';
@@ -22,7 +23,7 @@ export function registerScreenshots(app: FastifyInstance, config: AuthConfig, fi
     try {
       const context = await authoriseCapture(config, files, view, request);
       const { fileId, conversationId, memberId, fresh } = context;
-      const previous = (await ownConversation(files.store, files.silo, conversationId, memberId, true)).find(row => row.event.id === `file-upload-${fileId}`);
+      const previous = (await ownConversation(files.store, files.silo, conversationId, memberId, true, true)).find(row => row.event.id === `file-upload-${fileId}`);
       if (previous) {
         const file = (previous.event.type === 'file.uploaded' ? fileUploadedDataSchema : fileRejectedDataSchema).parse(previous.event.data);
         if (!file.screenshot) throw new Error('Id reused');
@@ -111,6 +112,9 @@ async function captureFile(files: FileOptions, view: LiveViewOptions, context: A
 }
 
 function captureFailure(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  if (error instanceof FileRefusal) {
+    return reply.code(error.statusCode).send({ status: 'refused', error: error.message });
+  }
   const reason = error instanceof Error ? error.message : '';
   const access = ['Access changed', 'Desktop access required', 'Conversation refused', 'Wrong silo'].includes(reason);
   request.log.warn({ operation: 'screenshot.capture', reason: access ? 'access_changed' : 'capture_failed' }, 'Screenshot refused');

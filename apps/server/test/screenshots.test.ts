@@ -133,3 +133,60 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
     expect(await services.client.listObjectsV2('files', '', true).toArray()).toEqual([]);
   } finally { await app.close(); await fixture.close(); await services.close(); }
 }, 180_000);
+
+// Reuse the screenshot probe to refuse a shared session before opening its desktop.
+async function refusesTeamScreenshotBeforeCapture() {
+  let captures = 0;
+  function open() {
+    captures++;
+    return desktop();
+  }
+  const fixture = await viewFixture(open);
+  const services = await uploadServices();
+  const { config, nats, binding, feed, db, keys } = fixture;
+  const options = { silo: 'test', store: nats.store, binding, feed, db, keys };
+  const files = { ...options, ...services };
+  const view = { ...options, open };
+  const app = buildServer(config, { files, liveView: view });
+  try {
+    await fixture.append('team-sales', 'team.created', {
+      teamId: 'sales', name: 'Sales', createdBy: 'alice',
+    }, true);
+    await fixture.append('team-sales', 'team.member_added', {
+      teamId: 'sales', memberId: 'alice', addedBy: 'alice',
+    }, true);
+    await fixture.append('assistant-team-sales', 'assistant.created', {
+      assistantId: 'team-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
+    }, true);
+    await fixture.append('computer-team-sales', 'computer.claimed', {
+      assistantId: 'team-sales', computerId: 'team-desktop', generation: 1, tokenId: 'token:test',
+    });
+    await fixture.append('computer-team-sales', 'computer.ready', {
+      assistantId: 'team-sales', computerId: 'team-desktop', generation: 1, podUid: 'pod',
+    });
+    await fixture.append('conversation-team-session', 'conversation.created', {
+      conversationId: 'team-session', assistantId: 'team-sales', createdBy: 'alice',
+      mode: 'agent_session', payingGroupId: 'sales',
+    }, true);
+    await fixture.append(grantStream('shared_desktop', 'team-desktop'), 'grant.given', {
+      resourceType: 'shared_desktop', resourceId: 'team-desktop', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'alice',
+    }, true);
+    const session = { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1,
+      exp: Math.floor(Date.now() / 1000) + 300 };
+    const headers = { origin: new URL(config.redirectUri).origin, 'x-opencrane-view': '1',
+      'idempotency-key': 'team-shot',
+      cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+    const response = await app.inject({ method: 'POST',
+      url: '/api/conversations/team-session/screenshots', headers });
+    expect(response.statusCode, response.body).toBe(403);
+    expect(captures).toBe(0);
+    expect(response.body).toContain('share one workspace');
+  } finally {
+    await app.close();
+    await fixture.close();
+    await services.close();
+  }
+}
+it('refuses a team screenshot before capturing the shared desktop',
+  refusesTeamScreenshotBeforeCapture, 120_000);

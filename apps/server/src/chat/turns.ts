@@ -1,5 +1,6 @@
 import type { Binding } from '@opencrane/authz';
-import { authorityFence, history, payingGroupAuthority } from '@opencrane/models';
+import { authorityFence, history, payingGroupAuthority, PayingGroupRefused, MemberAccessRefused,
+  activeMember } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -11,6 +12,18 @@ const binding = z.object({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
   requesterId: z.string(), task: z.literal('chat_turn'), payingGroupId: z.string().optional(),
 });
+const closedTurnDetails = z.object({ status: z.enum(['completed', 'failed']) });
+const assistantDetails = z.object({
+  kind: z.enum(['personal', 'team']), ownerId: z.string(),
+  payingGroupId: z.string().optional(),
+});
+const sessionDetails = z.object({
+  createdBy: z.string(), payingGroupId: z.string().optional(),
+});
+const budgetDetails = z.object({
+  scope: z.string(), defaultPayingGroupId: z.string().optional(),
+});
+
 type TurnBinding = z.infer<typeof binding>;
 type TurnInput = {
   conversationId: string; turnId: string; threadId?: string | undefined;
@@ -19,25 +32,34 @@ type TurnInput = {
 type TurnContext = {
   silo: string; computerId: string; assistantId: string; binding?: Binding;
 };
+export class TurnAdmissionRejected extends ReportRejected {}
+
 type WriteAuthority = Awaited<ReturnType<typeof authorityFence>>;
 
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
-  const subjects = [`computer-${context.assistantId}`, `assistant-${context.assistantId}`,
-    `conversation-${input.conversationId}`];
-  const fresh = await authorityFence(store, performance.now(), subjects);
-  const rows = await chatHistory(store, context.silo, input.conversationId, fresh.deadline);
+  const rows = await chatHistory(store, context.silo, input.conversationId);
   const requesterId = requestedTurn(rows, context.assistantId, input.turnId);
   const subject = `computer-${context.assistantId}`;
-  const events = await computerHistory(store, subject, context.silo, fresh.deadline);
+  const events = await computerHistory(store, subject, context.silo, performance.now() + 10_000);
   const data = decideTurn(events, rows, input, context.computerId, requesterId);
   if (!data) return;
-  fresh.include(`member-${data.requesterId}`);
+  let fresh: WriteAuthority | undefined;
+  let status = input.status;
+  let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(events, data);
   if (newAdmission(input.status, events, input.turnId)) {
-    data.payingGroupId = await payingGroup(store, context, rows, data.requesterId, fresh);
+    try {
+      const admission = await payingGroup(store, context, rows, data.requesterId);
+      data.payingGroupId = admission.payer;
+      fresh = admission.fresh;
+    } catch (error) {
+      if (!isFinalAdmissionRefusal(error)) throw error;
+      refusal = new TurnAdmissionRejected(error.message, { cause: error });
+      status = 'failed';
+    }
   }
-  const type = input.status === 'started' ? 'computer.turn_started' : 'computer.turn_closed';
+  const type = status === 'started' ? 'computer.turn_started' : 'computer.turn_closed';
   const hash = createHash('sha256');
   hash.update(`${context.computerId}:${input.turnId}:${type}`);
   const id = hash.digest('hex');
@@ -49,17 +71,18 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
     source: 'opencrane-server', principal: { kind: 'system' as const, id: 'turn-lifecycle' },
     time: new Date().toISOString(), data: eventData,
   };
-  if (input.status !== 'started') {
-    eventData.status = input.status;
+  if (status !== 'started') {
+    eventData.status = status;
   }
-  await fresh();
+  await fresh?.();
   const result = await store.append({ expectedSequence: events.at(-1)?.sequence ?? 0, event });
   if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
-  const committed = await computerHistory(store, subject, context.silo, fresh.deadline);
+  const committed = await computerHistory(store, subject, context.silo, performance.now() + 10_000);
   function isSaved(row: StoredEvent) {
     return row.event.id === id;
   }
   verifyBinding(committed.find(isSaved), data);
+  if (refusal) throw refusal;
   if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId) };
   return undefined;
 }
@@ -119,6 +142,13 @@ function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput
   }
   const turns = events.filter(isMatchingTurn);
   const closed = turns.find(isClosedTurn);
+  const started = turns.find(isStartedTurn);
+  const closedStatus = closed && closedTurnDetails.parse(closed.event.data).status;
+  const refusedBeforeStart = closed && !started &&
+    closedStatus === 'failed' && !reportedClosed(rows, input.turnId);
+  if (refusedBeforeStart && input.status === 'started') {
+    throw new TurnAdmissionRejected('Turn admission was refused');
+  }
   const recoveringClosed = input.replay && input.status === 'started' &&
     reportedClosed(rows, input.turnId);
   // Accept a verified duplicate without admitting a new turn after its final report.
@@ -126,7 +156,6 @@ function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput
     if (input.status === 'started' && !input.replay) throw new ReportRejected('Turn is closed');
     return;
   }
-  const started = turns.find(isStartedTurn);
   let data: TurnBinding;
   if (started) {
     data = binding.parse(started.event.data);
@@ -150,33 +179,36 @@ function verifyBinding(saved: StoredEvent | undefined, expected: TurnBinding) {
 }
 
 async function payingGroup(store: EventStore, context: TurnContext,
-  conversation: StoredEvent[], requesterId: string, fresh: WriteAuthority) {
+  conversation: StoredEvent[], requesterId: string) {
   const assistant = await creationEvent(store, context.silo,
-    `assistant-${context.assistantId}`, 'assistant.created', fresh.deadline);
-  const details = z.object({ kind: z.enum(['personal', 'team']), ownerId: z.string(),
-    payingGroupId: z.string().optional() }).parse(assistant.data);
+    `assistant-${context.assistantId}`, 'assistant.created');
+  const details = assistantDetails.parse(assistant.data);
   if (details.kind === 'team') {
     if (!context.binding) throw new ReportRejected('IAM binding required for a new team turn');
     const group = sessionPayer(conversation, requesterId, details.payingGroupId);
-    fresh.include(`team-${group}`, `team-${details.ownerId}`);
+    const subjects = [`member-${requesterId}`, `assistant-${context.assistantId}`,
+      `team-${group}`, `team-${details.ownerId}`];
+    const fresh = await authorityFence(store, performance.now(), subjects);
+    const memberAuthority = { requiredRole: 'member' as const, fresh };
+    await activeMember(store, context.binding, requesterId, memberAuthority);
     for (const groupId of new Set([group, details.ownerId])) {
       const groupAuthority = await payingGroupAuthority(store, context.silo, requesterId,
         groupId, context.binding, fresh.deadline);
       await groupAuthority();
     }
-    return group;
+    return { payer: group, fresh };
   }
-  return personalPayer(store, context.silo, fresh.deadline);
+  const payer = await personalPayer(store, context.silo, performance.now() + 10_000);
+  return { payer, fresh: undefined };
 }
 function sessionPayer(conversation: StoredEvent[], requesterId: string,
   assistantPayer: string | undefined) {
   const creation = conversation.find(isConversationCreated);
-  const created = z.object({ createdBy: z.string(), payingGroupId: z.string().optional() })
-    .parse(creation?.event.data);
+  const created = sessionDetails.parse(creation?.event.data);
   if (created.createdBy !== requesterId) throw new ReportRejected('Private requester mismatch');
   const group = created.payingGroupId;
   if (!group) throw new ReportRejected('Paying group unavailable for shared work');
-  if (assistantPayer && group !== assistantPayer) {
+  if (!assistantPayer || group !== assistantPayer) {
     throw new ReportRejected('Paying group does not match the assistant');
   }
   return group;
@@ -188,8 +220,7 @@ async function personalPayer(store: EventStore, silo: string, deadline: number) 
   const budgets = await history(store, `budget-${silo}`, silo, deadline);
   const ceilings = budgets.filter(isBudgetCeiling);
   for (const row of ceilings.reverse()) {
-    const data = z.object({ scope: z.string(), defaultPayingGroupId: z.string().optional() })
-      .parse(row.event.data);
+    const data = budgetDetails.parse(row.event.data);
     if (data.scope === 'global' && data.defaultPayingGroupId) return data.defaultPayingGroupId;
   }
   throw new ReportRejected('Paying group unavailable; configure the installation default');
@@ -211,4 +242,10 @@ function requireThreadOwner(events: StoredEvent[], input: TurnBinding) {
       throw new ReportRejected('Thread belongs to another requester or conversation');
     }
   }
+}
+
+function isFinalAdmissionRefusal(error: unknown): error is Error {
+  if (error instanceof MemberAccessRefused) return true;
+  return error instanceof PayingGroupRefused &&
+    error.message !== 'Paying group authority changed; try again';
 }

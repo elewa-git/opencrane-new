@@ -6,7 +6,7 @@ The back end for OpenCrane sign-in, conversations and organisation settings. It 
 
 ## Where it fits
 
-This is the back-end layer. `apps/web` sends it requests and live connections. It uses shared code in `libs/`, records changes in NATS (the event log), and reads PostgreSQL tables that `apps/ops` keeps current. It also sends work to `apps/computer`, the private computer for each person.
+This is the back-end layer. `apps/web` sends it requests and live connections. It uses shared code in `libs/`, records changes in NATS (the event log), and reads PostgreSQL tables that `apps/ops` keeps current. It also sends work to `apps/computer`, the computer for each personal or group assistant.
 
 ```mermaid
 flowchart LR
@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads tables| postgres
-  server -->|sends work and files| computer["apps/computer<br/>personal computer"]
+  server -->|sends work and files| computer["apps/computer<br/>assistant computer"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -31,6 +31,8 @@ flowchart LR
   every model request passes through.
 - Lets admins connect a model provider, store its key safely and check that the key works.
 - Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
+- Lets admins create a group assistant with selected tools and a fixed paying group.
+- Keeps each member's group chat private while they share the assistant's computer.
 - Provides the one-time command used to claim a new installation.
 
 ## Processes it handles
@@ -42,8 +44,11 @@ flowchart LR
 3. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
    person can stop the turn.
-4. **An admin adds a tool server.** The server checks the remote address, lists its tools and leaves them blocked until an admin reviews them.
-5. **An assistant asks an AI model for help.** The request goes through agentgateway, the
+4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
+   Each member gets a private chat and thread, while everyone shares one disk and
+   browser profile. A member who loses spending access can still read and stop their work.
+5. **An admin adds a tool server.** The server checks the remote address, lists its tools and leaves them blocked until an admin reviews them.
+6. **An assistant asks an AI model for help.** The request goes through agentgateway, the
    AI gateway. The gateway asks the models process whether the budget allows it, and only
    then sends it on to the model provider.
 

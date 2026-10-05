@@ -1,3 +1,9 @@
+import { createServer } from 'node:http';
+import { generateKeyPairSync } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { tokenIssuer } from '@opencrane/auth';
+import { bridgeChannel } from '../../computer/src/channel.ts';
+import { connectBridge } from '../src/chat/bridge.ts';
 import { WebSocket } from 'ws';
 import { once } from 'node:events';
 import { attachWebSocketServer } from '../src/websocket.ts';
@@ -8,7 +14,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
-import { databases, openfga } from '@opencrane/authz/testing';
+import { databases, openfga, until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope, history, modelGrantHandler } from '@opencrane/models';
 import {
@@ -180,6 +186,7 @@ async function keepsGrantKindsDistinct() {
   expect((await request('POST', '/api/assistants', input)).statusCode).toBe(200);
   const rows = await history(nats.store, 'assistant-team-sales', 'test');
   const db = pgDb(dbs.queue);
+  await auth.handler.handle(rows[0]!.event, db);
   await modelGrantHandler(nats.store).handle(rows[0]!.event, db);
   for await (const row of readEvents(nats.store, 1, await nats.store.head())) {
     if (row.event.type === 'grant.given') await auth.handler.handle(row.event, db);
@@ -403,6 +410,9 @@ async function readsAfterPayerRemoval() {
   expect(created.statusCode).toBe(200);
   const rows = await history(nats.store, 'assistant-team-billing-assistant', 'test');
   await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
+  const claim = lifecycleHandlers(nats.store)[1];
+  await claim.handle(rows[0]!.event, pgDb(dbs.queue));
+  await runner.run(computers);
   const session = { id: 'billing-session', conversationId: 'billing-session',
     assistantId: 'team-billing-assistant', payingGroupId: 'support' };
   expect((await request('POST', '/api/conversations', session, 'alice')).statusCode).toBe(200);
@@ -418,11 +428,164 @@ async function readsAfterPayerRemoval() {
   const list = await request('GET', '/api/conversations', undefined, 'alice');
   expect(list.statusCode).toBe(200);
   expect(list.body).toContain('billing-session');
+  const assistants = await request('GET', '/api/assistants', undefined, 'alice');
+  expect(assistants.statusCode, assistants.body).toBe(200);
+  const selection = assistants.json<{
+    rows: { assistantId: string; canStartSession: boolean }[];
+  }>();
+  function isBillingAssistant(row: typeof selection.rows[number]) {
+    return row.assistantId === 'team-billing-assistant';
+  }
+  expect(selection.rows.find(isBillingAssistant)?.canStartSession).toBe(false);
   const post = { id: 'payer-removed-message', text: 'Cannot charge support' };
   expect((await request('POST', '/api/conversations/billing-session/messages', post,
     'alice')).statusCode).toBe(403);
 }
 it('reads own history after payer removal while refusing new spending', readsAfterPayerRemoval);
+
+// Reuse the payer-removal probe with the real computer channel and a second member.
+async function refusesOnlyTheUnpaidTurn() {
+  if (!chat) throw new Error('Missing chat fixture');
+  await append('team-admission-payer', 'team.created', {
+    teamId: 'admission-payer', name: 'Billing', createdBy: 'owner',
+  });
+  for (const member of ['alice', 'bob']) {
+    await append('team-admission-payer', 'team.member_added', {
+      teamId: 'admission-payer', memberId: member, addedBy: 'owner',
+    });
+  }
+  const assistantId = 'team-admission';
+  const computerId = 'admission-computer';
+  await append(`assistant-${assistantId}`, 'assistant.created', {
+    assistantId, ownerId: 'sales', kind: 'team', payingGroupId: 'admission-payer',
+  });
+  await append(`computer-${assistantId}`, 'computer.claimed', {
+    assistantId, computerId, generation: 1, tokenId: 'token:test',
+  });
+  await append(`computer-${assistantId}`, 'computer.ready', {
+    assistantId, computerId, generation: 1, podUid: 'pod',
+  });
+  for (const member of ['alice', 'bob']) {
+    const conversationId = `admission-${member}`;
+    const input = { id: `create-${conversationId}`, conversationId,
+      assistantId, payingGroupId: 'admission-payer' };
+    expect((await request('POST', '/api/conversations', input, member)).statusCode).toBe(200);
+    const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
+    const message = { id: `message-${conversationId}`, text: 'Start work' };
+    expect((await request('POST', `/api/conversations/${conversationId}/messages`,
+      message, member)).statusCode).toBe(200);
+  }
+  await append('team-admission-payer', 'team.member_removed', {
+    teamId: 'admission-payer', memberId: 'alice', removedBy: 'owner',
+  });
+  const server = createServer();
+  const executedThreads: unknown[] = [];
+  let threadCount = 0;
+  function rpc(method: string, params: Record<string, unknown>) {
+    if (method === 'thread/start') {
+      threadCount++;
+      return Promise.resolve({ thread: { id: `admission-thread-${threadCount}` } });
+    }
+    if (method === 'turn/start') executedThreads.push(params['threadId']);
+    return Promise.resolve({});
+  }
+  async function grant() {}
+  function credential() {
+    return { value: 'test-computer', expiresAt: Date.now() + 120_000 };
+  }
+  const driver = { rpc, grant, credential, journal: `${directory}/admission-reports` };
+  const channel = bridgeChannel(server, driver);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing computer port');
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  const keyPath = `${directory}/admission-key.pem`;
+  await writeFile(keyPath, key.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: keyPath, issuer: 'https://bridge.test/' });
+  const connection = { url: `ws://127.0.0.1:${address.port}/bridge`,
+    computerId, assistantId, bearer: 'test-computer' };
+  const link = await connectBridge(chat, connection, tokens);
+  function send(member: string) {
+    const input = { type: 'turn', id: `message-admission-${member}`,
+      conversationId: `admission-${member}`, requesterId: member, assistantId,
+      text: 'Start work', token: 'preparing', expiresAt: Date.now() + 60_000 };
+    link.socket.send(JSON.stringify(input));
+  }
+  async function aliceFailed() {
+    const rows = await history(nats.store, 'conversation-admission-alice', 'test');
+    function isFailed(row: typeof rows[number]) {
+      return row.event.type === 'agent.turn_failed';
+    }
+    return rows.some(isFailed) || link.socket.readyState !== WebSocket.OPEN;
+  }
+  function bobExecuted() {
+    return executedThreads.length > 0 || link.socket.readyState !== WebSocket.OPEN;
+  }
+  try {
+    send('alice');
+    await until(aliceFailed);
+    expect(link.socket.readyState).toBe(WebSocket.OPEN);
+    expect(link.rejection).toBeUndefined();
+    const stopped = await request('POST', '/api/conversations/admission-alice/messages',
+      { id: 'stop-unpaid', stopTurnId: 'message-admission-alice' }, 'alice');
+    expect(stopped.statusCode, stopped.body).toBe(200);
+    send('bob');
+    await until(bobExecuted);
+    expect(link.socket.readyState).toBe(WebSocket.OPEN);
+    expect(executedThreads).toEqual(['admission-thread-2']);
+    const lifecycle = await history(nats.store, `computer-${assistantId}`, 'test');
+    function failedAlice(row: typeof lifecycle[number]) {
+      const data = z.object({ turnId: z.string().optional(), status: z.string().optional() })
+        .parse(row.event.data);
+      return data.turnId === 'message-admission-alice' && data.status === 'failed';
+    }
+    expect(lifecycle.some(failedAlice)).toBe(true);
+  } finally {
+    link.socket.terminate();
+    await link.settled();
+    await channel.close();
+    server.close();
+  }
+}
+it('refuses an unpaid turn, accepts Stop and admits another member on the same bridge',
+  refusesOnlyTheUnpaidTurn);
+
+// Reuse the list probe to bound the work for many sessions on one assistant.
+async function listsSixtyTeamSessions() {
+  if (!chat) throw new Error('Missing chat fixture');
+  for (let index = 0; index < 60; index++) {
+    const conversationId = `team-list-${index}`;
+    const input = { id: `create-${conversationId}`, conversationId,
+      assistantId: 'team-shared', payingGroupId: 'sales' };
+    const response = await request('POST', '/api/conversations', input, 'alice');
+    expect(response.statusCode, response.body).toBe(200);
+    const rows = await history(nats.store, `conversation-${conversationId}`, 'test');
+    await auth.handler.handle(rows[0]!.event, pgDb(dbs.queue));
+  }
+  await runner.run(conversations);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  try {
+    const started = performance.now();
+    const response = await request('GET', '/api/conversations', undefined, 'alice');
+    const elapsed = performance.now() - started;
+    expect(response.statusCode, response.body).toBe(200);
+    const result = response.json<{ rows: { conversationId: string }[] }>();
+    function isTeamList(row: typeof result.rows[number]) {
+      return row.conversationId.startsWith('team-list-');
+    }
+    expect(result.rows.filter(isTeamList)).toHaveLength(60);
+    expect(elapsed).toBeLessThan(3000);
+    expect(reads.mock.calls.length).toBeLessThan(140);
+  } finally {
+    reads.mockRestore();
+  }
+}
+it('lists 60 private team sessions without repeating each assistant access check',
+  listsSixtyTeamSessions, 120_000);
 
 async function refusesRevokedOwnerGroupBeforeIamCatchesUp() {
   await append('team-support', 'team.member_added', {
@@ -492,9 +655,6 @@ async function keepsOneRequestDeadline() {
     await delay(2100);
   }
   const cases = [
-    { url: '/api/conversations', sub: 'alice', subject: 'conversation-late-session',
-      input: { id: 'late-session', conversationId: 'late-session',
-        assistantId: 'team-shared', payingGroupId: 'sales' } },
     { url: '/api/assistants', sub: 'owner', subject: 'assistant-team-late-assistant',
       input: { ...creation, commandId: 'team-late-assistant', assistantId: 'team-late-assistant' } },
   ];
@@ -521,4 +681,4 @@ async function keepsOneRequestDeadline() {
     reads.mockRestore();
   }
 }
-it('late identity resolution cannot restart the shared authority deadline', keepsOneRequestDeadline);
+it('late identity resolution cannot restart the assistant creation deadline', keepsOneRequestDeadline);
