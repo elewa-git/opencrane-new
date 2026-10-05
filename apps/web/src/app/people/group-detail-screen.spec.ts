@@ -119,10 +119,16 @@ it('shows the review with the grants and private-data notes before sending', asy
   const removeButton = root.querySelector<HTMLButtonElement>(
     'button[aria-label="Remove Alex Kim from Sales team"]');
   if (!removeButton) throw new Error('Expected the local member Remove button');
+  const detailElement = fixture.debugElement.query(By.directive(GroupDetail));
+  const detail = detailElement.injector.get(GroupDetail);
+  const removeRequested = vi.spyOn(detail.removeRequested, 'emit');
+  expect(removeButton.disabled).toBe(false);
   removeButton.click();
   fixture.detectChanges();
+  expect(removeRequested).toHaveBeenCalled();
   await fixture.whenStable();
   fixture.detectChanges();
+  expect(root.querySelector('dialog')?.open).toBe(true);
   expect(root.textContent).toContain('Remove Alex Kim from Sales team?');
   expect(root.textContent).toContain('Alex Kim loses use of model model-a, granted through Sales team.');
   expect(root.textContent).toContain('Alex Kim can no longer select assistant assistant-a.');
@@ -152,7 +158,10 @@ it('sends the strict removal body and waits for both records before removing the
   removeButton.click();
   fixture.detectChanges();
   await fixture.whenStable();
-  fixture.detectChanges();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect([...root.querySelectorAll('button')].some(isConfirmButton), root.textContent).toBe(true);
+  });
   const confirm = [...root.querySelectorAll('button')].find(isConfirmButton);
   if (!confirm) throw new Error('Expected the removal confirmation button');
   confirm.click();
@@ -387,7 +396,10 @@ async function openAndConfirmRemoval(root: HTMLElement, fixture: ComponentFixtur
   removeButton.click();
   fixture.detectChanges();
   await fixture.whenStable();
-  fixture.detectChanges();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect([...root.querySelectorAll('button')].some(isConfirmButton)).toBe(true);
+  });
   const confirm = [...root.querySelectorAll('button')].find(isConfirmButton);
   if (!confirm) throw new Error('Expected the removal confirmation button');
   confirm.click();
