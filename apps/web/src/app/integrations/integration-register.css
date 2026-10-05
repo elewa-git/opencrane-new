@@ -63,7 +63,9 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   height: 32px;
   flex-shrink: 0;
   border-radius: var(--oc-radius-card);
-  background: var(--oc-neutral-soft);
+  background: var(--oc-accent-tint);
+  color: var(--oc-accent-dark);
+  border: 1px solid var(--oc-border-row);
   font-size: 11px;
 }
 .tools a {
@@ -89,6 +91,26 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
 .skeleton-row { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
 .skeleton-copy { flex: 1; min-width: 0; display: grid; gap: 8px; }
 .stale .register-row { background: var(--oc-neutral-soft); }
+.stale .tile { opacity: .6; }
+.notice-glyph {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  fill: none;
+  stroke: var(--oc-warning-text);
+  stroke-width: 1.6;
+}
+.notice-copy { font-size: 13px; }
+.notice-copy strong { color: var(--oc-ink-strong); font-weight: 500; }
+.notice-copy p { margin: 4px 0 0; color: var(--oc-ink-muted); }
+.status { min-width: 0; }
+.column-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
 .loaded { padding: 12px 18px; }
 @media (max-width: 700px) {
   .page-heading, .page-actions { flex-direction: column; width: 100%; }
@@ -96,11 +118,23 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   .tabs button { min-height: 44px; padding-inline: 8px; }
   .register-header { display: none; }
   .register-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
-  .account::before, .tools::before {
-    content: attr(data-label) ': ';
+  .column-label {
+    position: static;
+    width: auto;
+    height: auto;
+    clip-path: none;
     display: inline-block;
     min-width: 70px;
   }
-  .refresh-notice { flex-direction: column; align-items: stretch; }
+  .server .column-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+  }
+  .status { display: flex; }
+  .refresh-notice { display: grid; grid-template-columns: 12px minmax(0, 1fr); }
+  .notice-copy, .refresh-notice > button { grid-column: 2; }
+  .refresh-notice oc-shared-state { grid-column: 1 / -1; }
   .refresh-notice button { min-height: 44px; }
 }

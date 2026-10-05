@@ -11,7 +11,7 @@ import { SignIn } from './sign-in/sign-in';
 import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
-import { organisationPage, organisationPages } from './organisation/pages';
+import { normalisePathname, organisationPage, organisationPageLabel } from './organisation/pages';
 
 @Component({
   selector: 'app-root',
@@ -25,7 +25,7 @@ import { organisationPage, organisationPages } from './organisation/pages';
   host: { '[class.workspace-root]': 'workspacePage' },
 })
 export class App {
-  private readonly pathname = globalThis.location.pathname;
+  private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
@@ -38,11 +38,6 @@ export class App {
     .querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
 
   protected unavailableTitle(): string {
-    for (const page of organisationPages) {
-      if (page.id === this.activePage) {
-        return page.label;
-      }
-    }
-    return 'Page not found';
+    return organisationPageLabel(this.activePage) ?? 'Page not found';
   }
 }

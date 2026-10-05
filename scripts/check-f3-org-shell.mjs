@@ -160,12 +160,32 @@ async function checkNavigation(page, width, motion) {
   }
 }
 
+async function checkRowLabels(register, width) {
+  const row = register.getByRole('listitem');
+  for (const label of ['Server:', 'Account:', 'Tools:', 'Status:']) {
+    assert((await row.textContent()).includes(label), `Register names ${label}`);
+  }
+  if (width === 390) {
+    await row.getByText('Status:', { exact: true }).waitFor({ state: 'visible' });
+  }
+}
+
+async function checkModelStatus(page) {
+  await page.getByText('Models loaded', { exact: true }).waitFor();
+  assert.equal(await page.locator('oc-models time').count(), 0, 'No invented evidence date');
+  const checkStatus = page.getByRole('button', { name: 'Check status', exact: true });
+  assert((await checkStatus.boundingBox()).width < 250, 'Check status fits its label');
+  const spendingLink = page.locator('oc-models').getByRole('link', { name: 'Spending' });
+  assert((await spendingLink.boundingBox()).height >= 44, 'Spending target is at least 44px');
+}
+
 async function checkPages(page, width, motion) {
   await page.goto(`${origin}/org/integrations`);
   await page.locator('.register-row').waitFor();
   const register = page.getByRole('list', { name: 'Integrations', exact: true });
   assert.equal(await register.getByRole('listitem').count(), 1, 'Semantic register rows');
   await page.evaluate(fontsReady);
+  await checkRowLabels(register, width);
   await capture(page, 'integrations', width, motion);
   await checkNavigation(page, width, motion);
   for (const id of ['overview', 'people', 'routines']) {
@@ -181,6 +201,7 @@ async function checkPages(page, width, motion) {
   await page.getByText('pinned-model', { exact: true }).waitFor();
   assert.equal(await page.locator('#monthly-ceiling').count(), 0);
   assert.equal(await page.getByText('retired-model', { exact: true }).count(), 0);
+  await checkModelStatus(page);
   await capture(page, 'models', width, motion);
   await page.goto(`${origin}/org/spending`);
   await page.locator('#monthly-ceiling').waitFor();
@@ -188,17 +209,25 @@ async function checkPages(page, width, motion) {
   assert.equal(await page.getByText('pinned-model', { exact: true }).count(), 0);
   await capture(page, 'spending', width, motion);
   for (const [path, component] of [
-    ['/org', 'oc-integration-register'], ['/org/integrations/new', 'oc-mcp-install'],
+    ['/org', 'oc-integration-register'], ['/org/integrations/', 'oc-integration-register'],
+    ['/org/integrations/new', 'oc-mcp-install'],
     ['/org/integrations/odoo/tools', 'oc-tool-policy'], ['/org/history', 'oc-audit'],
-    ['/history/chat', 'oc-audit'],
+    ['/history/chat', 'oc-audit'], ['/org/states', 'oc-state-specimen'],
   ]) {
     await page.goto(`${origin}${path}`);
     await page.locator(component).waitFor();
     assert.equal(await page.locator(component).count(), 1, 'Deep links keep their screen');
+    if (component === 'oc-state-specimen') {
+      assert.equal(await page.locator('[aria-current=page]').count(), 0);
+    }
     if (component === 'oc-tool-policy') {
       await capture(page, 'integration-tools', width, motion);
     }
   }
+  await page.goto(`${origin}/org/missing/`);
+  await page.getByRole('heading', { name: 'Page not found', exact: true }).waitFor();
+  assert.equal(await page.getByText('Not available yet', { exact: true }).count(), 0);
+  assert.equal(await page.locator('[aria-current=page]').count(), 0);
 }
 
 await mkdir(output, { recursive: true });

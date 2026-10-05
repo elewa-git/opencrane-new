@@ -22,6 +22,9 @@
       <oc-spending />
     } @else if (activePage === 'history') {
       <oc-audit />
+    } @else if (!activePage) {
+      <h1>Page not found</h1>
+      <p>This address does not match an organisation page.</p>
     } @else {
       <h1>{{ unavailableTitle() }}</h1>
       <oc-shared-state kind="not_configured" message="Not available yet"

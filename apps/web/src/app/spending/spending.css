@@ -8,7 +8,6 @@ article, fieldset {
   padding: 16px;
   margin: 16px 0;
   background: white;
-
 }
 fieldset { display: grid; gap: 8px; } legend { font-weight: 600; }
 input, select, button {
@@ -19,21 +18,17 @@ input, select, button {
   border: 1px solid var(--oc-border-input);
   border-radius: 6px;
   font: inherit;
-
 }
 label {
   margin-top: 8px;
-
 }
 button {
   background: var(--oc-accent);
   color: var(--oc-ink-strong);
   cursor: pointer;
-
 }
 button:disabled, fieldset:disabled {
   opacity: .65;
-
 }
 :focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
 @media (max-width: 600px) { input, select, button { width: 100%; } }

@@ -29,6 +29,8 @@ export class IntegrationRegister implements OnInit, OnDestroy {
   protected readonly reviews = computed(this.reviewRows.bind(this));
   protected readonly visibleRows = computed(this.filteredRows.bind(this));
 
+  private readonly request = new AbortController();
+
   protected filterCount(tab: Tab): number {
     if (tab === 'attention') {
       return this.attention().length;
@@ -57,8 +59,6 @@ export class IntegrationRegister implements OnInit, OnDestroy {
     return this.rows();
   }
 
-  private readonly request = new AbortController();
-
   ngOnInit(): void {
     void this.load();
   }
@@ -79,7 +79,7 @@ export class IntegrationRegister implements OnInit, OnDestroy {
     void this.load();
   }
   protected tabKeydown(event: KeyboardEvent): void {
-    const tabs: Tab[] = ['all', 'attention', 'review'];
+    const tabs = this.tabs.map(tabId);
     const current = tabs.indexOf(this.selectedTab());
     let next = -1;
     if (event.key === 'Home') {
@@ -181,4 +181,8 @@ function needsAttention(row: IntegrationRow): boolean {
 function needsReview(row: IntegrationRow): boolean {
   const detail = row.status.detail.toLowerCase();
   return row.status.kind === 'needs_input' && detail.includes('pending review');
+}
+
+function tabId(tab: { id: Tab }): Tab {
+  return tab.id;
 }

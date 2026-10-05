@@ -34,7 +34,7 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const viewer = page.getByRole('dialog', { name: 'Computer view', exact: true });
   const open = async () => { await entry.focus(); await page.keyboard.press('Enter'); };
   await open();
-  await viewer.getByText('Not available', { exact: true }).waitFor();
+  await viewer.getByText('Unavailable', { exact: true }).waitFor();
   assert.equal(await viewer.locator('canvas').count(), 0, 'A participant without a desktop grant receives no pixels');
   await page.keyboard.press('Escape');
   assert(await entry.evaluate(node => node === document.activeElement), 'Escape restores the panel entry');

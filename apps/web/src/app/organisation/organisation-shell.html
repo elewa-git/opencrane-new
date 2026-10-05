@@ -14,20 +14,13 @@
     </div>
     <nav aria-label="Organisation settings">
       @for (page of pages; track page.id) {
-        @if (visible(page.id)) {
-          <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
-            {{ page.label }}
-            @if (readOnly(page.id)) { <small>Read-only</small> }
-            @if (page.id === 'overview' && attentionCount() !== undefined) {
-              <span class="count">{{ attentionCount() }}</span>
-            }
-          </a>
-        }
+        <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
+          {{ page.label }}
+        </a>
       }
     </nav>
     <div class="sidebar-footer">
       <a class="back" href="/workspace">‹ Back to workspace</a>
-      @if (viewer()) { <div class="viewer">{{ viewer() }}</div> }
     </div>
   </aside>
   <header class="mobile-bar">
@@ -44,16 +37,9 @@
     <strong>{{ organisationName() }}</strong>
   </div>
   @for (page of pages; track page.id) {
-    @if (visible(page.id)) {
-      <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
-        {{ page.label }}
-        @if (readOnly(page.id)) { <small>Read-only</small> }
-        @if (page.id === 'overview' && attentionCount() !== undefined) {
-          <span class="count">{{ attentionCount() }}</span>
-        }
-      </a>
-    }
+    <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
+      {{ page.label }}
+    </a>
   }
   <a class="back" href="/workspace">‹ Back to workspace</a>
-  @if (viewer()) { <div class="viewer">{{ viewer() }}</div> }
 </oc-navigation-menu>

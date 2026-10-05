@@ -97,6 +97,7 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).querySelector('.refresh-notice')?.textContent).toContain('Showing what we loaded at 09:40'));
     const notice = root(fixture).querySelector('.refresh-notice');
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
+    expect(notice?.querySelector('.notice-glyph')).not.toBeNull();
     expect(notice?.parentElement?.getAttribute('role')).toBe('status');
     expect(notice?.textContent).toContain('Showing what we loaded at 09:40');
     expect(button(root(fixture), 'Refresh list')).toBeTruthy();
@@ -170,7 +171,13 @@ describe('MCP register', () => {
     globalThis.history.replaceState({}, '', pathname);
     const fixture = create();
     const element = root(fixture);
-    expect(element.textContent).toContain('Not available yet');
+    if (pathname === '/org/missing') {
+      expect(element.textContent).toContain('Page not found');
+      expect(element.textContent).not.toContain('Not available yet');
+      expect(element.textContent).not.toContain('not been built yet');
+    } else {
+      expect(element.textContent).toContain('Not available yet');
+    }
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(7);
     expect(element.querySelector('a[href="/workspace"]')).not.toBeNull();
     expect(element.textContent).not.toContain('Skills & workflows');

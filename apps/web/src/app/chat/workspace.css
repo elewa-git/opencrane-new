@@ -6,7 +6,6 @@ button,a,summary { -webkit-tap-highlight-color: transparent; }
 button:focus-visible,a:focus-visible,summary:focus-visible,section:focus-visible {
   outline: 2px solid var(--oc-focus-ring);
   outline-offset: 2px;
-
 }
 button:active { transform: translateY(1px); transition: transform 90ms var(--oc-ease-standard); }
 .rail { display: flex; flex-direction: column; background: #eef1f2; border-right: 1px solid #d9dfe0; min-height: 0; }

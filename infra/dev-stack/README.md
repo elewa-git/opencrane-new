@@ -375,8 +375,8 @@ The receipt is [chat UI evidence](../../docs/process/chat-ui-evidence.md).
 
 Secondary journeys also prove monthly budgets through the real owner and member
 sessions. At 1280px and 390px, the owner saves paying-group and assistant ceilings
-in Models & budgets; each zero-cent ceiling refuses a stub chat call with an
-explanation retained after reload and no reservation. Repeated default-group
+in Spending (`/org/spending`), after **Spending loaded**; each zero-cent ceiling
+refuses a stub chat call with an explanation retained after reload and no reservation. Repeated default-group
 migration preserves existing ceilings without another installation event.
 Screenshots for fresh and repeat runs go to `docs/process/p3-13-live/`. The journey
 restores usable group and assistant ceilings before the next plain startup.
@@ -415,7 +415,7 @@ paying group. The monthly-budget journey above owns the test ceiling changes.
 
 The chat journey opens **Watch your computer** from the real member's conversation
 at 1280px and through the session overlay at 390px. Without a shared-desktop grant
-it shows **Not available**; a dev-only grant event then allows viewing. The viewer
+it shows **Unavailable**; a dev-only grant event then allows viewing. The viewer
 decodes the deployed computer's 800×600 framebuffer through the selected stack origin, the
 generated Angular proxy and the server's `computer-lifecycle` service account.
 A known window is fixture activity to make pixels recognisable; a real Codex turn

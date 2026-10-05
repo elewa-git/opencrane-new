@@ -11,8 +11,9 @@ export const organisationPages = [
 export type OrganisationPage = typeof organisationPages[number]['id'];
 
 export function organisationPage(pathname: string): OrganisationPage | undefined {
+  pathname = normalisePathname(pathname);
   // Keep /org on a supported page until the overview has real task reads.
-  if (pathname === '/org' || pathname === '/org/' || pathname === '/org/states') {
+  if (pathname === '/org') {
     return 'integrations';
   }
   for (const page of organisationPages) {
@@ -25,6 +26,19 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
   }
   if (/^\/org\/integrations\/[\w-]+\/tools$/u.test(pathname)) {
     return 'integrations';
+  }
+  return undefined;
+}
+
+export function normalisePathname(pathname: string): string {
+  return pathname.replace(/\/+$/u, '') || '/';
+}
+
+export function organisationPageLabel(pageId: OrganisationPage | undefined): string | undefined {
+  for (const page of organisationPages) {
+    if (page.id === pageId) {
+      return page.label;
+    }
   }
   return undefined;
 }

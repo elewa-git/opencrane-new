@@ -246,10 +246,36 @@ async function checkRegister(page, width, motion) {
   const noticeText = await page.locator('.refresh-notice').innerText();
   assert(noticeText.includes('09:40 UTC'));
   assert.equal(await page.locator('.refresh-notice button').count(), 1);
+  assert.equal(await page.locator('.notice-glyph').count(), 1, 'Stale warning has a glyph');
+  const appearance = await page.locator('.register-row').first().evaluate(staleAppearance);
+  assert.notEqual(appearance.tileBackground, appearance.rowBackground, 'Tile stands out');
+  assert.equal(appearance.tileOpacity, '0.6');
+  assert.equal(appearance.glyphOpacity, '0.6');
+  assert.deepEqual(await page.locator('.notice-copy strong').evaluate(noticeTypography),
+    ['13px', '500']);
   assert(await refresh.evaluate(retainsFocus));
   assert.equal(await page.locator('.refresh-notice [aria-live]').count(), 0, 'No nested announcement');
   await capture(page, 'integrations-stale', width, motion);
   await page.unroute('**/api/org/integrations', integrations);
+}
+
+function staleAppearance(node) {
+  const tile = node.querySelector('.tile');
+  const glyph = node.querySelector('[data-glyph]');
+  const rowStyle = globalThis.getComputedStyle(node);
+  const tileStyle = globalThis.getComputedStyle(tile);
+  const glyphStyle = globalThis.getComputedStyle(glyph);
+  return {
+    rowBackground: rowStyle.backgroundColor,
+    tileBackground: tileStyle.backgroundColor,
+    tileOpacity: tileStyle.opacity,
+    glyphOpacity: glyphStyle.opacity,
+  };
+}
+
+function noticeTypography(node) {
+  const style = globalThis.getComputedStyle(node);
+  return [style.fontSize, style.fontWeight];
 }
 
 function nodeConnected(node) {

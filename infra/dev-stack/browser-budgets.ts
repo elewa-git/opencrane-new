@@ -35,8 +35,8 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     for (const scope of ['paying_group', 'assistant'] as const) assert.equal(starting.ceilings.find(row => row.scope === scope && row.scopeId === (scope === 'assistant' ? assistantId : groupId))?.ceilingCents, 20000, 'Plain startup preserves the owner monthly ceilings');
   }
   const save = async (scope: 'global' | 'paying_group' | 'assistant', scopeId: string, cents: number) => {
-    await owner.goto(`${origin}/org/models`);
-    await owner.getByText('✓ Budgets loaded', { exact: true }).waitFor();
+    await owner.goto(`${origin}/org/spending`);
+    await owner.getByText('Spending loaded', { exact: true }).waitFor();
     await owner.getByLabel('Budget scope', { exact: true }).selectOption(scope);
     if (scope === 'global') await owner.getByLabel('Daily safety cap (euro cents)', { exact: true }).fill('5000');
     else await owner.getByLabel(scope === 'assistant' ? 'Assistant id' : 'Paying group id', { exact: true }).fill(scopeId);
@@ -46,7 +46,7 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     const response = await saving;
     assert.equal(response.status(), 200);
     const saved = budgetSummarySchema.parse((await response.json() as { budget: unknown }).budget);
-    await owner.getByText('✓ Budget saved', { exact: true }).waitFor();
+    await owner.getByText('Budget saved', { exact: true }).waitFor();
     const deadline = Date.now() + 90_000;
     let projected = await summary();
     while (projected.sequence < saved.sequence) {

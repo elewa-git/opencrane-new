@@ -23,7 +23,6 @@ export class ModelsScreen implements OnInit, OnDestroy {
   protected readonly models = signal<Model[]>([]);
   protected readonly kind = signal<PresentationState>('checking');
   protected readonly message = signal('Loading models…');
-  protected readonly loadedAt = signal<string | undefined>(undefined);
   private readonly request = new AbortController();
 
   ngOnInit(): void {
@@ -35,7 +34,6 @@ export class ModelsScreen implements OnInit, OnDestroy {
   }
 
   protected async load(): Promise<void> {
-    this.loadedAt.set(undefined);
     this.kind.set('checking');
     this.message.set('Loading models…');
     try {
@@ -59,9 +57,8 @@ export class ModelsScreen implements OnInit, OnDestroy {
       const result = responseSchema.parse(raw);
       const models = result.models.filter(activeModel);
       this.models.set(models);
-      this.kind.set('ready');
-      this.loadedAt.set(new Date().toISOString());
-      this.message.set('Model tariffs and task routing are fixed for this installation.');
+      this.kind.set('confirmed');
+      this.message.set('Models loaded');
     } catch {
       if (this.request.signal.aborted) {
         return;
