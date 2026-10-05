@@ -23,6 +23,10 @@ Review is read-only; isolated tests are allowed. Do not deploy, grant access or 
 5. At changed trust boundaries, check authentication and per-resource authorisation,
    cross-user/silo refusals, approval binding, token expiry and fail-closed decisions.
    Check destination validation, bounded requests, least privilege and log redaction.
+   Check the access-check rule in AGENTS.md: no whole conversation stream read inside
+   the 2-second fence, no conversation stream in a read fence, and no reader refused or
+   viewer closed by activity that does not change access. Probe a long conversation
+   (about 1,500 events) and a turn starting during a read. A break is blocking.
 6. When gateway or computer exposure changes, trace sockets, previews, desktop, browser
    control and shell routes through the authorised gateway. Check rendered Services,
    ingress and network policies for bypasses; do not assume a private port is unreachable.
