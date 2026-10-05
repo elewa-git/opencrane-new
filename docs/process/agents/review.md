@@ -43,6 +43,15 @@ style in AGENTS.md (no overbuilding, atomic named functions, no chaining, no inl
 logic, no nested ternaries, why-comments at invariants and boundaries) and name the
 expected rewrite. Other naming preferences and optional wording stay non-blocking.
 
+Plain writing is part of readability. Check new and changed comments, and
+each changed README.md, against "Writing for people" in AGENTS.md. A
+README.md also needs the fixed headings of the README standard and a
+diagram of at most 8 boxes that matches the real imports and calls. Raise a
+fix finding for any comment or README.md that holds a ticket id, phase
+number, or decision, handoff or evidence code, that uses shorthand we made
+up or heavy words, or that a newcomer cannot follow. Raise one for a comment
+that does not say why. Give the plain rewrite in the finding.
+
 At most two independent passes per change. The second checks fixes and introduced risk,
 including batched disputed findings. If blockers remain, hold for the owner; do not
 spawn a verifier per sentence or restart the counter. End with the verdict, evidence

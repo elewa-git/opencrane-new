@@ -1,7 +1,7 @@
 {
   // Preserve the supplied design handoff verbatim.
   "ignores": ["docs/design/chat/README.md", "docs/design/handoff-v2/[0-9]*/README.md"],
-  "globs": ["*.md", "docs/**/*.md", "apps/*/README.md", "libs/*/README.md"],
+  "globs": ["*.md", "docs/**/*.md", "apps/*/README*.md", "libs/*/README*.md", "infra/*/README*.md"],
   "config": {
     "default": true,
     "MD013": false,
