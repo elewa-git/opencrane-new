@@ -15,7 +15,7 @@ flowchart LR
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|starts and pauses| kube["Kubernetes<br/>computer manager"]
+  ops -->|checks computers and repairs mode changes| kube["Kubernetes<br/>computer manager"]
   kube -->|runs| computer["apps/computer<br/>personal computer"]
 ```
 
@@ -37,7 +37,9 @@ flowchart LR
    access and claims a computer for their assistant.
 3. **A computer sits idle.** After 15 minutes without activity (by default), the worker
    pauses it. When a new message arrives, the server asks for the computer back and the
-   worker starts it again.
+   worker starts it again. The watcher reads new events as they arrive and only asks
+   Kubernetes to change a computer's mode when needed. It checks quiet computers less
+   often and repairs outside changes to their mode.
 4. **An operator rebuilds a table.** The replay command reads every saved event again, builds a fresh copy of the table and checks it before swapping it in.
 
 ## How to run or test it

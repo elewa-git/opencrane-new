@@ -23,6 +23,7 @@ export interface SandboxState {
 
 /** Minimal kubectl adapter; Pod reads observe identity; the proxy subresource delivers ephemeral grants. */
 export class SandboxClient {
+  private readonly modes = new Map<string, 'Running' | 'Suspended'>();
   private readonly delivered = new Map<string, IssuedToken>();
   readonly kubeconfig: string;
   readonly namespace: string;
@@ -153,7 +154,16 @@ export class SandboxClient {
     this.delivered.set(name, token);
   }
 
+  forgetMode(name: string): void {
+    this.modes.delete(name);
+  }
+
   async mode(name: string, operatingMode: 'Running' | 'Suspended'): Promise<void> {
+    if (this.modes.get(name) === operatingMode) return;
+    // Forget the old mode because a failed reply may still mean the patch was applied.
+    this.modes.delete(name);
     await this.input(['patch', `sandbox/${name}`, '--type=merge', '-p', JSON.stringify({ spec: { operatingMode } })], {});
+    // Remember only successful patches so a failed request is retried.
+    this.modes.set(name, operatingMode);
   }
 }

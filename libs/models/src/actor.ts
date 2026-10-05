@@ -51,6 +51,7 @@ export class BudgetActor {
   private sequence = 0;
   private queue = Promise.resolve();
   private failed = false;
+  private readonly timedOut = new Set<string>();
   private readonly exhausted = new Set<string>();
   readonly store: EventStore;
   readonly silo: string;
@@ -235,7 +236,10 @@ export class BudgetActor {
     const observed = observedPayload(reservation, usage, outcome);
     const type = observed ? 'effect.observed' : 'effect.uncertain';
     const rows = await history(this.store, `effect-${id}`, this.silo);
-    if (redundantTimeout(type, reason, rows)) return;
+    if (redundantTimeout(type, reason, rows)) {
+      this.timedOut.add(id);
+      return;
+    }
     const uncertainty = {
       permitId: id, computerId: reservation.call.computerId,
       reason: knownTariff && !usage ? reason : 'unknown_tariff',
@@ -250,6 +254,7 @@ export class BudgetActor {
       return row.event.type === type;
     }
     if (rows.some(matchesPayload)) {
+      if (type === 'effect.uncertain') this.timedOut.add(id);
       return;
     }
     let suffix = '';
@@ -265,6 +270,8 @@ export class BudgetActor {
     if (result.status !== 'appended') {
       throw new Error('Effect append failed');
     }
+    // Skip later expiry reads only after the uncertainty record has been saved.
+    if (type === 'effect.uncertain') this.timedOut.add(id);
   }
   private async permitted(permitId: string, requestId?: string) {
     if (!requestId) return true; // Reservations before P3-19 did not carry the request id.
@@ -293,7 +300,7 @@ export class BudgetActor {
   }
   async expire() {
     for (const reservation of this.state.reservations) {
-      if (reservation.settledCents === undefined &&
+      if (!this.timedOut.has(reservation.id) && reservation.settledCents === undefined &&
           this.now().getTime() - Date.parse(reservation.time) > SETTLE_TIMEOUT_MS) {
         const expireReservation = this.expireReservation.bind(this, reservation);
         await this.serial(expireReservation);

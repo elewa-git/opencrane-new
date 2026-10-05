@@ -2,6 +2,7 @@ import type { Client } from 'minio/dist/esm/minio.mjs';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { tokenIssuer } from '@opencrane/auth';
+import { createLogger } from '@opencrane/observability';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { watchBridges } from './bridge.ts';
 import type { ChatOptions } from './routes.ts';
@@ -20,6 +21,14 @@ export async function startBridges(options: ChatOptions & { objects?: Client }, 
   });
   const stop = new AbortController();
   const work = watchBridges(options, tokens, new SandboxClient(kubeconfig, namespace), url, stop.signal);
-  void work.catch(() => stop.abort());
+  function watcherFailed(error: unknown) {
+    const logger = createLogger('bridge');
+    const details = { err: error };
+    logger.fatal(details, 'Bridge watcher stopped; restarting the server');
+    stop.abort();
+    child.kill();
+    process.exit(1);
+  }
+  void work.catch(watcherFailed);
   return async () => { stop.abort(); child.kill(); await work; };
 }

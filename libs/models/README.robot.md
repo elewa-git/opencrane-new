@@ -355,3 +355,17 @@ Lists use one finite, batched log replay; details read the exact budget and effe
 subjects. Both reads are bounded to two seconds and fail closed on expiry.
 [The HTTP contract and source evidence](../../docs/process/p3-15-reconcile.md)
 cover the screen binding, refusals and remaining live qualification.
+
+## Idle polling
+
+`ingestUsage` accepts a `UsageCursor` as its third argument. The models process
+keeps that cursor between 100 ms ticks. Its offset counts bytes after successfully
+recorded complete lines. An unfinished line or failed event append is retried.
+The gateway only appends to the file. If its size falls below the saved offset,
+the reader starts at byte zero again. File rotation and rewrites are not supported.
+Unchanged files need no content or event-store reads. A new process reads from the
+start; saved event ids prevent duplicate records.
+
+The budget actor remembers reservations with saved uncertainty. `expire()` skips
+their repeated timeout checks. A restarted actor checks each old reservation once
+and remembers the existing uncertainty. Later usage still records its observation.

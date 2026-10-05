@@ -22,6 +22,19 @@ import { reportPosition } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { history, suspendComputer } from '../../ops/src/lifecycle.ts';
 
+async function bridgeTokens(fixture: { directory: string }) {
+  const keyOptions = {
+    namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  } as const;
+  const key = generateKeyPairSync('ec', keyOptions);
+  const privateKeyPath = `${fixture.directory}/key.pem`;
+  await writeFile(privateKeyPath, key.privateKey, { mode: 0o600 });
+  const options = { privateKeyPath, issuer: 'https://bridge.test/' };
+  return tokenIssuer(options);
+}
+
 async function replayFixture(conversationIds = ['alice', 'bob']) {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/bridge-replay-`);
   await new BudgetActor(nats.store, 'test').start(2000, 20000, 'personal-default');
@@ -114,9 +127,7 @@ it('replays an older Alice/Bob journal in its global computer sequence', async (
 
 it('reconnects after credential expiry and delivers the pending message once', async () => {
   const fixture = await replayFixture(['alice']), dbs = await databases(), stop = new AbortController(), server = createServer();
-  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
-  await writeFile(`${fixture.directory}/key.pem`, key.privateKey, { mode: 0o600 });
-  const tokens = await tokenIssuer({ privateKeyPath: `${fixture.directory}/key.pem`, issuer: 'https://bridge.test/' });
+  const tokens = await bridgeTokens(fixture);
   const loggerLines: string[] = [];
   const logger = createLogger('bridge-expiry', { level: 'info', destination: { write: line => { loggerLines.push(line); } } });
   const db = pgDb(dbs.queue), runner = new ProjectionRunner(db, fixture.store, logger);
@@ -171,9 +182,7 @@ it('reconnects after credential expiry and delivers the pending message once', a
 
 it('surfaces a permanent report rejection and stops automatic reconnect attempts', async () => {
   const fixture = await replayFixture(), dbs = await databases(), stop = new AbortController();
-  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
-  await writeFile(`${fixture.directory}/key.pem`, key.privateKey, { mode: 0o600 });
-  const tokens = await tokenIssuer({ privateKeyPath: `${fixture.directory}/key.pem`, issuer: 'https://bridge.test/' });
+  const tokens = await bridgeTokens(fixture);
   const loggerLines: string[] = [];
   const logger = createLogger('bridge-rejection', { level: 'info', destination: { write: line => { loggerLines.push(line); } } });
   const db = pgDb(dbs.queue), runner = new ProjectionRunner(db, fixture.store, logger);
@@ -208,9 +217,7 @@ it('surfaces a permanent report rejection and stops automatic reconnect attempts
 
 it('wakes another conversation without rereading the archive of an already closed turn', async () => {
   const fixture = await replayFixture(), dbs = await databases(), stop = new AbortController();
-  const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
-  await writeFile(`${fixture.directory}/key.pem`, key.privateKey, { mode: 0o600 });
-  const tokens = await tokenIssuer({ privateKeyPath: `${fixture.directory}/key.pem`, issuer: 'https://bridge.test/' });
+  const tokens = await bridgeTokens(fixture);
   const db = pgDb(dbs.queue), runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-wake'));
   await runner.initialise(conversations); await runner.run(conversations);
   for (const [type, extra] of [
@@ -255,3 +262,211 @@ it('wakes another conversation without rereading the archive of an already close
     release(); stop.abort(); await work; reading.mockRestore(); vi.restoreAllMocks(); await fixture.close(); await dbs.close();
   }
 });
+
+async function deliversNewMessagesAfterIdle() {
+  const fixture = await replayFixture(['alice']);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-idle'));
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const claimed = envelope('test', 'computer-assistant', 'computer.claimed', {
+    computerId: 'computer', assistantId: 'assistant', generation: 1, tokenId: 'token:test',
+  });
+  const claimResult = await fixture.store.append({ event: claimed, expectedSequence: 0 });
+  if (claimResult.status !== 'appended') throw new Error('Computer fixture failed');
+  const ready = envelope('test', 'computer-assistant', 'computer.ready', {
+    computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'pod',
+  });
+  await fixture.store.append({ event: ready, expectedSequence: claimResult.sequence });
+  const terminal = {
+    sequence: 1, previousSequence: 0, conversationId: 'alice', turnId: 'message-alice',
+    assistantId: 'assistant', type: 'agent.turn_failed',
+  };
+  await recordReport(fixture.store, fixture.keys, fixture.context, terminal);
+  await turnCommand(fixture.store, fixture.context, { ...terminal, status: 'failed' });
+  await runner.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials').mockResolvedValue();
+  const mode = vi.spyOn(kube, 'mode').mockResolvedValue();
+  const state = vi.spyOn(kube, 'state');
+  const reads = vi.spyOn(fixture.store, 'readStream');
+  const heads = vi.spyOn(fixture.store, 'head');
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  try {
+    function initialHistoryWasRead() {
+      return reads.mock.calls.length >= 2;
+    }
+    await until(initialHistoryWasRead);
+    const initialPasses = heads.mock.calls.length;
+    function idlePassFinished() {
+      return heads.mock.calls.length >= initialPasses + 2;
+    }
+    await until(idlePassFinished);
+    reads.mockClear();
+    const idlePasses = heads.mock.calls.length;
+    function moreIdlePassesFinished() {
+      return heads.mock.calls.length >= idlePasses + 3;
+    }
+    await until(moreIdlePassesFinished);
+    expect(reads).not.toHaveBeenCalled();
+    expect(credentials).not.toHaveBeenCalled();
+    expect(mode).not.toHaveBeenCalled();
+    expect(state).not.toHaveBeenCalled();
+    const command = { id: 'next-message', conversationId: 'alice', text: 'New work' };
+    await chatCommand(fixture.store, fixture.keys, { silo: 'test', memberId: 'alice' }, command);
+    function receivedNextMessage(message: unknown) {
+      return typeof message === 'object' && message !== null &&
+        Reflect.get(message, 'id') === 'next-message';
+    }
+    function nextMessageArrived() {
+      return fixture.messages.some(receivedNextMessage);
+    }
+    await until(nextMessageArrived, 1000);
+    expect(credentials).toHaveBeenCalledOnce();
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+it('leaves idle chat history unread and picks up a new message on the next poll', deliversNewMessagesAfterIdle);
+
+async function deliversAfterTableCatchesUp() {
+  const fixture = await replayFixture(['alice']);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-table-delay'));
+  await runner.initialise(conversations);
+  const claimed = envelope('test', 'computer-assistant', 'computer.claimed', {
+    computerId: 'computer', assistantId: 'assistant', generation: 1, tokenId: 'token:test',
+  });
+  const result = await fixture.store.append({ event: claimed, expectedSequence: 0 });
+  if (result.status !== 'appended') throw new Error('Computer fixture failed');
+  const ready = envelope('test', 'computer-assistant', 'computer.ready', {
+    computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'pod',
+  });
+  await fixture.store.append({ event: ready, expectedSequence: result.sequence });
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  vi.spyOn(kube, 'credentials').mockResolvedValue();
+  const queries = vi.spyOn(db, 'query');
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  function queriedConversations(call: typeof queries.mock.calls[number]) {
+    return typeof call[0] === 'string' && call[0].includes('FROM conversation_feed');
+  }
+  function twoPollsFinished() {
+    const conversationQueries = queries.mock.calls.filter(queriedConversations);
+    return conversationQueries.length >= 2;
+  }
+  function isPostedTurn(message: unknown) {
+    return typeof message === 'object' && message !== null &&
+      Reflect.get(message, 'id') === 'message-alice';
+  }
+  function messageReceived() {
+    return fixture.messages.some(isPostedTurn);
+  }
+  try {
+    await until(twoPollsFinished);
+    expect(fixture.messages).toEqual([]);
+    await runner.run(conversations);
+    await until(messageReceived, 1000);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+it('delivers a message when the conversation table catches up without another event', deliversAfterTableCatchesUp);
+
+type TemporaryFailure = 'head' | 'credentials' | 'table' | 'history';
+
+async function deliversAfterTemporaryFailure(failureKind: TemporaryFailure) {
+  const fixture = await replayFixture(['alice']);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-retry'));
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const claim = envelope('test', 'computer-assistant', 'computer.claimed', {
+    computerId: 'computer', assistantId: 'assistant', generation: 1, tokenId: 'token:test',
+  });
+  const claimed = await fixture.store.append({ event: claim, expectedSequence: 0 });
+  if (claimed.status !== 'appended') throw new Error('Computer fixture failed');
+  const ready = envelope('test', 'computer-assistant', 'computer.ready', {
+    computerId: 'computer', assistantId: 'assistant', generation: 1, podUid: 'pod',
+  });
+  await fixture.store.append({ event: ready, expectedSequence: claimed.sequence });
+  await runner.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials').mockResolvedValue();
+  if (failureKind === 'head') {
+    vi.spyOn(fixture.store, 'head').mockRejectedValueOnce(new Error('Temporary NATS outage'));
+  } else if (failureKind === 'credentials') {
+    credentials.mockRejectedValueOnce(new Error('Temporary Pod outage'));
+  } else if (failureKind === 'table') {
+    vi.spyOn(db, 'query').mockRejectedValueOnce(new Error('Temporary database outage'));
+  } else {
+    function historyUnavailable(): never {
+      throw new Error('Temporary history read outage');
+    }
+    vi.spyOn(fixture.store, 'readStream').mockImplementationOnce(historyUnavailable);
+  }
+  const logs: string[] = [];
+  function logLine(line: string) {
+    logs.push(line);
+  }
+  const loggerOptions = { level: 'error', destination: { write: logLine } };
+  const logger = createLogger('bridge-retry', loggerOptions);
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal, logger);
+  let failure: unknown;
+  function recordFailure(error: unknown) {
+    failure = error;
+  }
+  void work.catch(recordFailure);
+  function turnReceived(message: unknown) {
+    return typeof message === 'object' && message !== null &&
+      Reflect.get(message, 'id') === 'message-alice';
+  }
+  function messageReceivedOrWatcherFailed() {
+    return failure !== undefined || fixture.messages.some(turnReceived);
+  }
+  try {
+    await until(messageReceivedOrWatcherFailed, 3000);
+    expect(failure).toBeUndefined();
+    expect(fixture.messages.some(turnReceived)).toBe(true);
+    if (failureKind === 'head') {
+      expect(logs.join('')).toContain('Temporary NATS outage');
+    } else if (failureKind === 'table') {
+      expect(logs.join('')).toContain('Temporary database outage');
+    } else if (failureKind === 'credentials') {
+      expect(credentials).toHaveBeenCalledTimes(2);
+    }
+  } finally {
+    stop.abort();
+    await work.catch(recordFailure);
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+const temporaryFailures = ['head', 'credentials', 'table', 'history'] as const;
+it.each(temporaryFailures)(
+  'delivers the next message after one temporary %s failure without another event',
+  deliversAfterTemporaryFailure,
+);

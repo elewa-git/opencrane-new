@@ -50,6 +50,9 @@
   can retry shortly.
 - Existing personal sessions start a fresh Codex context on their next turn when
   their old journal entries have no requester id. Their chat history is retained.
+- Idle installations stop rereading chat and usage history, repeating computer mode patches
+  and recording the same budget timeout. New messages, computer wakes and usage still use
+  the existing polling intervals.
 
 - PDF upload turns no longer hang when the model stream is cut: the models service rides out
   short event-store hiccups, restarts itself after 15 seconds of real outage instead of
