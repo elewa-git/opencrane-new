@@ -49,9 +49,13 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     assert.equal((await owner.request.get(`${origin}${path}`)).status(), 403,
       'The owner role does not grant access to private action history');
     await page.goto(`${origin}/history/${conversation}`);
-    await page.getByText('Decision: allow', { exact: true }).first().waitFor();
     await page.getByLabel('Turn id filter').fill(turn.id);
     await page.getByRole('button', { name: 'Apply filters', exact: true }).press('Enter');
+    try {
+      await page.getByText('Decision: allow', { exact: true }).first().waitFor();
+    } catch (error) {
+      await captureHistoryFailure(page, error);
+    }
     await page.getByText('Observed outcome: Success', { exact: true }).waitFor();
     assert(await page.getByRole('button', { name: 'Apply filters', exact: true }).evaluate(button => button === document.activeElement));
     await capture(page, `${output}/${run}-action-${page.viewportSize()!.width}.png`);
@@ -93,6 +97,17 @@ export async function browserAuditJourney(owner: Page, members: Page[], origin: 
     await page.goto(url);
     await page.getByRole('textbox', { name: 'Message your agent' }).waitFor();
   }
+}
+
+async function captureHistoryFailure(page: Page, error: unknown): Promise<never> {
+  const width = page.viewportSize()?.width ?? 0;
+  const results = page.locator('oc-audit .history > div[aria-busy]');
+  const accessibleResults = await results.ariaSnapshot();
+  await page.screenshot({ path: `${directory}/history-failure.png`, fullPage: true });
+  const message = error instanceof Error ? error.message : String(error);
+  throw new Error(
+    `${message}\nHistory page width: ${width}px\nAccessible history results:\n${accessibleResults}`,
+  );
 }
 
 async function capture(page: Page, path: string) {

@@ -617,7 +617,12 @@ it('never logs private audit filters, tokens or dependency error bodies', async 
   const sink = new Writable({ write(chunk: Buffer, _encoding, callback) { logs += chunk.toString(); callback(); } });
   vi.stubEnv('LOG_LEVEL', 'info');
   const logged = buildServer(config, { logDestination: sink, audit: { silo: 'test', store: nats.store, db: pgDb(dbs.queue), feed, binding: authorisation.binding } });
-  const failed = vi.spyOn(nats.store, 'head').mockRejectedValue(new Error('private-dependency-canary'));
+  async function* failEventRead() {
+    const failure = new Error('private-dependency-canary');
+    const rejectedRead = Promise.reject(failure);
+    yield await rejectedRead;
+  }
+  const failed = vi.spyOn(nats.store, 'readStream').mockImplementation(failEventRead);
   try {
     const reply = await logged.inject({ url: '/api/org/history', headers: { ...headers('oidc-alice'), authorization: 'Bearer private-bearer-canary' } });
     expect(reply.statusCode).toBe(503); expect(reply.body).not.toContain('canary');

@@ -58,36 +58,50 @@ it('shows action and change history states at 1280 and 390px with keyboard filte
     const context = await browser.newContext();
     await context.addCookies([{ name: config.cookieName, value: encodeSession(config, { sub: 'oidc-alice', orgId: 'org-acme', roles: [], authTime: 0, exp: 2_000_000_000 }), url: base }]);
     const page = await context.newPage();
-    for (const [view, path] of [['action', '/history/conversation'], ['change', '/org/history']] as const) {
-      for (const width of [1280, 390]) {
-        await page.setViewportSize({ width, height: 900 });
-        let release!: () => void;
-        const held = new Promise<void>(resolve => { release = resolve; });
-        await page.route('**/api/**/history*', async route => { await held; await route.continue(); });
-        await page.goto(`${base}${path}`);
-        await page.getByText('Loading history…').waitFor();
-        await page.screenshot({ path: `/tmp/p3-19-${view}-loading-${width}.png`, fullPage: true });
-        release(); await page.unrouteAll({ behavior: 'wait' });
-        await page.getByText('Observed outcome: Outcome unknown', { exact: true }).waitFor();
-        expect(await page.locator('body').innerText()).not.toContain('canary');
-        expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
-        const controls = page.locator('oc-audit button, oc-audit input, oc-audit select');
-        for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
-        await page.screenshot({ path: `/tmp/p3-19-${view}-unknown-${width}.png`, fullPage: true });
-        await page.getByLabel('Decision filter').selectOption('deny');
-        await page.getByRole('button', { name: 'Apply filters' }).focus();
-        await page.keyboard.press('Enter');
-        await page.getByText('No history matches', { exact: true }).waitFor();
-        await page.screenshot({ path: `/tmp/p3-19-${view}-empty-${width}.png`, fullPage: true });
-        await page.waitForFunction("document.activeElement?.id === 'apply-audit-filters'");
-        await page.route('**/api/**/history*', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"private-error-canary"}' }));
-        await page.getByRole('button', { name: 'Refresh history' }).press('Enter');
-        await page.getByText('History unavailable', { exact: true }).waitFor();
-        expect(await page.locator('body').innerText()).not.toContain('canary');
-        expect(await page.getByText('No history matches', { exact: true }).count()).toBe(0);
-        await page.screenshot({ path: `/tmp/p3-19-${view}-unavailable-${width}.png`, fullPage: true });
-        await page.unrouteAll();
+    const readStream = nats.store.readStream.bind(nats.store);
+    type StreamArguments = Parameters<typeof nats.store.readStream>;
+    async function* readAuditStream(...streamArguments: StreamArguments) {
+      const [subject, fromSequence, deadline] = streamArguments;
+      if (subject === 'conversation-conversation') {
+        throw new Error('Audit history must not read the conversation event stream');
       }
+      yield* readStream(subject, fromSequence, deadline);
+    }
+    const eventReads = vi.spyOn(nats.store, 'readStream').mockImplementation(readAuditStream);
+    try {
+      for (const [view, path] of [['action', '/history/conversation'], ['change', '/org/history']] as const) {
+        for (const width of [1280, 390]) {
+          await page.setViewportSize({ width, height: 900 });
+          let release!: () => void;
+          const held = new Promise<void>(resolve => { release = resolve; });
+          await page.route('**/api/**/history*', async route => { await held; await route.continue(); });
+          await page.goto(`${base}${path}`);
+          await page.getByText('Loading history…').waitFor();
+          await page.screenshot({ path: `/tmp/p3-19-${view}-loading-${width}.png`, fullPage: true });
+          release(); await page.unrouteAll({ behavior: 'wait' });
+          await page.getByText('Observed outcome: Outcome unknown', { exact: true }).waitFor();
+          expect(await page.locator('body').innerText()).not.toContain('canary');
+          expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
+          const controls = page.locator('oc-audit button, oc-audit input, oc-audit select');
+          for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+          await page.screenshot({ path: `/tmp/p3-19-${view}-unknown-${width}.png`, fullPage: true });
+          await page.getByLabel('Decision filter').selectOption('deny');
+          await page.getByRole('button', { name: 'Apply filters' }).focus();
+          await page.keyboard.press('Enter');
+          await page.getByText('No history matches', { exact: true }).waitFor();
+          await page.screenshot({ path: `/tmp/p3-19-${view}-empty-${width}.png`, fullPage: true });
+          await page.waitForFunction("document.activeElement?.id === 'apply-audit-filters'");
+          await page.route('**/api/**/history*', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"private-error-canary"}' }));
+          await page.getByRole('button', { name: 'Refresh history' }).press('Enter');
+          await page.getByText('History unavailable', { exact: true }).waitFor();
+          expect(await page.locator('body').innerText()).not.toContain('canary');
+          expect(await page.getByText('No history matches', { exact: true }).count()).toBe(0);
+          await page.screenshot({ path: `/tmp/p3-19-${view}-unavailable-${width}.png`, fullPage: true });
+          await page.unrouteAll();
+        }
+      }
+    } finally {
+      eventReads.mockRestore();
     }
     await context.close();
   } finally {
