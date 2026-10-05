@@ -17,6 +17,7 @@ import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers, deleteStoreById } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
+import { wireSubject } from '@opencrane/event-store';
 import {
   members, computers, conversations, pgDb, ProjectionRunner, connectMemberFeed,
 } from '@opencrane/projections';
@@ -25,7 +26,6 @@ import { envelope, history } from '@opencrane/models';
 import { chatListSchema, chatFeedSchema, chatColleaguesSchema, chatChangeSchema } from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
-import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 async function directFixture() {
@@ -133,6 +133,7 @@ it('lets both participants exchange and reload direct messages while keeping own
       url: '/api/conversations/guessed/messages', headers: headers('carol'),
     });
     expect(denied.statusCode).toBe(403);
+    expect(guessed.statusCode).toBe(403);
     expect(guessed.body).toBe(denied.body);
     const rebuilt = await rebuildMembers(fixture.fga.apiUrl, 'test', fixture.nats.reader, {
       verifyAgainst: fixture.options.binding,
@@ -374,9 +375,7 @@ it('refuses invalid audiences, altered commands, mode edits, closed sends and st
 }, 120_000);
 
 function eventType(row: Awaited<ReturnType<typeof history>>[number]) {
-
   return row.event.type;
-
 }
 
 it('pages authoritative history and fails closed when IAM is unavailable', async () => {
@@ -384,23 +383,19 @@ it('pages authoritative history and fails closed when IAM is unavailable', async
   let paused = false;
   try {
     await fixture.create();
-    const author = { silo: 'test', memberId: 'alice' };
-    // Seed the paging fixture through the command seam; HTTP send admission has separate coverage.
-    for (let index = 0; index < 101; index++) {
-      const input = { id: `page-${index}`, conversationId: 'direct', text: `Message ${index}` };
-      const result = await chatCommand(fixture.nats.store, fixture.options.keys, author, input);
-      expect(result.status).toBe('appended');
-    }
+    await seedPagingMessages(fixture);
     await fixture.runner.run(conversations);
     const first = await fixture.app.inject({
       url: '/api/conversations/direct/messages', headers: fixture.headers('bob'),
     });
+    expect(first.statusCode).toBe(200);
     const page = chatFeedSchema.parse(first.json());
     expect(page.rows).toHaveLength(100);
     const cursor = page.rows.at(-1)!.position;
     const second = await fixture.app.inject({
       url: `/api/conversations/direct/messages?since=${cursor}`, headers: fixture.headers('bob'),
     });
+    expect(second.statusCode).toBe(200);
     const remaining = chatFeedSchema.parse(second.json());
     expect(remaining.rows.map(rowId)).toEqual(['page-99', 'page-100']);
     await fixture.fga.pause();
@@ -420,10 +415,24 @@ it('pages authoritative history and fails closed when IAM is unavailable', async
   }
 }, 120_000);
 
+async function seedPagingMessages(fixture: Awaited<ReturnType<typeof directFixture>>) {
+  const previousHead = await fixture.nats.store.head();
+  // Paging tests content reads; command admission and retries have separate coverage.
+  for (let index = 0; index < 101; index++) {
+    const encrypted = fixture.options.keys.encrypt('test', 'direct', `Message ${index}`);
+    const data = {
+      conversationId: 'direct', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted,
+    };
+    const event = envelope('test', 'conversation-direct', 'message.posted', data, `page-${index}`);
+    event.principal = { kind: 'human', id: 'alice' };
+    await fixture.nats.connection.request(wireSubject(event.subject), JSON.stringify(event));
+  }
+  expect(await fixture.nats.store.head()).toBe(previousHead + 101);
+}
+
 function rowId(row: ReturnType<typeof chatFeedSchema.parse>['rows'][number]) {
-
   return row.id;
-
 }
 
 it('keeps human messages out of the bridge, computer, approval and budget paths', async () => {
@@ -569,7 +578,7 @@ function isRefusedMessage(message: ReturnType<typeof chatMessageSchema.parse>) {
   return message.type === 'refused';
 }
 
-it('refuses a list when access to an earlier row ends while a later summary is loading', async () => {
+it('drops a revoked earlier row while retaining the rest of the conversation list', async () => {
   const fixture = await directFixture();
   try {
     for (const conversationId of ['two', 'one']) {
@@ -577,7 +586,7 @@ it('refuses a list when access to an earlier row ends while a later summary is l
       await fixture.append(`conversation-${conversationId}`, 'conversation.created', {
         conversationId, createdBy: 'alice', mode: 'agent_session', assistantId: 'assistant',
       });
-      const encrypted = fixture.options.keys.encrypt('test', conversationId, 'Protected title');
+      const encrypted = fixture.options.keys.encrypt('test', conversationId, `${conversationId} title`);
       const message = {
         conversationId, authorId: 'alice', authorKind: 'human', contentType: 'text', ...encrypted,
       };
@@ -598,9 +607,135 @@ it('refuses a list when access to an earlier row ends while a later summary is l
     }
     fixture.options.db = { query: removeDuringSummary };
     const response = await fixture.app.inject({ url: '/api/conversations', headers: fixture.headers() });
-    expect(response.statusCode).toBe(403);
-    expect(response.body).not.toContain('protected-title');
+    expect(response.statusCode).toBe(200);
+    const list = chatListSchema.parse(response.json());
+    expect(list.rows.map(conversationId)).toEqual(['two']);
+    expect(response.body).not.toContain('one-title');
   } finally {
     await fixture.close();
   }
 }, 120_000);
+
+function conversationId(row: ReturnType<typeof chatListSchema.parse>['rows'][number]) {
+  return row.conversationId;
+}
+
+it('refuses new posts after the other participant leaves but keeps history readable', async () => {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'carol',
+    }, false);
+    const response = await fixture.app.inject({
+      method: 'POST', url: '/api/conversations/direct/messages', headers: fixture.headers(),
+      payload: { id: 'after-removal', text: 'Must not reach a departed recipient' },
+    });
+    expect(response.statusCode).toBe(403);
+    const read = await fixture.app.inject({
+      url: '/api/conversations/direct/messages', headers: fixture.headers(),
+    });
+    expect(read.statusCode).toBe(200);
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    expect(rows.map(eventType)).toEqual(['conversation.created']);
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);
+
+it('keeps a closed direct chat readable', async () => {
+  const fixture = await directFixture();
+  try {
+    await fixture.create();
+    await fixture.append('conversation-direct', 'conversation.closed', {
+      conversationId: 'direct', closedBy: 'alice',
+    }, false);
+    await fixture.runner.run(conversations);
+    const response = await fixture.app.inject({
+      url: '/api/conversations/direct/messages', headers: fixture.headers('bob'),
+    });
+    expect(response.statusCode).toBe(200);
+    const feed = chatFeedSchema.parse(response.json());
+    expect(feed.rows.map(feedEventType)).toEqual(['conversation.created', 'conversation.closed']);
+  } finally {
+    await fixture.close();
+  }
+}, 120_000);
+
+function feedEventType(row: ReturnType<typeof chatFeedSchema.parse>['rows'][number]) {
+  return row.type;
+}
+
+it("refuses an owner who subscribes to another pair's direct chat", async () => {
+  const fixture = await directFixture();
+  const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
+  let socket: WebSocket | undefined;
+  let wss: ReturnType<typeof attachWebSocketServer> | undefined;
+  try {
+    await fixture.create();
+    const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
+    const realtime = { feed: fixture.feed, binding: fixture.options.binding, chat: fixture.options };
+    wss = attachWebSocketServer(fixture.app.server, fixture.app.log, fixture.config, realtime);
+    const connectionOptions = { headers: fixture.headers('carol') };
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connectionOptions);
+    function receive(raw: Buffer) {
+      received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
+    }
+    socket.on('message', receive);
+    await once(socket, 'open');
+    const closed = once(socket, 'close');
+    const subscription = {
+      type: 'subscribe', topic: 'conversation', conversationId: 'direct', since: 0,
+    };
+    socket.send(JSON.stringify(subscription));
+    const closeResult: unknown[] = await closed;
+    expect(closeResult[0]).toBe(1008);
+    expect(received.map(messageType)).toEqual(['refused']);
+  } finally {
+    socket?.terminate();
+    if (wss) {
+      function closeServer(resolve: () => void) {
+        wss!.close(resolve);
+      }
+      await new Promise<void>(closeServer);
+    }
+    await fixture.close();
+  }
+}, 120_000);
+
+function messageType(message: ReturnType<typeof chatMessageSchema.parse>) {
+  return message.type;
+}
+
+it.each([false, true])(
+  'keeps colleague search authorised when a checked colleague leaves (head changed: %s)',
+  colleagueLeavesDuringSearch, 120_000,
+);
+
+async function colleagueLeavesDuringSearch(changedHead: boolean) {
+  const fixture = await directFixture();
+  const originalHead = fixture.options.store.head.bind(fixture.options.store);
+  let removed = false;
+  async function removeAfterColleagueCheck(subject?: string, deadline?: number) {
+    const head = await originalHead(subject, deadline);
+    if (!removed && subject === 'member-bob') {
+      removed = true;
+      await fixture.append('member-bob', 'member.removed', {
+        memberId: 'bob', removedBy: 'carol',
+      }, false);
+      if (changedHead) return originalHead(subject, deadline);
+    }
+    return head;
+  }
+  try {
+    fixture.options.store.head = removeAfterColleagueCheck;
+    const request = { url: '/api/chat/colleagues', headers: fixture.headers() };
+    const response = await fixture.app.inject(request);
+    expect(removed).toBe(true);
+    expect(response.statusCode).toBe(200);
+    expect(chatColleaguesSchema.safeParse(response.json()).success).toBe(true);
+  } finally {
+    fixture.options.store.head = originalHead;
+    await fixture.close();
+  }
+}

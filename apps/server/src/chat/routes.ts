@@ -7,8 +7,7 @@ import { memberAuthorisation } from '@opencrane/authz';
 import {
   listConversations, readConversation,
 } from '@opencrane/projections';
-import { activeMember } from '../members/groups.ts';
-import { chatAccess, recordedChatMode, isChatRefused, ChatRefused, type ChatOptions } from './access.ts';
+import { chatAccess, activeChatMember, recordedChatMode, isChatRefused, ChatRefused, type ChatOptions } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
@@ -16,6 +15,7 @@ import { chatCommand, chatInput, ChatConflict } from './commands.ts';
 export type { ChatOptions } from './access.ts';
 type Fresh = Awaited<ReturnType<typeof chatAccess>>;
 const id = z.string().regex(/^[\w-]{1,200}$/u);
+class InvalidChatRequest extends Error {}
 const parameters = z.object({ conversationId: id.optional(), commandId: id.optional() });
 
 export async function chatRows(options: ChatOptions, conversationId: string,
@@ -68,9 +68,10 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) throw new ChatRefused('Membership required');
       const { conversationId, commandId } = parameters.parse(request.params);
-      const relation = request.method === 'POST' ? 'post' : 'read';
+      const relation: 'post' | 'read' = request.method === 'POST' ? 'post' : 'read';
       const allowApplying = commandId !== undefined;
-      const fresh = await chatAccess(options, memberId, conversationId, relation, Infinity, allowApplying);
+      const accessRequest = { memberId, conversationId, relation, allowApplying };
+      const fresh = await chatAccess(options, accessRequest);
       if (request.method === 'GET') {
         let result;
         if (conversationId && commandId) {
@@ -82,14 +83,13 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
         if ('status' in result && result.status === 'not_found') reply.code(404);
         return reply.send(result);
       }
-      const result = await write(request, options, memberId, fresh, conversationId);
-      let code = 409;
-      if (result.status === 'appended') code = 200;
-      if (result.status === 'unavailable') code = 503;
-      if (result.status === 'appended') return reply.code(code).send(result);
-      return reply.code(code).send({ status: result.status });
+      const result = await write(request, options, memberId, conversationId);
+      const code = appendStatusCode(result);
+      let response: unknown = { status: result.status };
+      if (result.status === 'appended') response = result;
+      return reply.code(code).send(response);
     } catch (error) {
-      return chatRefusal(reply, error);
+      return chatRefusal(request, reply, error);
     }
   }
 }
@@ -108,7 +108,7 @@ async function read(
   conversationId: string | undefined, fresh: Fresh,
 ) {
   if (request.routeOptions.url === '/api/chat/colleagues') {
-    return colleagues(options, memberId, request.query, fresh);
+    return colleagues(options, memberId, request.query);
   }
   if (request.routeOptions.url === '/api/chat') return personalContext(options, memberId);
   if (conversationId) {
@@ -117,22 +117,38 @@ async function read(
     const mode = recordedChatMode(fresh);
     return chatRows(options, conversationId, mode, since);
   }
-  const auth = memberAuthorisation(options.binding);
-  const rows = [];
+  return conversationList(options, memberId, fresh);
+}
+
+async function conversationList(options: ChatOptions, memberId: string, fresh: Fresh) {
+  const pending = [];
   const conversations = await listConversations(options.db, options.silo);
   for (const row of conversations) {
-    const permission = await auth.conversation(memberId, row.conversationId, 'read');
-    if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-    if (!permission.allowed) continue;
-    fresh.include(`conversation-${row.conversationId}`);
-    const access = await chatAccess(
-      options, memberId, row.conversationId, 'read', fresh.deadline);
-    const display = await summary(options, row.conversationId, row.mode);
-    await access();
-    rows.push({ ...row, ...display });
+    try {
+      const request = { memberId, conversationId: row.conversationId, deadline: fresh.deadline };
+      const access = await chatAccess(options, request);
+      const display = await summary(options, row.conversationId, recordedChatMode(access));
+      pending.push({ row: { ...row, ...display }, access });
+    } catch (error) {
+      if (!rowAccessChanged(error)) throw error;
+    }
   }
-  await fresh();
+  const rows = [];
+  // Fence each row after all summaries, so a revoked earlier row cannot leak its title.
+  for (const entry of pending) {
+    try {
+      await entry.access();
+      rows.push(entry.row);
+    } catch (error) {
+      if (!rowAccessChanged(error)) throw error;
+    }
+  }
   return { rows };
+}
+
+function rowAccessChanged(error: unknown) {
+  return isChatRefused(error) ||
+    (error instanceof Error && error.message === 'Authority changed');
 }
 
 async function personalContext(options: ChatOptions, memberId: string) {
@@ -181,34 +197,43 @@ async function summary(options: ChatOptions, conversationId: string, mode: strin
 
 async function write(
   request: FastifyRequest, options: ChatOptions, memberId: string,
-  fresh: Fresh, conversationId?: string,
+  conversationId?: string,
 ) {
   const body = z.record(z.string(), z.unknown()).parse(request.body);
-  if (conversationId && 'conversationId' in body) throw new z.ZodError([]);
+  if (conversationId && 'conversationId' in body) {
+    throw new InvalidChatRequest('Conversation id belongs in the path');
+  }
   let value = body;
   if (conversationId) value = { ...body, conversationId };
   const input = chatInput.parse(value);
-  if ('mode' in input && conversationId) throw new z.ZodError([]);
-  let payerFresh: (() => Promise<void>) | undefined;
-  if ('assistantId' in input) {
-    payerFresh = await assistantCreation(options, memberId, input, fresh);
-  } else if ('colleagueId' in input) {
-    if (input.colleagueId === memberId) throw new z.ZodError([]);
-  } else if (!conversationId) {
-    throw new z.ZodError([]);
+  if ('mode' in input && conversationId) {
+    throw new InvalidChatRequest('Creation belongs on the conversation route');
+  }
+  if ('colleagueId' in input && input.colleagueId === memberId) {
+    throw new InvalidChatRequest('A direct chat needs another person');
+  }
+  if (!('mode' in input) && !conversationId) {
+    throw new InvalidChatRequest('Conversation required');
   }
   if ('mode' in input) options.keys.provision(options.silo, input.conversationId);
   async function checkFresh(operation: 'retry' | 'append') {
-    // Retries expose the original result; only a new chat requires the colleague to remain active.
-    if (operation === 'append' && 'colleagueId' in input) {
-      fresh.include(`member-${input.colleagueId}`);
-      await activeMember(options.store, options.binding, input.colleagueId, false, fresh);
+    // Stream reads use the command's budget. Recheck current access just before its append.
+    const request = { memberId, conversationId, relation: 'post' as const };
+    const fresh = await chatAccess(options, request);
+    if ('assistantId' in input) {
+      const payerFresh = await assistantCreation(options, memberId, input, fresh);
+      await payerFresh?.();
     }
-    await payerFresh?.();
+    let colleagueId = fresh.colleagueId;
+    if ('colleagueId' in input) colleagueId = input.colleagueId;
+    // A retry reports an existing append. New posts need both people still in the silo.
+    if (operation === 'append' && colleagueId) {
+      await activeChatMember(options, colleagueId, fresh);
+    }
     await fresh();
   }
   const context = { silo: options.silo, memberId };
-  return chatCommand(options.store, options.keys, context, input, checkFresh, fresh.deadline);
+  return chatCommand(options.store, options.keys, context, input, checkFresh);
 }
 
 async function assistantCreation(
@@ -233,12 +258,22 @@ async function assistantCreation(
     options.store, options.silo, memberId, input.payingGroupId, options.binding, fresh.deadline);
 }
 
-function chatRefusal(reply: FastifyReply, error: unknown) {
+function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
   if (error instanceof PayingGroupRefused) {
     return reply.code(403).send({ status: 'refused', error: error.message });
   }
   if (isChatRefused(error)) return reply.code(403).send({ status: 'refused' });
-  if (error instanceof z.ZodError) return reply.code(400).send({ status: 'refused' });
+  if (error instanceof z.ZodError || error instanceof InvalidChatRequest) {
+    return reply.code(400).send({ status: 'refused' });
+  }
   if (error instanceof ChatConflict) return reply.code(409).send({ status: 'refused' });
+  const message = error instanceof Error ? error.message : 'Unknown chat error';
+  request.log.error({ message }, 'Chat request unavailable');
   return reply.code(503).send({ status: 'unavailable' });
+}
+
+function appendStatusCode(result: Awaited<ReturnType<typeof chatCommand>>) {
+  if (result.status === 'appended') return 200;
+  if (result.status === 'unavailable') return 503;
+  return 409;
 }

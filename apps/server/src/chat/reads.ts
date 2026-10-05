@@ -12,7 +12,7 @@ const colleagueQuery = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(20),
 });
 
-export async function colleagues(options: ChatOptions, memberId: string, query: unknown, fresh: Fresh) {
+export async function colleagues(options: ChatOptions, memberId: string, query: unknown) {
   const input = colleagueQuery.parse(query);
   const result = await options.db.query<{ member_id: string; display_name: string | null }>(
     `SELECT member_id, display_name FROM members
@@ -21,17 +21,13 @@ export async function colleagues(options: ChatOptions, memberId: string, query: 
       ORDER BY member_id LIMIT $5`,
     [options.silo, memberId, input.after, input.q, input.limit + 1]);
   const page = result.rows.slice(0, input.limit);
-  function memberSubject(row: (typeof page)[number]) {
-    return `member-${row.member_id}`;
-  }
-  const subjects = page.map(memberSubject);
-  fresh.include(...subjects);
   async function candidate(row: (typeof page)[number]) {
     try {
-      await activeMember(options.store, options.binding, row.member_id, false, fresh);
+      await activeMember(options.store, options.binding, row.member_id);
       return { memberId: row.member_id, displayName: row.display_name };
     } catch (error) {
       if (isChatRefused(error)) return undefined;
+      if (error instanceof Error && error.message === 'Authority changed') return undefined;
       throw error;
     }
   }

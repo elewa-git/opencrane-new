@@ -1,9 +1,7 @@
 import { conversationCreatedDataSchema } from '@opencrane/events';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { conversationAccessFence } from '@opencrane/models';
-import { z } from 'zod';
-import { activeMember, GroupRefused } from '../members/groups.ts';
-import { chatHistory } from './commands.ts';
+import { conversationAccessFence, currentMembership } from '@opencrane/models';
+import { GroupRefused } from '../members/groups.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { Query, connectMemberFeed } from '@opencrane/projections';
 import type { conversationKeys } from './keys.ts';
@@ -17,63 +15,76 @@ export interface ChatOptions {
   feed: Pick<Awaited<ReturnType<typeof connectMemberFeed>>, 'memberId'>;
 }
 
-type Rows = Awaited<ReturnType<typeof chatHistory>>;
 export class ChatRefused extends Error {}
+type Fence = Awaited<ReturnType<typeof conversationAccessFence>>;
+interface AccessRequest {
+  memberId: string;
+  conversationId?: string | undefined;
+  relation?: 'read' | 'post';
+  deadline?: number;
+  allowApplying?: boolean;
+  fresh?: Fence;
+}
 
-/** Exact authority streams share one two-second deadline, including the final response fence. */
-export async function chatAccess(
-  options: ChatOptions, memberId: string, conversationId?: string,
-  relation: 'read' | 'post' = 'read', callerDeadline = Infinity, allowApplying = false,
-) {
+/** Only creation decides the fixed audience; message history is a content read. */
+export async function chatAccess(options: ChatOptions, request: AccessRequest) {
+  const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
   const subjects = [`member-${memberId}`];
   if (conversationId) subjects.push(`conversation-${conversationId}`);
-  const fresh = await conversationAccessFence(
-    options.store, performance.now(), subjects, callerDeadline);
-  await activeMember(options.store, options.binding, memberId, false, fresh);
+  const fresh = request.fresh ?? await conversationAccessFence(
+    options.store, performance.now(), subjects, request.deadline);
+  await activeChatMember(options, memberId, fresh);
   let mode: 'agent_session' | 'direct' | undefined;
+  let colleagueId: string | undefined;
   if (conversationId) {
-    const rows = await conversationHistory(options, conversationId, fresh.deadline);
-    const participation = conversationParticipation(rows, memberId);
-    mode = participation.mode;
-    await projectedAccess(
-      options, memberId, conversationId, relation, participation.receipts, allowApplying);
+    const row = await conversationCreation(options, conversationId, fresh.deadline);
+    const created = conversationCreatedDataSchema.parse(row.event.data);
+    mode = created.mode;
+    if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
+      throw new ChatRefused('Conversation refused');
+    }
+    if (created.mode === 'direct') {
+      function isOtherParticipant(participantId: string) {
+        return participantId !== memberId;
+      }
+      colleagueId = created.participantIds.find(isOtherParticipant);
+    }
+    const auth = memberAuthorisation(options.binding);
+    // A status read can precede tuple projection, but still needs the recorded audience.
+    const applying = allowApplying && !await auth.applied(row.event.id);
+    if (applying) {
+      if (mode === 'agent_session' && created.createdBy !== memberId) {
+        throw new ChatRefused('Conversation refused');
+      }
+    } else {
+      const permission = await auth.conversation(memberId, conversationId, relation);
+      if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+      if (!permission.allowed) throw new ChatRefused('Conversation refused');
+    }
   }
   await fresh();
-  const context = { mode };
+  const context = { mode, colleagueId };
   return Object.assign(fresh, context);
 }
 
-async function conversationHistory(options: ChatOptions, conversationId: string, deadline: number) {
-  try {
-    return await chatHistory(options.store, options.silo, conversationId, deadline);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'Conversation silo mismatch') {
-      throw new ChatRefused('Conversation refused');
-    }
-    throw error;
-  }
+/** Owner receipts gate privileged changes, not continued membership in a chat. */
+export async function activeChatMember(options: ChatOptions, memberId: string, fresh: Fence) {
+  const membership = await currentMembership(options.store, options.silo, memberId, fresh);
+  if (!membership.role) throw new ChatRefused('Active silo membership required');
+  const auth = memberAuthorisation(options.binding);
+  const permission = await auth.check(memberId, 'member');
+  if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+  if (!permission.allowed) throw new ChatRefused('Membership unavailable');
 }
 
-function conversationParticipation(rows: Rows, memberId: string) {
-  function isCreated(row: Rows[number]) {
-    return row.event.type === 'conversation.created';
+async function conversationCreation(
+  options: ChatOptions, conversationId: string, deadline: number,
+) {
+  for await (const row of options.store.readStream(`conversation-${conversationId}`, 1, deadline)) {
+    if (row.event.silo !== options.silo) throw new ChatRefused('Conversation refused');
+    if (row.event.type === 'conversation.created') return row;
   }
-  const createdRow = rows.find(isCreated);
-  if (!createdRow) throw new ChatRefused('Conversation refused');
-  const created = conversationCreatedDataSchema.parse(createdRow.event.data);
-  let participant = created.createdBy === memberId;
-  if (created.mode === 'direct') participant = created.participantIds.includes(memberId);
-  const receipts = [createdRow.event.id];
-  for (const row of rows) {
-    if (!['participant.added', 'participant.removed'].includes(row.event.type)) continue;
-    // Direct audiences cannot change after creation, even if malformed events appear.
-    if (created.mode === 'direct') throw new ChatRefused('Direct audience changed');
-    const data = z.object({ participantId: z.string() }).parse(row.event.data);
-    if (data.participantId === memberId) participant = row.event.type === 'participant.added';
-    receipts.push(row.event.id);
-  }
-  if (!participant) throw new ChatRefused('Conversation refused');
-  return { receipts, mode: created.mode };
+  throw new ChatRefused('Conversation refused');
 }
 
 export function recordedChatMode(access: Awaited<ReturnType<typeof chatAccess>>) {
@@ -81,25 +92,6 @@ export function recordedChatMode(access: Awaited<ReturnType<typeof chatAccess>>)
   return access.mode;
 }
 
-async function projectedAccess(
-  options: ChatOptions, memberId: string, conversationId: string,
-  relation: 'read' | 'post', receipts: string[], allowApplying: boolean,
-) {
-  const auth = memberAuthorisation(options.binding);
-  let applied = true;
-  for (const receipt of receipts) {
-    if (!await auth.applied(receipt)) applied = false;
-  }
-  if (!applied && !allowApplying) throw new ChatRefused('Conversation applying');
-  // Status reads work between append and tuple projection. Exact stream participation
-  // and current silo membership still gate that read; no content is disclosed here.
-  if (!applied) return;
-  const permission = await auth.conversation(memberId, conversationId, relation);
-  if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-  if (!permission.allowed) throw new ChatRefused('Conversation refused');
-}
-
 export function isChatRefused(error: unknown) {
-  if (error instanceof ChatRefused || error instanceof GroupRefused) return true;
-  return error instanceof Error && error.message === 'Authority changed';
+  return error instanceof ChatRefused || error instanceof GroupRefused;
 }

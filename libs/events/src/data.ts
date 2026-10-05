@@ -259,7 +259,7 @@ export const toolsetChangedDataSchema = z
 
 // --- Conversations and agent activity ----------------------------------
 
-function hasDirectParticipants(data: { createdBy: string; participantIds: string[] }) {
+export function hasDirectParticipants(data: { createdBy: string; participantIds: string[] }) {
   const [first, second] = data.participantIds;
   return first !== second && data.participantIds.includes(data.createdBy);
 }

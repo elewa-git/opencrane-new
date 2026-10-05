@@ -1,21 +1,10 @@
 import { z } from 'zod';
+import { conversationCreatedDataSchema, hasDirectParticipants } from '@opencrane/events';
 export const chatSubscribeSchema = z.object({ type: z.literal('subscribe'), topic: z.literal('conversation'),
   conversationId: z.string().regex(/^[\w-]{1,200}$/u), since: z.int().nonnegative(), generation: z.int().nonnegative().optional() }).strict();
-// Browser reads validate creation modes while future message fields remain opaque.
-const createdIdentity = { conversationId: z.string(), createdBy: z.string() };
-const creationSchema = z.union([
-  z.object({
-    ...createdIdentity, assistantId: z.string(),
-    mode: z.literal('agent_session').default('agent_session'),
-    payingGroupId: z.string().optional(),
-  }).strict(),
-  z.object({
-    ...createdIdentity, mode: z.literal('direct'), participantIds: z.array(z.string()).length(2),
-  }).strict().refine(directParticipants),
-]);
 function validateCreationRow(row: { type: string; data: unknown }, context: z.RefinementCtx) {
   if (row.type !== 'conversation.created') return;
-  const parsed = creationSchema.safeParse(row.data);
+  const parsed = conversationCreatedDataSchema.safeParse(row.data);
   if (!parsed.success) {
     context.addIssue({ code: 'custom', message: 'Invalid conversation mode', path: ['data'] });
   }
@@ -37,10 +26,6 @@ const conversationDisplay = {
   title: z.string().optional(),
   status: z.enum(['open', 'working', 'done', 'closed', 'failed', 'stopped']).optional(),
 };
-function directParticipants(row: { createdBy: string; participantIds: string[] }) {
-  return row.participantIds[0] !== row.participantIds[1] &&
-    row.participantIds.includes(row.createdBy);
-}
 export const chatListSchema = z.object({ rows: z.array(z.union([
   z.object({
     ...conversationDisplay, assistantId: z.string(), payingGroupId: z.string().optional(),
@@ -49,7 +34,7 @@ export const chatListSchema = z.object({ rows: z.array(z.union([
   z.object({
     ...conversationDisplay, mode: z.literal('direct'),
     participantIds: z.array(z.string()).length(2),
-  }).strict().refine(directParticipants),
+  }).strict().refine(hasDirectParticipants),
 ])) });
 export const chatColleaguesSchema = z.object({
   rows: z.array(z.object({ memberId: z.string(), displayName: z.string().nullable() }).strict()),

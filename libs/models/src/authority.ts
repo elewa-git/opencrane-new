@@ -102,14 +102,14 @@ export async function authorityFence(store: EventStore, started: number,
   return createAuthorityFence(store, started, subjects, callerDeadline, false);
 }
 
-/** Chat membership access survives message posts; work approvals may be cancelled by them. */
+/** Chat reads watch audience and membership changes; work approvals keep their strict fence. */
 export async function conversationAccessFence(store: EventStore, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
   return createAuthorityFence(store, started, subjects, callerDeadline, true);
 }
 
 async function createAuthorityFence(store: EventStore, started: number,
-  subjects: string[], callerDeadline: number, allowMessages: boolean) {
+  subjects: string[], callerDeadline: number, chatAccessOnly: boolean) {
   const deadline = Math.min(started + 2000, callerDeadline);
   const head = await store.head(undefined, deadline);
   const watched = new Set<string>();
@@ -138,7 +138,7 @@ async function createAuthorityFence(store: EventStore, started: number,
       if (!changed.length) return;
       for (const { subject, sequence } of changed) {
         const fromSequence = (outputHeads.get(subject) ?? head) + 1;
-        await checkOutputReports(store, subject, fromSequence, sequence, deadline, allowMessages);
+        await checkOutputReports(store, subject, fromSequence, sequence, deadline, chatAccessOnly);
         outputHeads.set(subject, sequence);
       }
       // Recheck every exact subject: revocation may have arrived while reading reports.
@@ -149,14 +149,31 @@ async function createAuthorityFence(store: EventStore, started: number,
 }
 
 async function checkOutputReports(store: EventStore, subject: string, from: number,
-  to: number, deadline: number, allowMessages: boolean) {
-  if (!subject.startsWith('conversation-')) throw new Error('Authority changed');
-  // A post leaves chat access intact but can cancel approved work. Only the chat
-  // access entrypoint accepts it; model and approval fences keep their strict rule.
+  to: number, deadline: number, chatAccessOnly: boolean) {
+  if (chatAccessOnly && subject.startsWith('ownership-')) return;
+  if (!chatAccessOnly && !subject.startsWith('conversation-')) {
+    throw new Error('Authority changed');
+  }
   for await (const row of store.readStream(subject, from, deadline)) {
     if (row.sequence > to) break;
-    if (allowMessages && row.event.type === 'message.posted') continue;
+    if (chatAccessOnly) {
+      if (changesChatAccess(subject, row.event.type)) throw new Error('Authority changed');
+      continue;
+    }
     if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
-      'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) throw new Error('Authority changed');
+      'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) {
+      throw new Error('Authority changed');
+    }
   }
+}
+
+function changesChatAccess(subject: string, type: string) {
+  if (subject.startsWith('conversation-')) {
+    return ['conversation.created', 'participant.added', 'participant.removed'].includes(type);
+  }
+  if (subject.startsWith('member-')) {
+    return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
+      'member.removed'].includes(type);
+  }
+  return true;
 }
