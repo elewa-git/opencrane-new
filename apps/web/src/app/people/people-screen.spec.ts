@@ -299,6 +299,49 @@ it('keeps an unknown create available after opening and cancelling the drawer', 
   expect(createBodies[1]).toBe(createBodies[0]);
 });
 
+it('shows a refused resend in the status area after a not-found check', async () => {
+  let postCount = 0;
+  const fixture = await mountWithFetch((request) => {
+    if (request.method === 'POST') {
+      postCount += 1;
+      if (postCount === 1) return makeResponse({ status: 'unavailable' }, 503);
+      return makeResponse({ status: 'conflict' }, 409);
+    }
+    if (request.url.includes('/changes/')) {
+      return makeResponse({ status: 'not_found' }, 404);
+    }
+    return makeResponse({ rows: [sampleGroup] });
+  });
+  const root = rootElement(fixture);
+  button(root, 'New group').click();
+  await settle(fixture);
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = 'Finance';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  button(root, 'Create group').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Couldn\'t confirm “Finance” was created');
+  });
+  button(root, 'Check status').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('No record of this change yet. It may still arrive.');
+  });
+
+  button(root, 'Send the same request again').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('This group changed or already exists. Nothing was created.');
+  });
+
+  expect(postCount).toBe(2);
+  expect(root.querySelector('[role="status"] button')).toBeNull();
+  expect(root.textContent).not.toContain('Check its status before sending');
+});
+
 it('keeps the current status while refreshing a healthy list', async () => {
   const requests: SeenRequest[] = [];
   let releaseRefresh: ((response: Response) => void) | undefined;

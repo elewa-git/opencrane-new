@@ -2,7 +2,7 @@
 
 The website reads group rows and sends group commands to the server. The server owns
 the group records. These captures use sample data in Chromium. They do not test a
-fresh installation. The checks use source commits `f0a83a4` and `d832918`.
+fresh installation. The checks use the final commits from both draft pull requests.
 
 ```mermaid
 flowchart LR
@@ -23,7 +23,7 @@ PPL-02 to PPL-08 and PPL-10 to PPL-16.
 | PPL-03 | `empty-*`, `no-match-*` | Empty groups and empty search use words and one action. They have no illustration. |
 | PPL-04 | `loading-*` | Four grain rows show loading. |
 | PPL-05 | `stale-*` | The notice gives the last successful load time. It says a failed read did not change data. |
-| PPL-06 | `create-duplicate-*`, `create-unknown-*`, `create-unknown-not-found-*`, `create-unknown-unavailable-*` (1280px only) | There is no description field. Duplicate names are checked against loaded names. An unknown result says which group could not be confirmed and gives the advice once. A not-found result has no extra detail. |
+| PPL-06 | `create-duplicate-*`, `create-unknown-*`, `create-unknown-not-found-*`, `create-applying-unavailable-*`, `create-unknown-unavailable-*` (1280px only) | There is no description field. Duplicate names are checked against loaded names. An unknown result says which group could not be confirmed and gives the advice once. A not-found result has no extra detail. |
 | PPL-07 | `created-*` | “Open group” replaces “Add members”. The detail gives the time when both records were checked, not when the change happened. |
 | PPL-08 | `menu-*` | The organisation shell supplies the phone menu and returns focus to its button. |
 | PPL-10 | `detail-local-*`, `detail-empty-*`, `detail-not-found-*` | There is no email, role, Since or More action. Three summary cards show the member count and source, shared assistant and grants before the full-width member list. The unavailable Add members message replaces the frame’s Add members action. Grants shows only use grants; the shared assistant has its own card. |
@@ -48,9 +48,9 @@ that was not run is not evidence that the feature works.
 | Typecheck | PASS | `nice -n 10 npm run typecheck`. |
 | Event catalogue | PASS | `nice -n 10 npm run check:events`; all 95 event types agree. |
 | Angular build | PASS | `nice -n 10 npm run build -w apps/web`; the bundle, People & groups CSS and noVNC warnings remain. |
-| Focused People and API tests | PASS | Report the final run on this branch below. |
-| Angular tests | NOT RUN | Report the final run on this branch below. |
-| People visual check | NOT RUN | Report the final run on this branch below. |
+| Focused People and API tests | PASS | 42 tests across four People screen and API spec files. |
+| Angular tests | PASS | 202 tests across 27 files. |
+| People visual check | PASS | 110 captures at 1280px, 390px and 320px, with normal and reduced motion. |
 | F1 visual check | PASS | 56 captures. |
 | F2 visual check | PASS | 38 captures. |
 | F3 visual check | PASS | 22 captures. |

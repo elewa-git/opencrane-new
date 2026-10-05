@@ -8,7 +8,7 @@ import { GrainLoader } from '../ui/grain-loader';
 import { ModalSheet } from '../ui/modal-sheet';
 import { fetchGroup, followChange, sendRemoveMember, type Outcome } from './groups-api';
 import { GroupDetail, type RemoveRequested } from './group-detail';
-import { checkTimeLabel, lossSentence } from './group-wording';
+import { checkTimeLabel, grantResourceLabel } from './group-wording';
 
 type ScreenState = 'loading' | 'ready' | 'missing' | 'failed' | 'access';
 type ActionState = 'idle' | 'applying' | 'unknown' | 'conflict' | 'refused' | 'confirmed';
@@ -17,6 +17,9 @@ type PendingRemoval = { commandId: string; memberId: string; displayName: string
 const ACCEPTED_REMOVAL_DETAIL = 'The server accepted the change. Its records are not current yet.';
 const UNKNOWN_REMOVAL_DETAIL =
   'We could not tell whether the server recorded it. Check its status before retrying.';
+const MEMBERSHIP_CHANGED_DETAIL =
+  'The person may have left the organisation, or their membership may now come from ' +
+  'your identity provider.';
 
 @Component({ selector: 'oc-group-detail-screen',
   imports: [SharedState, GroupDetail, ModalSheet, GrainLoader],
@@ -35,7 +38,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
   protected readonly pendingRemoval = signal<PendingRemoval | undefined>(undefined);
   protected readonly membersUnavailable = signal(false);
   protected readonly changeReference = signal<string | undefined>(undefined);
-  protected readonly lossSentence = lossSentence;
+  protected readonly grantResourceLabel = grantResourceLabel;
   private readonly request = new AbortController();
   private readInFlight = false;
   protected readonly pollInFlight = signal(false);
@@ -121,7 +124,7 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     this.actionState.set(this.receiptSeen ? 'applying' : 'unknown');
     this.statusKind.set(this.receiptSeen ? 'applying' : 'unknown');
     const groupName = this.group()?.name ?? 'the group';
-    this.statusMessage.set(`Checking the removal for ${pendingRemoval.displayName} from ${groupName}…`);
+    this.statusMessage.set(checkingRemovalMessage(pendingRemoval.displayName, groupName));
     await this.followRemoval();
   }
 
@@ -260,9 +263,8 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
       }
       this.acceptGroup(result.value);
     }
-    const refusalDetail = result.kind === 'ok'
-      ? 'The person may have left the organisation, or their membership may now come from your identity provider.'
-      : '';
+    let refusalDetail = '';
+    if (result.kind === 'ok') refusalDetail = MEMBERSHIP_CHANGED_DETAIL;
     this.showRefusedRemoval(refusalDetail);
     this.clearPendingRemoval();
   }
@@ -391,4 +393,8 @@ export class GroupDetailScreen implements OnInit, OnDestroy {
     if (this.focusTimer !== undefined) globalThis.clearTimeout(this.focusTimer);
     this.focusTimer = globalThis.setTimeout(this.focusHeading.bind(this), 0);
   }
+}
+
+function checkingRemovalMessage(displayName: string, groupName: string): string {
+  return `Checking the removal for ${displayName} from ${groupName}…`;
 }

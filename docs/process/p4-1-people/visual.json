@@ -101,17 +101,22 @@
       "motion": "no-preference"
     },
     {
-      "name": "unknown",
+      "name": "create-unknown",
       "width": 1280,
       "motion": "no-preference"
     },
     {
-      "name": "unknown-not-found",
+      "name": "create-unknown-not-found",
       "width": 1280,
       "motion": "no-preference"
     },
     {
-      "name": "unknown-unavailable",
+      "name": "create-applying-unavailable",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "create-unknown-unavailable",
       "width": 1280,
       "motion": "no-preference"
     },
@@ -206,17 +211,22 @@
       "motion": "reduce"
     },
     {
-      "name": "unknown",
+      "name": "create-unknown",
       "width": 1280,
       "motion": "reduce"
     },
     {
-      "name": "unknown-not-found",
+      "name": "create-unknown-not-found",
       "width": 1280,
       "motion": "reduce"
     },
     {
-      "name": "unknown-unavailable",
+      "name": "create-applying-unavailable",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "create-unknown-unavailable",
       "width": 1280,
       "motion": "reduce"
     },

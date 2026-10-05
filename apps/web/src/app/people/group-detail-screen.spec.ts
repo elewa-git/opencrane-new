@@ -37,7 +37,10 @@ async function mount(reply: Response): Promise<HTMLElement> {
   const fixture = await mountWithFetch(replyOnce(reply));
   return rootElement(fixture);
 }
-type SeenRequest = { url: string; method: string | undefined; body: string | undefined };
+type SeenRequest = {
+  url: string; method: string | undefined; body: string | undefined;
+  signal: AbortSignal | null | undefined;
+};
 function replyOnce(reply: Response): typeof fetch {
   return makeFetch([reply], []);
 }
@@ -46,7 +49,7 @@ function makeFetch(responses: Response[], calls: SeenRequest[]): typeof fetch {
     const url = requestUrl(input);
     const method = options?.method;
     const body = typeof options?.body === 'string' ? options.body : undefined;
-    calls.push({ url, method, body });
+    calls.push({ url, method, body, signal: options?.signal });
     const next = responses.shift();
     if (!next) return Promise.resolve(response({ status: 'unavailable' }, 503));
     return Promise.resolve(next);
@@ -74,6 +77,25 @@ function rootElement(fixture: ComponentFixture<GroupDetailScreen>): HTMLElement 
   return element;
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('shows one detail heading and one skeleton while the group is loading', async () => {
+  let releaseGroup: ((reply: Response) => void) | undefined;
+  vi.stubGlobal('fetch', () => new Promise((resolve) => { releaseGroup = resolve; }));
+  TestBed.configureTestingModule({ imports: [GroupDetailScreen] });
+  const fixture = TestBed.createComponent(GroupDetailScreen);
+  fixture.componentRef.setInput('groupId', 'sales-team');
+  fixture.detectChanges();
+  const root = rootElement(fixture);
+
+  expect(root.querySelectorAll('header.detail-heading')).toHaveLength(1);
+  expect(root.querySelectorAll('.detail-skeleton')).toHaveLength(1);
+
+  releaseGroup?.(response({ rows: [group] }));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).not.toContain('Loading group…');
+  });
+});
 
 it('shows separate shared-assistant and use-grant cards with a local Remove button', async () => {
   const root = await mount(response({ rows: [group] }));
@@ -200,6 +222,9 @@ it('checks an unknown removal with reads, then resends the same body after not f
     fixture.detectChanges();
     expect(root.textContent).toContain("Couldn't confirm the removal");
   });
+  const statusRegions = root.querySelectorAll('[role="status"]');
+  expect(statusRegions).toHaveLength(1);
+  expect(statusRegions[0]?.textContent).toContain("Couldn't confirm the removal");
   const checkButton = findButton(root, 'Check status');
   checkButton.click();
   await vi.waitFor(() => {
@@ -236,7 +261,44 @@ it('keeps a lost removal reply unknown when its status read is unavailable', asy
   expect(root.textContent).not.toContain('Still applying the removal');
 });
 
-it('keeps a removal after opening and cancelling another review when its request was accepted', async () => {
+it('stops a removal status read when the detail screen is destroyed', async () => {
+  let releaseStatus: ((reply: Response) => void) | undefined;
+  let statusSignal: AbortSignal | null | undefined;
+  let statusReads = 0;
+  const fixture = await mountWithFetch((input, options) => {
+    const url = requestUrl(input);
+    const method = options?.method;
+    if (url.includes('/changes/')) {
+      statusReads += 1;
+      statusSignal = options?.signal;
+      return new Promise((resolve) => { releaseStatus = resolve; });
+    }
+    if (method === 'POST') {
+      return Promise.resolve(response({ status: 'appended', groupId: group.groupId,
+        sequence: 1, changeId: 'remove-command' }));
+    }
+    return Promise.resolve(response({ rows: [group] }));
+  });
+  const root = rootElement(fixture);
+
+  await openAndConfirmRemoval(root, fixture);
+  await vi.waitFor(() => expect(statusReads).toBe(1));
+  expect(root.querySelectorAll('button').length).toBeGreaterThan(0);
+  expect([...root.querySelectorAll<HTMLButtonElement>('button')]
+    .some((button) => button.textContent?.trim() === 'Check status')).toBe(false);
+
+  fixture.destroy();
+  expect(statusSignal?.aborted).toBe(true);
+  releaseStatus?.(response({ status: 'appended', groupId: group.groupId,
+    sequence: 1, changeId: 'remove-command',
+    projection: { content: 'applying', iam: 'applying' } }));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(statusReads).toBe(1);
+});
+
+it('keeps a pending removal and rejects another review when its request was accepted', async () => {
   await keepPendingRemovalSeparateFromReviewDraft(200);
 });
 
@@ -277,6 +339,9 @@ async function keepPendingRemovalSeparateFromReviewDraft(postStatus: number): Pr
     'button[aria-label^="Remove "]')) {
     expect(button.disabled).toBe(true);
   }
+  expect(root.textContent).toContain(
+    'A removal is in progress. Check its status before starting another one.',
+  );
 
   const detailElement = fixture.debugElement.query(By.directive(GroupDetail));
   const detail = detailElement.injector.get(GroupDetail);
@@ -285,10 +350,6 @@ async function keepPendingRemovalSeparateFromReviewDraft(postStatus: number): Pr
   if (!opener) throw new Error('Expected a removal button in the review fixture');
   detail.removeRequested.emit({ member: secondLocalMember, opener });
   fixture.detectChanges();
-  expect(root.textContent).toContain('Remove Bob Kim from Sales team?');
-  findButton(root, 'Cancel').click();
-  fixture.detectChanges();
-
   expect(root.textContent).toContain(pendingStatus);
   expect(root.querySelector('[role="dialog"]')).toBeNull();
   findButton(root, 'Check status').click();

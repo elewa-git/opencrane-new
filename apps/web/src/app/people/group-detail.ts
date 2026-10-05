@@ -21,7 +21,6 @@ export class GroupDetail {
   readonly membersUnavailable = input(false);
   readonly removeRequested = output<RemoveRequested>();
   readonly refreshRequested = output<void>();
-  protected readonly compareByDisplayName = compareByDisplayName;
   protected readonly grantCountLabel = grantCountLabel;
   protected readonly memberCountLabel = memberCountLabel;
   protected readonly sharedAssistantIds = sharedAssistantIds;

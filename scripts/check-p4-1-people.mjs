@@ -304,7 +304,8 @@ try {
       assert.equal(await page.getByRole('button', { name: /Remove/u }).count(), 0);
       await capture(page, 'detail-supplied', width, motion);
       await visit(page, '/org/people/groups/long-id');
-      await page.getByText('No members yet', { exact: true }).waitFor();
+      await page.locator('.members-section')
+        .getByText('No members yet', { exact: true }).waitFor();
       await capture(page, 'detail-empty', width, motion);
       await visit(page, '/org/people/groups/missing-group');
       await page.getByRole('heading', { name: 'Group not found' }).waitFor();
@@ -404,7 +405,7 @@ try {
         await page.getByText('Couldn\'t confirm “Uncertain group” was created').waitFor();
         assert.equal(await page.getByText('Still applying “Uncertain group”').count(), 0);
         await page.getByRole('button', { name: 'Send the same request again' }).waitFor();
-        await capture(page, 'create-unknown-unavailable', width, motion);
+        await capture(page, 'create-applying-unavailable', width, motion);
         changeUnavailable = false;
         await page.getByRole('button', { name: 'Send the same request again' }).click();
         await page.getByText('Group “Uncertain group” created').waitFor();
@@ -430,7 +431,7 @@ async function waitForSheetMotion(page) {
   await page.waitForFunction(allAnimationsFinished);
 }
 function allAnimationsFinished() {
-  const animations = document.getAnimations({ subtree: true });
+  const animations = globalThis.document.getAnimations({ subtree: true });
   for (const animation of animations) {
     if (animation.playState === 'running') return false;
   }

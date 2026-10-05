@@ -12,7 +12,6 @@
     </div>
   }
 </header>
-</header>
 <div role="status" aria-live="polite">
   @if (state() === 'loading') {
     <oc-shared-state kind="checking" message="Loading group…" />
@@ -66,7 +65,15 @@
       <ul class="review-losses">
         @for (grant of reviewGrants(); track grant.resourceType + grant.resourceId) {
           <li><span aria-hidden="true" class="loss-mark">⊘</span>
-            {{ lossSentence(grant, reviewMember()!.displayName, group()!.name) }}</li>
+            @if (grant.relation === 'acts_for' && grant.resourceType === 'assistant') {
+              {{ reviewMember()!.displayName }} can no longer select assistant
+              <code>{{ grant.resourceId }}</code>.
+            } @else {
+              {{ reviewMember()!.displayName }} loses use of
+              {{ grantResourceLabel(grant.resourceType) }} <code>{{ grant.resourceId }}</code>,
+              granted through {{ group()!.name }}.
+            }
+          </li>
         }
       </ul>
     }
