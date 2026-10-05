@@ -65,9 +65,10 @@ async function serverRunDelay() {
 try {
   browser = await browserSessions(config, origin);
   // The broad startup journey can fail before its fixture members have joined.
-  for (const [memberId, role] of [[admin, 'owner'], [member, 'member']] as const) {
+  for (const [memberId, role] of [[admin, 'admin'], [member, 'member']] as const) {
     if ((await db.db.query("SELECT 1 FROM members WHERE member_id=$1 AND status='joined'", [memberId])).rows.length) continue;
-    const identity: { sub: string; cookie: string } = browser.sessions.get(role)!;
+    const sessionName = memberId === admin ? 'owner' : 'member';
+    const identity: { sub: string; cookie: string } = browser.sessions.get(sessionName)!;
     const invitationId = randomUUID();
     await append('member.invited', `member-${memberId}`, { memberId, role, invitationId,
       email: `${memberId}@example.test`, invitedBy: 'dev-only-bootstrap',

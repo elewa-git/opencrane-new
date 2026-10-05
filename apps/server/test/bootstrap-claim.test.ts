@@ -205,11 +205,11 @@ it('requires a session and rejects body authority and invalid contact data', asy
   expect(await nats.store.head()).toBe(0);
 });
 
-it('projects and replays the owner identity and OpenFGA role, assistant and model grants', async () => {
+it('claim reactions seed ownership once and replay identity, IAM, assistant and model grants', async () => {
   const { databases, openfga } = await import('@opencrane/authz/testing');
   const { createStore, memberAuthorisation, rebuildMembers } = await import('@opencrane/authz');
   const { connectMemberFeed, members, pgDb, ProjectionRunner } = await import('@opencrane/projections');
-  const { BudgetActor, modelGrantHandler, models } = await import('@opencrane/models');
+  const { BudgetActor, ownershipSeedHandler, modelGrantHandler, models } = await import('@opencrane/models');
   const { lifecycleHandlers } = await import('../../ops/src/lifecycle.ts');
   const { createLogger } = await import('@opencrane/observability');
   const dbs = await databases(), fga = await openfga();
@@ -235,6 +235,19 @@ it('projects and replays the owner identity and OpenFGA role, assistant and mode
     await assistant.handle(trigger, db); await assistant.handle(trigger, db);
     await modelGrantHandler(nats.store).handle(trigger, db);
     await modelGrantHandler(nats.store).handle(trigger, db);
+    const seed = ownershipSeedHandler(nats.store);
+    await seed.handle(trigger, db);
+    await seed.handle(trigger, db);
+    const ownership = [];
+    for await (const row of nats.store.readStream('ownership-test')) {
+      ownership.push(row);
+      await auth.handler.handle(row.event, db);
+    }
+    expect(ownership).toHaveLength(1);
+    expect(ownership[0]?.event.data).toEqual({ ownerIds: ['bootstrap-owner'] });
+    await runner.run(members);
+    await runner.rebuild(members);
+    expect(await feed.memberId('test', config.issuerUrl, 'alice')).toBe('bootstrap-owner');
     const assistants = [];
     for await (const { event } of nats.store.readStream('assistant-*')) {
       assistants.push(event);

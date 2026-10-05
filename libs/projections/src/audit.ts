@@ -17,6 +17,7 @@ const auditPrefixes = [
   'takeover.',
   // These event families expose safe lifecycle summaries.
   'team.',
+  'ownership.',
   'assistant.',
   'grant.',
 ];

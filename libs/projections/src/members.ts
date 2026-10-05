@@ -1,4 +1,6 @@
 import {
+  legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
+  ownershipSteppedDownSchema,
   memberInvitedDataSchema,
   siloOwnerBootstrappedDataSchema,
   memberJoinedDataSchema,
@@ -12,17 +14,20 @@ interface MemberTables {
   members: string;
   identities: string;
   changes: string;
+  ownership: string;
 }
 
 const live = {
   members: "members",
   identities: "member_identities",
   changes: "member_changes",
+  ownership: "silo_ownership",
 } satisfies MemberTables;
 export const replayMemberTables = {
   members: "members_replay",
   identities: "member_identities_replay",
   changes: "member_changes_replay",
+  ownership: "silo_ownership_replay",
 } satisfies MemberTables;
 
 function field(data: unknown, name: string): string {
@@ -42,6 +47,10 @@ async function applyMember(
   event: EventEnvelope,
   position: number,
 ): Promise<void> {
+  if (event.type.startsWith('ownership.')) {
+    await applyOwnership(tables, db, event, position);
+    return;
+  }
   if (
     ![
       "member.invited",
@@ -59,6 +68,17 @@ async function applyMember(
   const id = field(data, "memberId");
   if (event.subject !== `member-${id}`) {
     throw new Error("Member subject mismatch");
+  }
+  if (event.type === 'member.invited') {
+    // Reinviting an active member grants nothing and must preserve their identity and role.
+    const current = await db.query<{ status: string }>(
+      `SELECT status FROM ${tables.members} WHERE silo = $1 AND member_id = $2`,
+      [event.silo, id]);
+    if (current.rows[0]?.status === 'joined') {
+      return;
+    }
+  } else {
+    await refuseOwnerEdit(tables, db, event, id);
   }
   await applyIdentity(tables, db, event, data, id);
   if (event.type === "member.removed") {
@@ -140,6 +160,8 @@ function memberProjection(name: string, tables: MemberTables): Projection {
   return {
     name,
     async create(db) {
+      await db.query(`CREATE TABLE IF NOT EXISTS ${tables.ownership} (
+        silo TEXT PRIMARY KEY, owners JSONB NOT NULL)`);
       await db.query(`CREATE TABLE IF NOT EXISTS ${tables.members} (
         silo TEXT NOT NULL, member_id TEXT NOT NULL, email TEXT NOT NULL,
         display_name TEXT, role TEXT NOT NULL, status TEXT NOT NULL,
@@ -152,6 +174,7 @@ function memberProjection(name: string, tables: MemberTables): Projection {
         PRIMARY KEY (silo, position))`);
     },
     async drop(db) {
+      await db.query(`DROP TABLE IF EXISTS ${tables.ownership}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.changes}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.identities}`);
       await db.query(`DROP TABLE IF EXISTS ${tables.members}`);
@@ -160,9 +183,73 @@ function memberProjection(name: string, tables: MemberTables): Projection {
   };
 }
 
-/** Invited rows are pending invitations, never an authorisation grant. Removed rows are retained for display. */
+/** Invitations grant no authority. Removed rows are retained for display. */
 export const members = memberProjection("members", live);
 export const replayMembers = memberProjection(
   "members-replay",
   replayMemberTables,
 );
+
+async function applyOwnership(tables: MemberTables, db: Query,
+  event: EventEnvelope, position: number) {
+  if (event.subject !== `ownership-${event.silo}`) {
+    throw new Error('Ownership subject mismatch');
+  }
+  const current = await db.query<{ owners: string[] }>(
+    `SELECT owners FROM ${tables.ownership} WHERE silo = $1`, [event.silo]);
+  let owners = current.rows[0]?.owners;
+  if (event.type === 'ownership.seeded') {
+    if (owners) {
+      throw new Error('Ownership already seeded');
+    }
+    owners = ownershipSeededSchema.parse(event.data).ownerIds;
+  } else {
+    if (!owners) {
+      throw new Error('Ownership migration required');
+    }
+    const memberId = field(event.data, 'memberId');
+    let role: string;
+    if (event.type === 'ownership.transferred') {
+      const transfer = ownershipTransferredSchema.parse(event.data);
+      if (!owners.includes(transfer.transferredBy)) {
+        throw new Error('Owner required');
+      }
+      owners.push(memberId);
+      role = 'owner';
+    } else {
+      ownershipSteppedDownSchema.parse(event.data);
+      if (!owners.includes(memberId) || owners.length < 2) {
+        throw new Error('At least one owner must remain');
+      }
+      const remaining: string[] = [];
+      for (const ownerId of owners) {
+        if (ownerId !== memberId) {
+          remaining.push(ownerId);
+        }
+      }
+      owners = remaining;
+      role = 'admin';
+    }
+    await db.query(`UPDATE ${tables.members} SET role = $3 WHERE silo = $1 AND member_id = $2`,
+      [event.silo, memberId, role]);
+    await db.query(`INSERT INTO ${tables.changes}
+      SELECT silo, $3, jsonb_build_object('memberId', member_id, 'email', email,
+        'displayName', display_name, 'role', role, 'status', status)
+      FROM ${tables.members} WHERE silo = $1 AND member_id = $2`,
+      [event.silo, memberId, position]);
+    await db.query("SELECT pg_notify('members_changed', $1)", [event.silo]);
+  }
+  await db.query(`INSERT INTO ${tables.ownership} VALUES ($1, $2)
+    ON CONFLICT (silo) DO UPDATE SET owners = $2`, [event.silo, JSON.stringify(owners)]);
+}
+
+async function refuseOwnerEdit(tables: MemberTables, db: Query,
+  event: EventEnvelope, id: string) {
+  const ownership = await db.query<{ owners: string[] }>(
+    `SELECT owners FROM ${tables.ownership} WHERE silo = $1`, [event.silo]);
+  const owners = ownership.rows[0]?.owners;
+  const nextRole = legacyMemberRole(event);
+  if (owners && (owners.includes(id) || nextRole === 'owner')) {
+    throw new Error('Owner changes require the ownership stream');
+  }
+}

@@ -1,11 +1,12 @@
+import { currentMembership } from './ownership.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { tokenVerifier } from '@opencrane/auth';
 import type { JSONWebKeySet } from 'jose';
-import { BudgetActor, history } from './actor.ts';
+import { BudgetActor } from './actor.ts';
 import { authorityFence } from './authority.ts';
-import { budgetSummary, data } from './state.ts';
+import { budgetSummary } from './state.ts';
 
 export class BudgetAccessRefused extends Error {}
 const claims = z.object({ typ: z.literal('budget-admin'), silo: z.string(), memberId: z.string(), commandDigest: z.string() });
@@ -18,10 +19,16 @@ export async function configureBudget(actor: BudgetActor, binding: Binding, iden
   const permission = await memberAuthorisation(binding).check(checked.memberId, 'admin');
   if (permission.status === 'unavailable') throw new Error('Budget authority unavailable');
   if (!permission.allowed) throw new BudgetAccessRefused('Access changed');
-  const membership = await history(actor.store, `member-${checked.memberId}`, actor.silo);
-  const last = membership.filter(r => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
-  const member = last ? data(last.event) : {};
-  if (last?.event.type === 'member.removed' || !['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new BudgetAccessRefused('Access changed');
+  const membership = await currentMembership(actor.store, actor.silo, checked.memberId, fresh);
+  if (!['owner', 'admin'].includes(membership.role)) {
+    throw new BudgetAccessRefused('Access changed');
+  }
+  const auth = memberAuthorisation(binding);
+  for (const row of membership.facts) {
+    if (!await auth.applied(row.event.id)) {
+      throw new Error('IAM projection behind');
+    }
+  }
   const { commandId, expectedSequence, ...payload } = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u), expectedSequence: z.int().nonnegative() }).passthrough().parse(raw);
   const result = await actor.configure({ ...payload, setBy: checked.memberId }, commandId, expectedSequence, fresh);
   return { ...result, budget: budgetSummary(actor.state, actor.now()) };

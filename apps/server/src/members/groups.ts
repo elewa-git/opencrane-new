@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { authorityFence, history } from '@opencrane/models';
+import { authorityFence, currentMembership, history } from '@opencrane/models';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 function hasNoNul(value: string) {
@@ -17,26 +17,17 @@ type GroupInput = z.infer<typeof groupInput>;
 export class GroupRefused extends Error {}
 export class GroupConflict extends Error {}
 
-function isMemberState(row: StoredEvent) {
-  return ['member.joined', 'member.role_changed', 'member.removed'].includes(row.event.type);
-}
-function needsReceipt(row: StoredEvent) {
-  return row.event.type !== 'member.invited';
-}
-
-/** Pending role changes and removals deny access until their IAM receipts exist. */
+/** Pending owner/role changes deny access until their IAM receipts exist. */
 export async function activeMember(
   store: EventStore, binding: Binding, memberId: string, admin = false,
+  fresh?: Awaited<ReturnType<typeof authorityFence>>,
 ) {
-  const rows = await history(store, `member-${memberId}`, binding.silo);
-  const state = rows.findLast(isMemberState);
-  if (!state || state.event.type === 'member.removed') {
+  fresh ??= await authorityFence(store, performance.now());
+  const membership = await currentMembership(store, binding.silo, memberId, fresh);
+  if (!membership.role) {
     throw new GroupRefused('Active silo membership required');
   }
-  const role = z.object({ role: z.string().optional(), newRole: z.string().optional() });
-  const memberData = role.passthrough().parse(state.event.data);
-  const currentRole = memberData.newRole ?? memberData.role ?? '';
-  if (admin && !['owner', 'admin'].includes(currentRole)) {
+  if (admin && !['owner', 'admin'].includes(membership.role)) {
     throw new GroupRefused('Owner or Admin required');
   }
   const auth = memberAuthorisation(binding);
@@ -44,12 +35,12 @@ export async function activeMember(
   const permission = await auth.check(memberId, relation);
   if (permission.status === 'unavailable') throw new Error('IAM unavailable');
   if (!permission.allowed) throw new GroupRefused('Membership unavailable');
-  const receiptRows = rows.filter(needsReceipt);
-  for (const row of receiptRows) {
+  for (const row of membership.facts) {
     if (!await auth.applied(row.event.id)) {
       throw new GroupRefused('Membership is still being applied');
     }
   }
+  await fresh();
 }
 
 function eventType(input: GroupInput) {
@@ -97,8 +88,10 @@ export async function groupCommand(
   const subjects = [`member-${memberId}`];
   if (input.action !== 'create') subjects.push(`member-${input.memberId}`);
   const fresh = await authorityFence(store, performance.now(), subjects);
-  await activeMember(store, binding, memberId, true);
-  if (input.action !== 'create') await activeMember(store, binding, input.memberId);
+  await activeMember(store, binding, memberId, true, fresh);
+  if (input.action !== 'create') {
+    await activeMember(store, binding, input.memberId, false, fresh);
+  }
   const rows = await history(store, subject, binding.silo);
   checkHistory(rows, input.groupId);
   const retried = previous(rows, input, memberId);

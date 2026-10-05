@@ -115,7 +115,7 @@ it.skipIf(!process.env["PG_TEST_URL"])(
       await admin.query(`CREATE ROLE ${reader}`);
       await admin.query(`GRANT ${operator}, ${reader} TO CURRENT_USER`);
       await admin.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${operator}`);
-      for (const table of ["members", "member_identities", "member_changes", "projection_checkpoints", "projection_events", "projection_generations"]) {
+      for (const table of ["members", "member_identities", "member_changes", "silo_ownership", "projection_checkpoints", "projection_events", "projection_generations"]) {
         await admin.query(`ALTER TABLE ${table} OWNER TO ${operator}`);
       }
       await admin.query(`GRANT SELECT ON members, member_identities, member_changes TO ${reader}`);

@@ -61,11 +61,25 @@ inside enqueue's transaction and disables finished-job deletion. This uses
 pg-boss 12.35's schema; upgrades must rerun retention/replay tests. Queue rows
 and receipts currently grow without pruning. Monitor database capacity.
 
+## Recovery and subscription changes
+
 Stop dispatchers/workers before recovery. PostgreSQL is disposable execution
 state and content: rebuild it together with the consumer from EVENTS, with
 external reactions disabled. Keep receipts while preserving external state.
 Changing the enabled handler set requires a controlled rebuild/backfill;
 do not reset just the checkpoint or switch subscriptions on a live consumer.
+
+For a subscription change, stop writers and decision services as well. Drain
+in-flight jobs before replacing execution state. Rebuild the content projections
+and OpenFGA from EVENTS using the [operator replay commands](../../apps/ops/README.md),
+with reactions disabled. Re-provision the dispatcher consumer and its disposable
+queue/checkpoint database together against the new manifest, replaying EVENTS
+from the beginning; do not replace only the stored manifest or checkpoint.
+Preserve event-id receipts for any retained external state so replay cannot repeat
+external effects. Enable reactions and writers only after content/IAM catch up.
+This is the existing subscription rebuild requirement, not a change to job keys:
+member jobs keep their original `member-<id>` key and ownership jobs use
+`ownership-<silo>`. Live upgrade qualification is NOT RUN.
 
 Run `PG_TEST_URL=<PostgreSQL admin URL> npm test -- libs/handlers/test`.
 The selected database is only a control database and the role needs `CREATEDB`:

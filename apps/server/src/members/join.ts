@@ -16,7 +16,7 @@ export type JoinResult =
   | { status: 'refused'; reason: 'no_session' | 'wrong_silo' | 'wrong_identity'
       | 'unknown_invitation' | 'expired_invitation' | 'unbound_invitation'
       | 'invitation_not_pending' | 'command_id_reused' | 'concurrent_change'
-      | 'invalid_request' | 'wrong_origin' | 'invalid_history' }
+      | 'invalid_request' | 'wrong_origin' | 'invalid_history' | 'ownership_stream_required' }
   | { status: 'unavailable' };
 
 interface JoinContext {
@@ -66,6 +66,10 @@ function pending(events: StoredEvent[], input: JoinInput, context: JoinContext, 
   }
   if (latest !== invitation) return { status: 'refused', reason: 'invitation_not_pending' };
   if (Date.parse(data.expiresAt) <= now.getTime()) return { status: 'refused', reason: 'expired_invitation' };
+  const admission = admissionRefusal(events, data);
+  if (admission) {
+    return admission;
+  }
   return data;
 }
 
@@ -121,4 +125,21 @@ export async function joinMember(
   } catch (cause) {
     return { status: 'unavailable', cause };
   }
+}
+
+function isMembershipAdmission(row: StoredEvent) {
+  return ['member.joined', 'silo.owner_bootstrapped', 'member.removed'].includes(row.event.type);
+}
+
+function admissionRefusal(events: StoredEvent[], invitation: Invitation): JoinResult | undefined {
+  // Invitation acceptance grants membership; appointment belongs to the ownership stream.
+  if (invitation.role === 'owner') {
+    return { status: 'refused', reason: 'ownership_stream_required' };
+  }
+  // A new invitation cannot rewrite an active member's role or identity.
+  const membership = events.findLast(isMembershipAdmission);
+  if (membership && membership.event.type !== 'member.removed') {
+    return { status: 'refused', reason: 'invitation_not_pending' };
+  }
+  return undefined;
 }

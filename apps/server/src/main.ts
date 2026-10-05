@@ -1,3 +1,4 @@
+import { seedOwnership } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
 import { storageClient } from './files/storage.ts';
@@ -74,6 +75,10 @@ const app = buildServer(authConfig, {
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(files ? { files } : {}),
   ...(realtime && events && modelDb ? { groups: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
+  ...(realtime && events && modelDb ? { ownership: {
+    silo: realtime.binding.silo, store: events.store, db: modelDb.db,
+    feed: realtime.feed, binding: realtime.binding,
+  } } : {}),
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
     catalogue, discovery: {}, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),
@@ -81,6 +86,14 @@ const app = buildServer(authConfig, {
     computers, binding: realtime.binding } } : {}),
 });
 
+if (events && silo) {
+  try {
+    await seedOwnership(events.store, silo);
+  } catch (error) {
+    // Failed seeding leaves owner commands unavailable, while sign-in and health stay usable.
+    app.log.error({ err: error, operation: 'ownership.seed' }, 'Ownership seed unavailable');
+  }
+}
 const address = await app.listen({ port, host });
 const sockets = attachWebSocketServer(app.server, app.log, authConfig, realtime);
 installShutdown(app, sockets, graceMs, async () => {

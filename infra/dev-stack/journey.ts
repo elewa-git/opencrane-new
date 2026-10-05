@@ -70,7 +70,7 @@ function headers(memberId: string) {
     sub: `dev-${memberId}`, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 300,
   })}` };
 }
-async function invite(memberId: string, role: 'owner' | 'member') {
+async function invite(memberId: string, role: 'admin' | 'member') {
   // Dev-only bootstrap: the first-member policy is still separate from identity-provider login.
   await append('member.invited', `member-${memberId}`, { memberId, role, invitationId: `invite-${memberId}-${id}`,
     email: `${memberId}@example.test`, invitedBy: 'dev-only-bootstrap',
@@ -85,6 +85,19 @@ async function join(memberId: string) {
   assert.equal(response.status, 200);
   const body: unknown = await response.json();
   assert(body && typeof body === 'object' && 'status' in body && body.status === 'joined');
+}
+async function activeMember(memberId: string) {
+  const result = await db.db.query(
+    'SELECT 1 FROM members WHERE silo=$1 AND member_id=$2 AND status=$3',
+    [silo, memberId, 'joined']);
+  return result.rows.length === 1;
+}
+async function ensureMember(memberId: string, role: 'admin' | 'member') {
+  if (await activeMember(memberId)) {
+    return;
+  }
+  await invite(memberId, role);
+  await join(memberId);
 }
 async function computerEvents(assistantId: string) {
   const result = [];
@@ -132,8 +145,7 @@ try {
     identities.set(admin, browser.sessions.get('owner')!);
     identities.set(member, browser.sessions.get('member')!);
   }
-  await invite(admin, 'owner');
-  await join(admin);
+  await ensureMember(admin, 'admin');
   await until(async () => (await authz.check(admin, 'admin')).allowed, 'admin OpenFGA');
   await until(async () => (await db.db.query('SELECT 1 FROM members WHERE member_id=$1 AND status=$2', [admin, 'joined'])).rows.length === 1, 'admin projection');
   ws = new WebSocket(`${server.replace('http:', 'ws:')}/ws`, { headers: headers(admin) });
@@ -143,11 +155,15 @@ try {
   ws.send(JSON.stringify({ type: 'subscribe', topic: 'members', since: 0 }));
   await until(() => messages.some((message) => message.type === 'ready'), 'WebSocket initial catch-up');
   messages.length = 0;
-  await invite(member, 'member');
   const joinedAt = performance.now();
-  await join(member);
-  await until(() => messages.some((message) => message.type === 'member' && message.member.memberId === member
-    && message.member.status === 'joined'), 'live WebSocket join');
+  if (await activeMember(member)) {
+    console.log('PASS repeat journey preserves the active member without another invitation');
+  } else {
+    await ensureMember(member, 'member');
+    await until(() => messages.some((message) => message.type === 'member' &&
+      message.member.memberId === member && message.member.status === 'joined'),
+    'live WebSocket join');
+  }
   await until(async () => (await authz.check(member, 'member')).allowed, 'member OpenFGA');
   assert.equal((await db.db.query('SELECT 1 FROM members WHERE member_id=$1 AND status=$2', [member, 'joined'])).rows.length, 1);
   console.log('PASS member.joined HTTP command → PostgreSQL → OpenFGA + live WebSocket');

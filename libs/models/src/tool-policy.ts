@@ -1,3 +1,5 @@
+import { authorityFence } from './authority.ts';
+import { currentMembership } from './ownership.ts';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
 import { applyToolPolicy, emptyToolPolicy } from '@opencrane/projections';
@@ -19,10 +21,17 @@ const input = z.object({ commandId: id, expectedSequence: z.int().nonnegative(),
 export async function setToolPolicy(store: EventStore, binding: Binding, memberId: string, serverId: string, raw: unknown) {
   const command = input.parse(raw);
   if (!(await memberAuthorisation(binding).check(memberId, 'admin')).allowed) throw new Error('Access changed');
-  const membership = await history(store, `member-${memberId}`, binding.silo);
-  const last = membership.filter(r => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
-  const member = z.record(z.string(), z.unknown()).parse(last?.event.data);
-  if (!['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new Error('Access changed');
+  const fresh = await authorityFence(store, performance.now());
+  const membership = await currentMembership(store, binding.silo, memberId, fresh);
+  if (!['owner', 'admin'].includes(membership.role)) {
+    throw new Error('Access changed');
+  }
+  const auth = memberAuthorisation(binding);
+  for (const row of membership.facts) {
+    if (!await auth.applied(row.event.id)) {
+      throw new Error('IAM projection behind');
+    }
+  }
   const rows = await history(store, `mcp-${serverId}`, binding.silo);
   const payload = { serverId, connectionId: command.connectionId, toolName: command.toolName,
     toolRevision: command.toolRevision, mode: command.mode, setBy: memberId };
@@ -37,5 +46,6 @@ export async function setToolPolicy(store: EventStore, binding: Binding, memberI
     !tool?.reviewed || tool.revision !== command.toolRevision) return { status: 'conflict' };
   const event = { ...envelope(binding.silo, `mcp-${serverId}`, 'mcp.tool_mode_set', payload, command.commandId),
     principal: { kind: 'human' as const, id: memberId }, source: 'opencrane-server' };
+  await fresh();
   return store.append({ event, expectedSequence: command.expectedSequence });
 }

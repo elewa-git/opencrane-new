@@ -3,7 +3,7 @@ import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
-import { authorityFence, history, listEffects, readEffect, resolveEffect } from '@opencrane/models';
+import { authorityFence, currentMembership, listEffects, readEffect, resolveEffect } from '@opencrane/models';
 import type { EventStore } from '@opencrane/event-store';
 import type { IntegrationOptions } from '../integrations/routes.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -41,13 +41,15 @@ async function authorise(options: EffectOptions, issuer: string, sub: string) {
   if (!memberId) throw new Error('Access changed');
   const fresh = await authorityFence(options.store, performance.now(), [`member-${memberId}`]);
   const auth = memberAuthorisation(options.binding);
-  const membership = (await history(options.store, `member-${memberId}`, options.silo))
-    .filter(r => ['member.joined', 'member.role_changed', 'member.removed'].includes(r.event.type));
-  const latest = membership.at(-1);
-  if (!latest || latest.event.type === 'member.removed') throw new Error('Access changed');
-  const role = z.object({ role: z.string().optional(), newRole: z.string().optional() }).parse(latest.event.data);
-  if (!['owner', 'admin'].includes(role.newRole ?? role.role ?? '')) throw new Error('Access changed');
-  if (!(await Promise.all(membership.map(r => auth.applied(r.event.id)))).every(Boolean)) throw new Error('IAM behind');
+  const membership = await currentMembership(options.store, options.silo, memberId, fresh);
+  if (!['owner', 'admin'].includes(membership.role)) {
+    throw new Error('Access changed');
+  }
+  for (const row of membership.facts) {
+    if (!await auth.applied(row.event.id)) {
+      throw new Error('IAM behind');
+    }
+  }
   const permission = await auth.check(memberId, 'admin');
   if (permission.status === 'unavailable') throw new Error('IAM unavailable');
   if (!permission.allowed) throw new Error('Access changed');

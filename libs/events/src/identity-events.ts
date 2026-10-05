@@ -1,5 +1,6 @@
 // Organisation membership events; the main registry preserves their catalogue order.
 import { z } from 'zod';
+import type { EventEnvelope } from './envelope.ts';
 import { event } from './definition.ts';
 import { memberJoinedDataSchema } from './examples.ts';
 import * as data from './data.ts';
@@ -71,3 +72,20 @@ export const identityEvents = [
   ),
 
 ];
+
+/** Invitations grant no role. Only accepted membership events supply legacy role state. */
+export function legacyMemberRole(event: EventEnvelope): string | undefined {
+  if (event.type === 'member.removed') {
+    return '';
+  }
+  let field: string;
+  if (event.type === 'member.joined' || event.type === 'silo.owner_bootstrapped') {
+    field = 'role';
+  } else if (event.type === 'member.role_changed') {
+    field = 'newRole';
+  } else {
+    return undefined;
+  }
+  const fields = z.record(z.string(), z.unknown()).parse(event.data);
+  return z.string().parse(fields[field]);
+}
