@@ -7,7 +7,7 @@ const workspaceRows = [{
   position: 1,
   type: 'conversation.created',
   time: '2026-10-04T10:00:00Z',
-  data: {},
+  data: { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' },
 }];
 const sizeRefusalCases = [
   { reason: 'a file over 20 MiB', size: 20 * 1024 * 1024 + 1, status: null },

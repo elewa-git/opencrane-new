@@ -69,7 +69,7 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: { ...headers(), origin: 'https://wrong.test' }, payload: create })).statusCode).toBe(403);
     for (const mode of ['direct', 'group']) {
       const response = await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: { ...create, mode } });
-      expect(response.statusCode).toBe(400); expect(response.body).toContain('Phase 2 supports only agent_session');
+      expect(response.statusCode).toBe(400); expect(response.json()).toEqual({ status: 'refused' });
     }
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: create })).statusCode).toBe(200);
     await auth.handler.handle((await history(nats.store, `conversation-${conversationId}`, 'test'))[0]!.event, db);

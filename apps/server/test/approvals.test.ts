@@ -103,6 +103,47 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
   } finally { await f.close(); }
 }, 40_000);
 
+async function refusesMessageDuringAllowAudit() {
+  const fixture = await approvalFixture();
+  try {
+    await fixture.call();
+    expect((await fixture.decide()).statusCode).toBe(200);
+    const append = fixture.nats.store.append.bind(fixture.nats.store);
+    const encrypted = fixture.keys.encrypt('test', 'conversation', 'Withdraw this request');
+    const message = {
+      conversationId: 'conversation', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted,
+    };
+    const allowAudit = z.object({
+      type: z.literal('decision.recorded'), data: z.object({ outcome: z.literal('allow') }),
+    });
+    let changed = false;
+    async function appendAfterMessage(command: Parameters<typeof append>[0]) {
+      const parsedAudit = allowAudit.safeParse(command.event);
+      if (parsedAudit.success && !changed) {
+        changed = true;
+        await fixture.append('conversation-conversation', 'message.posted', message);
+      }
+      return append(command);
+    }
+    const auditing = vi.spyOn(fixture.nats.store, 'append');
+    auditing.mockImplementation(appendAfterMessage);
+    try {
+      const response = await fixture.call();
+      expect(changed).toBe(true);
+      expect(response.status).toBeGreaterThanOrEqual(400);
+      expect(fixture.received()).toBe(0);
+    } finally {
+      auditing.mockRestore();
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+
+it('refuses approved work when a message arrives during its allow audit',
+  refusesMessageDuringAllowAudit, 40_000);
+
 it.each([
   ['agent.turn_stop_requested', { requestedBy: 'alice' }],
   ['agent.turn_completed', {}],

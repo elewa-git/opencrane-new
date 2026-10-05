@@ -13,6 +13,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@opencrane/events": "^0.1.0",
     "zod": "4.6.5"
   }
 }

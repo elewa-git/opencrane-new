@@ -27,6 +27,7 @@
   resets each month. On phones, the message field sits above full-width, borderless attach and
   send buttons. The session panel leaves out placeholder Decisions and People sections.
 - Admins can create a group assistant with selected grants, a fixed paying group and one computer. Members get their own chat transcripts and threads. Screens, personal credentials and fresh-install checks remain pending (#89).
+- Two active silo members can create and use private direct chats through the backend, reload and reconnect to recorded messages, and check original command outcomes. Human messages start no assistant work; designed screens and fresh-install qualification remain pending.
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.

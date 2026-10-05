@@ -1,57 +1,63 @@
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { getEventDefinition } from '@opencrane/events';
+import { conversationCreatedDataSchema, getEventDefinition } from '@opencrane/events';
 import type { conversationKeys } from './keys.ts';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 function isUserConversation(conversationId: string) {
   return !conversationId.startsWith('provider-');
 }
-// Keep model audit records separate from user conversations.
+// Verification uses this prefix to keep model audit separate from user conversations.
 const conversationId = id.refine(isUserConversation, 'Reserved conversation prefix');
 export const chatInput = z.union([
-  z.object({ id, conversationId, assistantId: id,
-    mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session'),
-    payingGroupId: id.optional() }).strict(),
+  z.object({
+    id, conversationId, assistantId: id,
+    mode: z.literal('agent_session').default('agent_session'), payingGroupId: id.optional(),
+  }).strict(),
+  z.object({ id, conversationId, mode: z.literal('direct'), colleagueId: id }).strict(),
   z.object({ id, conversationId, text: z.string().trim().min(1).max(32_000) }).strict(),
   z.object({ id, conversationId, stopTurnId: id }).strict(),
 ]);
 type Input = z.infer<typeof chatInput>;
 type Context = { silo: string; memberId: string };
-type Keys = ReturnType<typeof conversationKeys>;
+export class ChatConflict extends Error {}
+
 type Store = Pick<EventStore, 'readStream' | 'append'>;
-type Authorise = () => Promise<(() => Promise<void>) | undefined>;
 
 function commandType(input: Input) {
-  if ('assistantId' in input) return 'conversation.created';
+  if ('mode' in input) return 'conversation.created';
   if ('stopTurnId' in input) return 'agent.turn_stop_requested';
   return 'message.posted';
 }
 
-function verifyRetry(previous: StoredEvent, input: Input, context: Context, keys: Keys) {
-  const data = z.record(z.string(), z.unknown()).parse(previous.event.data);
+function verifyRetry(
+  previous: StoredEvent, input: Input, context: Context,
+  keys: ReturnType<typeof conversationKeys>,
+) {
   if (previous.event.type !== commandType(input) ||
-      previous.event.principal?.id !== context.memberId) {
-    throw new Error('Id reused');
-  }
-  if ('stopTurnId' in input) {
-    if (data['turnId'] !== input.stopTurnId) throw new Error('Id reused');
-    return;
-  }
+      previous.event.principal?.id !== context.memberId) throw new ChatConflict('Id reused');
+  const data = z.record(z.string(), z.unknown()).parse(previous.event.data);
+  let matches: boolean;
   if ('assistantId' in input) {
-    if (data['assistantId'] !== input.assistantId || data['mode'] !== input.mode ||
-        data['payingGroupId'] !== input.payingGroupId) {
-      throw new Error('Id reused');
-    }
-    return;
+    matches = data['assistantId'] === input.assistantId &&
+      (data['mode'] ?? 'agent_session') === input.mode &&
+      data['payingGroupId'] === input.payingGroupId;
+  } else if ('colleagueId' in input) {
+    const created = conversationCreatedDataSchema.parse(data);
+    matches = created.mode === 'direct' && created.createdBy === context.memberId &&
+      input.colleagueId !== context.memberId && created.participantIds.includes(input.colleagueId);
+  } else if ('stopTurnId' in input) {
+    matches = data['turnId'] === input.stopTurnId;
+  } else {
+    matches = keys.decrypt(context.silo, input.conversationId, data) === input.text;
   }
-  const text = keys.decrypt(context.silo, input.conversationId, data);
-  if (text !== input.text) throw new Error('Id reused');
+  if (!matches) throw new ChatConflict('Id reused');
 }
 
-export async function chatHistory(store: Pick<EventStore, 'readStream'>,
-  silo: string, conversation: string) {
-  const deadline = performance.now() + 10_000;
+export async function chatHistory(
+  store: Pick<EventStore, 'readStream'>, silo: string, conversation: string,
+  deadline = performance.now() + 10_000,
+) {
   const rows: StoredEvent[] = [];
   for await (const row of store.readStream(`conversation-${conversation}`, 1, deadline)) {
     if (row.event.silo !== silo) throw new Error('Conversation silo mismatch');
@@ -60,22 +66,20 @@ export async function chatHistory(store: Pick<EventStore, 'readStream'>,
   return rows;
 }
 
-// Read history before opening the team access check. Append once to one stream.
-export async function chatCommand(store: Store, keys: Keys, context: Context,
-  value: z.input<typeof chatInput>, authorise?: Authorise) {
+/** Append one event after access is checked and a conversation key is available. */
+export async function chatCommand(
+  store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
+  value: unknown, fresh?: (operation: 'retry' | 'append') => Promise<void>,
+) {
   const input = chatInput.parse(value);
-  if ('assistantId' in input && input.mode !== 'agent_session') {
-    throw new Error('Phase 2 supports only agent_session conversations');
-  }
   const rows = await chatHistory(store, context.silo, input.conversationId);
-  const fresh = await authorise?.();
-  function matchesId(row: StoredEvent) {
+  function hasCommandId(row: StoredEvent) {
     return row.event.id === input.id;
   }
-  const previous = rows.find(matchesId);
+  const previous = rows.find(hasCommandId);
   if (previous) {
     verifyRetry(previous, input, context, keys);
-    await fresh?.();
+    await fresh?.('retry');
     return { status: 'appended' as const, sequence: previous.sequence };
   }
   validateConversation(rows, input, context.memberId);
@@ -87,50 +91,66 @@ export async function chatCommand(store: Store, keys: Keys, context: Context,
     silo: context.silo, source: 'opencrane-server', time: new Date().toISOString(),
     principal: { kind: 'human' as const, id: context.memberId }, data,
   };
-  await fresh?.();
-  const result = await store.append({ expectedSequence: rows.at(-1)?.sequence ?? 0, event });
+  await fresh?.('append');
+  const expectedSequence = rows.at(-1)?.sequence ?? 0;
+  const result = await store.append({ expectedSequence, event });
   if (result.status !== 'appended') return result;
-  // Verify the saved payload when the adapter recognises a concurrent retry.
+  // Verify the saved payload, because the adapter may have found a concurrent retry.
   const committed = await chatHistory(store, context.silo, input.conversationId);
-  const saved = committed.find(matchesId);
+  const saved = committed.find(hasCommandId);
   if (!saved) throw new Error('Append outcome unavailable');
   verifyRetry(saved, input, context, keys);
-  return result;
+  return { status: 'appended' as const, sequence: saved.sequence };
 }
 
-function commandData(input: Input, context: Context, keys: Keys) {
+function commandData(input: Input, context: Context, keys: ReturnType<typeof conversationKeys>) {
+  const conversationId = input.conversationId;
   if ('assistantId' in input) {
-    const data: { conversationId: string; assistantId: string; createdBy: string;
-      mode: string; payingGroupId?: string } = {
-      conversationId: input.conversationId, assistantId: input.assistantId,
-      createdBy: context.memberId, mode: input.mode,
+    const data = {
+      conversationId, assistantId: input.assistantId, createdBy: context.memberId, mode: input.mode,
     };
-    if (input.payingGroupId) data.payingGroupId = input.payingGroupId;
+    if (input.payingGroupId) return { ...data, payingGroupId: input.payingGroupId };
     return data;
   }
-  if ('stopTurnId' in input) {
-    return { conversationId: input.conversationId, turnId: input.stopTurnId,
-      requestedBy: context.memberId };
+  if ('colleagueId' in input) {
+    return {
+      conversationId, createdBy: context.memberId, mode: input.mode,
+      participantIds: [context.memberId, input.colleagueId],
+    };
   }
-  const content = keys.encrypt(context.silo, input.conversationId, input.text);
-  return { conversationId: input.conversationId, authorId: context.memberId,
-    authorKind: 'human', contentType: 'text', ...content };
+  if ('stopTurnId' in input) {
+    return { conversationId, turnId: input.stopTurnId, requestedBy: context.memberId };
+  }
+  const encrypted = keys.encrypt(context.silo, conversationId, input.text);
+  return {
+    conversationId, authorId: context.memberId, authorKind: 'human', contentType: 'text', ...encrypted,
+  };
 }
 
 function validateConversation(rows: StoredEvent[], input: Input, memberId: string) {
+  if ('mode' in input) {
+    if (rows.length) throw new ChatConflict('Conversation state conflict');
+    return;
+  }
   function isClosed(row: StoredEvent) {
     return row.event.type === 'conversation.closed';
   }
-  if ('assistantId' in input) {
-    if (rows.length > 0) throw new Error('Conversation state conflict');
-    return;
+  function isCreated(row: StoredEvent) {
+    return row.event.type === 'conversation.created';
   }
-  if (!rows.length || rows.some(isClosed)) throw new Error('Conversation state conflict');
-  if ('stopTurnId' in input) {
-    function isRequestedMessage(row: StoredEvent) {
-      return 'stopTurnId' in input && row.event.id === input.stopTurnId &&
-        row.event.type === 'message.posted' && row.event.principal?.id === memberId;
+  if (!rows.length || rows.some(isClosed)) throw new ChatConflict('Conversation state conflict');
+  const created = conversationCreatedDataSchema.parse(rows.find(isCreated)?.event.data);
+  if (created.mode === 'direct') {
+    if (!created.participantIds.includes(memberId) || 'stopTurnId' in input) {
+      throw new ChatConflict('Direct conversation refused');
     }
-    if (!rows.some(isRequestedMessage)) throw new Error('Unrequested turn');
+  }
+  if ('stopTurnId' in input) {
+    const stopTurnId = input.stopTurnId;
+    function isRequestedTurn(row: StoredEvent) {
+      return row.event.id === stopTurnId && row.event.type === 'message.posted' &&
+        row.event.principal?.id === memberId;
+    }
+    if (!rows.some(isRequestedTurn)) throw new ChatConflict('Unrequested turn');
   }
 }

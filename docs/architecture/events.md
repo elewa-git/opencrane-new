@@ -217,9 +217,9 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `conversation.created` | command | conversations (immutable `mode`: `agent_session`, `direct` or `group`; Phase 2 accepts only `agent_session`; missing mode in older events reads as `agent_session`) | OpenFGA participants |
+| `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; group admission is deferred; missing mode in older assistant events reads as `agent_session`) | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
-| `message.posted` | person, or the system for routines | messages | deliver to the assistant's computer (wake it if suspended); browser (WebSocket) |
+| `message.posted` | person, or the system for routines | messages | browser delivery (WebSocket) in every mode; only `agent_session` dispatches to its assistant's computer and wakes it if suspended |
 | `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
 | `agent.turn_stop_requested` | member command | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |
 | `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |

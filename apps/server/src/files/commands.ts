@@ -1,6 +1,7 @@
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import {
   getEventDefinition,
+  conversationCreatedDataSchema,
   fileDeliveredDataSchema,
   fileUploadedDataSchema,
 } from '@opencrane/events';
@@ -9,11 +10,6 @@ import { creationEvent } from '../chat/private-session.ts';
 import { chatHistory } from '../chat/commands.ts';
 import { FileRefusal, parseFileInput } from './refusals.ts';
 
-const conversationDetails = z.object({
-  createdBy: z.string(),
-  assistantId: z.string(),
-  mode: z.string().default('agent_session'),
-});
 const participantDetails = z.object({ participantId: z.string() });
 const memberDetails = z.object({ memberId: z.string() });
 const fileContext = z.object({
@@ -32,7 +28,10 @@ export async function ownConversation(
   const rows = await chatHistory(store, silo, conversationId);
   await verifyCurrentMember(store, silo, memberId);
   const created = findEventOfType(rows, 'conversation.created');
-  const data = conversationDetails.parse(created?.event.data);
+  const data = conversationCreatedDataSchema.parse(created?.event.data);
+  if (data.mode !== 'agent_session') {
+    throw new FileRefusal('conversation_refused');
+  }
   const event = await creationEvent(store, silo, `assistant-${data.assistantId}`,
     'assistant.created');
   const assistant = z.object({ kind: z.string(), ownerId: z.string() }).parse(event.data);
@@ -46,7 +45,7 @@ export async function ownConversation(
     allowed = currentParticipant(rows, memberId, allowed);
   }
   const closed = findEventOfType(rows, 'conversation.closed');
-  if (!allowed || data.mode !== 'agent_session' || closed) {
+  if (!allowed || closed) {
     throw new FileRefusal('conversation_refused');
   }
   return rows;

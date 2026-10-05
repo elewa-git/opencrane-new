@@ -16,7 +16,7 @@ import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, TurnAdmissionRejected } from './turns.ts';
 import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
-import { recordReport, reportPosition, ReportRejected } from './reports.ts';
+import { agentSession, recordReport, reportPosition, ReportRejected } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
@@ -32,6 +32,7 @@ const reportDetails = z.object({
 type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
   Partial<Pick<ChatOptions, 'binding'>> & { objects?: Client };
 type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
+type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Connection = (computerId: string, assistantId: string) =>
@@ -227,7 +228,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     }
     return link;
   }
-  async function process(conversation: Conversation) {
+  async function process(conversation: AgentSession) {
     try {
       await processConversation(options, tokens, conversation, refused, connection);
     } catch {
@@ -237,7 +238,8 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   try {
     while (!signal.aborted) {
       const conversations = await listConversations(options.db, options.silo);
-      const pending = conversations.map(process);
+      const sessions = conversations.filter(isAgentSession);
+      const pending = sessions.map(process);
       await Promise.all(pending);
       await delay(250, undefined, { signal });
     }
@@ -249,6 +251,10 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     const pending = active.map(settledBridge);
     await Promise.all(pending);
   }
+}
+
+function isAgentSession(conversation: Conversation): conversation is AgentSession {
+  return conversation.mode === 'agent_session';
 }
 
 async function openBridge(options: WatchOptions, tokens: Tokens, kube: SandboxClient,
@@ -323,7 +329,7 @@ function attachmentsBefore(rows: ChatRows, uploads: Upload[], sequence: number) 
   return attachments;
 }
 
-function sendTurn(options: WatchOptions, socket: WebSocket, conversation: Conversation,
+function sendTurn(options: WatchOptions, socket: WebSocket, conversation: AgentSession,
   rows: ChatRows, uploads: Upload[], message: ChatRows[number]) {
   const attachments = attachmentsBefore(rows, uploads, message.sequence);
   const requester = z.object({ authorId: z.string() }).parse(message.event.data);
@@ -347,8 +353,9 @@ async function deliverUploads(objects: Client | undefined,
 }
 
 async function processConversation(options: WatchOptions, tokens: Tokens,
-  conversation: Conversation, refused: Set<string>, connection: Connection) {
+  conversation: AgentSession, refused: Set<string>, connection: Connection) {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+  agentSession(rows);
   const message = pendingMessage(rows);
   const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
   function isLifecycle(row: ChatRows[number]) {

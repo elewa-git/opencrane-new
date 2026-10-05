@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { IssuedToken, tokenIssuer } from '@opencrane/auth';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import type { EventEnvelope } from '@opencrane/events';
+import { conversationCreatedDataSchema, type EventEnvelope } from '@opencrane/events';
 import { readEvents } from '@opencrane/projections';
 import { registerHandler } from '@opencrane/handlers';
 import { createLogger } from '@opencrane/observability';
@@ -167,7 +167,12 @@ async function lastActivity(store: EventStore, silo: string, assistantId: string
   let time = 0;
   for await (const { event } of readEvents(store, 1, await store.head())) {
     if (event.silo !== silo) continue;
-    if (event.type === 'conversation.created' && field(event.data, 'assistantId') === assistantId) conversations.add(event.subject);
+    if (event.type === 'conversation.created') {
+      const created = conversationCreatedDataSchema.parse(event.data);
+      if (created.mode === 'agent_session' && created.assistantId === assistantId) {
+        conversations.add(event.subject);
+      }
+    }
     if (!conversations.has(event.subject)) continue;
     if (event.type === 'message.posted') openTurnIds.add(event.id);
     // A turn id is the id of the message.posted event that started it.

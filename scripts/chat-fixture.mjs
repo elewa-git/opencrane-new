@@ -8,7 +8,8 @@ export async function chatFixture(page, scenario = 'live') {
     socket?.send(JSON.stringify({ version: 1, type: 'event', topic: 'conversation', conversationId: 'chat', generation: 1, position: row.position, row }));
     return row;
   };
-  add('conversation.created', {});
+  const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' };
+  add('conversation.created', creation);
   if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued'].includes(scenario)) {
     const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });

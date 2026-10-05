@@ -167,7 +167,11 @@ it.each([500, 503, 403])('does not show empty states after a %s conversation rea
 });
 it('renders streamed replies, wake progress and durable Stop, then replays the stopped partial', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
-  const rows = [{ id: 'create', position: 1, type: 'conversation.created', time: '2026-10-02T10:00:00Z', data: {} },
+  const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' };
+  const rows = [{
+    id: 'create', position: 1, type: 'conversation.created',
+    time: '2026-10-02T10:00:00Z', data: creation,
+  },
     { id: 'message', position: 2, type: 'message.posted', time: '2026-10-02T10:00:00Z', data: { text: 'Hi', authorId: 'me' } }];
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
@@ -204,7 +208,11 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
 
 it('uploads with progress, retries the same bytes and key, and replays attached files in both views', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
-  const rows = [{ id: 'create', position: 1, type: 'conversation.created', time: '2026-10-03T10:00:00Z', data: {} }];
+  const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' };
+  const rows = [{
+    id: 'create', position: 1, type: 'conversation.created',
+    time: '2026-10-03T10:00:00Z', data: creation,
+  }];
   let postedText = '';
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const path = input instanceof Request ? input.url : String(input);

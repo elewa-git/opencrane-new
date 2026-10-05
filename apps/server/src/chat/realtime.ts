@@ -1,139 +1,141 @@
 import type { WebSocket } from 'ws';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
-import { GroupRefused, readActiveMember } from '../members/groups.ts';
-import { AuthorityApplying, PayingGroupRefused } from '@opencrane/models';
-import { memberAuthorisation } from '@opencrane/authz';
-import { chatContent, type ChatOptions } from './routes.ts';
-import { privateSessionCreation, requirePrivateReader } from './private-session.ts';
+import { chatAccess, recordedChatMode, isChatRefused } from './access.ts';
+import { chatRows, type ChatOptions } from './routes.ts';
 
-async function subscriptionAccess(options: ChatOptions, memberId: string,
-  conversationId: string) {
-  // Keep creation events for this socket. Messages cannot change their owner or payer.
-  const session = await privateSessionCreation(options, conversationId);
-  const subjects = [`ownership-${options.silo}`, `member-${memberId}`,
-    `assistant-${session.created.assistantId}`];
-  if (session.assistant.kind === 'team') subjects.push(`team-${session.assistant.ownerId}`);
-  let previousHeads: number[] | undefined;
-  let conversationHead: number | undefined;
-  const auth = memberAuthorisation(options.binding);
-  async function readHead(subject: string) {
-    return options.store.head(subject);
-  }
-  async function check() {
-    const headReads = subjects.map(readHead);
-    const heads = await Promise.all(headReads);
-    const currentConversationHead = await options.store.head(`conversation-${conversationId}`);
-    const authorityChanged = !previousHeads || heads.some(headMoved);
-    function headMoved(head: number, index: number) {
-      return head !== previousHeads?.[index];
-    }
-    if (authorityChanged) {
-      await readActiveMember(options.store, options.binding, memberId);
-      await requirePrivateReader(options, memberId, session);
-    }
-    if (authorityChanged || currentConversationHead !== conversationHead) {
-      const permission = await auth.conversation(memberId, conversationId, 'read');
-      if (!permission.allowed) throw new GroupRefused('Conversation refused');
-    }
-    previousHeads = heads;
-    conversationHead = currentConversationHead;
-  }
-  return check;
+type Mode = 'agent_session' | 'direct';
+interface Subscription {
+  socket: WebSocket;
+  session: SessionData;
+  config: AuthConfig;
+  options: ChatOptions;
+  conversationId: string;
+  position: number;
+  generation: number;
+  running: boolean;
+  ready: boolean;
+  computerState: string;
+  checking: boolean;
 }
 
-export function conversationSubscription(socket: WebSocket, session: SessionData,
-  config: AuthConfig, options?: ChatOptions) {
+export function conversationSubscription(
+  socket: WebSocket, session: SessionData, config: AuthConfig, options?: ChatOptions,
+) {
   let started = false;
+  return subscribe;
+
   async function subscribe(conversationId: string, since: number, requestedGeneration?: number) {
     if (started || !options) {
       socket.close(1008);
       return;
     }
     started = true;
-    const chat = options;
-    let position = since;
-    let generation = requestedGeneration ?? 0;
-    let running = false;
-    let ready = false;
-    let state = '';
-    let access: Awaited<ReturnType<typeof subscriptionAccess>> | undefined;
-    function send(type: string, extra = {}) {
-      const message = { version: 1, topic: 'conversation', conversationId,
-        type, position, generation, ...extra };
-      socket.send(JSON.stringify(message));
-    }
-    async function drain() {
-      if (running || socket.readyState !== socket.OPEN) return;
-      running = true;
-      try {
-        if (!access) {
-          const memberId = await chat.feed.memberId(chat.silo, config.issuerUrl, session.sub);
-          if (!validSession(session, config, memberId)) throw new GroupRefused('Session refused');
-          access = await subscriptionAccess(chat, memberId, conversationId);
-        }
-        if (session.exp * 1000 <= Date.now()) throw new GroupRefused('Session expired');
-        await access();
-        const result = await chatContent(chat, conversationId, position);
-        if (needsResync(position, generation, result)) {
-          generation = result.generation;
-          position = 0;
-          send('resync');
-          socket.close(1013);
-          return;
-        }
-        generation = result.generation;
-        for (const row of result.rows) {
-          if (socket.bufferedAmount > 64 * 1024) {
-            send('resync');
-            socket.close(1013);
-            return;
-          }
-          position = row.position;
-          send('event', { row });
-        }
-        if (!ready || state !== result.computerState) {
-          state = result.computerState;
-          send('ready', { computerState: state });
-          ready = true;
-        }
-      } catch (error) {
-        if (error instanceof AuthorityApplying) {
-          socket.close(1013);
-        } else if (isPrivateRefusal(error)) {
-          send('refused');
-          socket.close(1008);
-        } else {
-          socket.close(1011);
-        }
-      } finally {
-        running = false;
-      }
-    }
+    const state: Subscription = {
+      socket, session, config, options, conversationId, position: since,
+      generation: requestedGeneration ?? 0, running: false, checking: false,
+      ready: false, computerState: '',
+    };
     function poll() {
-      void drain();
+      void drain(state);
     }
     const timer = setInterval(poll, 100);
-    function stopPolling() {
+    timer.unref();
+    function stop() {
       clearInterval(timer);
     }
-    timer.unref();
-    socket.once('close', stopPolling);
-    await drain();
+    socket.once('close', stop);
+    await drain(state);
   }
-  return subscribe;
 }
 
-function validSession(session: SessionData, config: AuthConfig,
-  memberId: string | undefined): memberId is string {
-  return session.orgId === config.expectedOrgId && session.exp * 1000 > Date.now()
-    && Boolean(memberId);
+async function pollAccess(state: Subscription): Promise<Mode | undefined> {
+  const { socket, options, conversationId, session, config } = state;
+  if (state.checking || socket.readyState !== socket.OPEN) return;
+  state.checking = true;
+  const deadline = performance.now() + 1500;
+  function expire() {
+    // Leave time for polling and the close handshake inside the two-second removal bound.
+    socket.close(1013);
+  }
+  const watchdog = setTimeout(expire, 1500);
+  try {
+    const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+    if (!validSession(session, config, options) || !memberId) {
+      refuse(state);
+      return;
+    }
+    const request = { memberId, conversationId, deadline };
+    const access = await chatAccess(options, request);
+    return recordedChatMode(access);
+  } catch (error) {
+    if (isChatRefused(error)) refuse(state);
+    else socket.close(1013);
+    return;
+  } finally {
+    clearTimeout(watchdog);
+    state.checking = false;
+  }
 }
 
-function isPrivateRefusal(error: unknown) {
-  return error instanceof GroupRefused || error instanceof PayingGroupRefused;
+async function drain(state: Subscription) {
+  // Keep checking removals while a slow content read is still waiting.
+  const mode = await pollAccess(state);
+  if (!mode || state.running || state.socket.readyState !== state.socket.OPEN) return;
+  state.running = true;
+  try {
+    const result = await chatRows(state.options, state.conversationId, mode, state.position);
+    if (state.socket.readyState !== state.socket.OPEN) return;
+    sendRows(state, result);
+  } catch {
+    state.socket.close(1013);
+  } finally {
+    state.running = false;
+  }
 }
 
-function needsResync(position: number, generation: number,
-  result: { position: number; generation: number }) {
-  return (position > 0 && generation !== result.generation) || position > result.position;
+function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRows>>) {
+  if ((state.position > 0 && state.generation !== result.generation) ||
+      state.position > result.position) {
+    state.generation = result.generation;
+    state.position = 0;
+    send(state, 'resync');
+    state.socket.close(1013);
+    return;
+  }
+  state.generation = result.generation;
+  for (const row of result.rows) {
+    if (state.socket.bufferedAmount > 64 * 1024) {
+      send(state, 'resync');
+      state.socket.close(1013);
+      return;
+    }
+    state.position = row.position;
+    const extra = { row };
+    send(state, 'event', extra);
+  }
+  if (!state.ready || state.computerState !== result.computerState) {
+    state.computerState = result.computerState;
+    const extra = { computerState: state.computerState };
+    send(state, 'ready', extra);
+    state.ready = true;
+  }
+}
+
+function send(state: Subscription, type: string, extra = {}) {
+  if (state.socket.readyState !== state.socket.OPEN) return;
+  const message = {
+    version: 1, topic: 'conversation', conversationId: state.conversationId,
+    type, position: state.position, generation: state.generation, ...extra,
+  };
+  state.socket.send(JSON.stringify(message));
+}
+
+function refuse(state: Subscription) {
+  send(state, 'refused');
+  state.socket.close(1008);
+}
+
+function validSession(session: SessionData, config: AuthConfig, options: ChatOptions) {
+  return session.orgId === config.expectedOrgId && session.exp * 1000 > Date.now() &&
+    options.silo === options.binding.silo;
 }

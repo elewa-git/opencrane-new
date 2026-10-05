@@ -1007,7 +1007,8 @@ it('resets at the exact UTC month boundary, holds unknown money and attributes l
     f.advance(1);
     await f.actor.period();
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 1 });
-    expect((await f.call()).status).toBe(402);
+    const refused = await f.call();
+    expect(refused.status, refused.text).toBe(402);
     await f.actor.effect(reservation.id, { inputTokens: 1000, outputTokens: 120 });
     await f.actor.settleRecorded(reservation.id, `${reservation.id}:effect.observed`);
     expect(totals(f.actor.state, f.actor.now())).toMatchObject({ monthCents: 0, reservedCents: 0 });

@@ -259,9 +259,22 @@ export const toolsetChangedDataSchema = z
 
 // --- Conversations and agent activity ----------------------------------
 
-export const conversationCreatedDataSchema = z
-  .object({ conversationId: id, assistantId: id, createdBy: id, mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session'), payingGroupId: id.optional() })
-  .strict();
+export function hasDirectParticipants(data: { createdBy: string; participantIds: string[] }) {
+  const [first, second] = data.participantIds;
+  return first !== second && data.participantIds.includes(data.createdBy);
+}
+
+// Missing mode belongs only to legacy assistant sessions. New human records are explicit.
+export const conversationCreatedDataSchema = z.union([
+  z.object({
+    conversationId: id, assistantId: id, createdBy: id,
+    mode: z.literal('agent_session').default('agent_session'), payingGroupId: id.optional(),
+  }).strict(),
+  z.object({
+    conversationId: id, createdBy: id, mode: z.literal('direct'),
+    participantIds: z.array(id).length(2),
+  }).strict().refine(hasDirectParticipants, 'Direct conversations require two distinct people'),
+]);
 
 export const participantAddedDataSchema = z
   .object({ conversationId: id, participantId: id, addedBy: id })
