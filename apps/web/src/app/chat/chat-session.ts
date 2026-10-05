@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { transcript, uploadedFile } from './chat-state';
+import { shortTime } from './file-presentation';
 
 class ReadFailure extends Error {
   readonly status: number;
@@ -28,6 +29,7 @@ export class ChatSession implements OnDestroy {
   readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
   readonly busy = signal(false);
   readonly error = signal('');
+  readonly announcement = signal('');
   readonly denied = signal(false);
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
@@ -75,7 +77,11 @@ export class ChatSession implements OnDestroy {
     });
   }
   async load(): Promise<void> {
-    this.error.set(''); this.loading.set(true); this.railLoading.set(true); this.railUnavailable.set(false);
+    this.error.set('');
+    this.announcement.set('');
+    this.loading.set(true);
+    this.railLoading.set(true);
+    this.railUnavailable.set(false);
     try {
       const context = chatContextSchema.parse(await this.request('/api/chat'));
       const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await this.request('/auth/me'));
@@ -90,7 +96,8 @@ export class ChatSession implements OnDestroy {
   async select(id: string): Promise<void> {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     const revision = ++this.revision;
-    this.clearUpload(); this.socket.disconnect(); this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
+    this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
+    this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
     history.replaceState({}, '', `/workspace?conversation=${encodeURIComponent(id)}`);
     try {
@@ -101,7 +108,8 @@ export class ChatSession implements OnDestroy {
   }
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
-    ++this.revision; this.clearUpload(); this.socket.disconnect(); this.selected.set(''); this.rows.set([]); this.error.set('');
+    ++this.revision; this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
+    this.selected.set(''); this.rows.set([]); this.error.set('');
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
     history.replaceState({}, '', '/workspace');
   }
@@ -196,15 +204,22 @@ export class ChatSession implements OnDestroy {
     if (message.computerState) this.computer.set(message.computerState);
     if (message.row) {
       const parsed = chatRowSchema.safeParse(message.row);
-      if (parsed.success) this.apply(parsed.data);
+      if (parsed.success) {
+        const added = this.apply(parsed.data);
+        // Old notices stay quiet when the workspace reloads.
+        if (added && isBudgetStop(parsed.data)) {
+          this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
+        }
+      }
       else { this.error.set('× Could not read a conversation update. Reload to retry.'); this.socket.disconnect(); }
     }
   }
-  private apply(row: ChatRow): void {
-    if (row.position <= this.position) return;
+  private apply(row: ChatRow): boolean {
+    if (row.position <= this.position) return false;
     this.position = row.position;
     this.rows.update(rows => [...rows.filter(existing => existing.id !== row.id), row].sort((a, b) => (a.position || Infinity) - (b.position || Infinity)));
     this.updateSummary();
+    return true;
   }
   private updateSummary(): void {
     const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
@@ -227,4 +242,8 @@ export class ChatSession implements OnDestroy {
       this.error.set('⊘ Access unavailable. Sign in with an account invited to this workspace.');
     } else this.error.set(this.pending ? '↻ Offline or unavailable — message queued on this page. Retry to send it once.' : '× Could not load the conversation. Retry when the connection returns.');
   }
+}
+
+function isBudgetStop(row: ChatRow): boolean {
+  return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
 }

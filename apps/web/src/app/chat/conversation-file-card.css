@@ -1,0 +1,76 @@
+.file-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #dee3e4;
+  border-radius: 10px;
+  background: white;
+  text-align: left;
+}
+
+.file-card.created {
+  border-color: #9fdde8;
+}
+
+.file-card strong {
+  display: block;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-card small {
+  display: block;
+  margin-top: 4px;
+  color: var(--oc-ink-muted);
+  font-size: 11.5px;
+}
+
+.file-card button,
+.file-card a {
+  color: var(--oc-accent-dark);
+  font-size: 12px;
+}
+
+.file-card a {
+  text-decoration: none;
+}
+
+@media (max-width: 700px) {
+  .file-card .screenshot-thumbnail {
+    grid-column: 1 / -1;
+  }
+
+  .file-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .file-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .file-card strong {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .file-card button,
+  .file-card a {
+    display: flex;
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+  }
+}

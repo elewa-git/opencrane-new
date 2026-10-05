@@ -14,6 +14,7 @@
   color: var(--oc-ink-muted);
   font-weight: 400;
 }
+.panel-section h2 + oc-shared-state { display: block; margin-top: 14px; }
 .panel-section>p {
   font-size: 11px;
   color: var(--oc-ink-muted);

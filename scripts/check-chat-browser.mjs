@@ -31,6 +31,12 @@ const stable = async page => {
   // Wait for a zoneless render, rather than treating the HTTP response as a painted view.
   await page.evaluate(() => new Promise(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))));
 };
+
+function agentBadgeStyle(node) {
+  const style = globalThis.getComputedStyle(node);
+  return { background: style.backgroundColor, fontFamily: style.fontFamily };
+}
+
 async function open(scenario, width = 390) {
   const page = await browser.newPage({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: 'reduce' });
   if (scenario === 'rail-offline') await page.clock.install();
@@ -130,6 +136,12 @@ try {
   // Keyboard, streaming, Stop and replay all cross the rendered UI and the wire protocol.
   for (const width of [1280, 390]) {
     const { page, fixture } = await open('streaming', width);
+    if (width === 390) {
+      const stopButton = page.locator('oc-chat-composer')
+        .getByRole('button', { name: 'Stop', exact: true });
+      assert.equal(await stopButton.evaluate(button => button.scrollWidth <= button.clientWidth), true,
+        'Stop label fits inside the phone button');
+    }
     const composer = page.getByRole('textbox', { name: 'Message your agent' });
     await composer.focus(); await page.keyboard.press('Tab');
     assert.equal(await page.getByRole('button', { name: 'Attach', exact: true }).evaluate(node => node === globalThis.document.activeElement), true);
@@ -138,9 +150,13 @@ try {
     await page.getByRole('region', { name: 'Conversation messages' }).focus();
     assert.equal(await page.locator(':focus').getAttribute('aria-label'), 'Conversation messages');
     fixture.add('decision.recorded', { turnId: 'event-2', reason: 'budget_exhausted' });
-    await page.getByRole('alert').filter({ hasText: 'Spending limit reached' }).waitFor();
+    await page.locator('oc-budget-stop-notice').waitFor();
     await page.reload(); await stable(page);
-    assert((await page.locator('.budget-refusal').innerText()).includes('Owner or Admin'));
+    const budgetNotice = page.locator('oc-budget-stop-notice');
+    const budgetCopy = await budgetNotice.innerText();
+    assert(budgetCopy.includes('Spending limit reached'));
+    assert(budgetCopy.includes('An Owner or Admin can review the limit'));
+    assert(budgetCopy.includes('next monthly budget period (UTC)'));
     assert(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     fixture.conflictNextStop();
     await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();
@@ -208,7 +224,12 @@ try {
       if (scenario === 'queued') { await page.getByRole('textbox', { name: 'Message your agent' }).fill('Compare this brief against what we promised.'); await page.getByRole('button', { name: 'Send message' }).click(); await page.getByRole('button', { name: 'Retry queued message' }).waitFor(); }
       if (scenario === 'panel' && width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
       if (scenario === 'tools' && frame !== '8i-activity') await page.locator('.tool-line summary').first().click();
-      if (scenario === 'assets') { await page.locator('.file-card').getByRole('button', { name: 'Open', exact: true }).click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
+      if (scenario === 'assets') { await page.locator('.file-card').getByRole('button', { name: /^Open (?!session files)/ }).click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
+      if (scenario === 'a2ui') {
+        const badge = await page.locator('.a2ui .agent-badge').evaluate(agentBadgeStyle);
+        assert.equal(badge.background, 'rgb(238, 250, 252)');
+        assert(badge.fontFamily.includes('DM Mono'));
+      }
       await page.evaluate(() => new Promise(resolve => globalThis.requestAnimationFrame(() => globalThis.requestAnimationFrame(resolve))));
       for (const selector of ['.workspace-header', '.transcript', '.composer-dock']) {
         const box = await page.locator(selector).boundingBox();

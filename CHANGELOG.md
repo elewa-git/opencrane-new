@@ -17,6 +17,10 @@
 - Owners can appoint an active successor while retaining ownership, then separately step down to Admin; the last owner is protected, and lost responses can be checked by their original change reference. P4-2 screens and fresh-install qualification remain pending.
 - Personal settings now opens from Account with workspace navigation, shows the current identity name, and marks unsupported profile and personal tool data unavailable.
 - Owners and admins can save and rotate provider keys, reconcile lost replies, select registry models and inspect separate reachability and budgeted model-test evidence through the new backend interface; screens and model access remain pending.
+- Phone file cards show full names. Your own uploads and screenshots can be downloaded in an
+  open conversation. The spending-limit message says an Owner or Admin can help, or the limit
+  resets each month. On phones, the message field sits above full-width, borderless attach and
+  send buttons. The session panel leaves out placeholder Decisions and People sections.
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.

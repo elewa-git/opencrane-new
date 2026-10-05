@@ -1,0 +1,66 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390,
+    320
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": 18,
+  "files": [
+    "empty-workspace-1280-no-preference.png",
+    "workspace-effects-1280-no-preference.png",
+    "empty-workspace-1280-reduce.png",
+    "workspace-effects-1280-reduce.png",
+    "empty-workspace-390-no-preference.png",
+    "phone-panel-390-no-preference.png",
+    "workspace-effects-390-no-preference.png",
+    "streaming-390-no-preference.png",
+    "empty-workspace-390-reduce.png",
+    "phone-panel-390-reduce.png",
+    "workspace-effects-390-reduce.png",
+    "streaming-390-reduce.png",
+    "empty-workspace-320-no-preference.png",
+    "workspace-effects-320-no-preference.png",
+    "streaming-320-no-preference.png",
+    "empty-workspace-320-reduce.png",
+    "workspace-effects-320-reduce.png",
+    "streaming-320-reduce.png"
+  ],
+  "environment": "Built Angular assets; Chromium; intercepted protocol fixtures; no stack",
+  "frames": [
+    "WRK-01-1280",
+    "WRK-01-390",
+    "WRK-03-1280",
+    "WRK-03-390",
+    "WRK-04-1280",
+    "WRK-04-390",
+    "WRK-80-1280",
+    "WRK-80-390",
+    "WRK-83-1280",
+    "WRK-83-390",
+    "WRK-40-1280",
+    "WRK-40-390",
+    "WRK-41-1280",
+    "WRK-41-390",
+    "WRK-42-1280",
+    "WRK-42-390",
+    "SPD-54-1280",
+    "SPD-54-390"
+  ],
+  "checks": [
+    "Sanitised tool line opens by keyboard and keeps a 2px focus ring",
+    "Failed commands and turns show failure without offering a retry",
+    "Budget stop tells the reader who can help and when it resets",
+    "Open conversations offer Download for your own uploads and screenshots",
+    "Assistant file badges keep their colour, spacing and mono font",
+    "Failed and refused reads never look like empty conversations",
+    "Phone panel keeps Files and Activity tabs and closes with Escape",
+    "44px phone file actions",
+    "No horizontal overflow",
+    "Reduced-motion panel entrance is immediate"
+  ]
+}

@@ -11,7 +11,160 @@ function closePanelDialog(this: HTMLDialogElement): void {
   this.dispatchEvent(new Event('close'));
 }
 
+function politeStatusText(root: HTMLElement): string {
+  const statuses = root.querySelectorAll('[role="status"][aria-live="polite"]');
+  const messages: string[] = [];
+  for (const status of statuses) messages.push(status.textContent ?? '');
+  return messages.join(' ');
+}
+
+interface DownloadScenario {
+  name: string;
+  expectedVisible: boolean;
+  rows: object[];
+}
+
+async function checkDownloadVisibility(scenario: DownloadScenario): Promise<void> {
+  history.replaceState({}, '', '/workspace?conversation=chat');
+  vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+    const path = input instanceof Request ? input.url : String(input);
+    const pathname = new URL(path, location.origin).pathname;
+    let body: object;
+    if (pathname === '/auth/me') {
+      body = { authenticated: true, user: { name: 'Alex' } };
+    } else if (pathname === '/api/chat') {
+      body = { memberId: 'me', assistantId: 'assistant' };
+    } else if (pathname === '/api/conversations') {
+      body = { rows: [{
+        conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
+        createdAt: '2026-10-03T10:00:00Z', status: 'open',
+      }] };
+    } else {
+      body = {
+        rows: scenario.rows,
+        position: scenario.rows.length,
+        generation: 1,
+        computerState: 'ready',
+      };
+    }
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  });
+
+  const socket: SocketLike = {
+    readyState: 1, onopen: null, onclose: null, onerror: null,
+    onmessage: null, send: vi.fn(), close: vi.fn(),
+  };
+  TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY, useValue: () => socket }] });
+  const fixture = TestBed.createComponent(Workspace);
+  await fixture.whenStable();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
+  await vi.waitFor(() => expect(root.querySelector('.file-card')).not.toBeNull());
+  const download = root.querySelector('.file-card a');
+  expect(download !== null).toBe(scenario.expectedVisible);
+  fixture.destroy();
+}
+
+const downloadScenarios: DownloadScenario[] = [
+  {
+    name: 'your own upload',
+    expectedVisible: true,
+    rows: [{
+      id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+      data: {
+        conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
+        name: 'brief.pdf', mime: 'application/pdf',
+      },
+    }],
+  },
+  {
+    name: 'another member’s ordinary upload',
+    expectedVisible: false,
+    rows: [{
+      id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+      data: {
+        conversationId: 'chat', fileId: 'file', uploadedBy: 'someone-else',
+        name: 'brief.pdf', mime: 'application/pdf',
+      },
+    }],
+  },
+  {
+    name: 'an assistant file',
+    expectedVisible: false,
+    rows: [
+      {
+        id: 'message', position: 1, type: 'message.posted', time: '2026-10-03T10:00:00Z',
+        data: { text: 'Create a brief', authorId: 'me' },
+      },
+      {
+        id: 'assistant-file', position: 2, type: 'agent.file_changed',
+        time: '2026-10-03T10:00:01Z',
+        data: { turnId: 'message', path: 'brief.pdf', changeType: 'created' },
+      },
+    ],
+  },
+  {
+    name: 'your upload in a closed conversation',
+    expectedVisible: false,
+    rows: [
+      {
+        id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+        data: {
+          conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
+          name: 'brief.pdf', mime: 'application/pdf',
+        },
+      },
+      {
+        id: 'closed', position: 2, type: 'conversation.closed',
+        time: '2026-10-03T10:00:01Z', data: {},
+      },
+    ],
+  },
+];
+
+function runDownloadScenario(scenario: DownloadScenario): Promise<void> {
+  return checkDownloadVisibility(scenario);
+}
+
 afterEach(() => { vi.restoreAllMocks(); history.replaceState({}, '', '/'); });
+
+it.each(downloadScenarios)('shows Download only when the route can serve $name', runDownloadScenario);
+
+it.each([500, 503, 403])('does not show empty states after a %s conversation read', async status => {
+  history.replaceState({}, '', '/workspace?conversation=chat');
+  vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.startsWith('/api/conversations/chat/messages')) {
+      return Promise.resolve(new Response('{}', { status }));
+    }
+    let body: object;
+    if (path === '/auth/me') {
+      body = { authenticated: true, user: { name: 'Alex' } };
+    } else if (path === '/api/chat') {
+      body = { memberId: 'me', assistantId: 'assistant' };
+    } else {
+      body = { rows: [] };
+    }
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  });
+  const socket: SocketLike = {
+    readyState: 1, onopen: null, onclose: null, onerror: null,
+    onmessage: null, send: vi.fn(), close: vi.fn(),
+  };
+  TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY, useValue: () => socket }] });
+  const fixture = TestBed.createComponent(Workspace);
+  await fixture.whenStable();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
+  const expectedMessage = status === 403 ? 'Access unavailable' : 'Could not load the conversation';
+  await vi.waitFor(() => expect(root.textContent).toContain(expectedMessage));
+  expect(root.textContent).not.toContain('No messages yet');
+  root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
+  await fixture.whenStable();
+  expect(root.textContent).not.toContain('No screenshots yet');
+});
 it('renders streamed replies, wake progress and durable Stop, then replays the stopped partial', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [{ id: 'create', position: 1, type: 'conversation.created', time: '2026-10-02T10:00:00Z', data: {} },
@@ -36,8 +189,13 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   message('agent.message_delta', 4, { turnId: 'message', messageId: 'reply', text: 'there' });
   await fixture.whenStable(); expect(root.textContent).toContain('Hello there');
   message('decision.recorded', 5, { turnId: 'message', reason: 'budget_exhausted' });
-  await fixture.whenStable(); expect(root.querySelector('.budget-refusal')?.textContent).toContain('Spending limit reached');
-  expect(root.querySelector('.budget-refusal')?.textContent).toContain('Owner or Admin');
+  await fixture.whenStable();
+  const budgetNotice = root.querySelector('oc-budget-stop-notice');
+  expect(budgetNotice?.textContent).toContain('Spending limit reached');
+  expect(politeStatusText(root)).toContain('Spending limit reached');
+  expect(budgetNotice?.querySelector('[role="alert"]')).toBeNull();
+  expect(budgetNotice?.textContent).toContain('An Owner or Admin can review the limit');
+  expect(budgetNotice?.textContent).toContain('next monthly budget period (UTC)');
   message('agent.turn_stop_requested', 6, { turnId: 'message' });
   message('agent.message_completed', 7, { turnId: 'message', messageId: 'reply', text: 'Hello there and more' });
   await fixture.whenStable(); expect(root.textContent).toContain('Stopped'); expect(root.textContent).not.toContain('and more');

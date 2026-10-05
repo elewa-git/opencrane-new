@@ -1,0 +1,8 @@
+.budget-stop {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--oc-warning-border);
+  border-radius: 8px;
+  background: var(--oc-warning-notice);
+  color: var(--oc-ink-strong);
+}

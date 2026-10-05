@@ -1,0 +1,26 @@
+<article class="file-card" [attr.aria-labelledby]="nameId()"
+  [class.created]="createdBy() === 'assistant'" [ocDogEar]="createdBy() === 'assistant'">
+  @if (thumbnailUrl()) {
+    <img class="screenshot-thumbnail" [src]="thumbnailUrl()" alt="Screenshot of the computer desktop"
+      loading="lazy">
+  }
+  <span class="file-type" [attr.data-type]="type()">{{ type() }}</span>
+  <span class="file-name" [id]="nameId()">
+    <strong>{{ name() }}</strong>
+    <small>
+      @if (createdBy() === 'assistant') {
+        <span class="agent-badge" aria-hidden="true">Ag</span>
+        <span class="sr-only">Created by assistant </span>
+      }
+      {{ time() }}
+    </small>
+  </span>
+  <button type="button" [attr.aria-label]="'Open ' + name()" (click)="open()">Open</button>
+  @if (createdBy() === 'assistant') {
+    <button type="button" aria-label="Open session files" (click)="showFiles()">Files</button>
+  }
+  @if (downloadAllowed()) {
+    <a [href]="downloadUrl()" [download]="name()"
+      [attr.aria-label]="'Download ' + name()">Download</a>
+  }
+</article>

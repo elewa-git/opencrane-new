@@ -1,0 +1,18 @@
+<details class="tool-line" [id]="'tool-' + record().id">
+  <summary>
+    <oc-icon class="state-mark" [attr.data-state]="record().failed ? 'failed' : 'done'"
+      [name]="record().failed ? 'failed' : 'done'" />
+    {{ record().label }}
+    <oc-icon class="chevron" name="chevron" />
+  </summary>
+  <div class="tool-drawer">
+    <dl>
+      <dt>tool</dt><dd>{{ toolName() }}</dd>
+      <dt>result</dt><dd>{{ result() }}</dd>
+      <dt>provider</dt><dd>Not reported</dd>
+      <dt>time</dt><dd>{{ time() }} · retries not reported</dd>
+    </dl>
+    <!-- Keep missing provider data unknown; this row cannot safely start a new message retry. -->
+    <footer>Details are sanitised. Tokens, cookies and headers are never shown.</footer>
+  </div>
+</details>
