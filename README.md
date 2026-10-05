@@ -1,152 +1,171 @@
 # OpenCrane 2
 
-[Changelog](CHANGELOG.md)
+## What this is
 
-## The vision
+OpenCrane gives every employee a personal AI assistant with its own safe computer,
+kept under company control. The assistant can read files, browse, run code and use
+approved tools. The company chooses the models, tool rules, approvals and spending limits.
+Each customer's private installation is called a [silo](GLOSSARY.md#silo).
 
-**Every employee gets an AI assistant with its own computer, and the company stays in control.**
+## Where it fits
 
-OpenCrane gives each person, and each team, an assistant that does real work: it reads documents, uses company tools, browses the web, runs code and remembers what matters. Each assistant has its own isolated computer, which you can think of as a managed laptop the company hands to a new colleague. That gives every assistant an identity, a network position and a workspace, and makes three questions easy to answer: **who is acting, what can it reach, and what would a mistake expose?**
+This repository holds the website, server, workers and computer image, plus their
+shared code. The developer stack runs services on the host and in Docker, and runs
+personal computers in Kubernetes, a system for running containers.
+The [planned cluster design](docs/architecture/target.md) describes the intended
+customer installation.
 
-The company decides:
+### Layers and folders
 
-- where OpenCrane runs;
-- which models it uses;
-- what each assistant may see and do;
-- which actions need a person's approval;
-- how much may be spent.
+Use these layer names when describing a package's place in the system.
 
-Humans and assistants live in **one identity and permission system**. An assistant never sees more than the person it works for, and never more than its own grants. People can watch their assistant work, take over its screen, and hand control back.
+| Layer | Folder | What it does |
+| --- | --- | --- |
+| Browser app | [apps/web](apps/web/README.md) | Sign in, chat, watch the assistant's screen and manage organisation settings. |
+| Back end | [apps/server](apps/server/README.md) | Check access, record changes and send work to computers. Its separate models process checks AI spending and starts the gateway. |
+| Background workers | [apps/ops](apps/ops/README.md) | Build read tables, update permissions, start and pause computers, and rebuild data. |
+| Personal computers | [apps/computer](apps/computer/README.md) | Build each person's isolated computer, where Codex, the AI agent, does the work. |
+| Event core | [libs/events](libs/events/README.md) | Define each kind of event and the data it carries. |
+| Event core | [libs/event-store](libs/event-store/README.md) | Save changes in the event log and read them in order. |
+| Event core | [libs/projections](libs/projections/README.md) | Turn events into PostgreSQL tables for reading. |
+| Event core | [libs/handlers](libs/handlers/README.md) | Run background work in response to events. |
+| Shared libraries | [libs/protocol](libs/protocol/README.md) | Define the messages the website and server share. |
+| Shared libraries | [libs/auth](libs/auth/README.md) | Handle sign-in, session cookies and short-lived access tokens. |
+| Shared libraries | [libs/authz](libs/authz/README.md) | Check and update permissions through OpenFGA. |
+| Shared libraries | [libs/models](libs/models/README.md) | Choose models and check budgets, tool rules and approvals through the AI gateway. |
+| Shared libraries | [libs/observability](libs/observability/README.md) | Write safe logs and optional traces that follow work between services. |
+| Infrastructure | [infra/devbox](infra/devbox/README.md) | Set up a fresh Ubuntu developer machine. |
+| Infrastructure | [infra/dev-stack](infra/dev-stack/README.md) | Start a developer copy of OpenCrane and check it from start to finish. |
+| Infrastructure | [infra/nats](infra/nats) | Configure the service that keeps and carries events. |
+| Infrastructure | [infra/clamav](infra/clamav/README.md) | Run the virus scanner for uploads. |
+| Infrastructure | [infra/odoo](infra/odoo/README.md) | Run a test business system for a future connector. |
+| Developer tools | [tools/fleet](tools/fleet) | Run tasks and secret checks for the coding team. |
+| Developer tools | [scripts](scripts) | Run repository checks, capture screenshots and download tools. |
+| Design notes | [docs](docs) | Describe the product, architecture, decisions and intended screens. |
+| Early experiments | [spikes](spikes) | Keep the experiments that tested the main design choices. |
 
-A **memory that learns and consolidates** ("dreaming") is scoped to people, assistants and groups, without ever letting knowledge cross a permission boundary.
+### Today's system
 
-## What you can do with it (target)
+Arrows show calls made while the system runs. The dotted arrow shows shared code.
+The files box groups storage and virus scanning to keep the map small.
+The server box includes the separate models process.
 
-- **Ask your assistant for real work:** "prepare my customer meeting", "reconcile these invoices", "summarise this contract". It uses the company systems and knowledge you may access, **as you**. In Odoo, for example, it acts with your own Odoo rights.
-- **Approve what matters:** each tool is set to *Allow automatically*, *Ask* or *Block*. Consequential actions show exactly what will change before you approve.
-- **Watch and take over:** see screenshots or a live view of the assistant's computer, take control (for example to sign in), and hand it back.
-- **Work together:** group chats with a shared team assistant, visible child chats, and delegation within one shared budget.
-- **Remember and forget:** personal and team memory with provenance, correction and deletion.
-- **Stay in control as a company:** members, tools, models, EUR monthly budgets, audit and usage, all administered in the product.
-
-## Key ideas
-
-1. **One computer per assistant.** A person's assistant keeps one computer across its conversations, with the same workspace, browser profile and logins, like one laptop per colleague. A team assistant has one computer with team scope.
-2. **The computer is the actor.** The agent (Codex) runs *inside* its computer: it calls models, uses tools, browses and runs code there. The platform keeps the books and never runs model-written code itself.
-3. **OpenCrane decides; the gateway enforces; the network guarantees.** Every outbound call from a computer goes through one gateway per silo, which asks OpenCrane for each sensitive decision. Network policy makes the gateway the only way out.
-4. **No lasting secrets in a computer.** A computer holds only short-lived tokens. The gateway adds the right credential (company key, or *this person's* Odoo login) to each upstream request.
-5. **MCP 2026-07-28 only.** All network tools use the stateless MCP revision: one request, one identity, no sessions.
-6. **Memory never grants anything.** Permissions live only in the permission system. Knowledge, and the dreaming that consolidates it, stays inside its permission scope.
-7. **Reuse before building, and keep it small.** Mature open-source components do the heavy lifting. OpenCrane's own code covers governance, identity binding, approvals, budgets and the product experience. Business rules live in typed TypeScript, not in SQL.
-8. **Event-driven.** Every change is an event in the event store, the only source of truth. PostgreSQL holds content (who owns what, installed MCP servers, conversations) as projections that can be rebuilt by replay. [The event catalogue](docs/architecture/events.md) states exactly which event triggers which logic.
-9. **Evidence over claims.** A capability is done when it passes live on a fresh installation.
-
-## Architecture: the whole cluster
-
-A conformant Kubernetes cluster hosts one **silo** per customer. It must provide a gVisor RuntimeClass and a CSI storage class with volume snapshots. k3d on a developer box, such as a DigitalOcean droplet, DigitalOcean Kubernetes, Hetzner and GKE are supported targets; GKE is not the platform. Each silo is fully isolated, with its own namespaces, database, gateway, computers and secrets.
-
-```text
-                    EXTERNAL
-   ┌──────────┐  ┌───────────┐  ┌────────────────┐  ┌───────────────┐  ┌──────────────┐
-   │ Zitadel  │  │ Model     │  │ Remote MCP     │  │ Company       │  │ Web          │
-   │ (sign-in)│  │ providers │  │ servers (v2)   │  │ systems (Odoo)│  │              │
-   └────▲─────┘  └─────▲─────┘  └───────▲────────┘  └──────▲────────┘  └──────▲───────┘
-        │              │                │                  │                  │
- ═══════╪══════════════╪════════════════╪══════════════════╪══════════════════╪═════════════
-        │  KUBERNETES  │                │                  │                  │
-        │              │                │                  │                  │
- ┌──────┴────── PLATFORM (shared, operator-managed) ───────────────────────────────────────┐
- │ ingress-nginx · cert-manager · CNPG operator · Agent Sandbox + gVisor RuntimeClass      │
- │ warm pools · CSI volume storage · network-policy dataplane · OpenTelemetry collector    │
- └─────────────────────────────────────────────────────────────────────────────────────────┘
-        │              │                │                  │                  │
- ┌──────┴──────────────┴──── SILO "acme" (one per customer) ┴──────────────────┴──────────┐
- │                                                                                        │
- │  acme-app                                                                              │
- │  ┌───────────────┐   ┌───────────────────────────────────────────┐   ┌──────────────┐  │
- │  │ web (Angular) │──▶│ opencrane-server                          │──▶│ OpenFGA      │  │
- │  └───────▲───────┘   │ • API: chats, groups, admin, audit        │   │ humans +     │  │
- │          │           │ • claim & bind computers                  │   │ agents: who  │  │
- │  browser ┘           │ • decision service (ext_authz):           │   │ may do what  │  │
- │  (via ingress)       │   budgets, Allow/Ask/Block, credentials   │   └──────────────┘  │
- │                      │ • live-view / takeover proxy              │   ┌──────────────┐  │
- │                      │ • reactions + jobs (pg-boss): schedules,  │──▶│ Memory facts │  │
- │                      │   wake-ups, settlement, dreaming          │   │ Postgres     │  │
- │                      └──────▲─────────────▲──────────────┬───────┘   │ projection   │  │
- │                             │ext_authz    │live view     │claim      └──────────────┘  │
- │  acme-gateway               │             │              │                             │
- │  ┌──────────────────────────┴───────────┐ │              │                             │
- │  │ agentgateway: the ONLY way out       │─┼──────▶ models · remote MCP · web (allowlist)│
- │  │ • checks computer token (JWKS)       │ │                                            │
- │  │ • CEL allowlist, rate limits         │ │                                            │
- │  │ • asks the decision service          │ │                                            │
- │  │ • injects credentials, logs          │─┼──────▶ acme-mcp (hosted MCP servers)       │
- │  └──────────▲───────────────────────────┘ │         ┌────────────────────────────────┐ │
- │             │ all traffic,                │         │ Odoo MCP (stateless, per-call  │ │
- │             │ short-lived token           │         │ credential) · memory MCP       │ │
- │  acme-computers (gVisor)                  │         │ (remember/recall) · adapters   │ │
- │  ┌──────────┴──────────────────────────┐  │         │ ingress from the gateway only  │ │
- │  │ 💻 Alice's assistant   💻 Sales team │  │         └────────────────────────────────┘ │
- │  │ ├─ Codex app-server + bridge        │◀─┘                                            │
- │  │ ├─ workspace disk · python/node/git │   ┌─────────────────┐  ┌──────────────────┐   │
- │  │ ├─ Chromium + Playwright MCP        │   │ acme-db         │  │ acme-secrets     │   │
- │  │ ├─ KasmVNC (live view, takeover)    │   │ CNPG Postgres:  │  │ company keys,    │   │
- │  │ └─ MarkItDown / poppler             │   │ content (replay-│  │ per-user creds,  │   │
- │  │ warm pool · volume kept on suspend  │   │ able), OpenFGA  │  │ signing key      │   │
- │  └─────────────────────────────────────┘   └─────────────────┘  └──────────────────┘   │
- │    acme-events: NATS JetStream — every event, the only source of truth → projections   │
- │    ClamAV scanner (uploads) · package mirror access (npm / PyPI) through the gateway   │
- └────────────────────────────────────────────────────────────────────────────────────────┘
-        (next silo: "globex" — same layout, nothing shared except the platform layer)
-
- Storage outside: S3-compatible per-silo buckets (encrypted files and backups) · any OCI registry (images & package mirror)
+```mermaid
+flowchart LR
+  web["apps/web<br/>website"] -->|requests| server["apps/server<br/>back end and models"]
+  server -->|signs people in| zitadel["Zitadel<br/>sign-in service"]
+  server -->|saves events| nats[("NATS JetStream<br/>event log")]
+  server -->|checks access| fga["OpenFGA<br/>permissions service"]
+  server -->|stores and scans files| files["MinIO + ClamAV<br/>files and virus scan"]
+  ops["apps/ops<br/>background workers"] -->|reads events| nats
+  ops -->|fills read tables| pg[("PostgreSQL<br/>read tables")]
+  ops -->|updates permissions| fga
+  server -->|reads tables| pg
+  ops -->|starts and pauses| computer["apps/computer<br/>personal computers"]
+  server -->|sends chat turns| computer
+  computer -->|makes AI calls| gateway["agentgateway<br/>AI call checks"]
+  gateway -->|asks permission| server
+  gateway -->|sends allowed AI calls| openai["OpenAI<br/>model provider"]
+  server -.->|uses| libs["libs/*<br/>shared code"]
 ```
 
-### How one request flows
+NATS JetStream keeps the event log, the lasting record of each change. PostgreSQL
+holds read tables built from those events; workers can rebuild them from the log.
+OpenFGA answers permission questions. Zitadel handles company sign-in.
+MinIO stores files, and ClamAV scans them for viruses.
+agentgateway checks AI calls before sending them to a model provider;
+the dev stack can use a fake model provider for tests.
 
-1. Alice asks her assistant in the web app. **opencrane-server** appends `message.posted` to the event store; a reaction wakes Alice's computer. OpenCrane claims a warm Pod, mounts her computer's encrypted volume, and refreshes its computer and turn tokens. Codex resumes the thread from its session files.
-2. **Codex** in the computer plans the work. Each model call, tool call or web request goes to **agentgateway** with the computer's short-lived token.
-3. agentgateway checks the token and its allowlist, then asks the **decision service**. The service consults OpenFGA ("Alice ∩ her assistant may use Odoo read?"), reserves the worst-case EUR cost, and applies the tool's Allow/Ask/Block mode.
-4. **Ask:** the call is refused with an approval id, Alice sees the approval card, and after she approves, the retry passes (single use, bound to those exact arguments).
-5. **Allowed:** the gateway adds Alice's Odoo credential for that one request, and the stateless **Odoo MCP** acts in Odoo as Alice.
-6. The result flows back as events (`agent.message_completed`, `effect.observed`); projections update the conversation, audit and usage, and the budget actor settles the actual cost. Alice can open the **live view** of her assistant's computer at any time and take over.
+## What it is responsible for
 
-## Components
+- Give each person an assistant and a private computer that keeps its files across restarts.
+- Record business changes as events and build readable data from them.
+- Check who may read conversations, use models and tools, or see a computer's screen.
+- Hold money before an AI call, then settle the charge from its reported use.
+- Ask for approval when a tool rule requires it, and bind approval to that exact action.
+- Scan uploaded files before the assistant can use them.
+- Keep secrets out of computers and use short-lived tokens for access.
 
-| Need | Component (open source unless noted) | OpenCrane's own part |
-| --- | --- | --- |
-| Sign-in | Zitadel | Map identities to members and agents |
-| Permissions for humans and agents | OpenFGA (Postgres backend) | The authorisation model and the "human ∩ agent" rule |
-| Agent loop, tools, sub-agents | Codex app-server | The bridge: messages in, events out, approvals relayed |
-| Computers | `kubernetes-sigs/agent-sandbox` controller (`SandboxTemplate`, `SandboxWarmPool`, `SandboxClaim`) + gVisor RuntimeClass | Claim a warm Pod, bind it to an assistant, and mount its persistent volume |
-| Browser, live view, takeover | Chromium, Playwright MCP, KasmVNC | View and control permissions, takeover audit |
-| Egress, models, tools | agentgateway (one per silo) | Gateway config generated from admin settings |
-| Budgets, approvals, credentials | — | The decision service behind `ext_authz` |
-| Tool servers | MCP 2026-07-28 servers; our Odoo MCP; hosted adapters | Install flow, tool review, per-user connections |
-| Memory | OpenCrane memory MCP on Postgres; Cognee later | Per-scope facts, full-text recall, correction, forgetting and nightly dreaming |
-| Events (source of truth) | NATS JetStream (Apache-2.0) | The event catalogue, command handlers, projections, reactions |
-| Content and jobs | PostgreSQL (CNPG) projections, pg-boss (ordered per stream, cron) | Rebuildable content tables, no business rules in SQL |
-| Secrets | Kubernetes Secrets or an external secret store | Credential lifecycle: connect, refresh, revoke |
-| Upload scanning | ClamAV scanner (from OpenCrane 1) | — |
-| Packages | Any OCI registry; Nexus or another package mirror | — |
-| Web app | Angular + PrimeNG, reusing OpenCrane 1 components | Chat, approvals, live view, admin |
-| Deployment | Helm, one silo per customer, charts from OpenCrane 1 | Install and qualification scripts |
+### What works today
 
-## Status
+The dev stack supports company sign-in, personal chat, streamed replies, file uploads,
+PDF reading, screenshots and live viewing. Admins can manage tool servers, models and
+monthly budgets in organisation settings. The server also supports members, groups
+and ownership changes; their website pages are not built yet.
 
-**Planning.** This repository starts OpenCrane 2. It succeeds the original OpenCrane platform (local folder `opencrane-2`, commit `10abd0ef6`) and reuses its product contract, decisions, hardened infrastructure and proven components. See [plan.md](plan.md) for the spikes, phases, rules and estimate: **a prototype in about 4–5 weeks and the MVP in about 12–16 weeks** of nightly agentic cycles.
+Live viewing still has failures under load. Complete tool startup, computer takeover
+and control of all outgoing computer traffic still need work and fresh-install checks.
+Some file previews and browser combinations have not been checked on real devices.
+Read the [changelog](CHANGELOG.md) for current limits.
 
-Carried over so far:
+Not built yet:
 
-- [Product contract](docs/product/product-contract.md)
-- [Workspace and conversation user stories](docs/product/user-stories-workspace-and-conversations.md)
-- [Accepted product decisions of 27 September 2026](docs/product/accepted-decisions-2026-09-27.md)
-- [Architecture review brief that led to this version](docs/background/2026-09-30-architecture-thread-brief.md)
+- Install a customer silo with Helm, the Kubernetes package installer.
+- Remember, correct and forget shared knowledge through a memory service.
+- Use the planned Odoo connector with a person's own business-system permissions.
+- Run shared team assistants, scheduled work and delegated conversations as a complete product.
 
-The Phase 1 [member authorisation projection](libs/authz/README.md) includes
-real-service evidence for membership, revocation, retry and rebuild. Server wiring
-and fresh-silo qualification are **NOT RUN**; see its [receipt](libs/authz/evidence.md).
+## Processes it handles
 
-## Licence
+### Ask an assistant for work
 
-OpenCrane 2 is free software under the **GNU Affero General Public License v3.0 or later**, the same licence as OpenCrane. See [LICENSE](LICENSE). Only OSI-approved open-source components run inside customer silos. Third-party components keep their own licences: Codex, agentgateway and NATS are Apache-2.0; check KasmVNC (GPL-2.0) and every new component before bundling.
+1. Sign in through Zitadel and open the website. The server checks the session and
+   whether you belong to this company.
+2. Send a message to your assistant. The server saves it as an event; background work
+   wakes the computer if needed, and the server sends the chat turn to its bridge.
+   The bridge is the small program that passes work to Codex and reports progress.
+3. Let the assistant call a model. The call goes through agentgateway, which asks the
+   models process in `apps/server` to check permission and hold enough money.
+   Supported tool routes also check the tool's Allow, Ask or Block rule.
+4. Approve an action if its tool rule is Ask. The call waits for approval in the chat;
+   only a retry with the approved arguments may use that approval once.
+5. Read the reply as it arrives. The bridge sends progress to the server, which saves
+   it as events and streams it to the website. Workers update the read tables,
+   and the models process settles spending from the gateway's usage records.
+
+### Use a file or watch the screen
+
+Upload a file in chat. The server scans it with ClamAV and stores it in MinIO before
+sending it to the computer. The computer receives the file, without storage credentials.
+
+Open the live viewer from a conversation. The server checks your access and forwards
+screen updates from the computer. It keeps checking access while the viewer is open.
+
+### Manage or rebuild the installation
+
+Set model, tool and budget rules in organisation settings as an admin or owner.
+Membership roles do not give access to someone else's private conversations.
+
+Rebuild read tables or permissions as an operator. The tools in `apps/ops` read the
+event log again, so the saved events remain the source of business state.
+
+## How to run or test it
+
+Use Node 22. Install dependencies and run the repository checks at lower CPU priority:
+
+```sh
+nice -n 10 npm ci
+nice -n 10 npm run lint
+```
+
+Follow the [developer stack guide](infra/dev-stack/README.md) to set up the required
+services and computer cluster. Start the stack once those prerequisites are ready:
+
+```sh
+infra/dev-stack/up.sh
+```
+
+## Where to read more
+
+- [Glossary](GLOSSARY.md): plain meanings of the words used across the project.
+- [Current plan](plan.md): remaining work and recorded decisions.
+- [Changelog](CHANGELOG.md): changes people can use and known limits.
+- [Architecture](docs/architecture): the event catalogue and service rules.
+- [Planned customer installation](docs/architecture/target.md): parts still to build or qualify.
+- [Design decisions](docs/adr/README.md): why the main components were chosen.
+- [Product contract](docs/product/product-contract.md): the intended user experience.
+- [User stories](docs/product/user-stories-workspace-and-conversations.md): the work people need to do.
+
+OpenCrane is licensed under [GNU AGPL v3.0 or later](LICENSE).
+Customer installations use only OSI-approved open-source application components and
+Debian main operating-system packages, under the [licence rules](AGENTS.md#licences).

@@ -91,11 +91,33 @@ any agent skill that prefers short code.
 - Comment the why: invariants, security boundaries, ordering, retries and
   what a stored state means. Don't comment what the code already says.
 - Never compress code to fit on one line or to pass a lint limit.
-- Plain-English comments: say what the code does simply, not with heavy
-  vocabulary. Avoid words like "canonicalise" or "provenance" when
-  "standardise" or "source" will do.
 - UK English throughout docs and comments.
 - TypeScript strict, ESM, Node 22. NodeNext module resolution.
+
+### Writing for people
+
+Owner rule (5 October 2026): comments and README.md files must be easy
+for a newcomer to read.
+
+- Use everyday UK English in short sentences. Say what the code does,
+  then why. In comments, start most sentences with a verb.
+- Don't use shorthand we made up (seam, plane, winner, head, fence as a
+  verb), noun piles, or heavy words (canonicalise, materialise,
+  provenance, posture, substrate, surface as a noun).
+- Keep a technical term only when it names something real in the code,
+  and explain it briefly the first time, or link it to GLOSSARY.md. Never
+  trade accuracy for plainness: if the plain version is less exact, make
+  it longer, not vaguer.
+- Don't put ticket ids, phase numbers, or decision, handoff or evidence
+  codes in comments or README.md files. Say what is true now. The pull
+  request, git history and README.robot.md hold the rest.
+- **READMEs.** Every package has a README.md for people, with the fixed
+  headings and the one small diagram set out in the
+  [engineering standard](docs/process/standards.md). Put exact contracts,
+  settings, limits, test detail and history in a README.robot.md next to
+  it. Read a package's README.robot.md before changing the package. When
+  a change alters what a package does or who it talks to, update both
+  files and the diagram.
 
 ## Secrets
 
@@ -105,7 +127,8 @@ by id, never by value, in events or in code.
 
 ## Where to look
 
-- [README.md](README.md) — the vision, architecture and component list.
+- [README.md](README.md) — the system map: layers, folders and one diagram.
+- [GLOSSARY.md](GLOSSARY.md) — the plain meaning of the words the READMEs share.
 - [plan.md](plan.md) — phases, spikes, decisions and the current plan.
 - [docs/architecture/events.md](docs/architecture/events.md) — the event
   catalogue.

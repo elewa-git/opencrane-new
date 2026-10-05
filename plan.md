@@ -6,7 +6,7 @@ This file holds the current plan only. When a phase is done, record the evidence
 
 Reach the MVP defined in the [product contract](docs/product/product-contract.md) and the [user stories](docs/product/user-stories-workspace-and-conversations.md): an employee signs in, gets useful work done by an assistant with company tools and knowledge, reviews consequential actions, collaborates in a group, and returns later without losing work. Administrators control members, tools, models, permissions and spending. The [27 September decisions](docs/product/accepted-decisions-2026-09-27.md) apply: EUR monthly hard budgets with reserve-before-call, per-tool Allow automatically / Ask / Block, paying-group attribution and fresh test qualification.
 
-**Constraint:** keep the architecture as simple as possible and reuse open-source components everywhere; see the README for the component list.
+**Constraint:** keep the architecture as simple as possible and reuse open-source components everywhere; see the [system map](README.md) for current parts and the [target design](docs/architecture/target.md) for planned parts.
 
 ## How work runs: nightly agentic cycles
 
@@ -335,6 +335,10 @@ stack, two full suites per box, and owner gates: chat UI visuals, an Odoo test
 instance and managed-cluster spend. This is a forecast, not a delivery promise.
 
 ## Copy from OpenCrane 1 (source commit `10abd0ef6`)
+
+This work succeeds OpenCrane 1, from the local folder `opencrane-2` at commit
+`10abd0ef6`. The first estimate was a prototype in about 4–5 weeks and the MVP
+in about 12–16 weeks of nightly work. Use the [current estimate](#estimate) for planning.
 
 Record the source commit in each copied file's header or README.
 

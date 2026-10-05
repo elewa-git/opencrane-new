@@ -68,18 +68,128 @@ Each evidence receipt records: date, source SHA/image digest, environment and wh
 
 Update the affected README, event catalogue, API documentation or ADR in the same change as its contract. One document owns each fact; others link to it. Implementers own routine documentation. A documentation agent is optional for substantial writing.
 
-Every package README answers these questions, normally in 30–80 lines; the range is guidance:
+### README standard
 
-1. What does this package do, who uses it, and what responsibility belongs elsewhere?
-2. What is its public entrypoint, and what is one real usage example? Link detailed API material rather than listing every export.
-3. What must callers guarantee, which failures can they receive, and how is the contract tested? Give the exact test command and state unfinished/live-unqualified behaviour.
-4. What does it depend on, and where are the parent architecture and related packages documented?
+Owner decision (5 October 2026): each package README carries one small diagram.
 
-Deployable packages also document required configuration/defaults, startup and verification commands, permissions, state ownership and recovery/replay. Explain consequences of dangerous options. Generate repetitive option tables from their schema when it exists. A diagram is optional; add it only when it explains a boundary more clearly than prose. Examples must name existing exports and executable commands; test important examples through normal contract tests.
+Each package gets a README.md for people. When it needs one, it also gets a README.robot.md for agents.
+
+#### README.md, for people
+
+It is written for a new engineer, or for a manager who is not an engineer. It uses these fixed headings, in this order:
+
+1. `## What this is`: the first sentence is the one-line summary. If the folder has a package.json, use the same words as its `description`. Then add two to four short sentences.
+2. `## Where it fits`: which layer the package belongs to (the root README names the layers), who talks to it and what it talks to. Then one small diagram.
+3. `## What it is responsible for`: one line per job, each starting with a verb. If part of the job is not built yet, end with a short "Not built yet" list in plain words.
+4. `## Processes it handles`: short stories from start to finish, two or three sentences each. For example: "A person uploads a file. The server scans it, stores it and passes it to their computer."
+5. `## How to run or test it`: the two or three commands people actually use. For a library, add one short real example of calling it.
+6. `## Where to read more`: README.robot.md, related packages, and decisions in `docs/adr`, each linked with a plain description of the decision, not its file title, for example [why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+
+Rules for the diagram:
+
+- Use a Mermaid `flowchart` (GitHub draws it) with at most 8 boxes.
+- Put the package in the middle. Show its parent layer or main callers, and the packages and services it deals with directly. Leave out anything further away.
+- Each box holds the folder or service name, then two to four plain words. Put labels in double quotes and use `<br/>` for a line break.
+- A solid arrow is something that happens while the system runs. A dotted arrow points from a package to the shared code it uses, or marks a part that is only planned. Label every solid arrow with a few words. A dotted 'uses' arrow, or an arrow from a folder to a part inside it, may stay unlabelled.
+- Check every arrow against the real imports and calls. The drafts in the sub-issues are a head start, not proof.
+
+Writing rules:
+
+- No ticket, issue, board, phase, experiment, handoff or wireframe codes.
+- No evidence or receipt links, and no test status codes such as PASS or NOT RUN. Say plainly what works and what does not work yet.
+- Use short sentences and everyday words. Explain a technical word in a few words the first time, or link it to GLOSSARY.md.
+- Name other parts by their folder (`apps/server`) and say what they are the first time.
+- Describe today's code. Mark anything planned as planned.
+- Use UK English and the active voice.
+- Aim for about 50 to 120 lines. More than 150 lines means some detail belongs in README.robot.md.
+
+Template:
+
+````markdown
+# apps/example
+
+## What this is
+
+One plain sentence, the same as the package.json description. Then two to four short
+sentences. Explain a technical word the first time, or link it to
+[the glossary](../../GLOSSARY.md).
+
+## Where it fits
+
+Which layer it belongs to, who talks to it and what it talks to.
+
+```mermaid
+flowchart LR
+  caller["apps/caller<br/>what it is"] -->|what travels| me["apps/example<br/>what it is"]
+  me -.->|uses| lib["libs/shared<br/>what it is"]
+```
+
+## What it is responsible for
+
+- One line per job, starting with a verb.
+- Not built yet: say it plainly, only if true.
+
+## Processes it handles
+
+1. **A person signs in.** Two or three sentences, from what starts it to the result.
+
+## How to run or test it
+
+```sh
+npm test -w @opencrane/example
+```
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): exact contracts, settings, limits, test detail and history.
+- Related packages, and decisions described in plain words.
+````
+
+#### README.robot.md, for agents and maintainers
+
+- **What goes in it.** Everything agents need and people do not:
+  - ticket and issue ids, handoff and state codes, phase numbers;
+  - dated owner decisions;
+  - evidence and receipt links, and test status;
+  - exact limits and full API contracts;
+  - one table of all settings (environment variables);
+  - test commands and what each one proves;
+  - licence audit notes and implementation detail.
+- **Moved, not deleted.** For each package, start with `git mv README.md README.robot.md`, then write a fresh README.md. Git and GitHub show this as a rewritten README.md and a new README.robot.md. To prove nothing was lost, run `git diff -B -M --stat main...HEAD`: each move must show as `…/README.md => …/README.robot.md` with only a few changed lines. Old history is found with `git log -B -M --follow -- <folder>/README.robot.md`. Old section links keep working once the link points at the new file name.
+- **First line.** The first line points back to README.md. Fix statements that are plainly wrong, and otherwise keep the content as it is. Tidying the robot file is optional.
+- **Only when needed.** If a package has nothing for agents beyond its README.md, it has no robot file.
+
+#### What the standard covers
+
+- Every folder under `apps/`, `libs/`, `infra/` and `tools/` follows the full standard.
+- The root README becomes the system map.
+- `docs/design` and `spikes` follow a lighter rule.
+- Not covered: the evidence folders under `docs/process`, `docs/adr/README.md` and `docs/specs`. They are records for agents, not guides.
+
+### The root README: the system map
+
+The root README.md is the front page for the whole system. It:
+
+- explains OpenCrane in a few sentences: every person gets an AI assistant with its own safe computer, and the company sets the rules (models, tools, approvals and spending);
+- names the layers that every package README refers to: browser app, back end, background workers, personal computers, event core, shared libraries, infrastructure, developer tools, design notes and early experiments;
+- has a folder map with one plain line for every folder;
+- has one whole-system diagram of the parts that exist today, with about 12 boxes (the only diagram allowed more than 8);
+- walks through one request in plain words;
+- says honestly what works today on the dev stack and what is still planned;
+- states the open-source licence rule in one line;
+- links to GLOSSARY.md, plan.md, CHANGELOG.md, docs/adr and docs/architecture.
+
+The long drawing of the target cluster moves to a new `docs/architecture/target.md`, together with the target parts that do not exist yet. That page is clearly marked as planned. There is no root README.robot.md: AGENTS.md already serves agents at the root, and the rest of the agent detail moves to plan.md or docs/architecture.
+
+A new root `GLOSSARY.md` explains each word the READMEs share in one or two plain sentences: silo, event, read table, reaction, computer, bridge, gateway and so on. Package READMEs link to it instead of each explaining the same words at length.
+
+### Other documentation
+
+Deployable packages also document, in README.robot.md, required configuration/defaults, startup and verification commands, permissions, state ownership and recovery/replay. Explain consequences of dangerous options. Generate repetitive option tables from their schema when it exists. Examples must name existing exports and executable commands; test important examples through normal contract tests.
 
 Every ADR records date/status, the concrete problem, decision and reason, meaningful alternatives, costs/risks, supporting evidence and supersession links. Normally 40–100 lines; longer proof belongs in linked evidence. “Accepted” means a decision was accepted, not that it passed live. Do not write ADRs for routine refactors or scheduling. Supersede decisions with a link instead of deleting a referenced record.
 
-Comments explain a caller obligation, invariant, state meaning, unusual failure, security boundary or non-obvious ordering. For persisted event/state values, say what the value means, what happens next, whether it is terminal and whether changing it breaks stored data. Public APIs document inputs/outputs only where their types do not explain the contract. No required comment on every property, getter, import or private helper; no comment ratio; no hand-maintained `Called by` lists. Use plain UK English, retaining precise protocol terms where necessary. If the reason is unknown, say so and investigate; never invent it.
+Comments explain a caller obligation, invariant, state meaning, unusual failure, security boundary or non-obvious ordering. For persisted event/state values, say what the value means, what happens next, whether it is terminal and whether changing it breaks stored data. Public APIs document inputs/outputs only where their types do not explain the contract. No required comment on every property, getter, import or private helper; no comment ratio; no hand-maintained `Called by` lists. Write comments to 'Writing for people' in AGENTS.md: plain UK English a newcomer can read, a technical term only when it names something real in the code, and no ticket or phase codes. If the reason is unknown, say so and investigate; never invent it.
 
 Examples from OpenCrane 1, snapshot `468742b97`:
 
@@ -113,6 +223,7 @@ Dropped from OpenCrane 1:
 - Grep-based formatting and prose compliance tables: established linters do the repeatable work.
 - Per-file ownership inventories and SQL business-authority gates: wrong abstraction for rebuildable projections and event-only truth.
 - Mandatory diagrams, every-field JSDoc and ASK quotas: they rewarded document shape instead of useful explanations.
+  Package READMEs now carry one small diagram (owner decision, 5 October 2026). Large or decorative diagrams stay out.
 - Pre-MVP release trains, version-to-version migration machinery and mandatory semantic-search setup: no demonstrated need in the present build loop.
 - Standing reaper/observability/specialist passes: use tools and targeted questions inside the one review.
 
@@ -139,10 +250,10 @@ Defer Prettier's formatting rollout (`.prettierrc.json`, `.prettierignore`, pinn
 ## Enabled checks and local setup — 1 October 2026
 
 The first implementation is installed. `lint` now runs code, dependency direction,
-unused code, Markdown and offline local-link checks in that order. Spikes and infra
-remain separately qualified. Markdown inputs are root documents, `docs/**/*.md` and
-package READMEs; generated builds, dependency trees and vendored material are outside
-those inputs. ESLint explicitly excludes dependency/build/cache output, spikes and infra.
+unused code, Markdown and offline local-link checks in that order. Spikes and
+infrastructure code stay separately qualified. Markdown inputs are root documents,
+`docs/**/*.md`, and README.md and README.robot.md files under apps, libs and infra.
+Generated builds, dependency trees and vendored material stay outside those inputs. ESLint explicitly excludes dependency/build/cache output, spikes and infra.
 
 Typed lint enforces every `no-unsafe-*` rule plus the named promise, `any`, error and
 exhaustiveness rules. Production modules have complexity 15, depth 4 and 500 code lines;

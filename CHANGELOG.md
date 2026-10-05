@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Find today’s system, planned parts and shared words in the root README and glossary, with one writing standard for package guides and comments.
+
 - Fleet Codex work, Angular dev-server builds and repository checks run at lower CPU priority; repeated live-view receipts capture host pressure and server scheduling delay.
 
 ### What you can do now
