@@ -34,6 +34,13 @@ lease closes with 4503/unavailable. Existing protocol, upstream, slow-viewer,
 disconnected and shutdown faults remain terminal. Pauses retain the capacity
 slot. The existing timing records include lease_pause and lease_resume.
 
+A check that sees new events on a stream it watches is unconfirmed, not a denial.
+This covers the shared freshness check ("Authority changed") and the team freshness
+and spending checks. Such a check earns no lease. The next check reads the new
+events itself, and it closes the view with 4003/access_changed if access really
+ended. Revocations are found by the check's own reads, so the 2 s bound still holds.
+See [i77-fence-evidence.md](i77-fence-evidence.md).
+
 ## Failing-first evidence
 
 Tests were written before the pause implementation at the confirmed delivery,
