@@ -4,7 +4,6 @@ import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema } from '@opencrane/events';
 import { envelope, history } from './actor.ts';
 import { data } from './state.ts';
-import type { authorityFence } from './authority.ts';
 
 export function ownershipSubject(silo: string) {
   return `ownership-${silo}`;
@@ -107,9 +106,12 @@ async function seedAttempt(store: EventStore, silo: string, deadline: number) {
   return result.status === 'appended';
 }
 
+export const memberStateTypes = [
+  'member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed',
+];
+
 function isMemberState(row: StoredEvent) {
-  return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
-    'member.removed'].includes(row.event.type);
+  return memberStateTypes.includes(row.event.type);
 }
 function relevantOwnership(row: StoredEvent, memberId: string) {
   if (row.event.type === 'ownership.seeded') {
@@ -138,7 +140,7 @@ function roleWithOwnership(state: StoredEvent | undefined, changes: StoredEvent[
 }
 /** Ownership supplies owner transitions; member streams retain identity and other roles. */
 export async function currentMembership(store: EventStore, silo: string, memberId: string,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh?: { include: (...subjects: string[]) => void; deadline: number }) {
   const subject = ownershipSubject(silo);
   fresh?.include(`member-${memberId}`, subject);
   const membership = await history(store, `member-${memberId}`, silo, fresh?.deadline);

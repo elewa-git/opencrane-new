@@ -286,13 +286,18 @@ it('supplies active colleagues and reconciles the original creation and send wit
       payload: { id: 'sent', text: 'One message' },
     });
     const head = await fixture.nats.store.head();
+    const applying = await fixture.app.inject({
+      url: '/api/conversations/direct/changes/sent', headers: fixture.headers('bob'),
+    });
+    expect(applying.statusCode).toBe(404);
+    await fixture.runner.run(conversations);
     const send = await fixture.app.inject({
       url: '/api/conversations/direct/changes/sent', headers: fixture.headers('bob'),
     });
     expect(send.statusCode).toBe(200);
     expect(chatChangeSchema.parse(send.json())).toMatchObject({
       status: 'appended', commandId: 'sent', type: 'message.posted',
-      projection: { content: 'applying', iam: 'current' },
+      projection: { content: 'current', iam: 'current' },
     });
     expect(await fixture.nats.store.head()).toBe(head);
     const unknown = await fixture.app.inject({
@@ -578,7 +583,7 @@ function isRefusedMessage(message: ReturnType<typeof chatMessageSchema.parse>) {
   return message.type === 'refused';
 }
 
-it('drops a revoked earlier row while retaining the rest of the conversation list', async () => {
+it('keeps all titles private when access changes during conversation summaries', async () => {
   const fixture = await directFixture();
   try {
     for (const conversationId of ['two', 'one']) {
@@ -607,18 +612,13 @@ it('drops a revoked earlier row while retaining the rest of the conversation lis
     }
     fixture.options.db = { query: removeDuringSummary };
     const response = await fixture.app.inject({ url: '/api/conversations', headers: fixture.headers() });
-    expect(response.statusCode).toBe(200);
-    const list = chatListSchema.parse(response.json());
-    expect(list.rows.map(conversationId)).toEqual(['two']);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
     expect(response.body).not.toContain('one-title');
   } finally {
     await fixture.close();
   }
 }, 120_000);
-
-function conversationId(row: ReturnType<typeof chatListSchema.parse>['rows'][number]) {
-  return row.conversationId;
-}
 
 it('refuses new posts after the other participant leaves but keeps history readable', async () => {
   const fixture = await directFixture();
@@ -631,7 +631,7 @@ it('refuses new posts after the other participant leaves but keeps history reada
       method: 'POST', url: '/api/conversations/direct/messages', headers: fixture.headers(),
       payload: { id: 'after-removal', text: 'Must not reach a departed recipient' },
     });
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(409);
     const read = await fixture.app.inject({
       url: '/api/conversations/direct/messages', headers: fixture.headers(),
     });
@@ -736,6 +736,27 @@ async function colleagueLeavesDuringSearch(changedHead: boolean) {
     expect(chatColleaguesSchema.safeParse(response.json()).success).toBe(true);
   } finally {
     fixture.options.store.head = originalHead;
+    await fixture.close();
+  }
+}
+
+it('offers a colleague whose role change has not reached OpenFGA yet',
+  colleagueWithPendingRole, 120_000);
+
+async function colleagueWithPendingRole() {
+  const fixture = await directFixture();
+  try {
+    await fixture.append('member-bob', 'member.role_changed', {
+      memberId: 'bob', previousRole: 'member', newRole: 'admin', changedBy: 'carol',
+    }, false);
+    const response = await fixture.app.inject({
+      url: '/api/chat/colleagues', headers: fixture.headers(),
+    });
+    expect(response.statusCode).toBe(200);
+    const colleagues = chatColleaguesSchema.parse(response.json());
+    expect(colleagues.rows).toContainEqual({ memberId: 'bob', displayName: 'bob' });
+    await fixture.create();
+  } finally {
     await fixture.close();
   }
 }

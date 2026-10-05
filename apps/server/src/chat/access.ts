@@ -26,7 +26,7 @@ interface AccessRequest {
   fresh?: Fence;
 }
 
-/** Only creation decides the fixed audience; message history is a content read. */
+/** Read participants from creation; messages do not decide who has access. */
 export async function chatAccess(options: ChatOptions, request: AccessRequest) {
   const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
   const subjects = [`member-${memberId}`];
@@ -50,7 +50,7 @@ export async function chatAccess(options: ChatOptions, request: AccessRequest) {
       colleagueId = created.participantIds.find(isOtherParticipant);
     }
     const auth = memberAuthorisation(options.binding);
-    // A status read can precede tuple projection, but still needs the recorded audience.
+    // Require the recorded participants even before OpenFGA has applied creation.
     const applying = allowApplying && !await auth.applied(row.event.id);
     if (applying) {
       if (mode === 'agent_session' && created.createdBy !== memberId) {
@@ -67,7 +67,9 @@ export async function chatAccess(options: ChatOptions, request: AccessRequest) {
   return Object.assign(fresh, context);
 }
 
-/** Owner receipts gate privileged changes, not continued membership in a chat. */
+/** Check current membership without waiting for role or owner changes to reach OpenFGA.
+ * Read removals from the member stream at once, and confirm joins through OpenFGA.
+ */
 export async function activeChatMember(options: ChatOptions, memberId: string, fresh: Fence) {
   const membership = await currentMembership(options.store, options.silo, memberId, fresh);
   if (!membership.role) throw new ChatRefused('Active silo membership required');

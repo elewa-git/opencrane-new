@@ -237,7 +237,8 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   try {
     while (!signal.aborted) {
       const conversations = await listConversations(options.db, options.silo);
-      const pending = conversations.map(process);
+      const sessions = conversations.filter(isAgentSession);
+      const pending = sessions.map(process);
       await Promise.all(pending);
       await delay(250, undefined, { signal });
     }

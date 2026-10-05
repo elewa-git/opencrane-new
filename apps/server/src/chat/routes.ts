@@ -7,7 +7,14 @@ import { memberAuthorisation } from '@opencrane/authz';
 import {
   listConversations, readConversation,
 } from '@opencrane/projections';
-import { chatAccess, activeChatMember, recordedChatMode, isChatRefused, ChatRefused, type ChatOptions } from './access.ts';
+import {
+  chatAccess,
+  activeChatMember,
+  recordedChatMode,
+  isChatRefused,
+  ChatRefused,
+  type ChatOptions,
+} from './access.ts';
 import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
@@ -35,7 +42,7 @@ export async function chatRows(options: ChatOptions, conversationId: string,
 
 async function conversationComputerState(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct') {
-  // Authorisation read the recorded mode; content projection may still be applying.
+  // Use the mode from the event log; the read table may still be catching up.
   if (mode === 'direct') return 'not_applicable';
   const computers = await options.db.query<{ status: string }>(
     `SELECT c.status FROM computers c JOIN conversation_feed f
@@ -50,9 +57,15 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
   app.get('/api/chat', handler);
   app.get('/api/chat/colleagues', handler);
   app.get('/api/conversations/:conversationId/changes/:commandId', handler);
-  const conversationsRoute = { method: ['GET', 'POST'] as ('GET' | 'POST')[], url: '/api/conversations', handler };
+  const conversationsRoute = {
+    method: ['GET', 'POST'] as ('GET' | 'POST')[],
+    url: '/api/conversations',
+    handler,
+  };
   const messagesRoute = {
-    method: ['GET', 'POST'] as ('GET' | 'POST')[], url: '/api/conversations/:conversationId/messages', handler,
+    method: ['GET', 'POST'] as ('GET' | 'POST')[],
+    url: '/api/conversations/:conversationId/messages',
+    handler,
   };
   app.route(conversationsRoute);
   app.route(messagesRoute);
@@ -75,7 +88,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
       if (request.method === 'GET') {
         let result;
         if (conversationId && commandId) {
-          result = await chatChange(options, conversationId, commandId, fresh);
+          result = await chatChange(options, conversationId, commandId);
         } else {
           result = await read(request, options, memberId, conversationId, fresh);
         }
@@ -121,34 +134,28 @@ async function read(
 }
 
 async function conversationList(options: ChatOptions, memberId: string, fresh: Fresh) {
-  const pending = [];
   const conversations = await listConversations(options.db, options.silo);
-  for (const row of conversations) {
-    try {
-      const request = { memberId, conversationId: row.conversationId, deadline: fresh.deadline };
-      const access = await chatAccess(options, request);
-      const display = await summary(options, row.conversationId, recordedChatMode(access));
-      pending.push({ row: { ...row, ...display }, access });
-    } catch (error) {
-      if (!rowAccessChanged(error)) throw error;
-    }
+  const auth = memberAuthorisation(options.binding);
+  async function authorisedSummary(row: (typeof conversations)[number]) {
+    if (row.mode === 'direct' && !row.participantIds.includes(memberId)) return undefined;
+    const permission = await auth.conversation(memberId, row.conversationId, 'read');
+    if (permission.status === 'unavailable') throw new Error('IAM unavailable');
+    if (!permission.allowed) return undefined;
+    fresh.include(`conversation-${row.conversationId}`);
+    const display = await summary(options, row.conversationId, row.mode);
+    return { ...row, ...display };
   }
   const rows = [];
-  // Fence each row after all summaries, so a revoked earlier row cannot leak its title.
-  for (const entry of pending) {
-    try {
-      await entry.access();
-      rows.push(entry.row);
-    } catch (error) {
-      if (!rowAccessChanged(error)) throw error;
+  for (let offset = 0; offset < conversations.length; offset += 8) {
+    const batch = conversations.slice(offset, offset + 8);
+    const checks = batch.map(authorisedSummary);
+    const summaries = await Promise.all(checks);
+    for (const row of summaries) {
+      if (row) rows.push(row);
     }
   }
+  // Keep titles private until the handler checks all included conversations again.
   return { rows };
-}
-
-function rowAccessChanged(error: unknown) {
-  return isChatRefused(error) ||
-    (error instanceof Error && error.message === 'Authority changed');
 }
 
 async function personalContext(options: ChatOptions, memberId: string) {
@@ -217,7 +224,7 @@ async function write(
   }
   if ('mode' in input) options.keys.provision(options.silo, input.conversationId);
   async function checkFresh(operation: 'retry' | 'append') {
-    // Stream reads use the command's budget. Recheck current access just before its append.
+    // Check access just before the append; slow history reads have their own time limit.
     const request = { memberId, conversationId, relation: 'post' as const };
     const fresh = await chatAccess(options, request);
     if ('assistantId' in input) {
@@ -226,9 +233,16 @@ async function write(
     }
     let colleagueId = fresh.colleagueId;
     if ('colleagueId' in input) colleagueId = input.colleagueId;
-    // A retry reports an existing append. New posts need both people still in the silo.
+    // Allow retries to report a saved result; require both people for new messages.
     if (operation === 'append' && colleagueId) {
-      await activeChatMember(options, colleagueId, fresh);
+      try {
+        await activeChatMember(options, colleagueId, fresh);
+      } catch (error) {
+        if (isChatRefused(error) && !('colleagueId' in input)) {
+          throw new ChatConflict('Other participant is no longer active');
+        }
+        throw error;
+      }
     }
     await fresh();
   }

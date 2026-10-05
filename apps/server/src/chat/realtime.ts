@@ -65,17 +65,22 @@ async function drain(state: Subscription) {
       return;
     }
     const subjects = [`member-${memberId}`, `conversation-${conversationId}`];
-    const fresh = await conversationAccessFence(options.store, performance.now(), subjects, deadline);
+    const fresh = await conversationAccessFence(
+      options.store, performance.now(), subjects, deadline);
     const memberHead = await options.store.head(subjects[0], deadline);
     const conversationHead = await options.store.head(subjects[1], deadline);
     const previous = state.access;
+    let currentAccess;
     if (!previous || previous.memberId !== memberId || previous.memberHead !== memberHead ||
         previous.conversationHead !== conversationHead) {
       const request = { memberId, conversationId, deadline, fresh };
       const access = await chatAccess(options, request);
-      state.access = { memberId, memberHead, conversationHead, mode: recordedChatMode(access) };
+      currentAccess = { memberId, memberHead, conversationHead, mode: recordedChatMode(access) };
+      state.access = currentAccess;
+    } else {
+      currentAccess = previous;
     }
-    const mode = state.access!.mode;
+    const mode = currentAccess.mode;
     const result = await chatRows(options, conversationId, mode, state.position);
     await fresh();
     if (socket.readyState !== socket.OPEN) return;

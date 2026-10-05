@@ -213,8 +213,8 @@ async function longAgentSession() {
     started = performance.now();
     const list = await context.app.inject({ url: '/api/conversations', headers: context.headers() });
     const listMs = performance.now() - started;
-    expect(read.statusCode).toBe(200);
-    expect(list.statusCode).toBe(200);
+    expect(read.statusCode, 'Long-session history').toBe(200);
+    expect(list.statusCode, 'Long-session list').toBe(200);
     expect(readMs).toBeLessThan(1500);
     expect(listMs).toBeLessThan(1500);
     const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
@@ -241,6 +241,22 @@ async function longAgentSession() {
     await delay(350);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     expect(received.some(isRefused)).toBe(false);
+    socket.terminate();
+    const sendRequest = {
+      method: 'POST' as const, url: '/api/conversations/long/messages',
+      headers: context.headers(), payload: { id: 'long-send', text: 'Next question' },
+    };
+    const sent = await context.app.inject(sendRequest);
+    expect(sent.statusCode, 'Long-session send').toBe(200);
+    const retried = await context.app.inject(sendRequest);
+    expect(retried.statusCode, 'Long-session retry').toBe(200);
+    expect(retried.body).toBe(sent.body);
+    await context.runner.run(conversations);
+    const status = await context.app.inject({
+      url: '/api/conversations/long/changes/long-send', headers: context.headers(),
+    });
+    expect(status.statusCode, 'Long-session status').toBe(200);
+    expect(status.json()).toMatchObject({ status: 'appended', commandId: 'long-send' });
     console.log(`1,502 events: history ${readMs.toFixed(0)} ms; list ${listMs.toFixed(0)} ms; ` +
       `socket ready ${socketMs.toFixed(0)} ms`);
   } finally {
@@ -363,7 +379,7 @@ async function expiredRead() {
   }
 }
 
-it('gives a send its command budget when reading beyond creation takes more than two seconds',
+it('reports a committed send when its history reads together exceed ten seconds',
   sendWithSlowHistory, 120_000);
 
 async function sendWithSlowHistory() {
@@ -376,7 +392,7 @@ async function sendWithSlowHistory() {
         yield row;
         // Access stops at creation. Only command history reads need this delayed continuation.
         if (subject === 'conversation-agent' && row.event.type === 'conversation.created') {
-          await delay(2100);
+          await delay(5500);
         }
       }
     }
@@ -412,6 +428,86 @@ async function readDuringPendingOwnership() {
     const request = { url: '/api/conversations/agent/messages', headers: context.headers() };
     const response = await context.app.inject(request);
     expect(response.statusCode).toBe(200);
+  } finally {
+    await context.close();
+  }
+}
+
+it('lists 160 conversations quickly when most belong to other people',
+  manyConversations, 600_000);
+
+async function manyConversations() {
+  const context = await fixture();
+  try {
+    for (let index = 0; index < 160; index++) {
+      const conversationId = `session-${index}`;
+      const owner = index < 30 ? 'alice' : 'bob';
+      context.keys.provision('test', conversationId);
+      let data: unknown = {
+        conversationId, createdBy: owner, mode: 'agent_session', assistantId: 'assistant',
+      };
+      if (index >= 120) {
+        data = {
+          conversationId, createdBy: 'bob', mode: 'direct', participantIds: ['bob', 'carol'],
+        };
+      }
+      await context.append(`conversation-${conversationId}`, 'conversation.created', data);
+      const encrypted = context.keys.encrypt('test', conversationId, 'Private title');
+      const message = {
+        conversationId, authorId: owner, authorKind: 'human', contentType: 'text', ...encrypted,
+      };
+      await context.append(`conversation-${conversationId}`, 'message.posted', message, false);
+    }
+    await context.runner.run(conversations);
+    const started = performance.now();
+    const response = await context.app.inject({
+      url: '/api/conversations', headers: context.headers(),
+    });
+    const elapsed = performance.now() - started;
+    expect(response.statusCode).toBe(200);
+    expect(response.json<{ rows: unknown[] }>().rows).toHaveLength(30);
+    expect(elapsed).toBeLessThan(1500);
+  } finally {
+    await context.close();
+  }
+}
+
+it('checks the first and last send on a direct chat with 1,500 messages',
+  longDirectChatStatus, 600_000);
+
+async function longDirectChatStatus() {
+  const context = await fixture();
+  try {
+    context.keys.provision('test', 'pair');
+    await context.append('conversation-pair', 'conversation.created', {
+      conversationId: 'pair', createdBy: 'alice', mode: 'direct',
+      participantIds: ['alice', 'bob'],
+    });
+    const encrypted = context.keys.encrypt('test', 'pair', 'Hello');
+    for (let index = 0; index < 1500; index++) {
+      const data = {
+        conversationId: 'pair', authorId: 'alice', authorKind: 'human',
+        contentType: 'text', ...encrypted,
+      };
+      const event = envelope('test', 'conversation-pair', 'message.posted', data);
+      event.id = `message-${index}`;
+      event.commandId = event.id;
+      event.principal = { id: 'alice', kind: 'human' };
+      await context.nats.connection.request(wireSubject(event.subject), JSON.stringify(event));
+    }
+    await context.runner.run(conversations);
+    for (const commandId of ['message-0', 'message-1499']) {
+      const started = performance.now();
+      const response = await context.app.inject({
+        url: `/api/conversations/pair/changes/${commandId}`, headers: context.headers(),
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        status: 'appended', commandId, type: 'message.posted',
+        projection: { content: 'current', iam: 'current' },
+      });
+      expect(performance.now() - started).toBeLessThan(1500);
+    }
   } finally {
     await context.close();
   }

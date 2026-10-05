@@ -9,10 +9,22 @@ function validateCreationRow(row: { type: string; data: unknown }, context: z.Re
     context.addIssue({ code: 'custom', message: 'Invalid conversation mode', path: ['data'] });
   }
 }
-export const chatRowSchema = z.object({ id: z.string(), position: z.int().nonnegative(), type: z.string(), time: z.string(),
-  data: z.object({ text: z.string().optional(), turnId: z.string().optional(), messageId: z.string().optional(),
-    authorId: z.string().optional(), path: z.string().optional(), exitCode: z.number().optional(), commandDigest: z.string().optional(),
-    reason: z.string().optional(), contentType: z.string().optional() }).passthrough(),
+export const chatRowSchema = z.object({
+  id: z.string(),
+  position: z.int().nonnegative(),
+  type: z.string(),
+  time: z.string(),
+  data: z.object({
+    text: z.string().optional(),
+    turnId: z.string().optional(),
+    messageId: z.string().optional(),
+    authorId: z.string().optional(),
+    path: z.string().optional(),
+    exitCode: z.number().optional(),
+    commandDigest: z.string().optional(),
+    reason: z.string().optional(),
+    contentType: z.string().optional(),
+  }).passthrough(),
 }).superRefine(validateCreationRow);
 export const chatMessageSchema = z.object({ version: z.literal(1), topic: z.literal('conversation'), conversationId: z.string(),
   type: z.enum(['event', 'ready', 'resync', 'refused']), position: z.int().nonnegative(), generation: z.int().nonnegative(),

@@ -66,14 +66,13 @@ export async function chatHistory(
   return rows;
 }
 
-/** Authorisation and key provisioning precede this command; its only write is one append. */
+/** Append one event after access is checked and a conversation key is available. */
 export async function chatCommand(
   store: Store, keys: ReturnType<typeof conversationKeys>, context: Context,
   value: unknown, fresh?: (operation: 'retry' | 'append') => Promise<void>,
-  deadline = performance.now() + 10_000,
 ) {
   const input = chatInput.parse(value);
-  const rows = await chatHistory(store, context.silo, input.conversationId, deadline);
+  const rows = await chatHistory(store, context.silo, input.conversationId);
   function hasCommandId(row: StoredEvent) {
     return row.event.id === input.id;
   }
@@ -96,8 +95,8 @@ export async function chatCommand(
   const expectedSequence = rows.at(-1)?.sequence ?? 0;
   const result = await store.append({ expectedSequence, event });
   if (result.status !== 'appended') return result;
-  // The adapter may recognise a concurrent retry; verify its committed payload too.
-  const committed = await chatHistory(store, context.silo, input.conversationId, deadline);
+  // Verify the saved payload, because the adapter may have found a concurrent retry.
+  const committed = await chatHistory(store, context.silo, input.conversationId);
   const saved = committed.find(hasCommandId);
   if (!saved) throw new Error('Append outcome unavailable');
   verifyRetry(saved, input, context, keys);
@@ -131,9 +130,6 @@ function commandData(input: Input, context: Context, keys: ReturnType<typeof con
 function validateConversation(rows: StoredEvent[], input: Input, memberId: string) {
   if ('mode' in input) {
     if (rows.length) throw new ChatConflict('Conversation state conflict');
-    if ('colleagueId' in input && input.colleagueId === memberId) {
-      throw new Error('Direct conversations require two distinct people');
-    }
     return;
   }
   function isClosed(row: StoredEvent) {

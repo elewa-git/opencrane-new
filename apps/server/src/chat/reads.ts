@@ -1,11 +1,9 @@
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
-import { activeMember } from '../members/groups.ts';
-import { chatHistory } from './commands.ts';
-import { isChatRefused, type chatAccess } from './access.ts';
+import { conversationAccessFence, isAuthorityChanged } from '@opencrane/models';
+import { activeChatMember, isChatRefused } from './access.ts';
 import type { ChatOptions } from './access.ts';
 
-type Fresh = Awaited<ReturnType<typeof chatAccess>>;
 const colleagueQuery = z.object({
   after: z.string().regex(/^[\w-]{1,200}$/u).default(''),
   q: z.string().trim().max(100).default(''),
@@ -23,15 +21,18 @@ export async function colleagues(options: ChatOptions, memberId: string, query: 
   const page = result.rows.slice(0, input.limit);
   async function candidate(row: (typeof page)[number]) {
     try {
-      await activeMember(options.store, options.binding, row.member_id);
+      const fresh = await conversationAccessFence(options.store, performance.now());
+      await activeChatMember(options, row.member_id, fresh);
+      await fresh();
       return { memberId: row.member_id, displayName: row.display_name };
     } catch (error) {
       if (isChatRefused(error)) return undefined;
-      if (error instanceof Error && error.message === 'Authority changed') return undefined;
+      if (isAuthorityChanged(error)) return undefined;
       throw error;
     }
   }
-  const candidates = await Promise.all(page.map(candidate));
+  const checks = page.map(candidate);
+  const candidates = await Promise.all(checks);
   const rows = [];
   for (const row of candidates) {
     if (row) rows.push(row);
@@ -42,25 +43,21 @@ export async function colleagues(options: ChatOptions, memberId: string, query: 
 }
 
 export async function chatChange(
-  options: ChatOptions, conversationId: string, commandId: string, fresh: Fresh,
+  options: ChatOptions, conversationId: string, commandId: string,
 ) {
-  const rows = await chatHistory(options.store, options.silo, conversationId, fresh.deadline);
-  function matchesCommand(row: (typeof rows)[number]) {
-    return row.event.commandId === commandId;
-  }
-  const row = rows.find(matchesCommand);
+  const result = await options.db.query<{ event_id: string; type: string; position: string }>(
+    `SELECT event_id, type, position FROM conversation_feed
+      WHERE silo = $1 AND conversation_id = $2 AND event_id = $3`,
+    [options.silo, conversationId, commandId]);
+  const row = result.rows[0];
   if (!row) return { status: 'not_found' as const };
-  const checkpoint = await options.db.query<{ sequence: string }>(
-    'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['conversations']);
-  let content = 'applying';
-  if (Number(checkpoint.rows[0]?.sequence ?? 0) >= row.sequence) content = 'current';
   let iam = 'current';
-  if (row.event.type === 'conversation.created') {
-    const applied = await memberAuthorisation(options.binding).applied(row.event.id);
+  if (row.type === 'conversation.created') {
+    const applied = await memberAuthorisation(options.binding).applied(row.event_id);
     if (!applied) iam = 'applying';
   }
   return {
-    status: 'appended' as const, conversationId, commandId, type: row.event.type,
-    sequence: row.sequence, projection: { content, iam },
+    status: 'appended' as const, conversationId, commandId, type: row.type,
+    sequence: Number(row.position), projection: { content: 'current', iam },
   };
 }

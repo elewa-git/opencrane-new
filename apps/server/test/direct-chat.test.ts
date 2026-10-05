@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { recordReport } from '../src/chat/reports.ts';
 import { turnCommand } from '../src/chat/turns.ts';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -18,6 +19,9 @@ it('records two direct participants, retries without duplicates and never admits
     const create = {
       id: 'create', conversationId: 'direct', mode: 'direct' as const, colleagueId: 'bob',
     };
+    await expect(chatCommand(nats.store, keys, alice, {
+      ...create, id: 'self', colleagueId: 'alice',
+    })).rejects.toBeInstanceOf(z.ZodError);
     const original = await chatCommand(nats.store, keys, alice, create);
     expect(await chatCommand(nats.store, keys, alice, create)).toEqual(original);
     await expect(chatCommand(nats.store, keys, alice, { ...create, colleagueId: 'alice' }))

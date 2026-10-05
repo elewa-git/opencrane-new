@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event-store';
 import { data } from './state.ts';
+import { memberStateTypes } from './ownership.ts';
 
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
@@ -70,7 +71,7 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
 function relevant(e: EventEnvelope, requester: string, assistant: string, conversation: string, resourceType: string, resourceId: string) {
   const d = data(e);
   return (e.subject === `ownership-${e.silo}` && (e.type === 'ownership.seeded' || d['memberId'] === requester)) ||
-      (e.subject === `member-${requester}` && ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(e.type)) ||
+      (e.subject === `member-${requester}` && memberStateTypes.includes(e.type)) ||
       (e.subject === `assistant-${assistant}` && e.type === 'assistant.created') ||
       (e.type.startsWith('team.') && (d['memberId'] === requester || e.type === 'team.created')) ||
       (d['conversationId'] === conversation && ['conversation.created', 'participant.added', 'participant.removed'].includes(e.type)) ||
@@ -99,17 +100,17 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
 /** Add exact subjects as they are discovered; all are fenced against the same starting head. */
 export async function authorityFence(store: EventStore, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
-  return createAuthorityFence(store, started, subjects, callerDeadline, false);
+  return createAuthorityFence(store, started, subjects, callerDeadline, checkOutputReports);
 }
 
-/** Chat reads watch audience and membership changes; work approvals keep their strict fence. */
+/** Watch chat participants and membership; keep work approval checks stricter. */
 export async function conversationAccessFence(store: EventStore, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
-  return createAuthorityFence(store, started, subjects, callerDeadline, true);
+  return createAuthorityFence(store, started, subjects, callerDeadline, checkChatAccessChanges);
 }
 
 async function createAuthorityFence(store: EventStore, started: number,
-  subjects: string[], callerDeadline: number, chatAccessOnly: boolean) {
+  subjects: string[], callerDeadline: number, checkChanges: typeof checkOutputReports) {
   const deadline = Math.min(started + 2000, callerDeadline);
   const head = await store.head(undefined, deadline);
   const watched = new Set<string>();
@@ -138,7 +139,7 @@ async function createAuthorityFence(store: EventStore, started: number,
       if (!changed.length) return;
       for (const { subject, sequence } of changed) {
         const fromSequence = (outputHeads.get(subject) ?? head) + 1;
-        await checkOutputReports(store, subject, fromSequence, sequence, deadline, chatAccessOnly);
+        await checkChanges(store, subject, fromSequence, sequence, deadline);
         outputHeads.set(subject, sequence);
       }
       // Recheck every exact subject: revocation may have arrived while reading reports.
@@ -149,17 +150,10 @@ async function createAuthorityFence(store: EventStore, started: number,
 }
 
 async function checkOutputReports(store: EventStore, subject: string, from: number,
-  to: number, deadline: number, chatAccessOnly: boolean) {
-  if (chatAccessOnly && subject.startsWith('ownership-')) return;
-  if (!chatAccessOnly && !subject.startsWith('conversation-')) {
-    throw new Error('Authority changed');
-  }
+  to: number, deadline: number) {
+  if (!subject.startsWith('conversation-')) throw new Error('Authority changed');
   for await (const row of store.readStream(subject, from, deadline)) {
     if (row.sequence > to) break;
-    if (chatAccessOnly) {
-      if (changesChatAccess(subject, row.event.type)) throw new Error('Authority changed');
-      continue;
-    }
     if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
       'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) {
       throw new Error('Authority changed');
@@ -167,13 +161,25 @@ async function checkOutputReports(store: EventStore, subject: string, from: numb
   }
 }
 
+async function checkChatAccessChanges(store: EventStore, subject: string, from: number,
+  to: number, deadline: number) {
+  if (subject.startsWith('ownership-')) return;
+  for await (const row of store.readStream(subject, from, deadline)) {
+    if (row.sequence > to) break;
+    if (changesChatAccess(subject, row.event.type)) throw new Error('Authority changed');
+  }
+}
+
+export function isAuthorityChanged(error: unknown) {
+  return error instanceof Error && error.message === 'Authority changed';
+}
+
 function changesChatAccess(subject: string, type: string) {
   if (subject.startsWith('conversation-')) {
     return ['conversation.created', 'participant.added', 'participant.removed'].includes(type);
   }
   if (subject.startsWith('member-')) {
-    return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
-      'member.removed'].includes(type);
+    return memberStateTypes.includes(type);
   }
   return true;
 }
