@@ -2,7 +2,7 @@
 
 Issue [#30](https://github.com/elewa-git/opencrane-new/issues/30), parent
 [#25](https://github.com/elewa-git/opencrane-new/issues/25). The original owner
-handoff is [README.md](README.md); **Workspace Live** is the canonical screen.
+handoff is [README.robot.md](README.robot.md); **Workspace Live** is the canonical screen.
 The HTML and support script are preserved as design references, never bundled
 into the app. Wireframe PNGs have been reduced from 2× to 1× with Chromium's
 canvas encoder. The texture is the original embedded JPEG, extracted unchanged.

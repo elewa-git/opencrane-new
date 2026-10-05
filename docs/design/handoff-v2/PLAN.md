@@ -1,7 +1,7 @@
 # Claude Design v2 UI integration plan
 
 4 October 2026. Seams are confirmed. This plan covers all 380 named states in the
-[ten handoffs](README.md), including their 1280px, 390px and reduced-motion views.
+[ten handoffs](README.robot.md), including their 1280px, 390px and reduced-motion views.
 It specifies Angular work in `apps/web`; the handoffs' `apps/opencrane-ui` name is
 obsolete. Designs are references, not evidence that a capability works.
 
@@ -229,7 +229,7 @@ behaviour. A frame containing several outcomes must exercise each one.
 
 ### 01-int — Integrations and My tools
 
-Reference: [handoff and full state names](01-int/README.md).
+Reference: [handoff and full state names](01-int/README.robot.md).
 `IntegrationRegister` takes `rows`, `loadState`, `loadedAt`, `selectedFilter` and
 emits `filterChanged`, `refreshed`, `opened`. `IntegrationFacts` takes four
 independent evidence records. Extend `McpInstall` with `serverId` and its existing
@@ -259,7 +259,7 @@ contain no credential release, deployment or permission logic.
 
 ### 02-wrk — Workspace effects
 
-Reference: [handoff](02-wrk/README.md). Extend existing `ApprovalCards`
+Reference: [handoff](02-wrk/README.robot.md). Extend existing `ApprovalCards`
 (`conversationId`), `LiveView` (`conversationId`, `saved`) and `FilePreview`
 (`conversationId`, `path`, `closed`). `ToolActivityLine` takes a sanitised tool
 record and emits `detailsOpened`; `ConversationFileCard` takes authorised file
@@ -281,7 +281,7 @@ controls mount before the backend confirms every agent thread has paused.
 
 ### 03-spd — Spending
 
-Reference: [handoff](03-spd/README.md). `SpendingSummary` takes `budget`,
+Reference: [handoff](03-spd/README.robot.md). `SpendingSummary` takes `budget`,
 `selection`, `loadedAt`; `MoneyCard` takes `label`, `settledCents`, `reservedCents`,
 optional `ceilingCents`, `period`; `BudgetLimitForm` takes current scope/limits,
 `expectedSequence` and `canEdit`. `EffectResolutionDrawer` takes `permitId`;
@@ -307,7 +307,7 @@ data, 503 remains unavailable/unknown. Never offer release because time elapsed.
 
 ### 04-ppl — People and groups
 
-Reference: [handoff](04-ppl/README.md). `GroupsList` takes authorised `rows`,
+Reference: [handoff](04-ppl/README.robot.md). `GroupsList` takes authorised `rows`,
 `loadState`, `loadedAt`; `GroupDetail` takes `group`, `changeStatus`, `canManage`.
 `MemberPicker` takes authorised `candidates`, `selectedIds`, `loading` and emits
 query/selection; it does not query a guessed directory. `MemberAccessSummary`
@@ -337,7 +337,7 @@ conversation/private-memory access; it is not an authority cache.
 
 ### 05-thr — Threads and delegation
 
-Reference: [handoff](05-thr/README.md). Reuse `Workspace`, `ChatComposer`,
+Reference: [handoff](05-thr/README.robot.md). Reuse `Workspace`, `ChatComposer`,
 `ApprovalCards` and the current transcript. `ConversationList` takes authorised
 rows/cursor/loading and emits selected/load-more/archive intent.
 `RecipientPicker` takes candidates, selections and allowed mode combinations.
@@ -360,7 +360,7 @@ takes the server's recovery/restriction state. These add no second transcript.
 
 ### 06-mem — Memory
 
-Reference: [handoff](06-mem/README.md). `MemoryList` takes authorised `scope`,
+Reference: [handoff](06-mem/README.robot.md). `MemoryList` takes authorised `scope`,
 `facts`, `query`, `cursor`, `loadState`. `MemoryFactDetail` takes a current fact
 and authorised source links. `MemoryReceipt` takes fact ids/revisions, scope,
 outcome and `canUndo`; emits per-item Undo. `MemoryFactForm` takes allowed scope,
@@ -379,7 +379,7 @@ source references. No component stores remembered text in browser persistence.
 
 ### 07-onb — Onboarding and account
 
-Reference: [handoff](07-onb/README.md). `AccountScreen` takes safe identity,
+Reference: [handoff](07-onb/README.robot.md). `AccountScreen` takes safe identity,
 editable display name, assistant status and revision; `OnboardingSurvey` takes
 confirmed step, saved answers, revision and field errors; `PersonaReview` takes
 persona revision/content/status; `WelcomeConversation` takes ordered welcome
@@ -394,7 +394,7 @@ where applicable without mounting ordinary session authority controls.
 
 ### 08-mod — Models and providers
 
-Reference: [handoff](08-mod/README.md). `ProviderList` takes safe provider/model
+Reference: [handoff](08-mod/README.robot.md). `ProviderList` takes safe provider/model
 rows and load state; `ProviderSetup` takes confirmed step, configuration
 revision, safe connection metadata and verification evidence. `ProviderKeyForm`
 takes provider id and status, never a saved key. `ProviderRetirementReview` takes
@@ -409,7 +409,7 @@ view with `models` and `taskRouting` inputs.
 
 ### 09-rtn — Routines
 
-Reference: [handoff](09-rtn/README.md). `RoutineList` takes rows/load state;
+Reference: [handoff](09-rtn/README.robot.md). `RoutineList` takes rows/load state;
 `RoutineForm` takes saved routine/revision, permitted assistant/company-profile/
 payer options and server schedule preview. `RoutineRunDetail` takes authorised
 occurrence/root/outcome links. `RoutineChangeReview` takes operation and server
@@ -423,7 +423,7 @@ IANA zone and server next UTC occurrence; never predicts successful execution.
 
 ### 10-ovr — Overview, history and qualification
 
-Reference: [handoff](10-ovr/README.md). `OverviewTaskList` takes authorised tasks,
+Reference: [handoff](10-ovr/README.robot.md). `OverviewTaskList` takes authorised tasks,
 load state and last-loaded time; `OverviewTaskRow` takes one task with safe scope,
 state, evidence and one action link. `AuditDetail` takes a safe history row and
 permitted owning-feature links. Reuse `AuditScreen` for filters/pagination and

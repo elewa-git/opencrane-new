@@ -1,40 +1,62 @@
-# Claude Design handoff v2
+# docs/design/handoff-v2
 
-The owner ran the ten prompts in [claude-design-briefs.md](../claude-design-briefs.md) in
-Claude Design and returned these handoffs on 4 October 2026. They are **designed states, not
-implementation evidence**: nothing here shows that the product behaves this way.
+## What this is
 
-| Handoff | Area | States | Tickets |
-| --- | --- | ---: | --- |
-| [01-int](01-int/README.md) | Integrations & My tools (INT) | 75 | P3-4 (#45), P3-6 (#47), P3-7 (#48), P3-8 (#49), P3-9 (#50), P3-10 (#51), P3-20 (#61), P4-23 (#105) |
-| [02-wrk](02-wrk/README.md) | Workspace effects (WRK) | 66 | P3-5 (#46), P3-12 (#53), P3-14 (#55), P3-17 (#58), P3-18 (#59), P3-20 (#61), P3-21 (#62) |
-| [03-spd](03-spd/README.md) | Spending (SPD) | 37 | P3-15 (#56), P4-26 (#108) |
-| [04-ppl](04-ppl/README.md) | People & groups (PPL) | 40 | P4-1 (#83), P4-2 (#84), P4-3 (#85), P4-7 (#89) |
-| [05-thr](05-thr/README.md) | Threads & delegation (THR) | 39 | P4-4 (#86), P4-5 (#87), P4-6 (#88), P4-8 (#90), P4-9 (#91), P4-10 (#92), P4-11 (#93), P4-14 (#96), P4-7 (#89) |
-| [06-mem](06-mem/README.md) | Memory (MEM) | 27 | P4-12 (#94), P4-13 (#95), P4-15 (#97), P4-16 (#98), P4-17 (#99), P4-14 (#96) |
-| [07-onb](07-onb/README.md) | Onboarding & account (ONB) | 26 | P4-18 (#100), P4-19 (#101), P4-20 (#102) |
-| [08-mod](08-mod/README.md) | Models & providers (MOD) | 26 | P4-21 (#103), P4-22 (#104) |
-| [09-rtn](09-rtn/README.md) | Routines (RTN) | 29 | P4-24 (#106), P4-25 (#107) |
-| [10-ovr](10-ovr/README.md) | Overview & history (OVR) | 15 | P4-27 (#109), P3-22 (#63), P4-28 (#110) |
+This folder holds ten newer designs for parts of OpenCrane. Each design shows screens and
+states that the website may support. They are design references, not proof that a screen
+works. The live website is [apps/web](../../../apps/web/README.md).
 
-## What is in the repository
+## Where it fits
 
-- `NN-key/README.md`: the handoff's own notes, kept verbatim. It lists every state id, the
-  shared paper and origami system, the state vocabulary, keyboard, accessibility, 390px and
-  reduced-motion rules.
-- `NN-key/source.dc.html`: the design source for that handoff. Open it in a browser; it loads
-  `shared/support.js` and the DM Sans and DM Mono fonts from `shared/`.
+The designs sit beside the older chat and organisation settings designs. The ten folders
+are siblings. Their source pictures were made with a design tool, and the full-size images
+are kept outside this repository. Ask the design owner for those files.
 
-The rendered frames (`png/<ID>-1280.png` and `png/<ID>-390.png`, 760 images, about 82MB) and
-the self-contained offline HTML are kept out of git. On the dev box they are in
-`/home/jente/dev/design-handoffs/v2/<NN-key>/`, with the original zips in `zips/`.
+```mermaid
+flowchart TD
+  handoff["handoff-v2<br/>ten designs"] --> integrations["Integrations<br/>tools and access"]
+  handoff --> workspace["Workspace<br/>chat activity"]
+  handoff --> spending["Spending<br/>budgets"]
+  handoff --> people["People and groups<br/>members"]
+  handoff --> threads["Threads and memory<br/>sharing and saved knowledge"]
+  handoff --> onboarding["Onboarding<br/>first use"]
+  handoff --> models["Models and routines<br/>providers and repeating work"]
+```
 
-## How builders use it
+## What it is responsible for
 
-- Recreate the frames in `apps/web` (the handoff notes call it `apps/opencrane-ui`) with Angular
-  components. Do not copy the design's inline HTML or `support.js`.
-- Build the shared pieces once (the organisation and settings shells, the paper and origami
-  system, the state glyphs and the loaders), then each ticket's screens on top of them. The
-  [integration plan](PLAN.md) maps every state id to its ticket and sets the order.
-- Every screen has a 1280px and a 390px layout and a reduced-motion variant, and follows the
-  code style in [AGENTS.md](../../../AGENTS.md#style).
+- Shows the intended screens for ten areas of the product.
+- Shows desktop, phone and reduced-motion versions of each designed state.
+- Makes clear which areas have working screens and which remain design ideas.
+- Leaves the website code in `apps/web`; no design HTML runs as part of the product.
+
+| Area | What a person does | What works in `apps/web` |
+| --- | --- | --- |
+| [Integrations and my tools](01-int/README.md) | Connect tool servers and choose tools. | Integrations work; personal tool settings are partial. |
+| [Workspace effects](02-wrk/README.md) | Follow assistant work, approvals, files and screenshots. | The chat workspace works; some designed states are missing. |
+| [Spending](03-spd/README.md) | Set a budget and check spending. | The spending page works. |
+| [People and groups](04-ppl/README.md) | Invite people, set roles and manage groups. | These pages are not built yet. |
+| [Threads and delegation](05-thr/README.md) | Share a conversation and pass work on. | These features are not built yet. |
+| [Memory](06-mem/README.md) | See and control what an assistant remembers. | This feature is not built yet. |
+| [Onboarding and account](07-onb/README.md) | Sign in and manage personal settings. | Sign-in and some settings work; onboarding is partial. |
+| [Models and providers](08-mod/README.md) | Choose models and who may use them. | The website lists models; provider management is not built. |
+| [Routines](09-rtn/README.md) | Set up repeating assistant work. | This feature is not built yet. |
+| [Overview and history](10-ovr/README.md) | See the organisation home page and changes. | Change history works; the home page is not built. |
+
+## Processes it handles
+
+1. **A person needs a product screen.** The design shows the proposed screen and its
+   states. The web team builds the screen in `apps/web` and checks it against the
+   reference. Some designs describe work that is not built yet.
+
+## How to run or test it
+
+Open each folder's HTML design in a browser. Compare the built chat, settings and loading
+screens with their references by running the visual checks from the repository root.
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): designer notes, state counts and build details.
+- [Full designer notes](README.robot.md#areas): detailed design states for each area.
+- [Organisation settings design](../org-admin/README.md): the older settings design.
+- [Website](../../../apps/web/README.md): the live screens.

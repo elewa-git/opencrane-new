@@ -81,8 +81,8 @@ path is disabled. No same-UID browser, MCP or package helper is added to Codex.
 
 ## Evidence and limits
 
-[S0.3 results](../../spikes/s0-3-warm-pool/README.md) own the measured claim/resume
-latencies and persistence/token receipts. [S0.5 results](../../spikes/s0-5-live-view/README.md)
+[S0.3 results](../../spikes/s0-3-warm-pool/README.robot.md) own the measured claim/resume
+latencies and persistence/token receipts. [S0.5 results](../../spikes/s0-5-live-view/README.robot.md)
 own the gateway, framebuffer, input and takeover receipts. Their runners use real
 Agent Sandbox, gVisor, Chromium, Codex, agentgateway and KasmVNC; only model replies
 and identity issuance are scripted. No paid provider is used.

@@ -181,7 +181,7 @@ decision specifically:
 
 **Decision:** retain Codex app-server, using its native exec-server environment
 for tool execution under a separate Unix user. Keep the local model forwarding
-proxy and per-thread tokens. [S0.1b](../../spikes/s0-1b-proxy-gvisor/README.md)
+proxy and per-thread tokens. [S0.1b](../../spikes/s0-1b-proxy-gvisor/README.robot.md)
 contains the runnable proof and [receipt](../../spikes/s0-1b-proxy-gvisor/evidence.json).
 
 The real Agent Sandbox 1.0.4 Pod used RuntimeClass `gvisor`; CRI inspection
