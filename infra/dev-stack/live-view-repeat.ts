@@ -17,7 +17,11 @@ import { browserViewTimings, collectViewTimings } from './live-view-timings.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
 
 assert(secondary, 'Repeated qualification requires a claimed secondary stack');
-const output = process.argv[2] ?? 'docs/process/i77-live-view';
+const argumentsList = process.argv.slice(2);
+const quiet = argumentsList.includes('--quiet');
+const outputArgument = argumentsList.find(argument => argument !== '--quiet');
+const output = outputArgument ?? 'docs/process/i77-live-view';
+const cpuPressureLimit = quiet ? 10 : 20;
 await mkdir(output, { recursive: true });
 const settings = await readEnv('settings'), binding = await readEnv('binding');
 const silo = settings['SILO_ID']!, origin = settings['ORIGIN']!;
@@ -44,14 +48,71 @@ async function cpuPressureSomeAvg10() {
   assert(avg10, 'CPU pressure has avg10');
   return Number(avg10);
 }
-async function waitForLowCpuPressure() {
+async function waitForLowCpuPressure(limit: number) {
   const deadline = Date.now() + 120_000;
   let avg10 = await cpuPressureSomeAvg10();
-  while (avg10 >= 20 && Date.now() < deadline) {
+  while (avg10 >= limit && Date.now() < deadline) {
     await delay(1000);
     avg10 = await cpuPressureSomeAvg10();
   }
   return avg10;
+}
+function closeCodeForStopReason(reason: unknown): number | null {
+  if (reason === 'access_changed' || reason === 'expired') return 4003;
+  if (reason === 'unavailable') return 4503;
+  if (reason === 'slow_viewer') return 1013;
+  if (reason === 'disconnected' || reason === 'upstream' || reason === 'protocol' ||
+    reason === 'shutdown') return 1000;
+  return null;
+}
+type BrowserSessionMeasurement = {
+  label: string;
+  sessionId: string;
+  count: number;
+  durationMs: number[];
+  revokeToClearMs?: number;
+};
+function sessionSummary(label: string, sessionId: string,
+  browserSession: BrowserSessionMeasurement | undefined,
+  timingRecords: Record<string, unknown>[], revokedAtTime: string) {
+  const stop = timingRecords.find(record => record['stage'] === 'stop');
+  const upgrade = timingRecords.find(record => record['stage'] === 'websocket_upgrade');
+  const stopReason = stop?.['outcome'] ?? upgrade?.['outcome'];
+  const leaseChecks = timingRecords.filter(record => record['stage'] === 'lease_check');
+  const checksByBoundary: Record<string, number> = {};
+  for (const check of leaseChecks) {
+    const boundary = typeof check['boundary'] === 'string' ? check['boundary'] : 'none';
+    const outcome = typeof check['outcome'] === 'string' ? check['outcome'] : 'unknown';
+    const result = `${boundary}:${outcome}`;
+    checksByBoundary[result] = (checksByBoundary[result] ?? 0) + 1;
+  }
+  const revokedAt = Date.parse(revokedAtTime);
+  const deniedBeforeRevoke = leaseChecks.filter(check => {
+    if (check['outcome'] !== 'denied') return false;
+    if (!Number.isFinite(revokedAt)) return true;
+    return typeof check['time'] === 'string' && Date.parse(check['time']) < revokedAt;
+  }).length;
+  const closeCode = stop ? closeCodeForStopReason(stopReason) : null;
+  let upgradeStatus: number | undefined;
+  if (!stop && (upgrade?.['outcome'] === 'access_changed' || upgrade?.['outcome'] === 'denied')) {
+    upgradeStatus = 403;
+  }
+  const pauseCount = browserSession?.count ?? null;
+  const pauseDurationMs = browserSession?.durationMs ?? null;
+  const revokeToClearMs = browserSession?.revokeToClearMs ?? null;
+  return {
+    label,
+    sessionId,
+    stopReason,
+    closeCode,
+    ...(upgradeStatus === undefined ? {} : { upgradeStatus }),
+    checksByBoundary,
+    deniedBeforeRevoke,
+    pauseCount,
+    pauseDurationMs,
+    revokeToClearMs,
+    timingRecords,
+  };
 }
 async function serverRunDelay() {
   const pidLine = await readFile(`${directory}/server.pid`, 'utf8');
@@ -90,16 +151,18 @@ try {
     auth.use('person', member, 'model', model.id), auth.use('assistant', computer!.assistant_id, 'model', model.id),
   ]))).every(result => result.allowed), 'member and assistant model grants');
   for (let run = 1; run <= 10; run++) {
-    const cpuPressureSomeAvg10 = await waitForLowCpuPressure();
+    const cpuPressureSomeAvg10 = await waitForLowCpuPressure(cpuPressureLimit);
     const serverRunDelayBefore = await serverRunDelay();
     const page: Page = browser.memberPages[(run - 1) % 2]!;
     const width = page.viewportSize()!.width, started = performance.now(), beforeLoad = loadavg();
     let result = 'PASS', failure: string | undefined;
-    let journeyPauses: unknown;
-    let journeyPauseMs: unknown;
+    let journeySessions: BrowserSessionMeasurement[] = [];
+    let revokedAtTime = '';
     const conversationId = randomUUID();
     const stopTimings = browserViewTimings(page, conversationId);
     try {
+      assert(cpuPressureSomeAvg10 < cpuPressureLimit,
+        `CPU pressure remained at or above ${cpuPressureLimit}%`);
       const response: APIResponse = await page.request.post(`${origin}/api/conversations`, { headers: { origin },
         data: { id: randomUUID(), conversationId, assistantId: computer.assistant_id } });
       assert.equal(response.status(), 200);
@@ -110,34 +173,46 @@ try {
       await browserLiveViewJourney(page, origin, computer, { member, admin, silo, store: events.store, append, until,
         desktopAllowed: async () => (await auth.desktop(member, computer!.computer_id)).allowed });
       const journeyReceipt = JSON.parse(await readFile(`docs/process/live-view/conversation-${width}.json`, 'utf8')) as {
-        pauses?: unknown; pauseMs?: unknown;
+        sessions?: typeof journeySessions; revokedAtTime?: string;
       };
       await writeFile(`${output}/run-${run}.json`, JSON.stringify(journeyReceipt, null, 2) + '\n');
-      journeyPauses = journeyReceipt.pauses;
-      journeyPauseMs = journeyReceipt.pauseMs;
+      journeySessions = journeyReceipt.sessions ?? [];
+      revokedAtTime = journeyReceipt.revokedAtTime ?? '';
     } catch (error) {
-      result = 'FAIL'; failure = error instanceof Error ? error.message : String(error);
-      await page.screenshot({ path: `${output}/run-${run}-failure.png` });
-      process.exitCode = 1;
+      if (cpuPressureSomeAvg10 >= cpuPressureLimit) {
+        result = 'LOADED';
+        failure = `CPU pressure some avg10 was ${cpuPressureSomeAvg10}%`;
+      } else {
+        result = 'FAIL'; failure = error instanceof Error ? error.message : String(error);
+        await page.screenshot({ path: `${output}/run-${run}-failure.png` });
+        process.exitCode = 1;
+      }
     }
     const serverRunDelayAfter = await serverRunDelay();
     const browserTimings = stopTimings();
     await writeFile(`${output}/run-${run}-browser.json`, JSON.stringify(browserTimings, null, 2) + '\n');
-    let sessionId: string | undefined;
+    const sessions: ReturnType<typeof sessionSummary>[] = [];
+    let admittedSessionCount = 0;
     for (const timing of browserTimings) {
       if (timing.stage === 'admission_response' && timing.sessionId) {
-        sessionId = timing.sessionId;
-        break;
+        admittedSessionCount += 1;
+        const sessionId = timing.sessionId;
+        let label = `viewer ${admittedSessionCount}`;
+        if (admittedSessionCount === 1) label = 'first view';
+        if (admittedSessionCount === 2) label = 'during turn';
+        const browserSession = journeySessions.find(session => session.sessionId === sessionId);
+        const timingOutput = admittedSessionCount === 1
+          ? `${output}/run-${run}-timings.jsonl`
+          : `${output}/run-${run}-timings-${admittedSessionCount}.jsonl`;
+        const timingRecords = await collectViewTimings(sessionId, timingOutput);
+        sessions.push(sessionSummary(label, sessionId, browserSession, timingRecords, revokedAtTime));
       }
     }
-    const timingRecords = await collectViewTimings(sessionId ?? '', `${output}/run-${run}-timings.jsonl`);
     const receipt = {
-      conversationId, sessionId, timingRecords, date: new Date().toISOString(), run, width, stackId,
+      conversationId, sessions, date: new Date().toISOString(), run, width, stackId,
       result, beforeLoad,
       cpuPressureSomeAvg10, serverRunDelayDelta: String(serverRunDelayAfter - serverRunDelayBefore),
       afterLoad: loadavg(),
-      ...(journeyPauses === undefined ? {} : { pauses: journeyPauses }),
-      ...(journeyPauseMs === undefined ? {} : { pauseMs: journeyPauseMs }),
       durationMs: Math.round(performance.now() - started), ...(failure ? { failure } : {}),
     };
     await appendFile(`${output}/runs.jsonl`, JSON.stringify(receipt) + '\n');

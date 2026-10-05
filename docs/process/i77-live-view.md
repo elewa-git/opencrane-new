@@ -155,12 +155,9 @@ after the required integer one-minute load check passed. It completed **PASS**:
 **1,391 passed / 14 skipped**, **80 files passed / 3 skipped**, **1,120.85 s**
 wall time (**1,118.99 s** Vitest). The opt-in tests remain NOT RUN.
 
-## Source gates and review
+## Source gates
 
-Independent source review: **PASS**, no blocking findings in either of the two passes. The reviewer checked
-the four red reproductions, lease expiry, denial precedence, post-audit proof
-and outage/refusal controls. All source gates pass; live qualification remains
-a separate failed gate. The final source was hashed before its fresh startup:
+The final source was hashed before its fresh startup:
 
 | File | SHA-256 |
 | --- | --- |
@@ -424,3 +421,63 @@ its 1,000 ms bound. A single-worker retry of the volume test then received a
 403 unavailable response from its decision service. The host was under
 concurrent test load; these are failed runs, not passes. Live qualification
 remains **FAIL**.
+
+## Final qualification — 5 October 2026
+
+**FAIL: 4/10 viewer runs passed.** The acceptance condition is ten of ten runs
+with explicit revocation clearing the viewer within **2,000 ms**. Runs 1, 2,
+3 and 8 passed that bound. The failures were in the **second viewer session**,
+opened while the assistant turn was streaming. Runs 4, 5, 6, 9 and 10 had a
+200 admission and then the server closed the session with **4003
+`access_changed`**. Run 7 was refused with HTTP **403** during WebSocket upgrade.
+Session 1 reached Viewing and passed its checks in every run; its later
+`disconnected` stop was the harness pressing Escape to close the dialog. The
+table reports the per-run result, revoke-to-clear time, pause evidence, CPU
+pressure and secondary server run-delay delta. Full receipts and timing files
+are in [the final batch directory](i77-live-view/final/).
+
+Before the final secondary claim, host readings were load average **18.05 /
+16.66 / 14.92**, **8 CPUs**, and CPU pressure `some avg10=29.76%`
+(`avg60=47.77%`, `avg300=52.08%`). Each run's CPU pressure is the harness's
+`some avg10` value after waiting up to 120 seconds for pressure below 20%.
+Every recorded run started above 20%, so the batch did not measure a quiet
+window. Run delay is the secondary server's `/proc/<pid>/schedstat` run-delay
+delta, converted from nanoseconds to milliseconds.
+
+| Run | Width | Result | Revoke-to-clear | Pauses / pause ms | CPU pressure some avg10 | Server run delay |
+| ---: | ---: | --- | --- | --- | ---: | ---: |
+| 1 | 390px | PASS | 421 ms | Unproven (0 recorded) | 48.06% | 6,403.5 ms |
+| 2 | 1280px | PASS | 430 ms | Unproven (0 recorded) | 59.95% | 6,603.1 ms |
+| 3 | 390px | PASS | 386 ms | Unproven (0 recorded) | 64.18% | 5,880.5 ms |
+| 4 | 1280px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Not captured | 50.74% | 11,096.4 ms |
+| 5 | 390px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Not captured | 41.65% | 6,729.9 ms |
+| 6 | 1280px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Pause marker; duration not captured | 49.35% | 8,456.8 ms |
+| 7 | 390px | FAIL; HTTP 403 at second-session upgrade | NOT REACHED | Not captured | 24.48% | 5,907.1 ms |
+| 8 | 1280px | PASS | 497 ms | Unproven (0 recorded) | 61.93% | 10,221.1 ms |
+| 9 | 390px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Not captured | 67.63% | 13,357.2 ms |
+| 10 | 1280px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Pause marker; duration not captured | 36.15% | 15,071.9 ms |
+
+Diagnosis: the authority fence treated conversation turn events such as
+`agent.turn_started`, `agent.turn_completed` and `message.posted` as authority
+changes. A harmless turn report arriving during an access check therefore
+became a denial and stopped the second session with `access_changed`. Load
+widened the race window, but the trigger was normal product activity while
+watching a live turn. This product fix is separate from the harness change.
+
+The old **0 pauses** count is unproven. The observer queried a dialog through
+`aria-label`, although the dialog is named with `aria-labelledby`; it also read
+the whole status line, which includes evidence time and could not equal
+`Paused`. The corrected harness observes the `.message` text and will measure
+pause count and duration separately for both sessions. No revocation was
+attempted in the six failed runs.
+
+On current `origin/main` (#158 included), lint, typecheck and `check:events`
+**PASS**ed. The full root suite **FAIL**ed: **1,604 passed, 15 skipped, 1
+failed test and 1 failed suite** across 106 files (100 passed, 4 skipped, 2
+failed). `libs/models/test/gateway.test.ts` failed with JetStream “heartbeats
+missed”; `apps/server/test/integrations.test.ts` failed its Chromium dev-proxy
+refresh assertion. Isolated retries of both files then **PASS**ed: gateway,
+80 passed / 1 skipped; integrations, 20 passed. The infra TypeScript check also
+passed on the rebased revision with the temporary harness adjustment. Logs,
+commands and timings are retained in [the final batch directory](i77-live-view/final/).
+The live qualification remains **FAIL**.

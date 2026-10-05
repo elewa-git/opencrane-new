@@ -1,0 +1,8 @@
+loadavg_before=10.73 11.20 13.47 8/2535 4053857
+cpu_pressure_before=
+some avg10=36.36 avg60=36.06 avg300=34.19 total=93291387587
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+started=2026-10-05T05:24:40Z
+command=PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- --maxWorkers=2
+exit=1
+wall_seconds=1396

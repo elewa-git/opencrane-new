@@ -70,12 +70,15 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   await page.evaluate(function observeStates() {
     const states: { state: string; at: number }[] = [];
     Object.assign(window, { liveViewStates: states });
-    const status = document.querySelector('dialog[aria-label="Computer view"] [role="status"]')!;
+    const titles = [...document.querySelectorAll('dialog h2')];
+    const title = titles.find(node => node.textContent?.trim() === 'Computer view')!;
+    const dialog = title.closest('dialog')!;
+    const message = dialog.querySelector('[role="status"] .message')!;
     function record() {
-      states.push({ state: status.textContent!.trim(), at: performance.now() });
+      states.push({ state: message.textContent!.trim(), at: performance.now() });
     }
     const observer = new MutationObserver(record);
-    observer.observe(status, { childList: true, characterData: true, subtree: true });
+    observer.observe(message, { childList: true, characterData: true, subtree: true });
   });
   const open = async () => { await entry.focus(); await page.keyboard.press('Enter'); };
   await open();
@@ -95,6 +98,7 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const started = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/view` && response.status() === 200);
   await open();
   const admitted = await (await started).json() as { sessionId: string };
+  const firstViewStartedAt = performance.now();
   await viewer.getByText('Viewing', { exact: true }).waitFor({ timeout: 20_000 });
   const canvas = viewer.locator('canvas');
   const viewerElement = await viewer.elementHandle();
@@ -137,6 +141,7 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
 
   // Close to reach the composer, then watch the same desktop while the real Codex turn completes.
   await page.keyboard.press('Escape');
+  const firstViewStoppedAt = performance.now();
   if (width === 390) await page.keyboard.press('Escape');
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   const replies = page.getByRole('article', { name: 'Agent reply', exact: true });
@@ -148,6 +153,7 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const nextAdmission = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/view` && response.status() === 200);
   await open();
   const watching = await (await nextAdmission).json() as { sessionId: string };
+  const duringTurnStartedAt = performance.now();
   await viewer.getByText('Viewing', { exact: true }).waitFor({ timeout: 20_000 });
   await replies.nth(before).getByText('Done', { exact: true }).waitFor();
   assert((await replies.nth(before).innerText()).includes('Hello from your computer.'), 'Actual assistant completes via stub while viewing');
@@ -156,13 +162,16 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   assert.equal(watchingAudit.length, 1);
   assert.equal(watchingAudit[0]?.event.type, 'computer.view_started');
   const revokedAt = performance.now();
+  const revokedAtTime = new Date().toISOString();
   await append('grant.revoked', grantStream('shared_desktop', computer.computer_id), { ...grant, revokedBy: admin });
   await page.waitForFunction(function hidden(dialog: Element) {
-    const state = dialog.querySelector('[role="status"]')!.textContent!.trim();
+    const message = dialog.querySelector('[role="status"] .message')!;
+    const state = message.textContent!.trim();
     const display = dialog.querySelector<HTMLElement>('.display')!;
     return state === 'Access changed' || (state === 'Paused' && display.hidden);
   }, viewerElement, { timeout: 2000 });
   const revokedMs = Math.round(performance.now() - revokedAt);
+  const duringTurnStoppedAt = performance.now();
   await viewer.getByText('Access changed', { exact: true }).waitFor({ timeout: 12_000 });
   assert.equal(await viewer.locator('canvas').count(), 0, 'Revocation clears protected pixels');
   await until(async () => (await history(store, `view-${watching.sessionId}`, silo)).length === 2, 'view stop audit');
@@ -173,19 +182,34 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
     return (window as unknown as { liveViewStates: { state: string; at: number }[] })
       .liveViewStates;
   });
-  const pauseMs: number[] = [];
-  let pausedAt: number | undefined;
-  for (const transition of transitions) {
-    if (transition.state === 'Paused' && pausedAt === undefined) pausedAt = transition.at;
-    if (transition.state !== 'Paused' && pausedAt !== undefined) {
-      pauseMs.push(Math.round(transition.at - pausedAt));
-      pausedAt = undefined;
+  function pauseMeasurements(startedAt: number, stoppedAt: number) {
+    const pauses: number[] = [];
+    let pausedAt: number | undefined;
+    for (const transition of transitions) {
+      if (transition.at < startedAt || transition.at > stoppedAt) continue;
+      if (transition.state === 'Paused' && pausedAt === undefined) pausedAt = transition.at;
+      if (transition.state !== 'Paused' && pausedAt !== undefined) {
+        pauses.push(Math.round(transition.at - pausedAt));
+        pausedAt = undefined;
+      }
     }
+    if (pausedAt !== undefined) pauses.push(Math.round(stoppedAt - pausedAt));
+    return { count: pauses.length, durationMs: pauses };
   }
+  const firstViewPauses = pauseMeasurements(firstViewStartedAt, firstViewStoppedAt);
+  const duringTurnPauses = pauseMeasurements(duringTurnStartedAt, duringTurnStoppedAt);
   await writeFile(`${receipt}/conversation-${width}.json`, JSON.stringify({ date: new Date().toISOString(), width, origin, stackId, namespace,
     conversationId, computer, member, generation: computer.generation, framebuffer: { width: 800, height: 600, sha256: createHash('sha256').update(pixels).digest('hex') },
+    revokedAtTime,
+    sessions: [
+      { label: 'first view', sessionId: admitted.sessionId, ...firstViewPauses },
+      { label: 'during turn', sessionId: watching.sessionId, ...duringTurnPauses,
+        revokeToClearMs: revokedMs },
+    ],
     sessionId: watching.sessionId, audit: stopped.map(({ event }) => ({ id: event.id, type: event.type, principal: event.principal, data: event.data })),
-    revokedMs, transitions, pauses: pauseMs.length, pauseMs, noGrant: 'PASS', keyboard: 'PASS', targets44px: 'PASS', assistantStubTurn: 'PASS', status: 'PASS' }, null, 2));
+    revokedMs, transitions, pauses: duringTurnPauses.count,
+    pauseMs: duringTurnPauses.durationMs, noGrant: 'PASS', keyboard: 'PASS',
+    targets44px: 'PASS', assistantStubTurn: 'PASS', status: 'PASS' }, null, 2));
   await page.keyboard.press('Escape');
   if (width === 390) await page.keyboard.press('Escape');
   console.log(`PASS browser live view ${width}px: conversation panel → no grant refused → granted real desktop + Codex/stub turn → revoked in ${revokedMs} ms, pixels cleared and stop audited; deployed service account, frontend proxy, keyboard and 44px targets`);

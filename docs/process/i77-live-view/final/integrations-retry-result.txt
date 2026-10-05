@@ -1,0 +1,4 @@
+started=2026-10-05T05:56:50Z
+command=PG_TEST_URL=... nice -n 10 npx vitest run apps/server/test/integrations.test.ts --maxWorkers=1
+exit=0
+wall_seconds=101

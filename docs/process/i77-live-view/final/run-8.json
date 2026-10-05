@@ -1,0 +1,96 @@
+{
+  "date": "2026-10-05T05:07:07.270Z",
+  "width": 1280,
+  "origin": "http://127.0.0.1:25206",
+  "stackId": "2",
+  "namespace": "opencrane-dev-2",
+  "conversationId": "e80e2b5c-0d53-4367-b233-7d4c322dc99e",
+  "computer": {
+    "assistant_id": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+    "computer_id": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+    "generation": 2
+  },
+  "member": "zitadel-member",
+  "generation": 2,
+  "framebuffer": {
+    "width": 800,
+    "height": 600,
+    "sha256": "0cffb2141fcb40cef0931e8f3d23b1cebe60d35e5e236288344602cceb01f1b6"
+  },
+  "sessionId": "04bc49d9-75e3-4a98-8470-0360f1729c9f",
+  "audit": [
+    {
+      "id": "2b30eb52-672b-42aa-8aba-6e6f9d46e15f",
+      "type": "computer.view_started",
+      "principal": {
+        "id": "zitadel-member",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "04bc49d9-75e3-4a98-8470-0360f1729c9f",
+        "conversationId": "e80e2b5c-0d53-4367-b233-7d4c322dc99e",
+        "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "memberId": "zitadel-member",
+        "generation": 2,
+        "expiresAt": "2026-10-05T05:09:04.050Z"
+      }
+    },
+    {
+      "id": "8e706bf3-a1a7-4733-a6e1-d8c2ee9a0f98",
+      "type": "computer.view_stopped",
+      "principal": {
+        "id": "zitadel-member",
+        "kind": "human"
+      },
+      "data": {
+        "sessionId": "04bc49d9-75e3-4a98-8470-0360f1729c9f",
+        "conversationId": "e80e2b5c-0d53-4367-b233-7d4c322dc99e",
+        "computerId": "computer-293ad9e1dca7393714fd36f884ee8ee5",
+        "assistantId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "memberId": "zitadel-member",
+        "generation": 2,
+        "expiresAt": "2026-10-05T05:09:04.050Z",
+        "reason": "access_changed"
+      }
+    }
+  ],
+  "revokedMs": 497,
+  "transitions": [
+    {
+      "state": "Disconnected",
+      "at": 5542.299999952316
+    },
+    {
+      "state": "Connecting",
+      "at": 6947.199999988079
+    },
+    {
+      "state": "ViewingEvidence: 5 Oct 2026, 05:06 UTC",
+      "at": 11128
+    },
+    {
+      "state": "Disconnected",
+      "at": 12665
+    },
+    {
+      "state": "Connecting",
+      "at": 33285.299999952316
+    },
+    {
+      "state": "ViewingEvidence: 5 Oct 2026, 05:07 UTC",
+      "at": 37347.89999997616
+    },
+    {
+      "state": "Access changed",
+      "at": 38120.5
+    }
+  ],
+  "pauses": 0,
+  "pauseMs": [],
+  "noGrant": "PASS",
+  "keyboard": "PASS",
+  "targets44px": "PASS",
+  "assistantStubTurn": "PASS",
+  "status": "PASS"
+}
