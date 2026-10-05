@@ -35,6 +35,7 @@
     "visual:f4-settings": "node scripts/check-f4-settings.mjs",
     "visual:f5-workspace": "npm run build -w apps/web && node scripts/check-f5-workspace.mjs",
     "visual:p3-15-spending": "node scripts/check-p3-15-spending.mjs",
+    "visual:integrations": "npm run build -w apps/web && node scripts/check-integrations-screens.mjs",
     "visual:p4-1-people": "node scripts/check-p4-1-people.mjs",
     "visual:p3-18-screens": "npm run build -w apps/web && node scripts/check-p3-18-screens.mjs"
   },

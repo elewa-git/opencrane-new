@@ -5,6 +5,7 @@ import { McpInstall } from './mcp-install/mcp-install';
 import { ModelsScreen } from './models/model-registry';
 import { SpendingScreen } from './spending/spending';
 import { IntegrationRegister } from './integrations/integration-register';
+import { IntegrationDetail } from './integrations/integration-detail';
 import { ToolPolicyScreen } from './tool-policy/tool-policy';
 import { Workspace } from './chat/workspace';
 import { SignIn } from './sign-in/sign-in';
@@ -23,7 +24,8 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
   selector: 'app-root',
   imports: [
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen,
-    ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, OrganisationShell,
+    ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
+    OrganisationShell,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
   ],
   templateUrl: './app.html',
@@ -46,6 +48,9 @@ export class App {
   protected readonly peopleGroupId = peopleGroupId(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
+  protected readonly detailServer = this.installPage
+    ? undefined
+    : /^\/org\/integrations\/([\w-]+)$/u.exec(this.pathname)?.[1];
   protected readonly auditConversation = /^\/history\/([\w-]+)$/u.exec(this.pathname)?.[1];
   protected readonly statesPage = this.pathname === '/org/states';
   protected readonly organisation = document

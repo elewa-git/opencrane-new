@@ -6,6 +6,10 @@ This Angular app provides the organisation settings shell and MCP register.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+The Integrations register searches and filters that read. Its detail page reads the
+register first, then reads the matching server's tool policy. Connected state and access
+grants remain unavailable until the server provides those reads. A 401 or 403 clears the
+register and detail page before showing the shared access-lost message.
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
 
@@ -19,6 +23,8 @@ npm run dev -w apps/web
 ```
 
 Open `http://localhost:4200/org/integrations`; `/org` also opens this implemented page.
+`/org/integrations/<id>` shows four separate facts for a registered server. It does not
+read the tools route for an id missing from the register.
 Organisation navigation is Overview, People & groups, Models & providers, Spending,
 Integrations, Routines and Change history. People & groups reads the flat group list,
 shows read-only group details and lets Owners and Admins create groups. Overview and

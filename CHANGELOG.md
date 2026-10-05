@@ -8,6 +8,7 @@
 - Shared prompt files and skill instructions are now off in personal and memory-free Codex turns as well as private turns.
 - Model and tool calls keep working when another chat, a file upload or someone else's access changes during the access check. Revocations, turn stops and approval invalidation still refuse calls, and unsent spending holds release at zero cents.
 
+- Owners and admins can search the integration register and open a detail page with separate installed, connected, access and assistant-availability facts.
 - Rewrote the access, AI and shared-library READMEs for new engineers, and kept their detailed contracts in README.robot.md.
 
 - The four app READMEs now explain their place in the system and what people can do with them.

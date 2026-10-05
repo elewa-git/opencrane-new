@@ -36,6 +36,8 @@
       <oc-mcp-install />
     } @else if (toolServer) {
       <oc-tool-policy [serverId]="toolServer" />
+    } @else if (detailServer) {
+      <oc-integration-detail [serverId]="detailServer" />
     } @else if (statesPage) {
       <oc-state-specimen />
     } @else if (activePage === 'integrations') {

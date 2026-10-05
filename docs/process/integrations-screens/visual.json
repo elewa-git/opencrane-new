@@ -1,0 +1,260 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390,
+    320
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": [
+    {
+      "name": "register-empty-1280-no-preference.png",
+      "adaptations": "No catalogue or package rows exist in the current API."
+    },
+    {
+      "name": "register-loading-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-all-1280-no-preference.png",
+      "adaptations": "Tools use the honest Allow or Ask wording supplied by the API."
+    },
+    {
+      "name": "register-attention-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-review-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-stale-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "access-lost-1280-no-preference.png",
+      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+    },
+    {
+      "name": "detail-draft-1280-no-preference.png",
+      "adaptations": "Unavailable connection and grant facts say Not available yet."
+    },
+    {
+      "name": "detail-published-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-empty-1280-reduce.png",
+      "adaptations": "No catalogue or package rows exist in the current API."
+    },
+    {
+      "name": "register-loading-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-all-1280-reduce.png",
+      "adaptations": "Tools use the honest Allow or Ask wording supplied by the API."
+    },
+    {
+      "name": "register-attention-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-review-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-stale-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "access-lost-1280-reduce.png",
+      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+    },
+    {
+      "name": "detail-draft-1280-reduce.png",
+      "adaptations": "Unavailable connection and grant facts say Not available yet."
+    },
+    {
+      "name": "detail-published-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-empty-390-no-preference.png",
+      "adaptations": "No catalogue or package rows exist in the current API."
+    },
+    {
+      "name": "register-loading-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-all-390-no-preference.png",
+      "adaptations": "Tools use the honest Allow or Ask wording supplied by the API."
+    },
+    {
+      "name": "register-attention-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-review-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-stale-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "access-lost-390-no-preference.png",
+      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+    },
+    {
+      "name": "detail-draft-390-no-preference.png",
+      "adaptations": "Unavailable connection and grant facts say Not available yet."
+    },
+    {
+      "name": "detail-published-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-empty-390-reduce.png",
+      "adaptations": "No catalogue or package rows exist in the current API."
+    },
+    {
+      "name": "register-loading-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-all-390-reduce.png",
+      "adaptations": "Tools use the honest Allow or Ask wording supplied by the API."
+    },
+    {
+      "name": "register-attention-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-review-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-stale-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "access-lost-390-reduce.png",
+      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+    },
+    {
+      "name": "detail-draft-390-reduce.png",
+      "adaptations": "Unavailable connection and grant facts say Not available yet."
+    },
+    {
+      "name": "detail-published-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "menu-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "menu-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-empty-320-no-preference.png",
+      "adaptations": "No catalogue or package rows exist in the current API."
+    },
+    {
+      "name": "register-loading-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-all-320-no-preference.png",
+      "adaptations": "Tools use the honest Allow or Ask wording supplied by the API."
+    },
+    {
+      "name": "register-attention-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-review-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-stale-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "access-lost-320-no-preference.png",
+      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+    },
+    {
+      "name": "detail-draft-320-no-preference.png",
+      "adaptations": "Unavailable connection and grant facts say Not available yet."
+    },
+    {
+      "name": "detail-published-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-empty-320-reduce.png",
+      "adaptations": "No catalogue or package rows exist in the current API."
+    },
+    {
+      "name": "register-loading-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-all-320-reduce.png",
+      "adaptations": "Tools use the honest Allow or Ask wording supplied by the API."
+    },
+    {
+      "name": "register-attention-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-review-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-stale-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "access-lost-320-reduce.png",
+      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+    },
+    {
+      "name": "detail-draft-320-reduce.png",
+      "adaptations": "Unavailable connection and grant facts say Not available yet."
+    },
+    {
+      "name": "detail-published-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "menu-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "menu-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    }
+  ],
+  "environment": "Built Angular assets; Chromium; disposable API fixtures; no stack",
+  "comparedFrames": [
+    "INT-01",
+    "INT-02",
+    "INT-03",
+    "INT-04",
+    "INT-05",
+    "INT-06",
+    "INT-07",
+    "INT-08",
+    "INT-37",
+    "INT-94"
+  ],
+  "scope": "Register and detail screens supported by the current integrations API."
+}

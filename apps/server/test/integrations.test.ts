@@ -253,7 +253,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.locator('.register-row').first().waitFor();
     expect(await page.locator('.register-row').count()).toBe(6);
 
-    await page.getByRole('link', { name: 'Add MCP server', exact: true }).click();
+    await page.getByRole('link', { name: 'Add an integration', exact: true }).click();
     await page.getByRole('heading', { name: 'Add an MCP server' }).waitFor();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
@@ -305,7 +305,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.locator('.register-row').first().waitFor();
 
     const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
-    await page.getByRole('link', { name: 'Manage tools for Odoo Accounting' }).click();
+    await page.goto(`${base}/org/integrations/odoo/tools`);
     expect((await toolsLoaded).status()).toBe(200);
     await page.getByRole('heading', { name: 'Tools & access' }).waitFor();
     await page.getByRole('group', { name: 'write' }).getByLabel('Allow automatically').check();
@@ -368,9 +368,12 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       `document.getElementById('integrations-tab-all')?.getAttribute('tabindex') === '0'`,
       undefined, { timeout: 5_000 });
     await page.getByRole('tab', { name: /^All/ }).press('Tab');
+    await focused(page, 'integration-search');
+    await page.keyboard.press('Tab');
     await focused(page, 'integrations-panel');
 
-    expect(await page.getByRole('link', { name: 'Add MCP server' }).getAttribute('href')).toBe('/org/integrations/new');
+    expect(await page.getByRole('link', { name: 'Add an integration' }).getAttribute('href'))
+      .toBe('/org/integrations/new');
     expect(await page.locator('.register-row button').count()).toBe(0);
     const interactive = page.locator('button:visible, a:visible');
     const targets = await Promise.all(Array.from({ length: await interactive.count() }, async (_, index) => {
@@ -396,7 +399,9 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       const firstFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.goto(`${base}/org/integrations`);
       expect((await firstFailure).status()).toBe(503);
-      await firstRead.getByText("Couldn't load the integrations list.").waitFor();
+      await firstRead.getByRole('tabpanel').getByText(
+        "Couldn't load the integrations list.",
+      ).waitFor();
       const retryFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.getByRole('button', { name: 'Refresh list' }).click();
       await firstRead.getByText('Refreshing the integrations list…').waitFor();

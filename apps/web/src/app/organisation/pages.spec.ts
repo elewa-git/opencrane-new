@@ -15,6 +15,11 @@ it.each(destinations)(
   'retains the destination with a trailing slash at %s', checkTrailingSlash,
 );
 
+it('keeps integration detail inside the Integrations destination', () => {
+  expect(organisationPage('/org/integrations/odoo')).toBe('integrations');
+  expect(organisationPage('/org/integrations/new')).toBe('integrations');
+});
+
 function checkNonNavigationPages(): void {
   expect(organisationPage('/org/states')).toBeUndefined();
   expect(organisationPage('/org/missing')).toBeUndefined();

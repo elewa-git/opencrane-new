@@ -35,6 +35,9 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
   if (/^\/org\/integrations\/[\w-]+\/tools$/u.test(pathname)) {
     return 'integrations';
   }
+  if (/^\/org\/integrations\/[\w-]+$/u.test(pathname)) {
+    return 'integrations';
+  }
   return undefined;
 }
 

@@ -3,10 +3,7 @@
 .page-heading > div:first-child { flex: 1; min-width: 0; }
 h1, h2, p { margin: 0; }
 h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
-h2 { font: var(--oc-type-card); }
 p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; }
-/* The phone Status label matches the Account and Tools labels; the state itself keeps its own style. */
-.status > .column-label { color: var(--oc-ink-admin-muted); font-size: 12px; }
 .page-heading p { margin-top: 4px; }
 .page-actions { display: flex; gap: 10px; }
 .button {
@@ -25,38 +22,78 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
 .primary { background: var(--oc-accent); border-color: var(--oc-accent); }
 .button.primary:hover { background: var(--oc-accent-hover); }
 .button[aria-disabled='true'] { background: var(--oc-neutral-soft); cursor: not-allowed; }
-.tabs { display: flex; border-bottom: 1px solid var(--oc-border-row); }
+:host a:focus-visible, :host button:focus-visible, :host input:focus-visible {
+  outline: 2px solid #0a8497;
+  outline-offset: 2px;
+}
+.tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--oc-border-row); }
 .tabs button { padding: 9px 12px; font-size: 13px; }
 .tabs button[aria-selected='true'] {
   font-weight: 600;
   box-shadow: inset 0 -2px 0 var(--oc-accent);
 }
-.register, .access-state {
-  background: white;
+.search-label { font-size: 13px; font-weight: 600; }
+#integration-search {
+  width: 100%;
+  min-height: 44px;
+  padding: 9px 12px;
+  border: 1px solid var(--oc-border-input);
+  border-radius: 8px;
+  font: inherit;
+}
+.register {
+  min-width: 0;
+  overflow-wrap: anywhere;
   border: 1px solid var(--oc-border-default);
   border-radius: var(--oc-radius-app);
-  overflow-wrap: anywhere;
+  background: white;
 }
 .register-list { list-style: none; margin: 0; padding: 0; }
 .register-header, .register-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr) minmax(60px, 1.2fr) minmax(0, 1.3fr);
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr) minmax(60px, 1.2fr)
+    minmax(0, 1.3fr) auto;
   gap: 16px;
   align-items: center;
   padding: 10px 18px;
   border-bottom: 1px solid var(--oc-border-row);
 }
 .register-header {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr) minmax(60px, 1.2fr)
+    minmax(0, 1.3fr) 120px;
   background: var(--oc-surface-table-header);
   color: var(--oc-ink-admin-muted);
   font: var(--oc-type-column);
   letter-spacing: var(--oc-tracking-column);
   text-transform: uppercase;
 }
-.register-row { min-height: 80px; }
+.register-row { position: relative; min-height: 80px; }
 .server { display: flex; align-items: center; gap: 11px; min-width: 0; }
 .server strong { display: block; font: var(--oc-type-row); }
 .server small { display: block; margin-top: 2px; }
+.row-link {
+  position: static;
+  z-index: 0;
+  display: block;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+.row-link::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  content: '';
+}
+.chevron { position: absolute; right: 16px; top: 50%; font-size: 22px; }
+.row-action {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--oc-accent-dark);
+}
 .tile {
   display: inline-flex;
   align-items: center;
@@ -64,18 +101,11 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   width: 32px;
   height: 32px;
   flex-shrink: 0;
+  border: 1px solid var(--oc-border-row);
   border-radius: var(--oc-radius-card);
   background: var(--oc-accent-tint);
   color: var(--oc-accent-dark);
-  border: 1px solid var(--oc-border-row);
   font-size: 11px;
-}
-.tools a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  margin-left: 4px;
-  color: var(--oc-accent-dark);
 }
 .refresh-notice {
   display: flex;
@@ -88,8 +118,8 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
 }
 .refresh-notice[data-retrying='true'] { background: var(--oc-info-notice); }
 .refresh-notice oc-shared-state, .notice-copy { flex: 1; }
-.loading, .empty, .access-state { padding: 24px; }
-.empty, .access-state { display: grid; gap: 12px; }
+.loading, .empty { display: grid; gap: 12px; padding: 24px; }
+.empty .button { width: fit-content; }
 .skeleton-row { display: flex; align-items: center; gap: 12px; padding: 14px 18px; }
 .skeleton-copy { flex: 1; min-width: 0; display: grid; gap: 8px; }
 .stale .register-row { background: var(--oc-neutral-soft); }
@@ -114,19 +144,38 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   clip-path: inset(50%);
 }
 .loaded { padding: 12px 18px; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
 @media (max-width: 700px) {
+  :host { gap: 18px; }
   .page-heading, .page-actions { flex-direction: column; width: 100%; }
-  .page-actions .button { min-height: 44px; width: 100%; }
+  .page-heading { gap: 12px; }
+  .page-actions .button { width: 100%; min-height: 44px; }
   .tabs button { min-height: 44px; padding-inline: 8px; }
+  #integration-search { min-height: 44px; }
   .register-header { display: none; }
-  .register-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 16px; }
+  .register-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+  }
+  .server { min-height: 44px; }
+  .row-link { min-height: 44px; padding-right: 20px; }
+  .chevron { right: 0; }
+  .account, .tools, .status { display: grid; grid-template-columns: 96px minmax(0, 1fr); }
   .column-label {
     position: static;
     width: auto;
     height: auto;
     clip-path: none;
     display: inline-block;
-    min-width: 70px;
+    min-width: 0;
   }
   .server .column-label {
     position: absolute;
@@ -134,9 +183,9 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
     height: 1px;
     clip-path: inset(50%);
   }
-  .status { display: flex; }
+  .row-action { display: flex; align-items: center; justify-content: center; width: 100%; }
   .refresh-notice { display: grid; grid-template-columns: 12px minmax(0, 1fr); }
-  .notice-copy, .refresh-notice > button { grid-column: 2; }
+  .notice-copy { grid-column: 2; }
   .refresh-notice oc-shared-state { grid-column: 1 / -1; }
-  .refresh-notice button { min-height: 44px; }
+  .empty .button { width: 100%; min-height: 44px; }
 }
