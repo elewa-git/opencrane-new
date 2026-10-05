@@ -11,14 +11,25 @@ sends events to registered reactions, and the workers that run them.
 
 ## Where it fits
 
-This package belongs to the event core. `apps/ops` runs it, and the event store
-provides the events it reads. `libs/events` names each reaction's event types;
+OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
+that is never changed. Everything else, such as read tables and permissions, is
+built from that log and can be rebuilt from it. This package runs the background
+work that follows each event.
+This package belongs to the event core. `apps/ops` runs it. The dispatcher reads
+new events straight from NATS JetStream, the service that holds the event log,
+using the connection and decoding helpers in `libs/event-store`. `libs/events`
+names each reaction's event types;
 `libs/projections` supplies the database helpers reactions can use. The queue
 uses pg-boss, a job queue stored in PostgreSQL.
+The reactions themselves live elsewhere. `libs/authz` updates permissions.
+`libs/models` handles budgets, model access and ownership. `apps/ops` creates
+assistants and claims computers.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>background workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
+  ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
+  nats["NATS JetStream<br/>event log"] -->|new events| handlers
+  reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
   handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
   handlers -.-> events["libs/events<br/>reaction list"]
   handlers -.-> projections["libs/projections<br/>database helpers"]
@@ -28,17 +39,22 @@ flowchart LR
 ## What it is responsible for
 
 - Read new events and queue the reactions that subscribe to them.
-- Run jobs for the same event stream in order while other streams can progress.
+- Run jobs about the same thing, such as one member, one after another, while
+  jobs about different things run side by side.
 - Retry failed jobs and keep failed jobs from being skipped silently.
-- Save a completed-job receipt with the reaction's database changes.
+- Save a note that the job is done in the same database step as the reaction's
+  changes, so its database changes are never applied twice.
 - Let an operator retry a failed job after fixing its cause.
 
 ## Processes it handles
 
-1. **A member joins.** The dispatcher reads the event and queues the registered
-   reactions, such as updating member tables and creating an assistant.
-2. **A reaction fails.** Later jobs for the same stream wait, while other streams
-   continue. An operator can repair the cause and retry the failed job.
+1. **A member joins.** The dispatcher reads the "member joined" event and
+   queues three jobs: give the member their permissions (`update-openfga`),
+   create their assistant (`create-assistant`) and allow the default AI models
+   (`seed-model-grants`).
+2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
+   other things carry on. An operator can repair the cause and retry the failed
+   job.
 
 ## How to run or test it
 
@@ -52,8 +68,10 @@ sh scripts/fetch-nats.sh
 npx vitest run libs/handlers/test
 ```
 
-Reactions receive the saved event and a database transaction. This small example
-passes the event id through the transaction; real reactions update their own tables:
+Each reaction receives the saved event and a database transaction. This example
+registers a reaction that only runs a harmless query. A real reaction changes
+its own tables through the same transaction. The name must come from the reaction
+list in `libs/events`:
 
 ```ts
 import type { EventEnvelope } from '@opencrane/events';

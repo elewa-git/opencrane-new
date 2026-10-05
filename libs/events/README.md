@@ -2,16 +2,22 @@
 
 ## What this is
 
-The typed event envelope and event-type registry: the contract from docs/architecture/events.md, in code.
+The list of every kind of event OpenCrane records, and the exact data each one carries.
 An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened.
 This package says which event types exist and what information each one carries.
 It checks event data, but it does not save events or decide whether a person may act.
 
 ## Where it fits
 
+OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
+that is never changed. Everything else, such as read tables and permissions, is
+built from that log and can be rebuilt from it. This package defines what each
+event looks like.
 This is shared code in the event core. The event store, background reactions,
 read-table builders and `apps/server` use its event definitions and checks.
-The event registry also uses Zod, a library that checks data shapes.
+`libs/models` and `libs/authz` also use these definitions for AI rules and
+permissions. `apps/ops` uses them in its background workers. The event registry
+also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
@@ -19,23 +25,27 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   handlers["libs/handlers<br/>background reactions"] -.-> events
+  others["libs/models and libs/authz<br/>AI rules and permissions"] -.-> events
+  ops["apps/ops<br/>background workers"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
 ```
 
 ## What it is responsible for
 
-- Define the shared event envelope and the data shape for each registered type.
+- Define the wrapper every event shares (its id, its type, what it is about,
+  who caused it and when), and the data each event type carries.
 - Check unknown values against the right event shape.
 - List which named background reactions subscribe to each event type.
 - Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
 
 ## Processes it handles
 
-1. **The server checks an incoming event.** It passes the unknown value to
-   `parseEventByType`. The result says whether the type is unknown, the event is
-   invalid, or the event has a valid shape.
+1. **The event store checks an event before saving it.** It passes the event to
+   `parseEventByType`. A badly formed event or an unknown type is refused and
+   never saved.
 2. **A developer adds an event type.** The registry and event catalogue are
-   updated together. The repository check reports if their lists disagree.
+   updated together. `npm run check:events` checks that this list and the event
+   catalogue match.
 
 ## How to run or test it
 
@@ -44,12 +54,14 @@ Run the type check and focused tests with these commands. A small real call is:
 ```sh
 npm run typecheck -w libs/events
 npx vitest run libs/events/test
+npm run check:events
 ```
 
 ```ts
 import { parseEventByType } from '@opencrane/events';
 
 const result = parseEventByType({ type: 'not.registered' });
+// result.success is false and result.reason is 'unknown_event_type'.
 ```
 
 ## Where to read more
@@ -57,5 +69,5 @@ const result = parseEventByType({ type: 'not.registered' });
 - [README.robot.md](README.robot.md): full contracts, examples and test details.
 - [Event catalogue](../../docs/architecture/events.md): what each saved event means.
 - [Event store](../event-store/README.md): where events are saved.
-- [Why events use a shared NATS log](../../docs/adr/0001-event-store-nats-jetstream.md).
+- [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
 - [Glossary](../../GLOSSARY.md): plain meanings of shared terms.

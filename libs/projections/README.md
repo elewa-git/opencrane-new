@@ -5,11 +5,16 @@
 Build and read rebuildable PostgreSQL tables from events.
 A [read table](../../GLOSSARY.md#read-table-projection) is a copy arranged so
 screens can load data quickly. The package keeps tables for members, groups,
-conversations, computers, tool servers and event history. The saved event log
+model providers, conversations, files, computers, tool servers and a history of
+who did what. The saved event log
 remains the record of what happened, so these tables can be rebuilt.
 
 ## Where it fits
 
+OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
+that is never changed. Everything else, such as read tables and permissions, is
+built from that log and can be rebuilt from it. This package builds the read
+tables.
 This package belongs to the event core. `apps/ops` runs the workers that fill its
 tables, and `apps/server` reads those tables. It reads events from
 `libs/event-store`, checks their shapes with `libs/events`, and writes to
@@ -17,10 +22,10 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>background workers"] -->|fills tables| projections["libs/projections<br/>read tables"]
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
-  projections -.-> store["libs/event-store<br/>saved events"]
+  store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
 ```
 
@@ -28,19 +33,25 @@ flowchart LR
 
 - Turn ordered events into tables that the server can read.
 - Save table changes and each worker's position together in one database step.
-- Rebuild supported tables from the event log; some rebuilds can replace live tables.
+- Rebuild tables from the event log. The replay command rebuilds members,
+  groups, model providers, budgets, the tool catalogue, computers and the
+  history table while the system runs.
+- Store the per-conversation encryption keys used on the dev stack, so chat text
+  is only saved in encrypted form.
 - Send member-change notices after the table update commits.
 - Keep private conversation content out of the event-history table.
 - Avoid outside actions while rebuilding tables.
+
+Not built yet: storing those keys safely for real customers.
 
 ## Processes it handles
 
 1. **A member joins.** The worker reads the saved event and updates the member
    table. It saves its position with the table change, then sends a notice after
    the change commits.
-2. **An operator rebuilds a table.** The worker reads the event log again and
-   replaces the old table contents. Replaying events does not run reactions or
-   make outside calls.
+2. **An operator rebuilds a table.** They run `npm run replay -- members`. The
+   command reads the whole event log again, builds fresh tables on the side and
+   swaps them in. It does not run reactions or make outside calls.
 
 ## How to run or test it
 
@@ -53,10 +64,10 @@ sh scripts/fetch-nats.sh
 npx vitest run libs/projections/test
 ```
 
-This example connects the event store and database, then fills the member tables:
-Before running it, set `DATABASE_URL`, configure NATS as described in the
-[event-store settings](../event-store/README.robot.md), and create the `EVENTS`
-stream with `npm run provision`.
+This example connects the event store and the database, then fills the member
+tables. Before you run it, set `DATABASE_URL`, set the NATS settings described
+in [the event-store details](../event-store/README.robot.md), and create the
+event log once with `npm run provision`.
 
 ```ts
 import { connectEventStore } from '@opencrane/event-store';
