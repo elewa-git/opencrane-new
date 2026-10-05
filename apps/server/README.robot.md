@@ -592,6 +592,10 @@ The chat watcher checks the global event position every 250 ms. It skips convers
 and computer history when that position is unchanged and the last pass found no
 pending message or file. The conversation table must have processed that event
 position before idle skipping starts. A failed read or pending work keeps retries enabled. The
-first pass after restart always runs. The models process keeps one usage-file byte
+first pass after restart always runs. Failed event-position or table reads are logged
+and retried after 250 ms. An unexpected watcher failure logs a fatal error and exits
+the server with status 1 so its supervisor can restart chat delivery.
+
+The models process keeps one usage-file byte
 offset for its 100 ms ticks. Each tick also checks NATS metadata so an idle
 process still detects an outage and restarts after the existing 15-second limit.

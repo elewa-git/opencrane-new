@@ -237,7 +237,7 @@ export class BudgetActor {
     const type = observed ? 'effect.observed' : 'effect.uncertain';
     const rows = await history(this.store, `effect-${id}`, this.silo);
     if (redundantTimeout(type, reason, rows)) {
-      this.rememberUncertainty(id, type);
+      this.timedOut.add(id);
       return;
     }
     const uncertainty = {
@@ -254,7 +254,7 @@ export class BudgetActor {
       return row.event.type === type;
     }
     if (rows.some(matchesPayload)) {
-      this.rememberUncertainty(id, type);
+      if (type === 'effect.uncertain') this.timedOut.add(id);
       return;
     }
     let suffix = '';
@@ -270,10 +270,7 @@ export class BudgetActor {
     if (result.status !== 'appended') {
       throw new Error('Effect append failed');
     }
-    this.rememberUncertainty(id, type);
-  }
-  private rememberUncertainty(id: string, type: string) {
-    // Avoid adding another timeout after any saved uncertainty, as before.
+    // Skip later expiry reads only after the uncertainty record has been saved.
     if (type === 'effect.uncertain') this.timedOut.add(id);
   }
   private async permitted(permitId: string, requestId?: string) {

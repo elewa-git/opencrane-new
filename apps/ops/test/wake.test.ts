@@ -40,11 +40,18 @@ it.each(['state', 'mode'] as const)('keeps watching other computers when Kuberne
   vi.spyOn(kube, 'mode').mockImplementation(id => { if (operation === 'mode') failBroken(id); return Promise.resolve(); });
   const outcome = watchComputers(nats.store, kube, tokens, id => {
     expect(id).toBe('healthy');
-    if (++deliveries === 2) stop.abort();
+    deliveries++;
     return Promise.resolve();
   }, 'test', 600_000, stop.signal).then(() => undefined, (error: unknown) => error);
   try {
-    await Promise.race([until(() => deliveries === 2, 3000), outcome.then(error => { if (error instanceof Error) throw error; })]);
+    function retriedAndDelivered() {
+      return attempts >= 2 && deliveries >= 1;
+    }
+    function throwWatcherFailure(error: unknown) {
+      if (error instanceof Error) throw error;
+    }
+    await Promise.race([until(retriedAndDelivered, 3000), outcome.then(throwWatcherFailure)]);
+    stop.abort();
     expect(attempts).toBeGreaterThanOrEqual(2);
     expect(await outcome).toBeUndefined();
   } finally {

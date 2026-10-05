@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, rename, rm, writeFile } from 'node:fs/promises';
+import { appendFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { expect, it, vi } from 'vitest';
@@ -46,7 +46,8 @@ async function readsNewUsage() {
   const cursor = { offset: 0 };
   const reads = vi.spyOn(fixture.nats.store, 'readStream');
   try {
-    await writeFile(file, usageLine(first));
+    const oldUsage = usageLine(first).repeat(100);
+    await writeFile(file, oldUsage);
     await ingestUsage(fixture.actor, file, cursor);
     reads.mockClear();
     await ingestUsage(fixture.actor, file, cursor);
@@ -92,7 +93,7 @@ async function recordsTimeoutOnce() {
 
 it('records an old reservation timeout once, including after restarting the actor', recordsTimeoutOnce);
 
-async function readsChangedFile(change: 'truncate' | 'replace' | 'truncate-regrow' | 'truncate-regrow-larger') {
+async function readsTruncatedFile() {
   const fixture = await budgetFixture();
   const file = `${fixture.directory}/usage.jsonl`;
   const first = await fixture.reserve();
@@ -101,17 +102,7 @@ async function readsChangedFile(change: 'truncate' | 'replace' | 'truncate-regro
   try {
     await writeFile(file, usageLine(first) + usageLine(first));
     await ingestUsage(fixture.actor, file, cursor);
-    if (change === 'truncate') {
-      await writeFile(file, usageLine(second));
-    } else if (change === 'truncate-regrow-larger') {
-      await writeFile(file, usageLine(second) + usageLine(second) + usageLine(first));
-    } else if (change === 'truncate-regrow') {
-      await writeFile(file, usageLine(second) + usageLine(second));
-    } else {
-      const replacement = `${fixture.directory}/replacement.jsonl`;
-      await writeFile(replacement, usageLine(second) + usageLine(second));
-      await rename(replacement, file);
-    }
+    await writeFile(file, usageLine(second));
     await ingestUsage(fixture.actor, file, cursor);
     const rows = await history(fixture.nats.store, `effect-${second}`, 'test');
     expect(rows).toMatchObject([{ event: { type: 'effect.observed' } }]);
@@ -120,10 +111,7 @@ async function readsChangedFile(change: 'truncate' | 'replace' | 'truncate-regro
   }
 }
 
-const fileChanges = ['truncate', 'replace', 'truncate-regrow', 'truncate-regrow-larger'] as const;
-it.each(fileChanges)(
-  'reads usage again from the start after the file changes by %s', readsChangedFile,
-);
+it('reads usage from the start after the file becomes smaller', readsTruncatedFile);
 
 async function retriesCompleteUsage() {
   const fixture = await budgetFixture();
@@ -152,3 +140,22 @@ async function retriesCompleteUsage() {
 }
 
 it('waits for a complete usage line and retries it after a failed append', retriesCompleteUsage);
+
+async function retriesFailedTimeoutAppend() {
+  const fixture = await budgetFixture();
+  try {
+    const id = await fixture.reserve();
+    fixture.advance();
+    const appends = vi.spyOn(fixture.nats.store, 'append');
+    const unavailable = { status: 'unavailable' as const, cause: new Error('Temporary NATS outage') };
+    appends.mockResolvedValueOnce(unavailable);
+    await expect(fixture.actor.expire()).rejects.toThrow('Effect append failed');
+    await fixture.actor.expire();
+    const rows = await history(fixture.nats.store, `effect-${id}`, 'test');
+    expect(rows).toMatchObject([{ event: { type: 'effect.uncertain' } }]);
+  } finally {
+    await fixture.close();
+  }
+}
+
+it('retries a reservation timeout when its event append failed', retriesFailedTimeoutAppend);

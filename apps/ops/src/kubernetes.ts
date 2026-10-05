@@ -154,6 +154,10 @@ export class SandboxClient {
     this.delivered.set(name, token);
   }
 
+  forgetMode(name: string): void {
+    this.modes.delete(name);
+  }
+
   async mode(name: string, operatingMode: 'Running' | 'Suspended'): Promise<void> {
     if (this.modes.get(name) === operatingMode) return;
     // Forget the old mode because a failed reply may still mean the patch was applied.

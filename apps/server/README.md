@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads tables| postgres
-  server -->|sends pending work and files| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends work and retries delivery| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -45,7 +45,8 @@ flowchart LR
 3. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
    person can stop the turn. While idle, the chat watcher waits for new events before
-   reading the saved conversation again.
+   reading the saved conversation again. It retries short service outages so pending
+   messages can still reach the computer.
 4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and thread, while everyone shares one disk and
    browser profile. A member who loses spending access can still read and stop their work.

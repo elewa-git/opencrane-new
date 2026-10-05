@@ -26,7 +26,8 @@ flowchart LR
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
 - Hold money before an AI call and settle the charge when usage is reported.
 - Release an expired hold at zero cents when it was never allowed or sent.
-- Read each new usage line once and leave old lines alone while idle.
+- Read each new usage line once and leave old lines alone while idle. Retry a line
+  if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
 - Start agentgateway without giving its provider key to the server or computer.
 - Record what the AI provider used. When the result of a call is unknown, keep the held money in place until an owner or admin settles it.

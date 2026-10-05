@@ -361,9 +361,10 @@ cover the screen binding, refusals and remaining live qualification.
 `ingestUsage` accepts a `UsageCursor` as its third argument. The models process
 keeps that cursor between 100 ms ticks. Its offset counts bytes after successfully
 recorded complete lines. An unfinished line or failed event append is retried.
-File identity, size, modification time and the last saved line detect replacement
-and truncation, which reset the offset. Ordinary appends compare that saved line
-and read only new lines. Unchanged files need no content or event-store reads. A new process reads from the start and relies on event idempotency.
+The gateway only appends to the file. If its size falls below the saved offset,
+the reader starts at byte zero again. File rotation and rewrites are not supported.
+Unchanged files need no content or event-store reads. A new process reads from the
+start; saved event ids prevent duplicate records.
 
 The budget actor remembers reservations with saved uncertainty. `expire()` skips
 their repeated timeout checks. A restarted actor checks each old reservation once

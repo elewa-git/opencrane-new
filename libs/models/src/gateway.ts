@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { providerGatewayRoutes } from './provider-gateway.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFile, open, readFile, writeFile, type FileHandle } from 'node:fs/promises';
+import { appendFile, open, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { connect } from 'node:net';
@@ -98,10 +98,6 @@ const observation = z.union([
 ]);
 export interface UsageCursor {
   offset: number;
-  identity?: string;
-  size?: number;
-  modifiedAt?: number;
-  lastLine?: Buffer;
 }
 
 async function recordUsageLine(actor: BudgetActor, line: string) {
@@ -130,32 +126,6 @@ async function recordUsageLine(actor: BudgetActor, line: string) {
   }
 }
 
-async function usageFileSize(handle: FileHandle, cursor: UsageCursor) {
-  const details = await handle.stat();
-  const identity = `${details.dev}:${details.ino}`;
-  const replaced = cursor.identity !== identity;
-  const shrunk = details.size < (cursor.size ?? 0);
-  const modified = details.mtimeMs !== cursor.modifiedAt;
-  const rewritten = modified && details.size === cursor.size;
-  let reset = replaced || shrunk || rewritten;
-  if (!reset && modified && cursor.lastLine) {
-    // Compare the last saved line, including its request id, after the file grows.
-    const saved = cursor.lastLine;
-    const current = Buffer.alloc(saved.length);
-    const position = cursor.offset - saved.length;
-    const result = await handle.read(current, 0, current.length, position);
-    reset = result.bytesRead !== saved.length || !current.equals(saved);
-  }
-  if (reset) {
-    cursor.offset = 0;
-    delete cursor.lastLine;
-  }
-  cursor.identity = identity;
-  cursor.size = details.size;
-  cursor.modifiedAt = details.mtimeMs;
-  return details.size;
-}
-
 export async function ingestUsage(actor: BudgetActor, file: string,
   cursor: UsageCursor = { offset: 0 }) {
   let handle;
@@ -166,7 +136,9 @@ export async function ingestUsage(actor: BudgetActor, file: string,
     throw error;
   }
   try {
-    const size = await usageFileSize(handle, cursor);
+    const details = await handle.stat();
+    const size = details.size;
+    if (size < cursor.offset) cursor.offset = 0;
     const bytes = Buffer.alloc(size - cursor.offset);
     if (!bytes.length) return;
     const result = await handle.read(bytes, 0, bytes.length, cursor.offset);
@@ -178,7 +150,6 @@ export async function ingestUsage(actor: BudgetActor, file: string,
       const line = content.subarray(start, end).toString('utf8');
       await recordUsageLine(actor, line);
       cursor.offset += end - start + 1;
-      cursor.lastLine = Buffer.from(content.subarray(start, end + 1));
       start = end + 1;
       end = content.indexOf(10, start);
     }

@@ -240,19 +240,28 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   }
   try {
     while (!signal.aborted) {
-      const head = await options.store.head();
-      if (head === previousHead && !pending) {
+      try {
+        const head = await options.store.head();
+        if (head === previousHead && !pending) {
+          await delay(250, undefined, { signal });
+          continue;
+        }
+        const tableBehind = await conversationTableBehind(options.db, head);
+        const conversations = await listConversations(options.db, options.silo);
+        const sessions = conversations.filter(isAgentSession);
+        const processing = sessions.map(process);
+        const pendingResults = await Promise.all(processing);
+        pending = tableBehind || pendingResults.includes(true);
+        // Keep the position from before the pass so events arriving during it are read next time.
+        previousHead = head;
+      } catch (error) {
+        if (signal.aborted) break;
+        const details = { err: error };
+        logger.error(details, 'Bridge poll failed; retrying next poll');
+        pending = true;
         await delay(250, undefined, { signal });
         continue;
       }
-      const tableBehind = await conversationTableBehind(options.db, head);
-      const conversations = await listConversations(options.db, options.silo);
-      const sessions = conversations.filter(isAgentSession);
-      const processing = sessions.map(process);
-      const pendingResults = await Promise.all(processing);
-      pending = tableBehind || pendingResults.includes(true);
-      // Keep the position from before the pass so events arriving during it are read next time.
-      previousHead = head;
       await delay(250, undefined, { signal });
     }
   } catch (error) {
