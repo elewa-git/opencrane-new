@@ -6,25 +6,27 @@ working deployment. Read the [system map](../../README.md) for today's code and 
 
 ## Where it will run
 
-Install one [silo](../../GLOSSARY.md#silo) per customer on Kubernetes.
-Give each silo its own application, gateway, computers, event log, database and secrets.
-Share only the cluster services managed by the operator.
+Each customer gets one [silo](../../GLOSSARY.md#silo) on Kubernetes. Each silo has its
+own application, gateway, computers, event log, database and secrets. Silos share only
+the cluster-wide services that the team running the cluster looks after.
 
-Provide gVisor, the extra security layer for computers, and storage that can keep
-computer files, encrypt them and take snapshots. Support ordinary Kubernetes clusters;
-developer clusters and managed cloud clusters are both intended targets.
+The cluster must provide gVisor, the extra security layer for computers. It must also
+provide storage that keeps computer files, encrypts them and can take snapshots
+(point-in-time copies). Any ordinary Kubernetes cluster should work, from a developer's
+machine to a managed cloud cluster.
 
 ## Target cluster drawing
 
-Keep this earlier design drawing as a plan. Its arrows show intended connections;
-they do not claim that the calls or deployments exist today. Background jobs now live
-in `apps/ops`; the older server box below groups them with the back end.
+This drawing is an earlier plan, kept for reference. Its arrows show intended
+connections, not calls or deployments that exist today. Background jobs and computer
+claims now live in `apps/ops`, although the drawing still shows them inside the server
+box.
 
 ```text
                     EXTERNAL
    ┌──────────┐  ┌───────────┐  ┌────────────────┐  ┌───────────────┐  ┌──────────────┐
    │ Zitadel  │  │ Model     │  │ Remote MCP     │  │ Company       │  │ Web          │
-   │ (sign-in)│  │ providers │  │ servers (v2)   │  │ systems (Odoo)│  │              │
+   │ (sign-in)│  │ providers │  │ servers (later)│  │ systems (Odoo)│  │              │
    └────▲─────┘  └─────▲─────┘  └───────▲────────┘  └──────▲────────┘  └──────▲───────┘
         │              │                │                  │                  │
  ═══════╪══════════════╪════════════════╪══════════════════╪══════════════════╪═════════════
@@ -46,7 +48,7 @@ in `apps/ops`; the older server box below groups them with the back end.
  │  (via ingress)       │   budgets, Allow/Ask/Block, credentials   │   └──────────────┘  │
  │                      │ • live-view / takeover proxy              │   ┌──────────────┐  │
  │                      │ • reactions + jobs (pg-boss): schedules,  │──▶│ Memory facts │  │
- │                      │   wake-ups, settlement, dreaming          │   │ Postgres     │  │
+ │                      │   wake-ups, settlement, memory tidy-up    │   │ Postgres     │  │
  │                      └──────▲─────────────▲──────────────┬───────┘   │ projection   │  │
  │                             │ext_authz    │live view     │claim      └──────────────┘  │
  │  acme-gateway               │             │              │                             │
@@ -77,23 +79,23 @@ in `apps/ops`; the older server box below groups them with the back end.
  Storage outside: S3-compatible per-silo buckets (encrypted files and backups) · any OCI registry (images & package mirror)
 ```
 
-## Parts still to build or qualify
+## Parts still to build or prove
 
 | Part | Intended job | What remains |
 | --- | --- | --- |
 | Helm installation | Package one customer silo for Kubernetes. | Build the charts and prove a fresh customer install. |
 | ingress-nginx and cert-manager | Route incoming traffic and renew encrypted-connection certificates. | Package and check them in the customer install. |
-| CloudNativePG operator | Manage PostgreSQL, standby copies and backups. | Replace the dev database setup and prove recovery after failure. |
-| Replicated NATS JetStream | Keep the event log available when a server fails. | Package replicated storage and test failover and restore. |
+| CloudNativePG operator | A program that runs PostgreSQL inside Kubernetes and looks after standby copies and backups. | Replace the dev database setup and prove recovery after failure. |
+| Replicated NATS JetStream | Keep several copies of the event log, so it keeps working when one server fails. | Package it, and test switching to a copy (failover) and restoring from backup. |
 | Odoo tool server | Use the business system with the requesting person's own rights. | Build the connector; `infra/odoo` is a test system, not this connector. |
 | Memory tool server | Remember, recall, correct and forget facts within the permitted scope. | Build the service and its replay and access checks. |
 | Team assistants and delegation | Share work while keeping access and spending tied to the requester. | Finish the product flows and test them together. |
 | Scheduled work | Start agreed work at set times. | Build the routines and check their permissions and spending. |
 | Screen takeover | Let a person control the assistant's screen and hand it back. | Finish control permissions, recording and live checks. |
-| Hosted tool servers | Run reviewed tool images with limited outside access. | Finish the install and release flow and test it live. |
-| Outgoing computer traffic | Make the gateway the only permitted route to outside services. | Finish and qualify the rules for all computer traffic. |
+| Hosted tool servers | Run checked, ready-made tool server packages (container images) with limited internet access. | Finish the install and release flow and test it live. |
+| Outgoing computer traffic | Make the gateway the only permitted route to outside services. | Finish the rules for all computer traffic and prove they hold. |
 | Backup and restore | Recover the event log, read data and computer files together. | Prove recovery on a fresh customer installation. |
-| Logs and traces | Follow a request across services without exposing private data. | Package the collector and check the customer deployment. |
+| Logs and traces | Follow a request across services without exposing private data. | Package the OpenTelemetry collector, which gathers logs and traces, and check it in a customer installation. |
 
 ## Rules the planned installation must keep
 
@@ -101,10 +103,10 @@ in `apps/ops`; the older server box below groups them with the back end.
 - Record every business change as an event; rebuild read tables and permissions from it.
 - Keep model-written code inside the assistant's computer.
 - Keep lasting secrets in the secret store and give computers only short-lived tokens.
-- Check the person and assistant's permissions before calling a model or tool.
-- Hold spending in whole euro cents before a call, and settle it from reported use.
+- Check both the person's and the assistant's permissions before any model or tool call.
+- Set money aside, in whole euro cents, before each call, and charge the real cost once its use is reported.
 - Ask for approval of the exact tool action when its rule is Ask.
-- Keep remembered facts within their permission scope; memory never grants access.
+- Show remembered facts only to people who are allowed to see them. Remembering a fact never gives anyone extra access.
 - Use only the application and operating-system components allowed by the
   [licence rules](../../AGENTS.md#licences).
 

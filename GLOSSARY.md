@@ -1,146 +1,185 @@
 # Glossary
 
-Use this page for the words shared by OpenCrane's guides.
-Read the [system map](README.md) to see how the parts fit together.
+This page explains, in plain words, the terms used across OpenCrane's guides.
 
 ## Silo
 
-Run one customer's private installation of OpenCrane as a silo.
-Keep its events, files, computers and permissions separate from other customers.
+A silo is one customer's own private installation of OpenCrane. Its events, files,
+computers and permissions are kept apart from every other customer's.
 
 ## Owner, admin, member
 
-Members use their assistant; admins also manage organisation settings, and owners
-can also hand over ownership while keeping at least one owner. No role grants access
-to another person's private conversations or replaces a model or tool grant.
+These are the three roles in a silo: members use their assistant, admins can also
+change settings, and owners can also hand over ownership as long as one owner remains.
+No role lets anyone read another person's private conversations, and no role gives
+access to a model or tool without a grant.
 
 ## Assistant
 
-Give each member an AI helper that acts for them within its granted permissions.
-That helper is their assistant.
+An assistant is the AI helper each member gets. It acts for that member and can do
+only what its grants allow.
 
 ## Computer
 
-Run the assistant's work on its own private cloud computer.
-A personal assistant keeps one computer across its conversations, with files kept across restarts.
+A computer is the private computer in the cloud where an assistant does its work.
+A personal assistant keeps the same computer for all its conversations, and its
+files survive restarts.
 
 ## Bridge
 
-Pass chat turns from the server to Codex through the bridge, a small program on the computer.
-Send progress and results back through it so the server can record them.
+The bridge is a small program on each computer that passes chat messages from the
+server to Codex. It sends progress and results back so the server can record them.
 
 ## Codex
 
-Run Codex, the AI agent, inside the computer to carry out a person's request.
-It calls models and uses the computer's tools to do the work.
+Codex is OpenAI's AI agent, a program that carries out a request step by step instead
+of only answering it. It runs inside each computer, calls AI models and uses the
+computer's tools.
+
+## Model and model provider
+
+A model is the AI system that writes replies and decides the assistant's next step.
+A model provider, such as OpenAI, is the company that runs it.
 
 ## Event
 
-Record something that happened, such as a member joining, as an event.
-Keep that record unchanged rather than overwriting it with a later state.
+An event is a saved record of one thing that happened, such as a member joining.
+Events are never changed: a later change is saved as a new event.
 
 ## Event log (event store)
 
-Keep events in a numbered log in NATS JetStream, the service that stores and carries them.
-Use this log as the one source of truth for business state.
+The event log is the numbered list of all events, kept in NATS JetStream, a service
+that stores and passes on events. It is the one true record of what happened, and
+everything else is built from it.
 
 ## Read table (projection)
 
-Build a PostgreSQL table from events so screens can read data quickly.
-Throw it away and rebuild it from the event log when needed.
+A read table is a PostgreSQL database table built from events, so screens can load
+data quickly. It is only a copy, so it can be thrown away and rebuilt from the event
+log.
+
+## PostgreSQL (database)
+
+PostgreSQL is the database that holds the read tables. Its tables are copies built
+from the event log.
 
 ## Reaction (handler)
 
-Run background work after an event, such as creating an assistant when someone joins.
-Call that work a reaction, or a handler in the code.
+A reaction is background work that runs after an event, such as creating an assistant
+when someone joins. The code calls it a handler.
 
 ## Dispatcher
 
-Read new events and hand them to the right background reactions.
-The dispatcher does this through a job queue that keeps each stream's work in order.
+The dispatcher is the background program that reads each new event and hands it to
+the reactions that need it. It uses a job queue, a waiting list of jobs, so the work
+for one thing, such as one conversation, runs in order.
 
 ## Replay
 
-Read saved events again from the start to rebuild read tables or permissions.
-Do this without repeating outside actions, such as calling a model.
+Replay means reading all saved events again from the start, to rebuild read tables or
+permissions. A replay never repeats outside actions, such as calling a model.
 
 ## OpenFGA (permissions service)
 
-Ask OpenFGA whether a person or assistant may use a resource.
-Build its permission records from OpenCrane events.
+OpenFGA is the permissions service, which decides whether a person or assistant may
+use something. OpenCrane builds its permission records from events.
 
 ## Zitadel (sign-in service)
 
-Sign in with a company account through Zitadel.
-The server checks that the account belongs to the silo's configured organisation.
+Zitadel is the sign-in service, where people sign in with their company account. The
+server then checks that the account belongs to this silo's company.
+
+## Access token
+
+An access token is a short-lived digital pass that proves who is asking. It expires
+soon, so a stolen one is quickly useless.
 
 ## agentgateway (AI gateway)
 
-Send model and supported tool calls through agentgateway.
-It asks the models process for permission before passing an allowed call to the outside service.
+agentgateway is the AI gateway: every model call, and some tool calls, pass through
+it. Before it sends a call on, it asks the [models process](#models-process) whether
+the call is allowed.
+
+## Models process
+
+The models process is a separate program inside `apps/server`. It answers
+agentgateway's permission questions, keeps the AI budgets and starts agentgateway.
 
 ## MCP server (tool server)
 
-Connect outside tools to an AI agent through a tool server.
-MCP means Model Context Protocol, the standard used for those calls.
+A tool server connects outside tools, such as a web browser or a business system, to
+an AI agent. MCP, the Model Context Protocol, is the standard way these calls are
+made.
 
 ## Tool rule (Allow, Ask, Block)
 
-Set the admin's rule for each tool: Allow runs it automatically, Ask needs the person's
-approval of the exact action, and Block refuses it.
+A tool rule is the admin's setting for one tool: Allow lets it run without asking,
+Ask waits for the person to approve that exact action, and Block stops it.
 
 ## Grant
 
-Give a person, assistant or group permission to use a named resource, such as a model.
-A grant does not replace the other checks on membership, tool rules or spending.
+A grant gives a person, assistant or group permission to use one named thing, such as
+a model or a tool. A grant alone is not enough: membership, tool rules and the budget
+are still checked.
 
 ## Budget
 
-Limit spending with a budget measured in whole euro cents.
-Hold money before an AI call and settle it when the call's use is reported.
+A budget is a spending limit, counted in whole euro cents. Before each AI call some
+money is set aside, and the real cost is charged once the call's use is reported.
 
 ## Kubernetes
 
-Run containers and the assistant computers with Kubernetes.
-k3d and k3s are ways to run it on a developer machine.
+Kubernetes is a system that runs and looks after containers, including the assistants'
+computers. k3d and k3s are ways to run Kubernetes on a developer machine.
+
+## Operator
+
+An operator is the person or team that installs and runs a silo. In Kubernetes, an
+operator can also mean a program that looks after a service automatically, such as
+the CloudNativePG operator.
 
 ## Container and Pod
 
-Package a program and the files it needs in a container.
-Run one or more containers together in a Kubernetes Pod; a computer uses a Pod.
+A container packages a program with the files it needs, so it runs the same way
+anywhere. A Pod is one or more containers that Kubernetes runs together, and each
+computer runs in a Pod.
 
 ## gVisor
 
-Add a security layer between a computer's programs and the machine running them.
-Use gVisor to reduce the damage a program inside a computer could cause.
+gVisor is an extra security layer between the programs in a computer and the machine
+they run on. It limits the damage a harmful program inside a computer could do.
 
 ## MinIO (file storage)
 
-Store uploaded files in MinIO on the dev stack.
-The server passes files to a computer without giving it storage credentials.
+MinIO is the file store on the dev stack, where uploaded files are kept. The server
+passes files to a computer without giving the computer the keys to the store.
 
 ## ClamAV (virus scanner)
 
-Check uploaded files for viruses with ClamAV before storing them for use.
-Refuse a file when the scanner finds an infection or cannot finish the check.
+ClamAV is the virus scanner that checks each upload before the file is stored for use.
+A file is refused if it is infected, or if the check cannot finish.
 
 ## Dev stack
 
-Run a full developer copy of OpenCrane on a developer machine.
-Use it to try the product and check that the parts work together.
+The dev stack is a full copy of OpenCrane that runs on a developer's machine.
+Developers use it to try the product and check that the parts work together.
 
 ## Journey
 
-Check the product from start to finish in the way a person would use it.
-A journey might sign in, send a chat message and wait for the reply.
+A journey is an automated test that uses the product from start to finish, as a person
+would. For example, it signs in, sends a chat message and waits for the reply.
 
 ## Spike
 
-Try a short experiment to answer a design question before building the full feature.
-Keep the result so later work can use what was learnt.
+A spike is a short experiment that answers one design question before the full feature
+is built. Its result is kept so later work can use what was learnt.
 
 ## Claim
 
-Claim a silo to become its first owner, a computer to reserve it for an assistant,
-or a test stack to reserve a numbered developer installation. In a sign-in token,
-claims are the named fields that describe the signed identity and its access.
+Claim has four meanings in OpenCrane:
+
+- To claim a silo is to become its first owner.
+- To claim a computer is to reserve it for one assistant.
+- To claim a test stack is to reserve one numbered dev stack.
+- The claims in a sign-in token are the named fields inside it, such as who the person
+  is.

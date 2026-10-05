@@ -4,42 +4,53 @@
 
 OpenCrane gives every employee a personal AI assistant with its own safe computer,
 kept under company control. The assistant can read files, browse, run code and use
-approved tools. The company chooses the models, tool rules, approvals and spending limits.
+approved tools. The company chooses the [models](GLOSSARY.md#model-and-model-provider),
+[tool rules](GLOSSARY.md#tool-rule-allow-ask-block), approvals and [budgets](GLOSSARY.md#budget).
 Each customer's private installation is called a [silo](GLOSSARY.md#silo).
+
+In short: you use the website, and the website talks to the server. The server saves
+every change as an [event](GLOSSARY.md#event) in the [event log](GLOSSARY.md#event-log-event-store),
+the one true record. Background workers copy those events into [read tables](GLOSSARY.md#read-table-projection)
+so screens load fast. They also start each person's [computer](GLOSSARY.md#computer)
+when it is needed.
 
 ## Where it fits
 
-This repository holds the website, server, workers and computer image, plus their
-shared code. The developer stack runs services on the host and in Docker, and runs
-personal computers in Kubernetes, a system for running containers.
+This repository holds all of OpenCrane's code: the website, the server, the background
+workers, the recipe for each personal computer, and the code they share. On the
+[dev stack](GLOSSARY.md#dev-stack), most services run directly on the developer's
+machine or in Docker [containers](GLOSSARY.md#container-and-pod). The personal computers run in
+[Kubernetes](GLOSSARY.md#kubernetes), a system that runs and looks after containers.
 The [planned cluster design](docs/architecture/target.md) describes the intended
 customer installation.
 
 ### Layers and folders
 
 Use these layer names when describing a package's place in the system.
+The event core is the shared code that records every change as an event and builds
+data from it.
 
 | Layer | Folder | What it does |
 | --- | --- | --- |
 | Browser app | [apps/web](apps/web/README.md) | Sign in, chat, watch the assistant's screen and manage organisation settings. |
-| Back end | [apps/server](apps/server/README.md) | Check access, record changes and send work to computers. Its separate models process checks AI spending and starts the gateway. |
-| Background workers | [apps/ops](apps/ops/README.md) | Build read tables, update permissions, start and pause computers, and rebuild data. |
-| Personal computers | [apps/computer](apps/computer/README.md) | Build each person's isolated computer, where Codex, the AI agent, does the work. |
+| Back end | [apps/server](apps/server/README.md) | Check access, record changes and send work to computers. It also runs the [models process](GLOSSARY.md#models-process), a separate program that checks AI spending and starts [agentgateway](GLOSSARY.md#agentgateway-ai-gateway), the AI gateway. |
+| Background workers | [apps/ops](apps/ops/README.md) | Keep the read tables and permissions up to date, start and pause computers, and rebuild data from the event log. |
+| Personal computers | [apps/computer](apps/computer/README.md) | Build each person's isolated computer, where [Codex](GLOSSARY.md#codex), the AI agent, does the work. |
 | Event core | [libs/events](libs/events/README.md) | Define each kind of event and the data it carries. |
 | Event core | [libs/event-store](libs/event-store/README.md) | Save changes in the event log and read them in order. |
-| Event core | [libs/projections](libs/projections/README.md) | Turn events into PostgreSQL tables for reading. |
+| Event core | [libs/projections](libs/projections/README.md) | Turn events into read tables in PostgreSQL, the database. |
 | Event core | [libs/handlers](libs/handlers/README.md) | Run background work in response to events. |
 | Shared libraries | [libs/protocol](libs/protocol/README.md) | Define the messages the website and server share. |
-| Shared libraries | [libs/auth](libs/auth/README.md) | Handle sign-in, session cookies and short-lived access tokens. |
-| Shared libraries | [libs/authz](libs/authz/README.md) | Check and update permissions through OpenFGA. |
+| Shared libraries | [libs/auth](libs/auth/README.md) | Handle sign-in, keep people signed in, and issue short-lived passes (access tokens) that prove who is asking. |
+| Shared libraries | [libs/authz](libs/authz/README.md) | Check and update who may do what, using OpenFGA, the permissions service. |
 | Shared libraries | [libs/models](libs/models/README.md) | Choose models and check budgets, tool rules and approvals through the AI gateway. |
-| Shared libraries | [libs/observability](libs/observability/README.md) | Write safe logs and optional traces that follow work between services. |
+| Shared libraries | [libs/observability](libs/observability/README.md) | Write logs that leave out private data, and optional traces that follow one request across services. |
 | Infrastructure | [infra/devbox](infra/devbox/README.md) | Set up a fresh Ubuntu developer machine. |
 | Infrastructure | [infra/dev-stack](infra/dev-stack/README.md) | Start a developer copy of OpenCrane and check it from start to finish. |
-| Infrastructure | [infra/nats](infra/nats) | Configure the service that keeps and carries events. |
+| Infrastructure | [infra/nats](infra/nats) | Configure [NATS JetStream](GLOSSARY.md#event-log-event-store), the service that keeps and carries events. |
 | Infrastructure | [infra/clamav](infra/clamav/README.md) | Run the virus scanner for uploads. |
-| Infrastructure | [infra/odoo](infra/odoo/README.md) | Run a test business system for a future connector. |
-| Developer tools | [tools/fleet](tools/fleet) | Run tasks and secret checks for the coding team. |
+| Infrastructure | [infra/odoo](infra/odoo/README.md) | Run a test copy of Odoo, a business system, for a planned link between assistants and Odoo. |
+| Developer tools | [tools/fleet](tools/fleet) | Help the AI coding agents run tasks, and check that no passwords or keys are committed. |
 | Developer tools | [scripts](scripts) | Run repository checks, capture screenshots and download tools. |
 | Design notes | [docs](docs) | Describe the product, architecture, decisions and intended screens. |
 | Early experiments | [spikes](spikes) | Keep the experiments that tested the main design choices. |
@@ -57,7 +68,7 @@ flowchart LR
   server -->|saves events| nats[("NATS JetStream<br/>event log")]
   server -->|checks access| fga["OpenFGA<br/>permissions service"]
   server -->|stores and scans files| files["MinIO + ClamAV<br/>files and virus scan"]
-  ops["apps/ops<br/>background workers"] -->|reads events| nats
+  ops["apps/ops<br/>background workers"] -->|reads and saves events| nats
   ops -->|fills read tables| pg[("PostgreSQL<br/>read tables")]
   ops -->|updates permissions| fga
   server -->|reads tables| pg
@@ -69,75 +80,90 @@ flowchart LR
   server -.->|uses| libs["libs/*<br/>shared code"]
 ```
 
-NATS JetStream keeps the event log, the lasting record of each change. PostgreSQL
-holds read tables built from those events; workers can rebuild them from the log.
-OpenFGA answers permission questions. Zitadel handles company sign-in.
+NATS JetStream keeps the event log, the lasting record of each change. PostgreSQL,
+the database, holds read tables: copies of the events arranged so screens load quickly.
+Workers can throw them away and rebuild them from the log.
+OpenFGA answers permission questions. [Zitadel](GLOSSARY.md#zitadel-sign-in-service)
+handles company sign-in.
 MinIO stores files, and ClamAV scans them for viruses.
-agentgateway checks AI calls before sending them to a model provider;
-the dev stack can use a fake model provider for tests.
+agentgateway checks each AI call before passing it to a model provider, the company
+that runs the AI model, such as OpenAI. For tests, the dev stack can use a fake model
+provider.
 
 ## What it is responsible for
 
 - Give each person an assistant and a private computer that keeps its files across restarts.
-- Record business changes as events and build readable data from them.
+- Save every change, such as a new member or a chat message, as an event, and build the tables the screens read from those events.
 - Check who may read conversations, use models and tools, or see a computer's screen.
-- Hold money before an AI call, then settle the charge from its reported use.
-- Ask for approval when a tool rule requires it, and bind approval to that exact action.
+- Set money aside from the budget before each AI call, then charge the real cost once the gateway reports what the call used.
+- Ask the person for approval when a tool rule says Ask, and let that approval cover only that exact action.
 - Scan uploaded files before the assistant can use them.
-- Keep secrets out of computers and use short-lived tokens for access.
+- Keep passwords and keys out of computers, and give computers only access passes (tokens) that expire quickly.
 
 ### What works today
 
 The dev stack supports company sign-in, personal chat, streamed replies, file uploads,
-PDF reading, screenshots and live viewing. Admins can manage tool servers, models and
-monthly budgets in organisation settings. The server also supports members, groups
-and ownership changes; their website pages are not built yet.
+PDF reading, screenshots and live viewing. Admins can register tool servers, set tool
+rules and set monthly budgets in organisation settings. Each installation has a fixed
+set of models for now. The server also supports members, groups and ownership changes,
+but their website pages are not built yet.
 
-Live viewing still has failures under load. Complete tool startup, computer takeover
-and control of all outgoing computer traffic still need work and fresh-install checks.
-Some file previews and browser combinations have not been checked on real devices.
+Live viewing still fails sometimes when the system is busy. Three things still need
+work: starting every tool server reliably, letting a person take control of the
+assistant's screen, and sending all of a computer's outside traffic through the
+gateway. Each must also be proven on a fresh installation. Some file previews and
+browsers have not been tried on real devices.
 Read the [changelog](CHANGELOG.md) for current limits.
 
 Not built yet:
 
-- Install a customer silo with Helm, the Kubernetes package installer.
-- Remember, correct and forget shared knowledge through a memory service.
-- Use the planned Odoo connector with a person's own business-system permissions.
-- Run shared team assistants, scheduled work and delegated conversations as a complete product.
+- Installing a customer silo with Helm, the Kubernetes package installer.
+- A memory service, so assistants can remember, correct and forget shared knowledge.
+- Letting assistants use Odoo, a business system, with only the rights of the person who asked.
+- Shared team assistants, work that starts at set times, and handing a conversation to another assistant. Parts of these exist, but they do not yet work together as a product.
 
 ## Processes it handles
 
 ### Ask an assistant for work
 
-1. Sign in through Zitadel and open the website. The server checks the session and
-   whether you belong to this company.
-2. Send a message to your assistant. The server saves it as an event; background work
-   wakes the computer if needed, and the server sends the chat turn to its bridge.
-   The bridge is the small program that passes work to Codex and reports progress.
-3. Let the assistant call a model. The call goes through agentgateway, which asks the
-   models process in `apps/server` to check permission and hold enough money.
-   Supported tool routes also check the tool's Allow, Ask or Block rule.
-4. Approve an action if its tool rule is Ask. The call waits for approval in the chat;
-   only a retry with the approved arguments may use that approval once.
-5. Read the reply as it arrives. The bridge sends progress to the server, which saves
-   it as events and streams it to the website. Workers update the read tables,
-   and the models process settles spending from the gateway's usage records.
+1. A person signs in with their company account through Zitadel and opens the website.
+   The server checks that they are signed in and belong to this company.
+2. The person sends a message to their assistant. The server saves it as an event.
+   Background work wakes the person's computer if it is asleep. The server then passes
+   the message to the [bridge](GLOSSARY.md#bridge), the small program on the computer
+   that hands work to Codex and reports progress.
+3. The assistant calls an AI model. The call goes through agentgateway, which asks the
+   [models process](GLOSSARY.md#models-process) in `apps/server` two things: is the
+   call allowed, and is there enough budget? If so, the models process sets that money
+   aside. Some tool calls also pass through the gateway. For those, the check also
+   applies the tool's [rule](GLOSSARY.md#tool-rule-allow-ask-block): Allow, Ask or Block.
+4. If the tool's rule is Ask, the action waits in the chat until the person approves
+   it. The assistant then tries again. The approval works once, and only for exactly
+   the action the person approved.
+5. The person reads the reply as it arrives. The bridge sends progress to the server,
+   which saves it as events and streams it to the website. Workers update the read
+   tables. The models process charges the real cost, using what the gateway reports
+   each call used.
 
 ### Use a file or watch the screen
 
-Upload a file in chat. The server scans it with ClamAV and stores it in MinIO before
-sending it to the computer. The computer receives the file, without storage credentials.
+A person uploads a file in chat. The server scans it with ClamAV, stores it in MinIO,
+then sends it to the computer. The computer gets the file, but never the keys to the
+file store.
 
-Open the live viewer from a conversation. The server checks your access and forwards
-screen updates from the computer. It keeps checking access while the viewer is open.
+A person opens the live viewer from a conversation. The server checks their access and
+forwards screen updates from the computer. It keeps checking access while the viewer
+is open.
 
 ### Manage or rebuild the installation
 
-Set model, tool and budget rules in organisation settings as an admin or owner.
-Membership roles do not give access to someone else's private conversations.
+An admin or owner sets tool rules and monthly budgets in organisation settings. Each
+installation has a fixed set of models for now.
 
-Rebuild read tables or permissions as an operator. The tools in `apps/ops` read the
-event log again, so the saved events remain the source of business state.
+An operator, the person who runs the installation, can rebuild read tables or
+permissions. The tools in `apps/ops` read the event log again from the start. This
+works because the saved events are the one true record, and everything else is a copy
+built from them.
 
 ## How to run or test it
 
@@ -148,7 +174,7 @@ nice -n 10 npm ci
 nice -n 10 npm run lint
 ```
 
-Follow the [developer stack guide](infra/dev-stack/README.md) to set up the required
+Follow the [dev stack guide](infra/dev-stack/README.md) to set up the required
 services and computer cluster. Start the stack once those prerequisites are ready:
 
 ```sh
@@ -160,12 +186,14 @@ infra/dev-stack/up.sh
 - [Glossary](GLOSSARY.md): plain meanings of the words used across the project.
 - [Current plan](plan.md): remaining work and recorded decisions.
 - [Changelog](CHANGELOG.md): changes people can use and known limits.
-- [Architecture](docs/architecture): the event catalogue and service rules.
-- [Planned customer installation](docs/architecture/target.md): parts still to build or qualify.
+- [Architecture](docs/architecture): the event catalogue and the upload API.
+- [Planned customer installation](docs/architecture/target.md): parts still to build or prove.
+- [Why OpenCrane 2 was redesigned](docs/background/2026-09-30-architecture-thread-brief.md): the architecture review that started this version.
 - [Design decisions](docs/adr/README.md): why the main components were chosen.
 - [Product contract](docs/product/product-contract.md): the intended user experience.
 - [User stories](docs/product/user-stories-workspace-and-conversations.md): the work people need to do.
 
 OpenCrane is licensed under [GNU AGPL v3.0 or later](LICENSE).
-Customer installations use only OSI-approved open-source application components and
-Debian main operating-system packages, under the [licence rules](AGENTS.md#licences).
+Customer installations use only open-source parts under licences approved by the Open
+Source Initiative (OSI), and only operating-system packages from Debian's main section.
+The [licence rules](AGENTS.md#licences) give the detail.

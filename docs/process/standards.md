@@ -156,14 +156,14 @@ npm test -w @opencrane/example
   - test commands and what each one proves;
   - licence audit notes and implementation detail.
 - **Moved, not deleted.** For each package, start with `git mv README.md README.robot.md`, then write a fresh README.md. Git and GitHub show this as a rewritten README.md and a new README.robot.md. To prove nothing was lost, run `git diff -B -M --stat main...HEAD`: each move must show as `…/README.md => …/README.robot.md` with only a few changed lines. Old history is found with `git log -B -M --follow -- <folder>/README.robot.md`. Old section links keep working once the link points at the new file name.
-- **First line.** The first line points back to README.md. Fix statements that are plainly wrong, and otherwise keep the content as it is. Tidying the robot file is optional.
+- **First line.** Keep the existing title as the first line. Put one line straight under it that points back: `For people, read [README.md](README.md) first.` (The Markdown check needs a title on the first line.) Fix statements that are plainly wrong, and otherwise keep the content as it is. Tidying the robot file is optional.
 - **Only when needed.** If a package has nothing for agents beyond its README.md, it has no robot file.
 
 #### What the standard covers
 
 - Every folder under `apps/`, `libs/`, `infra/` and `tools/` follows the full standard.
-- The root README becomes the system map.
-- `docs/design` and `spikes` follow a lighter rule.
+- The root README is the system map.
+- `docs/design` and `spikes` follow a lighter rule. Each has one index README.md with one diagram. Each folder inside gets a short README.md of about 3 to 15 lines. It says what the folder is, whether live code still uses it, and links to its README.robot.md. Notes copied from the design tool stay word for word in README.robot.md, under one line on top that says what is out of date.
 - Not covered: the evidence folders under `docs/process`, `docs/adr/README.md` and `docs/specs`. They are records for agents, not guides.
 
 ### The root README: the system map
@@ -179,9 +179,9 @@ The root README.md is the front page for the whole system. It:
 - states the open-source licence rule in one line;
 - links to GLOSSARY.md, plan.md, CHANGELOG.md, docs/adr and docs/architecture.
 
-The long drawing of the target cluster moves to a new `docs/architecture/target.md`, together with the target parts that do not exist yet. That page is clearly marked as planned. There is no root README.robot.md: AGENTS.md already serves agents at the root, and the rest of the agent detail moves to plan.md or docs/architecture.
+The long drawing of the target cluster, and the target parts that do not exist yet, live in `docs/architecture/target.md`, which is clearly marked as planned. There is no root README.robot.md: AGENTS.md serves agents at the root, and the rest of the agent detail lives in plan.md or docs/architecture.
 
-A new root `GLOSSARY.md` explains each word the READMEs share in one or two plain sentences: silo, event, read table, reaction, computer, bridge, gateway and so on. Package READMEs link to it instead of each explaining the same words at length.
+The root `GLOSSARY.md` explains each word the READMEs share in one or two plain sentences: silo, event, read table, reaction, computer, bridge, gateway and so on. Each entry starts by saying what the word is, for example 'A silo is one customer's own private installation of OpenCrane.' Package READMEs link to it instead of each explaining the same words at length.
 
 ### Other documentation
 
@@ -189,7 +189,7 @@ Deployable packages also document, in README.robot.md, required configuration/de
 
 Every ADR records date/status, the concrete problem, decision and reason, meaningful alternatives, costs/risks, supporting evidence and supersession links. Normally 40–100 lines; longer proof belongs in linked evidence. “Accepted” means a decision was accepted, not that it passed live. Do not write ADRs for routine refactors or scheduling. Supersede decisions with a link instead of deleting a referenced record.
 
-Comments explain a caller obligation, invariant, state meaning, unusual failure, security boundary or non-obvious ordering. For persisted event/state values, say what the value means, what happens next, whether it is terminal and whether changing it breaks stored data. Public APIs document inputs/outputs only where their types do not explain the contract. No required comment on every property, getter, import or private helper; no comment ratio; no hand-maintained `Called by` lists. Write comments to 'Writing for people' in AGENTS.md: plain UK English a newcomer can read, a technical term only when it names something real in the code, and no ticket or phase codes. If the reason is unknown, say so and investigate; never invent it.
+Comments explain a caller obligation, invariant, state meaning, unusual failure, security boundary or non-obvious ordering. For persisted event/state values, say what the value means, what happens next, whether it is terminal and whether changing it breaks stored data. Public APIs document inputs/outputs only where their types do not explain the contract. No required comment on every property, getter, import or private helper; no comment ratio; no hand-maintained `Called by` lists. Write comments to 'Writing for people' in AGENTS.md: plain UK English a newcomer can read, a technical term only when it names something real in the code, and no ticket or phase codes. Start most code comment sentences with a verb. READMEs and glossaries use plain statements that say what a thing is and does. If the reason is unknown, say so and investigate; never invent it.
 
 Examples from OpenCrane 1, snapshot `468742b97`:
 
