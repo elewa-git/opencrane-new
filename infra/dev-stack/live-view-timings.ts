@@ -36,7 +36,7 @@ export async function collectViewTimings(sessionId: string, output: string) {
   const lines = records.map(serialise);
   const contentsToWrite = lines.length > 0 ? `${lines.join('\n')}\n` : '';
   await writeFile(output, contentsToWrite);
-  return records.length;
+  return records;
 }
 
 

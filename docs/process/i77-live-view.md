@@ -155,12 +155,9 @@ after the required integer one-minute load check passed. It completed **PASS**:
 **1,391 passed / 14 skipped**, **80 files passed / 3 skipped**, **1,120.85 s**
 wall time (**1,118.99 s** Vitest). The opt-in tests remain NOT RUN.
 
-## Source gates and review
+## Source gates
 
-Independent source review: **PASS**, no blocking findings in either of the two passes. The reviewer checked
-the four red reproductions, lease expiry, denial precedence, post-audit proof
-and outage/refusal controls. All source gates pass; live qualification remains
-a separate failed gate. The final source was hashed before its fresh startup:
+The final source was hashed before its fresh startup:
 
 | File | SHA-256 |
 | --- | --- |
@@ -429,73 +426,50 @@ remains **FAIL**.
 
 **FAIL: 4/10 viewer runs passed.** The acceptance condition is ten of ten runs
 with explicit revocation clearing the viewer within **2,000 ms**. Runs 1, 2,
-3 and 8 passed that bound. Runs 4–7, 9 and 10 disconnected before reaching the
-“Viewing” state, so revocation was not reached on those runs. The table reports
-the per-run result, measured revoke-to-clear time, pause record, CPU pressure and
-secondary server run-delay delta. Full receipts and timing files are in
-[the final batch directory](i77-live-view/final/).
+3 and 8 passed that bound. The failures were in the **second viewer session**,
+opened while the assistant turn was streaming. Runs 4, 5, 6, 9 and 10 had a
+200 admission and then the server closed the session with **4003
+`access_changed`**. Run 7 was refused with HTTP **403** during WebSocket upgrade.
+Session 1 reached Viewing and passed its checks in every run; its later
+`disconnected` stop was the harness pressing Escape to close the dialog. The
+table reports the per-run result, revoke-to-clear time, pause evidence, CPU
+pressure and secondary server run-delay delta. Full receipts and timing files
+are in [the final batch directory](i77-live-view/final/).
 
 Before the final secondary claim, host readings were load average **18.05 /
 16.66 / 14.92**, **8 CPUs**, and CPU pressure `some avg10=29.76%`
 (`avg60=47.77%`, `avg300=52.08%`). Each run's CPU pressure is the harness's
 `some avg10` value after waiting up to 120 seconds for pressure below 20%.
-Run delay is the secondary server's `/proc/<pid>/schedstat` run-delay delta,
-converted from nanoseconds to milliseconds. Pause duration is recorded only
-when the browser journey completes; failed runs did not produce a pause count
-or pause duration. Server-side `lease_pause` timing markers are called out in
-the result where present.
+Every recorded run started above 20%, so the batch did not measure a quiet
+window. Run delay is the secondary server's `/proc/<pid>/schedstat` run-delay
+delta, converted from nanoseconds to milliseconds.
 
 | Run | Width | Result | Revoke-to-clear | Pauses / pause ms | CPU pressure some avg10 | Server run delay |
 | ---: | ---: | --- | --- | --- | ---: | ---: |
-| 1 | 390px | PASS | 421 ms | 0 / 0 | 48.06% | 6,403.5 ms |
-| 2 | 1280px | PASS | 430 ms | 0 / 0 | 59.95% | 6,603.1 ms |
-| 3 | 390px | PASS | 386 ms | 0 / 0 | 64.18% | 5,880.5 ms |
-| 4 | 1280px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 50.74% | 11,096.4 ms |
-| 5 | 390px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 41.65% | 6,729.9 ms |
-| 6 | 1280px | FAIL; disconnected before Viewing | NOT REACHED | Pause marker; duration not captured | 49.35% | 8,456.8 ms |
-| 7 | 390px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 24.48% | 5,907.1 ms |
-| 8 | 1280px | PASS | 497 ms | 0 / 0 | 61.93% | 10,221.1 ms |
-| 9 | 390px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 67.63% | 13,357.2 ms |
-| 10 | 1280px | FAIL; disconnected before Viewing | NOT REACHED | Pause marker; duration not captured | 36.15% | 15,071.9 ms |
+| 1 | 390px | PASS | 421 ms | Unproven (0 recorded) | 48.06% | 6,403.5 ms |
+| 2 | 1280px | PASS | 430 ms | Unproven (0 recorded) | 59.95% | 6,603.1 ms |
+| 3 | 390px | PASS | 386 ms | Unproven (0 recorded) | 64.18% | 5,880.5 ms |
+| 4 | 1280px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Not captured | 50.74% | 11,096.4 ms |
+| 5 | 390px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Not captured | 41.65% | 6,729.9 ms |
+| 6 | 1280px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Pause marker; duration not captured | 49.35% | 8,456.8 ms |
+| 7 | 390px | FAIL; HTTP 403 at second-session upgrade | NOT REACHED | Not captured | 24.48% | 5,907.1 ms |
+| 8 | 1280px | PASS | 497 ms | Unproven (0 recorded) | 61.93% | 10,221.1 ms |
+| 9 | 390px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Not captured | 67.63% | 13,357.2 ms |
+| 10 | 1280px | FAIL; second session closed 4003 `access_changed` | NOT REACHED | Pause marker; duration not captured | 36.15% | 15,071.9 ms |
 
-Failure timing evidence:
+Diagnosis: the authority fence treated conversation turn events such as
+`agent.turn_started`, `agent.turn_completed` and `message.posted` as authority
+changes. A harmless turn report arriving during an access check therefore
+became a denial and stopped the second session with `access_changed`. Load
+widened the race window, but the trigger was normal product activity while
+watching a live turn. This product fix is separate from the harness change.
 
-- Run 4 returned admission HTTP 200, upgraded and received its first browser
-  frame at **2,535 ms**. It stopped as disconnected at **5,907 ms**; retries
-  also closed before “Viewing”. No revocation was attempted.
-- Run 5 returned admission HTTP 200 and received its first browser frame at
-  **1,225 ms**, then disconnected at **3,491 ms**. A later check succeeded,
-  after the browser socket had closed. No revocation was attempted.
-- Run 6 received its first browser frame at **2,220 ms**. A renewal timed out
-  after **1,201 ms** and emitted `lease_pause` at **4,292 ms**; a check succeeded
-  **305 ms** later, but the socket disconnected at **4,614 ms**, before Viewing.
-- Run 7 received its first browser frame at **1,309 ms**, disconnected at
-  **2,414 ms**, then recorded an unavailable check (**1,253 ms**) and a denied
-  check (**1,108 ms**). No revocation was attempted.
-- Run 9 received its first browser frame at **2,079 ms**, disconnected at
-  **4,267 ms**, then recorded a denied check at **4,969 ms**. No revocation was
-  attempted.
-- Run 10 emitted `lease_pause` at **3,063 ms** and resumed after a successful
-  check at **3,205 ms**. It received its first browser frame at **2,684 ms**,
-  disconnected at **5,139 ms**, and then recorded two unavailable checks
-  (**1,213 ms** and **1,293 ms**) followed by a successful check. No revocation
-  was attempted.
-
-The first two attempts on updated main failed before viewer admission because
-`browserLiveViewJourney` installed its state observer before the modal existed
-and queried `aria-label` although the native dialog uses `aria-labelledby`.
-For the final measured batch only, I temporarily moved that observer after the
-initial unavailable dialog opened and targeted the labelled dialog. This was a
-local dev-stack test-harness adjustment; it is not in the branch. Application
-source and every viewer, lease and revocation deadline remained unchanged. The
-checked-in harness was restored after the run.
-
-The final `up.sh --fresh` journey with that temporary harness adjustment passed
-the upload and live-view steps, then failed at the later audit privacy-canary
-assertion. The post-batch `journey.sh` invocation failed earlier at the chat
-`.caret` wait; upload and live view were not reached in that invocation. Stack
-2 teardown **PASS**ed through the shell EXIT trap. No owner stack or Docker
-daemon settings were changed.
+The old **0 pauses** count is unproven. The observer queried a dialog through
+`aria-label`, although the dialog is named with `aria-labelledby`; it also read
+the whole status line, which includes evidence time and could not equal
+`Paused`. The corrected harness observes the `.message` text and will measure
+pause count and duration separately for both sessions. No revocation was
+attempted in the six failed runs.
 
 On current `origin/main` (#158 included), lint, typecheck and `check:events`
 **PASS**ed. The full root suite **FAIL**ed: **1,604 passed, 15 skipped, 1
