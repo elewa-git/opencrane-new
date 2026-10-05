@@ -17,6 +17,8 @@ import { envelope } from '@opencrane/models';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
+// Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
+const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
@@ -56,7 +58,12 @@ async function processId(name: string) {
   const [pid, start] = (await readFile(file, 'utf8')).split(' ');
   return start && await fingerprint(Number(pid)) === start ? Number(pid) : undefined;
 }
-type StackOwner = { worktree: string; pid?: number; processStart?: string };
+type StackOwner = {
+  worktree: string;
+  startedAt: number;
+  pid?: number;
+  processStart?: string;
+};
 function ownerField(line: string) {
   const separator = line.indexOf('=');
   return [line.slice(0, separator), line.slice(separator + 1)];
@@ -65,13 +72,26 @@ async function readStackOwner(): Promise<StackOwner | undefined> {
   const ownerFile = `${directory}/stack-owner`;
   if (!await exists(ownerFile)) return undefined;
   const contents = await readFile(ownerFile, 'utf8');
-  if (!contents.startsWith('worktree=')) return { worktree: contents };
-  const fields = Object.fromEntries(contents.trim().split('\n').map(ownerField));
+  if (!contents.startsWith('worktree=')) {
+    return { worktree: contents, startedAt: 0 };
+  }
+  const trimmedContents = contents.trim();
+  const lines = trimmedContents.split('\n');
+  const entries = lines.map(ownerField);
+  const fields = Object.fromEntries(entries);
   if (!fields['worktree']) throw new Error('Invalid secondary stack owner file');
+  let startedAt = 0;
+  if (fields['startedAt']) {
+    startedAt = Date.parse(fields['startedAt']);
+    if (!Number.isFinite(startedAt)) {
+      throw new Error('Invalid secondary stack owner file');
+    }
+  }
   const pid = Number(fields['pid']);
   const processStart = fields['processStart'];
   return {
     worktree: fields['worktree']!,
+    startedAt,
     ...(Number.isInteger(pid) && pid > 0 ? { pid } : {}),
     ...(processStart ? { processStart } : {}),
   };
@@ -111,6 +131,9 @@ async function stackProcessIsRunning() {
 async function slotIsFree() {
   const owner = await readStackOwner();
   if (!owner && await stat(directory).then(() => true, () => false)) return false;
+  if (owner && Date.now() - owner.startedAt < CLAIM_GRACE_PERIOD_MS) {
+    return false;
+  }
   if (await ownerProcessIsRunning(owner)) return false;
   return !await stackProcessIsRunning();
 }

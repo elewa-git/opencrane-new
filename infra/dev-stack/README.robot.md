@@ -50,8 +50,11 @@ infra/dev-stack/down.sh
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
 `claim.sh` prints one free secondary id, or exits non-zero when both ids are in use.
 The owner file records the worktree, claiming process id and claim start time. A
-worktree that claims again gets its existing id. A slot is stale when its claiming
+worktree that claims again gets its existing id. A claim stays reserved for 15 minutes
+from its `startedAt` timestamp, even after the claiming process has ended. This gives
+`up --fresh` time to start the stack. After that, a slot is stale when its claiming
 process has ended and no recorded host process or running Compose container remains.
+Old owner files containing only a worktree path count as claims started long ago.
 The next claim reports the reclaim on stderr and records the new owner. `status`
 prints `free` for an unused or stale slot, and `status` and `down` never create its
 directory or owner file. Successful `down --id` removes the secondary directory.

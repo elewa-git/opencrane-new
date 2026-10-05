@@ -48,9 +48,11 @@ flowchart LR
 
 `claim.sh` gives this worktree one of the two spare slots. Its private owner file records
 the worktree, the claiming process id and the start time. A later claim reuses the same
-slot for this worktree. It can reclaim a slot after that process has ended and no stack
-processes or containers are running. `status.sh` reports `free` for an unused slot and
-does not create its owner file. `down.sh` also leaves an unused slot alone.
+slot for this worktree. A claim stays reserved for at least 15 minutes so the stack
+has time to start. After that, another worktree can reclaim it if the claiming process
+has ended and no stack processes or containers are running. `status.sh` reports `free`
+for an unused slot and does not create its owner file. `down.sh` also leaves an unused
+slot alone.
 
 ## How to run or test it
 
