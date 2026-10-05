@@ -2,7 +2,7 @@
 
 The website reads group rows and sends group commands to the server. The server owns
 the group records. These captures use sample data in Chromium. They do not test a
-fresh installation. The checks use source commits `f0a83a4` and `2b8a624`.
+fresh installation. The checks use source commits `f0a83a4` and `d832918`.
 
 ```mermaid
 flowchart LR
