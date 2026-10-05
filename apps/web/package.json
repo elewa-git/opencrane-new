@@ -2,6 +2,7 @@
   "name": "@opencrane/web",
   "version": "0.1.0",
   "private": true,
+  "description": "The website people use to chat with their assistant and manage an OpenCrane organisation.",
   "scripts": {
     "ng": "ng",
     "dev": "ng serve --proxy-config proxy.conf.json",

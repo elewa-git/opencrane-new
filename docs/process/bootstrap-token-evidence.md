@@ -41,7 +41,7 @@ control PostgreSQL 17 at port 55432. No dev or production stack was operated.
   incorrect.
 - NOT RUN: ownership transfer (#24); outside this feature.
 
-Repeat the tests using the commands in the [server contract](../../apps/server/README.md#first-owner-bootstrap-12).
+Repeat the tests using the commands in the [server contract](../../apps/server/README.robot.md#first-owner-bootstrap-12).
 The first HTTP tracer failed with 404 before the route existed; the first browser
 tracer failed because the Claim this silo heading did not exist.
 

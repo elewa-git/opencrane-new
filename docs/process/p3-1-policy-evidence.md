@@ -149,7 +149,7 @@ The migration entrypoint is `npm run migrate:model-grants -w apps/ops` using the
 silo's command connection environment. The dev-stack owner still needs to invoke
 it from the `up.sh` startup path before OpenFGA rebuild and decision startup,
 and rebuild dispatcher subscriptions for the new reaction. See the
-[upgrade instructions](../../apps/ops/README.md#model-grant-upgrade).
+[upgrade instructions](../../apps/ops/README.robot.md#model-grant-upgrade).
 Startup-hook integration and live fresh-stack qualification are **NOT RUN** here.
 
 Follow-up validation (logs on the builder host at `/tmp/p3-1-*.log`):

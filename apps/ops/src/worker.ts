@@ -20,7 +20,9 @@ function required(name: string): string {
 }
 const mode = process.argv[2];
 if (!['members', 'mcp-catalogue', 'computers', 'dispatcher', 'budgets', 'conversations', 'audit', 'files'].includes(mode ?? '')) {
-  throw new Error('Expected members, mcp-catalogue, computers, budgets or dispatcher');
+  throw new Error(
+    'Expected members, mcp-catalogue, computers, dispatcher, budgets, conversations, audit or files',
+  );
 }
 const logger = createLogger(`worker-${mode}`);
 const stop = new AbortController();

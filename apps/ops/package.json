@@ -2,6 +2,7 @@
   "name": "@opencrane/ops",
   "version": "0.1.0",
   "private": true,
+  "description": "The background workers and operator tools that keep OpenCrane up to date.",
   "type": "module",
   "scripts": {
     "start": "node --experimental-strip-types src/replay.ts",

@@ -1,0 +1,490 @@
+# Server
+
+For people, read [README.md](README.md) first.
+
+The Node service exposes sign-in routes, invitation acceptance, the organisation MCP
+register, a health check and authenticated WebSocket routes. It does not serve static
+files: `GET /` returns 404. The [web app](../web/README.md) is built and served separately;
+during development Angular's server runs on port 4200 and
+proxies `/api`, `/auth` and `/ws` here on port 8080. The membership command writes only to
+the event store; projection writes belong to listeners in `libs/projections`.
+
+## Entrypoint and operation
+
+[main.ts](src/main.ts) starts Fastify and attaches `/ws`. From the repository root:
+
+```sh
+npm start -w apps/server
+curl --fail http://localhost:8080/healthz
+```
+
+Provision OIDC settings first; startup rejects missing or invalid configuration.
+Required: `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI` and
+`OIDC_COOKIE_SECRET` (at least 32 bytes, injected from the secret store).
+Production also requires `OIDC_EXPECTED_ORG_ID`. `OIDC_EXTRA_IDENTITIES` may name exact
+issuer/subject exceptions; it is empty by default. The callback is `/auth/callback`.
+See [auth configuration and defaults](../../libs/auth/src/config.ts), including
+client-secret indirection, scopes, cookie settings and provider claim names.
+`HOST` defaults to `0.0.0.0`, `PORT` to `8080`, `LOG_LEVEL` to `info`.
+`OTEL_EXPORTER_OTLP_ENDPOINT` enables optional trace export when set.
+Disabling secure cookies or allowing insecure OIDC HTTP is only for local testing.
+
+Set `NATS_URL`, `SILO_ID` and `OIDC_EXPECTED_ORG_ID` to enable membership acceptance.
+`SILO_ID` is the event silo; the OIDC setting pins the session organisation. Startup
+refuses a NATS configuration missing either pin. Provision the silo's `EVENTS`
+stream separately with the [event-store adapter](../../libs/event-store/README.md).
+Without NATS configuration, authenticated membership requests return unavailable.
+The process owns and closes its NATS connection. Set `NATS_NKEY_SEED_FILE`, `NATS_CA_FILE`, `NATS_CERT_FILE`
+and `NATS_KEY_FILE` to mounted files for the command role, and set
+`NATS_INBOX_PREFIX=_INBOX.command`; missing credentials fail startup. TLS and permissions use [ADR 0005](../../docs/adr/0005-nats-access.md).
+Never put credentials in a URL or event. Fresh-silo qualification remains pending.
+
+## Contract and verification
+
+`GET /auth/login` redirects to the provider; `GET /auth/me` reports the session,
+including the optional signed-in profile `user.name` for display.
+`POST /auth/logout` requires the exact configured Origin and a valid session for
+the pinned organisation. Refusals clear no cookies. Success clears the local cookie
+and answers a top-level form POST with **303 See Other**. Its `Location` is the
+provider end-session endpoint with `id_token_hint`, `client_id` and the configured
+`post_logout_redirect_uri`; the response body is empty and marked `no-store`.
+The ID token stays out of JSON, page JavaScript and logs. If provider logout is
+unavailable (including older cookies without an ID token), a plain-text page says
+only the OpenCrane session ended. `/auth/me` never returns the token.
+Zitadel ends **all accounts in that browser**, returns without a chooser and
+requires credentials on the next sign-in (which may first select a remembered
+account); see the [live evidence](../../docs/process/signin-evidence.md).
+Invalid callbacks return 400; `/ws` upgrades require a valid cookie and matching Origin.
+The socket supports resumable members subscriptions, plus the existing hello and event-validation demos; it never appends events.
+See [protocol schemas](../../libs/protocol/README.md) for real request examples.
+
+`POST /members/join` requires the encrypted session cookie, JSON and an `Origin`
+matching the OIDC redirect origin. Example JSON:
+
+```json
+{"memberId":"alice","invitationId":"invite-alice","commandId":"join-alice","displayName":"Alice"}
+```
+
+The [typed result](src/members/join.ts) is `joined` or `already_joined` (200, with
+`memberId` and global `sequence`), `refused` (with a stable `reason`), or
+`unavailable` (503). Missing/invalid/expired sessions return 401, an invalid Origin
+or other session organisation returns 403, invalid command fields return 400,
+and domain refusals return 409. Fastify rejects malformed JSON and oversized bodies
+before command execution. Unknown fields, including client-supplied roles/silos,
+are refused. Reuse the same command id and arguments after an ambiguous 503.
+Acceptance reads member history and makes at most one conditional append to that
+member's stream. It never writes PostgreSQL, OpenFGA or a command ledger. The
+returned sequence lets a caller wait for a listener's projection checkpoint.
+See the [invitation contract](../../docs/architecture/events.md#organisation-members-and-teams)
+for identity/expiry requirements, retries and the missing bootstrap policy.
+
+```sh
+npm test -- apps/server
+npm run typecheck -w apps/server
+```
+
+Set `PG_TEST_URL` to a disposable PostgreSQL 17 database for the acceptance-to-members
+test; it is explicitly skipped otherwise. It uses an isolated schema and real NATS,
+then restarts the database connection and rebuilds the projection. Other command
+tests prove races, durable retries after NATS restart, refusals with no append and
+real read/append outages. Tests also cover Node startup, OIDC, upgrades and redaction.
+The [acceptance evidence](../../docs/process/member-joined-evidence.md) records gate counts and untested conditions.
+A deployed fresh-install sign-in journey remains unqualified by these local tests.
+The process needs a listening port and outbound access to its OIDC provider and optional
+collector, NATS, PostgreSQL and OpenFGA. Restart discards connections; clients reconnect.
+Cookies survive only while their signing/encryption configuration and expiry remain valid.
+Business recovery and replay use the event-store and projection libraries.
+
+Dependencies: Fastify, ws, and the [auth](../../libs/auth/README.md),
+[events](../../libs/events/README.md), [observability](../../libs/observability/README.md)
+and protocol packages, plus event-store and Zod (MIT, existing pin). PostgreSQL
+(`pg`, MIT), projections and authz now serve realtime reads; no new external component
+was introduced. See the [architecture and plan](../../plan.md).
+
+## Members realtime and shutdown
+
+Set `DATABASE_URL`, `OPENFGA_API_URL`, `OPENFGA_STORE_ID` and `OPENFGA_MODEL_ID`,
+plus `SILO_ID` and `OIDC_EXPECTED_ORG_ID`, to enable the members topic. The server
+needs read access to the members projection and a LISTEN connection. Provision
+and run the existing projection runner and OpenFGA handler separately; the HTTP
+server does not become another projection writer. Existing projections must be
+stopped and rebuilt once to populate the new change history and identity bindings.
+Without configuration or permission, subscriptions fail closed.
+
+Send `{"type":"subscribe","topic":"members","since":0}` on the tab's existing
+`/ws` connection. Only one subscription per connection is supported. The server
+resolves the session's issuer/subject to a joined member through the projection,
+then checks the silo's `member` permission through OpenFGA. Cookie roles are ignored.
+Ambiguous or absent identity bindings are refused. Old unbound joins need a bound
+invitation before they can subscribe. Permissions are checked on reads and at
+one-second intervals (plus dependency latency); failures stop delivery. Session
+expiry is checked there too. This is bounded revocation, not instantaneous logout.
+
+Version 1 replies are `member`, `ready`, `resync` or `refused`; every reply has
+`topic`, `version`, `generation` and a safe integer `position`. A `member` contains the full row
+at that position. Positions are global event-log sequences filtered to this silo's
+members changes, so numeric gaps are normal. Apply rows in order, remember the
+last applied position and reconnect with it. `ready` marks initial catch-up.
+Positions ahead of the projection are refused. A resumed cursor includes the
+generation from its last reply. A repaired replay bumps the generation, sends
+`resync` at position 0 and closes with 1013; reconnect from 0. The original demo messages remain
+separate from this versioned subscription protocol.
+
+PostgreSQL delivers `members_changed` NOTIFY only after the projection transaction
+commits. Its payload is a wake-up, never data or permission: the server rereads
+ordered changes in pages of 100. A failed LISTEN connection fails subscriptions
+closed; restart the server to restore it. Reconnect always rereads durable history.
+Changes have no pruning yet. An equal online rebuild keeps its generation,
+so clients retaining positions can resume without reloading.
+Multi-replica fan-out over NATS core is **not implemented**.
+
+## Organisation integrations
+
+`GET /api/org/integrations` requires the encrypted session cookie, the configured silo and
+organisation, a joined issuer/subject binding in the members projection, and current
+OpenFGA `admin` permission (which includes owners). Cookie roles are ignored. Missing or
+unavailable authority fails closed. The response follows `integrationsResponseSchema`:
+event-derived server/source/tool/status rows plus `loadedAt`. Discovery metadata supplies
+the server name and version when present, and registration keeps optional catalogue origin
+separate from the remote/hosted transport kind. Old events replay with derived labels and
+explicit “Version not provided” / “Not provided” copy rather than invented facts.
+
+`DATABASE_URL` and the existing OpenFGA settings enable this route as well as members
+realtime. The `mcp catalogue` projection must run separately; the server remains a
+read-only projection client. The real-service test creates disposable PostgreSQL 17
+databases and uses real NATS and OpenFGA:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres \
+  npx vitest run apps/server/test/integrations.test.ts
+```
+
+That suite also drives Chromium through Angular's development proxy into this route.
+
+Sockets allow 20 application messages per one-second window and 16 KiB inbound
+frames. Ping/pong runs every 15 seconds; a missing pong terminates the peer at the
+next tick. Above 64 KiB queued output, the server drops further live deltas,
+sends `resync` and closes with 1013. The queue can also contain one row being sent.
+The projection retains every state: resume from the last position actually applied
+by the client, not the last position the server attempted to send.
+
+`SHUTDOWN_GRACE_MS` defaults to **10000**, a positive integer up to 2147483647.
+The first SIGTERM/SIGINT closes the listener, sends WebSocket close code 1001 and
+lets HTTP requests use the full grace period. No part is reserved by cutting off
+requests early. After HTTP and sockets close, NATS, the feed and telemetry close
+once. A clean shutdown exits 0; cleanup failure or expiry exits 1. At expiry,
+remaining sockets are destroyed and cleanup is invoked if it has not started;
+the next event-loop turn exits 1 even if a closer is still hung. Thus a timeout
+reports incomplete cleanup, never success. A second signal exits 1 immediately.
+
+For real Zitadel sign-in on the tailnet URL, use the [dev stack](../../infra/dev-stack/README.md).
+Browser callback refusals clear both cookies and redirect to `/signin/rejected` with
+one fixed reason code. API clients still receive 400 JSON. Provider discovery
+failure also reaches that screen. `/auth/me` refuses expired sessions and sessions
+whose organisation no longer matches the configured pin or an exact configured identity.
+
+## Conversation core
+
+With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
+(`id`, `conversationId`, `assistantId`, `mode`), `POST /api/conversations/:conversationId/messages`
+(`id`, `text`), and GET on those paths. The caller supplies stable event ids for
+retries. POST requires the session's exact Origin. Only live silo members acting
+for their personal assistant can create; conversation participants can read/post.
+Owner/admin roles do not bypass private conversation access. List/messages reads
+come from the `conversations` projection; text is decrypted only after permission
+checks. The messages response contains ordered event rows, a position, generation
+and `computerState` (`ready` or `starting your computer`).
+
+On `/ws`, subscribe with `{type: 'subscribe', topic: 'conversation', conversationId,
+since, generation}`. Apply event rows by position; deltas append to their message
+id, completed messages replace that message's text. `ready` marks catch-up;
+`resync` requires restarting at position 0. Keep the last applied position and
+generation when reconnecting. The server rechecks permissions throughout a stream.
+
+The bridge runner also needs `KUBECONFIG`, `KUBE_NAMESPACE`,
+`TOKEN_SIGNING_KEY_FILE` and `TOKEN_ISSUER`. The dev host uses a loopback Kubernetes
+proxy with scoped Pod-proxy permission. Its separate `x-bridge-token` capability
+never replaces Kubernetes authentication. Per-conversation AES-GCM keys live in
+the private dev secret-store directory, outside events and projections. Preserve
+those keys with event backups; deleting a key makes that conversation’s event/projection text unreadable.
+[Qualification and limits](../../docs/process/bridge-evidence.md).
+
+Creation defaults omitted `mode` to `agent_session` and records it immutably in
+`conversation.created`. Phase 2 refuses `direct` and `group` with HTTP 400 and
+“Phase 2 supports only agent_session conversations”. The projection retains mode
+on replay; older stored events without mode read as `agent_session`. New commands
+always write mode. Changing creation arguments on a retry never changes the conversation.
+
+Each conversation thread has an ordered report queue: at most 64 reports and
+1 MiB, including the report being persisted; at most 64 queues per connection.
+Exceeding either bound closes with 1013, “Report queue limit”. Threads acknowledge
+independently. Reports retain global ids and per-conversation predecessor positions;
+reconnect starts at the largest contiguous committed global position. Committed
+payload digests are checked on both append and deduplication. Acknowledgements
+name one report and never release another thread's pending start.
+
+The start acknowledgement carries a fresh signed thread grant after a separate
+server lifecycle command has acquired the computer-stream suspend fence. Each
+command still makes one conditional append. Terminal reports trigger permanent
+server closure, recovered by the watcher if the server stops between those commands.
+
+A digest-matching start replay for an already closed turn is acknowledged without
+new admission or a turn grant, including recovery after a terminal report but
+before its lifecycle closure. Older journals without `previousSequence` replay
+in global computer order and check continuity across conversations.
+
+Permanent report refusals close with 1008 and a safe reason. The watcher logs the
+computer id and reason, then stops reconnecting that computer for its lifetime;
+other computers continue. Resolve the refused report before restarting the server.
+Transient persistence failures still close with 1011 and retry from durable history.
+Credential expiry closes with 4001 and reconnects with a fresh credential; only a
+recorded report refusal stops automatic recovery.
+
+### Chat UI reads and Stop
+
+`GET /api/chat` returns the authenticated member id and their personal assistant
+id (null while provisioning). It requires live silo membership and `acts_for`;
+it does not expose the organisation computer register. Conversation list rows
+include an event-derived title and status, computed only after per-conversation
+read permission. No administrative bypass grants access to private sessions.
+
+`POST /api/conversations/:conversationId/messages` also accepts
+`{id, stopTurnId}`. Only the original message author can stop that turn. It appends
+one `agent.turn_stop_requested` event; retries retain their event id. The bridge
+skips an unstarted stopped turn or interrupts its active Codex turn. The browser
+freezes displayed text at the stop event's position, including after reload;
+late reports remain in durable history without replacing that displayed partial.
+
+Owner/Admin budget configuration uses POST `/api/org/models`, forwarded to the
+single-writer actor with a short-lived signed command. Set `MODEL_DECISION_URL`
+and the existing `TOKEN_SIGNING_KEY_FILE`/`TOKEN_ISSUER`. In development, the URL
+defaults to `http://127.0.0.1:43001`. On a fresh stream the model process records
+`installation-default` as its explicit personal paying group; installation can
+override that seed with `DEFAULT_PAYING_GROUP_ID`. Stored defaults always win.
+See the [budget contract](../../libs/models/README.robot.md#monthly-budgets-p3-13).
+
+### Permission-scoped audit (P3-19)
+
+`GET /api/conversations/:conversationId/history` requires live membership,
+conversation read permission and returns only that requester's actions.
+`GET /api/org/history` requires live Owner/Admin membership and returns safe
+organisation metadata. Neither route decrypts text or approval details, nor returns
+credential references, bearer material, raw arguments or gateway diagnostics.
+Membership/conversation stream heads and OpenFGA receipts fence each read; lag,
+outage or a changed scope refuses it. No audit read scans global event history.
+
+Filters: `requestId`, `turnId`, `decision` (`allow`, `ask`, `deny`) and `before`
+(an exclusive event-position cursor). Pages contain at most 50 anchors with all
+relevant evidence; decision and observed outcome are separate. An allowed request
+without an observation reads `unknown`, never success. The
+[shared response contract](../../libs/protocol/src/audit.ts) is strict and permits
+only fixed readable reasons. Run the `audit` ops worker alongside the existing
+projections. API startup enables these reads with the existing event store,
+database, member feed and OpenFGA settings; no conversation encryption key is needed.
+
+Tests: `PG_TEST_URL=… npx vitest run apps/server/test/integrations.test.ts
+apps/server/test/audit-browser.test.ts`. Browser evidence covers 1280/390px and
+Loading/Empty/Unavailable/Outcome unknown with keyboard filters. Fresh-install
+qualification is NOT RUN; this change does not alter or operate a dev stack.
+
+The P3-2 approval endpoint is `GET|POST /api/conversations/:conversationId/approvals`.
+GET restores safe decrypted cards and a session/conversation-bound CSRF token; POST
+accepts only `approvalId` and `decision` (`approved` or `rejected`). It requires the
+requester's authenticated session, current authority, exact Origin and `x-csrf-token`.
+409 means the decision lost its conditional append; 428 requires step-up; uncertain
+transport or persistence needs Check status, never an automatic repeat of an effect.
+A required step-up uses `/auth/login?approval=<id>&returnTo=<local-path>`, OIDC
+`prompt=login`, `max_age=0`, and verified `auth_time` within five minutes. The flow
+binds the original cookie, requester and approval; missing, future or stale evidence
+refuses. The resulting session authorises only that approval's step-up check.
+
+Run the gateway/API tests with:
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/approvals.test.ts
+```
+
+After building the web app, set `APPROVAL_BROWSER=1` for the same command to include
+Chromium at 1280/390px.
+These fixtures create disposable NATS/OpenFGA instances and private Postgres databases.
+They do not use the shared dev stack or a paid upstream.
+
+The model process accepts optional `MODEL_MCP_ROUTES`, a JSON array of
+`{serverId, connectionId, upstream}` records, to configure the existing gateway
+MCP routes. The default is empty. Deployment configuration owns these destinations;
+callers cannot supply them. Set `CONVERSATION_KEYS_DIR` to the same private directory
+as the server so the decision process can encrypt and verify approval reviews.
+The dev stack routes its credential-free recording fixture to its loopback stub.
+
+Read-only desktop sessions use `POST /api/conversations/:id/view` and
+`/ws/conversations/:id/view` for the WebSocket. The POST requires the session, exact Origin and
+`x-opencrane-view: 1`; redeem its ticket once as WebSocket subprotocols
+`binary, <ticket>`, with the same session and Origin. Both conversation participation
+and an explicit shared-desktop grant are required. The server uses `KUBECONFIG`
+and `KUBE_NAMESPACE` for its private Pod stream. See the
+[live-view contract and evidence](../../docs/process/live-view-evidence.md).
+
+## Remote MCP registration (P3-3)
+
+Owner/Admin `POST /api/org/integrations` accepts `{locator}` with the exact session
+Origin. It conditionally appends one registration per normalised HTTPS source and
+returns `{serverId, changeRef}` with HTTP 202. Repeating the same source, including
+concurrent requests, returns the same reference. GET
+`/api/org/integrations/:serverId/discovery` reads event-backed status and immutable
+inventory. GET `/api/org/integrations/discovery?locator=<encoded-source>` reconciles
+a lost registration reply without creating anything. Both require current admin
+access. HTTP 400 refuses the source; 503 is an unknown outcome requiring status.
+
+With the existing event store and catalogue configuration, `main.ts` starts the
+install worker. Its expiring in-memory identity alone admits POST
+`/internal/mcp/:serverId`, bound to that registered server and limited to
+`server/discover` and `tools/list`. Computers have no such identity. This route
+selects its endpoint from events, strips caller headers and never invokes tools.
+Restart reconciles unfinished registrations; terminal evidence is never rediscovered
+by this worker. PostgreSQL replay only rebuilds the register.
+
+The OC1 guarded transport source is commit `10abd0ef6182f36bec13d8f1358e43b15ead7cd5`.
+Every HTTPS connection checks all DNS answers, pins its checked address and verifies
+the original TLS hostname. IP URLs, credentials, queries/fragments, redirects,
+private/reserved addresses and session/legacy MCP are refused. MCP 2026-07-28 and
+complete discovery metadata are mandatory. Per-request fields use `params._meta`
+with `io.modelcontextprotocol/protocolVersion` and `clientCapabilities`; server identity
+comes from `result._meta['io.modelcontextprotocol/serverInfo']`. The full locator query
+is redacted before authentication or validation. Limits: 1 MiB request, 4 MiB response,
+30 seconds for the whole discovery including DNS, ten pages, 100 tools/page and
+1,000 tools total. Definitions are at most 32 KiB each and 512 KiB together;
+discovery metadata is at most 64 KiB and the inventory event payload 900 KiB.
+Duplicate accepted tool names, duplicate JSON keys, malformed page envelopes and
+repeated cursors reject the inventory. Individual malformed Tool declarations are
+excluded; valid siblings remain available for review. This follows the explicit
+per-tool rejection rule for `x-mcp-header` in the
+[MCP tools specification](https://modelcontextprotocol.io/specification/2026-07-28/server/tools#x-mcp-header)
+and applies the same isolation to other invalid declared fields and schemas.
+`rejectedTools` records only a safe name (when valid), the definition digest and a
+fixed reason code; it never stores rejected definitions or upstream validation errors.
+
+Input schemas require an object root. Output schemas may describe arrays, scalars
+or unconstrained values (`{}`). Accepted definitions are stored as immutable JSON
+strings, including output schemas and extension fields; the complete definition
+contributes to its revision and the inventory digest. Ajv 8.20.0 (MIT, licence
+checked locally) validates JSON Schema 2020-12 (default) and draft-07 without
+fetching references. Unsupported dialects and unresolved references exclude the tool.
+Header annotations require token names, no control characters, case-insensitive
+uniqueness and only declared string/integer/boolean types. They may appear only
+along a chain of `properties` keys from the input root. Integer argument range
+checks belong to the later call path; discovery never invokes tools.
+
+Discovery leaves tools blocked and unpublished. Protected servers show Needs input
+until P3-9; publication, grants and calls are outside this ticket. The local HTTPS,
+DNS rebinding and browser fixtures use no external MCP endpoints. Run
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/inventory.test.ts apps/server/test/mcp-discovery.test.ts apps/server/test/integrations.test.ts --maxWorkers=2`.
+See the [qualification receipt](../../docs/process/p3-3-mcp-discover.md).
+
+## Conversation uploads
+
+The [upload API](../../docs/architecture/upload-api.md) documents raw-byte POST
+and replayable GET on `/api/conversations/:conversationId/files`. Enable it with
+the chat configuration, `MINIO_URL` and `MINIO_CREDENTIALS_FILE` (a rotating,
+bucket-scoped STS lease); `CLAMD_HOST` defaults to `127.0.0.1`, `CLAMD_PORT` to
+`43310`. Provision private `quarantine` and `files` buckets and run the `files`
+projection separately. The computer receives clean bytes through the server's
+bridge and holds no object-store credentials. [Evidence and qualification](../../docs/process/upload-evidence.md)
+cover real-service tests and the pending fresh-install journey.
+
+## Authorised screenshots
+
+`POST /api/conversations/:conversationId/screenshots` takes no body. Supply the
+session cookie, exact configured Origin, `x-opencrane-view: 1` and a stable
+`idempotency-key`. Current participation and the shared-desktop audience grant are
+checked against events and OpenFGA, before capture and again before saving. The
+existing namespace-scoped authenticated desktop proxy supplies one framebuffer;
+there is no caller-selected URL, path or encoding. Dimensions are at most 4096
+per axis and at most 4 MiB of raw pixels, with a ten-second framebuffer deadline
+and at most four concurrent captures per server.
+
+A clean scan stores a PNG using the existing 20 MiB file path and appends one
+`file.uploaded` with capture metadata. Success is 201; input, access, scan and
+capacity failures return 400/401/403/422/503, and append conflicts return 409. Retry
+an uncertain command using the same key. Participants reopen screenshots through
+the authenticated file-view endpoint; ordinary uploads retain creator-only access.
+No Kasm credentials, public image URL or signed object-store URL reaches the browser.
+Enable both existing desktop and upload configurations; no new dependency is added.
+
+Run `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres npx vitest run apps/server/test/screenshots.test.ts --maxWorkers=2`.
+After the web build, `SCREENSHOT_BROWSER=1` with the same database runs
+`apps/server/test/screenshot-browser.test.ts` against disposable real Kasm, scan
+and storage fixtures. It requires the existing `ocn-upload-computer:test` image.
+See the [P3-18 evidence](../../docs/process/p3-18-screenshots.md) for remaining qualification.
+Owners and Admins can list and inspect monetary uncertainty with
+`GET /api/org/effects` and `GET /api/org/effects/:permitId`, then submit attested
+receipt evidence with `POST /api/org/effects/:permitId/resolve`.
+[The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
+CSRF token, optimistic sequence and pending settlement state. No screen is added.
+Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
+
+## First-owner bootstrap (#12)
+
+A production install generates one random 256-bit token with a 24-hour expiry:
+
+```sh
+SILO_ID=acme BOOTSTRAP_TOKEN_FILE=/var/lib/opencrane/bootstrap/token.json \
+  npm run bootstrap-token -w apps/server
+```
+
+Run under the server's Unix account. The command creates a private directory
+(0700) and file (0600) outside the repository, writes only a SHA-256 hash, silo
+and expiry, syncs it, then prints the token once to stdout. Run in a private
+terminal with output capture disabled; never put the token in argv, a URL, logs
+or events. An existing file is refused, so repeated installation cannot rotate
+credentials silently. For an expired or lost token on an unclaimed silo, the
+operator may remove that private file and rerun the command. Event history still
+prevents a new claim after any membership history exists. Back up the event store;
+losing this hash file after a successful claim does not reopen bootstrap.
+
+Set the same `BOOTSTRAP_TOKEN_FILE` and `SILO_ID` on the server, along with its
+existing NATS credentials and required `OIDC_EXPECTED_ORG_ID`. The server reads
+this file only during an unclaimed installation, verifies private permissions
+and ownership, and fails closed on missing or invalid material. It does not
+write business state to the file or PostgreSQL. Open `/claim`, sign in through
+Zitadel, enter a display name, contact email and token, then choose **Claim this
+silo**. Email is contact data; the encrypted authenticated session supplies the
+identity. The token input clears after submission and is never saved in browser
+storage. A successful claim returns HTTP 201 and records one event; reactions
+provision the personal assistant, owner/member OpenFGA tuples and model grants.
+The model process seeds `installation-default` (or `DEFAULT_PAYING_GROUP_ID`)
+as the default personal paying group using its existing budget events.
+
+`POST /api/silo/claim` accepts only `{token, displayName, email}` with an exact
+same-origin session. The token creates the first owner of a fresh silo: any
+membership history, including pending invitations and removed members, disables
+this path. An existing member cannot use it to gain ownership. This follows the
+owner decision on #12; it is not a recovery or promotion command.
+
+Identity bindings live on member streams. The same conditional append requires
+expected sequence zero across `member-*`, including every identity's binding
+stream, using NATS' native subject-filter expectation. A membership write between
+the history read and append therefore refuses the claim without recording an
+event or consuming the token. No projection freshness is needed for this check.
+
+Refusals include `token_used`, `owner_exists`, `members_exist`,
+`token_expired`, `wrong_token`, `wrong_organisation`, `concurrent_claim`,
+`no_session`, `wrong_origin` and `invalid_request`. Five submissions per minute
+share a process-wide installation budget across identities; HTTP 429 carries
+`Retry-After: 60`. This bounds failed attempts and in-flight races. Deployments
+with multiple server replicas must also apply a shared ingress rate limit.
+HTTP 503 means the outcome is unknown; do not assume ownership or repeat effects.
+A later submission consults event history and cannot create a second owner.
+All claim replies use `Cache-Control: no-store`.
+
+The existing dev stack retains its explicit invitation/join owner bootstrap
+for `jente@elewa.ke`; see its [instructions](../../infra/dev-stack/README.md#zitadel-sign-in).
+This production token path never uses the dev external-identity exception.
+Ownership transfer remains #24. The production install uses the token method alone.
+
+```sh
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres \
+  npx vitest run apps/server/test/bootstrap-token.test.ts apps/server/test/bootstrap-claim.test.ts apps/server/test/bootstrap-browser.test.ts --maxWorkers=2
+```
+
+Tests use disposable NATS, PostgreSQL and OpenFGA plus Chromium at 1280/390px.
+[Evidence and remaining live qualification](../../docs/process/bootstrap-token-evidence.md).

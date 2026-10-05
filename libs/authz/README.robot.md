@@ -50,7 +50,7 @@ replay that head through `HandlerRuntime.replay`. HTTP writes throw on failure.
 Production OpenFGA uses the silo PostgreSQL cluster's **`openfga` database**, with
 OpenFGA migrations run before startup. This library does not deploy that service.
 For an offline rebuild, follow the
-[operator runbook](../../apps/ops/README.md#rebuild-openfga-offline). The tool
+[operator runbook](../../apps/ops/README.robot.md#rebuild-openfga-offline). The tool
 creates a fresh store/model and replays to the captured global head through the
 same handler, checking sequence gaps and silo identity. It returns the new binding
 and sequence only on success. Rebuild stores have unique names; failures, ambiguous

@@ -1,166 +1,50 @@
-# Web
+# apps/web
 
-This Angular app provides the organisation settings shell and MCP register.
-The [server](../server/README.md) owns sessions and register truth. The register uses
-authenticated HTTP reads; the workspace uses the authenticated WebSocket.
-The browser retains the last successful register read only while access remains valid.
+## What this is
 
-## Entrypoint and usage
+The website people use to chat with their assistant and manage an OpenCrane organisation. It runs in a browser and sends requests to `apps/server`, the back end. Passwords go to the sign-in service, not to the website.
 
-[src/main.ts](src/main.ts) bootstraps the standalone application.
-From the repository root, with the server configured and running:
+## Where it fits
+
+This is the browser app layer. It talks to `apps/server` over web requests and a live connection. The shared message rules in `libs/protocol` check data before the website shows it.
+
+```mermaid
+flowchart LR
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>the back end"]
+  web -.->|uses| protocol["libs/protocol<br/>message rules"]
+```
+
+## What it is responsible for
+
+- Shows sign-in and the first-owner claim page.
+- Lets people start conversations, send messages and stop a reply.
+- Shows tool approval requests, uploaded files and the assistant's desktop.
+- Gives admins pages for integrations, models, spending and change history.
+- Clears private information when the server refuses access.
+- Adapts the workspace and menus for phones and desktop screens.
+- Supports keyboard use in menus, dialogs and the chat workspace.
+- Not built yet: the organisation overview, People & groups and Routines pages.
+- Not built yet: several personal settings pages, which show an unavailable message.
+
+## Processes it handles
+
+1. **A person signs in.** The website sends them to the sign-in service. After sign-in, it returns them to the page they opened.
+2. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
+3. **An admin reviews a tool.** The website shows the tools found on a registered server. The admin can allow, ask before use or block each tool.
+4. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation.
+5. **An admin checks a change.** The website shows organisation history to people with access.
+
+## How to run or test it
 
 ```sh
 npm run dev -w apps/web
-```
-
-Open `http://localhost:4200/org/integrations`; `/org` also opens this implemented page.
-Organisation navigation is Overview, People & groups, Models & providers, Spending,
-Integrations, Routines and Change history. Overview, People & groups and Routines
-show explicit availability states until their screens are built. Desktop uses a
-220px sidebar; phones use the shared modal menu. Back to workspace opens `/workspace`.
-`/org/states` renders the shared state vocabulary for development and visual checks,
-but is not a navigation destination. [F3 source receipt](../../docs/process/f3-org-shell/README.md).
-[proxy.conf.json](proxy.conf.json) forwards `/api`, `/auth` and `/ws` to port 8080.
-The register reads `/api/org/integrations`, leaving `/org/integrations` and the
-other `/org/...` paths to Angular page navigation.
-Configure the provider callback and server `OIDC_REDIRECT_URI` for the browser origin,
-including `/auth/callback`. Local HTTP development requires local-only cookie settings
-as described in the [server README](../server/README.md).
-The browser uses same-origin auth and WebSocket URLs; no credentials are built into assets.
-
-## Contract and verification
-
-The client validates the register response and incoming messages with
-[protocol](../../libs/protocol/README.md).
-Register refresh failures keep old rows and their load time visible. The always-available
-refresh button stays in place and keeps keyboard focus while retrying. Refusal clears
-protected rows before any response body is parsed. Non-admins see that the Owner or
-Admin role is required. Adding a remote MCP server uses `/org/integrations/new`;
-discovery and tool review retain their existing API flows.
-Socket closure updates state and schedules reconnect with jitter;
-there is no durable outgoing message queue. Sign out uses a native form POST to
-`/auth/logout`; the server sends a 303 navigation to Zitadel. Page JavaScript never
-reads a logout URL or ID token. Zitadel signs out all accounts in that browser,
-returns home without a chooser and requires credentials on the next sign-in.
-That next sign-in may first show a remembered-account selector. Page navigation ends the
-current socket; the shell does not explicitly disconnect it first. The server checks
-the session and Origin on every WebSocket upgrade.
-
-```sh
-npm run typecheck -w apps/web
 npm run build -w apps/web
-npm run test -w apps/web
-npm test -- apps/web/test
+npm run typecheck -w apps/web
 ```
 
-The Angular suite covers components, messages and reconnect timing; the root suite
-checks theme contracts and drives Chromium through the dev proxy into the real server,
-PostgreSQL, NATS and OpenFGA register path. Both suites are needed. A real provider
-sign-in journey on a fresh silo is not qualified by these tests.
-The build produces static assets in `apps/web/dist/web/browser`; serve them with
-same-origin `/auth` and `/ws` routing and TLS in a deployment. The app needs no server
-filesystem or database permission. Reload discards local UI state and reconnects;
-the chat workspace reloads durable history from the bridge projection.
+## Where to read more
 
-Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-hosted
-DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
-See the [repository architecture](../../README.md) and [plan](../../plan.md).
-
-## Sign-in
-
-`/` shows the SSO-first sign-in screen or the current session and sign-out action.
-`/signin/handoff` focuses Cancel and announces “Opening single sign-on…” for 2.5 seconds before
-opening the existing server login route; Cancel returns home and stops the timer.
-`/signin/rejected` shows fixed, safe failure copy with an SSO recovery action.
-Set the public `opencrane-org` meta tag in `src/index.html` for the deployment’s
-organisation display name. A non-empty `?invitation=…` arrival shows the frame’s
-invitation copy using that name; it does not grant membership or validate an invite.
-All three use the onboarding SSO colour token and shared states at desktop and
-390px widths. Passwords stay on Zitadel. Email sign-in is unavailable until
-delivery is qualified; there is no fake sent-email screen.
-
-Run `npm run visual:signin` with the dev stack running to capture the three screens
-and 1× card comparisons cropped from the design source in `/home/jente/.fleet/signin-shots/`. The capture checks card dimensions, spacing, tokens, copy, overflow and 44px
-controls. Browser-clock checks exercise focus, Enter/Space cancellation and timing. The live journey uses normal
-timers, real Zitadel and both test accounts; see the
-[sign-in evidence](../../docs/process/signin-evidence.md).
-
-## Chat workspace
-
-After sign-in, choose **Open workspace** (`/workspace`). Personal Agent sessions
-use the real bridge's `GET /api/chat`, conversation commands and resumable `/ws`
-feed. Only `agent_session` rows are shown. A new draft creates a conversation at
-first send; message ids stay stable across explicit retries. Pending messages are
-kept only on this page and the UI warns that reload discards an unsent draft.
-No conversation content or credentials are stored in browser persistent storage.
-
-Stop records `agent.turn_stop_requested`, interrupts the computer and keeps text
-through that position on replay. HTTP reads page through history; realtime consumes
-every validated envelope, including several deltas in one zoneless render. Access
-refusal clears protected content. The computer state announces wake progress.
-
-Keyboard paths: Enter sends, Shift+Enter adds a line, Ctrl/Cmd+N opens a draft,
-Ctrl/Cmd+Shift+A asks the personal Agent, Ctrl/Cmd+K finds a session. Native panel
-and preview dialogs use Escape and focus restoration. Phones use a top-bar menu,
-a docked composer and 44px targets. The panel starts closed below 1100px.
-
-Run `NO_COLOR=1 npm test -- apps/web/test` for Chromium plus replay tests, and
-`NO_COLOR=1 npm run test -w apps/web -- --watch=false` for Angular's unit suite.
-`npm run visual:chat` regenerates the [comparison page](../../docs/design/chat/comparison/index.html).
-[Reuse and deferred file transport](../../docs/design/chat/IMPLEMENTATION.md) records
-attribution and the scope limits. The live dev-stack journey uses only the stub
-provider and includes streamed text, Stop and reload through the shipped UI.
-
-## Tool policy
-
-P3-1 adds Tools & access at `/org/integrations/:serverId/tools`, linked from the
-existing register. Native radio groups offer Allow automatically, Ask and Block
-for reads and writes. Pending saves disable edits; uncertain replies require Check
-status; 401/403 clears protected tool details. Desktop and 390px browser evidence
-comes from `apps/server/test/integrations.test.ts` with real API dependencies.
-
-`/org/models` is Models & providers: the pinned registry remains here, with provider
-and routing editing explicitly unavailable. `/org/spending` owns the existing budget
-summary and single editor. It displays global and configured paying-group/assistant
-monthly ceilings, current charges and held reservations, and edits safe integer EUR
-cents through the unchanged `/api/org/models` API. Conflicts or an unknown save
-outcome require a status read before another edit; access loss clears the details.
-The authenticated browser journey covers 1280px and 390px.
-
-The chat's 8g approval cards restore from the authenticated approval endpoint above
-the composer. Requested cards show every reviewed field, expiry and conditional
-sign-in; decided, expired, cancelled and consumed cards collapse. A consumed card
-says outcome unknown, not success. Submitting disables both actions; uncertain
-transport offers Check status before any safe retry. No arguments or authority are
-sent back by the browser. Polling every three seconds restores updates without
-introducing another business-state store. Chromium qualification and images are in
-[the P3-2 receipt](../../docs/process/p3-2-approvals.md).
-
-## Desktop view
-
-Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
-`/ws/conversations/:id/view`, through the existing frontend `/ws` proxy.
-
-The session panel and its phone overlay offer **Watch your computer** for a saved
-conversation. The self-contained `LiveView` component opens a native dialog with
-fit/actual-size viewing and Connecting, Viewing, Disconnected and Access changed
-states. Participants need an explicit shared-desktop grant; a refused admission
-shows **Unavailable**. Revocation closes the connection and clears pixels.
-Escape closes the dialog and restores focus to its entry. Changing conversation
-or destroying the component cancels admission and closes the old connection.
-All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed
-core and the authenticated proxy; it provides no control or clipboard path.
-
-`npm run build:live-view-test -w apps/web` builds a separate browser qualification
-host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
-[Licence and live evidence](../../docs/process/live-view-evidence.md).
-
-The viewer's **Screenshot** button explicitly captures one desktop image. It
-announces capture/scanning progress, disables duplicate clicks and reports a saved
-result only after the file event is committed. Uncertain requests retain the same command key for a retry; a terminal malware
-rejection allows a new capture with a new key. Screenshots appear as PNG thumbnails in the
-conversation and the panel's Screenshots group; Open uses the existing authenticated
-file preview and download. Reload restores them from conversation events. Keyboard
-Enter/Space activates native buttons; Escape closes viewer and preview dialogs.
-The [P3-18 receipt](../../docs/process/p3-18-screenshots.md) records 1280/390px pixel evidence.
+- [README.robot.md](README.robot.md): routes, message details, limits and test commands.
+- [apps/server](../server/README.md) handles the website's requests.
+- [Why a computer keeps its disk when it sleeps](../../docs/adr/0006-computer-disk-and-live-view.md).
+- [The shared words used in these guides](../../GLOSSARY.md).
