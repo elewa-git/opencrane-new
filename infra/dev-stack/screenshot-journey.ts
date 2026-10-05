@@ -20,6 +20,16 @@ assert(secondary, 'Screenshot qualification requires a claimed secondary stack')
 const run = z.enum(['fresh', 'repeat']).parse(process.argv[2]);
 const output = 'docs/process/p3-18-live';
 await mkdir(output, { recursive: true });
+function hasVisibleDesktopPixels(dialog: Element): boolean {
+  const canvas = dialog.querySelector<HTMLCanvasElement>('canvas');
+  if (!canvas || canvas.width !== 800 || canvas.height !== 600) return false;
+  const bytes = canvas.getContext('2d')!.getImageData(0, 0, 800, 600).data;
+  for (let pixelIndex = 0; pixelIndex < bytes.length; pixelIndex++) {
+    const value = bytes[pixelIndex];
+    if (pixelIndex % 4 !== 3 && value !== bytes[pixelIndex % 4]) return true;
+  }
+  return false;
+}
 const settings = await readEnv('settings'), binding = await readEnv('binding');
 const silo = settings['SILO_ID']!, origin = settings['ORIGIN']!;
 const events = await connectEventStore(await readEnv('command'));
@@ -72,10 +82,9 @@ try {
     await page.getByRole('button', { name: 'Watch your computer', exact: true }).click();
     const viewer = page.getByRole('dialog', { name: 'Computer view', exact: true });
     await viewer.getByText('Viewing', { exact: true }).waitFor();
-    await page.waitForFunction(() => {
-      const canvas = document.querySelector<HTMLCanvasElement>('dialog[open] canvas');
-      return canvas?.width === 800 && canvas.height === 600 && canvas.getContext('2d')!.getImageData(0, 0, 800, 600).data.some((v, i, bytes) => i % 4 !== 3 && v !== bytes[i % 4]);
-    });
+    const viewerElement = await viewer.elementHandle();
+    assert(viewerElement, 'Computer view dialog is present');
+    await page.waitForFunction(hasVisibleDesktopPixels, viewerElement);
     const captured = page.waitForResponse(response => new URL(response.url()).pathname === `/api/conversations/${conversationId}/screenshots` && response.request().method() === 'POST');
     const started = performance.now();
     await viewer.getByRole('button', { name: 'Screenshot', exact: true }).click();
@@ -93,20 +102,25 @@ try {
     assert.equal(file.fileId, saved.fileId); assert.equal(file.uploadedBy, member.memberId);
     assert.equal(file.screenshot?.computerId, computer.computerId);
     const card = page.locator('.file-card').filter({ hasText: file.name });
-    const preview = page.getByRole('dialog', { name: 'File preview', exact: true });
+    const preview = page.getByRole('dialog', { name: file.name, exact: true });
     for (const state of ['saved', 'reloaded']) {
       if (state === 'reloaded') await page.reload();
       await card.waitFor(); await card.locator('img').evaluate((image: HTMLImageElement) => image.decode());
       await page.screenshot({ path: `${output}/${run}-${state}-conversation-${width}.png`, fullPage: true });
       await card.getByRole('button', { name: 'Open', exact: true }).click();
-      await preview.getByText('✓ Preview ready', { exact: true }).waitFor();
+      await preview.getByText('Preview ready', { exact: true }).waitFor();
       await preview.locator('img').evaluate((image: HTMLImageElement) => image.decode());
       await page.keyboard.press('Escape'); await preview.waitFor({ state: 'hidden' });
       if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-      const panel = page.locator('.panel-file:visible').filter({ hasText: file.name });
-      await panel.waitFor(); await panel.locator('img').evaluate((image: HTMLImageElement) => image.decode());
+      const panel = width === 390
+        ? page.getByRole('dialog', { name: 'Session', exact: true })
+        : page.getByRole('complementary', { name: 'Session panel', exact: true });
+      const panelFile = panel.getByRole('button', { name: file.name, exact: false });
+      await panelFile.waitFor();
+      await panelFile.locator('img').evaluate((image: HTMLImageElement) => image.decode());
       await page.screenshot({ path: `${output}/${run}-${state}-panel-${width}.png`, fullPage: true });
-      await panel.click(); await preview.getByText('✓ Preview ready', { exact: true }).waitFor();
+      await panelFile.click();
+      await preview.getByText('Preview ready', { exact: true }).waitFor();
       await page.screenshot({ path: `${output}/${run}-${state}-preview-${width}.png`, fullPage: true });
       await page.keyboard.press('Escape'); await preview.waitFor({ state: 'hidden' });
       if (width === 390) await page.keyboard.press('Escape');
