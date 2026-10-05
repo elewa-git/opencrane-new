@@ -6,6 +6,9 @@ This folder holds pictures and notes about how OpenCrane screens should look and
 The designs are references, not proof that the product behaves that way. The live website
 is in [apps/web](../../apps/web/README.md).
 
+`claude-design-briefs.md` holds the prompts used to make the designs, and
+`handoff-v2/PLAN.md` holds the build plan. Both are working records for agents, not guides.
+
 ## Where it fits
 
 These are design notes beside the working product. The folders below hold the first chat
@@ -22,7 +25,8 @@ flowchart LR
 ## What it is responsible for
 
 - Shows the intended layout and states for screens in the website.
-- Shows phone layouts and reduced-motion versions where the designs include them.
+- Requires every built screen to have a phone layout (390 pixels wide) and a version
+  without animation for people who turn motion off.
 - Keeps old design notes and newer designs together for comparison.
 - Records where a design has been replaced or has not been built yet.
 - Leaves screen code in `apps/web`; the design HTML is not copied into the website.
@@ -46,7 +50,6 @@ npm run visual:fold-loader
 
 ## Where to read more
 
-- [README.robot.md](README.robot.md): design history and the full index of design areas.
 - [Chat design](chat/README.md): the first chat and workspace design.
 - [Organisation settings design](org-admin/README.md): the first settings design.
 - [Newer screen designs](handoff-v2/README.md): the ten newer areas and what is built.

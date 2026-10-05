@@ -6,7 +6,7 @@ These notes describe design ideas. The real app is in `apps/web`, and some file 
 
 This package is one of the ten v2 handoffs. Each state has a 1280px desktop frame and a 390px phone frame. Date: 4 Oct 2026.
 
-> **These are designed states, not implementation proof.** Nothing here shows that a live system behaves this way. The live website is in `apps/web`; these designed states do not prove that it supports them. Don't copy the inline HTML or `support.js`.
+> **These are designed states, not implementation proof.** Nothing here shows that a live system behaves this way. Recreate the frames in `apps/opencrane-ui` (Angular) using its existing components. Don't copy the inline HTML or `support.js`.
 
 ## What's in this folder
 - `html/opencrane-handoff-09-rtn.offline.html` is self-contained and opens in any browser. It opens on this handoff and keeps the shared Brief tab.
