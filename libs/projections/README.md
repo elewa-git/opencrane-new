@@ -54,6 +54,9 @@ npx vitest run libs/projections/test
 ```
 
 This example connects the event store and database, then fills the member tables:
+Before running it, set `DATABASE_URL`, configure NATS as described in the
+[event-store settings](../event-store/README.robot.md), and create the `EVENTS`
+stream with `npm run provision`.
 
 ```ts
 import { connectEventStore } from '@opencrane/event-store';
