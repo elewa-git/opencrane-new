@@ -41,7 +41,7 @@ flowchart LR
 | Dev-stack journey | NOT RUN | No secondary stack was requested. |
 | Fresh-install qualification | NOT RUN | This screen change does not qualify a fresh installation. |
 
-The screen code, tests and notes contain about 1,700 written lines. The visual record and its
+The screen code, tests and notes contain about 1,710 written lines. The visual record and its
 58 PNG captures are evidence and are not part of that count.
 
 The server does not yet publish integrations, read grants, mark tools as reviewed, remove

@@ -173,12 +173,23 @@ async function captureRegister(browser, name, width, motion, scenario, prepare) 
   const { page } = opened;
   try {
     await page.goto(`${origin}/org/integrations`);
+    await waitForRegisterState(page, scenario);
     if (prepare) await prepare(page, opened.fixtures.state);
     await waitForFonts(page);
     await capture(page, name, width, motion);
   } finally {
     await opened.context.close();
   }
+}
+
+async function waitForRegisterState(page, scenario) {
+  if (scenario === 'empty') {
+    const emptyMessage = page.getByText('No integrations yet', { exact: true });
+    await emptyMessage.waitFor();
+    assert(await emptyMessage.isVisible());
+    return;
+  }
+  await page.locator('.register-row').first().waitFor();
 }
 
 async function prepareAttention(page) {
