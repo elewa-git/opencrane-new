@@ -6,7 +6,7 @@ import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { chatHistory } from './commands.ts';
 import { creationEvent } from './private-session.ts';
-import { ReportRejected } from './reports.ts';
+import { agentSession, ReportRejected } from './reports.ts';
 
 const binding = z.object({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
@@ -100,8 +100,7 @@ function isConversationCreated(row: StoredEvent) {
   return row.event.type === 'conversation.created';
 }
 function requestedTurn(rows: StoredEvent[], assistantId: string, turnId: string) {
-  const creation = rows.find(isConversationCreated);
-  const created = z.object({ assistantId: z.string() }).parse(creation?.event.data);
+  const created = agentSession(rows);
   function isRequestedMessage(row: StoredEvent) {
     return row.event.id === turnId && row.event.type === 'message.posted';
   }

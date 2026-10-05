@@ -1,3 +1,4 @@
+import { conversationCreatedDataSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -27,7 +28,7 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   if (report.assistantId !== context.assistantId) throw new ReportRejected('Assistant mismatch');
   const digest = createHash('sha256').update(JSON.stringify(report)).digest('hex');
   const rows = await chatHistory(store, context.silo, report.conversationId);
-  const created = z.object({ assistantId: z.string() }).parse(rows.find(r => r.event.type === 'conversation.created')?.event.data);
+  const created = agentSession(rows);
   if (created.assistantId !== context.assistantId || !rows.some(r => r.event.type === 'message.posted' && r.event.id === report.turnId)) throw new ReportRejected('Unrequested report');
   if (report.requesterId) {
     const message = rows.find(row => row.event.id === report.turnId);
@@ -68,4 +69,13 @@ function verifyDigest(row: StoredEvent | undefined, digest: string) {
 }
 function lastReportSequence(rows: StoredEvent[], computerId: string) {
   return rows.findLast(r => r.event.report?.computerId === computerId)?.event.report?.sequence ?? 0;
+}
+
+export function agentSession(rows: StoredEvent[]) {
+  function isCreated(row: StoredEvent) {
+    return row.event.type === 'conversation.created';
+  }
+  const created = conversationCreatedDataSchema.parse(rows.find(isCreated)?.event.data);
+  if (created.mode !== 'agent_session') throw new ReportRejected('Human conversation');
+  return created;
 }

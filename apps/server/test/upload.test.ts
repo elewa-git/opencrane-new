@@ -97,8 +97,14 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       await nats.store.append({ event, expectedSequence: (await history(nats.store, subject, 'test')).at(-1)?.sequence ?? 0 });
       if (type !== 'member.invited') await auth.handler.handle(event, db);
     }
-    for (const [conversationId, createdBy, mode] of [['other', 'bob', 'agent_session'], ['direct', 'alice', 'direct'], ['closed', 'alice', 'agent_session']]) {
-      const created = envelope('test', `conversation-${conversationId}`, 'conversation.created', { conversationId, assistantId: 'assistant', createdBy, mode });
+    const refusedConversations = [
+      ['other', 'bob', 'agent_session'],
+      ['direct', 'alice', 'direct'],
+      ['closed', 'alice', 'agent_session'],
+    ] as const;
+    for (const [conversationId, createdBy, mode] of refusedConversations) {
+      const data = creationData(conversationId, createdBy, mode);
+      const created = envelope('test', `conversation-${conversationId}`, 'conversation.created', data);
       await nats.store.append({ event: created, expectedSequence: 0 }); await auth.handler.handle(created, db);
       if (createdBy === 'bob') {
         const joined = envelope('test', `conversation-${conversationId}`, 'participant.added', { conversationId, participantId: 'alice', addedBy: 'bob' });
@@ -414,3 +420,11 @@ it('refuses encoded macro declarations and encrypted or macro legacy workbooks',
     await expect(inspectFile('legacy.xls', z.instanceof(Buffer).parse(cfb.write(workbook, { type: 'buffer' })))).rejects.toThrow('Unsafe Office document');
   }
 });
+
+function creationData(conversationId: string, createdBy: string, mode: string) {
+  const data = { conversationId, createdBy, mode };
+  if (mode === 'direct') {
+    return { ...data, participantIds: [createdBy, 'colleague'] };
+  }
+  return { ...data, assistantId: 'assistant' };
+}

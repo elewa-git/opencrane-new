@@ -123,7 +123,7 @@ it('rejects a concurrent conflicting report and only acknowledges the committed 
   } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }
 });
 
-it('records immutable agent_session mode, refuses direct and group in Phase 2, and preserves mode on replay', async () => {
+it('records immutable agent_session mode and refuses binding an assistant to a human mode', async () => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/chat-mode-`);
   try {
     const keys = conversationKeys(directory); keys.provision('test', 'mode');
@@ -132,7 +132,7 @@ it('records immutable agent_session mode, refuses direct and group in Phase 2, a
     await chatCommand(nats.store, keys, context, input);
     expect((await chatHistory(nats.store, 'test', 'mode'))[0]?.event.data).toMatchObject({ mode: 'agent_session' });
     for (const mode of ['direct', 'group'] as const) {
-      await expect(chatCommand(nats.store, keys, context, { ...input, mode })).rejects.toThrow('Phase 2 supports only agent_session');
+      await expect(chatCommand(nats.store, keys, context, { ...input, mode })).rejects.toThrow();
     }
     expect(await nats.store.head()).toBe(1);
   } finally { await nats.close(); await rm(directory, { recursive: true, force: true }); }

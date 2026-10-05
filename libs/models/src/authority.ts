@@ -99,6 +99,17 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
 /** Add exact subjects as they are discovered; all are fenced against the same starting head. */
 export async function authorityFence(store: EventStore, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
+  return createAuthorityFence(store, started, subjects, callerDeadline, false);
+}
+
+/** Chat membership access survives message posts; work approvals may be cancelled by them. */
+export async function conversationAccessFence(store: EventStore, started: number,
+  subjects: string[] = [], callerDeadline = Infinity) {
+  return createAuthorityFence(store, started, subjects, callerDeadline, true);
+}
+
+async function createAuthorityFence(store: EventStore, started: number,
+  subjects: string[], callerDeadline: number, allowMessages: boolean) {
   const deadline = Math.min(started + 2000, callerDeadline);
   const head = await store.head(undefined, deadline);
   const watched = new Set<string>();
@@ -127,7 +138,7 @@ export async function authorityFence(store: EventStore, started: number,
       if (!changed.length) return;
       for (const { subject, sequence } of changed) {
         const fromSequence = (outputHeads.get(subject) ?? head) + 1;
-        await checkOutputReports(store, subject, fromSequence, sequence, deadline);
+        await checkOutputReports(store, subject, fromSequence, sequence, deadline, allowMessages);
         outputHeads.set(subject, sequence);
       }
       // Recheck every exact subject: revocation may have arrived while reading reports.
@@ -137,11 +148,14 @@ export async function authorityFence(store: EventStore, started: number,
   return Object.assign(fresh, snapshot);
 }
 
-async function checkOutputReports(store: EventStore, subject: string, from: number, to: number, deadline: number) {
+async function checkOutputReports(store: EventStore, subject: string, from: number,
+  to: number, deadline: number, allowMessages: boolean) {
   if (!subject.startsWith('conversation-')) throw new Error('Authority changed');
-  // Output reports grant no authority and may arrive beside their model continuation.
+  // A post leaves chat access intact but can cancel approved work. Only the chat
+  // access entrypoint accepts it; model and approval fences keep their strict rule.
   for await (const row of store.readStream(subject, from, deadline)) {
     if (row.sequence > to) break;
+    if (allowMessages && row.event.type === 'message.posted') continue;
     if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
       'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) throw new Error('Authority changed');
   }

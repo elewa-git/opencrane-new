@@ -104,7 +104,7 @@ it('resumes a bound computer when the claim endpoint is unavailable, after the o
 });
 
 
-it('continues reconciliation across all view audits and replays them safely after restart', async () => {
+it('keeps reconciling computers beside human conversations and view audits after restart', async () => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/view-replay-`);
   const key = generateKeyPairSync('ec', { namedCurve: 'P-256', privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
   await writeFile(`${directory}/key.pem`, key.privateKey, { mode: 0o600 });
@@ -125,6 +125,14 @@ it('continues reconciliation across all view audits and replays them safely afte
   try {
     await append(subject, 'computer.claimed', { assistantId: 'asst_1', computerId: 'computer_1', generation: 1, tokenId: 'token:test' });
     await append(subject, 'computer.ready', { assistantId: 'asst_1', computerId: 'computer_1', generation: 1, podUid: 'pod' });
+    await append('conversation-direct', 'conversation.created', {
+      conversationId: 'direct', createdBy: 'alice', mode: 'direct', participantIds: ['alice', 'bob'],
+    });
+    const message = {
+      conversationId: 'direct', authorId: 'alice', authorKind: 'human', contentType: 'text',
+      ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:direct',
+    };
+    await append('conversation-direct', 'message.posted', message);
     outcome = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal).catch((error: unknown) => error);
     await until(() => deliveries > 0, 3000);
     for (const type of ['computer.view_started', 'computer.view_stopped', 'computer.view_refused']) {

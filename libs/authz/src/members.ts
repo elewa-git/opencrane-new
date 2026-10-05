@@ -1,5 +1,5 @@
 import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
-  ownershipSteppedDownSchema,
+  ownershipSteppedDownSchema, conversationCreatedDataSchema,
   handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { registerHandler } from "@opencrane/handlers";
 import { objectId, TupleClient, type Binding, type Tuple } from "./client.ts";
@@ -39,16 +39,34 @@ export function memberAuthorisation(binding: Binding) {
   const object = objectId("silo", binding.silo);
 
   async function applyConversation(event: EventEnvelope, receipt: Tuple) {
-      const conversationId = field(event.data, 'conversationId');
-      if (event.subject !== `conversation-${conversationId}`) throw new Error('Conversation subject mismatch');
-      const target = objectId('conversation', binding.silo, conversationId);
-      const participant = { user: objectId('person', binding.silo,
-        field(event.data, event.type === 'conversation.created' ? 'createdBy' : 'participantId')), relation: 'participant', object: target };
+    const conversationId = field(event.data, 'conversationId');
+    if (event.subject !== `conversation-${conversationId}`) {
+      throw new Error('Conversation subject mismatch');
+    }
+    const target = objectId('conversation', binding.silo, conversationId);
+    let participantIds: string[];
+    if (event.type === 'conversation.created') {
+      const created = conversationCreatedDataSchema.parse(event.data);
+      participantIds = [created.createdBy];
+      if (created.mode === 'direct') participantIds = created.participantIds;
+    } else {
+      participantIds = [field(event.data, 'participantId')];
+    }
+    const writes: Tuple[] = [receipt];
+    const deletes: Tuple[] = [];
+    if (event.type === 'conversation.created') {
+      writes.push({ user: object, relation: 'silo', object: target });
+    }
+    for (const participantId of participantIds) {
+      const participant = {
+        user: objectId('person', binding.silo, participantId),
+        relation: 'participant', object: target,
+      };
       const exists = (await client.read(participant)).length > 0;
-      await client.write([receipt,
-        ...(event.type === 'conversation.created' ? [{ user: object, relation: 'silo', object: target }] : []),
-        ...(!exists && event.type !== 'participant.removed' ? [participant] : [])],
-      exists && event.type === 'participant.removed' ? [participant] : []);
+      if (!exists && event.type !== 'participant.removed') writes.push(participant);
+      if (exists && event.type === 'participant.removed') deletes.push(participant);
+    }
+    await client.write(writes, deletes);
   }
 
   async function applyTeam(event: EventEnvelope, receipt: Tuple) {

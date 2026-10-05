@@ -16,7 +16,7 @@ import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, TurnAdmissionRejected } from './turns.ts';
 import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
-import { recordReport, reportPosition, ReportRejected } from './reports.ts';
+import { agentSession, recordReport, reportPosition, ReportRejected } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
@@ -349,6 +349,7 @@ async function deliverUploads(objects: Client | undefined,
 async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: Conversation, refused: Set<string>, connection: Connection) {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
+  agentSession(rows);
   const message = pendingMessage(rows);
   const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
   function isLifecycle(row: ChatRows[number]) {

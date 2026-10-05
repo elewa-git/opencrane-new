@@ -10,7 +10,7 @@ export { payingGroupAuthority, groupMembership, PayingGroupRefused, AuthorityApp
 export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.ts';
 
 export { approvalCards, readApproval, decideApproval } from './approvals.ts';
-export { authorityFence, currentAuthority } from './authority.ts';
+export { authorityFence, conversationAccessFence, currentAuthority } from './authority.ts';
 
 export { losslessJson } from './lossless-json.ts';
 

@@ -1,4 +1,4 @@
-import { decisionRecordedDataSchema } from '@opencrane/events';
+import { conversationCreatedDataSchema, decisionRecordedDataSchema, type EventEnvelope } from '@opencrane/events';
 import type { Projection } from './runner.ts';
 import type { Query } from './db.ts';
 
@@ -16,7 +16,12 @@ export const conversations: Projection = {
     const refusal = decision?.route === 'model' && decision.outcome === 'deny' && decision.reason === 'budget_exhausted';
     const conversationId = refusal ? decision.conversationId : event.subject.startsWith('conversation-') ? event.subject.slice('conversation-'.length) : undefined;
     if (typeof conversationId !== 'string') return;
-    const data = refusal ? { turnId: decision.turnId, reason: 'budget_exhausted' } : event.data;
+    await validateMode(db, event, conversationId);
+    let data = event.data;
+    if (refusal) data = { turnId: decision.turnId, reason: 'budget_exhausted' };
+    if (event.type === 'conversation.created') {
+      data = conversationCreatedDataSchema.parse(event.data);
+    }
     await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
       [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
@@ -33,7 +38,28 @@ export async function readConversation(db: Query, silo: string, conversationId: 
 }
 
 export async function listConversations(db: Query, silo: string) {
-  const rows = await db.query<{ conversation_id: string; data: { assistantId: string; createdBy: string; mode: 'agent_session' | 'direct' | 'group' }; time: string }>(
+  const rows = await db.query<{ conversation_id: string; data: unknown; time: string }>(
     "SELECT conversation_id, data, time FROM conversation_feed WHERE silo = $1 AND type = 'conversation.created' ORDER BY position DESC", [silo]);
-  return rows.rows.map(row => ({ conversationId: row.conversation_id, ...row.data, createdAt: row.time }));
+  function conversationRow(row: (typeof rows.rows)[number]) {
+    const data = conversationCreatedDataSchema.parse(row.data);
+    return { ...data, conversationId: row.conversation_id, createdAt: row.time };
+  }
+  return rows.rows.map(conversationRow);
+}
+
+async function validateMode(db: Query, event: EventEnvelope, conversationId: string) {
+  const result = await db.query<{ data: unknown }>(
+    `SELECT data FROM conversation_feed
+      WHERE silo = $1 AND conversation_id = $2 AND type = 'conversation.created'`,
+    [event.silo, conversationId]);
+  const original = result.rows[0];
+  if (!original) return;
+  const created = conversationCreatedDataSchema.parse(original.data);
+  if (created.mode !== 'direct') {
+    if (event.type === 'conversation.created') throw new Error('Conversation mode is immutable');
+    return;
+  }
+  if (!['message.posted', 'conversation.closed'].includes(event.type)) {
+    throw new Error('Direct conversation is immutable');
+  }
 }
