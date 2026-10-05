@@ -39,6 +39,24 @@ nothing else.
 (projections and reactions), never in database triggers, views or stored
 procedures.
 
+**Access checks stay small and quick.** Before a write, the server notes the
+latest position of each stream that grants access (`authorityFence` in
+`libs/models/src/authority.ts`). It refuses the write if one of them moved or
+if 2 seconds passed. So:
+
+- Only watch the small streams that decide access: member, assistant, team,
+  payer and grant streams. Never watch a whole conversation stream for a
+  personal session, and never put one in a fence used for reading.
+- Never read a whole conversation stream inside that 2-second limit. Read the
+  history first, with its own time limit, then check access.
+- Reads check access once, at that moment. Only writes and turn starts need the
+  fence.
+- Activity that does not change who has access, such as a turn starting or a
+  file arriving, must never refuse a reader or close a viewer.
+
+Three branches broke these rules in the same week and locked users out of long
+chats, so reviewers treat a break as a blocking finding.
+
 ## The event catalogue is the contract
 
 [docs/architecture/events.md](docs/architecture/events.md) states exactly
