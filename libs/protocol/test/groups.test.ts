@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { createGroupCommandSchema, groupRowSchema } from '../src/groups.ts';
+import { createGroupCommandSchema, groupRowSchema, removeMemberCommandSchema } from '../src/groups.ts';
 
 const sample = {
   groupId: 'sales-team', name: 'Sales team', membershipSource: 'local', position: 0,
@@ -22,4 +22,9 @@ it('rejects private conversation access and unknown membership sources', () => {
 it('rejects unknown create command fields', () => {
   expect(createGroupCommandSchema.safeParse({ commandId: 'cmd', groupId: 'group',
     name: 'Group', expectedSequence: 1 }).success).toBe(false);
+});
+
+it('rejects a group id on the strict remove command', () => {
+  expect(removeMemberCommandSchema.safeParse({ action: 'remove', commandId: 'cmd',
+    memberId: 'alex', groupId: 'sales' }).success).toBe(false);
 });

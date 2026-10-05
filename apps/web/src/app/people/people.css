@@ -16,6 +16,9 @@ p, small { color: var(--oc-ink-admin-muted); }
 .button.primary { background: var(--oc-accent); color: var(--oc-ink-strong);
   border-color: var(--oc-accent); }
 .button.primary:hover { background: var(--oc-accent-hover); }
+.button.secondary { background: white; }
+.button.destructive { background: var(--oc-danger); color: white;
+  border-color: var(--oc-danger); }
 .button:disabled { background: var(--oc-neutral-soft); color: var(--oc-ink-admin-muted);
   border-color: var(--oc-border-row); cursor: not-allowed; }
 .button:focus-visible, a:focus-visible, input:focus-visible, [role=tab]:focus-visible {
@@ -71,12 +74,20 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
 .members { list-style: none; padding: 0; margin: 0; }
 .members li { padding: 12px 0; border-top: 1px solid var(--oc-border-row);
   overflow-wrap: anywhere; }
+.members li { display: grid; grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center; gap: 6px 16px; }
+.members li strong, .members li small, .members li span { grid-column: 1; }
 .members li span { display: block; color: var(--oc-ink-admin-muted); }
 .members strong { overflow-wrap: anywhere; }
+.remove-button { min-height: 44px; grid-column: 2 !important; grid-row: 1 / span 3; }
+.review-losses, .review-notes { list-style: none; padding-left: 0; }
+.review-losses li, .review-notes li { margin: 12px 0; overflow-wrap: anywhere; }
+.loss-mark { color: var(--oc-danger); font-size: 1.3rem; margin-right: 4px; }
+.info-mark { color: var(--oc-accent-dark); margin-right: 6px; }
 .lock { position: relative; display: inline-block; width: 12px; height: 9px;
   margin: 0 2px; border: 1.5px solid currentColor; border-radius: 2px;
   vertical-align: -1px; }
-.lock::before { position: absolute; top: -5px; left: 2px; width: 5px; height: 6px;
+.lock::before { position: absolute; top: 0; left: 2px; width: 5px; height: 6px;
   border: 1.5px solid currentColor; border-bottom: 0; border-radius: 5px 5px 0 0;
   content: ''; }
 .add-members { margin-top: 20px; }
@@ -98,9 +109,10 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
   .chevron { position: absolute; right: 12px; }
   .group-list li { position: relative; }
   .detail-cards { grid-template-columns: 1fr; }
+  .remove-button { width: 100%; grid-column: 1 / -1 !important; grid-row: auto; }
   .refresh-notice, .supplied { display: block; }
   .refresh-notice .button { width: 100%; margin-top: 12px; }
-  .overlay-actions { flex-direction: column-reverse; }
+  .overlay-actions { flex-direction: column; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important;

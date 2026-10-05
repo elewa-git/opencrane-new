@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { grantResourceLabel, isDuplicateName, newGroupId, useGrants } from './group-wording';
+import { grantResourceLabel, isDuplicateName, newGroupId, useGrants }
+  from './group-wording';
 import type { GroupRow } from '@opencrane/protocol';
 
 const row = {
@@ -25,4 +26,8 @@ it('uses clear wording and omits acts-for grants from the Grants list', () => {
   expect(grantResourceLabel(row.access.grants[0]!.resourceType)).toBe('model');
   expect(grantResourceLabel(row.access.grants[1]!.resourceType)).toBe('assistant');
   expect(useGrants(row.access.grants)).toHaveLength(1);
+});
+
+it('shows only the resource id in monospace in the grants card', () => {
+  expect(grantResourceLabel(row.access.grants[0]!.resourceType)).toBe('model');
 });

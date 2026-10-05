@@ -18,7 +18,7 @@
 
 ### What you can do now
 
-- Owners and admins can see flat groups, create one and open it to see members, source and grants; adding members waits for a member list.
+- Owners and admins can see flat groups, create one, open it, and remove a member after reviewing what they lose; adding members waits for a member list.
 - Organisation settings now has the v2 navigation and phone menu; Integrations keeps the register, Spending owns budgets, and other unfinished areas say Not available yet.
 - Owners can appoint an active successor while retaining ownership, then separately step down to Admin; the last owner is protected, and lost responses can be checked by their original change reference. P4-2 screens and fresh-install qualification remain pending.
 - Personal settings now opens from Account with workspace navigation, shows the current identity name, and marks unsupported profile and personal tool data unavailable.

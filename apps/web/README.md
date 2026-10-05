@@ -37,7 +37,7 @@ flowchart LR
 5. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation.
 6. **An admin checks a change.** The website shows organisation history to people with access.
 7. **An Owner or Admin opens People & groups.** The website checks group reads,
-   shows members and grants, and creates groups through the server.
+   shows members and grants, creates groups and removes a member after review.
 
 ## How to run or test it
 

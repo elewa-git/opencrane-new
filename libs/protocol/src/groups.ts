@@ -37,11 +37,19 @@ export const groupReceiptSchema = z.object({
   changeId: z.string().min(1),
 });
 export const groupChangeSchema = groupReceiptSchema.extend({
-  projection: z.object({ content: z.enum(['current', 'applying']), iam: z.enum(['current', 'applying']) }),
+  projection: z.object({
+    content: z.enum(['current', 'applying']),
+    iam: z.enum(['current', 'applying']),
+  }),
 });
 export const createGroupCommandSchema = z.object({
   commandId: id,
   groupId: id,
   name: z.string().trim().min(1).max(200).refine(hasNoNul),
+}).strict();
+export const removeMemberCommandSchema = z.object({
+  action: z.literal('remove'),
+  commandId: id,
+  memberId: id,
 }).strict();
 export type GroupRow = z.infer<typeof groupRowSchema>;

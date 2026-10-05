@@ -66,6 +66,31 @@
       "motion": "no-preference"
     },
     {
+      "name": "remove-review",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "conflict",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "refused",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "removing",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "removed",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
       "name": "access-changed",
       "width": 1280,
       "motion": "no-preference"
@@ -76,17 +101,22 @@
       "motion": "no-preference"
     },
     {
-      "name": "unknown",
+      "name": "create-unknown",
       "width": 1280,
       "motion": "no-preference"
     },
     {
-      "name": "unknown-not-found",
+      "name": "create-unknown-not-found",
       "width": 1280,
       "motion": "no-preference"
     },
     {
-      "name": "unknown-unavailable",
+      "name": "create-applying-unavailable",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "create-unknown-unavailable",
       "width": 1280,
       "motion": "no-preference"
     },
@@ -146,6 +176,31 @@
       "motion": "reduce"
     },
     {
+      "name": "remove-review",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "conflict",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "refused",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "removing",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "removed",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
       "name": "access-changed",
       "width": 1280,
       "motion": "reduce"
@@ -156,17 +211,22 @@
       "motion": "reduce"
     },
     {
-      "name": "unknown",
+      "name": "create-unknown",
       "width": 1280,
       "motion": "reduce"
     },
     {
-      "name": "unknown-not-found",
+      "name": "create-unknown-not-found",
       "width": 1280,
       "motion": "reduce"
     },
     {
-      "name": "unknown-unavailable",
+      "name": "create-applying-unavailable",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "create-unknown-unavailable",
       "width": 1280,
       "motion": "reduce"
     },
@@ -231,6 +291,31 @@
       "motion": "no-preference"
     },
     {
+      "name": "remove-review",
+      "width": 390,
+      "motion": "no-preference"
+    },
+    {
+      "name": "conflict",
+      "width": 390,
+      "motion": "no-preference"
+    },
+    {
+      "name": "refused",
+      "width": 390,
+      "motion": "no-preference"
+    },
+    {
+      "name": "removing",
+      "width": 390,
+      "motion": "no-preference"
+    },
+    {
+      "name": "removed",
+      "width": 390,
+      "motion": "no-preference"
+    },
+    {
       "name": "loading",
       "width": 390,
       "motion": "reduce"
@@ -291,6 +376,31 @@
       "motion": "reduce"
     },
     {
+      "name": "remove-review",
+      "width": 390,
+      "motion": "reduce"
+    },
+    {
+      "name": "conflict",
+      "width": 390,
+      "motion": "reduce"
+    },
+    {
+      "name": "refused",
+      "width": 390,
+      "motion": "reduce"
+    },
+    {
+      "name": "removing",
+      "width": 390,
+      "motion": "reduce"
+    },
+    {
+      "name": "removed",
+      "width": 390,
+      "motion": "reduce"
+    },
+    {
       "name": "loading",
       "width": 320,
       "motion": "no-preference"
@@ -346,6 +456,31 @@
       "motion": "no-preference"
     },
     {
+      "name": "remove-review",
+      "width": 320,
+      "motion": "no-preference"
+    },
+    {
+      "name": "conflict",
+      "width": 320,
+      "motion": "no-preference"
+    },
+    {
+      "name": "refused",
+      "width": 320,
+      "motion": "no-preference"
+    },
+    {
+      "name": "removing",
+      "width": 320,
+      "motion": "no-preference"
+    },
+    {
+      "name": "removed",
+      "width": 320,
+      "motion": "no-preference"
+    },
+    {
       "name": "loading",
       "width": 320,
       "motion": "reduce"
@@ -397,6 +532,31 @@
     },
     {
       "name": "detail-not-found",
+      "width": 320,
+      "motion": "reduce"
+    },
+    {
+      "name": "remove-review",
+      "width": 320,
+      "motion": "reduce"
+    },
+    {
+      "name": "conflict",
+      "width": 320,
+      "motion": "reduce"
+    },
+    {
+      "name": "refused",
+      "width": 320,
+      "motion": "reduce"
+    },
+    {
+      "name": "removing",
+      "width": 320,
+      "motion": "reduce"
+    },
+    {
+      "name": "removed",
       "width": 320,
       "motion": "reduce"
     }

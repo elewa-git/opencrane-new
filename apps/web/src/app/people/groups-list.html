@@ -6,8 +6,10 @@
           <strong>{{ group.name }}</strong>
           <small>{{ highlightedGroupId() === group.groupId ? 'New' : assistantLine(group) }}</small>
         </span>
-        <span><span class="column-label">Members: </span>{{ memberCountLabel(group.members.length) }}</span>
-        <span><span class="column-label">Source: </span>{{ sourceLabel(group.membershipSource) }}</span>
+        <span><span class="column-label">Members: </span>
+          {{ memberCountLabel(group.members.length) }}</span>
+        <span><span class="column-label">Source: </span>
+          {{ sourceLabel(group.membershipSource) }}</span>
         <span class="row-status"><span class="column-label">Status: </span>
           @if (!group.members.length) {
             <oc-shared-state kind="not_configured" message="No members yet" [showAction]="false" />

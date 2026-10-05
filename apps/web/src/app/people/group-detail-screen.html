@@ -4,7 +4,7 @@
   </nav>
 }
 <header class="detail-heading" [attr.aria-busy]="state() === 'loading'">
-  <h1 tabindex="-1">{{ heading() }}</h1>
+  <h1 #detailHeading tabindex="-1">{{ heading() }}</h1>
   @if (state() === 'loading') {
     <div class="detail-skeleton" aria-hidden="true">
       <oc-grain-loader width="100%" height="12px" />
@@ -24,8 +24,76 @@
   } @else if (state() === 'failed') {
     <oc-shared-state kind="failed" [message]="statusMessage()" [detail]="detail()"
       [safeToRetry]="true" actionLabel="Try again" (action)="refresh()" />
+  } @else if (actionState() === 'conflict') {
+    <div class="refresh-notice"><div>
+      <strong>{{ statusMessage() }}</strong><p>{{ detail() }}</p></div>
+      <button type="button" class="button secondary" (click)="refresh()">Refresh</button>
+    </div>
+  } @else if (actionState() === 'refused') {
+    <oc-shared-state kind="refused" [message]="statusMessage()" [detail]="detail()"
+      [showAction]="false" />
+    <button type="button" class="button secondary" (click)="refresh()">Refresh</button>
+  } @else if (actionState() === 'confirmed') {
+    <oc-shared-state kind="confirmed" [message]="statusMessage()" [detail]="detail()"
+      [changeReference]="changeReference()" [showAction]="false" />
+  } @else if (actionState() === 'applying' || actionState() === 'unknown') {
+    <oc-shared-state [kind]="statusKind()" [message]="statusMessage()" [detail]="detail()"
+      [changeReference]="changeReference()" [showAction]="false" />
+    @if (!pollInFlight()) {
+      <button type="button" class="button secondary" (click)="checkStatus()">
+        Check status</button>
+    }
+    @if (retryAfterNotFound()) {
+      <button type="button" class="button secondary" (click)="resendRemoval()">
+        Send the same request again</button>
+    }
   } @else { <span class="sr-only">{{ statusMessage() }}</span> }
 </div>
 @if (state() === 'ready' && group()) {
-  <oc-group-detail [group]="group()!" [canManage]="group()!.membershipSource === 'local'" />
+  <oc-group-detail [group]="group()!" [canManage]="group()!.membershipSource === 'local'"
+    [pendingMemberId]="pendingRemoval()?.memberId ?? undefined"
+    [membersUnavailable]="membersUnavailable()"
+    (removeRequested)="openReview($event)" (refreshRequested)="refreshMembers()" />
 }
+<oc-modal-sheet [open]="reviewOpen()" [title]="reviewTitle()" backLabel="Cancel"
+  [returnFocusTo]="reviewOpener" (closed)="closeReview()">
+  @if (group() && reviewMember()) {
+    @if (reviewGrants().length === 0) {
+      <p>No tools, models or assistants are attached to this group.</p>
+    } @else {
+      <h3>Access through this group ends</h3>
+      <ul class="review-losses">
+        @for (grant of reviewGrants(); track grant.resourceType + grant.resourceId) {
+          <li><span aria-hidden="true" class="loss-mark">⊘</span>
+            @if (grant.relation === 'acts_for' && grant.resourceType === 'assistant') {
+              {{ reviewMember()!.displayName }} can no longer select assistant
+              <code>{{ grant.resourceId }}</code>.
+            } @else {
+              {{ reviewMember()!.displayName }} loses use of
+              {{ grantResourceLabel(grant.resourceType) }} <code>{{ grant.resourceId }}</code>,
+              granted through {{ group()!.name }}.
+            }
+          </li>
+        }
+      </ul>
+    }
+    <ul class="review-notes">
+      <li><span aria-hidden="true" class="info-mark">ⓘ</span>
+        Grants given to {{ reviewMember()!.displayName }} directly stay in place.</li>
+      <li><span aria-hidden="true" class="info-mark">ⓘ</span>
+        Access from other groups stays.</li>
+      <li><span aria-hidden="true" class="info-mark">ⓘ</span>
+        {{ reviewMember()!.displayName }}'s private conversations and memory aren't affected
+        or revealed.</li>
+      <li><span aria-hidden="true" class="info-mark">ⓘ</span>
+        Live group access ends within two seconds.</li>
+    </ul>
+  }
+  <div overlayFooter class="overlay-actions">
+    <button type="button" class="button destructive" [disabled]="state() !== 'ready'"
+      (click)="confirmRemoval()">
+      Remove {{ reviewMember()?.displayName ?? 'member' }} from {{ group()?.name ?? 'group' }}
+    </button>
+    <button type="button" class="button secondary" (click)="closeReview()">Cancel</button>
+  </div>
+</oc-modal-sheet>

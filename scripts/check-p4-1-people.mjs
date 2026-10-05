@@ -18,9 +18,13 @@ let endSession = false;
 let dropCreateReply = false;
 let changeUnavailable = false;
 const knownChanges = new Set();
+const readsUntilCurrent = new Map();
 const createBodies = [];
+let conflictRemove = false;
+let refuseRemove = false;
 const contentTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
   '.woff2': 'font/woff2', '.svg': 'image/svg+xml' };
+// Treat the sample browser as jente@elewa.ke, an Owner.
 const groups = [
   group('sales-team', 'Sales team', 'local', [
     member('alex-kim', 'Alex Kim', 'local'), member('grace-achieng', 'Grace Achieng', 'local'),
@@ -55,7 +59,7 @@ function noOverflow() {
 }
 function everyTargetIsLarge() {
   const targets = [...globalThis.document.querySelectorAll(
-    'main button, main a, main input',
+    'main button, main a, main input, dialog[open] button, dialog[open] a, dialog[open] input',
   )];
   const smallTargets = [];
   for (const target of targets) {
@@ -71,6 +75,21 @@ function focusRing(target) {
   target.focus();
   const style = globalThis.getComputedStyle(target);
   return [style.outlineWidth, style.outlineOffset];
+}
+function elementContainsFocus(element) {
+  return element.contains(globalThis.document.activeElement);
+}
+function isActiveElement(element) {
+  return globalThis.document.activeElement === element;
+}
+function headingHasFocus() {
+  return globalThis.document.activeElement === globalThis.document.querySelector('main h1');
+}
+function focusedWithin(dialog) {
+  return dialog.evaluate(elementContainsFocus);
+}
+function focusedHeading(page) {
+  return page.locator('main h1').evaluate(isActiveElement);
 }
 async function serveAssets(route) {
   const url = new URL(route.request().url());
@@ -126,6 +145,25 @@ async function serveApi(route, pathname) {
       sequence: 1, changeId: body.commandId } });
     return;
   }
+  const groupPath = /^\/api\/groups\/([^/]+)$/u.exec(pathname);
+  if (request.method() === 'POST' && groupPath) {
+    const body = request.postDataJSON();
+    if (conflictRemove) {
+      await route.fulfill({ status: 409, json: { status: 'refused' } });
+      return;
+    }
+    if (refuseRemove) {
+      await route.fulfill({ status: 403, json: { status: 'refused' } });
+      return;
+    }
+    const groupId = decodeURIComponent(groupPath[1] ?? '');
+    removeMemberFromGroup(groupId, body.memberId);
+    knownChanges.add(body.commandId);
+    readsUntilCurrent.set(body.commandId, 1);
+    await route.fulfill({ json: { status: 'appended', groupId,
+      sequence: 2, changeId: body.commandId } });
+    return;
+  }
   if (pathname.includes('/changes/')) {
     if (changeUnavailable) {
       await route.fulfill({ status: 503, json: { status: 'unavailable' } });
@@ -136,11 +174,27 @@ async function serveApi(route, pathname) {
       await route.fulfill({ status: 404, json: { status: 'not_found' } });
       return;
     }
-    await route.fulfill({ json: { status: 'appended', groupId: 'created', sequence: 1,
+    const readsLeft = readsUntilCurrent.get(changeId) ?? 0;
+    if (readsLeft > 0) {
+      readsUntilCurrent.set(changeId, readsLeft - 1);
+      await route.fulfill({ json: { status: 'appended', groupId: 'sales-team', sequence: 2,
+        changeId, projection: { content: 'applying', iam: 'current' } } });
+      return;
+    }
+    await route.fulfill({ json: { status: 'appended', groupId: 'sales-team', sequence: 2,
       changeId, projection: { content: 'current', iam: 'current' } } });
     return;
   }
   await route.fulfill({ status: 404, json: { status: 'not_found' } });
+}
+function removeMemberFromGroup(groupId, memberId) {
+  const row = groups.find(matchesGroup(groupId));
+  if (!row) return;
+  const remainingMembers = [];
+  for (const memberRow of row.members) {
+    if (memberRow.memberId !== memberId) remainingMembers.push(memberRow);
+  }
+  row.members = remainingMembers;
 }
 function waitForListRelease() {
   return new Promise(holdListUntilReleased);
@@ -161,24 +215,16 @@ async function capture(page, name, width, motion) {
   await page.screenshot({ path: resolve(output, `${name}-${width}-${motion}.png`), fullPage: true });
   captures.push({ name, width, motion });
 }
-async function waitForDialogMotion(page) {
-  await page.evaluate(waitForOpenDialogMotion);
-}
-async function waitForOpenDialogMotion() {
-  const dialog = globalThis.document.querySelector('dialog[open]');
-  if (!dialog) return;
-  const animations = dialog.getAnimations();
-  for (const animation of animations) {
-    try {
-      await animation.finished;
-    } catch {
-      // Continue after a dialog closes while its entrance is moving.
-    }
-  }
-}
 async function visit(page, path) {
   await page.goto(`${origin}${path}`);
   await page.locator('main h1').waitFor();
+}
+async function confirmRemoval(page, dialog, displayName, groupName) {
+  const confirmButton = dialog.getByRole('button', {
+    name: `Remove ${displayName} from ${groupName}`, exact: true,
+  });
+  await confirmButton.waitFor();
+  await confirmButton.click();
 }
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({ headless: true });
@@ -187,8 +233,9 @@ try {
     for (const motion of ['no-preference', 'reduce']) {
       const context = await browser.newContext({ viewport: { width, height: 900 }, reducedMotion: motion });
       const page = await context.newPage();
-      groups.splice(0, groups.length, ...initialGroups);
+      groups.splice(0, groups.length, ...structuredClone(initialGroups));
       knownChanges.clear();
+      readsUntilCurrent.clear();
       createBodies.length = 0;
       emptyList = false;
       failList = false;
@@ -196,6 +243,8 @@ try {
       endSession = false;
       dropCreateReply = false;
       changeUnavailable = false;
+      conflictRemove = false;
+      refuseRemove = false;
       holdList = true;
       await page.route('**/*', serveAssets);
       await page.goto(`${origin}/org/people`);
@@ -209,7 +258,6 @@ try {
       assert.deepEqual(await page.locator('.button.primary').first().evaluate(focusRing), ['2px', '2px']);
       await capture(page, 'list', width, motion);
       await page.getByRole('button', { name: 'New group', exact: true }).click();
-      await waitForDialogMotion(page);
       await page.getByLabel('Group name').fill('Sales team');
       assert.equal(await page.getByRole('button', { name: 'Create group' }).isDisabled(), true);
       assert.notEqual(await page.getByLabel('Group name').getAttribute('aria-describedby'), null);
@@ -237,7 +285,6 @@ try {
       await page.getByRole('button', { name: 'Refresh list' }).first().click();
       await page.getByRole('list', { name: 'Groups' }).waitFor();
       await page.getByRole('button', { name: 'New group', exact: true }).click();
-      await waitForDialogMotion(page);
       await page.getByLabel('Group name').fill('New group');
       await page.getByRole('button', { name: 'Create group' }).click();
       await page.getByText('Group “New group” created').waitFor();
@@ -257,11 +304,73 @@ try {
       assert.equal(await page.getByRole('button', { name: /Remove/u }).count(), 0);
       await capture(page, 'detail-supplied', width, motion);
       await visit(page, '/org/people/groups/long-id');
-      await page.locator('.members-section').getByText('No members yet', { exact: true }).waitFor();
+      await page.locator('.members-section')
+        .getByText('No members yet', { exact: true }).waitFor();
       await capture(page, 'detail-empty', width, motion);
       await visit(page, '/org/people/groups/missing-group');
       await page.getByRole('heading', { name: 'Group not found' }).waitFor();
       await capture(page, 'detail-not-found', width, motion);
+      await visit(page, '/org/people/groups/sales-team');
+      const alexRemove = page.getByRole('button', { name: 'Remove Alex Kim from Sales team' });
+      const mariekeRow = page.locator('li').filter({ hasText: 'Marieke Vos' });
+      assert.equal(await mariekeRow.getByRole('button', { name: /Remove/u }).count(), 0);
+      await alexRemove.click();
+      const review = page.getByRole('dialog');
+      await review.waitFor();
+      assert.match(await review.locator('h2').textContent(), /Remove Alex Kim from Sales team\?/u);
+      assert.equal(await focusedWithin(review), true);
+      if (width < 700) assert.deepEqual(await page.evaluate(everyTargetIsLarge), []);
+      const reviewButtons = review.locator('button');
+      const reviewButtonCount = await reviewButtons.count();
+      assert.equal(reviewButtonCount, 3);
+      await reviewButtons.first().focus();
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await reviewButtons.last().evaluate(isActiveElement), true);
+      await page.keyboard.press('Tab');
+      assert.equal(await reviewButtons.first().evaluate(isActiveElement), true);
+      for (let buttonIndex = 1; buttonIndex < reviewButtonCount; buttonIndex += 1) {
+        await page.keyboard.press('Tab');
+        assert.equal(await reviewButtons.nth(buttonIndex).evaluate(isActiveElement), true);
+      }
+      await page.keyboard.press('Tab');
+      assert.equal(await reviewButtons.first().evaluate(isActiveElement), true);
+      await page.keyboard.press('Shift+Tab');
+      assert.equal(await reviewButtons.last().evaluate(isActiveElement), true);
+      await page.keyboard.press('Escape');
+      await review.waitFor({ state: 'detached' });
+      assert.equal(await alexRemove.evaluate(isActiveElement), true);
+      await alexRemove.click();
+      await waitForSheetMotion(page);
+      await capture(page, 'remove-review', width, motion);
+      conflictRemove = true;
+      await confirmRemoval(page, review, 'Alex Kim', 'Sales team');
+      await page.getByText('Membership changed while you were looking').waitFor();
+      await capture(page, 'conflict', width, motion);
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await page.getByText('Membership changed while you were looking').waitFor({ state: 'detached' });
+      assert.equal(await focusedHeading(page), true);
+      conflictRemove = false;
+      refuseRemove = true;
+      await alexRemove.click();
+      await confirmRemoval(page, review, 'Alex Kim', 'Sales team');
+      await page.getByText('This removal was refused. Nothing changed.').waitFor();
+      await capture(page, 'refused', width, motion);
+      refuseRemove = false;
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      await alexRemove.waitFor();
+      await alexRemove.click();
+      await confirmRemoval(page, review, 'Alex Kim', 'Sales team');
+      await page.getByText('Still applying the removal for Alex Kim').waitFor();
+      const removeButtons = page.getByRole('button', { name: /Remove /u });
+      const removeButtonCount = await removeButtons.count();
+      assert.ok(removeButtonCount > 0);
+      for (let buttonIndex = 0; buttonIndex < removeButtonCount; buttonIndex += 1) {
+        assert.equal(await removeButtons.nth(buttonIndex).isDisabled(), true);
+      }
+      await capture(page, 'removing', width, motion);
+      await page.getByText('Removed Alex Kim from Sales team').waitFor();
+      await page.waitForFunction(headingHasFocus);
+      await capture(page, 'removed', width, motion);
       if (width === 1280) {
         await visit(page, '/org/people');
         refuseList = true;
@@ -281,33 +390,52 @@ try {
         const firstBodyIndex = createBodies.length;
         dropCreateReply = true;
         await page.getByRole('button', { name: 'New group', exact: true }).click();
-        await waitForDialogMotion(page);
         await page.getByLabel('Group name').fill('Uncertain group');
         await page.getByRole('button', { name: 'Create group' }).click();
         await page.getByText('Couldn\'t confirm “Uncertain group” was created').waitFor();
         await page.getByText('Check its status before sending the same request again.').waitFor();
-        await capture(page, 'unknown', width, motion);
+        await capture(page, 'create-unknown', width, motion);
         const postsBeforeCheck = createBodies.length;
         await page.getByRole('button', { name: 'Check status' }).click();
         await page.getByText('No record of this change yet. It may still arrive.').waitFor();
         assert.equal(createBodies.length, postsBeforeCheck);
-        await capture(page, 'unknown-not-found', width, motion);
+        await capture(page, 'create-unknown-not-found', width, motion);
         changeUnavailable = true;
         await page.getByRole('button', { name: 'Check status' }).click();
         await page.getByText('Couldn\'t confirm “Uncertain group” was created').waitFor();
         assert.equal(await page.getByText('Still applying “Uncertain group”').count(), 0);
         await page.getByRole('button', { name: 'Send the same request again' }).waitFor();
-        await capture(page, 'unknown-unavailable', width, motion);
+        await capture(page, 'create-applying-unavailable', width, motion);
         changeUnavailable = false;
         await page.getByRole('button', { name: 'Send the same request again' }).click();
         await page.getByText('Group “Uncertain group” created').waitFor();
         assert.deepEqual(createBodies[firstBodyIndex], createBodies[firstBodyIndex + 1]);
+        await visit(page, '/org/people');
+        dropCreateReply = true;
+        changeUnavailable = true;
+        await page.getByRole('button', { name: 'New group', exact: true }).click();
+        await page.getByLabel('Group name').fill('Uncertain unavailable group');
+        await page.getByRole('button', { name: 'Create group' }).click();
+        await page.getByText('Couldn\'t confirm “Uncertain unavailable group” was created').waitFor();
+        await page.getByRole('button', { name: 'Check status' }).click();
+        await page.getByText('Couldn\'t confirm “Uncertain unavailable group” was created').waitFor();
+        await capture(page, 'create-unknown-unavailable', width, motion);
       }
       await context.close();
     }
   }
 } finally {
   await browser.close();
+}
+async function waitForSheetMotion(page) {
+  await page.waitForFunction(allAnimationsFinished);
+}
+function allAnimationsFinished() {
+  const animations = globalThis.document.getAnimations({ subtree: true });
+  for (const animation of animations) {
+    if (animation.playState === 'running') return false;
+  }
+  return true;
 }
 const visual = { result: 'PASS', widths: [1280, 390, 320],
   motion: ['no-preference', 'reduce'], captures, comparedFrames,
