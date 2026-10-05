@@ -38,6 +38,9 @@ let upstreamCount = 0;
 let upstreamHeaders: string[] = [];
 let upstreamAuthHash = '';
 let upstreamFailure = 0;
+let upstreamRedirectTo = '';
+let upstreamUnexpectedBody = false;
+let redirectTargetCount = 0;
 let upstreamInvalidJson = false;
 let upstreamNoAnswer = false;
 let auth: ReturnType<typeof memberAuthorisation>;
@@ -227,7 +230,16 @@ function recordUpstream(req: import('node:http').IncomingMessage,
     res.end('{}');
     return;
   }
+  if (upstreamRedirectTo) {
+    res.writeHead(307, { location: upstreamRedirectTo });
+    res.end();
+    return;
+  }
   res.setHeader('content-type', 'application/json');
+  if (upstreamUnexpectedBody) {
+    res.end('{"unexpected":true}');
+    return;
+  }
   if (req.url === '/v1/models') {
     res.end('{"data":[{"id":"gpt-6-luna"}]}');
     return;
@@ -735,6 +747,55 @@ it.each(upstreamFailureCases)(
   'an upstream $status during $action records $outcome with appropriate settlement',
   recordsUpstreamFailure,
 );
+function countRedirectTarget(req: import('node:http').IncomingMessage,
+  res: import('node:http').ServerResponse) {
+  redirectTargetCount++;
+  req.resume();
+  res.writeHead(401);
+  res.end('{}');
+}
+async function recordsRedirectAsUnknown(action: 'reachability' | 'test') {
+  const commandId = `redirect-${action}`;
+  await preparesVerificationProvider(commandId);
+  const target = createServer(countRedirectTarget);
+  target.listen(0, '127.0.0.1');
+  await once(target, 'listening');
+  const address = target.address();
+  if (!address || typeof address === 'string') throw new Error('Missing redirect target');
+  upstreamRedirectTo = `http://127.0.0.1:${address.port}/v1/models`;
+  const targetHitsBefore = redirectTargetCount;
+  try {
+    const input = verificationInput(commandId, action);
+    const response = await request('POST', `/api/org/providers/${commandId}/verify`, input);
+    expect(response.statusCode).toBe(200);
+    // The redirect target must never be called: it would receive our check token.
+    expect(redirectTargetCount).toBe(targetHitsBefore);
+    const status = await request('GET', `/api/org/providers/${commandId}/changes/${commandId}`);
+    expect(status.json()).toMatchObject({ outcome: 'unknown' });
+  } finally {
+    upstreamRedirectTo = '';
+    target.close();
+  }
+}
+it.each(['reachability', 'test'] as const)(
+  'an upstream redirect during %s is never followed and records unknown',
+  recordsRedirectAsUnknown);
+async function recordsUnexpectedModelListAsUnknown() {
+  const commandId = 'unexpected-model-list';
+  await preparesVerificationProvider(commandId);
+  upstreamUnexpectedBody = true;
+  try {
+    const input = verificationInput(commandId, 'reachability');
+    const response = await request('POST', `/api/org/providers/${commandId}/verify`, input);
+    expect(response.statusCode).toBe(200);
+    const status = await request('GET', `/api/org/providers/${commandId}/changes/${commandId}`);
+    expect(status.json()).toMatchObject({ outcome: 'unknown' });
+  } finally {
+    upstreamUnexpectedBody = false;
+  }
+}
+it('a reply that is not a model list records unknown, not a rejected key',
+  recordsUnexpectedModelListAsUnknown);
 async function releasesReservationWhenAuditFails() {
   const providerId = 'audit-failure';
   await preparesVerificationProvider(providerId);

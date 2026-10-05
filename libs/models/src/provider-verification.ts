@@ -285,6 +285,14 @@ async function recordVerificationDecision(actor: BudgetActor, silo: string,
     throw new Error('Verification audit unavailable');
   }
 }
+// Only a reply that lists the provider's models passes. Any other reply is unclear:
+// it does not prove the key was rejected, so we record unknown, not fail.
+function reachabilityOutcome(body: unknown): 'pass' | 'unknown' {
+  if (providerModelListSchema.safeParse(body).success) {
+    return 'pass';
+  }
+  return 'unknown';
+}
 async function callProviderGateway(actor: BudgetActor, binding: Binding, memberId: string,
   input: Verification, authorization: string, options: ProviderVerificationOptions,
   reservationId?: string
@@ -301,7 +309,10 @@ async function callProviderGateway(actor: BudgetActor, binding: Binding, memberI
     if (reservationId) {
       headers['x-provider-reservation'] = reservationId;
     }
-    const request: RequestInit = { method: 'GET', headers, signal: AbortSignal.timeout(15_000) };
+    // Never follow a redirect. The redirect target is not the provider, and following it
+    // would send our check token and the request body to another server.
+    const request: RequestInit = { method: 'GET', headers, redirect: 'manual',
+      signal: AbortSignal.timeout(15_000) };
     if (input.action === 'test') {
       const body = testBody(input.model);
       request.method = 'POST';
@@ -317,7 +328,7 @@ async function callProviderGateway(actor: BudgetActor, binding: Binding, memberI
     return gatewayFailure(actor, binding.silo, input, reservationId);
   }
   if (input.action === 'reachability') {
-    return { outcome: providerModelListSchema.safeParse(body).success ? 'pass' : 'fail' };
+    return { outcome: reachabilityOutcome(body) };
   }
   if (!reservationId || input.action !== 'test') {
     throw new ProviderRefused();

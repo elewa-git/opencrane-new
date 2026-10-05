@@ -60,8 +60,9 @@ is uncertain, was budget-refused or is still pending. An explicit Skip retains
 Ready needs both reachability and model-answer PASS for the saved key. Skip never
 creates PASS. Reachability `fail` or `unknown` maps to `saved_unverified`, including
 a re-check of a previously ready provider. Only an upstream 401 or 403 records
-reachability `fail`; other non-OK replies record `unknown`, because rate limits,
-provider outages and gateway timeouts do not prove that the key was rejected.
+reachability `fail`. Other non-OK replies, redirects (which are never followed) and
+replies that are not a model list record `unknown`, because rate limits, provider
+outages, gateway timeouts and odd replies do not prove that the key was rejected.
 Pending requests and consumed attempts without a result remain
 `outcome_unknown`; retries only reconcile them. Failures retain the saved fact.
 A priced test requires the exact current quote and explicit consent. When no
