@@ -2,6 +2,31 @@
 
 For people, read [README.md](README.md) first.
 
+## Recovery after store outages
+
+Expiry releases a reservation at zero cents with `outcome: not_dispatched` when
+its request has no matching allow decision and no provider dispatch record.
+It reads both records before releasing money. Failed reads leave the reservation
+for a later check. A matching allow decision or dispatch keeps the reservation
+and records `effect.uncertain` with `reason: settle_timeout`. Older reservations
+without a request id keep the same uncertainty rules.
+
+A retry of a provider check never sends it again. When no dispatch exists, the
+retry records `provider.verification_recorded` with `outcome: unknown` and the
+original reservation id. It includes settled cents only when the budget has
+already settled the reservation. An allow decision still keeps the hold uncertain
+at expiry. The result and dispatch use conditional appends on the same provider
+stream. Gateway admission refuses a finished attempt, so a request still running
+cannot dispatch after the retry finishes it. A disabled budget writer must be
+replaced before expiry can release an unadmitted hold.
+
+`test/actor.test.ts` covers expiry, repeated checks and budget replay.
+`test/hold-recovery.test.ts` covers the two consecutive store failures from
+issue #173 (probe cases F, G and H) through provider checks and ordinary calls.
+Ordinary calls have no provider-result write: the corresponding case loses the
+release acknowledgement after saving the zero-cent settlement.
+The tests use disposable services and never send a paid model request.
+
 Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle computer and
 thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and

@@ -10,7 +10,8 @@ import type { JSONWebKeySet } from 'jose';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { appendProvider, providerAuthority, providerHistory, providerReceipt,
   ProviderConflict, ProviderRefused, ProviderUnpriced, providerPermission } from './providers.ts';
-import { requestReservationCents, costCents, models, priceTableId } from './state.ts';
+import { requestReservationCents, costCents, data as eventData, models,
+  priceTableId } from './state.ts';
 import type { ProviderSecrets } from './provider-secrets.ts';
 
 const providerContentSchema = z.object({
@@ -92,7 +93,7 @@ async function checkRevision(store: EventStore, binding: Binding,
   }
   return { ...current, state: current.state, fresh };
 }
-/** One append records intent; a retry only reads the original attempt. */
+/** One append records intent; a retry never sends the check again. */
 export async function requestProviderVerification(store: EventStore, binding: Binding,
   memberId: string, raw: unknown) {
   const input = providerVerificationSchema.parse(raw);
@@ -150,8 +151,9 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
     throw new ProviderRefused();
   }
   for (const row of current.rows) {
-    if (row.event.type === 'provider.verification_dispatched' &&
-      providerDispatchedSchema.parse(row.event.data).attemptId === input.commandId) {
+    if ((row.event.type === 'provider.verification_dispatched' ||
+      row.event.type === 'provider.verification_recorded') &&
+      eventData(row.event)['attemptId'] === input.commandId) {
       throw new ProviderRefused('Attempt already consumed');
     }
   }
@@ -224,7 +226,11 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
   options: ProviderVerificationOptions) {
   const requested = await requestProviderVerification(actor.store, binding, memberId, raw);
   const { input, receipt } = requested;
-  if (!requested.created || input.action === 'skip') {
+  if (input.action === 'skip') {
+    return receipt;
+  }
+  if (!requested.created) {
+    await finishUndispatchedVerification(actor, binding, memberId, input, receipt.changeId);
     return receipt;
   }
   let reservationId: string | undefined;
@@ -256,6 +262,51 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
   await recordResult(actor, binding, memberId, input, observed.outcome,
     reservationId, observed.settledCents);
   return receipt;
+}
+async function finishUndispatchedVerification(actor: BudgetActor, binding: Binding,
+  memberId: string, input: Verification, requestedEventId: string) {
+  function matchesReservation(reservation: (typeof actor.state.reservations)[number]) {
+    return reservation.call.requestId === requestedEventId;
+  }
+  const reservation = actor.state.reservations.find(matchesReservation);
+  const payload = { ...requestedData(input, memberId), outcome: 'unknown',
+    ...(reservation ? { reservationId: reservation.id,
+      settledCents: reservation.settledCents } : {}) };
+  for (let retry = 0; retry < 3; retry++) {
+    const rows = await history(actor.store, `provider-${input.providerId}`, binding.silo);
+    function matchesAttempt(row: (typeof rows)[number]) {
+      return eventData(row.event)['attemptId'] === input.commandId;
+    }
+    const attempt = rows.filter(matchesAttempt);
+    function isDispatch(row: (typeof rows)[number]) {
+      return row.event.type === 'provider.verification_dispatched';
+    }
+    function isResult(row: (typeof rows)[number]) {
+      return row.event.type === 'provider.verification_recorded';
+    }
+    if (attempt.some(isDispatch)) {
+      return;
+    }
+    if (!attempt.some(isResult)) {
+      try {
+        // Finish on the same provider stream as dispatch, so only one can be saved.
+        // Prevent gateway admission from releasing the key after the attempt finishes.
+        await appendProvider(actor.store, binding.silo, input.providerId, memberId,
+          `internal:provider:${input.commandId}:result`, 'provider.verification_recorded',
+          payload, rows.at(-1)?.sequence ?? 0, completedVerificationAuthority);
+      } catch (error) {
+        if (error instanceof ProviderConflict) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    return;
+  }
+  throw new ProviderConflict('Result append conflicted');
+}
+function completedVerificationAuthority() {
+  return Promise.resolve();
 }
 async function reserveProviderTest(actor: BudgetActor, binding: Binding, memberId: string,
   input: Extract<Verification, { action: 'test' }>, requestedEventId: string, raw: unknown) {
