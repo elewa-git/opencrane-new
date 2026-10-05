@@ -7,10 +7,11 @@ export class MemberAccessRefused extends Error {}
 
 /** Pending ownership, role changes and removals deny access until their IAM receipts exist. */
 export async function activeMember(
-  store: EventStore, binding: Binding, memberId: string, admin = false,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>,
+  store: EventStore, binding: Binding, memberId: string,
+  options: { requiredRole: 'member' | 'admin'; fresh?: Awaited<ReturnType<typeof authorityFence>> },
 ) {
-  fresh ??= await authorityFence(store, performance.now());
+  const fresh = options.fresh ?? await authorityFence(store, performance.now());
+  const admin = options.requiredRole === 'admin';
   const membership = await currentMembership(store, binding.silo, memberId, fresh);
   if (!membership.role) {
     throw new MemberAccessRefused('Active silo membership required');
@@ -29,7 +30,7 @@ export async function activeMember(
   }
   for (const row of membership.facts) {
     if (!await auth.applied(row.event.id)) {
-      throw new MemberAccessRefused('Membership is still being applied');
+      throw new Error('Membership is still being applied');
     }
   }
   await fresh();

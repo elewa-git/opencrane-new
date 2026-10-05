@@ -3,7 +3,8 @@ import { budgets, ownershipSeedHandler, settlementHandler, modelGrantHandler,
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
-import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members, mcpCatalogue, computers,
+import { connectProjectionDb, ProjectionRunner, auditTrail, groups, providers, members,
+  mcpCatalogue, computers,
   conversations, files } from '@opencrane/projections';
 import { dispatch, HandlerRuntime } from '@opencrane/handlers';
 import { memberAuthorisation } from '@opencrane/authz';

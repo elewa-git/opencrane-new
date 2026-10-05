@@ -123,7 +123,10 @@ async function activeTurn(actor: BudgetActor, computer: z.infer<typeof computerS
   }
   return turn;
 }
-export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions) {
+export async function startDecision(
+  actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string },
+  binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
+) {
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     const started = performance.now();
@@ -209,7 +212,11 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
     close: () => new Promise<void>((resolve, reject) => { if (!server.listening) { resolve(); return; } server.closeAllConnections(); server.close(error => error ? reject(error) : resolve()); }) };
 }
 
-async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, providers?: ProviderVerificationOptions) {
+async function internalRoutes(
+  req: IncomingMessage, res: ServerResponse, actor: BudgetActor,
+  identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
+  providers?: ProviderVerificationOptions,
+) {
   if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return true; }
   if (req.url === '/budgets' && req.method === 'POST') {
     try {

@@ -58,12 +58,20 @@ plus `model_test_fail`, `model_test_unknown`, `model_test_budget_refused` and
 is uncertain, was budget-refused or is still pending. An explicit Skip retains
 `connected_not_tested`. The separate facts remain available with each status.
 Ready needs both reachability and model-answer PASS for the saved key. Skip never
-creates PASS. Pending requests and consumed attempts without a result remain
+creates PASS. Reachability `fail` or `unknown` maps to `saved_unverified`, including
+a re-check of a previously ready provider. Only an upstream 401 or 403 records
+reachability `fail`; other non-OK replies record `unknown`, because rate limits,
+provider outages and gateway timeouts do not prove that the key was rejected.
+Pending requests and consumed attempts without a result remain
 `outcome_unknown`; retries only reconcile them. Failures retain the saved fact.
 A priced test requires the exact current quote and explicit consent. When no
 `provider.verification_dispatched` event exists, the provider was never
 sent the check: the outcome is `unknown` and a priced reservation is released at
-zero cents. After dispatch, unknown usage or transport results keep the budget
+zero cents. A failure before calling the gateway also records `unknown` and
+releases any reservation as undispatched, without requiring an allow decision.
+After dispatch, priced tests settle definite upstream 401, 403 and 429 rejections
+at zero cents and record `fail`. Other non-OK replies, unknown usage or transport
+results keep the budget
 hold; there is no timeout refund or automatic retry. Invalid JSON is recorded as
 unknown immediately. A configuration or role change during the call cannot block
 recording its result at the original revision. A late result only updates the same
@@ -96,10 +104,12 @@ IAM receipts, configuration revision, fixed test body and reservation. It consum
 one attempt before forwarding. Its token has the separate `provider-verification`
 type and audience, bound to the command digest; budget tokens cannot admit it.
 The key is read after request, attempt, reservation and freshness checks.
-Provider reservations use a `provider-` conversation id, and internal dispatch/result
-command ids contain `:` so they cannot collide with validated user command ids.
+Provider reservations use a `provider-` conversation id; user conversation commands
+reject that reserved prefix. Internal dispatch/result command ids contain `:` so
+they cannot collide with validated user command ids.
 Provider routes use their own attempt events rather than unrelated native gateway
-observations. Keys are injected after admission; internal tokens
+observations. Provider-route 401 log lines remain in the gateway audit as
+`jwt_failed` observations. Keys are injected after admission; internal tokens
 and command headers never reach the provider. Authority reads use exact subjects
 and the shared two-second fence/deadline. Changes during reads fail closed.
 

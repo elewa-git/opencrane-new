@@ -1,7 +1,9 @@
-import { parseEventByType } from '@opencrane/events';
+import { parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
+import type { StoredEvent } from '@opencrane/event-store';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
+import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
 import { exportPKCS8, generateKeyPair } from 'jose';
 import { tokenIssuer } from '@opencrane/auth';
@@ -618,6 +620,223 @@ it.each(gatewayStepCases)(
   'the real gateway records unknown for an undispatched $action check when $failure',
   recordsRealGatewayStepFailure,
 );
+async function recordsLateDispatchAcknowledgement(action: 'reachability' | 'test') {
+  const commandId = `late-dispatch-ack-${action}`;
+  await preparesVerificationProvider(commandId);
+  const input = verificationInput(commandId, action);
+  const originalAppend = nats.store.append.bind(nats.store);
+  let acknowledgement: Promise<void> | undefined;
+  async function delayDispatchReply(command: Parameters<typeof originalAppend>[0]) {
+    const result = await originalAppend(command);
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'provider.verification_dispatched') {
+      acknowledgement = delay(2500);
+      await acknowledgement;
+    }
+    return result;
+  }
+  const writer = vi.spyOn(nats.store, 'append').mockImplementation(delayDispatchReply);
+  const originalFetch = globalThis.fetch;
+  let gatewayStatus: number | undefined;
+  async function observeGateway(resource: Parameters<typeof fetch>[0],
+    options?: Parameters<typeof fetch>[1]) {
+    const response = await originalFetch(resource, options);
+    if (fetchUrl(resource).includes('/providers/openai/')) {
+      gatewayStatus = response.status;
+    }
+    return response;
+  }
+  const gatewayRequest = vi.spyOn(globalThis, 'fetch').mockImplementation(observeGateway);
+  const before = upstreamCount;
+  try {
+    const response = await request('POST', `/api/org/providers/${commandId}/verify`, input);
+    expect(response.statusCode).toBe(200);
+    expect(gatewayStatus).toBe(503);
+    expect(upstreamCount).toBe(before);
+    const rows: StoredEvent[] = [];
+    for await (const row of nats.store.readStream(`provider-${commandId}`)) {
+      rows.push(row);
+    }
+    function dispatchedAttempt(row: (typeof rows)[number]) {
+      const parsed = parseEventByType(row.event);
+      if (!parsed.success || parsed.event.type !== 'provider.verification_dispatched') {
+        return false;
+      }
+      return providerDispatchedSchema.parse(parsed.event.data).attemptId === commandId;
+    }
+    expect(rows.some(dispatchedAttempt)).toBe(true);
+    const status = await request('GET', `/api/org/providers/${commandId}/changes/${commandId}`);
+    expect(status.json()).toMatchObject({ outcome: 'unknown' });
+    if (action === 'test') {
+      expect(actor.state.reservations.at(-1)?.settledCents).toBeUndefined();
+    }
+  } finally {
+    await acknowledgement;
+    gatewayRequest.mockRestore();
+    writer.mockRestore();
+  }
+}
+it.each(['reachability', 'test'] as const)(
+  'a stored %s dispatch with a late admission reply records unknown without upstream contact',
+  recordsLateDispatchAcknowledgement);
+const upstreamFailureCases = [
+  { action: 'reachability', status: 401, outcome: 'fail' },
+  { action: 'reachability', status: 403, outcome: 'fail' },
+  { action: 'reachability', status: 429, outcome: 'unknown' },
+  { action: 'reachability', status: 500, outcome: 'unknown' },
+  { action: 'reachability', status: 503, outcome: 'unknown' },
+  { action: 'test', status: 401, outcome: 'fail', settledCents: 0 },
+  { action: 'test', status: 403, outcome: 'fail', settledCents: 0 },
+  { action: 'test', status: 429, outcome: 'fail', settledCents: 0 },
+  { action: 'test', status: 500, outcome: 'unknown', settledCents: undefined },
+  { action: 'test', status: 503, outcome: 'unknown', settledCents: undefined },
+] as const;
+async function recordsUpstreamFailure(scenario: (typeof upstreamFailureCases)[number]) {
+  const commandId = `upstream-${scenario.action}-${scenario.status}`;
+  await preparesVerificationProvider(commandId);
+  const input = verificationInput(commandId, scenario.action);
+  upstreamFailure = scenario.status;
+  const before = upstreamCount;
+  try {
+    const response = await request('POST', `/api/org/providers/${commandId}/verify`, input);
+    expect(response.statusCode).toBe(200);
+    expect(upstreamCount - before).toBe(1);
+    const status = await request('GET', `/api/org/providers/${commandId}/changes/${commandId}`);
+    expect(status.json()).toMatchObject({ outcome: scenario.outcome });
+    if (scenario.action === 'test') {
+      const reservation = actor.state.reservations.at(-1);
+      expect(reservation?.settledCents).toBe(scenario.settledCents);
+    }
+  } finally {
+    upstreamFailure = 0;
+  }
+}
+function verificationInput(commandId: string, action: 'reachability' | 'test') {
+  const input = { commandId, expectedRevision: 2, action };
+  if (action === 'test') {
+    return { ...input, model: 'gpt-6-luna',
+      priceTableId: 'openai-2026-10-02-all-eur95', reservedCents: 1, consent: true };
+  }
+  return input;
+}
+async function preparesVerificationProvider(providerId: string) {
+  const create = { action: 'create', commandId: `create-${providerId}`, providerId,
+    expectedRevision: 0, provider: 'openai', name: providerId };
+  expect((await request('POST', '/api/org/providers', create)).statusCode).toBe(200);
+  for await (const row of nats.store.readStream(`provider-${providerId}`)) {
+    await auth.handler.handle(row.event, pgDb(dbs.queue));
+  }
+  const key = { commandId: `key-${providerId}`, expectedRevision: 1, key: 'fixture-only-key' };
+  expect((await request('POST', `/api/org/providers/${providerId}/key`, key)).statusCode).toBe(200);
+  const budget = { scope: 'global', ceilingCents: 1000, dailyCeilingCents: 1000, setBy: 'owner' };
+  await actor.configure(budget);
+}
+it.each(upstreamFailureCases)(
+  'an upstream $status during $action records $outcome with appropriate settlement',
+  recordsUpstreamFailure,
+);
+async function releasesReservationWhenAuditFails() {
+  const providerId = 'audit-failure';
+  await preparesVerificationProvider(providerId);
+  const input = verificationInput('audit-failure-test', 'test');
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function unavailableAudit(command: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(command.event);
+    if (parsed.success && parsed.event.type === 'decision.recorded') {
+      return { status: 'unavailable' as const, cause: new Error('Fixture audit outage') };
+    }
+    return originalAppend(command);
+  }
+  const writer = vi.spyOn(nats.store, 'append').mockImplementation(unavailableAudit);
+  const before = upstreamCount;
+  try {
+    const response = await request('POST', `/api/org/providers/${providerId}/verify`, input);
+    expect(response.statusCode).toBe(503);
+  } finally {
+    writer.mockRestore();
+  }
+  const reservation = actor.state.reservations.at(-1);
+  expect(reservation).toBeDefined();
+  expect(upstreamCount).toBe(before);
+  // Expiry must not turn a known undispatched hold into an effect without an allow decision.
+  const expired = new Date(Date.parse(reservation!.time) + 180_001);
+  const clock = vi.spyOn(actor, 'now').mockReturnValue(expired);
+  try {
+    await actor.expire();
+  } finally {
+    clock.mockRestore();
+  }
+  expect(await nats.store.head(`security-${reservation!.id}`)).toBe(0);
+  expect(reservation?.settledCents).toBe(0);
+  const statusUrl = `/api/org/providers/${providerId}/changes/${input.commandId}`;
+  expect((await request('GET', statusUrl)).json()).toMatchObject({ outcome: 'unknown' });
+  expect((await request('POST', `/api/org/providers/${providerId}/verify`, input)).statusCode)
+    .toBe(200);
+  expect(upstreamCount).toBe(before);
+}
+it('an unavailable audit releases undispatched money without an expiry security alert',
+  releasesReservationWhenAuditFails);
+const preReservationRefusals = [
+  { change: 'config', status: 409 },
+  { change: 'role', status: 403 },
+  { change: 'iam', status: 503 },
+] as const;
+async function finishesPreReservationRefusal(scenario: (typeof preReservationRefusals)[number]) {
+  const providerId = `before-reservation-${scenario.change}`;
+  await preparesVerificationProvider(providerId);
+  const input = verificationInput(providerId, 'test');
+  const originalAppend = nats.store.append.bind(nats.store);
+  let roleChange: EventEnvelope | undefined;
+  async function changeAfterRequest(command: Parameters<typeof originalAppend>[0]) {
+    const result = await originalAppend(command);
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success || parsed.event.type !== 'provider.verification_requested') {
+      return result;
+    }
+    if (scenario.change === 'config') {
+      const selection = { action: 'models', commandId: `${providerId}-models`, providerId,
+        expectedRevision: 2, models: ['gpt-6-luna'] };
+      expect((await request('POST', '/api/org/providers', selection)).statusCode).toBe(200);
+    } else {
+      const newRole = scenario.change === 'role' ? 'member' : 'admin';
+      roleChange = { ...event(`${providerId}-role`, 'member-owner', 'member.role_changed'),
+        silo: 'acme', correlation: {}, principal: { kind: 'human', id: 'owner' },
+        data: { memberId: 'owner', previousRole: 'owner', newRole, changedBy: 'owner' } };
+      const roleCommand = { event: roleChange,
+        expectedSequence: await nats.store.head('member-owner') };
+      await originalAppend(roleCommand);
+    }
+    return result;
+  }
+  const writer = vi.spyOn(nats.store, 'append').mockImplementation(changeAfterRequest);
+  const before = upstreamCount;
+  const reservationCount = actor.state.reservations.length;
+  try {
+    const response = await request('POST', `/api/org/providers/${providerId}/verify`, input);
+    expect(response.statusCode).toBe(scenario.status);
+  } finally {
+    writer.mockRestore();
+    if (roleChange) {
+      await auth.handler.handle(roleChange, pgDb(dbs.queue));
+      const restored = { ...event(`${providerId}-restore`, 'member-owner', 'member.role_changed'),
+        silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' },
+        data: { memberId: 'owner', previousRole: scenario.change === 'role' ? 'member' : 'admin',
+          newRole: 'owner', changedBy: 'owner' } };
+      const restoreCommand = { event: restored,
+        expectedSequence: await nats.store.head('member-owner') };
+      await nats.store.append(restoreCommand);
+      await auth.handler.handle(restored, pgDb(dbs.queue));
+    }
+  }
+  const statusUrl = `/api/org/providers/${providerId}/changes/${input.commandId}`;
+  expect((await request('GET', statusUrl)).json()).toMatchObject({ outcome: 'unknown' });
+  expect(actor.state.reservations).toHaveLength(reservationCount);
+  expect(upstreamCount).toBe(before);
+}
+it.each(preReservationRefusals)(
+  'a refusal at $change before reservation finishes the attempt as unknown',
+  finishesPreReservationRefusal,
+);
 async function recordsResultAfterRevisionChanges() {
   const providerId = 'changing';
   const create = { action: 'create', providerId, commandId: 'create-changing',
@@ -743,12 +962,16 @@ async function recordsNoFakeGatewayObservations() {
   } catch (error) {
     expect(error).toMatchObject({ code: 'ENOENT' });
   }
-  expect(usage).toBe('');
+  const lines = usage.trim().split('\n');
+  expect(lines).toHaveLength(2);
+  for (const line of lines) {
+    expect(JSON.parse(line)).toMatchObject({ outcome: 'error', reason: 'jwt_failed' });
+  }
   await ingestUsage(actor, `${secretDirectory}/usage.jsonl`);
   const files = await readdir(secretDirectory);
   expect(files).not.toContain(providerSecretRef('acme', 'primary', 'save-primary').slice(16));
 }
-it('provider checks do not invent unrelated gateway observation rows',
+it('provider checks retain only 401 gateway audit rows',
   recordsNoFakeGatewayObservations);
 async function deniesRevokedRoleBeforeIamCatchesUp() {
   const row = { ...event('provider-revoked-owner', 'member-owner', 'member.role_changed'),

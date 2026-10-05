@@ -4,10 +4,17 @@ import { getEventDefinition } from '@opencrane/events';
 import type { conversationKeys } from './keys.ts';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
+function isUserConversation(conversationId: string) {
+  return !conversationId.startsWith('provider-');
+}
+// Verification uses this prefix to keep model audit separate from user conversations.
+const conversationId = id.refine(isUserConversation, 'Reserved conversation prefix');
 export const chatInput = z.union([
-  z.object({ id, conversationId: id, assistantId: id, mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session'), payingGroupId: id.optional() }).strict(),
-  z.object({ id, conversationId: id, text: z.string().trim().min(1).max(32_000) }).strict(),
-  z.object({ id, conversationId: id, stopTurnId: id }).strict(),
+  z.object({ id, conversationId, assistantId: id,
+    mode: z.enum(['agent_session', 'direct', 'group']).default('agent_session'),
+    payingGroupId: id.optional() }).strict(),
+  z.object({ id, conversationId, text: z.string().trim().min(1).max(32_000) }).strict(),
+  z.object({ id, conversationId, stopTurnId: id }).strict(),
 ]);
 type Input = z.infer<typeof chatInput>;
 type Context = { silo: string; memberId: string };

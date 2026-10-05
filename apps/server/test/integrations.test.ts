@@ -498,6 +498,26 @@ it('saves a reviewed connection revision policy through one conditional event an
 });
 
 
+async function retriesBudgetDuringIamLag() {
+  const changed = fixture('member.role_changed', 'member-alice', {
+    memberId: 'alice', previousRole: 'owner', newRole: 'admin', changedBy: 'amina',
+  });
+  await append(changed);
+  const payload = { commandId: 'budget-iam-pending', expectedSequence: actor.state.sequence,
+    scope: 'global', ceilingCents: 30000 };
+  const requestHeaders = { ...headers('oidc-alice'),
+    origin: new URL(config.redirectUri).origin };
+  const options = { method: 'POST' as const, url: '/api/org/models',
+    headers: requestHeaders, payload };
+  const before = await nats.store.head('budget-test');
+  expect((await app.inject(options)).statusCode).toBe(503);
+  expect(await nats.store.head('budget-test')).toBe(before);
+  await authorisation.handler.handle(changed, pgDb(dbs.queue));
+  expect((await app.inject(options)).statusCode).toBe(200);
+}
+it('budget commands are retryable while a current role waits for its IAM receipt',
+  retriesBudgetDuringIamLag);
+
 it('lets Owner and Admin configure the one budget actor, refuses others and replays every ceiling', async () => {
   const url = '/api/org/models';
   const payload = { commandId: 'budget-global', expectedSequence: actor.state.sequence, scope: 'global', ceilingCents: 30000, dailyCeilingCents: 2000, defaultPayingGroupId: 'personal-default' };

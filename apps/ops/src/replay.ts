@@ -21,7 +21,10 @@ import {
 } from "@opencrane/projections";
 
 const usage =
-  "Usage: npm run replay -- <members|groups|providers|mcp-catalogue|computers|budgets|audit|openfga> [--dry-run] [--verify] [--confirm-openfga-stopped] [--list-stores | --delete-store <id>]";
+  "Usage: npm run replay -- " +
+  "<members|groups|providers|mcp-catalogue|computers|budgets|audit|openfga> " +
+  "[--dry-run] [--verify] [--confirm-openfga-stopped] " +
+  "[--list-stores | --delete-store <id>]";
 const replayOptions = {
   "dry-run": { type: "boolean", default: false },
   verify: { type: "boolean", default: false },

@@ -7,13 +7,11 @@ import type { JSONWebKeySet } from 'jose';
 import { BudgetActor } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { budgetSummary } from './state.ts';
-import { providerIdSchema } from '@opencrane/events';
+import { budgetCommandSchema } from '@opencrane/protocol';
 
 export class BudgetAccessRefused extends Error {}
 const claims = z.object({ typ: z.enum(['budget-admin', 'provider-verification']),
   silo: z.string(), memberId: z.string(), commandDigest: z.string() });
-const budgetCommand = z.object({ commandId: providerIdSchema,
-  expectedSequence: z.int().nonnegative() }).passthrough();
 /** The server signs the exact command after session and Origin checks. */
 export async function configureBudget(actor: BudgetActor, binding: Binding,
   identity: { jwks: JSONWebKeySet; issuer: string }, raw: unknown, authorization?: string) {
@@ -23,15 +21,16 @@ export async function configureBudget(actor: BudgetActor, binding: Binding,
   if (binding.silo !== actor.silo) {
     throw new BudgetAccessRefused('Access changed');
   }
+  const authority = { requiredRole: 'admin' as const, fresh };
   try {
-    await activeMember(actor.store, binding, checked.memberId, true, fresh);
+    await activeMember(actor.store, binding, checked.memberId, authority);
   } catch (error) {
     if (error instanceof MemberAccessRefused) {
       throw new BudgetAccessRefused(error.message);
     }
     throw error;
   }
-  const { commandId, expectedSequence, ...payload } = budgetCommand.parse(raw);
+  const { commandId, expectedSequence, ...payload } = budgetCommandSchema.parse(raw);
   const configuration = { ...payload, setBy: checked.memberId };
   const result = await actor.configure(configuration, commandId, expectedSequence, fresh);
   return { ...result, budget: budgetSummary(actor.state, actor.now()) };

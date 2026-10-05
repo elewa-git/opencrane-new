@@ -253,7 +253,7 @@ until its complete fresh-install journey passes.
 
 Main advanced during these checks to `cfbf50a`, adding ownership transitions,
 live-view pause handling, the organisation shell and dev-stack journey selectors.
-The second rebase completed: feature commit `629cdb5` and fix commit `5f15e66`
+The second rebase completed: feature commit `629cdb5` and fix commit `c8c87a3`
 are based on that main, which was checked as an ancestor.
 Both provider and ownership registrations and subscriptions are preserved.
 The shared membership helper now delegates to main's `currentMembership`, using

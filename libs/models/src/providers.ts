@@ -31,8 +31,9 @@ export class ProviderConflict extends Error {}
 
 export async function providerAuthority(store: EventStore, binding: Binding, memberId: string) {
   const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
+  const authority = { requiredRole: 'admin' as const, fresh };
   try {
-    await activeMember(store, binding, memberId, true, fresh);
+    await activeMember(store, binding, memberId, authority);
   } catch (error) {
     if (error instanceof MemberAccessRefused) {
       throw new ProviderRefused(error.message);

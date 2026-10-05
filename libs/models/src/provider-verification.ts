@@ -201,9 +201,7 @@ async function recordResult(actor: BudgetActor, binding: Binding, memberId: stri
   reservationId?: string, settledCents?: number) {
   // A result records an admitted attempt, even after its member or configuration changes.
   // It grants no new authority and must keep the original attempt's revision.
-  const payload = { ...requestedData(input, memberId), outcome,
-    ...(reservationId ? { reservationId } : {}),
-    ...(settledCents === undefined ? {} : { settledCents }) };
+  const payload = { ...requestedData(input, memberId), outcome, reservationId, settledCents };
   function completedAuthority() {
     return Promise.resolve();
   }
@@ -230,42 +228,62 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
     return receipt;
   }
   let reservationId: string | undefined;
-  if (input.action === 'test') {
-    const current = await checkRevision(actor.store, binding, memberId, input);
-    const payingGroupId = actor.state.defaultPayingGroupId;
-    if (!payingGroupId) {
-      throw new ProviderRefused('Paying group unavailable');
+  try {
+    if (input.action === 'test') {
+      const reservation = await reserveProviderTest(actor, binding, memberId, input,
+        receipt.changeId, raw);
+      reservationId = reservation.reservationId;
+      await recordVerificationDecision(actor, binding.silo, receipt.changeId,
+        reservationId, reservation.contextDigest);
     }
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify(raw));
-    const contextDigest = hash.digest('hex');
-    const call = { requestId: receipt.changeId, model: input.model, priceTableId,
-      computerId: `provider-${input.providerId}`, assistantId: 'provider-verification',
-      requesterId: memberId, conversationId: `provider-${input.providerId}`,
-      turnId: input.commandId,
-      threadId: input.commandId, payingGroupId, contextDigest };
-    try {
-      reservationId = await actor.reserve(call, input.reservedCents, current.fresh);
-    } catch (error) {
-      if (!(error instanceof BudgetRefused)) {
-        throw error;
-      }
+  } catch (error) {
+    if (error instanceof BudgetRefused) {
       await recordResult(actor, binding, memberId, input, 'budget_refused');
       return receipt;
     }
-    const audit = envelope(binding.silo, `decision-${receipt.changeId}`, 'decision.recorded',
-      { requestId: receipt.changeId, route: 'model', outcome: 'allow',
-        reason: 'provider_verification', contextDigest, permitId: reservationId });
-    const result = await actor.store.append({ event: audit, expectedSequence: 0 });
-    if (result.status !== 'appended') {
-      throw new Error('Verification audit unavailable');
+    // The gateway has not been called, so no provider effect or allow decision is needed
+    // to release the hold. Finish the attempt before returning the original refusal.
+    let settledCents: number | undefined;
+    if (reservationId) {
+      await actor.releaseUndispatched(reservationId);
+      settledCents = 0;
     }
+    await recordResult(actor, binding, memberId, input, 'unknown', reservationId, settledCents);
+    throw error;
   }
   const observed = await callProviderGateway(actor, binding, memberId, input,
     authorization, options, reservationId);
   await recordResult(actor, binding, memberId, input, observed.outcome,
     reservationId, observed.settledCents);
   return receipt;
+}
+async function reserveProviderTest(actor: BudgetActor, binding: Binding, memberId: string,
+  input: Extract<Verification, { action: 'test' }>, requestedEventId: string, raw: unknown) {
+  const current = await checkRevision(actor.store, binding, memberId, input);
+  const payingGroupId = actor.state.defaultPayingGroupId;
+  if (!payingGroupId) {
+    throw new ProviderRefused('Paying group unavailable');
+  }
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(raw));
+  const contextDigest = hash.digest('hex');
+  const call = { requestId: requestedEventId, model: input.model, priceTableId,
+    computerId: `provider-${input.providerId}`, assistantId: 'provider-verification',
+    requesterId: memberId, conversationId: `provider-${input.providerId}`,
+    turnId: input.commandId, threadId: input.commandId, payingGroupId, contextDigest };
+  const reservationId = await actor.reserve(call, input.reservedCents, current.fresh);
+  return { reservationId, contextDigest };
+}
+async function recordVerificationDecision(actor: BudgetActor, silo: string,
+  requestedEventId: string, reservationId: string, contextDigest: string) {
+  const payload = { requestId: requestedEventId, route: 'model', outcome: 'allow',
+    reason: 'provider_verification', contextDigest, permitId: reservationId };
+  const audit = envelope(silo, `decision-${requestedEventId}`, 'decision.recorded', payload);
+  const command = { event: audit, expectedSequence: 0 };
+  const result = await actor.store.append(command);
+  if (result.status !== 'appended') {
+    throw new Error('Verification audit unavailable');
+  }
 }
 async function callProviderGateway(actor: BudgetActor, binding: Binding, memberId: string,
   input: Verification, authorization: string, options: ProviderVerificationOptions,
@@ -277,17 +295,22 @@ async function callProviderGateway(actor: BudgetActor, binding: Binding, memberI
     const current = await checkRevision(actor.store, binding, memberId, input);
     await current.fresh();
     const action = input.action === 'reachability' ? 'reachability' : 'test';
-    const headers = { 'x-provider-token': authorization,
+    const headers: Record<string, string> = { 'x-provider-token': authorization,
       'x-provider-command': Buffer.from(JSON.stringify(input)).toString('base64url'),
-      'content-type': 'application/json',
-      ...(reservationId ? { 'x-provider-reservation': reservationId } : {}) };
-    const request = { method: input.action === 'test' ? 'POST' : 'GET', headers,
-      ...(input.action === 'test' ? { body: JSON.stringify(testBody(input.model)) } : {}),
-      signal: AbortSignal.timeout(15_000) };
+      'content-type': 'application/json' };
+    if (reservationId) {
+      headers['x-provider-reservation'] = reservationId;
+    }
+    const request: RequestInit = { method: 'GET', headers, signal: AbortSignal.timeout(15_000) };
+    if (input.action === 'test') {
+      const body = testBody(input.model);
+      request.method = 'POST';
+      request.body = JSON.stringify(body);
+    }
     const url = `${options.gatewayUrl}/providers/${current.state.provider}/${action}`;
     response = await fetch(url, request);
     if (!response.ok) {
-      return gatewayFailure(actor, binding.silo, input, reservationId, true);
+      return gatewayFailure(actor, binding.silo, input, reservationId, response.status);
     }
     body = await response.json();
   } catch {
@@ -302,7 +325,7 @@ async function callProviderGateway(actor: BudgetActor, binding: Binding, memberI
   return settleProviderResponse(actor, binding.silo, input.model, reservationId, body);
 }
 async function gatewayFailure(actor: BudgetActor, silo: string, input: Verification,
-  reservationId?: string, rejected = false
+  reservationId?: string, responseStatus?: number
 ): Promise<{ outcome: 'fail' | 'unknown'; settledCents?: number }> {
   const rows = await history(actor.store, `provider-${input.providerId}`, silo);
   function dispatchedAttempt(row: (typeof rows)[number]) {
@@ -313,16 +336,24 @@ async function gatewayFailure(actor: BudgetActor, silo: string, input: Verificat
       input.commandId;
   }
   const dispatched = rows.some(dispatchedAttempt);
+  const keyRejected = responseStatus === 401 || responseStatus === 403;
+  const definiteRejection = keyRejected || responseStatus === 429;
   if (reservationId) {
-    if (dispatched) {
-      await actor.uncertain(reservationId, 'transport_failure');
-    } else {
+    if (!dispatched) {
       // The gateway never released the key, so no provider cost can exist.
       await actor.releaseUndispatched(reservationId);
       return { outcome: 'unknown', settledCents: 0 };
     }
+    if (definiteRejection) {
+      await actor.effect(reservationId, undefined, 'error');
+      await settleRecordedProviderEffect(actor, silo, reservationId);
+      return { outcome: 'fail', settledCents: 0 };
+    }
+    // Admission may finish after the gateway gives up, so a stored dispatch alone
+    // cannot distinguish a gateway outage from an upstream call with unknown cost.
+    await actor.uncertain(reservationId, 'transport_failure');
   }
-  if (dispatched && rejected && input.action === 'reachability') {
+  if (dispatched && keyRejected && input.action === 'reachability') {
     return { outcome: 'fail' };
   }
   return { outcome: 'unknown' };
@@ -349,12 +380,16 @@ async function settleProviderResponse(actor: BudgetActor, silo: string, model: s
     cachedInputTokens: answer.usage.input_tokens_details?.cached_tokens ?? 0,
     cacheWriteTokens: answer.usage.input_tokens_details?.cache_write_tokens ?? 0 };
   await actor.effect(reservationId, usage);
+  await settleRecordedProviderEffect(actor, silo, reservationId);
+  return { outcome: answered ? 'pass' : 'fail', settledCents: costCents(model,
+    usage.inputTokens, usage.outputTokens, usage.cachedInputTokens, usage.cacheWriteTokens) };
+}
+async function settleRecordedProviderEffect(actor: BudgetActor, silo: string,
+  reservationId: string) {
   const rows = await history(actor.store, `effect-${reservationId}`, silo);
   const observed = rows.at(-1);
   if (!observed || observed.event.type !== 'effect.observed') {
     throw new Error('Usage unavailable');
   }
   await actor.settleRecorded(reservationId, observed.event.id);
-  return { outcome: answered ? 'pass' : 'fail', settledCents: costCents(model,
-    usage.inputTokens, usage.outputTokens, usage.cachedInputTokens, usage.cacheWriteTokens) };
 }

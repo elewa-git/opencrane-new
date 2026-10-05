@@ -63,9 +63,11 @@ export async function groupCommand(
   const subjects = [`member-${memberId}`];
   if (input.action !== 'create') subjects.push(`member-${input.memberId}`);
   const fresh = await authorityFence(store, performance.now(), subjects);
-  await activeMember(store, binding, memberId, true, fresh);
+  const administratorAuthority = { requiredRole: 'admin' as const, fresh };
+  await activeMember(store, binding, memberId, administratorAuthority);
   if (input.action !== 'create') {
-    await activeMember(store, binding, input.memberId, false, fresh);
+    const memberAuthority = { requiredRole: 'member' as const, fresh };
+    await activeMember(store, binding, input.memberId, memberAuthority);
   }
   const rows = await history(store, subject, binding.silo);
   checkHistory(rows, input.groupId);

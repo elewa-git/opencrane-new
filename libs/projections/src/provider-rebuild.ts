@@ -61,7 +61,8 @@ export async function rebuildProviderProjection(
         return switchTables(tx, head, unchanged);
       }
       await locked.transaction(switchProjection);
-      return { previousSequence: checkpoint, sequence: head, verified: verify, changed: !unchanged };
+      return { previousSequence: checkpoint, sequence: head,
+        verified: verify, changed: !unchanged };
     } catch (error) {
       try {
         await locked.transaction(removeReplay);

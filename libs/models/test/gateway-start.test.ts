@@ -6,7 +6,13 @@ import { resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import { expect, it, vi } from 'vitest';
-import { startGateway } from '../src/gateway.ts';
+import { gatewayUsage, startGateway } from '../src/gateway.ts';
+
+function keepsProviderJwtFailure() {
+  const line = 'route=default/provider-openai-test http.status=401';
+  expect(gatewayUsage(line)).toMatchObject({ outcome: 'error', reason: 'jwt_failed' });
+}
+it('keeps provider-route JWT refusals in the gateway audit', keepsProviderJwtFailure);
 
 const STDERR_AFTER_EXIT_MS = 150;
 
