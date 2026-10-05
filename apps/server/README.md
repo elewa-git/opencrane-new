@@ -258,7 +258,7 @@ and the existing `TOKEN_SIGNING_KEY_FILE`/`TOKEN_ISSUER`. In development, the UR
 defaults to `http://127.0.0.1:43001`. On a fresh stream the model process records
 `installation-default` as its explicit personal paying group; installation can
 override that seed with `DEFAULT_PAYING_GROUP_ID`. Stored defaults always win.
-See the [budget contract](../../libs/models/README.md#monthly-budgets-p3-13).
+See the [budget contract](../../libs/models/README.robot.md#monthly-budgets-p3-13).
 
 ### Permission-scoped audit (P3-19)
 

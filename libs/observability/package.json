@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Shared structured logging, secret redaction and tracing used by every OpenCrane 2 service.",
+  "description": "Shared logs and optional traces for OpenCrane services and background work.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
