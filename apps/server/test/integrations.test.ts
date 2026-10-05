@@ -423,21 +423,28 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     const refused = page.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
     await page.getByRole('button', { name: 'Refresh list' }).click();
     expect((await refused).status()).toBe(403);
-    await page.getByText('You no longer have permission').waitFor();
+    await page.getByRole('heading', {
+      name: 'You no longer have access to Integrations',
+    }).waitFor();
     expect(await page.getByText('Ask an Owner or Admin').count()).toBe(1);
     expect(await page.locator('.access-state button').count()).toBe(0);
     expect(await page.locator('.register-row').count()).toBe(0);
 
+    const unavailablePage = await context.newPage();
     await fga.pause();
     try {
-      const unavailable = page.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
-      await page.getByRole('button', { name: 'Refresh list' }).click();
-      expect((await unavailable).status()).toBe(503);
-      await page.getByText("Couldn't load the integrations list.").waitFor();
-      expect(await page.locator('.register-row').count()).toBe(0);
-      expect(await page.getByText(/Showing what we loaded/).count()).toBe(0);
+      const unavailableRead = unavailablePage.waitForResponse((response) =>
+        response.url().endsWith('/api/org/integrations'));
+      await unavailablePage.goto(`${base}/org/integrations`);
+      expect((await unavailableRead).status()).toBe(503);
+      await unavailablePage.getByRole('tabpanel').getByText(
+        "Couldn't load the integrations list.",
+      ).waitFor();
+      expect(await unavailablePage.locator('.register-row').count()).toBe(0);
+      expect(await unavailablePage.getByText(/Showing what we loaded/).count()).toBe(0);
     } finally {
       await fga.resume();
+      await unavailablePage.close();
     }
     await context.close();
   } finally {
