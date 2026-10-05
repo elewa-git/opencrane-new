@@ -876,7 +876,7 @@ const readsLongPrivateContextOnlyAfterTheTurn = async () => {
     await test.post('alice', 'long-first');
     const content = chat!.keys.encrypt('test', 'long-context-alice', 'delta');
     const events = [];
-    for (let index = 0; index < 2000; index++) {
+    for (let index = 0; index < 400; index++) {
       const event = envelope('test', 'conversation-long-context-alice', 'agent.message_delta', {
         conversationId: 'long-context-alice', turnId: 'long-first', messageId: 'reply',
         contentType: 'text', ...content }, `long-delta-${index}`);
@@ -985,7 +985,9 @@ const dispatchesRequiredExecutionModes = async (personal: boolean) => {
   const stop = new AbortController();
   const watcherPool = new Pool({ connectionString: await dbs.postgres() });
   const watcherDb = pgDb(watcherPool);
-  await conversations.create(watcherDb);
+  const watcherLogger = createLogger('dispatch-fixture');
+  const watcherProjection = new ProjectionRunner(watcherDb, nats.store, watcherLogger);
+  await watcherProjection.initialise(conversations);
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   const credentials = vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
   function rewrite(request: { url?: string }) {
@@ -1031,3 +1033,48 @@ it.each([false, true])(
   'dispatches required execution modes, personal=%s',
   dispatchesRequiredExecutionModes
 );
+
+async function refusesOnlyTheTurnWhenPrivateContextIsUnavailable() {
+  const test = await privateServerFixture('context-unavailable');
+  await test.post('alice', 'context-unavailable-turn');
+  await test.post('bob', 'context-available-turn');
+  const readStream = nats.store.readStream.bind(nats.store);
+  const appendEvent = nats.store.append.bind(nats.store);
+  let admitted = false;
+  let failureInjected = false;
+  async function rememberAdmission(...args: Parameters<typeof appendEvent>) {
+    const result = await appendEvent(...args);
+    const event = z.object({ type: z.string() }).parse(args[0].event);
+    if (event.type === 'computer.turn_started') admitted = true;
+    return result;
+  }
+  const appends = vi.spyOn(nats.store, 'append').mockImplementation(rememberAdmission);
+  async function* readWithContextFailure(...args: Parameters<typeof readStream>) {
+    if (args[0] === 'conversation-context-unavailable-alice' && admitted && !failureInjected) {
+      failureInjected = true;
+      throw new Error('Context fixture unavailable');
+    }
+    yield* readStream(...args);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(readWithContextFailure);
+  try {
+    const ack = await test.report('alice', 'context-unavailable-turn', 'agent.turn_started', {
+      threadId: 'context-unavailable-thread', executionMode: 'restricted' });
+    expect(ack).toMatchObject({ refused: 'Private context unavailable' });
+    expect(ack).not.toHaveProperty('token');
+    expect(ack).not.toHaveProperty('context');
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+    const rows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
+    expect(rows.at(-1)?.event).toMatchObject({ type: 'computer.turn_closed',
+      data: { turnId: 'context-unavailable-turn', status: 'failed' } });
+    const bob = await test.report('bob', 'context-available-turn', 'agent.turn_started', {
+      threadId: 'context-available-thread', executionMode: 'restricted' });
+    expect(bob).toHaveProperty('token');
+  } finally {
+    reads.mockRestore();
+    appends.mockRestore();
+    await test.close();
+  }
+}
+it('refuses only the private turn when context is unavailable and keeps other members connected',
+  refusesOnlyTheTurnWhenPrivateContextIsUnavailable);

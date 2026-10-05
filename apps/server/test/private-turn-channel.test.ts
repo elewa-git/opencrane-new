@@ -513,3 +513,24 @@ it(
   'defaults old frames to memory-free and rejects unknown execution modes',
   defaultsOldFramesToMemoryFreeAndRejects
 );
+
+async function omitsMemoryFreeModeFromStartReports() {
+  const test = await fixture();
+  try {
+    test.send('alice', 'memory_free');
+    function started() {
+      return test.reports.some(isStart);
+    }
+    function isStart(report: BridgeReport) {
+      return report.type === 'agent.turn_started';
+    }
+    await until(started);
+    expect(test.reports.find(isStart)).not.toHaveProperty('executionMode');
+    const storedReports = readFileSync(test.journal, 'utf8');
+    expect(storedReports).not.toContain('executionMode');
+  } finally {
+    await test.close();
+  }
+}
+it('omits executionMode from memory-free start reports and their journal',
+  omitsMemoryFreeModeFromStartReports);

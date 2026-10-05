@@ -1,5 +1,8 @@
 // Prepare protected homes and start the computer's separate user processes.
-import { mkdirSync, lstatSync, openSync, closeSync, fstatSync, fchmodSync, fchownSync, constants, symlinkSync, rmSync, readdirSync, writeFileSync, chownSync, chmodSync } from 'node:fs';
+import {
+  mkdirSync, lstatSync, openSync, closeSync, fstatSync, fchmodSync, fchownSync,
+  constants, symlinkSync, rmSync, readdirSync, writeFileSync, chownSync,
+} from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { privateConfig, privateEnvironments } from './codex-config.ts';
@@ -29,6 +32,76 @@ function trustedParent(path: string) {
   if (st.uid !== 0 || (st.mode & 0o022)) { closeSync(fd); throw new Error(`Unsafe parent: ${path}`); }
   return fd;
 }
+function preparePrivateHome(privateHome: string) {
+  const directories = [privateHome, `${privateHome}/codex`,
+    `${privateHome}/tmp`, `${privateHome}/work`];
+  for (const path of directories) {
+    mkdirSync(path, { mode: 0o700 });
+  }
+  const configPath = `${privateHome}/codex/config.toml`;
+  const environmentsPath = `${privateHome}/codex/environments.toml`;
+  writeFileSync(configPath, privateConfig(process.env['MODEL'] ?? 'stub-model'));
+  writeFileSync(environmentsPath, privateEnvironments());
+  const ownedPaths = [...directories, configPath, environmentsPath];
+  // Keep the modes set at creation. Root lacks FOWNER after giving files to UID 1003.
+  for (const path of ownedPaths) {
+    chownSync(path, 1003, 1003);
+  }
+}
+
+function supervisePrivateChild(child: ChildProcess, socket: Socket, privateHome: string,
+  children: Set<ChildProcess>) {
+  let exited = false;
+  let timer: NodeJS.Timeout | undefined;
+  let killAttempts = 0;
+  function childExited() {
+    exited = true;
+    if (timer) clearTimeout(timer);
+    children.delete(child);
+    socket.destroy();
+    rmSync(privateHome, { recursive: true, force: true });
+  }
+  function killFailed() {
+    if (exited) return;
+    // Log fixed text only. Child output and private paths can contain member content.
+    process.stderr.write('Private process cleanup failed\n');
+    if (killAttempts < 3) {
+      timer = setTimeout(killAsPrivateUser, 1000);
+    }
+  }
+  function killAsPrivateUser() {
+    if (exited || !child.pid) return;
+    killAttempts++;
+    const args = ['--reuid=1003', '--regid=1003', '--clear-groups', '--',
+      '/bin/kill', '-KILL', String(child.pid)];
+    const killer = spawn('/usr/bin/setpriv', args, { stdio: 'ignore' });
+    let failed = false;
+    function retryKill() {
+      if (failed) return;
+      failed = true;
+      killFailed();
+    }
+    function killerExited(code: number | null) {
+      if (code !== 0) retryKill();
+    }
+    killer.on('error', retryKill);
+    killer.on('exit', killerExited);
+  }
+  function socketClosed() {
+    child.stdin?.destroy();
+    if (!exited && !timer) timer = setTimeout(killAsPrivateUser, 5000);
+  }
+  function socketFailed() {
+    socket.destroy();
+    socketClosed();
+  }
+  child.on('error', childExited);
+  child.on('exit', childExited);
+  child.stdin?.on('error', socketFailed);
+  socket.on('error', socketFailed);
+  socket.on('close', socketClosed);
+}
+
 if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   const socket = connect(process.argv[2] === 'connect-host' ? '/run/executor/host.sock' : '/run/executor/exec.sock');
   process.stdin.pipe(socket); socket.pipe(process.stdout);
@@ -59,62 +132,27 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   function startPrivateCodex(socket: Socket, caller: string) {
     const privateHome = `/home/private/turn-${++privateCounter}`;
     let child: ChildProcess | undefined;
-    let exited = false;
-    let timer: NodeJS.Timeout | undefined;
-    function removeHome() {
-      rmSync(privateHome, { recursive: true, force: true });
-    }
-    function childExited() {
-      exited = true;
-      if (timer) clearTimeout(timer);
-      if (child) privateChildren.delete(child);
-      socket.destroy();
-      removeHome();
-    }
-    function killAsPrivateUser() {
-      if (exited || !child?.pid) return;
-      const killer = spawn('/usr/bin/setpriv', ['--reuid=1003', '--regid=1003',
-        '--clear-groups', '--', '/bin/kill', '-KILL', String(child.pid)], { stdio: 'ignore' });
-      killer.on('error', socketClosed);
-    }
-    function socketClosed() {
-      child?.stdin?.destroy();
-      if (!exited && !timer) timer = setTimeout(killAsPrivateUser, 5000);
-    }
-    function socketFailed() { socket.destroy(); socketClosed(); }
     try {
-      mkdirSync(privateHome, { mode: 0o700 });
-      for (const name of ['codex', 'tmp', 'work']) mkdirSync(`${privateHome}/${name}`, { mode: 0o700 });
-      writeFileSync(`${privateHome}/codex/config.toml`, privateConfig(process.env['MODEL'] ?? 'stub-model'));
-      writeFileSync(`${privateHome}/codex/environments.toml`, privateEnvironments());
-      for (const path of [privateHome, `${privateHome}/codex`, `${privateHome}/tmp`, `${privateHome}/work`,
-        `${privateHome}/codex/config.toml`, `${privateHome}/codex/environments.toml`]) {
-        chownSync(path, 1003, 1003);
-      }
-      for (const path of [privateHome, `${privateHome}/codex`, `${privateHome}/tmp`, `${privateHome}/work`]) {
-        chmodSync(path, 0o700);
-      }
-      // Keep stderr out of Pod logs and files in a RAM home owned by UID 1003.
-      // Share this UID between private turns; tools being absent keeps members apart.
-      // Allow writes to /tmp, /dev/shm and world-writable workspace directories.
-      // Allow workspace reads and loopback ports 8080, 8081 and 6901.
-      // Deny access to executor, control, persistent Codex and tool homes by directory modes.
-      // Allow every UID 1000 process, including persistent Codex, to reach private.sock.
+      preparePrivateHome(privateHome);
+      // Keep stderr out of Pod logs. Private turns share UID 1003.
+      // Treat /tmp, /dev/shm and world-writable workspace folders as writable limits.
+      // Treat workspace reads and loopback ports 8080, 8081 and 6901 as limits too.
+      // Check directory protections under gVisor before claiming live isolation.
+      // Allow UID 1000 processes to reach private.sock, including memory-free Codex.
       const launch = privateCodexLaunch(privateHome, caller);
       child = spawn(launch.command, launch.args, launch.options);
       privateChildren.add(child);
-      child.on('error', childExited);
-      child.on('exit', childExited);
+      supervisePrivateChild(child, socket, privateHome, privateChildren);
       if (!child.stdin || !child.stdout) throw new Error('Missing private pipes');
-      child.stdin.on('error', socketFailed);
-      socket.on('error', socketFailed);
-      socket.on('close', socketClosed);
       socket.pipe(child.stdin);
       child.stdout.pipe(socket);
     } catch {
       socket.destroy();
-      if (child) socketClosed();
-      else removeHome();
+      if (child) {
+        child.stdin?.destroy();
+      } else {
+        rmSync(privateHome, { recursive: true, force: true });
+      }
     }
   }
 
@@ -134,7 +172,9 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
     return child;
   };
   process.on('SIGTERM', () => stop(0)); process.on('SIGINT', () => stop(0));
-  for (const name of ['exec', 'host', 'private']) rmSync(`/run/executor/${name}.sock`, { force: true });
+  for (const name of ['exec', 'host', 'private']) {
+    rmSync(`/run/executor/${name}.sock`, { force: true });
+  }
   for (const name of ['control', 'app']) rmSync(`/run/codex/${name}.sock`, { force: true });
   const executor = (args: string[]) => createServer(socket => {
     const child = watch(spawn('/usr/local/bin/tool-user', args, { stdio: ['pipe', 'pipe', 'inherit'] }), false);
@@ -146,7 +186,9 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   });
   // Only UID 1000 can traverse this root-owned directory. No path-based socket chmod/chown.
   process.umask(0o111);
-  function privateConnection(socket: Socket) { startPrivateCodex(socket, caller); }
+  function privateConnection(socket: Socket) {
+    startPrivateCodex(socket, caller);
+  }
   createServer(privateConnection).listen('/run/executor/private.sock');
   executor(['host']).listen('/run/executor/host.sock', () => {
     executor([]).listen('/run/executor/exec.sock', () => {

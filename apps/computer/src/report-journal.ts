@@ -174,7 +174,7 @@ export function reportJournal(driver: JournalDriver) {
       sequence: reports.length + 1,
     };
     if (input.requesterId) report.requesterId = input.requesterId;
-    if (input.executionMode !== undefined) report.executionMode = input.executionMode;
+    if (input.executionMode === 'restricted') report.executionMode = 'restricted';
     if (input.executionMode === 'restricted' && report.text !== undefined) report.memoryOnly = true;
     const serializedReport = storedLine(report);
     const reportLine = `${serializedReport}\n`;

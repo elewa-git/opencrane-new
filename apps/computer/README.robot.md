@@ -7,10 +7,9 @@ accepts 384/384 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
-The template still names the previous memory-free image,
-`sha256:688db3cbc1558d8ab2f5ffb2cd008ab05390489b83cc41effd6e0fb028189d77`.
-The private build passed local filesystem and licence checks, but the local
-registry refused its push. Its new digest and gVisor checks remain unqualified.
+The current image build and publication results are in the
+[private-turn check record](../../docs/process/p4-14-private-turns-evidence.md).
+The older image receipt below describes the earlier memory-free release.
 This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
 credential through the Kubernetes Pod proxy; the bridge atomically stores it in
 `/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
@@ -257,7 +256,11 @@ Each private turn opens a new Codex process and ephemeral thread as UID 1003.
 It never resumes a thread. At most two private turns prepare or run together.
 Its home is `/home/private/turn-<n>`, with config, temporary files and working
 files inside. The supervisor removes it after the process exits. Socket closure
-ends input; after 5 seconds it sends SIGKILL as UID 1003 if needed.
+ends input. After 5 seconds it tries SIGKILL as UID 1003 if needed. A failed kill
+is checked and retried twice, one second apart. Each failure writes the fixed line
+`Private process cleanup failed`, with no private text. The five-second cleanup
+and removal during the turn are not yet proven under gVisor; J4 and J6 are NOT RUN.
+Disk isolation is not yet proven on a live computer; memory features stay off until it is.
 A private child error fails its own connection, rather than the supervisor.
 Stderr is discarded. The whole container inherits a hard core-file limit of zero.
 
@@ -266,7 +269,7 @@ Stderr is discarded. The whole container inherits a hard core-file limit of zero
 | Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged; swappable here |
 | Supervisor stream buffers | Process RAM | Root supervisor | Yes, while passing bytes; swappable here |
 | Private Codex memory | Process RAM | UID 1003 Codex | Yes; swappable here |
-| `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes, only during its turn |
+| `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes; swappable here; gVisor backing not yet measured |
 | `/home/agent/codex` | PVC | UID 1000 | No; only text-free private outlines |
 | `/home/agent/workspace` (`/workspace`) | PVC | UID 1001; UID 1003 in world-writable directories | No |
 | `/home/agent/profile` | PVC | UID 1002 | No |
@@ -280,9 +283,8 @@ Stderr is discarded. The whole container inherits a hard core-file limit of zero
 
 All private processes share UID 1003. The kernel does not separate two members'
 concurrent homes or processes; only the absence of tools does. UID 1003 can read
-the workspace and reach loopback ports 8080, 8081 and 6901. Directory permissions
-prevent reading `/run/executor`, `/run/codex`, `/home/codex`, `/home/agent/codex`
-and `/home/tool`. Every UID 1000 process can reach `private.sock`, including
+the workspace and reach loopback ports 8080, 8081 and 6901. Directory permissions are intended to prevent reading `/run/executor`, `/run/codex`, `/home/codex`, `/home/agent/codex`
+and `/home/tool`; this is not yet checked under gVisor. Every UID 1000 process can reach `private.sock`, including
 memory-free Codex and its connectors; this socket is not exclusive to the bridge.
 Codex uses its RAM `TMPDIR`, but the kernel still permits writes to `/tmp`,
 `/dev/shm` and world-writable workspace directories. The live probe checks them.
@@ -302,8 +304,45 @@ not receive it and cannot resume a former private thread.
 
 Both configs switch shared prompt files and skill instructions off. Personal
 and memory-free tools otherwise retain their existing persistent home and work.
-No fallback is enabled without a failing pinned-image check. The live probe,
-`test/private-turns.mjs`, runs after the existing image checks in `build.sh`.
+No fallback is enabled without a failing pinned-image check. The live canary probe
+and its provider are on `work/p4-14-qualification`, outside this change.
+The local `test/private-capabilities.mjs` runs a private turn through `private.sock`
+with the template's exact capabilities and a stub provider. It uses Docker's runc
+runtime and does not qualify gVisor isolation.
 [Check record](../../docs/process/p4-14-private-turns-evidence.md).
 Memory admission remains disabled while swap, host crash dumps or the live proof
 fail. This developer box cannot qualify swap or host core-dump isolation.
+
+## Local bridge credential limit
+
+The loopback `POST /credentials` handler currently accepts a replacement credential
+without authentication. A local desktop or memory-free Codex process can replace
+it, open `/bridge`, disconnect the server and read private reports waiting in memory.
+It can also forge a start acknowledgement with private context. Tool-free private
+turns cannot currently make these calls, but this gap must be closed before they
+get tools or memory. The hardening work is [#200](https://github.com/elewa-git/opencrane-new/issues/200).
+
+## Private-turn rollout
+
+1. The new computer image is published and its digest is pinned in `sandbox-template.json`.
+2. Each silo's admission policy is regenerated from that template with
+   `node infra/dev-stack/computer-admission.mjs <NAMESPACE>`.
+3. The new server is deployed.
+4. Running team computers are replaced by suspending and resuming them through the normal lifecycle.
+
+Between steps 3 and 4, old computers refuse default private team turns because
+those images do not report restricted execution. Personal and memory-free turns
+continue. Old admission policies refuse the new private memory volume, so step 2
+must precede computer replacement.
+
+Memory-free start reports omit `executionMode`. A new computer can therefore run
+personal and memory-free work against an older server. Restricted start reports
+still need the new server. A server rollback is safe only after team traffic is
+paused and all private turns have ended; team traffic must remain memory-free
+until the server supports restricted reports again. A computer rollback requires
+restoring the old server before allowing default team traffic.
+
+`COMPUTER_PUSH_REGISTRY` sets the host address used by `build.sh` for publishing;
+it defaults to `127.0.0.1:5001`. The Pod image always uses `k3d-ocn-registry:5000`.
+A temporary user-space forwarder can reach the same registry when its published
+host port is broken. This does not change Docker settings or host networking.

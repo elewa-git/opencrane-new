@@ -2,6 +2,7 @@
 set -eu
 cd "$(dirname "$0")"
 mkdir -p .state
+push_registry=${COMPUTER_PUSH_REGISTRY:-127.0.0.1:5001}
 # These are build tools and data only; neither is copied into the runtime.
 curl -fsSL https://github.com/anchore/syft/releases/download/v1.54.0/syft_1.54.0_linux_amd64.tar.gz -o .state/syft.tar.gz
 printf '%s\n' '54a87372498168b2d033e876fd41fa4e8035b872699e525a57046e1f2f09c860  .state/syft.tar.gz' | sha256sum -c -
@@ -14,11 +15,12 @@ docker run --rm -i -v "$PWD/src:/expected/src:ro" -v "$PWD/../../libs/models/src
 docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime - notices < collect-licences.py > .state/licence-evidence.json
 docker run --rm -i --entrypoint /usr/bin/python3 ocn-computer-runtime -c "$(cat test/notice-completeness.py)" < .state/licence-evidence.json
 python3 check-licences.py .state/sbom.syft.json .state/osi.json .state/licences.json .state/licence-evidence.json
+node test/private-capabilities.mjs
 # Qualify the tracked manifest before moving the release tag.
-docker tag ocn-computer-runtime 127.0.0.1:5001/opencrane/computer:qualification
-docker push 127.0.0.1:5001/opencrane/computer:qualification
-docker inspect 127.0.0.1:5001/opencrane/computer:qualification --format '{{index .RepoDigests 0}}' |
-  sed 's|127.0.0.1:5001/|k3d-ocn-registry:5000/|' > .state/image.txt
+docker tag ocn-computer-runtime "$push_registry"/opencrane/computer:qualification
+docker push "$push_registry"/opencrane/computer:qualification
+docker inspect "$push_registry"/opencrane/computer:qualification --format '{{index .RepoDigests 0}}' |
+  sed "s|$push_registry/|k3d-ocn-registry:5000/|" > .state/image.txt
 python3 - <<'PYTHON'
 import json
 from pathlib import Path
@@ -29,7 +31,6 @@ path.write_text(json.dumps(template, indent=2) + '\n')
 PYTHON
 node --experimental-strip-types test/exec-host.mjs
 node test/run.mjs
-node test/private-turns.mjs
-docker tag ocn-computer-runtime 127.0.0.1:5001/opencrane/computer:p2-1
-docker push 127.0.0.1:5001/opencrane/computer:p2-1
+docker tag ocn-computer-runtime "$push_registry"/opencrane/computer:p2-1
+docker push "$push_registry"/opencrane/computer:p2-1
 docker inspect ocn-computer-runtime --format '{{.Size}}' > .state/image-size.txt

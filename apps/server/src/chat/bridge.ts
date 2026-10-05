@@ -77,28 +77,47 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       acknowledgement.refused = error.message;
     }
     if (status === 'started' && binding) {
-      if (!tokens) throw new Error('Turn issuer unavailable');
-      const credentials = computerCredentials(options.store, tokens, options.silo);
-      const turn = { ...binding, assistantId: input.assistantId, model: modelForTask(binding.task) };
-      const grant = await credentials.turn(turn);
-      acknowledgement.token = grant.value;
-      acknowledgement.expiresAt = grant.expiresAt;
-      if (binding.executionMode === 'restricted') {
-        const rows = await chatHistory(options.store, options.silo, report.conversationId);
-        function isMessage(row: ChatRows[number]) {
-          return row.event.type === 'message.posted' && row.event.id === report.turnId;
-        }
-        const message = rows.find(isMessage);
-        if (!message) throw new Error('Requested message unavailable');
-        function decrypt(data: unknown) {
-          return options.keys.decrypt(options.silo, report.conversationId, data);
-        }
-        const context = privateContext(rows, message, binding.requesterId, decrypt);
-        if (context !== undefined) acknowledgement.context = context;
+      try {
+        const privateHistory = await privateContextFor(options, report, binding);
+        if (!tokens) throw new Error('Turn issuer unavailable');
+        const credentials = computerCredentials(options.store, tokens, options.silo);
+        const turn = { ...binding, assistantId: input.assistantId,
+          model: modelForTask(binding.task) };
+        const grant = await credentials.turn(turn);
+        acknowledgement.token = grant.value;
+        acknowledgement.expiresAt = grant.expiresAt;
+        if (privateHistory !== undefined) acknowledgement.context = privateHistory;
+      } catch (error) {
+        if (!(error instanceof PrivateContextUnavailable)) throw error;
+        await turnCommand(options.store, context, { ...report, status: 'failed' });
+        acknowledgement.refused = 'Private context unavailable';
       }
     }
   }
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(acknowledgement));
+}
+
+class PrivateContextUnavailable extends Error {}
+
+async function privateContextFor(options: BridgeOptions,
+  report: z.infer<typeof reportDetails>,
+  binding: NonNullable<Awaited<ReturnType<typeof turnCommand>>>) {
+  if (binding.executionMode !== 'restricted') return undefined;
+  function isMessage(row: ChatRows[number]) {
+    return row.event.type === 'message.posted' && row.event.id === report.turnId;
+  }
+  function decrypt(data: unknown) {
+    return options.keys.decrypt(options.silo, report.conversationId, data);
+  }
+  try {
+    // Read history after admission, outside the two-second access check.
+    const rows = await chatHistory(options.store, options.silo, report.conversationId);
+    const message = rows.find(isMessage);
+    if (!message) throw new Error('Requested message unavailable');
+    return privateContext(rows, message, binding.requesterId, decrypt);
+  } catch (error) {
+    throw new PrivateContextUnavailable('Private context unavailable', { cause: error });
+  }
 }
 
 async function deliverFile(options: BridgeOptions, input: BridgeInput, socket: WebSocket,

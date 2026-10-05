@@ -599,6 +599,7 @@ the server with status 1 so its supervisor can restart chat delivery.
 The models process keeps one usage-file byte
 offset for its 100 ms ticks. Each tick also checks NATS metadata so an idle
 process still detects an outage and restarts after the existing 15-second limit.
+
 ## Private team turns
 
 Team messages default to restricted execution. Only `executionMode: "memory_free"`

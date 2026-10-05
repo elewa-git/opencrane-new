@@ -335,7 +335,7 @@ class TurnRunner {
     if (previousStart) {
       sequence = previousStart.sequence;
     } else {
-      const startedReport = this.appendReport(input, 'agent.turn_started', { threadId, executionMode: input.executionMode });
+      const startedReport = this.appendReport(input, 'agent.turn_started', { threadId });
       sequence = startedReport.sequence;
     }
 
@@ -454,14 +454,18 @@ class TurnRunner {
 
   private completedItem(input: Turn, params: Record<string, unknown>) {
     const completed = record(params['item']);
-    if (input.executionMode !== 'restricted' && completed['type'] === 'commandExecution' && typeof completed['command'] === 'string'
-      && typeof completed['exitCode'] === 'number') {
+    const command = completed['command'];
+    const exitCode = completed['exitCode'];
+    if (input.executionMode !== 'restricted'
+      && completed['type'] === 'commandExecution'
+      && typeof command === 'string'
+      && typeof exitCode === 'number') {
       const commandHash = createHash('sha256');
-      commandHash.update(completed['command']);
+      commandHash.update(command);
       const commandDigest = commandHash.digest('hex');
       this.appendReport(input, 'agent.command_ran', {
         commandDigest,
-        exitCode: completed['exitCode'],
+        exitCode,
       });
     }
     if (completed['type'] === 'agentMessage' && typeof completed['text'] === 'string') {

@@ -187,8 +187,10 @@ Claim has four meanings in OpenCrane:
 ## Private turn
 
 A private turn is work in a member's team session that runs in a fresh, tool-free
-Codex process. Its messages, replies and working state stay in memory on the
-shared computer. After a restart, unfinished work fails and is never repeated.
+Codex process. Its files use a memory volume on the shared computer. Swap can
+still write those files and process memory to disk. Isolation is not yet proven
+on a live computer; memory features stay off until it is. After a restart,
+unfinished work fails and is never repeated.
 
 ## Memory-free turn
 

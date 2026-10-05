@@ -181,6 +181,8 @@ file refusals explain the payer or upload restriction without returning content.
 
 Memory stays disabled. MCP currently admits only credential-free connections.
 This change does not supply personal credentials or a company fallback. Two real
-requester profiles at a recording MCP upstream remain **NOT RUN**. Private
-Codex/gVisor checks are recorded in the [private-turn check record](../process/p4-14-private-turns-evidence.md). File and browser isolation between members
+requester profiles at a recording MCP upstream, pinned Codex/gVisor execution
+and fresh-install journeys remain **NOT RUN**. Private-turn gVisor journeys are
+**NOT RUN**; see the [private-turn check record](../process/p4-14-private-turns-evidence.md).
+File and browser isolation between members
 is **absent**. See the [check record](../process/p4-7-backend-evidence.md).

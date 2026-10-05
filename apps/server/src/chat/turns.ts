@@ -59,7 +59,8 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (newAdmission(input.status, events, input.turnId)) {
     try {
       executionMode = input.executionMode ?? 'memory_free';
-      const admission = await admitTurn(store, context, rows, events, data, requested.executionMode, executionMode);
+      const admission = await admitTurn(store, context, rows, events, data,
+        requested.executionMode, executionMode);
       data.payingGroupId = admission.payer;
       fresh = admission.fresh;
     } catch (error) {
@@ -308,5 +309,7 @@ function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'co
   status: TurnInput['status'], executionMode: ExecutionMode | undefined) {
   if (status === 'started') {
     if (executionMode !== undefined) data.executionMode = executionMode;
-  } else data.status = status;
+  } else {
+    data.status = status;
+  }
 }

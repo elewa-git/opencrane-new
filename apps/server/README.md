@@ -36,7 +36,9 @@ flowchart LR
 - Keeps each member's group chat private while they share the assistant's computer.
 - Provides the one-time command used to claim a new installation.
 
-Team turns run privately with earlier completed replies from the same member. The computer starts a fresh Codex process for each turn.
+Private team turns receive earlier completed replies from the same member. The
+computer starts a fresh Codex process for each private team turn. Disk isolation is
+not yet proven on a live computer; memory features stay off until it is.
 
 ## Processes it handles
 

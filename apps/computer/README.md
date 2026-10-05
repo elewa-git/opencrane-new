@@ -4,7 +4,9 @@
 
 A private cloud computer where each person's assistant does its work. Each computer is a locked-down Linux container. It holds Codex (OpenAI's coding agent), a web browser and a remote desktop. Kubernetes, the system that runs containers, starts one for each person.
 
-Private turns run in a short-lived, tool-free Codex process whose files live only in memory.
+Private turns run in a temporary Codex process with no tools. Its files use a memory
+volume, which can still be written to disk by swap. Isolation is not yet proven on
+a live computer; memory features stay off until it is.
 
 ## Where it fits
 
