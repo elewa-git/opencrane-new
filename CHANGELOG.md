@@ -8,6 +8,8 @@
 
 ### What you can do now
 
+- Organisation settings now has the v2 navigation and phone menu; Integrations keeps the register, Spending owns budgets, and unfinished areas say Not available yet.
+
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.
 - Reuse the v2 paper tokens, state vocabulary and reduced-motion loaders across the organisation and workspace screens.

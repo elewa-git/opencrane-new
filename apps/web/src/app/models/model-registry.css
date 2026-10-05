@@ -1,0 +1,15 @@
+:host { display: grid; gap: 16px; min-width: 0; }
+h1 { margin: 0; font: var(--oc-type-page); }
+p { overflow-wrap: anywhere; }
+button {
+  justify-self: start;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--oc-border-input);
+}
+a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--oc-accent-dark);
+}

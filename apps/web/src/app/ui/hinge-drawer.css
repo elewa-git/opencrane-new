@@ -21,3 +21,7 @@ dialog::before {
   pointer-events: none;
   z-index: 1;
 }
+
+@media (max-width: 600px) {
+  dialog::before { display: none; }
+}

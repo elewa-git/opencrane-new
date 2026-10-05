@@ -1,0 +1,65 @@
+<h1>Spending</h1>
+<p>One charge counts towards the global, paying-group and optional assistant ceilings.
+  Monthly budgets reset at 00:00 UTC on the first. Unconfirmed usage stays reserved.</p>
+<div role="status" aria-live="polite">
+  <oc-shared-state [kind]="statusKind()" [message]="message()"
+    [evidenceAt]="evidenceAt()" [changeReference]="changeReference()" [showAction]="false" />
+</div>
+<div [attr.aria-busy]="state() === 'loading' || state() === 'pending'">
+  @if (state() !== 'access') {
+    <button class="refresh" type="button" (click)="load()"
+      [disabled]="state() === 'loading' || state() === 'pending'">Check status</button>
+  }
+  @if (budget(); as currentBudget) {
+    <p>Personal work pays through
+      <strong>{{ currentBudget.defaultPayingGroupId || 'Default group not configured' }}</strong>.
+      Shared work needs an explicit paying group.</p>
+    <section aria-label="Current budgets">
+      <article [ocDogEar]="true">
+        <h2>Global</h2>
+        <p>{{ money(currentBudget.monthCents) }} spent ·
+          {{ money(currentBudget.reservedCents) }} reserved ·
+          {{ money(currentBudget.ceilingCents) }} monthly ceiling</p>
+        <p>{{ money(currentBudget.todayCents) }} spent today ·
+          {{ money(currentBudget.dailyCeilingCents) }} daily safety cap</p>
+      </article>
+      @for (ceiling of currentBudget.ceilings; track ceiling.scope + ':' + ceiling.scopeId) {
+        <article [ocDogEar]="true">
+          <h2>{{ ceiling.scope === 'paying_group' ? 'Paying group' : 'Assistant' }} ·
+            {{ ceiling.scopeId }}</h2>
+          <p>{{ money(ceiling.monthCents) }} spent · {{ money(ceiling.reservedCents) }} reserved ·
+            {{ money(ceiling.ceilingCents) }} monthly ceiling</p>
+        </article>
+      }
+    </section>
+    <form (submit)="save($event)">
+      <fieldset [disabled]="state() !== 'ready'">
+        <legend>Set a hard ceiling</legend>
+        <label for="budget-scope">Budget scope</label>
+        <select id="budget-scope" #scopeInput (change)="select(scopeInput.value)">
+          <option value="global">Global</option>
+          <option value="paying_group">Paying group</option>
+          <option value="assistant">Assistant</option>
+        </select>
+        @if (scope !== 'global') {
+          <label for="budget-id">
+            {{ scope === 'paying_group' ? 'Paying group id' : 'Assistant id' }}</label>
+          <input id="budget-id" required [value]="scopeId" #idInput
+            (input)="scopeId = idInput.value" />
+        }
+        <label for="monthly-ceiling">Monthly ceiling (euro cents)</label>
+        <input id="monthly-ceiling" type="number" min="0" step="1" required [value]="monthly"
+          #monthlyInput (input)="monthly = monthlyInput.value" />
+        @if (scope === 'global') {
+          <label for="daily-ceiling">Daily safety cap (euro cents)</label>
+          <input id="daily-ceiling" type="number" min="0" step="1" required [value]="daily"
+            #dailyInput (input)="daily = dailyInput.value" />
+          <label for="default-group">Default paying group for new personal work</label>
+          <input id="default-group" required [value]="defaultGroup" #defaultInput
+            (input)="defaultGroup = defaultInput.value" />
+        }
+        <button type="submit">Save budget</button>
+      </fieldset>
+    </form>
+  }
+</div>

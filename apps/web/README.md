@@ -1,9 +1,9 @@
 # Web
 
-This Angular app provides the organisation settings shell and MCP register. It opens
-the existing authenticated WebSocket, but the [server](../server/README.md) owns
-sessions and all register truth. The browser retains the last successful register
-read only while the page remains open.
+This Angular app provides the organisation settings shell and MCP register.
+The [server](../server/README.md) owns sessions and register truth. The register uses
+authenticated HTTP reads; the workspace uses the authenticated WebSocket.
+The browser retains the last successful register read only while access remains valid.
 
 ## Entrypoint and usage
 
@@ -14,10 +14,13 @@ From the repository root, with the server configured and running:
 npm run dev -w apps/web
 ```
 
-Open `http://localhost:4200/org/integrations`. The shell shows only Integrations:
-Overview, Models & providers, Skills & workflows, People & groups and Change history
-are not built and therefore are not navigation links. `/org/states` renders the shared
-nine-state vocabulary for development and visual checks, but is not a destination.
+Open `http://localhost:4200/org/integrations`; `/org` also opens this implemented page.
+Organisation navigation is Overview, People & groups, Models & providers, Spending,
+Integrations, Routines and Change history. Overview, People & groups and Routines
+show explicit availability states until their screens are built. Desktop uses a
+220px sidebar; phones use the shared modal menu. Back to workspace opens `/workspace`.
+`/org/states` renders the shared state vocabulary for development and visual checks,
+but is not a navigation destination. [F3 source receipt](../../docs/process/f3-org-shell/README.md).
 [proxy.conf.json](proxy.conf.json) forwards `/api`, `/auth` and `/ws` to port 8080.
 The register reads `/api/org/integrations`, leaving `/org/integrations` and the
 other `/org/...` paths to Angular page navigation.
@@ -31,8 +34,10 @@ The browser uses same-origin auth and WebSocket URLs; no credentials are built i
 The client validates the register response and incoming messages with
 [protocol](../../libs/protocol/README.md).
 Register refresh failures keep old rows and their load time visible. The always-available
-refresh button stays in place and keeps keyboard focus while retrying. Non-admins see that the Owner or Admin role is required. Adding an
-MCP server is explicitly unavailable; no setup flow or mutation is simulated.
+refresh button stays in place and keeps keyboard focus while retrying. Refusal clears
+protected rows before any response body is parsed. Non-admins see that the Owner or
+Admin role is required. Adding a remote MCP server uses `/org/integrations/new`;
+discovery and tool review retain their existing API flows.
 Socket closure updates state and schedules reconnect with jitter;
 there is no durable outgoing message queue. Sign out uses a native form POST to
 `/auth/logout`; the server sends a 303 navigation to Zitadel. Page JavaScript never
@@ -115,9 +120,11 @@ for reads and writes. Pending saves disable edits; uncertain replies require Che
 status; 401/403 clears protected tool details. Desktop and 390px browser evidence
 comes from `apps/server/test/integrations.test.ts` with real API dependencies.
 
-`/org/models` is the Owner/Admin Models & budgets screen. It displays global and
-configured paying-group/assistant monthly ceilings, current charges and held
-reservations, and edits safe integer EUR cents. Conflicts or an unknown save
+`/org/models` is Models & providers: the pinned registry remains here, with provider
+and routing editing explicitly unavailable. `/org/spending` owns the existing budget
+summary and single editor. It displays global and configured paying-group/assistant
+monthly ceilings, current charges and held reservations, and edits safe integer EUR
+cents through the unchanged `/api/org/models` API. Conflicts or an unknown save
 outcome require a status read before another edit; access loss clears the details.
 The authenticated browser journey covers 1280px and 390px.
 
@@ -139,7 +146,7 @@ The session panel and its phone overlay offer **Watch your computer** for a save
 conversation. The self-contained `LiveView` component opens a native dialog with
 fit/actual-size viewing and Connecting, Viewing, Disconnected and Access changed
 states. Participants need an explicit shared-desktop grant; a refused admission
-shows **Not available**. Revocation closes the connection and clears pixels.
+shows **Unavailable**. Revocation closes the connection and clears pixels.
 Escape closes the dialog and restores focus to its entry. Changing conversation
 or destroying the component cancels admission and closes the old connection.
 All viewer buttons have 44px targets. The viewer uses only noVNC's OSI-licensed

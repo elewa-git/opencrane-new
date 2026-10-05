@@ -63,7 +63,8 @@ export class LiveView implements OnDestroy, OnChanges {
     if (this.state() === 'Connecting') return 'checking';
     if (this.state() === 'Viewing') return 'ready';
     if (this.state() === 'Failed') return 'failed';
-    if (this.state() === 'Access changed' || this.state() === 'Not available') {
+    if (this.state() === 'Unavailable') return 'refused';
+    if (this.state() === 'Access changed') {
       return 'access_changed';
     }
     return 'paused';
@@ -132,7 +133,7 @@ export class LiveView implements OnDestroy, OnChanges {
       const url = `/api/conversations/${encodeURIComponent(this.conversationId())}/view`;
       const response = await fetch(url, { method: 'POST', headers: { 'x-opencrane-view': '1' } });
       if (attempt !== this.attempt) return;
-      if (response.status === 401 || response.status === 403) return this.close('Not available');
+      if (response.status === 401 || response.status === 403) return this.close('Unavailable');
       if (response.status === 503) return this.close('Failed');
       if (!response.ok) throw new Error('View unavailable');
       const result: unknown = await response.json();

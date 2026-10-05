@@ -78,7 +78,7 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1));
     button(root(fixture), 'Pending review · 0').click();
     await fixture.whenStable();
-    expect(root(fixture).querySelector('.empty-filter')?.textContent).toContain('No servers are pending review');
+    expect(root(fixture).querySelector('.empty')?.textContent).toContain('No servers are pending review');
     expect(root(fixture).textContent).not.toContain('Nothing set up yet');
   });
 
@@ -97,6 +97,7 @@ describe('MCP register', () => {
     await vi.waitFor(() => expect(root(fixture).querySelector('.refresh-notice')?.textContent).toContain('Showing what we loaded at 09:40'));
     const notice = root(fixture).querySelector('.refresh-notice');
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
+    expect(notice?.querySelector('.notice-glyph')).not.toBeNull();
     expect(notice?.parentElement?.getAttribute('role')).toBe('status');
     expect(notice?.textContent).toContain('Showing what we loaded at 09:40');
     expect(button(root(fixture), 'Refresh list')).toBeTruthy();
@@ -140,7 +141,9 @@ describe('MCP register', () => {
   it('clears protected rows after an authority refusal and does not restore them during an outage', async () => {
     const fixture = create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
-    fetchSpy.mockResolvedValueOnce(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
+    // A refused response can have no JSON body; authority still clears the previous read.
+    const refusedWithoutBody = new Response(null, { status: 403 });
+    fetchSpy.mockResolvedValueOnce(refusedWithoutBody);
     button(root(fixture), 'Refresh list').click();
     await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(0);
@@ -163,6 +166,32 @@ describe('MCP register', () => {
     }
     await vi.waitFor(safeFailureIsVisible);
   });
+
+  function checkUnavailablePage(pathname: string): void {
+    globalThis.history.replaceState({}, '', pathname);
+    const fixture = create();
+    const element = root(fixture);
+    if (pathname === '/org/missing') {
+      expect(element.textContent).toContain('Page not found');
+      expect(element.textContent).not.toContain('Not available yet');
+      expect(element.textContent).not.toContain('not been built yet');
+    } else {
+      expect(element.textContent).toContain('Not available yet');
+    }
+    expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(7);
+    expect(element.querySelector('a[href="/workspace"]')).not.toBeNull();
+    expect(element.textContent).not.toContain('Skills & workflows');
+    expect(fetchSpy).not.toHaveBeenCalled();
+    const selected = element.querySelector('.sidebar [aria-current="page"]');
+    if (pathname !== '/org/missing') {
+      expect(selected?.getAttribute('href')).toBe(pathname);
+    } else {
+      expect(selected).toBeNull();
+    }
+  }
+
+  const unavailablePaths = ['/org/overview', '/org/people', '/org/routines', '/org/missing'];
+  it.each(unavailablePaths)('shows truthful availability at %s', checkUnavailablePage);
 
   it('keeps the existing sign-in shell outside /org routes', () => {
     globalThis.history.replaceState({}, '', '/');

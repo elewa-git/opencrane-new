@@ -53,7 +53,7 @@ try {
     const target = await entry.boundingBox(); assert(target.width >= 44 && target.height >= 44);
     await entry.focus(); await page.keyboard.press('Enter');
     const viewer = page.getByRole('dialog', { name: 'Computer view', exact: true });
-    await viewer.getByText('Not available', { exact: true }).waitFor();
+    await viewer.getByText('Unavailable', { exact: true }).waitFor();
     assert((await viewer.innerText()).includes('shared-desktop grant'));
     assert.equal(await viewer.locator('canvas').count(), 0);
     await page.keyboard.press('Escape');

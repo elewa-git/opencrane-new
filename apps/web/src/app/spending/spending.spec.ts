@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { ModelsScreen } from './models';
+import { SpendingScreen } from './spending';
 
 const budget = { sequence: 2, defaultPayingGroupId: 'personal-default', periodStart: '2026-10-01T00:00:00.000Z', todayCents: 1,
   monthCents: 1, reservedCents: 25, ceilingCents: 20000, dailyCeilingCents: 2000, ceilings: [] };
@@ -7,7 +7,7 @@ const reply = (status: number, body: unknown = {}) => new Response(JSON.stringif
 afterEach(() => vi.restoreAllMocks());
 it('sends integer cents, prevents duplicate saves, requires a fresh read after uncertainty and clears budget data on access loss', async () => {
   const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply(200, { budget, models: [] }));
-  const fixture = TestBed.createComponent(ModelsScreen); fixture.detectChanges();
+  const fixture = TestBed.createComponent(SpendingScreen); fixture.detectChanges();
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Expected screen');
   await vi.waitFor(() => expect(root.querySelector('fieldset')).not.toBeNull());

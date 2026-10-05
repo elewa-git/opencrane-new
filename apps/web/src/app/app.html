@@ -1,102 +1,34 @@
-@if (claimPage) { <oc-claim /> } @else if (workspacePage) { <oc-workspace /> } @else if (auditConversation) { <oc-audit [conversationId]="auditConversation" /> } @else if (!orgPage) {
+@if (claimPage) {
+  <oc-claim />
+} @else if (workspacePage) {
+  <oc-workspace />
+} @else if (auditConversation) {
+  <oc-audit [conversationId]="auditConversation" />
+} @else if (!orgPage) {
   <oc-sign-in />
-} @else { <div class="app-frame">
-  <header class="mobile-bar">
-    <button type="button" class="menu-button" aria-label="Open organisation navigation" (click)="menuOpen.set(!menuOpen())">☰</button>
-    <span>Organisation settings</span>
-  </header>
-  <nav class="sidebar" [class.mobile-open]="menuOpen()" aria-label="Organisation settings">
-    <a class="back" href="/">‹ Back to chats</a>
-    <div class="organisation"><strong>Organisation</strong><span>Organisation settings</span></div>
-    <a class="nav-item" [class.active]="!modelsPage && !historyPage" href="/org/integrations" [attr.aria-current]="!modelsPage && !historyPage ? 'page' : null">Integrations</a>
-    <a class="nav-item" [class.active]="modelsPage" href="/org/models" [attr.aria-current]="modelsPage ? 'page' : null">Models & budgets</a>
-    <a class="nav-item" [class.active]="historyPage" href="/org/history" [attr.aria-current]="historyPage ? 'page' : null">Change history</a>
-    <span class="sidebar-spacer"></span>
-    <div class="viewer"><span class="avatar">OA</span><span><strong>Organisation admin</strong><small>Owner or Admin</small></span></div>
-  </nav>
-
-  <main ocPaperSurface="main">
-    @if (historyPage) { <oc-audit /> } @else if (installPage) {
+} @else {
+  <oc-organisation-shell [activePage]="activePage" [organisationName]="organisation">
+    @if (installPage) {
       <oc-mcp-install />
-    } @else if (modelsPage) {
-      <oc-models />
     } @else if (toolServer) {
       <oc-tool-policy [serverId]="toolServer" />
     } @else if (statesPage) {
       <oc-state-specimen />
+    } @else if (activePage === 'integrations') {
+      <oc-integration-register />
+    } @else if (activePage === 'models') {
+      <oc-models />
+    } @else if (activePage === 'spending') {
+      <oc-spending />
+    } @else if (activePage === 'history') {
+      <oc-audit />
+    } @else if (!activePage) {
+      <h1>Page not found</h1>
+      <p>This address does not match an organisation page.</p>
     } @else {
-      <div class="page-heading">
-        <div><h1>Integrations</h1><p>MCP servers your assistants can reach. Each server offers tools; you choose which ones, for whom.</p></div>
-        <div class="page-actions">
-          <button id="refresh-integrations" type="button" class="button secondary" (click)="refresh()" [attr.aria-disabled]="loadState() === 'loading' || loadState() === 'retrying'">{{ loadState() === 'retrying' ? 'Refreshing list…' : 'Refresh list' }}</button>
-          <a class="button primary" href="/org/integrations/new">Add MCP server</a>
-        </div>
-      </div>
-        <div role="status" aria-live="polite">
-          @if (loadState() === 'failed' || loadState() === 'retrying') {
-            <div class="refresh-notice" [attr.data-retrying]="loadState() === 'retrying'">
-              @if (loadState() === 'retrying') {
-                <oc-shared-state kind="checking" message="Refreshing the integrations list…" detail="The list below stays usable." />
-              } @else if (loadedAt()) {
-                <svg class="notice-glyph" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M8 2 14 13H2Zm0 4v3m0 2h.01" />
-                </svg>
-                <div class="notice-copy">
-                  <strong>Showing what we loaded at {{ loadedTime() }}</strong>
-                  <p>We couldn't refresh the list. Nothing changed on the server because of this.</p>
-                </div>
-              } @else {
-                <oc-shared-state kind="failed" message="Couldn't load the integrations list."
-                  detail="The organisation register is unavailable." [showAction]="false" />
-              }
-              <button type="button" class="button secondary" (click)="refresh()" [attr.aria-disabled]="loadState() === 'retrying'">Refresh</button>
-            </div>
-          } @else { <span class="sr-only">{{ loadMessage() }}</span> }
-        </div>
-      @if (loadState() === 'access') {
-        <section class="access-state">
-          <h2>Access needed</h2>
-          <oc-shared-state kind="access_changed" message="You no longer have permission" detail="The Owner or Admin role is needed to view organisation integrations. Ask an Owner or Admin in your organisation for access." [showAction]="false" />
-        </section>
-      } @else {
-        <div class="tabs" role="tablist" aria-label="Integration filters">
-          <button id="integrations-tab-all" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'all'" [attr.tabindex]="selectedTab() === 'all' ? 0 : -1" (click)="select('all')" (keydown)="tabKeydown($event)">All {{ tabCount(rows().length) }}</button>
-          <button id="integrations-tab-attention" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'attention'" [attr.tabindex]="selectedTab() === 'attention' ? 0 : -1" (click)="select('attention')" (keydown)="tabKeydown($event)">Needs attention {{ tabCount(attention().length) }}</button>
-          <button id="integrations-tab-review" type="button" role="tab" aria-controls="integrations-panel" [attr.aria-selected]="selectedTab() === 'review'" [attr.tabindex]="selectedTab() === 'review' ? 0 : -1" (click)="select('review')" (keydown)="tabKeydown($event)">Pending review {{ tabCount(reviews().length) }}</button>
-        </div>
-
-        <section id="integrations-panel" class="register" [class.stale]="loadState() === 'failed' || loadState() === 'retrying'" [attr.aria-busy]="loadState() === 'loading' || loadState() === 'retrying'" role="tabpanel" tabindex="0" [attr.aria-labelledby]="'integrations-tab-' + selectedTab()">
-          @if (loadState() === 'loading') {
-            <div class="loading">
-              <oc-shared-state kind="checking" message="Loading integrations…" />
-            </div>
-            @for (width of skeletonWidths; track $index) {
-              <div class="skeleton-row" aria-hidden="true">
-                <oc-grain-loader width="28px" height="28px" />
-                <div class="skeleton-copy">
-                  <oc-grain-loader [width]="width" />
-                  <oc-grain-loader width="36%" height="8px" />
-                </div>
-              </div>
-            }
-          } @else if ((loadState() === 'failed' || loadState() === 'retrying') && !loadedAt()) {
-          } @else if (rows().length === 0) {
-            <div class="empty"><oc-shared-state kind="not_configured" message="Not configured" detail="Nothing set up yet" /></div>
-          } @else if (visibleRows().length === 0) {
-            <div class="empty empty-filter"><strong>{{ emptyFilterMessage() }}</strong><span>Try another filter to see the configured servers.</span></div>
-          } @else {
-            <div class="register-header" role="row"><span>Server</span><span>Account</span><span>Tools</span><span>Status</span></div>
-            @for (row of visibleRows(); track row.serverId) {
-              <div class="register-row" role="row">
-                <div class="server"><span class="tile">{{ row.name.slice(0, 2).toUpperCase() }}</span><span><strong>{{ row.name }}</strong><small>{{ row.source.label }} · {{ row.version }} · {{ row.source.detail }}</small></span></div>
-                <span class="account" data-label="Account">{{ row.accountModel }}</span>
-                <span class="tools" data-label="Tools">{{ tools(row) }} <a [href]="'/org/integrations/new?server=' + row.serverId" [attr.aria-label]="'Check discovery status for ' + row.name">Check status</a> <a [href]="'/org/integrations/' + row.serverId + '/tools'" [attr.aria-label]="'Manage tools for ' + row.name">Manage tools</a></span>
-                <oc-shared-state [kind]="row.status.kind" [safeToRetry]="row.status.safeToRetry ?? false" [message]="row.status.label" [detail]="row.status.detail" [showAction]="false" />
-              </div>
-            }
-          }
-        </section>
-      }
+      <h1>{{ unavailableTitle() }}</h1>
+      <oc-shared-state kind="not_configured" message="Not available yet"
+        detail="This organisation page has not been built yet." [showAction]="false" />
     }
-  </main>
-</div> }
+  </oc-organisation-shell>
+}
