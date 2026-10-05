@@ -7,6 +7,9 @@ import { GrainLoader } from '../ui/grain-loader';
 import { FlutterLoader } from '../ui/flutter-loader';
 import { SharedState } from '../shared-state/shared-state';
 import { ApprovalCards } from './approvals';
+import { BudgetStopNotice } from './budget-stop-notice';
+import { ConversationFileCard } from './conversation-file-card';
+import { ToolActivityLine } from './tool-activity-line';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, inject, signal,
   viewChild, type OnInit,
@@ -26,7 +29,8 @@ import { LiveView } from '../live-view/live-view';
   selector: 'oc-workspace',
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
-    SharedState, ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView,
+    SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, ToolActivityLine,
+    FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
   providers: [ChatSession, WebSocketService],
@@ -169,6 +173,11 @@ export class Workspace implements OnInit {
   protected time(value: string): string { return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }
   protected isScreenshot(path: string): boolean { return this.screenshots().some(file => file.path === path); }
+  protected fileCreator(author: 'you' | 'person' | 'agent'): 'you' | 'participant' | 'assistant' {
+    if (author === 'agent') return 'assistant';
+    if (author === 'person') return 'participant';
+    return 'you';
+  }
   protected screenshotUrl(path: string): string { return `/api/conversations/${encodeURIComponent(this.chat.selected())}/files/view?preview=true&path=${encodeURIComponent(path)}`; }
   protected name(path: string): string { return path.split('/').at(-1) ?? path; }
   protected type(path: string): string { return path.split('.').at(-1)?.toUpperCase().slice(0, 5) ?? 'FILE'; }

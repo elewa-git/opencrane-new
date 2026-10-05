@@ -1,0 +1,19 @@
+<article class="file-card" [class.created]="createdBy() === 'assistant'" [ocDogEar]="createdBy() === 'assistant'">
+  @if (thumbnailUrl()) {
+    <img class="screenshot-thumbnail" [src]="thumbnailUrl()" alt="Screenshot of the computer desktop"
+      loading="lazy">
+  }
+  <span class="file-type" [attr.data-type]="type()">{{ type() }}</span>
+  <span class="file-name">
+    <strong>{{ name() }}</strong>
+    <small>
+      @if (createdBy() === 'assistant') { <span class="agent-badge">Ag</span> }
+      {{ time() }}
+    </small>
+  </span>
+  <button type="button" (click)="open()">Open</button>
+  @if (createdBy() === 'assistant') {
+    <button type="button" (click)="showFiles()">Files</button>
+  }
+  <a [href]="downloadUrl()" [download]="name()" (click)="markDownloaded()">Download</a>
+</article>

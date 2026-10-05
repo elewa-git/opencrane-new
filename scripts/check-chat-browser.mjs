@@ -140,7 +140,11 @@ try {
     fixture.add('decision.recorded', { turnId: 'event-2', reason: 'budget_exhausted' });
     await page.getByRole('alert').filter({ hasText: 'Spending limit reached' }).waitFor();
     await page.reload(); await stable(page);
-    assert((await page.locator('.budget-refusal').innerText()).includes('Owner or Admin'));
+    const budgetNotice = page.locator('oc-budget-stop-notice');
+    const budgetCopy = await budgetNotice.innerText();
+    assert(budgetCopy.includes('Spending limit reached'));
+    assert(budgetCopy.includes('scope, limit, reset time or held amount'));
+    assert(!budgetCopy.includes('Owner or Admin'));
     assert(await page.evaluate(() => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth));
     fixture.conflictNextStop();
     await page.locator('oc-chat-composer').getByRole('button', { name: 'Stop', exact: true }).click();

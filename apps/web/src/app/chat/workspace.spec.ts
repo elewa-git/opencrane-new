@@ -36,8 +36,11 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   message('agent.message_delta', 4, { turnId: 'message', messageId: 'reply', text: 'there' });
   await fixture.whenStable(); expect(root.textContent).toContain('Hello there');
   message('decision.recorded', 5, { turnId: 'message', reason: 'budget_exhausted' });
-  await fixture.whenStable(); expect(root.querySelector('.budget-refusal')?.textContent).toContain('Spending limit reached');
-  expect(root.querySelector('.budget-refusal')?.textContent).toContain('Owner or Admin');
+  await fixture.whenStable();
+  const budgetNotice = root.querySelector('oc-budget-stop-notice');
+  expect(budgetNotice?.textContent).toContain('Spending limit reached');
+  expect(budgetNotice?.textContent).toContain('scope, limit, reset time or held amount');
+  expect(budgetNotice?.textContent).not.toContain('Owner or Admin');
   message('agent.turn_stop_requested', 6, { turnId: 'message' });
   message('agent.message_completed', 7, { turnId: 'message', messageId: 'reply', text: 'Hello there and more' });
   await fixture.whenStable(); expect(root.textContent).toContain('Stopped'); expect(root.textContent).not.toContain('and more');

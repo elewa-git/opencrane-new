@@ -39,23 +39,31 @@
             <p class="draft-note">@if (!chat.assistantId()) { No personal agent yet. Your agent is being prepared. } @else if (recipient()) { <oc-icon name="agent" /> Agent session — every message starts a governed run. Locks when you send. } @else { Choose your agent to start a session. }</p>
           </section>
         }
+        @if (chat.selected() && !chat.loading() && !chat.turns().length) {
+          <section class="empty-conversation" aria-label="Empty conversation">
+            <oc-shared-state kind="not_configured" message="No messages yet"
+              detail="Send a message to start this conversation." [showAction]="false" />
+          </section>
+        }
         @for (turn of chat.turns(); track turn.author + turn.id) {
           <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
             @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true"><oc-icon [name]="turn.author === 'agent' ? 'agent' : 'open'" /></span> }
             <div class="message-content">
               @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}@if (turn.endedAt) { · {{ duration(turn.time, turn.endedAt) }}s }</time></header> }
               @for (tool of turn.tools; track tool.id) {
-                <details class="tool-line" [id]="'tool-' + tool.id" #details>
-                  <summary [attr.aria-expanded]="details.open" (click)="$event.preventDefault(); details.open = !details.open"><oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'" [name]="tool.failed ? 'failed' : 'done'" /> {{ tool.label }} <oc-icon class="chevron" name="chevron" /></summary>
-                  <div class="tool-drawer"><dl><dt>tool</dt><dd>{{ tool.label === 'Reply failed' ? 'agent run' : 'computer command' }}</dd><dt>error</dt><dd>{{ tool.failed ? 'execution · ' + tool.detail : 'none · ' + tool.detail }}</dd><dt>provider</dt><dd>Not reported</dd><dt>time</dt><dd>{{ time(tool.time) }} · retries not reported</dd></dl><footer>Details are sanitised — tokens, cookies and headers are never shown. @if (tool.failed) { <button type="button" (click)="focusComposer()">Retry in a new message</button> }</footer></div>
-                </details>
+                <oc-tool-activity-line [record]="tool" />
               }
               @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
               @if (turn.author === 'agent' && turn.state === 'working' && turn.text) { <div class="writing"><oc-fold-loader /><em>Writing…</em><button type="button" [disabled]="chat.busy()" (click)="chat.stop()">Stop</button></div> }
               @if (turn.author === 'agent' && turn.state === 'working' && !turn.text) { <div class="folding" role="status"><oc-fold-loader /> Folding…</div> }
-              @for (file of turn.files; track file) { <div class="file-card" [class.created]="turn.author === 'agent'" [ocDogEar]="turn.author === 'agent'">@if (isScreenshot(file)) { <img class="screenshot-thumbnail" [src]="screenshotUrl(file)" alt="Screenshot of the computer desktop" loading="lazy"> }<span class="file-type" [attr.data-type]="type(file)">{{ type(file) }}</span><span class="file-name"><strong>{{ name(file) }}</strong><small>@if (turn.author === 'agent') { <span class="agent-badge">Ag</span> } {{ time(turn.time) }}</small></span><button type="button" (click)="preview.set(file)">Open</button>@if (turn.author === 'agent') { <button type="button" (click)="showFiles()">Files</button> }</div> }
-              @if (turn.refusal) { <p class="budget-refusal" role="alert">{{ turn.refusal }}</p> }
+              @for (file of turn.files; track file) {
+                <oc-conversation-file-card [conversationId]="chat.selected()" [path]="file"
+                  [createdAt]="turn.time" [createdBy]="fileCreator(turn.author)"
+                  [thumbnailUrl]="isScreenshot(file) ? screenshotUrl(file) : ''"
+                  (opened)="preview.set($event)" (filesOpened)="showFiles()" />
+              }
+              @if (turn.budgetStop) { <oc-budget-stop-notice [reason]="turn.budgetStop" /> }
               @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
             </div>
           </article>
@@ -204,6 +212,10 @@
         @if (uploads().length) { <h2>Attached by you · {{ uploads().length }}</h2> }
         @for (file of uploads(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><span class="file-type" [attr.data-type]="type(file.name)">{{ type(file.name) }}</span><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (screenshots().length) { <h2>Screenshots · {{ screenshots().length }}</h2> }
+        @if (!screenshots().length) {
+          <oc-shared-state kind="not_configured" message="No screenshots yet"
+            detail="Open the computer viewer and choose Screenshot." [showAction]="false" />
+        }
         @for (file of screenshots(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt="Computer desktop" loading="lazy"><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
         @for (file of files(); track file) {
@@ -217,8 +229,6 @@
         }
         @if (!files().length && !chat.attachments().length) { <p>Files created in this session will appear here.</p> }
       </section>
-      <section class="panel-section"><h2>Decisions · 0</h2><p>No decisions yet.</p></section>
-      <section class="panel-section"><h2>People · 1</h2><div class="person"><span class="avatar user">{{ initials() }}</span><span>{{ chat.displayName() }}</span><small>Personal</small></div></section>
       <footer class="panel-footnote">Saved files remain in the transcript after retries and session close.</footer>
     } @else {
       <section class="panel-section" role="tabpanel" aria-label="Activity">

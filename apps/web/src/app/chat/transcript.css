@@ -11,13 +11,6 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
 .prose { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; font-size: 14.5px; }
 .paragraph + .paragraph { margin-top: 9px; }
 .ink { animation: oc-ink 420ms var(--oc-ease-fold); }
-.tool-line { font-size: 11px; color: var(--oc-ink-muted); margin: 8px 0; }
-.tool-line summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; padding: 7px 0; }
-.tool-line .chevron { width: 10px; height: 10px; }.tool-line[open] .chevron { transform: rotate(90deg); }
-.tool-drawer { margin: 4px 0 10px 14px; padding: 12px; border: 1px solid #dee3e4; border-radius: 7px; background: white; }
-.tool-drawer dl { display: grid; grid-template-columns: 54px minmax(0,1fr); gap: 5px 8px; margin: 0; font: 10px/1.5 var(--oc-font-mono); color: #616a6c; }
-.tool-drawer dd { margin: 0; overflow-wrap: anywhere; }.tool-drawer footer { border-top: 1px solid #eef1f2; padding-top: 8px; margin-top: 10px; line-height: 1.5; }
-.tool-drawer button { color: var(--oc-accent-dark); }
 .turn-status { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #2a7d4f; animation: oc-settle 260ms var(--oc-ease-standard); transform-origin: left; }
 .turn-status.stopped { color: var(--oc-ink-muted); }
 .turn-status.failed { color: #c1392b; }
@@ -34,19 +27,7 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
   font: 10px var(--oc-font-mono);
 }
 .citation::before { content: ''; position: absolute; width: 44px; height: 44px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
-.file-card { display: flex; gap: 10px; align-items: center; border: 1px solid #dee3e4; border-radius: 10px; background: white; padding: 12px; margin-top: 14px; text-align: left; max-width: 100%; }
-.file-card.created { border-color: #9fdde8; }.file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-card strong { display: block; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-card small {
-  display: block;
-  font-size: 11.5px;
-  color: var(--oc-ink-muted);
-  margin-top: 4px;
-}
-.file-card button {
-  color: var(--oc-accent-dark);
-  font-size: 12px;
-}
+.file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-type {
   display: inline-flex;
   align-items: center;
@@ -57,15 +38,6 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
   border-radius: 3px;
   padding: 3px;
   font: 9px var(--oc-font-mono);
-}
-.agent-badge {
-  display: inline-block;
-  font: 10px var(--oc-font-mono);
-  color: var(--oc-accent-dark);
-  background: #eefafc;
-  border-radius: 3px;
-  padding: 2px 4px;
-  margin-right: 4px;
 }
 .a2ui { white-space: normal; border: 1px solid #9fdde8; background: white; border-radius: 10px; padding: 15px; font-size: 13px; }
 .a2ui header {
@@ -100,8 +72,7 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
   .agent-turn>.avatar { width: 24px; height: 24px; grid-row: 1; }.agent-turn .message-content { display: contents; }
   .agent-turn .message-content>header { grid-column: 2; grid-row: 1; align-items: center; }.agent-turn .message-content>:not(header) { grid-column: 1 / -1; }
   .prose { font-size: 14px; }.own .message-content { max-width: 88%; }
-  .tool-line { margin: 0; }.tool-line summary,.tool-drawer button,.file-card button,.writing button { min-height: 44px; min-width: 44px; }
-  .file-card { width: 100%; gap: 6px; padding: 10px; }
+  .writing button { min-height: 44px; min-width: 44px; }
   .transcript { padding-bottom: 72px; }
 }
 .connection-strip { display: flex; align-items: center; gap: 8px; border: 1px solid #efcf99; border-radius: 9px; padding: 10px; background: #fffaf0; color: #8a6426; margin-bottom: 10px; font-size: 11px; }
@@ -121,8 +92,4 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
 .file-type[data-type=DOCX] { background: #2a5c9a; }
 .file-type[data-type=XLSX] { background: #2a7d4f; }
 
-.budget-refusal { padding: 12px; border: 1px solid #e0a59c; border-radius: 8px; color: #982a20; background: #fff4f2; }
-
 .screenshot-thumbnail{width:72px;height:54px;object-fit:contain;flex-shrink:0;background:#172a2d;border-radius:4px}
-
-.created { border-color: #9fdde8; }
