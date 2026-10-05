@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { providerGatewayRoutes } from './provider-gateway.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
@@ -64,7 +65,7 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
       cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)',
       decisionRequestId: 'response.headers["x-request-id"]' } } },
-    routes: [...mcpRoutes.map(route => mcpRoute(route, decisionUrl, issuer)), { name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
+    routes: [...providerGatewayRoutes(decisionUrl, issuer, upstream), ...mcpRoutes.map(route => mcpRoute(route, decisionUrl, issuer)), { name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
       policies: {
           jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
           location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },

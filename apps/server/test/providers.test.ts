@@ -1,0 +1,428 @@
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
+import { once } from 'node:events';
+import { resolve } from 'node:path';
+import { exportPKCS8, generateKeyPair } from 'jose';
+import { tokenIssuer } from '@opencrane/auth';
+import { BudgetActor, startDecision, startGateway } from '@opencrane/models';
+import { createLogger } from '@opencrane/observability';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { providerSecrets, providerSecretRef } from '@opencrane/models';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { encodeSession } from '@opencrane/auth';
+import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
+import { databases, openfga } from '@opencrane/authz/testing';
+import { event, natsFixture } from '@opencrane/event-store/testing';
+import { pgDb, providers, readProviders, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
+import { buildServer } from '../src/server.ts';
+import { testAuthConfig } from './support/test-auth-config.ts';
+
+const config = testAuthConfig({ expectedOrgId: 'org-acme' });
+let nats: Awaited<ReturnType<typeof natsFixture>>;
+let fga: Awaited<ReturnType<typeof openfga>>;
+let dbs: Awaited<ReturnType<typeof databases>>;
+let runner: ProjectionRunner;
+let app: ReturnType<typeof buildServer>;
+let secretDirectory: string;
+let secrets: ReturnType<typeof providerSecrets>;
+let actor: BudgetActor;
+let decision: Awaited<ReturnType<typeof startDecision>>;
+let gateway: Awaited<ReturnType<typeof startGateway>>;
+let upstream: ReturnType<typeof createServer>;
+let upstreamCount = 0;
+let upstreamHeaders: string[] = [];
+let upstreamAuthHash = '';
+let upstreamFailure = 0;
+let auth: ReturnType<typeof memberAuthorisation>;
+async function initialise() {
+  nats = await natsFixture();
+  fga = await openfga();
+  dbs = await databases();
+  runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader,
+    createLogger('provider-test', { level: 'silent' }));
+  await runner.initialise(providers);
+  const binding = await createStore(fga.apiUrl, 'acme');
+  auth = memberAuthorisation(binding);
+  const joined = {
+    ...event('provider-owner', 'member-owner', 'member.joined'), silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' },
+    data: { memberId: 'owner', email: 'owner@example.test', displayName: 'Owner',
+      role: 'owner', invitationId: 'invite-owner' },
+  };
+  await nats.store.append({ event: joined, expectedSequence: 0 });
+  await auth.handler.handle(joined, pgDb(dbs.queue));
+  function memberId(_silo: string, _issuer: string, subject: string) {
+    if (subject === 'idp-owner') return Promise.resolve('owner');
+    return Promise.resolve('bob');
+  }
+  const bob = { ...event('provider-bob', 'member-bob', 'member.joined'),
+    silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' }, data: { memberId: 'bob', email: 'bob@example.test',
+      displayName: 'Bob', role: 'member', invitationId: 'invite-bob' } };
+  await nats.store.append({ event: bob, expectedSequence: 0 });
+  await auth.handler.handle(bob, pgDb(dbs.queue));
+  secretDirectory = await mkdtemp(`${tmpdir()}/provider-secrets-`);
+  const issuer = 'https://provider-test.invalid';
+  const keyPair = await generateKeyPair('ES256', { extractable: true });
+  const privateKeyPath = `${secretDirectory}/issuer.pem`;
+  await writeFile(privateKeyPath, await exportPKCS8(keyPair.privateKey));
+  const tokens = await tokenIssuer({ privateKeyPath, issuer });
+  upstream = createServer(recordUpstream);
+  upstream.listen(0, '127.0.0.1');
+  await once(upstream, 'listening');
+  const upstreamAddress = upstream.address();
+  if (!upstreamAddress || typeof upstreamAddress === 'string') throw new Error('Missing upstream');
+  const port = await freePort();
+  const readinessPort = await freePort();
+  actor = new BudgetActor(nats.store, 'acme');
+  await actor.start(100, 100, 'installation-default');
+  secrets = providerSecrets(secretDirectory);
+  const verificationOptions = { secrets,
+    gatewayUrl: `http://127.0.0.1:${port}` };
+  decision = await startDecision(actor, { issuer, jwks: tokens.jwks }, binding,
+    0, undefined, verificationOptions);
+  await writeFile(`${secretDirectory}/legacy-key`, 'fixture-only');
+  const binary = resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64');
+  gateway = await startGateway({ binary, port, readinessPort, decisionUrl: decision.url,
+    issuer, upstream: `127.0.0.1:${upstreamAddress.port}`, keyFile: `${secretDirectory}/legacy-key`,
+    configFile: `${secretDirectory}/gateway.json`, usageFile: `${secretDirectory}/usage.jsonl` });
+  app = buildServer(config, { providers: {
+    silo: 'acme', store: nats.store, binding, db: pgDb(dbs.queue), feed: { memberId }, secrets,
+    verification: { decisionUrl: decision.url, tokens },
+  } });
+}
+beforeAll(initialise, 120_000);
+async function close() {
+  await app?.close();
+  await gateway?.stop();
+  await decision?.close();
+  if (upstream) {
+    upstream.closeAllConnections();
+    await new Promise<void>(closeUpstream);
+  }
+  await dbs?.close();
+  await fga?.close();
+  await nats?.close();
+  if (secretDirectory) await rm(secretDirectory, { recursive: true, force: true });
+}
+afterAll(close);
+function request(method: 'GET' | 'POST', url: string, payload?: unknown,
+  sub = 'idp-owner', orgId = 'org-acme', origin = 'https://app.example.test') {
+  const session = { sub, orgId, roles: ['owner'],
+    authTime: 1, exp: 2000000000 };
+  const headers = { origin,
+    'content-type': 'application/json', cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const options = { method, url, ...(payload ? { payload: JSON.stringify(payload) } : {}), headers };
+  return app.inject(options);
+}
+async function createsConnection() {
+  const input = { action: 'create', commandId: 'create-primary', providerId: 'primary',
+    provider: 'openai', name: 'Primary', expectedRevision: 0 };
+  const first = await request('POST', '/api/org/providers', input);
+  expect(first.statusCode).toBe(200);
+  for await (const row of nats.store.readStream('provider-primary')) {
+    await auth.handler.handle(row.event, pgDb(dbs.queue));
+  }
+  expect(first.json()).toMatchObject({ status: 'appended', providerId: 'primary', revision: 1 });
+  const repeat = await request('POST', '/api/org/providers', input);
+  expect(repeat.json()).toEqual(first.json());
+  const status = await request('GET', '/api/org/providers/primary/changes/create-primary');
+  expect(status.json()).toMatchObject({ status: 'appended', revision: 1 });
+}
+it('an owner creates a named connection and reconciles the original command', createsConnection);
+async function savesKeyOnce() {
+  const key = 'fixture-provider-key-never-in-events';
+  const input = { commandId: 'save-primary', expectedRevision: 1, key };
+  const saved = await request('POST', '/api/org/providers/primary/key', input);
+  expect(saved.statusCode).toBe(200);
+  expect(saved.json()).toMatchObject({ status: 'appended', revision: 2, clearKey: true });
+  const repeat = await request('POST', '/api/org/providers/primary/key', input);
+  expect(repeat.json()).toEqual(saved.json());
+  const status = await request('GET', '/api/org/providers/primary/changes/save-primary');
+  expect(status.json()).toMatchObject({ status: 'appended', revision: 2 });
+  const rows = [];
+  for await (const row of nats.store.readStream('provider-primary')) rows.push(row);
+  expect(JSON.stringify(rows)).not.toContain(key);
+}
+it('saves the key once and clears transient input on acceptance without event disclosure', savesKeyOnce);
+async function readsAndReplaysMetadata() {
+  await runner.run(providers);
+  const response = await request('GET', '/api/org/providers/primary');
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ rows: [{ providerId: 'primary', revision: 2,
+    saved: { revision: 2, outcome: 'recorded' }, enabledModels: [], status: 'saved_unverified' }] });
+  await runner.run(providers);
+  const before = await readProviders(pgDb(dbs.queue), 'acme', 'primary');
+  await runner.rebuild(providers);
+  expect(await readProviders(pgDb(dbs.queue), 'acme', 'primary')).toEqual(before);
+}
+it('reads separate safe facts and replays metadata without reading secrets', readsAndReplaysMetadata);
+async function skipsWithoutClaimingReady() {
+  const input = { commandId: 'skip-primary', expectedRevision: 2, action: 'skip' };
+  const skipped = await request('POST', '/api/org/providers/primary/verify', input);
+  expect(skipped.statusCode).toBe(200);
+  await runner.run(providers);
+  const detail = await request('GET', '/api/org/providers/primary');
+  expect(detail.json()).toMatchObject({ rows: [{ status: 'saved_unverified',
+    modelAnswer: { revision: 2, outcome: 'skipped' } }] });
+}
+it('records an explicit skipped test separately without ready or model-answer PASS', skipsWithoutClaimingReady);
+async function checksThroughRealGateway() {
+  const checked = await request('POST', '/api/org/providers/primary/verify',
+    { commandId: 'reach-primary', expectedRevision: 2, action: 'reachability' });
+  expect(checked.statusCode).toBe(200);
+  await runner.run(providers);
+  const detail = await request('GET', '/api/org/providers/primary');
+  expect(upstreamAuthHash).toBe(keyHash('fixture-provider-key-never-in-events'));
+  expect(detail.json()).toMatchObject({ rows: [{ status: 'connected_not_tested',
+    reachable: { revision: 2, outcome: 'pass' }, modelAnswer: { outcome: 'skipped' } }] });
+}
+it('checks reachability through the real gateway separately from a model answer', checksThroughRealGateway);
+
+function closeUpstream(resolve: () => void) { upstream.close(resolve); }
+async function freePort() {
+  const server = createServer();
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Missing port');
+  function closeServer(resolve: () => void) { server.close(resolve); }
+  await new Promise<void>(closeServer);
+  return address.port;
+}
+function recordUpstream(req: import('node:http').IncomingMessage,
+  res: import('node:http').ServerResponse) {
+  upstreamCount++;
+  upstreamHeaders = Object.keys(req.headers);
+  const hash = createHash('sha256');
+  hash.update(req.headers.authorization ?? '');
+  upstreamAuthHash = hash.digest('hex');
+  req.resume();
+  if (upstreamFailure) { res.writeHead(upstreamFailure); res.end('{}'); return; }
+  res.setHeader('content-type', 'application/json');
+  if (req.url === '/v1/models') { res.end('{"data":[{"id":"gpt-6-luna"}]}'); return; }
+  const response = { status: 'completed', output: [{ type: 'message',
+    content: [{ type: 'output_text', text: 'OK' }] }],
+    usage: { input_tokens: 10, output_tokens: 2 } };
+  res.end(JSON.stringify(response));
+}
+async function runsPricedTestOnce() {
+  const quote = await request('GET', '/api/org/providers/primary/verify?model=gpt-6-luna');
+  expect(quote.statusCode).toBe(200);
+  expect(quote.json()).toMatchObject({ revision: 2, reservedCents: 1, consentRequired: true });
+  const input = { commandId: 'test-primary', expectedRevision: 2, action: 'test',
+    model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+    reservedCents: 1, consent: true };
+  const before = upstreamCount;
+  expect((await request('POST', '/api/org/providers/primary/verify', input)).statusCode).toBe(200);
+  await runner.run(providers);
+  expect((await request('GET', '/api/org/providers/primary')).json()).toMatchObject({
+    rows: [{ status: 'ready', modelAnswer: { revision: 2, outcome: 'pass',
+      model: 'gpt-6-luna', reservedCents: 1, settledCents: 1 } }] });
+  expect(actor.state.reservations).toHaveLength(1);
+  expect(actor.state.reservations[0]?.settledCents).toBe(1);
+  await request('POST', '/api/org/providers/primary/verify', input);
+  expect(upstreamCount - before).toBe(1);
+  expect(upstreamHeaders).not.toContain('x-provider-token');
+  expect(upstreamHeaders).not.toContain('x-provider-command');
+  expect(upstreamHeaders).not.toContain('x-provider-key');
+}
+it('warns with an integer-cent quote, reserves and settles a real gateway test exactly once', runsPricedTestOnce);
+function keyHash(key: string) {
+  const hash = createHash('sha256');
+  hash.update(`Bearer ${key}`);
+  return hash.digest('hex');
+}
+async function rejectsUnknownPriceAndMissingConsent() {
+  const before = upstreamCount;
+  const base = { commandId: 'denied-test', expectedRevision: 2, action: 'test',
+    model: 'not-in-registry', priceTableId: 'openai-2026-10-02-all-eur95',
+    reservedCents: 1, consent: true };
+  expect((await request('POST', '/api/org/providers/primary/verify', base)).statusCode).toBe(403);
+  expect((await request('POST', '/api/org/providers/primary/verify',
+    { ...base, model: 'gpt-6-luna', consent: false })).statusCode).toBe(400);
+  expect((await request('POST', '/api/org/providers/primary/verify',
+    { ...base, model: 'gpt-6-luna', reservedCents: 2 })).statusCode).toBe(409);
+  expect(upstreamCount).toBe(before);
+  expect(actor.state.reservations).toHaveLength(1);
+}
+it('refuses unknown tariffs, missing consent and a stale quote before reservation or dispatch',
+  rejectsUnknownPriceAndMissingConsent);
+async function rotatesAndInvalidatesEvidence() {
+  const key = 'fixture-rotated-key';
+  const rotated = await request('POST', '/api/org/providers/primary/key',
+    { commandId: 'rotate-primary', expectedRevision: 2, key });
+  expect(rotated.statusCode).toBe(200);
+  await runner.run(providers);
+  expect((await request('GET', '/api/org/providers/primary')).json()).toMatchObject({
+    rows: [{ revision: 3, status: 'saved_unverified', saved: { revision: 3 } }] });
+  const state = await readProviders(pgDb(dbs.queue), 'acme', 'primary');
+  expect(state[0]?.reachable).toBeUndefined();
+  expect(state[0]?.modelAnswer).toBeUndefined();
+  const before = upstreamCount;
+  expect((await request('POST', '/api/org/providers/primary/verify',
+    { commandId: 'stale-check', action: 'reachability', expectedRevision: 2 })).statusCode).toBe(409);
+  expect(upstreamCount).toBe(before);
+  expect((await request('POST', '/api/org/providers/primary/verify',
+    { commandId: 'fresh-rotated-check', expectedRevision: 3, action: 'reachability' })).statusCode)
+    .toBe(200);
+  expect(upstreamAuthHash).toBe(keyHash('fixture-rotated-key'));
+}
+it('rotation invalidates old check evidence and refuses stale verification', rotatesAndInvalidatesEvidence);
+async function holdsUnknownCostWithoutRetry() {
+  upstreamFailure = 504;
+  const input = { commandId: 'unknown-test', expectedRevision: 3, action: 'test',
+    model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+    reservedCents: 1, consent: true };
+  const before = upstreamCount;
+  expect((await request('POST', '/api/org/providers/primary/verify', input)).statusCode).toBe(200);
+  const original = await request('GET', '/api/org/providers/primary/changes/unknown-test');
+  expect(original.json()).toMatchObject({ outcome: 'unknown', revision: 3 });
+  await request('POST', '/api/org/providers/primary/verify', input);
+  expect(upstreamCount - before).toBe(1);
+  expect(actor.state.reservations[1]?.settledCents).toBeUndefined();
+  upstreamFailure = 0;
+}
+it('holds an uncertain priced call and Check status never dispatches it again', holdsUnknownCostWithoutRetry);
+async function refusesBudgetBeforeGateway() {
+  await actor.configure({ scope: 'global', ceilingCents: 2, dailyCeilingCents: 2,
+    setBy: 'owner' });
+  const before = upstreamCount;
+  const input = { commandId: 'budget-test', expectedRevision: 3, action: 'test',
+    model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+    reservedCents: 1, consent: true };
+  expect((await request('POST', '/api/org/providers/primary/verify', input)).statusCode).toBe(200);
+  expect((await request('GET', '/api/org/providers/primary/changes/budget-test')).json())
+    .toMatchObject({ outcome: 'budget_refused' });
+  expect(upstreamCount).toBe(before);
+  expect(actor.state.reservations).toHaveLength(2);
+}
+it('budget refusal keeps the saved key and makes no model call', refusesBudgetBeforeGateway);
+async function selectsRegistryModelsWithoutGrants() {
+  const body = { action: 'models', commandId: 'select-models', providerId: 'primary',
+    expectedRevision: 3, models: ['gpt-6-luna', 'gpt-6.1-sol'] };
+  expect((await request('POST', '/api/org/providers', body)).statusCode).toBe(200);
+  expect((await auth.use('person', 'owner', 'model', 'gpt-6-luna')).allowed).toBe(false);
+  await runner.run(providers);
+  expect((await request('GET', '/api/org/providers/primary')).json()).toMatchObject({
+    rows: [{ enabledModels: ['gpt-6-luna', 'gpt-6.1-sol'] }],
+    access: { grantsAvailable: false, reason: 'p4_22_required' } });
+  expect((await request('POST', '/api/org/providers', { ...body,
+    commandId: 'unknown-model', expectedRevision: 4, models: ['made-up'] })).statusCode).toBe(403);
+}
+it('selects only registry models and never turns setup into a model grant', selectsRegistryModelsWithoutGrants);
+async function rejectsReferenceWithoutCustody() {
+  const providerId = 'forged-reference';
+  const created = { action: 'create', providerId, commandId: 'create-forged-reference',
+    expectedRevision: 0, provider: 'openai', name: 'Reference guard' };
+  expect((await request('POST', '/api/org/providers', created)).statusCode).toBe(200);
+  for await (const row of nats.store.readStream(`provider-${providerId}`)) {
+    await auth.handler.handle(row.event, pgDb(dbs.queue));
+  }
+  const before = await nats.store.head();
+  const secretRef = providerSecretRef('acme', providerId, 'forged-key');
+  const command = { action: 'key', providerId, commandId: 'forged-key',
+    expectedRevision: 1, secretRef };
+  expect((await request('POST', '/api/org/providers', command)).statusCode).toBe(400);
+  expect(await nats.store.head()).toBe(before);
+}
+it('rejects a caller-supplied secret reference without claiming key custody',
+  rejectsReferenceWithoutCustody);
+async function deniesUntrustedRequests() {
+  const before = await nats.store.head();
+  const body = { action: 'create', commandId: 'denied-create', providerId: 'denied',
+    expectedRevision: 0, provider: 'openai', name: 'Denied' };
+  expect((await request('POST', '/api/org/providers', body, 'idp-bob')).statusCode).toBe(403);
+  expect((await request('POST', '/api/org/providers', body, 'idp-owner', 'foreign')).statusCode)
+    .toBe(403);
+  expect((await request('POST', '/api/org/providers', body, 'idp-owner', 'org-acme',
+    'https://forged.test')).statusCode).toBe(403);
+  expect((await app.inject({ method: 'GET', url: '/api/org/providers' })).statusCode).toBe(401);
+  expect((await request('POST', '/api/org/providers', { ...body, providerId: '*' })).statusCode)
+    .toBe(400);
+  expect(await nats.store.head()).toBe(before);
+}
+it('ignores claimed roles and refuses member, foreign silo, forged Origin and missing sessions',
+  deniesUntrustedRequests);
+async function deniesUnavailableAuthority() {
+  const original = nats.store.readStream.bind(nats.store);
+  async function* unavailable(...args: Parameters<typeof original>) {
+    if (args[0] === 'member-owner') throw new Error('fixture unavailable');
+    yield* original(...args);
+  }
+  const reader = vi.spyOn(nats.store, 'readStream').mockImplementation(unavailable);
+  const before = upstreamCount;
+  try {
+    expect((await request('GET', '/api/org/providers')).statusCode).toBe(503);
+  } finally { reader.mockRestore(); }
+  expect(upstreamCount).toBe(before);
+  await fga.pause();
+  try {
+    expect((await request('POST', '/api/org/providers/primary/key',
+      { commandId: 'iam-down', expectedRevision: 4, key: 'fixture-key' })).statusCode).toBe(503);
+  } finally { await fga.resume(); }
+}
+it('fails closed for unavailable event authority and IAM', deniesUnavailableAuthority);
+async function refusesSecretFailure() {
+  const before = await nats.store.head();
+  const save = vi.spyOn(secrets, 'save').mockRejectedValue(new Error('fixture-secret-failure'));
+  try {
+    const response = await request('POST', '/api/org/providers/primary/key',
+      { commandId: 'secret-down', expectedRevision: 4, key: 'fixture-rejected-key' });
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain('fixture-rejected-key');
+    expect(response.body).not.toContain('fixture-secret-failure');
+  } finally { save.mockRestore(); }
+  expect(await nats.store.head()).toBe(before);
+}
+it('secret-store failure accepts no key change and discloses no key or upstream error',
+  refusesSecretFailure);
+async function reconcilesLostSaveReply() {
+  const append = nats.store.append.bind(nats.store);
+  async function loseReply(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    return { status: 'unavailable' as const, cause: new Error('fixture-lost-reply'), result };
+  }
+  const writer = vi.spyOn(nats.store, 'append').mockImplementation(loseReply);
+  const input = { commandId: 'lost-key-reply', expectedRevision: 4, key: 'fixture-lost-key' };
+  try {
+    expect((await request('POST', '/api/org/providers/primary/key', input)).statusCode).toBe(503);
+  } finally { writer.mockRestore(); }
+  const status = await request('GET', '/api/org/providers/primary/changes/lost-key-reply');
+  expect(status.json()).toMatchObject({ status: 'appended', revision: 5 });
+  const before = await nats.store.head();
+  expect((await request('POST', '/api/org/providers/primary/key', input)).statusCode).toBe(200);
+  expect(await nats.store.head()).toBe(before);
+  const configuration = await readFile(`${secretDirectory}/gateway.json`, 'utf8');
+  expect(configuration).not.toContain('fixture-lost-key');
+}
+it('lost save acknowledgement reconciles the original change without another secret or event',
+  reconcilesLostSaveReply);
+async function reconstructsWithoutExternalCalls() {
+  await runner.run(providers);
+  const before = await request('GET', '/api/org/providers');
+  const count = upstreamCount;
+  await rebuildProviderProjection(pgDb(dbs.queue), nats.reader,
+    createLogger('provider-rebuild', { level: 'silent' }), { verify: true });
+  const after = await request('GET', '/api/org/providers');
+  expect(after.json<{ rows: unknown[] }>().rows).toEqual(before.json<{ rows: unknown[] }>().rows);
+  const rebuilt = await rebuildMembers(fga.apiUrl, 'acme', nats.reader,
+    { verifyAgainst: auth.binding });
+  expect((await rebuilt.provider('owner', 'primary', 'manage')).allowed).toBe(true);
+  expect((await rebuilt.provider('bob', 'primary', 'manage')).allowed).toBe(false);
+  expect(upstreamCount).toBe(count);
+}
+it('rebuilds the same metadata and OpenFGA relations with zero verification calls',
+  reconstructsWithoutExternalCalls);
+async function deniesRevokedRoleBeforeIamCatchesUp() {
+  const row = { ...event('provider-revoked-owner', 'member-owner', 'member.role_changed'),
+    silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' }, data: { memberId: 'owner', previousRole: 'owner',
+      newRole: 'member', changedBy: 'owner' } };
+  await nats.store.append({ event: row, expectedSequence: await nats.store.head('member-owner') });
+  const before = upstreamCount;
+  expect((await request('POST', '/api/org/providers/primary/key',
+    { commandId: 'revoked-key', expectedRevision: 4, key: 'fixture-key' })).statusCode).toBe(403);
+  expect((await request('GET', '/api/org/providers')).statusCode).toBe(403);
+  expect(upstreamCount).toBe(before);
+}
+it('revoked role denies reads and key rotation before the IAM projection catches up',
+  deniesRevokedRoleBeforeIamCatchesUp);

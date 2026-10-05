@@ -71,6 +71,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `credential-<lease>` | request-bound credential release | released |
 | `egress-<request>` | observed egress | observed |
 | `gateway-<request>` | safe gateway evidence | observation recorded |
+| `provider-<providerId>` | company model provider | configuration and verification |
 | `connection-<user>-<server>-<profile>` | credential connection | created, refreshed, revoked |
 | `view-<session>` | bounded desktop view | started, stopped |
 | `grant-<resource>` | shared resource (type and id) | given, revoked |
@@ -420,12 +421,23 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | --- | --- | --- | --- |
 | `security.alert_raised` | any reaction | alerts | notify admins |
 
+### Company model providers
+
+| Event | Trigger | Projection | Reaction |
+| --- | --- | --- | --- |
+| `provider.created` | Owner/Admin command | provider metadata and OpenFGA silo relation | No key, model call or grant. |
+| `provider.key_saved` | Owner/Admin command after secret custody | provider metadata | Invalidate current reachability/model evidence; never a grant. |
+| `provider.models_selected` | Owner/Admin command | provider metadata | Registry selection only; grants belong to P4-22. |
+| `provider.verification_requested` | Owner/Admin command | provider metadata | Explicit live check only; no replay dispatch. |
+| `provider.verification_dispatched` | authenticated gateway admission | provider metadata | Consume one check, with existing budget reservation for paid tests. |
+| `provider.verification_recorded` | live verification reaction or explicit skip | provider metadata | Dated revision-bound outcome, never raw responses or credentials. |
+
 ## Named handler subscriptions
 
 These queue names and subscriptions are checked against `libs/events` by
 `check:events`. A host enables a handler explicitly. `update-members` can
 wrap the members projection; [authz](../../libs/authz/README.md) implements
-`update-openfga` for member, assistant, conversation, team and resource-grant
+`update-openfga` for provider, member, assistant, conversation, team and resource-grant
 events. Desktop admission additionally requires an explicit member
 `shared_desktop` grant. Scope promotion remains deferred.
 
@@ -433,7 +445,7 @@ events. Desktop admission additionally requires an explicit member
 | --- | --- |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
 | `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
-| `update-openfga` | `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `update-openfga` | `provider.created`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
 | `seed-ownership` | `silo.owner_bootstrapped` |
 | `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |
 | `create-assistant` | `member.joined`, `silo.owner_bootstrapped` |

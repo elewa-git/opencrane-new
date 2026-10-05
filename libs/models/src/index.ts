@@ -17,3 +17,8 @@ export { losslessJson } from './lossless-json.ts';
 export { readEffect, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
 
 export { seedOwnership, ownershipSeedHandler, ownershipSubject, ownershipState, currentMembership } from './ownership.ts';
+export { providerCommand, providerCommandSchema, providerAuthority, providerReceipt,
+  ProviderRefused, ProviderUnpriced, ProviderConflict, providerSecretRef, providerHistory, providerPermission } from './providers.ts';
+export { providerSecrets, type ProviderSecrets } from './provider-secrets.ts';
+export { providerVerificationSchema, requestProviderVerification, providerTestQuote,
+  type ProviderVerificationOptions } from './provider-verification.ts';

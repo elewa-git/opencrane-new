@@ -1,3 +1,6 @@
+import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
+  type ProviderVerificationOptions } from './provider-verification.ts';
+import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
 import { payingGroupAuthority, PayingGroupRefused } from './paying-group.ts';
 import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
 import { approvalDecision, type ReviewKeys } from './approvals.ts';
@@ -53,7 +56,7 @@ const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired
   prompt_cache_key: z.string().max(200).optional(), client_metadata: z.record(z.string(), z.string()).optional(),
   store: z.literal(false).optional(), service_tier: z.literal('default').optional(),
 }).strict();
-async function readBody(req: IncomingMessage) {
+async function readBody(req: IncomingMessage, allowEmpty = false) {
   const chunks: Buffer[] = []; let length = 0;
   for await (const chunk of req) {
     const bytes: unknown = chunk;
@@ -63,7 +66,7 @@ async function readBody(req: IncomingMessage) {
     chunks.push(bytes);
   }
   const text = new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks));
-  losslessJson(text);
+  if (text || !allowEmpty) losslessJson(text);
   return text;
 }
 async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string, fresh: Awaited<ReturnType<typeof authorityFence>>): Promise<ModelCall> {
@@ -120,7 +123,7 @@ async function activeTurn(actor: BudgetActor, computer: z.infer<typeof computerS
   }
   return turn;
 }
-export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0, keys?: ReviewKeys) {
+export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions) {
   const credentials = computerCredentials(actor.store, tokenVerifier(identity.jwks, identity.issuer), actor.silo);
   const server = createServer((req, res) => {
     const started = performance.now();
@@ -142,7 +145,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
     };
     void (async () => {
       res.setHeader('content-type', 'application/json');
-      if (await internalRoutes(req, res, actor, identity, binding)) return;
+      if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
       if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
       const fresh = await authorityFence(actor.store, started);
       const checked = await credentials.check(req.headers, undefined, fresh.deadline);
@@ -206,7 +209,7 @@ export async function startDecision(actor: BudgetActor, identity: { jwks: JSONWe
     close: () => new Promise<void>((resolve, reject) => { if (!server.listening) { resolve(); return; } server.closeAllConnections(); server.close(error => error ? reject(error) : resolve()); }) };
 }
 
-async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding) {
+async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding, providers?: ProviderVerificationOptions) {
   if (req.url === '/jwks.json' && req.method === 'GET') { res.end(JSON.stringify(identity.jwks)); return true; }
   if (req.url === '/budgets' && req.method === 'POST') {
     try {
@@ -217,6 +220,9 @@ async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: 
     }
     return true;
   }
+  if (isProviderPath(req.url)) {
+    return providerRoutes(req, res, actor, identity, binding, providers);
+  }
   if (req.url === '/computer-lost' && req.method === 'POST') {
     const d = z.object({ subject: z.string().max(300), eventId: z.string().max(300) }).strict().parse(JSON.parse(await readBody(req)));
     await actor.computerLostRecorded(d.subject, d.eventId); res.end('{}'); return true;
@@ -226,4 +232,48 @@ async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: 
     await actor.settleRecorded(d.permitId, d.eventId); res.end('{}'); return true;
   }
   return false;
+}
+
+function isProviderPath(path: string | undefined) {
+  return path === '/providers/verify' || Boolean(path?.startsWith('/authorize/providers/'));
+}
+
+async function providerRoutes(req: IncomingMessage, res: ServerResponse, actor: BudgetActor,
+  identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
+  providers?: ProviderVerificationOptions) {
+  try {
+    const path = z.string().parse(req.url);
+    if (!providers) throw new Error('Provider verification unavailable');
+    if (path === '/providers/verify' && req.method !== 'POST') throw new ProviderRefused();
+    const body = await readBody(req, path !== '/providers/verify');
+    let raw: unknown;
+    const authorization = req.headers.authorization ?? String(req.headers['x-provider-token'] ?? '');
+    if (path === '/providers/verify') raw = JSON.parse(body);
+    else {
+      const encoded = z.string().max(8192).parse(req.headers['x-provider-command']);
+      raw = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+    }
+    const memberId = await verifyProviderCapability(identity, actor.silo, raw, authorization);
+    if (path === '/providers/verify') {
+      const receipt = await runProviderVerification(actor, binding, memberId, raw,
+        authorization, providers);
+      res.end(JSON.stringify(receipt));
+    } else {
+      const reservationId = z.string().optional().parse(req.headers['x-provider-reservation']);
+      const key = await admitProviderVerification(actor, binding, memberId, raw, providers,
+        path, body, reservationId);
+      res.setHeader('x-provider-key', key);
+      res.end('{}');
+    }
+  } catch (error) {
+    let code = 503;
+    if (error instanceof ProviderRefused) code = 403;
+    if (error instanceof ProviderConflict) code = 409;
+    if (error instanceof z.ZodError) code = 400;
+    res.writeHead(code);
+    const result = { status: 'refused',
+      ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
+    res.end(JSON.stringify(result));
+  }
+  return true;
 }

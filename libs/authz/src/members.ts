@@ -149,6 +149,14 @@ export function memberAuthorisation(binding: Binding) {
     }
   }
 
+  async function applyProvider(event: EventEnvelope, receipt: Tuple) {
+    const providerId = field(event.data, 'providerId');
+    if (event.subject !== `provider-${providerId}`) throw new Error('Provider subject mismatch');
+    const target = objectId('provider', binding.silo, providerId);
+    const siloTuple = { user: object, object: target, relation: 'silo' };
+    await client.write([siloTuple, receipt], []);
+  }
+
   async function apply(input: EventEnvelope): Promise<void> {
     const parsed = parseEventByType(input);
     if (!parsed.success || parsed.event.silo !== binding.silo) {
@@ -168,14 +176,17 @@ export function memberAuthorisation(binding: Binding) {
     if (event.type.startsWith('ownership.')) {
       return applyOwnership(event, receipt);
     }
+    const creationHandlers: Record<string, typeof applyProvider> = {
+      'provider.created': applyProvider,
+      'assistant.created': applyAssistant,
+    };
+    const creationHandler = creationHandlers[event.type];
+    if (creationHandler) return creationHandler(event, receipt);
     if (event.type.startsWith('team.')) return applyTeam(event, receipt);
     if (event.type.startsWith('grant.')) return applyGrant(event, receipt);
     if (['conversation.created', 'participant.added', 'participant.removed'].includes(event.type)) {
       await applyConversation(event, receipt);
       return;
-    }
-    if (event.type === 'assistant.created') {
-      return applyAssistant(event, receipt);
     }
     const memberId = field(event.data, "memberId");
     if (event.subject !== `member-${memberId}`) {
@@ -210,6 +221,10 @@ export function memberAuthorisation(binding: Binding) {
     binding,
     async applied(eventId: string) {
       return (await client.check({ user: object, relation: 'applied', object: objectId('projection_event', binding.silo, eventId) })).allowed;
+    },
+    provider(memberId: string, providerId: string, relation: 'read' | 'manage') {
+      return client.check({ user: objectId('person', binding.silo, memberId), relation,
+        object: objectId('provider', binding.silo, providerId) });
     },
     use(kind: 'person' | 'assistant', id: string, resourceType: string, resourceId: string) {
       return client.check({ user: objectId(kind, binding.silo, id), relation: 'use', object: objectId('resource', binding.silo, resourceType, resourceId) });
