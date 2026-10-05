@@ -31,6 +31,11 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       if (!(await allowed())) return reply.code(403).send({ status: 'refused' });
       return reply.send(result);
     } catch (error) {
+      if (error instanceof Error &&
+          (error.message === 'Authority changed' ||
+           error.message === 'Authority snapshot expired')) {
+        return reply.code(403).send({ status: 'refused' });
+      }
       if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
       request.log.error({ operation: 'audit.read' }, 'Audit history unavailable');
       return reply.code(503).send({ status: 'unavailable' });

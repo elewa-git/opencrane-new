@@ -6,7 +6,7 @@ import type { StoredEvent } from '@opencrane/event-store';
 import { authorityFence, history, ownershipSubject } from '@opencrane/models';
 import type { GroupOptions } from './group-routes.ts';
 import { sessionFor } from './routes.ts';
-import { ownershipAccess, ownershipCommand, ownershipReceipt,
+import { ownershipAccess, ownershipStatusAccess, ownershipCommand, ownershipReceipt,
   OwnershipConflict, OwnershipRefused } from './ownership.ts';
 
 export function registerOwnershipRoutes(app: FastifyInstance, config: AuthConfig,
@@ -34,7 +34,8 @@ export function registerOwnershipRoutes(app: FastifyInstance, config: AuthConfig
         throw new OwnershipRefused('active_membership_required');
       }
       if (request.method === 'POST') {
-        const result = await ownershipCommand(options.store, options.binding, memberId, request.body);
+        const result = await ownershipCommand(
+          options.store, options.binding, memberId, request.body);
         return reply.send(result);
       }
       const parameters = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u).optional() });
@@ -49,9 +50,8 @@ export function registerOwnershipRoutes(app: FastifyInstance, config: AuthConfig
 }
 async function read(options: GroupOptions, actorId: string, commandId?: string) {
   const fresh = await authorityFence(options.store, performance.now());
-  const permitPendingStepDown = commandId !== undefined;
-  const membership = await ownershipAccess(options.store, options.binding, actorId, fresh,
-    permitPendingStepDown);
+  const access = commandId === undefined ? ownershipAccess : ownershipStatusAccess;
+  const membership = await access(options.store, options.binding, actorId, fresh);
   let result;
   if (commandId) {
     result = await readChange(options, commandId, fresh.deadline);
@@ -62,10 +62,8 @@ async function read(options: GroupOptions, actorId: string, commandId?: string) 
     for (const memberId of ownerIds) {
       const rows = await history(options.store, `member-${memberId}`, options.silo, fresh.deadline);
       fresh.include(`member-${memberId}`);
-      function isJoined(row: StoredEvent) {
-        return ['member.joined', 'silo.owner_bootstrapped'].includes(row.event.type);
-      }
-      const fields = z.object({ displayName: z.string() }).parse(rows.findLast(isJoined)?.event.data);
+      const joined = rows.findLast(isJoined);
+      const fields = z.object({ displayName: z.string() }).parse(joined?.event.data);
       owners.push({ memberId, displayName: fields.displayName, role: 'owner' as const });
     }
     result = { status: 'current', owners, sequence: membership.ownership.at(-1)?.sequence ?? 0,
@@ -74,6 +72,9 @@ async function read(options: GroupOptions, actorId: string, commandId?: string) 
   }
   await fresh();
   return result;
+}
+function isJoined(row: StoredEvent) {
+  return ['member.joined', 'silo.owner_bootstrapped'].includes(row.event.type);
 }
 async function readChange(options: GroupOptions, commandId: string, deadline: number) {
   const rows = await history(options.store, ownershipSubject(options.silo), options.silo, deadline);
@@ -98,6 +99,9 @@ function failure(reply: FastifyReply, error: unknown) {
   }
   if (error instanceof OwnershipRefused) {
     return reply.code(403).send({ status: 'refused', reason: error.message });
+  }
+  if (error instanceof Error && error.message === 'Authority changed') {
+    return reply.code(409).send({ status: 'refused', reason: 'concurrent_change' });
   }
   if (error instanceof OwnershipConflict) {
     const response = { status: 'refused', reason: error.message };

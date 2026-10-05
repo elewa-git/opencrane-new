@@ -46,6 +46,8 @@ async function waitFor(check: () => Promise<boolean>) {
   }
 }
 try {
+  const seedSequence = await events.store.head(`ownership-${settings['SILO_ID']!}`);
+  assert.equal(seedSequence, 0, 'Dev owner bootstrap is refused after ownership seeding');
   const history: StoredEvent[] = [];
   for await (const stored of events.store.readStream(`member-${memberId}`)) history.push(stored);
   assert(history.length <= 2, 'Dev owner member stream has unexpected events');

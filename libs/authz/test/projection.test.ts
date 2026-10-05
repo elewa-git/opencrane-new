@@ -249,7 +249,7 @@ it("dispatches real NATS events through pg-boss, revokes under 2 seconds and reb
       async () => (await runtime.deadLetters("update-openfga")).length === 1,
     );
     expect(await runtime.boss.getBlockedKeys("update-openfga")).toEqual([
-      "ownership-test",
+      "member-bob",
     ]);
     const receipts = await db.query(
       "SELECT event_id FROM handler_receipts WHERE event_id IN ('d2', 'j3')",

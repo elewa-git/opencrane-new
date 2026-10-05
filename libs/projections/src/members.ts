@@ -1,5 +1,6 @@
 import {
-  ownershipSeededSchema, ownershipTransferredSchema, ownershipSteppedDownSchema,
+  legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
+  ownershipSteppedDownSchema,
   memberInvitedDataSchema,
   siloOwnerBootstrappedDataSchema,
   memberJoinedDataSchema,
@@ -68,7 +69,17 @@ async function applyMember(
   if (event.subject !== `member-${id}`) {
     throw new Error("Member subject mismatch");
   }
-  await refuseOwnerEdit(tables, db, event, data, id);
+  if (event.type === 'member.invited') {
+    // Reinviting an active member grants nothing and must preserve their identity and role.
+    const current = await db.query<{ status: string }>(
+      `SELECT status FROM ${tables.members} WHERE silo = $1 AND member_id = $2`,
+      [event.silo, id]);
+    if (current.rows[0]?.status === 'joined') {
+      return;
+    }
+  } else {
+    await refuseOwnerEdit(tables, db, event, id);
+  }
   await applyIdentity(tables, db, event, data, id);
   if (event.type === "member.removed") {
     await db.query(
@@ -172,7 +183,7 @@ function memberProjection(name: string, tables: MemberTables): Projection {
   };
 }
 
-/** Invited rows are pending invitations, never an authorisation grant. Removed rows are retained for display. */
+/** Invitations grant no authority. Removed rows are retained for display. */
 export const members = memberProjection("members", live);
 export const replayMembers = memberProjection(
   "members-replay",
@@ -232,21 +243,12 @@ async function applyOwnership(tables: MemberTables, db: Query,
     ON CONFLICT (silo) DO UPDATE SET owners = $2`, [event.silo, JSON.stringify(owners)]);
 }
 
-function nextMemberRole(event: EventEnvelope, data: unknown) {
-  if (event.type === 'member.removed') {
-    return '';
-  }
-  if (event.type === 'member.role_changed') {
-    return field(data, 'newRole');
-  }
-  return field(data, 'role');
-}
 async function refuseOwnerEdit(tables: MemberTables, db: Query,
-  event: EventEnvelope, data: unknown, id: string) {
+  event: EventEnvelope, id: string) {
   const ownership = await db.query<{ owners: string[] }>(
     `SELECT owners FROM ${tables.ownership} WHERE silo = $1`, [event.silo]);
   const owners = ownership.rows[0]?.owners;
-  const nextRole = nextMemberRole(event, data);
+  const nextRole = legacyMemberRole(event);
   if (owners && (owners.includes(id) || nextRole === 'owner')) {
     throw new Error('Owner changes require the ownership stream');
   }

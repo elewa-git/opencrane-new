@@ -1,4 +1,5 @@
-import { ownershipSeededSchema, ownershipTransferredSchema, ownershipSteppedDownSchema,
+import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
+  ownershipSteppedDownSchema,
   handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { registerHandler } from "@opencrane/handlers";
 import { objectId, TupleClient, type Binding, type Tuple } from "./client.ts";
@@ -12,13 +13,6 @@ function field(data: unknown, name: string): string {
     throw new Error("Missing member field");
   }
   return value;
-}
-
-function memberRoleField(type: string) {
-  if (type === 'member.joined' || type === 'silo.owner_bootstrapped') {
-    return 'role';
-  }
-  return 'newRole';
 }
 
 function roleTuples(user: string, object: string, role: string): Tuple[] {
@@ -149,10 +143,7 @@ export function memberAuthorisation(binding: Binding) {
     function isOwner(tuple: Tuple) {
       return tuple.relation === 'owner_role';
     }
-    let nextRole = '';
-    if (event.type !== 'member.removed') {
-      nextRole = field(event.data, event.type === 'member.role_changed' ? 'newRole' : 'role');
-    }
+    const nextRole = legacyMemberRole(event);
     if (seeded.length && (current.some(isOwner) || nextRole === 'owner')) {
       throw new Error('Owner changes require the ownership stream');
     }
@@ -205,10 +196,7 @@ export function memberAuthorisation(binding: Binding) {
         : roleTuples(
             user,
             object,
-            field(
-              event.data,
-              memberRoleField(event.type),
-            ),
+            legacyMemberRole(event) ?? '',
           );
     // A lost reply is safe: the receipt and changes either all commit or all fail.
     // Repeating an old event after removal cannot restore its previous permissions.

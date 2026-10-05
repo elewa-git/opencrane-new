@@ -42,13 +42,3 @@ export function checkHandlers(handlers: readonly Handler[]): string {
       .sort((a, b) => a.name.localeCompare(b.name)),
   );
 }
-
-/** Member roles and ownership share silo state, so their IAM jobs must not overtake each other. */
-export function handlerOrderingKey(name: HandlerName, event: EventEnvelope) {
-  const membership = event.subject.startsWith('member-');
-  const ownership = event.subject.startsWith('ownership-');
-  if (name === 'update-openfga' && (membership || ownership)) {
-    return `ownership-${event.silo}`;
-  }
-  return event.subject;
-}

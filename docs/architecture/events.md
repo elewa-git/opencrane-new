@@ -127,9 +127,11 @@ Ownership edits use only `ownership-<silo>`. Migration seeds the current active
 owners from legacy member events once; the seed append also conditionally checks
 the captured global sequence. New writes cannot use a stale seed. Fresh claims
 seed through the durable `seed-ownership` reaction. No owner edit is enabled until
-seeding succeeds. Owner-role invitations and rejoining active members are refused;
-member-stream events cannot change seeded owners or introduce an owner. Member
-and IAM projections reject these legacy bypasses. Non-owner member commands remain
+seeding succeeds. Acceptance of an Owner-role invitation and rejoining an active
+member are refused. Recording an invitation grants no authority; the members
+projection preserves an active member's identity and role when they are invited
+again. Other member-stream events cannot change seeded owners or introduce an
+owner; member and IAM projections reject these legacy bypasses. Non-owner member commands remain
 P4-3 work. Ownership adds no conversation, memory, group or resource grant.
 The [ownership interface](../api/ownership.md) exposes the original event receipt,
 recorded actor/target/time and both projection statuses, without a second ledger.

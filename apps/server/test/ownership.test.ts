@@ -6,7 +6,8 @@ import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { seedOwnership } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner, readEvents, rebuildMemberProjection } from '@opencrane/projections';
+import { auditTrail, connectMemberFeed, members, pgDb, ProjectionRunner,
+  readEvents, rebuildMemberProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -59,6 +60,7 @@ async function initialise() {
   const db = pgDb(dbs.queue);
   runner = new ProjectionRunner(db, nats.reader, logger);
   await runner.initialise(members);
+  await runner.initialise(auditTrail);
   for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member'], ['admin', 'admin']]) {
     const data = { memberId, email: `${memberId}@example.test`, displayName: memberId, role };
     const joined = await append(`member-${memberId}`, 'member.joined', data);
@@ -69,9 +71,10 @@ async function initialise() {
     mode: 'agent_session',
   });
   await project();
-  app = buildServer(config, { ownership: {
+  const options = {
     silo: 'acme', store: nats.store, db, binding, feed: { memberId: resolveMemberId },
-  } });
+  };
+  app = buildServer(config, { ownership: options, audit: options });
 }
 async function close() {
   await app?.close();
@@ -81,6 +84,129 @@ async function close() {
 }
 beforeAll(initialise, 120_000);
 afterAll(close);
+
+async function projectsPostSeedInvitations() {
+  await seedOwnership(nats.store, 'acme');
+  await project();
+  await append('member-owner', 'member.invited', {
+    memberId: 'owner', email: 'changed@example.test', role: 'member', invitedBy: 'admin',
+    invitationId: 'reinvite-seeded-owner', expiresAt: '2026-11-01T00:00:00Z',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'another-identity' },
+  });
+  await append('member-pending-owner', 'member.invited', {
+    memberId: 'pending-owner', email: 'pending@example.test', role: 'owner', invitedBy: 'owner',
+    invitationId: 'invite-pending-owner', expiresAt: '2026-11-01T00:00:00Z',
+  });
+  await runner.run(members);
+  const feed = await connectMemberFeed(String(dbs.queue.options.connectionString));
+  try {
+    const changes = await feed.read('acme', 0);
+    function concernsOwner(change: (typeof changes)[number]) {
+      return change.member.memberId === 'owner';
+    }
+    const ownerChanges = changes.filter(concernsOwner);
+    expect(ownerChanges.at(-1)?.member).toMatchObject({ role: 'owner', status: 'joined' });
+    expect(await feed.memberId('acme', config.issuerUrl, 'another-identity')).toBeUndefined();
+    expect((await request('GET')).statusCode).toBe(200);
+    await runner.rebuild(members);
+    expect((await request('GET')).statusCode).toBe(200);
+  } finally {
+    await feed.close();
+  }
+}
+it('post-seed invitations let the members projection continue and preserve active owners',
+  projectsPostSeedInvitations);
+
+async function refusesPlainMemberTransfer() {
+  const before = await nats.store.head();
+  const input = { action: 'transfer', commandId: 'member-appoint', successorId: 'admin',
+    expectedSequence: await nats.store.head('ownership-acme') };
+  expect((await request('POST', input, 'idp-bob')).statusCode).toBe(403);
+  expect(await nats.store.head()).toBe(before);
+}
+it('a plain Member cannot transfer ownership', refusesPlainMemberTransfer);
+
+async function conflictsOnAuthorityChange() {
+  const input = { action: 'transfer', commandId: 'changed-authority', successorId: 'bob',
+    expectedSequence: await nats.store.head('ownership-acme') };
+  const original = nats.store.head.bind(nats.store);
+  let changed = false;
+  async function changeAuthority(subject?: string, deadline?: number) {
+    if (subject === 'member-owner' && !changed) {
+      changed = true;
+      await append('member-owner', 'member.invited', {
+        memberId: 'owner', email: 'owner@example.test', role: 'admin', invitedBy: 'admin',
+        invitationId: 'authority-race', expiresAt: '2026-11-01T00:00:00Z',
+      });
+    }
+    return original(subject, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(changeAuthority);
+  try {
+    const response = await request('POST', input);
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ reason: 'concurrent_change' });
+  } finally {
+    spy.mockRestore();
+  }
+  expect(await nats.store.head('ownership-acme')).toBe(input.expectedSequence);
+}
+it('a change to watched authority returns an ownership conflict before append',
+  conflictsOnAuthorityChange);
+
+async function refusesChangedAuditAuthority() {
+  const original = nats.store.head.bind(nats.store);
+  let changed = false;
+  async function changeAuthority(subject?: string, deadline?: number) {
+    if (subject === 'member-owner' && !changed) {
+      changed = true;
+      await append('member-owner', 'member.invited', {
+        memberId: 'owner', email: 'owner@example.test', role: 'admin', invitedBy: 'admin',
+        invitationId: 'audit-authority-race', expiresAt: '2026-11-01T00:00:00Z',
+      });
+    }
+    return original(subject, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'head').mockImplementation(changeAuthority);
+  try {
+    const response = await request('GET', undefined, 'idp-owner', '/api/org/history');
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toMatchObject({ status: 'refused' });
+  } finally {
+    spy.mockRestore();
+  }
+}
+it('audit refuses a mid-read authority change with 403', refusesChangedAuditAuthority);
+
+async function readsReceiptWithNewBound() {
+  const input = { action: 'transfer', commandId: 'slow-append', successorId: 'admin',
+    expectedSequence: await nats.store.head('ownership-acme') };
+  const original = nats.store.append.bind(nats.store);
+  const realNow = performance.now.bind(performance);
+  let elapsed = 0;
+  function now() {
+    return realNow() + elapsed;
+  }
+  async function slowAppend(command: Parameters<typeof original>[0]) {
+    const result = await original(command);
+    elapsed = 2100;
+    return result;
+  }
+  const clock = vi.spyOn(performance, 'now').mockImplementation(now);
+  const spy = vi.spyOn(nats.store, 'append').mockImplementationOnce(slowAppend);
+  try {
+    expect((await request('POST', input)).statusCode).toBe(200);
+  } finally {
+    spy.mockRestore();
+    clock.mockRestore();
+  }
+  await project();
+  const stepDown = { action: 'step_down', commandId: 'restore-slow-append-fixture',
+    expectedSequence: await nats.store.head('ownership-acme') };
+  expect((await request('POST', stepDown, 'idp-admin')).statusCode).toBe(200);
+  await project();
+}
+it('a successful append has a separate bound for reading its receipt', readsReceiptWithNewBound);
 
 async function appointsSuccessor() {
   await seedOwnership(nats.store, 'acme');

@@ -8,7 +8,7 @@ import { createLogger } from '@opencrane/observability';
 import { seedOwnership } from '@opencrane/models';
 import { pgDb, type Query } from '@opencrane/projections';
 
-async function ordersMigration() {
+async function retriesDelayedOwnerSeed() {
   const nats = await natsFixture();
   const fga = await openfga();
   const dbs = await databases();
@@ -24,9 +24,9 @@ async function ordersMigration() {
     entered = resolve;
   }
   const blocked = new Promise<void>(captureRelease);
-  const demotionEntered = new Promise<void>(captureEntry);
+  const joinEntered = new Promise<void>(captureEntry);
   async function apply(record: EventEnvelope, transaction: Query) {
-    if (record.id === 'demote-alice') {
+    if (record.id === 'join-charlie') {
       entered();
       await blocked;
     }
@@ -34,7 +34,7 @@ async function ordersMigration() {
   }
   const handler = registerHandler('update-openfga', apply);
   const options = { db, silo: 'test', logger: createLogger('ownership-order', { level: 'silent' }),
-    handlers: [handler], retryLimit: 1 };
+    handlers: [handler], retryLimit: 5 };
   const runtime = new HandlerRuntime(options);
   const controller = new AbortController();
   let dispatching: Promise<void> | undefined;
@@ -53,8 +53,8 @@ async function ordersMigration() {
   async function sentinelApplied() {
     return auth.applied('sentinel');
   }
-  async function demotionApplied() {
-    return auth.applied('demote-alice');
+  async function joinApplied() {
+    return auth.applied('join-charlie');
   }
   async function seedApplied() {
     return auth.applied('ownership-seed-test');
@@ -76,21 +76,21 @@ async function ordersMigration() {
       });
     }
     await until(bothOwners);
-    await append('demote-alice', 'member-alice', 'member.role_changed', {
-      memberId: 'alice', previousRole: 'owner', newRole: 'admin', changedBy: 'bob',
+    await append('join-charlie', 'member-charlie', 'member.joined', {
+      memberId: 'charlie', email: 'charlie@example.test', displayName: 'Charlie', role: 'owner',
     });
-    await demotionEntered;
+    await joinEntered;
     await seedOwnership(nats.store, 'test');
     await append('sentinel', 'team-sentinel', 'team.created', {
       teamId: 'sentinel', name: 'Sentinel', createdBy: 'bob',
     });
-    // Another key completes while this silo's older demotion holds ownership behind it.
+    // Unrelated keys still run while the seed waits for its delayed owner's IAM tuple.
     await until(sentinelApplied);
     expect(await auth.applied('ownership-seed-test')).toBe(false);
     release();
-    await until(demotionApplied);
+    await until(joinApplied);
     await until(seedApplied);
-    expect((await auth.check('alice', 'owner')).allowed).toBe(false);
+    expect((await auth.check('charlie', 'owner')).allowed).toBe(true);
     const rebuilt = await rebuildMembers(fga.apiUrl, 'test', nats.reader, { verifyAgainst: binding });
     expect((await rebuilt.check('bob', 'owner')).allowed).toBe(true);
     controller.abort();
@@ -105,5 +105,5 @@ async function ordersMigration() {
     await nats.close();
   }
 }
-it('live IAM delivery orders a delayed legacy demotion before seeding and matches replay',
-  ordersMigration, 120_000);
+it('live IAM retries a seed waiting for a delayed owner addition and matches replay',
+  retriesDelayedOwnerSeed, 120_000);

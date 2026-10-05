@@ -1,4 +1,5 @@
-import { budgets, ownershipSeedHandler, settlementHandler, modelGrantHandler, initialiseBudgetProjection } from '@opencrane/models';
+import { budgets, ownershipSeedHandler, settlementHandler, modelGrantHandler,
+  initialiseBudgetProjection } from '@opencrane/models';
 import { setTimeout as delay } from 'node:timers/promises';
 import { connectNats, createEventStore } from '@opencrane/event-store';
 import { connectEventStore } from '@opencrane/event-store';
@@ -45,9 +46,13 @@ try {
       process.env['COMPUTER_POOL'] ?? 'computer', process.env['COMPUTER_STORAGE'] ?? '10Gi');
     const tokens = await tokenIssuer({ privateKeyPath: required('TOKEN_SIGNING_KEY_FILE'),
       issuer: required('TOKEN_ISSUER') });
-    runtime = new HandlerRuntime({ db: db.db, logger, silo,
-      handlers: [authorisation.handler, ownershipSeedHandler(commands.store),
-        modelGrantHandler(commands.store), ...lifecycleHandlers(commands.store), ...(process.env['MODEL_DECISION_URL'] ? [settlementHandler(process.env['MODEL_DECISION_URL'])] : [])] });
+    const handlers = [authorisation.handler, ownershipSeedHandler(commands.store),
+      modelGrantHandler(commands.store), ...lifecycleHandlers(commands.store)];
+    const decisionUrl = process.env['MODEL_DECISION_URL'];
+    if (decisionUrl) {
+      handlers.push(settlementHandler(decisionUrl));
+    }
+    runtime = new HandlerRuntime({ db: db.db, logger, silo, handlers });
     await runtime.start();
     await runtime.work();
     const idleMs = Number(process.env['COMPUTER_IDLE_MS'] ?? 900_000);

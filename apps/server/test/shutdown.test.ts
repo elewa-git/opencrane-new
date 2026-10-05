@@ -98,3 +98,15 @@ it('exits non-zero on telemetry cleanup failure while still closing NATS', async
   running.child.kill('SIGTERM');
   await exit(running, 1);
 }, CASE_TIMEOUT_MS);
+
+async function servesAfterSeedFailure() {
+  const foreign = event('foreign-owner', 'member-foreign', 'member.joined');
+  expect((await nats.store.append({ event: foreign, expectedSequence: 0 })).status).toBe('appended');
+  const running = await start();
+  expect((await fetch(`http://127.0.0.1:${running.port}/healthz`)).status).toBe(200);
+  expect(running.stdout()).toContain('Ownership seed unavailable');
+  running.child.kill('SIGTERM');
+  await exit(running, 0);
+}
+it('a startup seed failure keeps the server available and able to shut down',
+  servesAfterSeedFailure, CASE_TIMEOUT_MS);

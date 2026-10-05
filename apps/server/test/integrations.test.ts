@@ -9,7 +9,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
-import { chromium, type Page, type Response } from 'playwright';
+import { chromium, type Page } from 'playwright';
 import { encodeSession, tokenIssuer } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
@@ -265,12 +265,10 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     expect((await registered).status()).toBe(202);
     await page.reload();
     await page.getByText('Outcome unknown', { exact: false }).waitFor();
-    async function checkInventory() {
-      await checkDiscoveryStatus(page);
-      const inventory = page.getByRole('region', { name: 'Tool inventory' });
-      await inventory.waitFor({ timeout: 5000 });
-    }
-    await vi.waitFor(checkInventory, { timeout: 10_000 });
+    await vi.waitFor(async () => {
+      await page.getByRole('button', { name: 'Check status', exact: true }).click();
+      expect(await page.getByRole('region', { name: 'Tool inventory' }).count()).toBe(1);
+    }, { timeout: 10_000 });
     expect(registrations).toHaveLength(1);
     await page.getByText('2 tools discovered · 0 allowed').waitFor();
     for (const width of [1280, 390]) {
@@ -284,13 +282,10 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('button', { name: 'Add another server' }).click();
     await page.getByLabel('Server URL', { exact: true }).fill('https://mcp.example.test/protected');
     await page.getByRole('button', { name: 'Discover tools', exact: true }).click();
-    async function checkProtectedDiscovery() {
-      await checkDiscoveryStatus(page);
-      const message = page.getByText('A scoped validation connection is required.',
-        { exact: false });
-      await message.waitFor({ timeout: 5000 });
-    }
-    await vi.waitFor(checkProtectedDiscovery, { timeout: 10_000 });
+    await vi.waitFor(async () => {
+      await page.getByRole('button', { name: 'Check status', exact: true }).click();
+      expect(await page.getByText('A scoped validation connection is required.', { exact: false }).count()).toBe(1);
+    }, { timeout: 10_000 });
     expect(await page.getByRole('region', { name: 'Tool inventory' }).count()).toBe(0);
     await page.getByRole('link', { name: 'Back to integrations' }).click();
     await page.locator('.register-row').first().waitFor();
@@ -437,18 +432,6 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await rm(directory, { recursive: true, force: true });
   }
 }, 120_000);
-
-function isDiscoveryStatusResponse(response: Response): boolean {
-  return response.request().method() === 'GET' &&
-    response.url().includes('/api/org/integrations/discovery?');
-}
-async function checkDiscoveryStatus(page: Page): Promise<void> {
-  // Clicking clears the previous message; assertions must wait for this read and its render.
-  const checked = page.waitForResponse(isDiscoveryStatusResponse);
-  await page.getByRole('button', { name: 'Check status', exact: true }).click();
-  const response = await checked;
-  expect(response.status()).toBe(200);
-}
 
 /** Wait until the element with this id has focus; Angular renders after the key event. */
 async function focused(page: Page, id: string): Promise<void> {

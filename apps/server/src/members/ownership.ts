@@ -15,18 +15,27 @@ type Command = z.infer<typeof commandSchema>;
 export class OwnershipRefused extends Error {}
 export class OwnershipConflict extends Error {}
 
+type FreshAuthority = Awaited<ReturnType<typeof authorityFence>>;
 export async function ownershipAccess(store: EventStore, binding: Binding, memberId: string,
-  fresh: Awaited<ReturnType<typeof authorityFence>>, permitPendingStepDown = false) {
+  fresh: FreshAuthority) {
+  const membership = await readableMembership(store, binding, memberId, fresh);
+  await checkReceipts(binding, memberId, membership.facts, 'admin');
+  return membership;
+}
+export async function ownershipStatusAccess(store: EventStore, binding: Binding, memberId: string,
+  fresh: FreshAuthority) {
+  const membership = await readableMembership(store, binding, memberId, fresh);
+  // Both sides of step-down can read receipts; owner additions still need their IAM receipt.
+  const facts = membership.facts.filter(isStatusAuthority);
+  await checkReceipts(binding, memberId, facts, 'admin');
+  return membership;
+}
+async function readableMembership(store: EventStore, binding: Binding, memberId: string,
+  fresh: FreshAuthority) {
   const membership = await currentMembership(store, binding.silo, memberId, fresh);
   if (!['owner', 'admin'].includes(membership.role)) {
     throw new OwnershipRefused('owner_or_admin_required');
   }
-  let facts = membership.facts;
-  if (permitPendingStepDown) {
-    // Both sides of step-down can read receipts; pending owner additions still need their receipt.
-    facts = facts.filter(isStatusAuthority);
-  }
-  await checkReceipts(binding, memberId, facts, 'admin');
   return membership;
 }
 function isStatusAuthority(row: StoredEvent) {
@@ -123,6 +132,8 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human' as const, id: actorId },
   };
+  // P4-3: member removal must fence the successor's membership at this append boundary.
+  // The current fence detects changes before append; a removal in the gap still needs protection.
   await fresh();
   const result = await store.append({ event, expectedSequence: input.expectedSequence });
   if (result.status === 'unavailable') {
@@ -131,7 +142,7 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
   if (result.status === 'rejected') {
     throw new Error('Ownership append rejected');
   }
-  const updated = await history(store, subject, binding.silo, fresh.deadline);
+  const updated = await history(store, subject, binding.silo, performance.now() + 2000);
   ownershipState(updated);
   const receipt = previous(updated, input, actorId);
   if (receipt) {

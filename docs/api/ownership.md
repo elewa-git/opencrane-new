@@ -61,23 +61,27 @@ unapplied authority is unavailable. Errors disclose no foreign member details.
 
 ## Migration and replay
 
-Upgrade with writers stopped. Drain or explicitly rebuild all queued, active,
-retrying and failed legacy IAM jobs before changing their ordering keys; stopping
-the dispatcher alone is insufficient. Deploy the updated event registry,
-projection and handlers together. The dispatcher subscription manifest changes;
-use its existing controlled rebuild procedure, preserving ordered delivery. Member
-and ownership IAM jobs now share one silo ordering key so a seed cannot overtake
-legacy owner changes; other handler keys remain per entity. The
-server startup performs the idempotent owner-set migration before serving edits.
-Its single seed append fences both the ownership stream and captured global head;
-a concurrent write refuses migration, so retry startup with writers stopped.
-An empty install waits for the bootstrap claim's independently retried seed reaction.
+Deploy the registry, projections and handlers together. IAM job keys remain each
+event's subject, so queued member jobs retain their accepted key. The changed
+handler subscription manifest still requires the existing
+[controlled dispatcher rebuild](../../libs/handlers/README.md#recovery-and-subscription-changes).
+This is separate from ownership seeding; no ordering-key migration is needed.
+
+Startup seeding makes at most five attempts, each with a fresh global fence and a
+ten-second scan bound. A concurrent append causes a fresh scan and retry. The
+single seed append fences the ownership stream and captured global head. If the
+bound is exhausted or a dependency fails, the server logs the failure and keeps
+serving; ownership commands remain unavailable until seeding succeeds on a later
+startup. An empty install waits for the claim's durable seed reaction.
 
 Legacy owner additions/removals/demotions belong only before this seed. After it,
 member and OpenFGA projections reject owner-changing member events. Invitation
 acceptance refuses an Owner role and any rewrite of active membership. P4-3 must
 route future owner edits through this ownership invariant; its non-owner role and
-safe removal commands are not part of this interface.
+safe removal commands are not part of this interface. P4-3 must also fence the
+successor's active membership at append time: the present pre-append check leaves
+a gap in which a future removal could arrive. Its removal/transfer race test must
+prove that a removed successor cannot be appointed or stall IAM delivery.
 
 Replay members to rebuild roles, identities, owner sets and feed deltas; replay
 OpenFGA to rebuild the same tuples and receipts. Ownership reactions do not run
@@ -86,5 +90,5 @@ shared two-second fence. Gateway decisions include relevant ownership receipts;
 Owner/Admin commands use the ownership-derived role and refuse missing IAM receipts.
 
 [Source evidence and remaining qualification](../process/p4-2-backend-evidence.md)
-record the tested seams. Desktop/390px states and fresh-install journeys remain
+record the tested seams and live results. Ownership desktop/390px screens remain
 NOT RUN for this backend change.

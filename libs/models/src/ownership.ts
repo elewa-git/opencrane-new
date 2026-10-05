@@ -1,6 +1,6 @@
 import { registerHandler } from '@opencrane/handlers';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { ownershipSeededSchema, ownershipTransferredSchema,
+import { legacyMemberRole, ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema } from '@opencrane/events';
 import { envelope, history } from './actor.ts';
 import { data } from './state.ts';
@@ -48,15 +48,24 @@ export function ownershipState(rows: StoredEvent[]) {
   return owners;
 }
 
-/** Installation migration only: a global append fence protects both the snapshot and seed races. */
+/** Each attempt rescans behind a fresh global fence; unrelated writers may win the first append. */
 export async function seedOwnership(store: EventStore, silo: string) {
-  const deadline = performance.now() + 2000;
-  const existing = await history(store, ownershipSubject(silo), silo, deadline);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const deadline = performance.now() + 10_000;
+    if (await seedAttempt(store, silo, deadline)) {
+      return;
+    }
+  }
+  throw new Error('Ownership migration conflicted after five attempts');
+}
+async function seedAttempt(store: EventStore, silo: string, deadline: number) {
+  const subject = ownershipSubject(silo);
+  const head = await store.head(undefined, deadline);
+  const existing = await history(store, subject, silo, deadline);
   if (existing.length) {
     ownershipState(existing);
-    return;
+    return true;
   }
-  const head = await store.head(undefined, deadline);
   const roles = new Map<string, string>();
   for await (const row of store.readStream('member-*', 1, deadline)) {
     if (row.sequence > head) {
@@ -70,14 +79,9 @@ export async function seedOwnership(store: EventStore, silo: string) {
     if (row.event.subject !== `member-${memberId}`) {
       throw new Error('Member subject mismatch');
     }
-    if (['member.joined', 'silo.owner_bootstrapped'].includes(row.event.type)) {
-      roles.set(memberId, String(fields['role']));
-    }
-    if (row.event.type === 'member.role_changed') {
-      roles.set(memberId, String(fields['newRole']));
-    }
-    if (row.event.type === 'member.removed') {
-      roles.delete(memberId);
+    const role = legacyMemberRole(row.event);
+    if (role !== undefined) {
+      roles.set(memberId, role);
     }
   }
   const ownerIds: string[] = [];
@@ -87,29 +91,52 @@ export async function seedOwnership(store: EventStore, silo: string) {
     }
   }
   if (!ownerIds.length) {
-    return;
+    return true;
   }
   ownerIds.sort();
-  const event = envelope(silo, ownershipSubject(silo), 'ownership.seeded', { ownerIds },
+  const event = envelope(silo, subject, 'ownership.seeded', { ownerIds },
     `ownership-seed-${silo}`);
-  const result = await store.append({ event, expectedSequence: 0, expectedGlobalSequence: head });
-  if (result.status !== 'appended') {
-    throw new Error('Ownership migration conflicted; retry migration');
+  const command = { event, expectedSequence: 0, expectedGlobalSequence: head };
+  const result = await store.append(command);
+  if (result.status === 'unavailable') {
+    throw new Error('Ownership migration unavailable', { cause: result.cause });
   }
+  if (result.status === 'rejected') {
+    throw new Error('Ownership migration rejected');
+  }
+  return result.status === 'appended';
 }
 
 function isMemberState(row: StoredEvent) {
   return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
     'member.removed'].includes(row.event.type);
 }
-function memberRole(state: StoredEvent | undefined) {
-  if (!state || state.event.type === 'member.removed') {
-    return '';
+function relevantOwnership(row: StoredEvent, memberId: string) {
+  if (row.event.type === 'ownership.seeded') {
+    return true;
   }
-  const fields = data(state.event);
-  return String(fields['newRole'] ?? fields['role']);
+  return data(row.event)['memberId'] === memberId;
 }
-/** The ownership stream supplies owner transitions; member streams retain identity and other roles. */
+function roleWithOwnership(state: StoredEvent | undefined, changes: StoredEvent[],
+  owners: Set<string>, memberId: string) {
+  const memberRole = state ? legacyMemberRole(state.event) : undefined;
+  if (owners.has(memberId)) {
+    if (!memberRole) {
+      throw new Error('Owner membership was changed outside the ownership stream');
+    }
+    return 'owner';
+  }
+  const lastChange = changes.at(-1);
+  if (lastChange?.event.type === 'ownership.stepped_down' &&
+      (!state || lastChange.sequence > state.sequence)) {
+    return 'admin';
+  }
+  if (changes.length && memberRole === 'owner') {
+    return 'admin';
+  }
+  return memberRole ?? '';
+}
+/** Ownership supplies owner transitions; member streams retain identity and other roles. */
 export async function currentMembership(store: EventStore, silo: string, memberId: string,
   fresh: Awaited<ReturnType<typeof authorityFence>>) {
   const subject = ownershipSubject(silo);
@@ -117,29 +144,13 @@ export async function currentMembership(store: EventStore, silo: string, memberI
   const membership = await history(store, `member-${memberId}`, silo, fresh.deadline);
   const ownership = await history(store, subject, silo, fresh.deadline);
   const owners = ownershipState(ownership);
-  const facts = membership.filter(isMemberState);
-  const state = facts.at(-1);
-  let role = memberRole(state);
-  for (const row of ownership) {
-    const fields = data(row.event);
-    if (row.event.type === 'ownership.seeded' || fields['memberId'] === memberId) {
-      facts.push(row);
-    }
-    if (row.event.type === 'ownership.stepped_down' && fields['memberId'] === memberId) {
-      if (!state || row.sequence > state.sequence) {
-        role = 'admin';
-      }
-    }
+  const memberFacts = membership.filter(isMemberState);
+  function concernsMember(row: StoredEvent) {
+    return relevantOwnership(row, memberId);
   }
-  if (ownership.length && role === 'owner' && !owners.has(memberId)) {
-    role = 'admin';
-  }
-  if (owners.has(memberId)) {
-    if (!role) {
-      throw new Error('Owner membership was changed outside the ownership stream');
-    }
-    role = 'owner';
-  }
+  const ownershipFacts = ownership.filter(concernsMember);
+  const role = roleWithOwnership(memberFacts.at(-1), ownershipFacts, owners, memberId);
+  const facts = [...memberFacts, ...ownershipFacts];
   return { role, facts, owners, ownership };
 }
 
