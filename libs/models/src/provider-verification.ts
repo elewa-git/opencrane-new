@@ -3,14 +3,15 @@ import { providerIdSchema, providerModelIdSchema,
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { ProviderState } from '@opencrane/projections';
 import { verifyCommand } from './budget-config.ts';
 import type { JSONWebKeySet } from 'jose';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { appendProvider, providerAuthority, providerHistory, providerReceipt,
   ProviderConflict, ProviderRefused, ProviderUnpriced, providerPermission } from './providers.ts';
-import { requestReservationCents, costCents, models, priceTableId } from './state.ts';
+import { requestReservationCents, costCents, data as eventData, models,
+  priceTableId } from './state.ts';
 import type { ProviderSecrets } from './provider-secrets.ts';
 
 const providerContentSchema = z.object({
@@ -47,6 +48,8 @@ export const providerVerificationSchema = z.discriminatedUnion('action', [
     priceTableId: id, reservedCents: z.int().positive(), consent: z.literal(true) }).strict(),
 ]);
 type Verification = z.infer<typeof providerVerificationSchema>;
+const GATEWAY_TIMEOUT_MS = 15_000;
+const RETRY_MARGIN_MS = 5_000;
 export interface ProviderVerificationOptions {
   secrets: ProviderSecrets;
   gatewayUrl: string;
@@ -92,7 +95,7 @@ async function checkRevision(store: EventStore, binding: Binding,
   }
   return { ...current, state: current.state, fresh };
 }
-/** One append records intent; a retry only reads the original attempt. */
+/** One append records intent; a retry never sends the check again. */
 export async function requestProviderVerification(store: EventStore, binding: Binding,
   memberId: string, raw: unknown) {
   const input = providerVerificationSchema.parse(raw);
@@ -150,8 +153,9 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
     throw new ProviderRefused();
   }
   for (const row of current.rows) {
-    if (row.event.type === 'provider.verification_dispatched' &&
-      providerDispatchedSchema.parse(row.event.data).attemptId === input.commandId) {
+    if ((row.event.type === 'provider.verification_dispatched' ||
+      row.event.type === 'provider.verification_recorded') &&
+      eventData(row.event)['attemptId'] === input.commandId) {
       throw new ProviderRefused('Attempt already consumed');
     }
   }
@@ -199,18 +203,15 @@ function checkReservation(actor: BudgetActor, input: Verification, requestedEven
 async function recordResult(actor: BudgetActor, binding: Binding, memberId: string,
   input: Verification, outcome: 'pass' | 'fail' | 'unknown' | 'budget_refused',
   reservationId?: string, settledCents?: number) {
-  // A result records an admitted attempt, even after its member or configuration changes.
-  // It grants no new authority and must keep the original attempt's revision.
+  // Save the result of an existing check, even after its member or settings change.
+  // Grant no new access and keep the original settings revision.
   const payload = { ...requestedData(input, memberId), outcome, reservationId, settledCents };
-  function completedAuthority() {
-    return Promise.resolve();
-  }
   for (let retry = 0; retry < 3; retry++) {
     const rows = await history(actor.store, `provider-${input.providerId}`, binding.silo);
     try {
       return await appendProvider(actor.store, binding.silo, input.providerId, memberId,
         `internal:provider:${input.commandId}:result`, 'provider.verification_recorded',
-        payload, rows.at(-1)?.sequence ?? 0, completedAuthority);
+        payload, rows.at(-1)?.sequence ?? 0, skipAuthorityForAdmittedAttempt);
     } catch (error) {
       if (!(error instanceof ProviderConflict)) {
         throw error;
@@ -224,7 +225,11 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
   options: ProviderVerificationOptions) {
   const requested = await requestProviderVerification(actor.store, binding, memberId, raw);
   const { input, receipt } = requested;
-  if (!requested.created || input.action === 'skip') {
+  if (input.action === 'skip') {
+    return receipt;
+  }
+  if (!requested.created) {
+    await finishUndispatchedVerification(actor, binding, memberId, input, receipt.changeId);
     return receipt;
   }
   let reservationId: string | undefined;
@@ -256,6 +261,67 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
   await recordResult(actor, binding, memberId, input, observed.outcome,
     reservationId, observed.settledCents);
   return receipt;
+}
+async function finishUndispatchedVerification(actor: BudgetActor, binding: Binding,
+  memberId: string, input: Verification, requestedEventId: string) {
+  function matchesReservation(reservation: (typeof actor.state.reservations)[number]) {
+    return reservation.call.requestId === requestedEventId;
+  }
+  const reservation = actor.state.reservations.find(matchesReservation);
+  const payload = {
+    ...requestedData(input, memberId), outcome: 'unknown',
+    reservationId: reservation?.id, settledCents: reservation?.settledCents,
+  };
+  function matchesAttempt(row: StoredEvent) {
+    return eventData(row.event)['attemptId'] === input.commandId;
+  }
+  function isDispatch(row: StoredEvent) {
+    return row.event.type === 'provider.verification_dispatched';
+  }
+  function isResult(row: StoredEvent) {
+    return row.event.type === 'provider.verification_recorded';
+  }
+  function isRequest(row: StoredEvent) {
+    return row.event.id === requestedEventId;
+  }
+  for (let retry = 0; retry < 3; retry++) {
+    const rows = await history(actor.store, `provider-${input.providerId}`, binding.silo);
+    const request = rows.find(isRequest);
+    const startedAt = reservation?.time ?? request?.event.time;
+    if (!startedAt) {
+      return;
+    }
+    const elapsedMs = actor.now().getTime() - Date.parse(startedAt);
+    // Leave time for the first check to finish before a retry closes its attempt.
+    if (elapsedMs <= GATEWAY_TIMEOUT_MS + RETRY_MARGIN_MS) {
+      return;
+    }
+    const attempt = rows.filter(matchesAttempt);
+    if (attempt.some(isDispatch)) {
+      return;
+    }
+    if (!attempt.some(isResult)) {
+      try {
+        // Finish on the same provider stream as dispatch, so only one can be saved.
+        // Prevent gateway admission from releasing the key after the attempt finishes.
+        await appendProvider(actor.store, binding.silo, input.providerId, memberId,
+          `internal:provider:${input.commandId}:result`, 'provider.verification_recorded',
+          payload, rows.at(-1)?.sequence ?? 0, skipAuthorityForAdmittedAttempt);
+      } catch (error) {
+        if (error instanceof ProviderConflict) {
+          continue;
+        }
+        throw error;
+      }
+    }
+    return;
+  }
+  throw new ProviderConflict('Result append conflicted');
+}
+// Record only the outcome of an existing attempt, without granting new access.
+// Check access before accepting a retry; keep results even after access changes.
+function skipAuthorityForAdmittedAttempt() {
+  return Promise.resolve();
 }
 async function reserveProviderTest(actor: BudgetActor, binding: Binding, memberId: string,
   input: Extract<Verification, { action: 'test' }>, requestedEventId: string, raw: unknown) {
@@ -312,7 +378,7 @@ async function callProviderGateway(actor: BudgetActor, binding: Binding, memberI
     // Never follow a redirect. The redirect target is not the provider, and following it
     // would send our check token and the request body to another server.
     const request: RequestInit = { method: 'GET', headers, redirect: 'manual',
-      signal: AbortSignal.timeout(15_000) };
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS) };
     if (input.action === 'test') {
       const body = testBody(input.model);
       request.method = 'POST';

@@ -196,6 +196,8 @@ export async function startDecision(
         await actor.releaseUndispatched(reservation);
         throw error;
       });
+      // Refuse a permit if expiry released its hold while the audit was being saved.
+      await actor.requireOpenReservation(reservation, fresh);
       res.setHeader('x-request-id', requestId);
       res.setHeader('x-reservation-id', reservation); res.end('{}');
     })().catch(async (error: unknown) => {

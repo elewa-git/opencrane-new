@@ -10,6 +10,7 @@
 - The event libraries now have plain guides for people, with detailed contracts kept in README.robot.md.
 - Design folders and early experiments now have short guides for people, with the detailed records kept beside them.
 - Infrastructure and developer-tool guides now explain in plain words what each folder does, with exact setup detail kept in companion files.
+- Expired spending holds release at zero cents when a call was never allowed or sent. A failed final access check releases an unsent hold. A later unknown result restores the full hold for an allowed call. Provider retries leave live checks running and finish old interrupted checks as unknown without sending them again.
 - The root README now explains in plain words what each part of OpenCrane does, with one system diagram and an honest status. A new glossary explains the shared words, and the planned customer installation now lives in docs/architecture/target.md.
 - The live view of an assistant's computer stays up while the assistant works: a check that sees new chat, file or grant activity waits for the next check instead of closing the view. Real revocations still close it within 2 seconds. Live qualification of #77 is still pending.
 

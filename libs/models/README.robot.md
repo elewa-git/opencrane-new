@@ -2,6 +2,63 @@
 
 For people, read [README.md](README.md) first.
 
+## Recovery after store outages
+
+Expiry releases a hold at zero cents with `outcome: not_dispatched` when
+its request has no matching allow decision, no provider dispatch record and no
+record in `effect-<id>` or `security-<id>`. It reads these records before releasing
+money. Failed reads leave the hold for a later check. A matching allow decision
+or any evidence of a call keeps the hold and records `effect.uncertain` with
+`reason: settle_timeout`. A dispatch without an allow decision also raises a high
+`effect_without_permit` alert. Older holds without a request id keep the same
+uncertainty rules. A hold that may have been sent is never refunded by time.
+
+A retry of a provider check never sends it again. It returns the original receipt
+without writing while the first check may still be running. Recovery can finish
+an attempt only after its reservation is older than the 15-second gateway timeout
+plus a five-second margin. Without a reservation, the original request must be
+older than that same limit. When no dispatch exists, recovery records
+`provider.verification_recorded` with `outcome: unknown` and the original
+reservation id, if one exists. It includes settled cents only when the local
+budget actor has already settled the hold; otherwise the budget stream shows
+whether the money is still held or has been released. An allow decision still
+keeps the hold uncertain at expiry, even when a final result exists without a
+dispatch. That case needs manual resolution.
+
+The result and dispatch use conditional appends on the same provider stream.
+Gateway admission refuses a finished attempt. Ordinary model admission checks
+that its hold is still open after saving the allow decision. It checks current
+access again inside the budget queue, using the original two-second time limit.
+If that access check fails, it releases the hold at zero before returning the error.
+No permit has left the process at that point. It refuses the call
+if expiry already released the hold. A disabled budget writer must be
+replaced before expiry can release a hold that was never allowed or sent.
+
+When an allowed call reports an unknown result after a zero-cent release,
+`uncertain()` saves `budget.settled` with `settledCents: 0` and `outcome: unknown`.
+This makes the full reserved amount count against spending limits again without
+claiming a known charge. Duplicate reports do not write another settlement, and
+replay restores the same hold. Without an allow decision, the report raises
+`effect_without_permit` and does not restore the hold.
+
+Provider admission and expiry still run separately. A dispatch can be saved after
+expiry reads the provider stream but before it releases money. Reaching this gap
+requires a clock jump of 180 seconds or more between reservation and admission.
+Later usage or uncertainty restores the hold, but a crash before either report
+can leave the zero-cent release in place. Two leaders serving together with that
+much clock skew can also allow a call before the newer leader releases its hold.
+
+`test/actor.test.ts` covers expiry, late uncertainty, repeated checks and budget replay.
+`test/hold-leadership.test.ts` covers a stale leader allowing a call during expiry
+and the same-actor refusal that prevents that ordering.
+`test/hold-recovery.test.ts` covers two consecutive store failures through
+provider checks and ordinary calls. Ordinary calls have no provider-result
+write: the corresponding case loses the reply after saving the zero-cent
+settlement. `apps/server/test/providers.test.ts` covers a same-id retry during
+a live check and expiry racing admission through the real gateway.
+The tests use disposable services and
+never send a paid model request.
+
 Phase 2 #29 and Phase 3 #54. The decision process verifies the lifecycle computer and
 thread-bound turn tokens; agentgateway v1.5.0 enforces its answer and sends
 Responses requests to OpenAI. Reuses S0.2's ext_authz/header allowlist and
@@ -103,7 +160,8 @@ No extra proxy sees the provider key. `backendAuth.key.file` reads
 The prototype stores reservation history in one JSON projection row and rereads
 small entity histories. Large histories need compaction/indexing later; the event
 stream remains the source of truth. Manual resolution of uncertain effects and
-price administration are Phase 3 work; uncertainty never automatically refunds.
+price administration are Phase 3 work. A hold that may have been sent is never
+refunded by time. A hold that was never allowed or sent is released at zero cents.
 
 ## Monthly budgets (P3-13)
 
@@ -138,7 +196,8 @@ Model multiplicity stays one, with a positive bounded output limit and the
 existing conservative prompt bound. Unknown tariffs, overflowing/fractional
 money and provider tools with unreviewed cost are refused before dispatch.
 Reviewed non-metered MCP tools, including Odoo fixture calls, must explicitly
-carry `costCents: 0` in discovery. Monetary uncertainty is never refunded by time.
+carry `costCents: 0` in discovery. A hold that may have been sent is never refunded
+by time. A hold that was never allowed or sent is released at zero cents.
 P3-14/P3-15 own hard-stop cascades and evidence-based uncertainty resolution.
 
 ## Run and test

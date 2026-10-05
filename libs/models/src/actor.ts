@@ -1,12 +1,20 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore } from '@opencrane/event-store';
-import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDataSchema, effectObservedDataSchema, parseEventByType, type EventEnvelope } from '@opencrane/events';
+import { budgetCeilingSetDataSchema, effectResolvedDataSchema, effectUncertainDataSchema,
+  effectObservedDataSchema, parseEventByType, providerDispatchedSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
 import { applyBudget, costCents, data, emptyBudget, models, totals, type BudgetState, type ModelCall } from './state.ts';
 
-// After 180 seconds without settlement evidence, record effect.uncertain as settle_timeout.
-// Issue #144 tracks why this existing delay is set to 180 seconds.
+type ModelUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number | undefined;
+  cacheWriteTokens?: number | undefined;
+};
+
+// Keep a hold for three minutes so usage reports have time to arrive.
 const SETTLE_TIMEOUT_MS = 180_000;
 
 export async function history(store: EventStore, subject: string, silo: string, deadline = Infinity) {
@@ -118,13 +126,35 @@ export class BudgetActor {
       return id;
     });
   }
+  requireOpenReservation(reservationId: string, fresh: () => Promise<void>) {
+    const appendNotDispatched = this.appendNotDispatched.bind(this);
+    const state = this.state;
+    function matchesReservation(reservation: BudgetState['reservations'][number]) {
+      return reservation.id === reservationId;
+    }
+    async function checkReservation() {
+      const reservation = state.reservations.find(matchesReservation);
+      if (!reservation || reservation.settledCents !== undefined) {
+        throw new Error('Reservation is no longer open');
+      }
+      // Recheck access after waiting in the queue, within the original time limit.
+      try {
+        await fresh();
+      } catch (error) {
+        // Release the hold because no permit has left this process.
+        await appendNotDispatched(reservationId);
+        throw error;
+      }
+    }
+    return this.serial(checkReservation);
+  }
   releaseUndispatched(id: string) {
     return this.serial(async () => {
       const r = this.state.reservations.find(r => r.id === id);
       if (!r) throw new Error('Unmatched reservation');
       if (r.settledCents !== undefined) throw new Error('Reservation already settled');
       // Call only with proof that the permit was not used for provider dispatch.
-      await this.append('budget.settled', { reservationId: id, permitId: id, settledCents: 0, outcome: 'not_dispatched' });
+      await this.appendNotDispatched(id);
     });
   }
   settle(event: EventEnvelope) {
@@ -170,25 +200,71 @@ export class BudgetActor {
   uncertain(id: string, reason: z.infer<typeof effectUncertainDataSchema>['reason']) {
     return this.serial(() => this.recordEffect(id, undefined, 'success', reason));
   }
-  effect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success') {
+  effect(id: string, usage?: ModelUsage, outcome: 'success' | 'error' = 'success') {
     return this.serial(() => this.recordEffect(id, usage, outcome));
   }
-  private async recordEffect(id: string, usage?: { inputTokens: number; outputTokens: number; cachedInputTokens?: number | undefined; cacheWriteTokens?: number | undefined }, outcome: 'success' | 'error' = 'success', reason = 'settle_timeout') {
-    const r = this.state.reservations.find(r => r.id === id);
-    if (!r || !(await this.permitted(id, r.call.requestId))) { await this.alert(id); return; }
-    const knownTariff = models.some(row => row.id === r.call.model && row.priceTableId === r.call.priceTableId);
-    const observed = observedPayload(r, usage, outcome);
+  private async recordEffect(id: string, usage?: ModelUsage,
+    outcome: 'success' | 'error' = 'success', reason = 'settle_timeout') {
+    function matchesReservation(reservation: BudgetState['reservations'][number]) {
+      return reservation.id === id;
+    }
+    const reservation = this.state.reservations.find(matchesReservation);
+    if (!reservation || !(await this.permitted(id, reservation.call.requestId))) {
+      await this.alert(id);
+      return;
+    }
+    await this.recordEffectEvidence(reservation, usage, outcome, reason);
+    if (!usage && outcome === 'success' && reservation.settledCents === 0 &&
+        !reservation.outcomeUnknown) {
+      // Hold the full amount again because the allowed call may have been sent.
+      // Retry this write even when its uncertainty record already exists.
+      const payload = {
+        reservationId: id, permitId: id, settledCents: 0, outcome: 'unknown',
+      };
+      await this.append('budget.settled', payload);
+    }
+  }
+  private async recordEffectEvidence(reservation: BudgetState['reservations'][number],
+    usage: ModelUsage | undefined, outcome: 'success' | 'error', reason: string) {
+    function matchesTariff(model: (typeof models)[number]) {
+      return model.id === reservation.call.model &&
+        model.priceTableId === reservation.call.priceTableId;
+    }
+    const knownTariff = models.some(matchesTariff);
+    const id = reservation.id;
+    const observed = observedPayload(reservation, usage, outcome);
     const type = observed ? 'effect.observed' : 'effect.uncertain';
     const rows = await history(this.store, `effect-${id}`, this.silo);
     if (redundantTimeout(type, reason, rows)) return;
-    const payload = observed ? effectObservedDataSchema.parse(observed) : effectUncertainDataSchema.parse({
-      permitId: id, computerId: r.call.computerId, reason: knownTariff && !usage ? reason : 'unknown_tariff' });
-    if (rows.some(row => row.event.type === type && JSON.stringify(row.event.data) === JSON.stringify(payload))) return;
-    const suffix = rows.some(row => row.event.type === type) ? `:${createHash('sha256').update(JSON.stringify(payload)).digest('hex')}` : '';
+    const uncertainty = {
+      permitId: id, computerId: reservation.call.computerId,
+      reason: knownTariff && !usage ? reason : 'unknown_tariff',
+    };
+    const payload = observed ? effectObservedDataSchema.parse(observed) :
+      effectUncertainDataSchema.parse(uncertainty);
+    const payloadText = JSON.stringify(payload);
+    function matchesPayload(row: (typeof rows)[number]) {
+      return row.event.type === type && JSON.stringify(row.event.data) === payloadText;
+    }
+    function matchesType(row: (typeof rows)[number]) {
+      return row.event.type === type;
+    }
+    if (rows.some(matchesPayload)) {
+      return;
+    }
+    let suffix = '';
+    if (rows.some(matchesType)) {
+      const hash = createHash('sha256');
+      hash.update(payloadText);
+      suffix = `:${hash.digest('hex')}`;
+    }
     const eventId = `${id}:${type}${suffix}`;
-    const result = await this.store.append({ event: envelope(this.silo, `effect-${id}`, type, payload, eventId),
-      expectedSequence: rows.at(-1)?.sequence ?? 0 });
-    if (result.status !== 'appended') throw new Error('Effect append failed');
+    const event = envelope(this.silo, `effect-${id}`, type, payload, eventId);
+    const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0 };
+    const result = await this.store.append(command);
+    if (result.status !== 'appended') {
+      throw new Error('Effect append failed');
+    }
   }
   private async permitted(permitId: string, requestId?: string) {
     if (!requestId) return true; // Reservations before P3-19 did not carry the request id.
@@ -216,12 +292,61 @@ export class BudgetActor {
     });
   }
   async expire() {
-    for (const r of this.state.reservations) {
-      if (r.settledCents === undefined &&
-          this.now().getTime() - Date.parse(r.time) > SETTLE_TIMEOUT_MS) {
-        await this.effect(r.id);
+    for (const reservation of this.state.reservations) {
+      if (reservation.settledCents === undefined &&
+          this.now().getTime() - Date.parse(reservation.time) > SETTLE_TIMEOUT_MS) {
+        const expireReservation = this.expireReservation.bind(this, reservation);
+        await this.serial(expireReservation);
       }
     }
+  }
+  private async expireReservation(reservation: BudgetState['reservations'][number]) {
+    if (reservation.settledCents !== undefined) {
+      return;
+    }
+    const allowed = await this.permitted(reservation.id, reservation.call.requestId);
+    if (allowed) {
+      await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
+      return;
+    }
+    const dispatched = await this.providerDispatched(reservation);
+    const hasEvidence = await this.hasCallEvidence(reservation.id);
+    if (!dispatched && !hasEvidence) {
+      // Release only when no allow decision or evidence of a call exists.
+      // Keep the hold if a read fails, then try again at the next expiry check.
+      await this.appendNotDispatched(reservation.id);
+      return;
+    }
+    if (dispatched) {
+      await this.alert(reservation.id);
+    }
+    await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
+  }
+  private async appendNotDispatched(reservationId: string) {
+    const payload = {
+      reservationId, permitId: reservationId, settledCents: 0, outcome: 'not_dispatched',
+    };
+    await this.append('budget.settled', payload);
+  }
+  private async hasCallEvidence(reservationId: string) {
+    const effects = await history(this.store, `effect-${reservationId}`, this.silo);
+    const security = await history(this.store, `security-${reservationId}`, this.silo);
+    return effects.length > 0 || security.length > 0;
+  }
+  private async providerDispatched(reservation: BudgetState['reservations'][number]) {
+    if (reservation.call.assistantId !== 'provider-verification') {
+      return false;
+    }
+    // Use the provider stream stored as computerId for provider checks.
+    const rows = await history(this.store, reservation.call.computerId, this.silo);
+    function matchesDispatch(row: (typeof rows)[number]) {
+      if (row.event.type !== 'provider.verification_dispatched') {
+        return false;
+      }
+      const dispatch = providerDispatchedSchema.parse(row.event.data);
+      return dispatch.reservationId === reservation.id;
+    }
+    return rows.some(matchesDispatch);
   }
   async computerLostRecorded(subject: string, eventId: string) {
     if (!/^computer-[\w-]+$/u.test(subject)) throw new Error('Wrong computer stream');
