@@ -20,6 +20,9 @@ export class PersonalSettingsShell {
   protected readonly menuOpen = signal(false);
 
   protected pageLabel(): string {
+    if (!this.activePage()) {
+      return 'Settings';
+    }
     return personalSettingsPageLabel(this.activePage());
   }
 

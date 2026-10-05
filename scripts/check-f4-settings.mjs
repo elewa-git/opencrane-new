@@ -113,7 +113,7 @@ async function checkAccount(page, width, motion) {
 async function checkAssistant(page, width) {
   await page.goto(`${origin}/account/assistant`);
   await page.getByRole('heading', { name: 'Assistant', exact: true }).waitFor();
-  await page.getByText('Your assistant assignment is available in the workspace.', {
+  await page.getByText('Your assistant is assigned in the workspace.', {
     exact: false,
   }).waitFor();
   assert.equal(await page.locator('.sidebar [aria-current="page"]').getAttribute('href'),
@@ -122,7 +122,7 @@ async function checkAssistant(page, width) {
   await capture(page, 'assistant', width, 'no-preference');
 }
 
-async function checkTitlePositions(page) {
+async function checkTitlePositions(page, width) {
   const destinations = [
     ['/account', 'Account'],
     ['/account/preferences', 'Preferences'],
@@ -139,6 +139,14 @@ async function checkTitlePositions(page) {
       firstTitleTop = titleTop;
     } else {
       assert.equal(titleTop, firstTitleTop, 'Settings page titles line up');
+    }
+    if (width === 390) {
+      const menuButton = page.getByRole('button', {
+        name: 'Open personal settings navigation',
+      });
+      const buttonBox = await menuButton.boundingBox();
+      assert.equal(buttonBox.x + buttonBox.width, width - 16,
+        `Phone menu button stays 16px from the right edge on ${label}`);
     }
   }
 }
@@ -241,7 +249,7 @@ try {
       await checkUnavailablePreferences(page, width, motion);
       await checkUnavailableTools(page, width, motion);
       if (motion === 'no-preference') {
-        await checkTitlePositions(page);
+        await checkTitlePositions(page, width);
         await checkAssistant(page, width);
         await checkFailureStates(page, width);
       }
@@ -261,7 +269,12 @@ try {
       'My tools omits the INT-60 and INT-61 introductory line.',
       'Preferences omits the ONB-52 Personal · only you label.',
       'The account logo is not the smaller, lighter ONB-50 mark.',
-      'The Assistant page reports missing persona details and provisioning status.',
+      'The Assistant page reports missing persona and setup details.',
+      'ONB-51 expired state has no card or detail line; Sign in again is a text link outside it.',
+      'ONB-51 failed state has a text Try again button, not a bordered button in a red card.',
+      'The ONB-51 failed message differs from Nothing changed.',
+      'Loading shows one Checking line instead of the ONB-51 skeleton rows.',
+      'These aren\'t your settings is not built because /auth/me does not return that state.',
     ],
     scope: 'Settings shell, available identity name, and honest unavailable screen bodies',
   };

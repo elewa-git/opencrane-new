@@ -1,5 +1,6 @@
 import {
-  afterNextRender, ChangeDetectionStrategy, Component, signal, type OnDestroy,
+  afterNextRender, ChangeDetectionStrategy, Component, ElementRef, signal,
+  ViewChild, type OnDestroy,
 } from '@angular/core';
 import { z } from 'zod';
 import { ChatIcon } from '../chat/icon';
@@ -20,6 +21,7 @@ type IdentityState = 'loading' | 'ready' | 'signed-out' | 'failed';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AccountScreen implements OnDestroy {
+  @ViewChild('accountHeading') private accountHeading?: ElementRef<HTMLHeadingElement>;
   protected readonly identityState = signal<IdentityState>('loading');
   protected readonly identityName = signal('');
   protected readonly announcement = signal('');
@@ -50,7 +52,7 @@ export class AccountScreen implements OnDestroy {
       const identity = identityResponse.parse(body);
       if (!identity.authenticated) {
         this.identityState.set('signed-out');
-        this.announcement.set('');
+        this.announcement.set('Your session expired.');
         return;
       }
       this.identityName.set(identity.user?.name?.trim() ?? '');
@@ -62,11 +64,10 @@ export class AccountScreen implements OnDestroy {
           'Identity loaded from your current session. A display name was not provided.',
         );
       }
-    } catch (error) {
+    } catch {
       if (request.signal.aborted) return;
-      if (error instanceof DOMException && error.name === 'AbortError') return;
       this.identityState.set('failed');
-      this.announcement.set('');
+      this.announcement.set("Couldn't load your identity.");
     }
   }
 
@@ -74,7 +75,8 @@ export class AccountScreen implements OnDestroy {
     void this.loadIdentity();
   }
 
-  protected retryIdentity(): void {
-    void this.loadIdentity();
+  protected async retryIdentity(): Promise<void> {
+    await this.loadIdentity();
+    this.accountHeading?.nativeElement.focus();
   }
 }

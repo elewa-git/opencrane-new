@@ -1,5 +1,5 @@
 .account { max-width: 488px; }
-h1 { margin: 0 0 2px; font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
+h1 { margin: 0 0 2px; }
 .intro { margin: 0 0 18px; color: var(--oc-ink-muted); font-size: 12px; line-height: 1.5; }
 .identity { margin: 0 0 18px; }
 h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
@@ -26,7 +26,6 @@ a { color: var(--oc-accent-dark); }
 }
 @media (max-width: 700px) {
   .account { max-width: none; }
-  h1 { font-size: 24px; }
   .intro { margin-bottom: 18px; font-size: 14px; }
   .identity { margin-bottom: 20px; }
   .value { min-height: 44px; font-size: 14px; }

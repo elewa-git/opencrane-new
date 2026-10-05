@@ -1,4 +1,4 @@
-<div class="shell shell--personal">
+<div class="shell">
   <aside class="sidebar">
     <a class="brand" href="/workspace" aria-label="OpenCrane workspace">
       <oc-brand-mark /> Open<span class="brand-accent">Crane</span>
@@ -6,11 +6,11 @@
     <a class="back" href="/workspace">‹ Back to workspace</a>
     <p class="section-label">Your settings</p>
     <nav aria-label="Personal settings">
-  @for (page of pages; track page.id) {
-    <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
-      {{ page.label }}
-    </a>
-  }
+      @for (page of pages; track page.id) {
+        <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
+          {{ page.label }}
+        </a>
+      }
     </nav>
   </aside>
   <header class="mobile-bar">
@@ -26,9 +26,9 @@
   [open]="menuOpen()" [returnFocusTo]="menuButton" (closed)="menuOpen.set(false)">
   <a class="menu-back" href="/workspace">‹ Back to workspace</a>
   <p class="section-label">Your settings</p>
-      @for (page of pages; track page.id) {
-        <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
-          {{ page.label }}
-        </a>
-      }
+    @for (page of pages; track page.id) {
+      <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
+        {{ page.label }}
+      </a>
+    }
 </oc-navigation-menu>

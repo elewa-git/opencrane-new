@@ -40,8 +40,17 @@ account fixture text is intentionally different from handoff sample content.
 - My tools (INT-60 and INT-61) has no introductory line.
 - Preferences (ONB-52) has no “Personal · only you” label.
 - The account logo is not the smaller, lighter mark shown in ONB-50.
-- The Assistant page reports that persona details and provisioning status are
+- The Assistant page reports that persona details and setup status are
   not available; the assignment itself is available in the workspace.
+- ONB-51's expired state has no card or detail line. “Sign in again” is a
+  text link outside the state, while the frame shows a primary button inside
+  it.
+- ONB-51's failed state has a text “Try again” button rather than a bordered
+  button in a red card, and its message differs from the frame's “Nothing
+  changed”.
+- Loading shows one “Checking…” line rather than the ONB-51 skeleton rows.
+- The “These aren't your settings” state is not implemented because `/auth/me`
+  does not return it.
 
 ## Checks
 
@@ -52,17 +61,21 @@ account fixture text is intentionally different from handoff sample content.
   warnings).
 - PASS — Angular tests, 142 passed across 19 files on the first complete run.
   A later full rerun under shared host load had three unrelated 5-second
-  timeouts (139 passed); the changed `app.spec.ts` passed all 27 tests on a
-  focused run.
+  timeouts (139 passed). All three failing files passed when run alone; the
+  failures came from host load. The changed `app.spec.ts` passed all 27 tests
+  on a focused run.
 - PASS — `npm run visual:f1-foundation` (56 captures).
-- PARTIAL — `npm run visual:f2-drawers`; both attempts timed out waiting for
-  the Computer view “Viewing” status after resize.
+- PASS — `npm run visual:f2-drawers` after #160 updated its fixture to send the
+  access notice required since #153. The original timeout was a main bug, not
+  a load failure.
 - PASS — `npm run visual:f3-org-shell` (22 captures; shared shell styles
   preserve the organisation shell checks; the 1280px sidebar and 390px
   phone-bar regions are pixel-identical to the earlier captures).
 - PASS — `npm run visual:f4-settings` (20 captures; see `visual.json`).
 - NOT RUN — Fresh-install silo qualification; no secondary stack was requested
   or used for this screen-only foundation work.
+
+- Size — 1,118 changed lines against the 500–850 line estimate.
 
 - PARTIAL — Full root suite:
 

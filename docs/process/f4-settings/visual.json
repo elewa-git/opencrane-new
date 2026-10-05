@@ -44,7 +44,12 @@
     "My tools omits the INT-60 and INT-61 introductory line.",
     "Preferences omits the ONB-52 Personal · only you label.",
     "The account logo is not the smaller, lighter ONB-50 mark.",
-    "The Assistant page reports missing persona details and provisioning status."
+    "The Assistant page reports missing persona and setup details.",
+    "ONB-51 expired state has no card or detail line; Sign in again is a text link outside it.",
+    "ONB-51 failed state has a text Try again button, not a bordered button in a red card.",
+    "The ONB-51 failed message differs from Nothing changed.",
+    "Loading shows one Checking line instead of the ONB-51 skeleton rows.",
+    "These aren't your settings is not built because /auth/me does not return that state."
   ],
   "scope": "Settings shell, available identity name, and honest unavailable screen bodies"
 }

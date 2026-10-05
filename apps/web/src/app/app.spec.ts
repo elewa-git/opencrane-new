@@ -313,7 +313,8 @@ describe('personal settings shell', () => {
     expect(state?.getAttribute('data-glyph-name')).toBe('access_changed');
     expect(root(fixture).querySelector('a[href="/"]')?.textContent).toBe('Sign in again');
     expect(root(fixture).textContent).not.toContain('Identity unavailable');
-    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim()).toBe('');
+    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim())
+      .toBe('Your session expired.');
   }
 
   it('shows a lock state and sign-in link when the identity says the session expired',
@@ -331,6 +332,7 @@ describe('personal settings shell', () => {
     button(root(fixture), 'Try again').click();
     await vi.waitFor(() => expect(root(fixture).textContent).toContain('Taylor Example'));
     expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(globalThis.document.activeElement).toBe(root(fixture).querySelector('h1'));
     expect(root(fixture).querySelector('.sr-only')?.textContent?.trim())
       .toContain('Identity loaded from your current session.');
   }
@@ -344,7 +346,8 @@ describe('personal settings shell', () => {
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load your identity"));
     expect(button(root(fixture), 'Try again')).toBeTruthy();
     expect(root(fixture).textContent).not.toContain('Sign in again');
-    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim()).toBe('');
+    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim())
+      .toBe("Couldn't load your identity.");
   }
 
   it('uses the failed state when the identity response is not valid JSON',

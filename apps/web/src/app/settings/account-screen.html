@@ -1,5 +1,5 @@
-<section class="account">
-  <h1>Account</h1>
+<section class="account" [attr.aria-busy]="identityState() === 'loading'">
+  <h1 #accountHeading tabindex="-1">Account</h1>
   <p class="intro">Your identity and preferences. Fields from single sign-on are read-only.</p>
   <p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
   @if (identityState() === 'loading') {
@@ -10,7 +10,7 @@
     <p class="sign-in-link"><a href="/">Sign in again</a></p>
   } @else if (identityState() === 'failed') {
     <oc-shared-state kind="failed" message="Couldn't load your identity"
-      detail="The identity check failed. You can repeat the read safely."
+      detail="Nothing changed. You can try again."
       [safeToRetry]="true" (action)="retryIdentity()" />
   } @else {
     <section class="identity">

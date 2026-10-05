@@ -1,5 +1,25 @@
+.shell { grid-template-columns: 220px minmax(0, 1fr); }
+.brand {
+  padding: 0 18px;
+  color: var(--oc-ink-strong);
+}
+.brand oc-brand-mark { margin-right: 10px; }
+a { font-size: 13px; }
+nav { padding: 0 10px; }
+nav a, oc-navigation-menu a {
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+main { padding: var(--oc-page-padding); }
 .organisation { display: grid; padding: 16px 18px; overflow-wrap: anywhere; }
 .organisation strong { font-size: 13px; }
 small { color: var(--oc-ink-admin-muted); font-size: 11px; }
 .sidebar-footer { margin-top: auto; border-top: 1px solid var(--oc-border-row); }
 .back { display: flex; align-items: center; min-height: 44px; padding: 10px 18px; }
+@media (max-width: 700px) {
+  .mobile-bar { gap: 12px; padding: 0 12px; }
+  .mobile-bar button { width: 44px; height: 44px; font-size: 20px; }
+  oc-navigation-menu a { min-height: 44px; padding: 12px 18px; }
+}
