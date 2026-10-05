@@ -29,10 +29,11 @@ flowchart LR
 ## Processes it handles
 
 1. **A person signs in.** The website sends them to the sign-in service. After sign-in, it returns them to the page they opened.
-2. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
-3. **An admin reviews a tool.** The website shows the tools found on a registered server. The admin can allow, ask before use or block each tool.
-4. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation.
-5. **An admin checks a change.** The website shows organisation history to people with access.
+2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
+3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
+4. **An admin reviews a tool.** The website shows the tools found on a registered server. The admin can allow, ask before use or block each tool.
+5. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation.
+6. **An admin checks a change.** The website shows organisation history to people with access.
 
 ## How to run or test it
 

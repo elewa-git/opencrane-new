@@ -32,9 +32,10 @@ flowchart LR
 ## Processes it handles
 
 1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie.
-2. **A person chats with an assistant.** The server sends the turn to that person's computer and streams reports back to the browser. The person can stop the turn.
-3. **An admin adds a tool server.** The server checks the remote address, lists its tools and leaves them blocked until an admin reviews them.
-4. **A model request arrives.** The models process checks the available budget and starts agentgateway for allowed requests.
+2. **The first owner claims a new installation.** They enter a one-time token after signing in. The server checks it and records the new owner.
+3. **A person chats with an assistant.** The server sends the turn to that person's computer and streams reports back to the browser. The person can stop the turn.
+4. **An admin adds a tool server.** The server checks the remote address, lists its tools and leaves them blocked until an admin reviews them.
+5. **A model request arrives.** The models process checks the available budget and starts agentgateway for allowed requests.
 
 ## How to run or test it
 
