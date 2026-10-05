@@ -1,0 +1,110 @@
+<div class="page-heading">
+  <div><h1 tabindex="-1">People &amp; groups</h1>
+    <p>Flat groups for {{ organisationName() }}. A group grants only what is attached to it.
+      It never reveals private conversations or memory.</p></div>
+  <div class="page-actions">
+    <button type="button" class="button secondary" (click)="refresh()"
+      [attr.aria-disabled]="state() === 'loading' || state() === 'retrying'">Refresh list</button>
+    <button #createButton type="button" class="button primary"
+      (click)="openDrawer(createButton)">New group</button>
+  </div>
+</div>
+<div role="status" aria-live="polite">
+  @if (state() === 'loading') {
+    <oc-shared-state kind="checking" message="Loading groups…" />
+  } @else if (operationKind() === 'confirmed') {
+    <oc-shared-state kind="confirmed" [message]="operation()"
+      [detail]="'Group and access records were current when checked at ' + checkTime() +
+        ' UTC. It has no members yet. Creating a group grants nothing.'"
+      [changeReference]="changeReference()" actionLabel="Open group" [showAction]="false" />
+    <a class="button secondary" [href]="'/org/people/groups/' + highlightedGroupId()">Open group</a>
+  } @else if (operationKind() === 'unknown' || operationKind() === 'applying') {
+    <oc-shared-state [kind]="operationKind()" [message]="operation()"
+      detail="The change was recorded. Its records aren't current yet."
+      [changeReference]="changeReference()" [showAction]="false" />
+    <button type="button" class="button secondary" (click)="checkStatus()">Check status</button>
+    @if (operation().startsWith('No record')) {
+      <button type="button" class="button secondary" (click)="resend()">
+        Send the same request again</button>
+    }
+  } @else if (state() === 'access') {
+    <oc-shared-state kind="access_changed" message="Your access changed"
+      [detail]="accessDetail()"
+      [showAction]="false" />
+  } @else if (state() === 'failed' && !loadedAt()) {
+    <oc-shared-state kind="failed" message="Groups are unavailable right now"
+      detail="Nothing changed. Reading again is safe." [safeToRetry]="true"
+      actionLabel="Try again" (action)="refresh()" />
+  } @else if (state() === 'failed' || state() === 'retrying') {
+    <div class="refresh-notice"><div><strong>Showing what we loaded at {{ loadedTime() }}</strong>
+      <p>We couldn't refresh groups. Nothing changed because of this.</p></div>
+      <button class="button secondary" type="button" (click)="refresh()">Refresh list</button>
+    </div>
+  } @else {
+    <span class="sr-only">{{ operation() }}</span>
+  }
+</div>
+@if (state() !== 'access') {
+  <div class="tabs" role="tablist" aria-label="People and groups">
+    @for (tab of tabs; track tab.id) {
+      <button type="button" role="tab" [id]="'people-tab-' + tab.id"
+        aria-controls="people-panel" [attr.aria-selected]="selectedTab() === tab.id"
+        [attr.tabindex]="selectedTab() === tab.id ? 0 : -1" (click)="select(tab.id)"
+        (keydown)="tabKeydown($event)">{{ tab.label }}{{ tab.id === 'groups' && loadedAt() ?
+          ' · ' + rows().length : '' }}</button>
+    }
+  </div>
+  <section id="people-panel" role="tabpanel" tabindex="0" aria-labelledby="people-tab-groups"
+    [class.stale]="state() === 'failed' || state() === 'retrying'"
+    [attr.aria-busy]="state() === 'loading' || state() === 'retrying'">
+    @if (selectedTab() === 'groups') {
+      <label class="sr-only" for="group-search">Search groups</label>
+      <input #search id="group-search" type="search" placeholder="Search groups"
+        [value]="query()" (input)="setQuery($event)" />
+      @if (state() === 'loading') {
+        @for (width of ['48%', '65%', '54%', '72%']; track width) {
+          <div class="skeleton-row" aria-hidden="true"><oc-grain-loader width="100%" height="42px" /></div>
+        }
+      } @else if (visibleRows().length === 0 && query().trim()) {
+        <section class="empty"><h2>No groups match “{{ query() }}”</h2>
+          <p>Check the spelling or clear the search.</p>
+          <button type="button" class="button secondary" (click)="clearSearch(search)">Clear search</button>
+        </section>
+      } @else if (rows().length === 0) {
+        <section class="empty"><h2>No groups yet</h2>
+          <p>Groups collect people so you can grant tools, models and a shared assistant once.</p>
+          <button type="button" class="button primary" (click)="openDrawer(createButton)">New group</button>
+        </section>
+      } @else {
+        <div class="register-header" aria-hidden="true"><span>Group</span><span>Members</span>
+          <span>Source</span><span>Status</span></div>
+        <oc-groups-list [rows]="visibleRows()" [loadState]="state()" [loadedAt]="loadedAt()"
+          [query]="query()" [highlightedGroupId]="highlightedGroupId()" />
+      }
+    } @else if (selectedTab() === 'members') {
+      <oc-shared-state kind="not_configured" message="Not available yet"
+        detail="The member list isn't available yet." [showAction]="false" />
+    } @else {
+      <oc-shared-state kind="not_configured" message="Not available yet"
+        detail="Invitations aren't available yet." [showAction]="false" />
+    }
+  </section>
+}
+<oc-hinge-drawer [open]="drawerOpen()" title="New group" backLabel="Cancel"
+  [returnFocusTo]="createButton" (closed)="closeDrawer()">
+  <form (submit)="$event.preventDefault(); create()">
+    <label for="group-name">Group name <strong>Required</strong></label>
+    <input id="group-name" maxlength="200" [value]="draftName()" (input)="nameChanged($event)"
+      aria-describedby="group-name-hint group-name-error" />
+    <p id="group-name-hint" class="rule-note">Groups are flat: no parent groups or departments.</p>
+    @if (!loadedAt()) { <p>Waiting for the group list so we can check for duplicate names.</p> }
+    @if (duplicate()) { <p id="group-name-error">A group named “{{ draftName().trim() }}” already exists. Choose another name.</p> }
+    @if (draftName().trim().length > 200) { <p id="group-name-error">Use 200 characters or fewer.</p> }
+    @if (draftError()) { <p id="group-name-error">{{ draftError() }}</p> }
+  </form>
+  <div overlayFooter class="overlay-actions">
+    <button type="button" class="button secondary" (click)="closeDrawer()">Cancel</button>
+    <button type="button" class="button primary" [disabled]="createDisabled()"
+      (click)="create()">{{ sending() ? 'Creating…' : 'Create group' }}</button>
+  </div>
+</oc-hinge-drawer>

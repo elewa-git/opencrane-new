@@ -6,6 +6,8 @@ This Angular app provides the organisation settings shell and MCP register.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+People & groups reads flat group rows from `/api/groups`, validates them through
+the shared protocol package and creates groups through the same-origin API.
 
 ## Entrypoint and usage
 

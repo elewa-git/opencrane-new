@@ -188,7 +188,7 @@ async function checkPages(page, width, motion) {
   await checkRowLabels(register, width);
   await capture(page, 'integrations', width, motion);
   await checkNavigation(page, width, motion);
-  for (const id of ['overview', 'people', 'routines']) {
+  for (const id of ['overview', 'routines']) {
     await page.goto(`${origin}/org/${id}`);
     await page.getByText('Not available yet', { exact: true }).waitFor();
     assert.equal(await page.locator('.register-row').count(), 0);

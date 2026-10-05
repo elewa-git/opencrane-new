@@ -18,7 +18,8 @@
 
 ### What you can do now
 
-- Organisation settings now has the v2 navigation and phone menu; Integrations keeps the register, Spending owns budgets, and unfinished areas say Not available yet.
+- Owners and admins can see flat groups, create one and open it to see members, source and grants; adding members waits for a member list.
+- Organisation settings now has the v2 navigation and phone menu; Integrations keeps the register, Spending owns budgets, and other unfinished areas say Not available yet.
 - Owners can appoint an active successor while retaining ownership, then separately step down to Admin; the last owner is protected, and lost responses can be checked by their original change reference. P4-2 screens and fresh-install qualification remain pending.
 - Personal settings now opens from Account with workspace navigation, shows the current identity name, and marks unsupported profile and personal tool data unavailable.
 - Owners and admins can save and rotate provider keys, reconcile lost replies, select registry models and inspect separate reachability and budgeted model-test evidence through the new backend interface; screens and model access remain pending.
@@ -28,7 +29,7 @@
   send buttons. The session panel leaves out placeholder Decisions and People sections.
 - Admins can create a group assistant with selected grants, a fixed paying group and one computer. Members get their own chat transcripts and threads. Screens, personal credentials and fresh-install checks remain pending (#89).
 
-- Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
+- Group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. Fresh-install qualification remains pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.
 - Reuse the v2 paper tokens, state vocabulary and reduced-motion loaders across the organisation and workspace screens.
 - Members with desktop access can take a screenshot from a conversation's viewer, open it from chat or the session panel, and find it again after reload.

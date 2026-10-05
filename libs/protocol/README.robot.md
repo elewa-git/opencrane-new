@@ -59,3 +59,7 @@ conversation/turn ids, separate decision and observed outcome, integer cents and
 fixed readable reasons. Strict metadata schemas reject private payload fields.
 The Angular history views use this same contract; no event payload is passed to
 browser rendering. See the [HTTP contract](../../apps/server/README.robot.md#permission-scoped-audit-p3-19).
+
+The People & groups screen uses `groupRowSchema`, `groupsResponseSchema`,
+`groupReceiptSchema`, `groupChangeSchema` and `createGroupCommandSchema` for its
+flat group reads and create command.

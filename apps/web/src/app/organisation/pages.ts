@@ -21,6 +21,10 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
       return page.id;
     }
   }
+  if (pathname === '/org/people' ||
+      /^\/org\/people\/groups\/[\w-]{1,200}$/u.test(pathname)) {
+    return 'people';
+  }
   if (pathname === '/org/integrations/new') {
     return 'integrations';
   }

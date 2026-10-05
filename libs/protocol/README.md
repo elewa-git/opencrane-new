@@ -22,6 +22,7 @@ flowchart LR
 - Define the data returned for chat, computers, integrations, budgets, approvals and the history of changes.
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
+- Check flat group rows and create commands for the People & groups screen.
 
 ## Processes it handles
 

@@ -1,0 +1,23 @@
+@if (state() !== 'missing') {
+  <nav aria-label="Breadcrumb"><a href="/org/people">People &amp; groups</a> › Groups
+    @if (group()) { › <span aria-current="page">{{ group()!.name }}</span> }
+  </nav>
+}
+<h1 tabindex="-1">{{ heading() }}</h1>
+<div role="status" aria-live="polite">
+  @if (state() === 'loading') {
+    <oc-shared-state kind="checking" message="Loading group…" />
+  } @else if (state() === 'missing') {
+    <oc-shared-state kind="removed" [message]="statusMessage()" [showAction]="false" />
+    <a class="button secondary" href="/org/people">Back to groups</a>
+  } @else if (state() === 'access') {
+    <oc-shared-state kind="access_changed" [message]="statusMessage()" [detail]="detail()"
+      [showAction]="false" />
+  } @else if (state() === 'failed') {
+    <oc-shared-state kind="failed" [message]="statusMessage()" [detail]="detail()"
+      [safeToRetry]="true" actionLabel="Try again" (action)="refresh()" />
+  } @else { <span class="sr-only">{{ statusMessage() }}</span> }
+</div>
+@if (state() === 'ready' && group()) {
+  <oc-group-detail [group]="group()!" [canManage]="group()!.membershipSource === 'local'" />
+}

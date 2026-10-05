@@ -1,0 +1,68 @@
+:host { display: block; color: #202729; }
+h1 { overflow-wrap: anywhere; }
+.page-heading { display: flex; justify-content: space-between; gap: 24px; align-items: start; }
+.page-heading h1 { margin: 0; }
+.page-heading p { max-width: 720px; }
+.page-actions, .overlay-actions { display: flex; gap: 12px; }
+.button { min-height: 44px; padding: 10px 16px; border-radius: 5px; font: inherit; cursor: pointer; }
+.button.primary { background: #087f8c; color: white; border: 1px solid #087f8c; }
+.button.secondary { background: transparent; color: #263134; border: 1px solid #778184; }
+.button:focus-visible, a:focus-visible, input:focus-visible, [role=tab]:focus-visible {
+  outline: 2px solid #0a8497; outline-offset: 2px;
+}
+.tabs { display: flex; gap: 6px; border-bottom: 1px solid #d4dadd; margin: 20px 0 16px; }
+.tabs button { min-height: 44px; padding: 8px 12px; border: 0; background: none; color: inherit; }
+.tabs button[aria-selected=true] { border-bottom: 3px solid #087f8c; font-weight: 700; }
+.sr-only, .column-label { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+#group-search { box-sizing: border-box; width: 100%; min-height: 44px; margin: 0 0 14px; padding: 10px; }
+.register-header, .group-row { display: grid; grid-template-columns: minmax(240px, 2fr) 1fr 1.5fr 1fr 20px;
+  gap: 12px; align-items: center; }
+.register-header { padding: 8px 14px; color: #4f575a; font-size: .85rem; }
+.group-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid #d4dadd; }
+.group-list li { border-bottom: 1px solid #d4dadd; }
+.group-row { min-height: 78px; padding: 12px 14px; color: inherit; text-decoration: none; overflow-wrap: anywhere; }
+.group-row:hover { background: #f3f7f7; }
+.stale .group-row { color: #4f575a; }
+.group-row small, .members small { display: block; margin-top: 4px; color: #4f575a; font-family: monospace; }
+.highlighted { border-left: 3px solid #087f8c; }
+.chevron { justify-self: end; font-size: 1.5rem; }
+.empty { padding: 36px 12px; text-align: center; }
+.refresh-notice, .supplied { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 14px; background: #fff7e6; border: 1px solid #a46900; margin: 12px 0; }
+.refresh-notice p, .supplied p { margin: 6px 0 0; }
+.skeleton-row { margin: 10px 0; }
+nav[aria-label=Breadcrumb] { margin: 0 0 16px; overflow-wrap: anywhere; }
+nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-items: center; }
+.detail-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 24px; }
+.paper-card { min-width: 0; padding: 18px; border: 1px solid #d4dadd; background: white; }
+.paper-card h2 { margin-top: 0; }
+.paper-card code, .members small { overflow-wrap: anywhere; }
+.members { list-style: none; padding: 0; }
+.members li { padding: 12px 0; border-top: 1px solid #e0e4e5; }
+.members li span { display: block; color: #4f575a; }
+.lock { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; vertical-align: -3px; }
+.add-members { margin-top: 20px; }
+.rule-note { color: #087f8c; }
+.overlay-actions { justify-content: flex-end; }
+@media (max-width: 700px) {
+  .page-heading { display: block; }
+  .page-actions { flex-direction: column; margin-top: 16px; }
+  .page-actions .button, .overlay-actions .button { width: 100%; }
+  .tabs { flex-wrap: wrap; }
+  .register-header { display: none; }
+  .group-row { display: flex; flex-wrap: wrap; align-items: start; gap: 8px 16px; padding: 14px 12px; }
+  .group-name { flex-basis: calc(100% - 24px); }
+  .group-row > span:not(.group-name):not(.chevron) { display: block; flex-basis: 100%; }
+  .column-label { position: static; width: auto; height: auto; margin: 0; overflow: visible;
+    clip: auto; white-space: normal; font-weight: 700; }
+  .chevron { position: absolute; right: 12px; }
+  .group-list li { position: relative; }
+  .detail-cards { grid-template-columns: 1fr; }
+  .refresh-notice, .supplied { display: block; }
+  .refresh-notice .button { width: 100%; margin-top: 12px; }
+  .overlay-actions { flex-direction: column-reverse; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

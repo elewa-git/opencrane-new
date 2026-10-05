@@ -46,6 +46,12 @@
       <oc-spending />
     } @else if (activePage === 'history') {
       <oc-audit />
+    } @else if (activePage === 'people') {
+      @if (peopleGroupId) {
+        <oc-group-detail-screen [groupId]="peopleGroupId" />
+      } @else {
+        <oc-people-screen [organisationName]="organisation" />
+      }
     } @else if (!activePage) {
       <h1>Page not found</h1>
       <p>This address does not match an organisation page.</p>
