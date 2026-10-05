@@ -320,3 +320,86 @@ root runs and targeted reruns. Every lint, typecheck and test command used
 `--maxWorkers=2`, after the integer load fell below 16 and no live qualification
 batch was detected. All model calls used recording fixtures. No paid call,
 owner-stack change, Docker daemon/network change or new dependency was involved.
+
+## Provider outcome and money recovery — 5 October 2026
+
+Validated application source: `1a4c49c`, based on `c8c87a3` and main `cfbf50a`.
+Environment: shared Linux host, disposable NATS, PostgreSQL, OpenFGA and the pinned
+real agentgateway, with a local recording upstream. This is source evidence;
+fresh-install provider qualification and MOD screens remain **NOT RUN**.
+
+Stored dispatch proves admission completed, rather than proving the gateway sent
+anything. Reachability now records `fail` only for upstream 401/403; other non-OK
+statuses record `unknown`. Priced upstream 401/403/429 rejections settle at zero;
+ambiguous dispatched outcomes retain their hold. An audit failure before the
+gateway call releases the reservation as undispatched and records `unknown`.
+Role, configuration and pending IAM refusals also finish their requested attempt.
+
+Provider-route 401 audit lines remain recorded. Pending budget IAM receipts return
+retryable 503. User conversation commands reject the reserved `provider-` prefix.
+The API contract explains status mapping, and budget configuration uses the shared
+command schema. Named authority options replace bare flags; the ledger row is
+inside its table and the earlier receipt's rebased commit reference is corrected.
+
+### Own regression evidence
+
+The slow-acknowledgement test first failed with gateway 503, stored dispatch and
+zero upstream calls, but recorded `fail`: 1 failed / 34 passed in 40.37 seconds
+(`/tmp/p4-21-pass2-red-ack.log`). Its fix passed all 35 tests. The broader upstream
+run reported 7 failed / 38 passed in 194.67 seconds, including authority failures
+before some intended assertions. Separate provider fixtures then reproduced the
+three priced-rejection failures: 3 failed / 7 passed in 46.72 seconds
+(`/tmp/p4-21-pass2-red-status-isolated.log`). All ten status cases passed after
+the settlement fix (`/tmp/p4-21-pass2-green-status.log`).
+
+The unavailable-audit test first raised the false expiry security alert. It then
+passed with zero-cent release, `unknown`, no upstream contact and no alert after
+180 seconds (`/tmp/p4-21-pass2-red-audit.log` and
+`/tmp/p4-21-pass2-green-audit.log`). The three minor behaviour tests also failed
+before their fixes and passed afterwards: provider-route 401 audit, reserved
+conversation prefix and retry after applying the pending budget IAM receipt.
+
+After the passing root run, an own sensitivity check temporarily restored only
+the starting `c8c87a3` verification implementation. The new cases produced
+11 expected failures / 5 passed controls / 34 filtered-out tests in 26.43 seconds,
+including 429/5xx reachability, priced rejections, expiry and unfinished refusals
+(`/tmp/p4-21-pass2-original-control.log`). Restoring the validated implementation
+passed all 16 selected cases in 21.22 seconds
+(`/tmp/p4-21-pass2-control-restored.log`). SHA-256 confirmed byte-for-byte restoration
+of the application source. Filtered-out tests are not counted as passes.
+
+Intermediate lint and typecheck attempts failed while fixture event types and all
+membership callers were being corrected. Those failures remain in
+`/tmp/p4-21-pass2-lint.log` and `/tmp/p4-21-pass2-typecheck.log`; final checks pass.
+
+### Own final checks
+
+| Check | Result |
+| --- | --- |
+| Full lint | PASS: code, dependencies, unused exports, docs, links and fixtures |
+| Workspace typecheck | PASS |
+| Event catalogue | PASS: 95 matching types |
+| Provider, secret and token run | PASS: 54 tests |
+| Ten-file focused run | FAIL: NATS heartbeat error during gateway teardown; 217 passed / 2 skipped cases |
+| All requested suites in the complete root run | PASS, including 50 provider and 80 active gateway cases |
+| Complete root suite | PASS: 1,684 passed / 15 skipped; 104 passed / 4 skipped files |
+| Restored-source sensitivity cases | PASS: 16 selected tests |
+| Paid model calls, fresh-install provider qualification and MOD screens | NOT RUN |
+
+The complete root run exited 0 in 1,237.73 seconds, starting at integer load **4**
+at 06:58:51 UTC, with no detected live qualification batch. It used
+`PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`, `--maxWorkers=2`
+and `nice -n 10`, after checking integer load was below **12**. Application source
+stayed unchanged throughout that run. All 80 active gateway cases passed in this
+complete passing run; the preceding focused teardown failure remains a failed run.
+`/tmp/p4-21-pass2-root.log` and `/tmp/p4-21-pass2-focused.log` retain both results.
+
+Final lint, typecheck and catalogue logs are `/tmp/p4-21-pass2-lint-final.log`,
+`/tmp/p4-21-pass2-typecheck-final.log` and `/tmp/p4-21-pass2-events.log`.
+The final formatting-only changes passed targeted lint in
+`/tmp/p4-21-pass2-style-lint.log` before the complete root run. Every lint,
+typecheck and test command used `nice -n 10`. `MODELS_REAL_CALL=0` explicitly
+disabled the paid-call test. No paid model call, owner-stack change, Docker
+daemon/network change or new dependency was involved. Source checks are **PASS**;
+hosted CI and the complete fresh-install provider journey remain required before
+landing or claiming a live provider capability.
