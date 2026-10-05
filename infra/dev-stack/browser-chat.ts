@@ -7,7 +7,11 @@ import { mkdir } from 'node:fs/promises';
 import type { Page } from 'playwright';
 
 /** The real signed-in member uses the shipped UI, HTTP commands and realtime bridge. */
-export async function browserChatJourney(page: Page, origin: string, prompt = 'Say hello briefly.'): Promise<void> {
+export async function browserChatJourney(
+  page: Page,
+  origin: string,
+  prompt = 'Say hello briefly.',
+): Promise<string> {
   await page.bringToFront();
   const start = performance.now();
   const width = page.viewportSize()!.width;
@@ -32,7 +36,8 @@ export async function browserChatJourney(page: Page, origin: string, prompt = 'S
   await reply.filter({ hasText: 'Hello from your computer.' }).waitFor();
   await reply.getByText('Done', { exact: true }).waitFor();
   const completeMs = Math.round(performance.now() - sentAt);
-  const url = page.url(); assert(new URL(url).searchParams.get('conversation'));
+  const url = page.url();
+  assert(new URL(url).searchParams.get('conversation'));
   await page.reload();
   await reply.filter({ hasText: 'Hello from your computer.' }).waitFor();
   await page.getByRole('article', { name: 'Your message', exact: true }).filter({ hasText: prompt }).waitFor();
@@ -55,4 +60,5 @@ export async function browserChatJourney(page: Page, origin: string, prompt = 'S
   await page.screenshot({ path: `${screenshots}/workspace-${width}.png`, fullPage: true });
   await browserUploadJourney(page, origin, screenshots);
   console.log(`PASS browser chat ${width}px: sign-in → workspace → streamed stub reply → reload; Stop keeps partial text after reload; first token ${firstTokenMs} ms, completion ${completeMs} ms, browser journey ${Math.round(performance.now() - start)} ms; screenshot ${screenshots}/workspace-${width}.png`);
+  return url;
 }
