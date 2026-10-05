@@ -1,4 +1,4 @@
-import { parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
+import { decisionRecordedDataSchema, parseEventByType, providerDispatchedSchema, type EventEnvelope } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -1034,6 +1034,55 @@ async function recordsNoFakeGatewayObservations() {
 }
 it('provider checks retain only 401 gateway audit rows',
   recordsNoFakeGatewayObservations);
+async function keepsLiveVerificationRunning() {
+  const providerId = 'live-retry';
+  await preparesVerificationProvider(providerId);
+  const input = verificationInput('live-retry-test', 'test');
+  const verifyUrl = `/api/org/providers/${providerId}/verify`;
+  const originalAppend = nats.store.append.bind(nats.store);
+  let retryChecked = false;
+  let retryWroteNothing = false;
+
+  async function retryAfterAllow(command: Parameters<typeof originalAppend>[0]) {
+    const result = await originalAppend(command);
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success || parsed.event.type !== 'decision.recorded') {
+      return result;
+    }
+    const decision = decisionRecordedDataSchema.parse(parsed.event.data);
+    if (decision.reason !== 'provider_verification') {
+      return result;
+    }
+    const sequenceBeforeRetry = await nats.store.head();
+    const retried = await request('POST', verifyUrl, input);
+    expect(retried.statusCode).toBe(200);
+    const sequenceAfterRetry = await nats.store.head();
+    retryWroteNothing = sequenceAfterRetry === sequenceBeforeRetry;
+    retryChecked = true;
+    return result;
+  }
+
+  const writer = vi.spyOn(nats.store, 'append');
+  writer.mockImplementation(retryAfterAllow);
+  const before = upstreamCount;
+  try {
+    const first = await request('POST', verifyUrl, input);
+    expect(first.statusCode).toBe(200);
+    expect(retryChecked).toBe(true);
+    expect(retryWroteNothing).toBe(true);
+    expect(upstreamCount - before).toBe(1);
+    const statusUrl = `/api/org/providers/${providerId}/changes/${input.commandId}`;
+    const status = await request('GET', statusUrl);
+    expect(status.json()).toMatchObject({ outcome: 'pass' });
+    expect(actor.state.reservations.at(-1)?.settledCents).toBe(1);
+  } finally {
+    writer.mockRestore();
+  }
+}
+
+it('a same-id retry during a live check writes nothing and lets the first check pass',
+  keepsLiveVerificationRunning);
+
 async function deniesRevokedRoleBeforeIamCatchesUp() {
   const row = { ...event('provider-revoked-owner', 'member-owner', 'member.role_changed'),
     silo: 'acme', correlation: {},

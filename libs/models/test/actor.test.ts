@@ -101,7 +101,12 @@ async function keepsDispatchedHold() {
   expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
   const effects = await history(nats.store, `effect-${reservationId}`, 'test');
   expect(effects[0]?.event).toMatchObject({ type: 'effect.uncertain' });
-  expect(await history(nats.store, `security-${reservationId}`, 'test')).toEqual([]);
+  const alerts = await history(nats.store, `security-${reservationId}`, 'test');
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]?.event).toMatchObject({
+    type: 'security.alert_raised',
+    data: { severity: 'high', reason: 'effect_without_permit' },
+  });
 }
 
 it('keeps a dispatched provider hold uncertain even without an allow decision', keepsDispatchedHold);
@@ -115,3 +120,53 @@ async function keepsLegacyHold() {
 }
 
 it('keeps a hold from before request ids were recorded uncertain', keepsLegacyHold);
+
+async function keepsHoldAfterUsageWithoutDecision() {
+  const budget = {
+    scope: 'global', dailyCeilingCents: 1000, ceilingCents: 1000, setBy: 'alice',
+  };
+  await actor.configure(budget);
+  const call = {
+    requestId: 'usage-request', model: 'gpt-6-luna', priceTableId,
+    computerId: 'computer', assistantId: 'assistant', requesterId: 'alice',
+    conversationId: 'conversation', turnId: 'attempt', threadId: 'attempt',
+    payingGroupId: 'group', contextDigest: '0'.repeat(64),
+  };
+  const reservationId = await actor.reserve(call, 500);
+  const usage = { inputTokens: 100_000, outputTokens: 2000 };
+  await actor.effect(reservationId, usage);
+  await expire();
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 500, monthCents: 0 });
+  const effects = await history(nats.store, `effect-${reservationId}`, 'test');
+  expect(effects).toHaveLength(1);
+  expect(effects[0]?.event).toMatchObject({
+    type: 'effect.uncertain', data: { reason: 'settle_timeout' },
+  });
+  const alerts = await history(nats.store, `security-${reservationId}`, 'test');
+  expect(alerts).toHaveLength(1);
+  expect(alerts[0]?.event.data).toMatchObject({ reason: 'effect_without_permit' });
+  const recovered = new BudgetActor(nats.store, 'test', now);
+  await recovered.start();
+  await recovered.expire();
+  expect(totals(recovered.state, clock)).toMatchObject({ reservedCents: 500 });
+}
+
+it('keeps money held when usage was reported without an allow decision',
+  keepsHoldAfterUsageWithoutDecision);
+
+async function keepsHoldWithRecordedEffect() {
+  const reservationId = await reserve(false, 'request');
+  const payload = { permitId: reservationId, computerId: 'computer',
+    reason: 'transport_failure' };
+  const event = envelope('test', `effect-${reservationId}`, 'effect.uncertain', payload);
+  const command = { event, expectedSequence: 0 };
+  expect((await nats.store.append(command)).status).toBe('appended');
+  await expire();
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+  const effects = await history(nats.store, `effect-${reservationId}`, 'test');
+  expect(effects).toHaveLength(1);
+  expect(effects[0]?.event.data).toMatchObject({ reason: 'transport_failure' });
+}
+
+it('keeps money held when an effect was recorded without an allow decision',
+  keepsHoldWithRecordedEffect);

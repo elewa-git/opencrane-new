@@ -333,7 +333,9 @@ reservation. Ambiguous outcomes (including timeouts and lost connections) produc
 If the audit or final authority fence rejects before a permit is returned, the
 actor instead appends `budget.settled` with `settledCents: 0` and
 `outcome: not_dispatched`. This releases the reservation without an effect;
-expiry and replay preserve that settlement.
+expiry and replay preserve that settlement. Expiry also writes this settlement
+when a hold has no matching allow decision, no provider dispatch record and no
+effect or security record. A hold that may have been sent is never refunded by time.
 `settle-budget` retries a recorded
 observation or operator resolution through the decision process; duplicate settlement is a no-op.
 It also records uncertainty for outstanding reservations of a lost computer.

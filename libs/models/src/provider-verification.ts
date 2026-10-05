@@ -3,7 +3,7 @@ import { providerIdSchema, providerModelIdSchema,
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import type { ProviderState } from '@opencrane/projections';
 import { verifyCommand } from './budget-config.ts';
 import type { JSONWebKeySet } from 'jose';
@@ -48,6 +48,8 @@ export const providerVerificationSchema = z.discriminatedUnion('action', [
     priceTableId: id, reservedCents: z.int().positive(), consent: z.literal(true) }).strict(),
 ]);
 type Verification = z.infer<typeof providerVerificationSchema>;
+const GATEWAY_TIMEOUT_MS = 15_000;
+const RETRY_MARGIN_MS = 5_000;
 export interface ProviderVerificationOptions {
   secrets: ProviderSecrets;
   gatewayUrl: string;
@@ -201,18 +203,15 @@ function checkReservation(actor: BudgetActor, input: Verification, requestedEven
 async function recordResult(actor: BudgetActor, binding: Binding, memberId: string,
   input: Verification, outcome: 'pass' | 'fail' | 'unknown' | 'budget_refused',
   reservationId?: string, settledCents?: number) {
-  // A result records an admitted attempt, even after its member or configuration changes.
-  // It grants no new authority and must keep the original attempt's revision.
+  // Save the result of an existing check, even after its member or settings change.
+  // Grant no new access and keep the original settings revision.
   const payload = { ...requestedData(input, memberId), outcome, reservationId, settledCents };
-  function completedAuthority() {
-    return Promise.resolve();
-  }
   for (let retry = 0; retry < 3; retry++) {
     const rows = await history(actor.store, `provider-${input.providerId}`, binding.silo);
     try {
       return await appendProvider(actor.store, binding.silo, input.providerId, memberId,
         `internal:provider:${input.commandId}:result`, 'provider.verification_recorded',
-        payload, rows.at(-1)?.sequence ?? 0, completedAuthority);
+        payload, rows.at(-1)?.sequence ?? 0, skipAuthorityForAdmittedAttempt);
     } catch (error) {
       if (!(error instanceof ProviderConflict)) {
         throw error;
@@ -269,21 +268,35 @@ async function finishUndispatchedVerification(actor: BudgetActor, binding: Bindi
     return reservation.call.requestId === requestedEventId;
   }
   const reservation = actor.state.reservations.find(matchesReservation);
-  const payload = { ...requestedData(input, memberId), outcome: 'unknown',
-    ...(reservation ? { reservationId: reservation.id,
-      settledCents: reservation.settledCents } : {}) };
+  const payload = {
+    ...requestedData(input, memberId), outcome: 'unknown',
+    reservationId: reservation?.id, settledCents: reservation?.settledCents,
+  };
+  function matchesAttempt(row: StoredEvent) {
+    return eventData(row.event)['attemptId'] === input.commandId;
+  }
+  function isDispatch(row: StoredEvent) {
+    return row.event.type === 'provider.verification_dispatched';
+  }
+  function isResult(row: StoredEvent) {
+    return row.event.type === 'provider.verification_recorded';
+  }
+  function isRequest(row: StoredEvent) {
+    return row.event.id === requestedEventId;
+  }
   for (let retry = 0; retry < 3; retry++) {
     const rows = await history(actor.store, `provider-${input.providerId}`, binding.silo);
-    function matchesAttempt(row: (typeof rows)[number]) {
-      return eventData(row.event)['attemptId'] === input.commandId;
+    const request = rows.find(isRequest);
+    const startedAt = reservation?.time ?? request?.event.time;
+    if (!startedAt) {
+      return;
+    }
+    const elapsedMs = actor.now().getTime() - Date.parse(startedAt);
+    // Leave time for the first check to finish before a retry closes its attempt.
+    if (elapsedMs <= GATEWAY_TIMEOUT_MS + RETRY_MARGIN_MS) {
+      return;
     }
     const attempt = rows.filter(matchesAttempt);
-    function isDispatch(row: (typeof rows)[number]) {
-      return row.event.type === 'provider.verification_dispatched';
-    }
-    function isResult(row: (typeof rows)[number]) {
-      return row.event.type === 'provider.verification_recorded';
-    }
     if (attempt.some(isDispatch)) {
       return;
     }
@@ -293,7 +306,7 @@ async function finishUndispatchedVerification(actor: BudgetActor, binding: Bindi
         // Prevent gateway admission from releasing the key after the attempt finishes.
         await appendProvider(actor.store, binding.silo, input.providerId, memberId,
           `internal:provider:${input.commandId}:result`, 'provider.verification_recorded',
-          payload, rows.at(-1)?.sequence ?? 0, completedVerificationAuthority);
+          payload, rows.at(-1)?.sequence ?? 0, skipAuthorityForAdmittedAttempt);
       } catch (error) {
         if (error instanceof ProviderConflict) {
           continue;
@@ -305,7 +318,9 @@ async function finishUndispatchedVerification(actor: BudgetActor, binding: Bindi
   }
   throw new ProviderConflict('Result append conflicted');
 }
-function completedVerificationAuthority() {
+// Record only the outcome of an existing attempt, without granting new access.
+// Check access before accepting a retry; keep results even after access changes.
+function skipAuthorityForAdmittedAttempt() {
   return Promise.resolve();
 }
 async function reserveProviderTest(actor: BudgetActor, binding: Binding, memberId: string,
@@ -363,7 +378,7 @@ async function callProviderGateway(actor: BudgetActor, binding: Binding, memberI
     // Never follow a redirect. The redirect target is not the provider, and following it
     // would send our check token and the request body to another server.
     const request: RequestInit = { method: 'GET', headers, redirect: 'manual',
-      signal: AbortSignal.timeout(15_000) };
+      signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS) };
     if (input.action === 'test') {
       const body = testBody(input.model);
       request.method = 'POST';

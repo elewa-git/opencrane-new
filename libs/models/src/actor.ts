@@ -126,13 +126,28 @@ export class BudgetActor {
       return id;
     });
   }
+  requireOpenReservation(reservationId: string, fresh: () => Promise<void>) {
+    const state = this.state;
+    function matchesReservation(reservation: BudgetState['reservations'][number]) {
+      return reservation.id === reservationId;
+    }
+    async function checkReservation() {
+      const reservation = state.reservations.find(matchesReservation);
+      if (!reservation || reservation.settledCents !== undefined) {
+        throw new Error('Reservation is no longer open');
+      }
+      // Recheck access after waiting in the queue, within the original time limit.
+      await fresh();
+    }
+    return this.serial(checkReservation);
+  }
   releaseUndispatched(id: string) {
     return this.serial(async () => {
       const r = this.state.reservations.find(r => r.id === id);
       if (!r) throw new Error('Unmatched reservation');
       if (r.settledCents !== undefined) throw new Error('Reservation already settled');
       // Call only with proof that the permit was not used for provider dispatch.
-      await this.append('budget.settled', { reservationId: id, permitId: id, settledCents: 0, outcome: 'not_dispatched' });
+      await this.appendNotDispatched(id);
     });
   }
   settle(event: EventEnvelope) {
@@ -274,22 +289,39 @@ export class BudgetActor {
       return;
     }
     const allowed = await this.permitted(reservation.id, reservation.call.requestId);
-    if (!allowed && !(await this.providerDispatched(reservation))) {
-      // Release money only when neither admission nor dispatch was recorded.
-      // Keep the hold if a read fails, then try again at the next expiry check.
-      const payload = {
-        reservationId: reservation.id, permitId: reservation.id,
-        settledCents: 0, outcome: 'not_dispatched',
-      };
-      await this.append('budget.settled', payload);
+    if (allowed) {
+      await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
       return;
     }
+    const dispatched = await this.providerDispatched(reservation);
+    const hasEvidence = await this.hasCallEvidence(reservation.id);
+    if (!dispatched && !hasEvidence) {
+      // Release only when no allow decision or evidence of a call exists.
+      // Keep the hold if a read fails, then try again at the next expiry check.
+      await this.appendNotDispatched(reservation.id);
+      return;
+    }
+    if (dispatched) {
+      await this.alert(reservation.id);
+    }
     await this.recordEffectEvidence(reservation, undefined, 'success', 'settle_timeout');
+  }
+  private async appendNotDispatched(reservationId: string) {
+    const payload = {
+      reservationId, permitId: reservationId, settledCents: 0, outcome: 'not_dispatched',
+    };
+    await this.append('budget.settled', payload);
+  }
+  private async hasCallEvidence(reservationId: string) {
+    const effects = await history(this.store, `effect-${reservationId}`, this.silo);
+    const security = await history(this.store, `security-${reservationId}`, this.silo);
+    return effects.length > 0 || security.length > 0;
   }
   private async providerDispatched(reservation: BudgetState['reservations'][number]) {
     if (reservation.call.assistantId !== 'provider-verification') {
       return false;
     }
+    // Use the provider stream stored as computerId for provider checks.
     const rows = await history(this.store, reservation.call.computerId, this.silo);
     function matchesDispatch(row: (typeof rows)[number]) {
       if (row.event.type !== 'provider.verification_dispatched') {

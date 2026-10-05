@@ -1,8 +1,8 @@
 import { expect, it, vi } from 'vitest';
 import type { AppendCommand, AppendResult } from '@opencrane/event-store';
-import { parseEventByType } from '@opencrane/events';
+import { decisionRecordedDataSchema, parseEventByType } from '@opencrane/events';
 import { BudgetActor, history, priceTableId, providerCommand, providerHistory,
-  providerSecretRef, ProviderRefused, totals } from '../src/index.ts';
+  providerSecretRef, ProviderRefused, requestProviderVerification, totals } from '../src/index.ts';
 import { admitProviderVerification, runProviderVerification } from '../src/provider-verification.ts';
 import { fixture } from './fixture.ts';
 
@@ -161,6 +161,7 @@ async function recoversProviderCheck(failure: Failure) {
     if (failure === 'audit_and_budget') {
       recovered = await recoverActor(current);
     }
+    current.advance(20_001);
     await runProviderVerification(recovered, current.binding, 'alice', input,
       'fixture-token', options);
     await runProviderVerification(recovered, current.binding, 'alice', input,
@@ -203,3 +204,87 @@ async function recoversProviderCheck(failure: Failure) {
 }
 
 it.each(failures)('finishes an undispatched provider check after %s', recoversProviderCheck, 60_000);
+
+async function refusesOrdinaryCallAfterExpiry() {
+  const current = await fixture();
+  await current.stopDispatch();
+  const append = current.nats.store.append.bind(current.nats.store);
+  let expired = false;
+
+  async function expireBeforeAllow(command: AppendCommand): Promise<AppendResult> {
+    const parsed = parseEventByType(command.event);
+    if (!expired && parsed.success && parsed.event.type === 'decision.recorded') {
+      const decision = decisionRecordedDataSchema.parse(parsed.event.data);
+      if (decision.outcome === 'allow') {
+        expired = true;
+        current.advance();
+        await current.actor.expire();
+      }
+    }
+    return append(command);
+  }
+
+  const writer = vi.spyOn(current.nats.store, 'append');
+  writer.mockImplementation(expireBeforeAllow);
+  try {
+    const response = await current.call();
+    expect(expired).toBe(true);
+    expect(response.status).toBe(503);
+    expect(current.received()).toBe(0);
+    expect(current.actor.state.reservations[0]?.settledCents).toBe(0);
+    expect(totals(current.actor.state, current.actor.now())).toMatchObject({
+      reservedCents: 0, monthCents: 0,
+    });
+  } finally {
+    writer.mockRestore();
+    await current.close();
+  }
+}
+
+it('refuses an ordinary call when expiry released the hold before its allow decision',
+  refusesOrdinaryCallAfterExpiry, 60_000);
+
+async function waitsForRequestWithoutReservationToAge() {
+  const current = await fixture();
+  await current.stopDispatch();
+  try {
+    await createProvider(current);
+    const input = {
+      providerId: 'recovery', commandId: 'request-without-reservation', expectedRevision: 2,
+      action: 'test', model: 'gpt-6-luna', priceTableId, reservedCents: 1, consent: true,
+    };
+    const requested = await requestProviderVerification(current.nats.store,
+      current.binding, 'alice', input);
+    const rows = await history(current.nats.store, 'provider-recovery', 'test');
+    const requestedAt = Date.parse(rows.at(-1)!.event.time);
+    function unusedSecret(): never {
+      throw new Error('No key should be released');
+    }
+    const secrets = { save: unusedSecret, read: unusedSecret, remove: unusedSecret };
+    const options = { secrets, gatewayUrl: `http://127.0.0.1:${current.options.port}` };
+    const clock = vi.spyOn(current.actor, 'now');
+    try {
+      clock.mockReturnValue(new Date(requestedAt + 20_000));
+      const beforeRetry = await current.nats.store.head();
+      const retryReceipt = await runProviderVerification(current.actor, current.binding,
+        'alice', input, 'fixture-token', options);
+      expect(retryReceipt).toEqual(requested.receipt);
+      expect(await current.nats.store.head()).toBe(beforeRetry);
+
+      clock.mockReturnValue(new Date(requestedAt + 20_001));
+      await runProviderVerification(current.actor, current.binding, 'alice', input,
+        'fixture-token', options);
+      const provider = await providerHistory(current.nats.store, 'test', 'recovery');
+      expect(provider.state?.modelAnswer?.outcome).toBe('unknown');
+      expect(current.actor.state.reservations).toEqual([]);
+      expect(current.received()).toBe(0);
+    } finally {
+      clock.mockRestore();
+    }
+  } finally {
+    await current.close();
+  }
+}
+
+it('returns only the receipt until a request without a reservation is old enough',
+  waitsForRequestWithoutReservationToAge, 60_000);
