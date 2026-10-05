@@ -1,0 +1,192 @@
+[
+  {
+    "run": 2,
+    "conversationId": "781bbb05-90b1-407c-8fa9-f45beab2ca8f",
+    "events": [
+      {
+        "type": "conversation.created",
+        "time": "2026-10-05T22:56:44.678Z"
+      },
+      {
+        "type": "message.posted",
+        "time": "2026-10-05T22:56:54.766Z"
+      },
+      {
+        "type": "agent.turn_started",
+        "time": "2026-10-05T22:57:04.647Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T22:57:25.832Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T22:57:26.716Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T22:57:28.047Z"
+      },
+      {
+        "type": "agent.message_completed",
+        "time": "2026-10-05T22:57:28.256Z"
+      },
+      {
+        "type": "agent.turn_completed",
+        "time": "2026-10-05T22:57:28.401Z"
+      }
+    ]
+  },
+  {
+    "run": 4,
+    "conversationId": "03ab8662-6c73-4038-b7bb-fd45f9b44f26",
+    "events": [
+      {
+        "type": "conversation.created",
+        "time": "2026-10-05T22:58:27.691Z"
+      },
+      {
+        "type": "message.posted",
+        "time": "2026-10-05T22:58:40.717Z"
+      },
+      {
+        "type": "agent.turn_started",
+        "time": "2026-10-05T22:58:52.608Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T22:59:18.286Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T22:59:18.765Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T22:59:19.435Z"
+      },
+      {
+        "type": "agent.message_completed",
+        "time": "2026-10-05T22:59:21.035Z"
+      },
+      {
+        "type": "agent.turn_completed",
+        "time": "2026-10-05T22:59:21.425Z"
+      }
+    ]
+  },
+  {
+    "run": 6,
+    "conversationId": "e69414cc-a0a9-466e-9ba8-c7b063f5c26b",
+    "events": [
+      {
+        "type": "conversation.created",
+        "time": "2026-10-05T23:00:59.744Z"
+      },
+      {
+        "type": "message.posted",
+        "time": "2026-10-05T23:01:18.811Z"
+      },
+      {
+        "type": "agent.turn_started",
+        "time": "2026-10-05T23:01:33.807Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:02:08.591Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:02:09.784Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:02:10.304Z"
+      },
+      {
+        "type": "agent.message_completed",
+        "time": "2026-10-05T23:02:12.053Z"
+      },
+      {
+        "type": "agent.turn_completed",
+        "time": "2026-10-05T23:02:13.680Z"
+      }
+    ]
+  },
+  {
+    "run": 7,
+    "conversationId": "b2b1a748-2f8d-41d5-a4ed-8f3a6a7369ae",
+    "events": [
+      {
+        "type": "conversation.created",
+        "time": "2026-10-05T23:02:40.466Z"
+      },
+      {
+        "type": "message.posted",
+        "time": "2026-10-05T23:02:58.572Z"
+      },
+      {
+        "type": "agent.turn_started",
+        "time": "2026-10-05T23:03:08.140Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:03:34.638Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:03:34.997Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:03:36.867Z"
+      },
+      {
+        "type": "agent.message_completed",
+        "time": "2026-10-05T23:03:38.069Z"
+      },
+      {
+        "type": "agent.turn_completed",
+        "time": "2026-10-05T23:03:40.096Z"
+      }
+    ]
+  },
+  {
+    "run": 8,
+    "conversationId": "b9dda732-2166-4aa3-9cca-bae19d40f923",
+    "events": [
+      {
+        "type": "conversation.created",
+        "time": "2026-10-05T23:04:22.135Z"
+      },
+      {
+        "type": "message.posted",
+        "time": "2026-10-05T23:04:44.697Z"
+      },
+      {
+        "type": "agent.turn_started",
+        "time": "2026-10-05T23:05:00.572Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:06:07.245Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:06:08.590Z"
+      },
+      {
+        "type": "agent.message_delta",
+        "time": "2026-10-05T23:06:08.916Z"
+      },
+      {
+        "type": "agent.message_completed",
+        "time": "2026-10-05T23:06:10.947Z"
+      },
+      {
+        "type": "agent.turn_completed",
+        "time": "2026-10-05T23:06:13.244Z"
+      }
+    ]
+  }
+]

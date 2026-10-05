@@ -1,0 +1,122 @@
+[
+  {
+    "batch": "final3",
+    "run": 4,
+    "sessionId": "51cfcb5d-7a40-4343-9aac-6e956ef939fc",
+    "label": "first view",
+    "revokedAtEpochMs": 1791239721316.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3",
+    "run": 4,
+    "sessionId": "f264e47d-762b-42b7-ac31-9ac32c45fab4",
+    "label": "during turn",
+    "revokedAtEpochMs": 1791239721316.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3",
+    "run": 5,
+    "sessionId": "c5ce830f-909d-4b91-b99e-ab6bce5513e2",
+    "label": "first view",
+    "revokedAtEpochMs": 1791239880263.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3",
+    "run": 5,
+    "sessionId": "23eade41-d7c3-4227-b2a0-7727e11f24cd",
+    "label": "during turn",
+    "revokedAtEpochMs": 1791239880263.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 1,
+    "sessionId": "cc698e03-2de6-4ced-a657-1c4245841ccd",
+    "label": "first view",
+    "revokedAtEpochMs": 1791240997825.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 1,
+    "sessionId": "c8058899-9ccd-468c-981e-96b2b5e2dfc2",
+    "label": "during turn",
+    "revokedAtEpochMs": 1791240997825.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 2,
+    "sessionId": "c3b927bf-2c8c-4ced-9920-78506ff8f9cc",
+    "label": "first view",
+    "revokedAtEpochMs": null,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 3,
+    "sessionId": "4e7e4fc2-a8d5-40d5-a6f9-909364b0f09c",
+    "label": "first view",
+    "revokedAtEpochMs": 1791241084433.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 3,
+    "sessionId": "a1fb4f8e-edbb-479c-a7bf-3b8b4a068479",
+    "label": "during turn",
+    "revokedAtEpochMs": 1791241084433.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 4,
+    "sessionId": "f28235fa-ea24-4cd7-af49-57c7055eac81",
+    "label": "first view",
+    "revokedAtEpochMs": null,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 5,
+    "sessionId": "40852273-e564-4b96-956e-0bd1be91ec35",
+    "label": "first view",
+    "revokedAtEpochMs": 1791241198741.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 5,
+    "sessionId": "4903ac7f-737b-4d3e-aedd-f66ee7001314",
+    "label": "during turn",
+    "revokedAtEpochMs": 1791241198741.0,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 6,
+    "sessionId": "218b4bef-f8d3-40ee-bce7-344400408b4d",
+    "label": "first view",
+    "revokedAtEpochMs": null,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 7,
+    "sessionId": "46e5f7ea-8617-442d-a699-4dc0772a1d5a",
+    "label": "first view",
+    "revokedAtEpochMs": null,
+    "deniedBeforeRevokeOrFailure": 0
+  },
+  {
+    "batch": "final3-retry-3",
+    "run": 8,
+    "sessionId": "8e64c163-68d6-4147-b0ff-6c007936cf18",
+    "label": "first view",
+    "revokedAtEpochMs": null,
+    "deniedBeforeRevokeOrFailure": 0
+  }
+]

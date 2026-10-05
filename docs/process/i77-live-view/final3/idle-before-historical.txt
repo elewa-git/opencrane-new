@@ -1,0 +1,8 @@
+Historical readings supplied in the 5 October diagnosis and reported in PR #194.
+Source: https://github.com/elewa-git/opencrane-new/pull/194
+These are a historical comparison, not a controlled baseline measured by this run.
+Server: about 80% CPU
+Dispatcher: about 53% CPU
+Models process: about 46% CPU
+NATS: about 38% CPU
+CPU pressure some avg10: 18.9–23.1%

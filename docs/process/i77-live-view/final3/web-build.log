@@ -1,0 +1,33 @@
+npm notice run @opencrane/web@0.1.0 build
+npm notice run ng build
+❯ Building...
+✔ Building...
+Initial chunk files | Names         |  Raw size | Estimated transfer size
+main-BTTWL7HG.js    | main          | 960.11 kB |               186.52 kB
+styles-ZVZPOJAD.css | styles        |  12.69 kB |                 3.01 kB
+chunk-QXIBXHVB.js   | -             |   1.16 kB |               502 bytes
+
+                    | Initial total | 973.96 kB |               190.03 kB
+
+Lazy chunk files    | Names         |  Raw size | Estimated transfer size
+chunk-U2PYCMFI.js   | viewer        | 287.33 kB |                56.68 kB
+
+Application bundle generation complete. [9.384 seconds] - 2026-10-05T23:47:43.981Z
+
+▲ [WARNING] bundle initial exceeded maximum budget. Budget 650.00 kB was not met by 323.96 kB with a total of 973.96 kB.
+
+
+▲ [WARNING] src/app/chat/workspace.css exceeded maximum budget. Budget 4.00 kB was not met by 3.80 kB with a total of 7.80 kB.
+
+
+▲ [WARNING] src/app/people/people.css exceeded maximum budget. Budget 4.00 kB was not met by 2.23 kB with a total of 6.23 kB.
+
+
+▲ [WARNING] Module '@novnc/novnc/lib/rfb.js' used by 'src/app/live-view/viewer.ts' is not ESM
+
+  CommonJS or AMD dependencies can cause optimization bailouts.
+  For more information see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies
+
+
+Output location: /home/jente/dev/wt/i77-batch3/apps/web/dist/web
+

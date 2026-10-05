@@ -1,0 +1,21 @@
+Error: Command failed: /usr/bin/node --experimental-strip-types infra/dev-stack/journey.ts
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+
+409 !== 200
+
+    at join (file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/journey.ts:85:10)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/journey.ts:276:5 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: 409,
+  expected: 200,
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v22.23.3

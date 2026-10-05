@@ -1,0 +1,9 @@
+file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/browser-signin.ts:149
+    throw new Error(`Real browser sign-in failed at ${stage}`);
+          ^
+
+Error: Real browser sign-in failed at owner 390px login
+    at browserSessions (file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/browser-signin.ts:149:11)
+    at async file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/live-view-repeat.ts:127:13
+
+Node.js v22.23.3

@@ -1,0 +1,20 @@
+[
+  {
+    "stage": "admission_response",
+    "elapsedMs": 12552,
+    "status": 200,
+    "sessionId": "46e5f7ea-8617-442d-a699-4dc0772a1d5a"
+  },
+  {
+    "stage": "browser_socket_created",
+    "elapsedMs": 12611
+  },
+  {
+    "stage": "browser_first_bytes",
+    "elapsedMs": 13675
+  },
+  {
+    "stage": "browser_socket_closed",
+    "elapsedMs": 17420
+  }
+]

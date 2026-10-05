@@ -481,3 +481,173 @@ refresh assertion. Isolated retries of both files then **PASS**ed: gateway,
 passed on the rebased revision with the temporary harness adjustment. Logs,
 commands and timings are retained in [the final batch directory](i77-live-view/final/).
 The live qualification remains **FAIL**.
+
+## Final qualification 3 — 5 October 2026
+
+**FAIL: 5/10 counted runs passed.** Passing this qualification requires all ten
+counted runs to pass, with revocation clearing pixels in less than **2,000 ms**.
+Five runs failed before the second viewer opened: the assistant did not start
+showing streamed text within the unchanged 30-second browser wait. Revocation
+was not reached in those runs. The five passing runs cleared pixels within the
+bound. None of the fifteen admitted sessions had a denied access check before
+revocation or failure. This result does not close #77.
+
+The source was `52ca70f9bfa97e576b29d3bbd1cd99fd3fcc1c36`, matching
+`origin/main` when work started, on `work/i77-batch3`.
+It includes the fixes in #180, #163, #194 and #201.
+`nice -n 10 npm ci` passed before the other work. Only secondary
+id **2** was claimed, on the first attempt, with an EXIT trap to release that id.
+The stack started with new data and real Zitadel sign-in, using the local stub
+provider. The owner stack was not changed. Product code, deadlines, memory limits
+and Docker daemon settings were not changed.
+
+The [first host reading](i77-live-view/final3/host-first-reading.txt) was load
+**2.77 / 5.51 / 7.02**, **8 CPUs**, and CPU pressure `some avg10=5.59%`.
+[Immediately before the claim](i77-live-view/final3/host-before.txt), load was
+**8.54 / 6.57 / 7.27** and pressure was **43.56%**. These are host measurements,
+not measurements of this stack alone.
+
+The batch used the default **20%** pressure gate, without `--quiet`. Every counted
+run started below 20%. Seven **LOADED** attempts started between **28.39% and
+66.78%** and did not count. The initial batch wrote two PASS and five LOADED
+records before the server exhausted its unchanged 256 MiB JavaScript heap.
+Retries 1 and 2 could not sign in and wrote no run records. After restarting the
+same claimed stack with its existing settings, retry 3 wrote three PASS, five
+FAIL and two LOADED records. Together these give exactly ten counted runs.
+
+The table contains one row per counted run, in time order. Each session cell lists
+its stop reason and close code, check counts by boundary and outcome, denied
+checks before revocation or failure, and observed pause count and lengths.
+`none:ok` means access was confirmed without a named failure boundary.
+`deadline:unavailable` means a check timed out; `authority_changed:unavailable`
+means access state moved during a check. Neither means access was denied.
+`none:denied` checks in the passing runs happened after explicit revocation.
+The first viewer was closed with Escape, so revocation was tested only on the
+viewer opened during the turn. Close codes follow the server stop-reason mapping;
+the harness did not capture them separately from the WebSocket wire.
+
+Failed runs did not save a completed browser journey receipt, so their first
+viewer's pause measurements are **NOT CAPTURED**, not zero. Their second viewer
+and revocation checks are **NOT RUN**. Denial counts were also checked separately
+against the numeric server timestamps and the stored revocation time; see
+[the timestamp calculation](i77-live-view/final3/session-denial-checks.json).
+Server run delay is the `/proc/<pid>/schedstat` delay accumulated during the run,
+converted from nanoseconds to milliseconds.
+
+| Count / record | Width | Result | First viewer: stop / code; checks; denied; pauses | During turn: stop / code; checks; denied; pauses | Revoke-to-clear | CPU pressure some avg10 | Server run delay |
+| --- | ---: | --- | --- | --- | --- | ---: | ---: |
+| 1: [final3 / 4](i77-live-view/final3/run-4-browser.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 8; denied 0; pauses 0, [] ms | `access_changed` / 4003; `authority_changed:unavailable` 1, `deadline:unavailable` 5, `none:denied` 2, `none:ok` 9; denied 0; pauses 0, [] ms | 550 ms | 19.27% | 12,251.9 ms |
+| 2: [final3 / 5](i77-live-view/final3/run-5-browser.json) | 390px | PASS | `disconnected` / 1000; `deadline:unavailable` 2, `none:ok` 23; denied 0; pauses 0, [] ms | `access_changed` / 4003; `deadline:unavailable` 2, `none:denied` 3, `none:ok` 12; denied 0; pauses 0, [] ms | 1009 ms | 19.92% | 10,399.4 ms |
+| 3: [retry 3 / 1](i77-live-view/final3-retry-3/run-1-browser.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 9; denied 0; pauses 0, [] ms | `access_changed` / 4003; `authority_changed:unavailable` 1, `none:denied` 2, `none:ok` 6; denied 0; pauses 0, [] ms | 495 ms | 19.57% | 2,375.9 ms |
+| 4: [retry 3 / 2](i77-live-view/final3-retry-3/run-2-browser.json) | 1280px | FAIL | `disconnected` / 1000; `none:ok` 13; denied 0; pauses NOT CAPTURED | NOT RUN: viewer not opened | NOT REACHED | 19.64% | 1,967.1 ms |
+| 5: [retry 3 / 3](i77-live-view/final3-retry-3/run-3-browser.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 10; denied 0; pauses 0, [] ms | `access_changed` / 4003; `authority_changed:unavailable` 1, `deadline:unavailable` 2, `none:denied` 2, `none:ok` 10; denied 0; pauses 0, [] ms | 557 ms | 19.52% | 3,247.7 ms |
+| 6: [retry 3 / 4](i77-live-view/final3-retry-3/run-4-browser.json) | 1280px | FAIL | `disconnected` / 1000; `none:ok` 16; denied 0; pauses NOT CAPTURED | NOT RUN: viewer not opened | NOT REACHED | 18.97% | 2,174.3 ms |
+| 7: [retry 3 / 5](i77-live-view/final3-retry-3/run-5-browser.json) | 390px | PASS | `disconnected` / 1000; `deadline:unavailable` 2, `none:ok` 16; denied 0; pauses 0, [] ms | `access_changed` / 4003; `none:denied` 4, `none:ok` 6; denied 0; pauses 0, [] ms | 812 ms | 19.94% | 2,835.1 ms |
+| 8: [retry 3 / 6](i77-live-view/final3-retry-3/run-6-browser.json) | 1280px | FAIL | `disconnected` / 1000; `deadline:unavailable` 1, `none:ok` 16; denied 0; pauses NOT CAPTURED | NOT RUN: viewer not opened | NOT REACHED | 19.73% | 3,743.3 ms |
+| 9: [retry 3 / 7](i77-live-view/final3-retry-3/run-7-browser.json) | 390px | FAIL | `disconnected` / 1000; `deadline:unavailable` 6, `none:ok` 11; denied 0; pauses NOT CAPTURED | NOT RUN: viewer not opened | NOT REACHED | 19.22% | 3,460.6 ms |
+| 10: [retry 3 / 8](i77-live-view/final3-retry-3/run-8-browser.json) | 1280px | FAIL | `disconnected` / 1000; `deadline:unavailable` 5, `none:ok` 16; denied 0; pauses NOT CAPTURED | NOT RUN: viewer not opened | NOT REACHED | 19.30% | 5,970.0 ms |
+
+All five counted failures timed out waiting for `.caret`, the chat streaming
+indicator. The first viewer had already displayed the desktop and closed normally
+on Escape; no second viewer was admitted. The screenshots show the assistant
+still working, without streamed text. The saved event types and times show that
+reply text arrived later; they do not establish why execution was slow.
+
+| Counted failure | Screenshot | Message posted to first reply text | Revocation |
+| --- | --- | ---: | --- |
+| 4 | [retry 3 / 2](i77-live-view/final3-retry-3/run-2-failure.png) | 31.066 s | NOT REACHED |
+| 6 | [retry 3 / 4](i77-live-view/final3-retry-3/run-4-failure.png) | 37.569 s | NOT REACHED |
+| 8 | [retry 3 / 6](i77-live-view/final3-retry-3/run-6-failure.png) | 49.780 s | NOT REACHED |
+| 9 | [retry 3 / 7](i77-live-view/final3-retry-3/run-7-failure.png) | 36.066 s | NOT REACHED |
+| 10 | [retry 3 / 8](i77-live-view/final3-retry-3/run-8-failure.png) | 82.548 s | NOT REACHED |
+
+The [run records](i77-live-view/final3/runs.jsonl),
+[retry 3 records](i77-live-view/final3-retry-3/runs.jsonl), their browser and server
+timing files, and [failed-turn event times](i77-live-view/final3-retry-3/failed-turn-events.json)
+retain the evidence. The initial interruption is recorded in
+[the heap failure](i77-live-view/final3/server-heap-failure.txt). This is a separate
+failure from the five counted browser timeouts. Its underlying cause was not
+investigated by changing product code.
+
+The initial `nice -n 10 up.sh --fresh` invocation failed when startup tried to
+raise the web child's priority back to 10. The web process was not yet recorded
+in its PID file, so the first plain startup retry refused its listener. Only that
+process, launched by this task, was stopped. Plain `up.sh` then completed the broad
+journey on the fresh data; its web child uses priority 10. After the heap failure,
+a further startup restored the server, but its repeated broad journey failed
+when it tried to join the already active `audit-other-member` fixture: HTTP 409
+instead of 200. The [saved assertion](i77-live-view/final3/server-recovery-journey-failure.txt)
+records that separate fixture failure. No new stack was claimed.
+
+### Idle CPU after the first fresh journey
+
+Use the second `top -b -n 2 -d 5` sample for the five-second CPU measurement.
+The first sample contains earlier CPU use and is retained in
+[the complete sample](i77-live-view/final3/idle-after-fresh.txt). Models and NATS
+were measured by their host PIDs inside this secondary's Compose containers.
+The old readings come from the 5 October diagnosis quoted in
+[PR #194](https://github.com/elewa-git/opencrane-new/pull/194); they were not a
+controlled baseline measured by this task.
+
+| Process or host reading | Historical diagnosis before #194 | After this stack's fresh journey |
+| --- | ---: | ---: |
+| Server CPU | about 80% | 4.8% |
+| Dispatcher CPU | about 53% | 5.0% |
+| Models CPU | about 46% | 2.4% |
+| NATS CPU | about 38% | 8.2% |
+| Total CPU for those four processes | about 217% | 20.4% |
+| Host CPU pressure some avg10 | 18.9–23.1% | 48.57% before top; 48.62% after |
+
+The four processes used about one fifth of a CPU in this idle sample, rather than
+the roughly two CPUs reported earlier. The box still had high CPU pressure.
+This supports the idle-work improvement; it does not establish that the host was
+quiet or explain the later heap exhaustion.
+
+### Fresh core journey after the batch
+
+**FAIL:** the post-batch `infra/dev-stack/up.sh --fresh` journey reset the same
+claimed secondary id and reached the 1280px upload check. It timed out waiting
+120 seconds for the expected Willow-47 reply to show Done. Browser transport
+failures `net::ERR_ABORTED` and `net::ERR_FAILED` were also reported; the evidence
+does not establish whether they caused the missing completion. The new 390px
+upload and live-view steps passed. The 1280px live-view step was **NOT RUN** because
+the earlier upload step failed. No timeout was extended.
+
+| Post-batch fresh step | 390px | 1280px |
+| --- | --- | --- |
+| Browser upload | PASS | FAIL: expected PDF reply did not complete within 120 s |
+| Live view | PASS: pixels cleared in 346 ms | NOT RUN: blocked by upload failure |
+
+The [startup log](i77-live-view/final3/core-journey-after.log),
+[saved failure](i77-live-view/final3/core-journey-after-failure.txt),
+[new mobile live-view receipt](i77-live-view/final3/core-journey-view-390.json) and
+[desktop upload screenshot](i77-live-view/final3/core-upload-1280.png) retain the
+new evidence. The successful first fresh journey, before the batch, remains in
+[its startup log](i77-live-view/final3/startup-recovery-2.log): upload and live view
+passed at both widths, with revocation clearing in 112 ms and 188 ms. Those earlier
+passes do not qualify the failed post-batch journey.
+
+### Other checks
+
+Only this task's checks are reported below. They ran after the live work and
+secondary teardown. Lint, typechecks, tests and the web build used `nice -n 10`.
+The root suite used two workers and its normal disposable service fixtures,
+including a separate PostgreSQL test container. Commands are recorded in
+[the command list](i77-live-view/final3/commands.txt).
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Dependency install | PASS | `nice -n 10 npm ci`; 926 packages added, 940 audited |
+| Final lint | PASS | [Full rerun](i77-live-view/final3/lint-final.log) after fixing a wrapped ticket reference in this receipt |
+| Workspace typecheck | PASS | [Log](i77-live-view/final3/typecheck.log) |
+| Full root suite | PASS: 1,841 passed, 15 skipped; 121 files passed, 4 skipped | [Log](i77-live-view/final3/test.log) |
+| Event catalogue | PASS: 95 event types agree | [Log](i77-live-view/final3/check-events.log) |
+| Infra TypeScript check | PASS | [Log](i77-live-view/final3/infra-typecheck.log) |
+| Web production build | PASS | [Log](i77-live-view/final3/web-build.log) |
+| Web unit tests | PASS: 202 tests, 27 files | [Log](i77-live-view/final3/web-test.log) |
+| Secondary teardown | PASS: id 2 claim directory and Compose containers removed | [Check](i77-live-view/final3/teardown-check.txt) |
+| PostgreSQL test fixture teardown | PASS | [Log](i77-live-view/final3/test-fixture-teardown.log) |
+
+The fifteen skipped root tests are **NOT RUN**, not passing conditions. The
+successful source checks do not change the failed live qualification or the
+failed post-batch fresh journey.

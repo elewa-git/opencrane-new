@@ -1,0 +1,30 @@
+2026-10-05T22:27:09+00:00
+server=1202506 dispatcher=1202497 models=1202197 nats=1189463
+16.07 13.77 10.68 21/3712 1260863
+some avg10=48.57 avg60=56.10 avg300=48.34 total=116034617855
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+top - 22:27:09 up 4 days, 13:51,  1 user,  load average: 16.07, 13.77, 10.68
+Tasks:   4 total,   0 running,   4 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 10.5 us, 24.4 sy, 43.0 ni, 18.6 id,  0.0 wa,  0.0 hi,  3.5 si,  0.0 st 
+MiB Mem :  15991.8 total,    620.4 free,  11512.5 used,   5022.6 buff/cache     
+MiB Swap:   8192.0 total,   3105.5 free,   5086.5 used.   4479.3 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1189463 root      20   0 1277380  26016  13940 S  18.2   0.2   1:50.37 nats-se+
+1202506 jente     30  10   21.6g 381168  61708 S   0.0   2.3   7:00.45 node
+1202497 jente     30  10   21.3g 139564  58072 S   0.0   0.9   0:42.91 node
+1202197 jente     20   0   21.3g 104044  15432 S   0.0   0.6   0:39.18 node
+
+top - 22:27:14 up 4 days, 13:51,  1 user,  load average: 15.27, 13.64, 10.65
+Tasks:   4 total,   0 running,   4 sleeping,   0 stopped,   0 zombie
+%Cpu(s): 13.8 us, 19.1 sy, 44.7 ni, 17.8 id,  0.8 wa,  0.0 hi,  3.7 si,  0.2 st 
+MiB Mem :  15991.8 total,    409.6 free,  11682.6 used,   5063.4 buff/cache     
+MiB Swap:   8192.0 total,   3105.5 free,   5086.5 used.   4309.2 avail Mem 
+
+    PID USER      PR  NI    VIRT    RES    SHR S  %CPU  %MEM     TIME+ COMMAND
+1189463 root      20   0 1277380  27656  13940 S   8.2   0.2   1:50.78 nats-se+
+1202497 jente     30  10   21.3g 140012  58072 S   5.0   0.9   0:43.16 node
+1202506 jente     30  10   21.6g 381188  61708 S   4.8   2.3   7:00.69 node
+1202197 jente     20   0   21.3g 104240  15432 S   2.4   0.6   0:39.30 node
+some avg10=48.62 avg60=55.44 avg300=48.36 total=116037017282
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0

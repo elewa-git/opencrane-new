@@ -1,0 +1,9 @@
+file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/browser-signin.ts:148
+    if (error instanceof Error && error.message.startsWith('Login did not complete at ')) throw new Error(`Real browser sign-in failed at ${stage}: ${error.message}`);
+                                                                                                ^
+
+Error: Real browser sign-in failed at owner 390px login: Login did not complete at provider input (null/; net::ERR_HTTP_RESPONSE_CODE_FAILURE)
+    at browserSessions (file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/browser-signin.ts:148:97)
+    at async file:///home/jente/dev/wt/i77-batch3/infra/dev-stack/live-view-repeat.ts:127:13
+
+Node.js v22.23.3

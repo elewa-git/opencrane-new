@@ -1,0 +1,9 @@
+The first batch wrote seven records: two PASS and five LOADED.
+The server then exhausted its unchanged 256 MiB JavaScript heap.
+The batch stopped before writing run 8; its logout error hid the earlier failure.
+Retry 1 could not sign in because the server was gone. It wrote no run records.
+Retry 2 could not sign in either. It exited with status 1 and wrote no run records.
+A stop signal was attempted during recovery, after that process had already exited.
+The shell holding the claim was paused during recovery; its EXIT trap remained installed.
+Recovery uses plain up.sh on the same secondary id and keeps its existing data and settings.
+No memory limit, deadline or product code was changed.

@@ -1,0 +1,38 @@
+[
+  {
+    "stage": "admission_response",
+    "elapsedMs": 7490,
+    "status": 200,
+    "sessionId": "c5ce830f-909d-4b91-b99e-ab6bce5513e2"
+  },
+  {
+    "stage": "browser_socket_created",
+    "elapsedMs": 7657
+  },
+  {
+    "stage": "browser_first_bytes",
+    "elapsedMs": 13540
+  },
+  {
+    "stage": "browser_socket_closed",
+    "elapsedMs": 16920
+  },
+  {
+    "stage": "browser_socket_created",
+    "elapsedMs": 39220
+  },
+  {
+    "stage": "admission_response",
+    "elapsedMs": 39204,
+    "status": 200,
+    "sessionId": "23eade41-d7c3-4227-b2a0-7727e11f24cd"
+  },
+  {
+    "stage": "browser_first_bytes",
+    "elapsedMs": 41185
+  },
+  {
+    "stage": "browser_socket_closed",
+    "elapsedMs": 45508
+  }
+]

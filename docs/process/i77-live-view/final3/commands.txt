@@ -1,0 +1,44 @@
+Source: 52ca70f9bfa97e576b29d3bbd1cd99fd3fcc1c36 (origin/main at start)
+Branch: work/i77-batch3
+Working directory: /home/jente/dev/wt/i77-batch3
+First command: nice -n 10 npm ci (PASS, 926 packages added, 940 audited)
+Read issue: gh issue view 77 (old gh failed on deprecated projectCards)
+Read issue fallback: gh issue view 77 --json number,title,body,comments,url (PASS)
+Host: cat /proc/loadavg; nproc; cat /proc/pressure/cpu
+Claim: stack_id=$(infra/dev-stack/claim.sh) (PASS on first attempt, id 2)
+Environment: DEV_STACK_ID=2
+Environment: ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key
+Cleanup: shell EXIT trap running infra/dev-stack/down.sh --id "$stack_id"
+Initial start: nice -n 10 infra/dev-stack/up.sh --fresh
+Initial start failed at web priority adjustment (EACCES); it was terminated with status 143.
+Recovery: infra/dev-stack/up.sh (first recovery refused the unrecorded web listener)
+Stopped only the web process launched by this task, then ran infra/dev-stack/up.sh again.
+Second recovery: PASS, completed the first broad journey on the new data.
+Idle: top -b -n 2 -d 5 -p <this stack's server,dispatcher,models,NATS PIDs>
+Idle: cat /proc/pressure/cpu before and after top
+Batch: node --experimental-strip-types infra/dev-stack/live-view-repeat.ts docs/process/i77-live-view/final3
+Retries: the same command with final3-retry-1, final3-retry-2 and final3-retry-3.
+Used the default 20% pressure gate throughout. No --quiet argument.
+The first batch stopped after the server exhausted its unchanged 256 MiB JS heap.
+Restarted the same claimed stack with plain up.sh; retained its data and settings.
+The recovery journey failed on the existing audit-other-member fixture (HTTP 409).
+After the final retry finished: infra/dev-stack/up.sh --fresh on the same claimed id.
+Plain up.sh uses its own web priority setting (10), avoiding the initial EACCES.
+No product code, deadline, memory limit or Docker daemon setting was changed.
+
+After secondary teardown, ran a normal PostgreSQL fixture (postgres:17.6-alpine)
+with a fixture-only test password and an ephemeral loopback port.
+Set PG_TEST_URL to that disposable fixture, not to any dev stack database.
+Required checks, each under nice -n 10:
+  npm run lint
+  npm run typecheck
+  npm test -- --maxWorkers=2
+  npm run check:events
+  npx tsc --noEmit -p infra/dev-stack/tsconfig.json
+  npm run build -w apps/web
+  npm run test -w apps/web -- --watch=false
+Final lint rerun: nice -n 10 npm run lint (after the receipt formatting fix).
+Removed only the PostgreSQL fixture created for these checks.
+Final receipt text checks, both under nice -n 10:
+  npm run lint:docs
+  npm run lint:links
