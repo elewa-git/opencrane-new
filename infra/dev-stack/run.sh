@@ -14,6 +14,8 @@ while [ "$#" -gt 0 ]; do
 done
 case "$stack_id" in owner) suffix= ;; 1|2) suffix=-$stack_id ;; *) echo 'Stack id must be owner, 1 or 2' >&2; exit 2 ;; esac
 export DEV_STACK_ID="$stack_id"
+DEV_STACK_CLAIM_PID=${DEV_STACK_CLAIM_PID:-$$}
+export DEV_STACK_CLAIM_PID
 # Close the lock in the child: detached servers must not hold it after up exits.
 if [ "$action" = claim ]; then
   exec flock --nonblock --close "/tmp/opencrane-dev-stack-$(id -u)$suffix.lock" node --experimental-strip-types infra/dev-stack/stack.ts claim

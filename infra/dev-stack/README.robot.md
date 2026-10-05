@@ -48,13 +48,18 @@ infra/dev-stack/down.sh
 
 `up` includes the core journey. Every command also accepts `--id 1` or `--id 2`,
 overriding `DEV_STACK_ID`. A missing id selects `owner`; other ids are refused.
-`claim.sh` prints only a free secondary id, or exits non-zero when both are claimed.
-It reserves the directory and worktree marker while holding that id’s non-blocking
-lock. Claims survive task exits and failed starts; they are released by successful
-`down --id`. Never delete or transfer another worktree’s marker to take its slot.
-Two tasks in the same worktree can claim different ids. After a crash, run `status`
-and `down` from the recorded worktree. Locks close before detached servers start,
-so those servers cannot keep an operation lock held after the command finishes.
+`claim.sh` prints one free secondary id, or exits non-zero when both ids are in use.
+The owner file records the worktree, claiming process id and claim start time. A
+worktree that claims again gets its existing id. A claim stays reserved for 15 minutes
+from its `startedAt` timestamp, even after the claiming process has ended. This gives
+`up --fresh` time to start the stack. After that, a slot is stale when its claiming
+process has ended and no recorded host process or running Compose container remains.
+Old owner files containing only a worktree path count as claims started long ago.
+The next claim reports the reclaim on stderr and records the new owner. `status`
+prints `free` for an unused or stale slot, and `status` and `down` never create its
+directory or owner file. Successful `down --id` removes the secondary directory.
+Locks close before detached servers start, so those servers cannot keep an
+operation lock held after the command finishes.
 
 | Resource | Owner (default) | Id 1 | Id 2 |
 | --- | --- | --- | --- |

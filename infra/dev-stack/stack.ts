@@ -2,7 +2,7 @@ import { issueMinioLease } from './minio-tokens.ts';
 import { Client } from 'minio';
 import { execFile, spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { open, readFile, rm, stat } from 'node:fs/promises';
+import { open, readFile, realpath, rm, stat } from 'node:fs/promises';
 import { setPriority } from 'node:os';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -17,6 +17,8 @@ import { envelope } from '@opencrane/models';
 import { base, directory, exists, generate, readEnv, root, save, writeEnv, prepareDirectory, authEnv } from './config.ts';
 
 const exec = promisify(execFile);
+// Keep a claim for 15 minutes because claim.sh exits before stack startup can finish.
+const CLAIM_GRACE_PERIOD_MS = 15 * 60 * 1000;
 const names = ['members', 'mcp-catalogue', 'computers', 'conversations', 'files', 'budgets', 'audit', 'minio-tokens', 'model-stub', 'models', 'dispatcher', 'server', 'web'].filter(name => !secondary || !['models', 'model-stub'].includes(name));
 async function run(command: string, args: string[], env: Record<string, string> = base, timeout = 180_000) {
   // Capture output in private files: database URLs and provider errors can contain secrets.
@@ -55,6 +57,85 @@ async function processId(name: string) {
   if (!(await exists(file))) return undefined;
   const [pid, start] = (await readFile(file, 'utf8')).split(' ');
   return start && await fingerprint(Number(pid)) === start ? Number(pid) : undefined;
+}
+type StackOwner = {
+  worktree: string;
+  startedAt: number;
+  pid?: number;
+  processStart?: string;
+};
+function ownerField(line: string) {
+  const separator = line.indexOf('=');
+  return [line.slice(0, separator), line.slice(separator + 1)];
+}
+async function readStackOwner(): Promise<StackOwner | undefined> {
+  const ownerFile = `${directory}/stack-owner`;
+  if (!await exists(ownerFile)) return undefined;
+  const contents = await readFile(ownerFile, 'utf8');
+  if (!contents.startsWith('worktree=')) {
+    return { worktree: contents, startedAt: 0 };
+  }
+  const trimmedContents = contents.trim();
+  const lines = trimmedContents.split('\n');
+  const entries = lines.map(ownerField);
+  const fields = Object.fromEntries(entries);
+  if (!fields['worktree']) throw new Error('Invalid secondary stack owner file');
+  let startedAt = 0;
+  if (fields['startedAt']) {
+    startedAt = Date.parse(fields['startedAt']);
+    if (!Number.isFinite(startedAt)) {
+      throw new Error('Invalid secondary stack owner file');
+    }
+  }
+  const pid = Number(fields['pid']);
+  const processStart = fields['processStart'];
+  return {
+    worktree: fields['worktree']!,
+    startedAt,
+    ...(Number.isInteger(pid) && pid > 0 ? { pid } : {}),
+    ...(processStart ? { processStart } : {}),
+  };
+}
+async function stackOwnerRecord(pid: number) {
+  const processStart = await fingerprint(pid);
+  const startRecord = processStart ? `processStart=${processStart}\n` : '';
+  return `worktree=${root}\npid=${pid}\nstartedAt=${new Date().toISOString()}\n${startRecord}`;
+}
+async function ownerProcessIsRunning(owner: StackOwner | undefined) {
+  if (!owner?.pid) return false;
+  if (owner.processStart) return await fingerprint(owner.pid) === owner.processStart;
+  try {
+    process.kill(owner.pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    if ((error as NodeJS.ErrnoException).code === 'EPERM') return true;
+    throw error;
+  }
+}
+async function stackProcessIsRunning() {
+  const pids = await Promise.all(names.map(processId));
+  if (pids.some((pid) => pid !== undefined)) return true;
+  try {
+    const dockerArguments = [
+      'ps', '--filter', `label=com.docker.compose.project=${project}`,
+      '--filter', 'status=running', '--quiet',
+    ];
+    const result = await exec('docker', dockerArguments, { env: base, timeout: 10_000 });
+    return result.stdout.trim().length > 0;
+  } catch {
+    // Treat an unavailable Docker daemon as busy; reclaim only when containers are checked.
+    return true;
+  }
+}
+async function slotIsFree() {
+  const owner = await readStackOwner();
+  if (!owner && await stat(directory).then(() => true, () => false)) return false;
+  if (owner && Date.now() - owner.startedAt < CLAIM_GRACE_PERIOD_MS) {
+    return false;
+  }
+  if (await ownerProcessIsRunning(owner)) return false;
+  return !await stackProcessIsRunning();
 }
 async function start(name: string, args: string[], env: Record<string, string>) {
   if (await processId(name)) return;
@@ -363,6 +444,10 @@ async function journey() {
   console.log(output.trim());
 }
 async function status() {
+  if (secondary && await slotIsFree()) {
+    console.log('free');
+    return;
+  }
   let ok = true;
   for (const name of names) {
     const pid = await processId(name);
@@ -386,20 +471,54 @@ async function status() {
 }
 let prepared = false;
 try {
-  if (process.argv[2] === 'claim') {
-    if (!secondary || await stat(directory).then(() => true, () => false)) process.exit(1);
+  const [action, flag, extra] = process.argv.slice(2);
+  if (extra || (flag && !(action === 'up' && flag === '--fresh'))) {
+    throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
+  }
+  const directoryPresent = await stat(directory).then(() => true, () => false);
+  if (secondary && directoryPresent && await realpath(directory) !== directory) {
+    throw new Error('Secondary stack directory must not be a symlink');
+  }
+  if (action === 'claim') {
+    if (!secondary) process.exit(1);
+    const owner = await readStackOwner();
+    if (directoryPresent && !owner) process.exit(1);
+    const sameWorktree = owner?.worktree === root;
+    let reclaimingStaleSlot = directoryPresent && !sameWorktree;
+    if (directoryPresent && sameWorktree && !await slotIsFree()) {
+      console.log(stackId);
+      process.exit(0);
+    }
+    if (directoryPresent && !sameWorktree && !await slotIsFree()) process.exit(1);
+    if (directoryPresent && sameWorktree) reclaimingStaleSlot = true;
+    if (!directoryPresent && await stackProcessIsRunning()) process.exit(1);
     await checkPorts(defaultPorts);
-    await prepareDirectory();
+    const ownerRecord = await stackOwnerRecord(
+      Number(process.env['DEV_STACK_CLAIM_PID'] ?? process.pid),
+    );
+    await prepareDirectory(ownerRecord, reclaimingStaleSlot);
+    await save('stack-owner', ownerRecord);
+    if (reclaimingStaleSlot) console.error(`Reclaimed stale slot ${stackId}.`);
     console.log(stackId);
     process.exit(0);
   }
-  await prepareDirectory();
-  prepared = true;
-  const [action, flag, extra] = process.argv.slice(2);
-  if (extra || (flag && !(action === 'up' && flag === '--fresh'))) throw new Error('Usage: up.sh [--fresh], down.sh, status.sh, journey.sh');
+  if (action === 'up') {
+    const ownerRecord = secondary
+      ? await stackOwnerRecord(Number(process.env['DEV_STACK_CLAIM_PID'] ?? process.pid))
+      : undefined;
+    await prepareDirectory(ownerRecord);
+    if (ownerRecord) await save('stack-owner', ownerRecord);
+    prepared = true;
+  } else {
+    prepared = directoryPresent;
+  }
   switch (action) {
     case 'up': await up(flag === '--fresh'); break;
     case 'down':
+      if (!directoryPresent) {
+        if (secondary) console.log('free');
+        break;
+      }
       await stop();
       if (secondary) {
         if (await exists(`${directory}/settings.env`)) await compose('down', '--volumes', '--remove-orphans');
