@@ -1,6 +1,8 @@
 import { conversationCreatedDataSchema } from '@opencrane/events';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { conversationAccessFence, currentMembership } from '@opencrane/models';
+import { conversationAccessFence, currentMembership, PayingGroupRefused }
+  from '@opencrane/models';
+import { readPrivateSession } from './private-session.ts';
 import { GroupRefused } from '../members/groups.ts';
 import type { EventStore } from '@opencrane/event-store';
 import type { Query, connectMemberFeed } from '@opencrane/projections';
@@ -23,21 +25,33 @@ interface AccessRequest {
   relation?: 'read' | 'post';
   deadline?: number;
   allowApplying?: boolean;
-  fresh?: Fence;
 }
 
-/** Read participants from creation; messages do not decide who has access. */
+// Check access once. Content reads have their own time limit.
 export async function chatAccess(options: ChatOptions, request: AccessRequest) {
-  const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
-  const subjects = [`member-${memberId}`];
-  if (conversationId) subjects.push(`conversation-${conversationId}`);
-  const fresh = request.fresh ?? await conversationAccessFence(
+  const deadline = request.deadline ?? performance.now() + 2000;
+  await activeChatMember(options, request.memberId);
+  return conversationAccess(options, request, deadline);
+}
+
+// Keep the write check short by opening it after command history has loaded.
+export async function writeChatAccess(options: ChatOptions, request: AccessRequest) {
+  const subjects = [`member-${request.memberId}`];
+  if (request.conversationId) subjects.push(`conversation-${request.conversationId}`);
+  const fresh = await conversationAccessFence(
     options.store, performance.now(), subjects, request.deadline);
-  await activeChatMember(options, memberId, fresh);
+  await activeChatMember(options, request.memberId, fresh);
+  const context = await conversationAccess(options, request, fresh.deadline);
+  await fresh();
+  return Object.assign(fresh, context);
+}
+
+async function conversationAccess(options: ChatOptions, request: AccessRequest, deadline: number) {
+  const { memberId, conversationId, relation = 'read', allowApplying = false } = request;
   let mode: 'agent_session' | 'direct' | undefined;
   let colleagueId: string | undefined;
   if (conversationId) {
-    const row = await conversationCreation(options, conversationId, fresh.deadline);
+    const row = await conversationCreation(options, conversationId, deadline);
     const created = conversationCreatedDataSchema.parse(row.event.data);
     mode = created.mode;
     if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
@@ -61,16 +75,15 @@ export async function chatAccess(options: ChatOptions, request: AccessRequest) {
       if (permission.status === 'unavailable') throw new Error('IAM unavailable');
       if (!permission.allowed) throw new ChatRefused('Conversation refused');
     }
+    if (mode === 'agent_session') await readPrivateSession(options, memberId, conversationId);
   }
-  await fresh();
-  const context = { mode, colleagueId };
-  return Object.assign(fresh, context);
+  return { mode, colleagueId };
 }
 
 /** Check current membership without waiting for role or owner changes to reach OpenFGA.
  * Read removals from the member stream at once, and confirm joins through OpenFGA.
  */
-export async function activeChatMember(options: ChatOptions, memberId: string, fresh: Fence) {
+export async function activeChatMember(options: ChatOptions, memberId: string, fresh?: Fence) {
   const membership = await currentMembership(options.store, options.silo, memberId, fresh);
   if (!membership.role) throw new ChatRefused('Active silo membership required');
   const auth = memberAuthorisation(options.binding);
@@ -95,5 +108,6 @@ export function recordedChatMode(access: Awaited<ReturnType<typeof chatAccess>>)
 }
 
 export function isChatRefused(error: unknown) {
-  return error instanceof ChatRefused || error instanceof GroupRefused;
+  return error instanceof ChatRefused || error instanceof GroupRefused ||
+    error instanceof PayingGroupRefused;
 }

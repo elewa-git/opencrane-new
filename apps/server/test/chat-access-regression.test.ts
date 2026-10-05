@@ -39,7 +39,9 @@ async function fixture() {
   const app = buildServer(config, { chat: options });
   async function append(subject: string, type: string, data: unknown, iam = true) {
     const event = envelope('test', subject, type, data);
-    event.principal = { id: 'alice', kind: 'human' };
+    let actorId = 'alice';
+    if (type === 'member.joined') actorId = subject.slice('member-'.length);
+    event.principal = { id: actorId, kind: 'human' };
     const rows = await history(nats.store, subject, 'test');
     const expectedSequence = rows.at(-1)?.sequence ?? 0;
     expect((await nats.store.append({ event, expectedSequence })).status).toBe('appended');
@@ -56,6 +58,9 @@ async function fixture() {
       displayName: memberId, role: 'member',
     });
   }
+  await append('assistant-assistant', 'assistant.created', {
+    assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
+  });
   for (const projection of [members, conversations, computers]) {
     await runner.initialise(projection);
     await runner.run(projection);
@@ -139,7 +144,7 @@ async function historyDuringTurnStart() {
   }
 }
 
-it('WS: agent session live view survives the assistant completing a turn',
+it('WS: a slow content read stays open while the assistant completes a turn',
   socketDuringTurnCompletion, 120_000);
 
 async function socketDuringTurnCompletion() {
@@ -168,12 +173,15 @@ async function socketDuringTurnCompletion() {
     await context.append('conversation-agent', 'agent.turn_completed', {
       conversationId: 'agent', turnId: 'agent-turn',
     }, false);
+    await delay(2100);
     pause.release();
     function settled() {
       return received.some(isReadyOrRefused);
     }
     await until(settled);
     expect(received.some(isRefused)).toBe(false);
+    expect(received.some(isReady)).toBe(true);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
   } finally {
     socket?.terminate();
     if (wss) {
@@ -333,7 +341,7 @@ const changedAccessEvents = [
   { subject: 'member-alice', type: 'member.role_changed',
     data: { memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob' } },
 ];
-it.each(changedAccessEvents)('returns retryable 503 when $type changes a read fence',
+it.each(changedAccessEvents)('returns history authorised before $type was recorded',
   readDuringAccessChange, 120_000);
 
 async function readDuringAccessChange(event: AccessEvent) {
@@ -348,18 +356,17 @@ async function readDuringAccessChange(event: AccessEvent) {
     await context.append(event.subject, event.type, event.data, false);
     pause.release();
     const response = await reading;
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'unavailable' });
-    expect(response.body).not.toContain('Hello');
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Hello');
   } finally {
     pause?.release();
     await context.close();
   }
 }
 
-it('returns retryable 503 when a history read outlives its fence', expiredRead, 120_000);
+it('returns history when its content read takes more than two seconds', slowHistoryRead, 120_000);
 
-async function expiredRead() {
+async function slowHistoryRead() {
   const context = await fixture();
   let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
   try {
@@ -371,8 +378,8 @@ async function expiredRead() {
     await delay(2100);
     pause.release();
     const response = await reading;
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain('Hello');
   } finally {
     pause?.release();
     await context.close();
@@ -509,6 +516,132 @@ async function longDirectChatStatus() {
       expect(performance.now() - started).toBeLessThan(1500);
     }
   } finally {
+    await context.close();
+  }
+}
+
+// Reuse the verifier's 30 visible sessions and 120 other sessions with three busy replies.
+it('lists conversations while three caller sessions stream every 20 ms',
+  listDuringStreaming, 120_000);
+
+async function seedStreamingList(context: Fixture) {
+  for (let index = 0; index < 150; index++) {
+    const conversationId = `session-${index}`;
+    const owner = index < 30 ? 'alice' : 'bob';
+    context.keys.provision('test', conversationId);
+    const creation = { conversationId, createdBy: owner,
+      mode: 'agent_session', assistantId: 'assistant' };
+    await context.append(`conversation-${conversationId}`, 'conversation.created', creation);
+    const encrypted = context.keys.encrypt('test', conversationId, `Secret ${conversationId}`);
+    const message = { conversationId, authorId: owner, authorKind: 'human',
+      contentType: 'text', ...encrypted };
+    await context.append(`conversation-${conversationId}`, 'message.posted', message, false);
+  }
+  await context.runner.run(conversations);
+}
+
+function streamReplies(context: Fixture) {
+  let running = true;
+  let sent = 0;
+  async function pump(conversationId: string) {
+    const encrypted = context.keys.encrypt('test', conversationId, 'delta');
+    while (running) {
+      const data = { conversationId, turnId: 'turn', messageId: 'reply',
+        contentType: 'text', ...encrypted };
+      const event = envelope('test', `conversation-${conversationId}`, 'agent.message_delta', data);
+      await context.nats.connection.request(wireSubject(event.subject), JSON.stringify(event));
+      sent++;
+      await delay(20);
+    }
+  }
+  const conversationIds = ['session-0', 'session-1', 'session-2'];
+  const pumps = conversationIds.map(pump);
+  async function stop() {
+    running = false;
+    await Promise.all(pumps);
+    return sent;
+  }
+  return { stop };
+}
+
+async function listDuringStreaming() {
+  const context = await fixture();
+  let streaming: ReturnType<typeof streamReplies> | undefined;
+  try {
+    await seedStreamingList(context);
+    streaming = streamReplies(context);
+    await delay(300);
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const request = { url: '/api/conversations', headers: context.headers() };
+      const response = await context.app.inject(request);
+      expect(response.statusCode).toBe(200);
+      const rows = response.json<{ rows: { conversationId: string }[] }>().rows;
+      expect(rows).toHaveLength(30);
+      for (const row of rows) {
+        const sessionIndex = Number(row.conversationId.slice('session-'.length));
+        expect(sessionIndex).toBeLessThan(30);
+      }
+      expect(response.body).not.toContain('Secret session-30');
+    }
+    expect(await streaming.stop()).toBeGreaterThan(0);
+    streaming = undefined;
+  } finally {
+    await streaming?.stop();
+    await context.close();
+  }
+}
+
+it('revokes a socket within two seconds while its content read is waiting',
+  removalDuringSlowSocketRead, 120_000);
+
+async function removalDuringSlowSocketRead() {
+  const context = await fixture();
+  const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
+  let socket: WebSocket | undefined;
+  let wss: ReturnType<typeof attachWebSocketServer> | undefined;
+  let pause: ReturnType<typeof pauseFirstHistoryRead> | undefined;
+  try {
+    await context.agentSession('agent');
+    const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
+    const realtime = { feed: context.feed, binding: context.options.binding,
+      chat: context.options };
+    wss = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
+    pause = pauseFirstHistoryRead(context);
+    const connectionOptions = { headers: context.headers() };
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connectionOptions);
+    function receive(raw: Buffer) {
+      received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
+    }
+    socket.on('message', receive);
+    await once(socket, 'open');
+    const subscription = { type: 'subscribe', topic: 'conversation',
+      conversationId: 'agent', since: 0 };
+    socket.send(JSON.stringify(subscription));
+    await pause.reached;
+    const closed = once(socket, 'close');
+    const started = performance.now();
+    await context.append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'bob',
+    }, false);
+    function expired(): never {
+      throw new Error('Socket removal took more than two seconds');
+    }
+    const timeout = delay(2000).then(expired);
+    const closure: unknown[] = await Promise.race([closed, timeout]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+    expect(socket.readyState).toBe(WebSocket.CLOSED);
+    expect(received.some(isRefused)).toBe(true);
+    expect(received.some(isReady)).toBe(false);
+  } finally {
+    pause?.release();
+    socket?.terminate();
+    if (wss) {
+      function closeServer(resolve: () => void) {
+        wss!.close(resolve);
+      }
+      await new Promise<void>(closeServer);
+    }
     await context.close();
   }
 }

@@ -61,6 +61,9 @@ async function directFixture() {
       displayName: memberId, role: memberId === 'carol' ? 'owner' : 'member',
     });
   }
+  await append('assistant-assistant', 'assistant.created', {
+    assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
+  });
   for (const projection of [members, conversations, computers]) {
     await runner.initialise(projection);
     await runner.run(projection);
@@ -202,7 +205,8 @@ it('reconnects in position order and revokes a socket within two seconds before 
     }, false);
     await Promise.race([closed, removalDeadline()]);
     expect(performance.now() - started).toBeLessThan(2000);
-    expect(received.at(-1)?.type).toBe('refused');
+    expect(socket.readyState).toBe(WebSocket.CLOSED);
+    expect(received.some(isRefusedMessage)).toBe(true);
     const response = await fixture.app.inject({
       url: '/api/conversations/direct/messages', headers: fixture.headers('bob'),
     });
@@ -583,7 +587,7 @@ function isRefusedMessage(message: ReturnType<typeof chatMessageSchema.parse>) {
   return message.type === 'refused';
 }
 
-it('keeps all titles private when access changes during conversation summaries', async () => {
+it('returns list rows checked before access changes during their summaries', async () => {
   const fixture = await directFixture();
   try {
     for (const conversationId of ['two', 'one']) {
@@ -612,9 +616,9 @@ it('keeps all titles private when access changes during conversation summaries',
     }
     fixture.options.db = { query: removeDuringSummary };
     const response = await fixture.app.inject({ url: '/api/conversations', headers: fixture.headers() });
-    expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ status: 'unavailable' });
-    expect(response.body).not.toContain('one-title');
+    expect(response.statusCode).toBe(200);
+    expect(chatListSchema.parse(response.json()).rows).toHaveLength(2);
+    expect(response.body).toContain('one-title');
   } finally {
     await fixture.close();
   }
@@ -707,35 +711,21 @@ function messageType(message: ReturnType<typeof chatMessageSchema.parse>) {
   return message.type;
 }
 
-it.each([false, true])(
-  'keeps colleague search authorised when a checked colleague leaves (head changed: %s)',
-  colleagueLeavesDuringSearch, 120_000,
-);
+it('omits a departed colleague before OpenFGA applies the removal',
+  colleagueRemovedBeforeSearch, 120_000);
 
-async function colleagueLeavesDuringSearch(changedHead: boolean) {
+async function colleagueRemovedBeforeSearch() {
   const fixture = await directFixture();
-  const originalHead = fixture.options.store.head.bind(fixture.options.store);
-  let removed = false;
-  async function removeAfterColleagueCheck(subject?: string, deadline?: number) {
-    const head = await originalHead(subject, deadline);
-    if (!removed && subject === 'member-bob') {
-      removed = true;
-      await fixture.append('member-bob', 'member.removed', {
-        memberId: 'bob', removedBy: 'carol',
-      }, false);
-      if (changedHead) return originalHead(subject, deadline);
-    }
-    return head;
-  }
   try {
-    fixture.options.store.head = removeAfterColleagueCheck;
+    await fixture.append('member-bob', 'member.removed', {
+      memberId: 'bob', removedBy: 'carol',
+    }, false);
     const request = { url: '/api/chat/colleagues', headers: fixture.headers() };
     const response = await fixture.app.inject(request);
-    expect(removed).toBe(true);
     expect(response.statusCode).toBe(200);
-    expect(chatColleaguesSchema.safeParse(response.json()).success).toBe(true);
+    const colleagues = chatColleaguesSchema.parse(response.json());
+    expect(colleagues.rows).toEqual([{ memberId: 'carol', displayName: 'carol' }]);
   } finally {
-    fixture.options.store.head = originalHead;
     await fixture.close();
   }
 }
@@ -756,6 +746,22 @@ async function colleagueWithPendingRole() {
     const colleagues = chatColleaguesSchema.parse(response.json());
     expect(colleagues.rows).toContainEqual({ memberId: 'bob', displayName: 'bob' });
     await fixture.create();
+  } finally {
+    await fixture.close();
+  }
+}
+
+it('refuses session creation with an unknown assistant', unknownAssistant, 120_000);
+
+async function unknownAssistant() {
+  const fixture = await directFixture();
+  try {
+    const payload = { id: 'unknown-assistant', conversationId: 'unknown-assistant',
+      assistantId: 'missing-assistant' };
+    const request = { method: 'POST' as const, url: '/api/conversations',
+      headers: fixture.headers(), payload };
+    const response = await fixture.app.inject(request);
+    expect(response.statusCode).toBe(403);
   } finally {
     await fixture.close();
   }

@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in and chats"]
   server -.->|uses| libs["libs/*<br/>shared code"]
   server -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -26,6 +26,7 @@ flowchart LR
 - Checks permissions before returning private information or changing data.
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
+- Lets two silo members exchange private messages without starting assistant work.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
   and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that
   every model request passes through.
@@ -47,8 +48,11 @@ flowchart LR
 4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and thread, while everyone shares one disk and
    browser profile. A member who loses spending access can still read and stop their work.
-5. **An admin adds a tool server.** The server checks the remote address, lists its tools and leaves them blocked until an admin reviews them.
-6. **An assistant asks an AI model for help.** The request goes through agentgateway, the
+5. **Two people chat.** The server checks who can read their direct conversation,
+   then returns messages and live updates. Busy chats and slow reads keep working.
+6. **An admin adds a tool server.** The server checks the remote address, lists its
+   tools and leaves them blocked until an admin reviews them.
+7. **An assistant asks an AI model for help.** The request goes through agentgateway, the
    AI gateway. The gateway asks the models process whether the budget allows it, and only
    then sends it on to the model provider.
 

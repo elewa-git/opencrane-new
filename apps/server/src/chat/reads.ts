@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { memberAuthorisation } from '@opencrane/authz';
-import { conversationAccessFence, isAuthorityChanged } from '@opencrane/models';
 import { activeChatMember, isChatRefused } from './access.ts';
 import type { ChatOptions } from './access.ts';
 
@@ -21,13 +20,10 @@ export async function colleagues(options: ChatOptions, memberId: string, query: 
   const page = result.rows.slice(0, input.limit);
   async function candidate(row: (typeof page)[number]) {
     try {
-      const fresh = await conversationAccessFence(options.store, performance.now());
-      await activeChatMember(options, row.member_id, fresh);
-      await fresh();
+      await activeChatMember(options, row.member_id);
       return { memberId: row.member_id, displayName: row.display_name };
     } catch (error) {
       if (isChatRefused(error)) return undefined;
-      if (isAuthorityChanged(error)) return undefined;
       throw error;
     }
   }

@@ -59,17 +59,22 @@ content only while access remains valid.
 HTTP and socket requests check the caller's current membership and conversation
 access. Removal denies the departing member's history, posts and status without
 waiting for OpenFGA to catch up. It ends their subscription within two seconds.
-Sockets check the member and conversation event numbers on each tick, and check
-access again when either number moves. After loading content, the server checks
-that access has stayed the same before sending anything. An unavailable
-permission check grants no access. Direct chats report
-`computerState: "not_applicable"`, even before the read table has caught up.
+Each socket poll checks access before reading content. The access check has a
+1.5-second time limit; it ends before the content read starts. The server keeps
+checking removals while a content read is waiting. An unavailable permission check
+grants no access. Direct chats report `computerState: "not_applicable"`, even before
+the read table has caught up.
 
-If your membership or a chat's participants change while a request runs, it returns 503.
-The client can retry the request. If its access check takes too long, it also returns 503.
-The socket closes with 1013 in these cases and can be reconnected. Turn activity,
-files, closure and ownership changes preserve a reader's access. Model and
-approval checks retain their stricter rules for cancelling work.
+History and status reads check access once, before loading content. Each list row
+checks its recorded participants and OpenFGA permission once, with up to eight
+rows checked in parallel. A membership or participant change during the content
+read does not change that request's result. The next request checks the new access.
+Slow content reads and busy conversations do not cause an access timeout.
+An unavailable access check still returns 503; a socket closes with 1013 and can
+be reconnected. Turn activity, files, closure and ownership changes preserve a
+reader's access. Writes read command history with its own ten-second limit, then
+open a short access check before appending. Model and approval checks retain
+their stricter rules for cancelling work.
 Replay rebuilds the read tables and both participants' OpenFGA permissions without
 waking computers or starting work. Older creations without a mode still read as
 `agent_session` with their recorded assistant.

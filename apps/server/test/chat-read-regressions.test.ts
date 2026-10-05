@@ -197,7 +197,6 @@ async function streamsDuringTurnChanges() {
   }
   socket.on('message', collect);
   let reporting: Promise<void> | undefined;
-  const reads = vi.spyOn(nats.store, 'readStream');
   try {
     await once(socket, 'open');
     const subscription = { type: 'subscribe', topic: 'conversation',
@@ -205,16 +204,12 @@ async function streamsDuringTurnChanges() {
     socket.send(JSON.stringify(subscription));
     await until(receivedReady);
     expect(socket.readyState).toBe(WebSocket.OPEN);
-    reads.mockClear();
     await delay(500);
-    expect(reads.mock.calls).toHaveLength(0);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
     await append('member-alice', 'member.role_changed', {
       memberId: 'alice', previousRole: 'member', newRole: 'member', changedBy: 'owner',
     });
-    function checkedChangedMembership() {
-      return reads.mock.calls.length > 0;
-    }
-    await until(checkedChangedMembership);
+    await delay(200);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     reporting = reportTurns();
     for (let index = 0; index < 4; index++) {
@@ -225,7 +220,6 @@ async function streamsDuringTurnChanges() {
     expect(socket.readyState).toBe(WebSocket.OPEN);
     expect(messages.some(isCompletion)).toBe(true);
   } finally {
-    reads.mockRestore();
     stopped = true;
     await reporting;
     socket.terminate();

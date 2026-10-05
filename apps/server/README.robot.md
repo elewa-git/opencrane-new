@@ -296,8 +296,8 @@ those keys with event backups; deleting a key makes that conversation’s event/
 [Qualification and limits](../../docs/process/bridge-evidence.md).
 
 Creation defaults omitted `mode` to `agent_session` and records it immutably in
-`conversation.created`. Phase 2 refuses `direct` and `group` with HTTP 400 and
-“Phase 2 supports only agent_session conversations”. The projection retains mode
+`conversation.created`. Direct creation binds exactly two active silo members and
+no assistant. Unsupported modes return HTTP 400. The projection retains mode
 on replay; older stored events without mode read as `agent_session`. New commands
 always write mode. Changing creation arguments on a retry never changes the conversation.
 
@@ -327,6 +327,17 @@ Credential expiry closes with 4001 and reconnects with a fresh credential; only 
 recorded report refusal stops automatic recovery.
 
 ### Chat UI reads and Stop
+
+The [direct chat API](../../docs/api/direct-chats.md) supplies two-person creation,
+messages, history, status and live updates. Direct messages never start assistant work.
+History and status check access once before reading content. The list checks each
+row's participants and OpenFGA permission once, with eight rows at a time.
+Readers do not use an authority fence, the short check that detects access changes
+before a write. Content reads can take longer than two seconds without an access timeout.
+Socket polls run every 100 ms. Each access check has a 1.5-second limit and ends
+before reading content. Access polling continues during a slow content read, so
+member removal still closes the socket within two seconds. Writes read history
+with its own ten-second limit before opening their short access check.
 
 `GET /api/chat` returns the authenticated member id and their personal assistant
 id (null while provisioning). It requires live silo membership and `acts_for`;

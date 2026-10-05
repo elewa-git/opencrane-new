@@ -1,6 +1,5 @@
 import type { WebSocket } from 'ws';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
-import { conversationAccessFence } from '@opencrane/models';
 import { chatAccess, recordedChatMode, isChatRefused } from './access.ts';
 import { chatRows, type ChatOptions } from './routes.ts';
 
@@ -16,7 +15,7 @@ interface Subscription {
   running: boolean;
   ready: boolean;
   computerState: string;
-  access?: { memberId: string; memberHead: number; conversationHead: number; mode: Mode };
+  checking: boolean;
 }
 
 export function conversationSubscription(
@@ -33,7 +32,8 @@ export function conversationSubscription(
     started = true;
     const state: Subscription = {
       socket, session, config, options, conversationId, position: since,
-      generation: requestedGeneration ?? 0, running: false, ready: false, computerState: '',
+      generation: requestedGeneration ?? 0, running: false, checking: false,
+      ready: false, computerState: '',
     };
     function poll() {
       void drain(state);
@@ -48,10 +48,10 @@ export function conversationSubscription(
   }
 }
 
-async function drain(state: Subscription) {
+async function pollAccess(state: Subscription): Promise<Mode | undefined> {
   const { socket, options, conversationId, session, config } = state;
-  if (state.running || socket.readyState !== socket.OPEN) return;
-  state.running = true;
+  if (state.checking || socket.readyState !== socket.OPEN) return;
+  state.checking = true;
   const deadline = performance.now() + 1500;
   function expire() {
     // Leave time for polling and the close handshake inside the two-second removal bound.
@@ -64,32 +64,31 @@ async function drain(state: Subscription) {
       refuse(state);
       return;
     }
-    const subjects = [`member-${memberId}`, `conversation-${conversationId}`];
-    const fresh = await conversationAccessFence(
-      options.store, performance.now(), subjects, deadline);
-    const memberHead = await options.store.head(subjects[0], deadline);
-    const conversationHead = await options.store.head(subjects[1], deadline);
-    const previous = state.access;
-    let currentAccess;
-    if (!previous || previous.memberId !== memberId || previous.memberHead !== memberHead ||
-        previous.conversationHead !== conversationHead) {
-      const request = { memberId, conversationId, deadline, fresh };
-      const access = await chatAccess(options, request);
-      currentAccess = { memberId, memberHead, conversationHead, mode: recordedChatMode(access) };
-      state.access = currentAccess;
-    } else {
-      currentAccess = previous;
-    }
-    const mode = currentAccess.mode;
-    const result = await chatRows(options, conversationId, mode, state.position);
-    await fresh();
-    if (socket.readyState !== socket.OPEN) return;
-    sendRows(state, result);
+    const request = { memberId, conversationId, deadline };
+    const access = await chatAccess(options, request);
+    return recordedChatMode(access);
   } catch (error) {
     if (isChatRefused(error)) refuse(state);
     else socket.close(1013);
+    return;
   } finally {
     clearTimeout(watchdog);
+    state.checking = false;
+  }
+}
+
+async function drain(state: Subscription) {
+  // Keep checking removals while a slow content read is still waiting.
+  const mode = await pollAccess(state);
+  if (!mode || state.running || state.socket.readyState !== state.socket.OPEN) return;
+  state.running = true;
+  try {
+    const result = await chatRows(state.options, state.conversationId, mode, state.position);
+    if (state.socket.readyState !== state.socket.OPEN) return;
+    sendRows(state, result);
+  } catch {
+    state.socket.close(1013);
+  } finally {
     state.running = false;
   }
 }
