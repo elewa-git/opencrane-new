@@ -20,6 +20,8 @@
   short event-store hiccups, restarts itself after 15 seconds of real outage instead of
   sitting idle, and upstream aborts reach Codex promptly (#113).
 - Live view retries access checks that do not answer for up to 5 seconds, and says it couldn't confirm access instead of Access changed or Not available when they time out (#77).
+- Gateway startup failures now include the gateway's stderr error line and exit status; test
+  fixtures clean up spawned services after timeouts and worker shutdown.
 - Added comments and names for the existing gateway accounting and audit rules; behaviour and
   budget limits are unchanged.
 - Live-view diagnostics now correlate admission, desktop startup, first-frame forwarding and every permission check without logging credentials or pixels ([#77 diagnosis](docs/process/i77-live-view.md#post-admission-diagnosis--4-october-2026)); the loaded live batch still fails qualification.

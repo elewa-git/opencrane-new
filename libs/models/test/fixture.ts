@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { afterAll, beforeAll, expect } from 'vitest';
+import { afterAll, beforeAll, expect, onTestFinished } from 'vitest';
 import { exportJWK, exportPKCS8, generateKeyPair, SignJWT } from 'jose';
 import { computerCredentials, tokenIssuer } from '@opencrane/auth';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -20,8 +20,40 @@ import { modelGrantHandler, BudgetActor, budgets, envelope, history, ingestUsage
 export let fga: Awaited<ReturnType<typeof openfga>>;
 beforeAll(async () => { fga = await openfga(); }, 120_000);
 afterAll(async () => { await fga.close(); });
+
+function registerGatewayCleanup(
+  child: ChildProcess,
+  stop: (signal?: NodeJS.Signals) => Promise<void>,
+) {
+  function removeSignalHandlers() {
+    process.removeListener('SIGTERM', stopOnSigterm);
+    process.removeListener('SIGINT', stopOnSigint);
+  }
+  async function stopChild() {
+    await stop('SIGKILL');
+    removeSignalHandlers();
+  }
+  async function stopChildAndForwardSignal(signal: NodeJS.Signals) {
+    await stopChild();
+    process.kill(process.pid, signal);
+  }
+  function stopOnSigterm() {
+    void stopChildAndForwardSignal('SIGTERM');
+  }
+  function stopOnSigint() {
+    void stopChildAndForwardSignal('SIGINT');
+  }
+  process.once('SIGTERM', stopOnSigterm);
+  process.once('SIGINT', stopOnSigint);
+  child.once('close', removeSignalHandlers);
+  if (expect.getState().currentTestName) {
+    onTestFinished(stopChild);
+  } else {
+    afterAll(stopChild);
+  }
+}
 async function freePort() {
-  const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening');
+  const server = createServer(); server.listen(0, '::'); await once(server, 'listening');
   const address = server.address(); if (!address || typeof address === 'string') throw new Error('No port');
   await new Promise<void>(resolve => server.close(() => resolve())); return address.port;
 }
@@ -117,12 +149,26 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const address = stub.address(); if (!address || typeof address === 'string') throw new Error('No stub');
   const keyFile = real ? resolve(process.env['MODELS_REAL_KEY_FILE'] ?? '.keys/.openai-key') : `${directory}/stub-key`;
   if (!real) await writeFile(keyFile, 'stub-only-placeholder');
-  const options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
+  let options = { binary: resolve('spikes/s0-1c-real-model-smoke/.tools/agentgateway-linux-amd64'),
     configFile: `${directory}/gateway.json`, usageFile: `${directory}/usage.jsonl`, keyFile,
     port: await freePort(), readinessPort: await freePort(), decisionUrl: decision.url, issuer,
     mcpRoutes: [{ serverId: 'fixture', connectionId: 'installed', upstream: `127.0.0.1:${address.port}` }],
-    ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }) };
-  let gateway = await startGateway(options);
+    ...(real ? {} : { upstream: `127.0.0.1:${address.port}` }),
+    onChildSpawn: registerGatewayCleanup };
+  let gateway: Awaited<ReturnType<typeof startGateway>>;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      gateway = await startGateway(options);
+      break;
+    } catch (error) {
+      const isAddressConflict = error instanceof Error &&
+        /address (?:already )?in use/iu.test(error.message);
+      if (!isAddressConflict || attempt >= 2) {
+        throw error;
+      }
+      options = { ...options, port: await freePort(), readinessPort: await freePort() };
+    }
+  }
   const runner = new ProjectionRunner(db, nats.store, logger); await runner.initialise(budgets);
   await provisionDispatcher(nats.connection);
   const runtime = new HandlerRuntime({ db, logger, silo: 'test', handlers: [settlementHandler(decision.url), ...(grants === 'reactions' ? [modelGrantHandler(nats.store), auth.handler] : [])], retryDelay: 1 });
@@ -137,6 +183,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   // The stub's 1,000 input tokens must fit within the request's byte bound.
   const body = { model: allowedModel, input: real ? 'Say OK.' : 'Say OK.'.repeat(150), max_output_tokens: 128, stream: true, store: false, reasoning: { effort: 'minimal' } };
   return { keys, stopDispatch, upstreamBody: () => upstreamBody, actor, append, headers, t, c, sign, issue, credentials, binding, identity: { jwks: { keys: [jwk] }, issuer },
+    gatewayHealthy: () => gateway.healthy(),
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
@@ -157,8 +204,43 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
         '"extAuthz":{"policies":{"http":{"requestTimeout":"10s"}},');
       await writeFile(options.configFile, config);
       const child = spawn(options.binary, ['-f', options.configFile], { stdio: 'ignore' });
+      function stopSlowGateway() {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill('SIGKILL');
+        }
+      }
+      function slowGatewayHealthy() {
+        return child.exitCode === null && child.signalCode === null;
+      }
+      async function stopSlowGatewayNormally() {
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+        await exited;
+      }
+      function removeSlowGatewaySignalHandlers() {
+        process.removeListener('SIGTERM', stopSlowGatewayOnSigterm);
+        process.removeListener('SIGINT', stopSlowGatewayOnSigint);
+      }
+      function stopSlowGatewayOnSigterm() {
+        stopSlowGateway();
+        process.kill(process.pid, 'SIGTERM');
+      }
+      function stopSlowGatewayOnSigint() {
+        stopSlowGateway();
+        process.kill(process.pid, 'SIGINT');
+      }
+      process.once('SIGTERM', stopSlowGatewayOnSigterm);
+      process.once('SIGINT', stopSlowGatewayOnSigint);
+      child.once('close', removeSlowGatewaySignalHandlers);
+      if (expect.getState().currentTestName) {
+        onTestFinished(stopSlowGateway);
+      } else {
+        afterAll(stopSlowGateway);
+      }
       const exited = once(child, 'exit');
-      gateway = { healthy: () => child.exitCode === null, stop: async () => { child.kill(); await exited; } };
+      gateway = {
+        healthy: slowGatewayHealthy,
+        stop: stopSlowGatewayNormally,
+      };
       await until(async () => {
         try { return (await fetch(`http://127.0.0.1:${options.readinessPort}/healthz/ready`)).ok; }
         catch { return false; }

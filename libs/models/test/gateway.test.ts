@@ -8,7 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { readFile, writeFile } from 'node:fs/promises';
 
 import { createHash, randomUUID } from 'node:crypto';
-import { expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 
 import { rebuildMembers, grantStream } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
@@ -17,6 +17,19 @@ import { auditTrail, readAudit, conversations, readConversation } from '@opencra
 import { BudgetActor, budgets, costCents, envelope, history, ingestUsage, models, readBudget, startDecision, totals } from '../src/index.ts';
 
 import { fixture, fga, waitForModelGrants } from './fixture.ts';
+
+let suiteFixture: Awaited<ReturnType<typeof fixture>>;
+beforeAll(async () => {
+  suiteFixture = await fixture(0, 0);
+  await suiteFixture.slowDecisions();
+}, 120_000);
+afterAll(async () => {
+  await suiteFixture?.close();
+});
+
+it('starts a gateway fixture from beforeAll and keeps its slow gateway alive', () => {
+  expect(suiteFixture.gatewayHealthy()).toBe(true);
+});
 
 async function waitForJwtLogs(f: Awaited<ReturnType<typeof fixture>>, count: number) {
   await until(async () => {
@@ -238,7 +251,13 @@ it.each([
     });
     try {
       const pending = f.call();
-      await capturing;
+      const captureOrResponse = await Promise.race([
+        capturing.then(() => undefined),
+        pending,
+      ]);
+      if (captureOrResponse) {
+        throw new Error(`Gateway returned ${captureOrResponse.status} before history was captured`);
+      }
       if (revoke) await f.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
         resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
       });

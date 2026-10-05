@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { once } from "node:events";
-import { afterAll, beforeAll, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { OpenFgaClient, ConsistencyPreference } from "@openfga/sdk";
 import { transformer } from "@openfga/syntax-transformer";
 import { event, natsFixture } from "@opencrane/event-store/testing";
@@ -426,60 +426,96 @@ it("deletes the fresh OpenFGA store when model creation fails", async () => {
   }
 });
 
-it("cleans a rebuild store when the create response is lost at the HTTP boundary", async () => {
-  const service = await openfga(await dbs.postgres());
-  const client = new OpenFgaClient({ apiUrl: service.apiUrl });
-  const before = await client.listStores({ pageSize: 100 });
-  let releaseCreate: () => void = () => undefined;
-  const allowCreate = new Promise<void>((resolve) => {
-    releaseCreate = resolve;
+describe("PostgreSQL-backed rebuild cleanup", () => {
+  let service: Awaited<ReturnType<typeof openfga>>;
+  beforeAll(async () => {
+    service = await openfga(await dbs.postgres());
+  }, 120_000);
+  afterAll(async () => {
+    await service?.close();
   });
-  let firstListCompleted = false;
-  let createCommittedAfterFirstList = false;
-  const proxy = createServer((request, response) => {
-    void (async () => {
-      const chunks = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      if (request.method === "POST" && request.url === "/stores") {
-        await allowCreate;
-      }
-      const upstream = await fetch(`${service.apiUrl}${request.url ?? ""}`, {
-        method: request.method ?? "POST",
-        headers: { "content-type": "application/json" },
-        ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
-      });
-      const body = await upstream.text();
-      if (request.method === "POST" && request.url === "/stores") {
-        createCommittedAfterFirstList = firstListCompleted;
+
+  it("cleans a rebuild store when the create response is lost at the HTTP boundary", async () => {
+    const client = new OpenFgaClient({ apiUrl: service.apiUrl });
+    const before = await client.listStores({ pageSize: 100 });
+    let releaseCreate: () => void = () => undefined;
+    const allowCreate = new Promise<void>((resolve) => {
+      releaseCreate = resolve;
+    });
+    let markCreateCommitted: () => void = () => undefined;
+    const createCommitted = new Promise<void>((resolve) => {
+      markCreateCommitted = resolve;
+    });
+    let firstListCompleted = false;
+    let createCommittedAfterFirstList = false;
+    function proxyRequest(request: IncomingMessage, response: ServerResponse) {
+      void handleProxyRequest(request, response);
+    }
+    async function handleProxyRequest(request: IncomingMessage, response: ServerResponse) {
+      try {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(Buffer.from(chunk));
+        const isStoreList = request.method === "GET" && request.url?.startsWith("/stores");
+        if (isStoreList && firstListCompleted) {
+          // The retry list must wait until the lost create response is known to have committed.
+          await createCommitted;
+        }
+        const isStoreCreate = request.method === "POST" && request.url === "/stores";
+        if (isStoreCreate) {
+          await allowCreate;
+        }
+        const upstream = await fetch(`${service.apiUrl}${request.url ?? ""}`, {
+          method: request.method ?? "POST",
+          headers: { "content-type": "application/json" },
+          ...(chunks.length ? { body: Buffer.concat(chunks) } : {}),
+        });
+        const body = await upstream.text();
+        if (isStoreCreate) {
+          createCommittedAfterFirstList = firstListCompleted;
+          markCreateCommitted();
+          response.destroy();
+          return;
+        }
+        response.writeHead(upstream.status, { "content-type": "application/json" });
+        response.end(body);
+        if (isStoreList) {
+          firstListCompleted = true;
+          releaseCreate();
+        }
+      } catch {
         response.destroy();
-        return;
       }
-      response.writeHead(upstream.status, { "content-type": "application/json" });
-      response.end(body);
-      if (request.method === "GET" && request.url?.startsWith("/stores")) {
-        firstListCompleted = true;
-        releaseCreate();
-      }
-    })().catch(() => response.destroy());
+    }
+    const proxy = createServer(proxyRequest);
+    proxy.listen(0, "127.0.0.1");
+    await once(proxy, "listening");
+    const address = proxy.address();
+    if (!address || typeof address === "string") throw new Error("No proxy port");
+    const empty = {
+      head: () => Promise.resolve(0),
+      async *subscribe() {
+        await Promise.resolve();
+        yield { sequence: 1, event: member("unused") };
+      },
+    };
+    try {
+      await expect(
+        rebuildMembers(`http://127.0.0.1:${address.port}`, "lost", empty),
+      ).rejects.toThrow();
+      const after = await client.listStores({ pageSize: 100 });
+      expect(createCommittedAfterFirstList).toBe(true);
+      expect(after.stores.map(({ id }) => id).sort()).toEqual(
+        before.stores.map(({ id }) => id).sort(),
+      );
+    } finally {
+      await stopProxy();
+    }
+
+    async function stopProxy() {
+      proxy.closeAllConnections();
+      await new Promise<void>((resolve) => proxy.close(() => resolve()));
+    }
   });
-  proxy.listen(0, "127.0.0.1");
-  await once(proxy, "listening");
-  const address = proxy.address();
-  if (!address || typeof address === "string") throw new Error("No proxy port");
-  const empty = { head: () => Promise.resolve(0), async *subscribe() {
-    await Promise.resolve();
-    yield { sequence: 1, event: member("unused") };
-  } };
-  try {
-    await expect(rebuildMembers(`http://127.0.0.1:${address.port}`, "lost", empty)).rejects.toThrow();
-    const after = await client.listStores({ pageSize: 100 });
-    expect(createCommittedAfterFirstList).toBe(true);
-    expect(after.stores.map(({ id }) => id).sort()).toEqual(before.stores.map(({ id }) => id).sort());
-  } finally {
-    proxy.closeAllConnections();
-    await new Promise<void>((resolve) => proxy.close(() => resolve()));
-    await service.close();
-  }
 });
 
 it("preserves a rebuild store created by an earlier run", async () => {

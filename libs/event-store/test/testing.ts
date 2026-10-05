@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { connect, createServer, type Socket } from "node:net";
@@ -9,6 +10,35 @@ import { jetstream } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
 import { createEventStore, connectNats } from "../src/index.ts";
+import { afterAll, expect, onTestFinished } from "vitest";
+
+function registerChildCleanup(child: ChildProcess) {
+  const killChild = () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+    }
+  };
+  const removeSignalHandlers = () => {
+    process.removeListener("SIGTERM", stopChildOnSigterm);
+    process.removeListener("SIGINT", stopChildOnSigint);
+  };
+  function stopChildOnSigterm() {
+    killChild();
+    process.kill(process.pid, "SIGTERM");
+  }
+  function stopChildOnSigint() {
+    killChild();
+    process.kill(process.pid, "SIGINT");
+  }
+  process.once("SIGTERM", stopChildOnSigterm);
+  process.once("SIGINT", stopChildOnSigint);
+  child.once("close", removeSignalHandlers);
+  if (expect.getState().currentTestName) {
+    onTestFinished(killChild);
+  } else {
+    afterAll(killChild);
+  }
+}
 
 /** Keep the public port bound while a child service stops and starts behind it. */
 export async function tcpProxy(target: () => { host: string; port: number }, host = "127.0.0.1") {
@@ -113,6 +143,7 @@ export async function natsFixture({ provision = true } = {}) {
       "-c", `${directory}/${jetstream ? "nats" : "no-js"}.conf`,
     ], { env: { ...globalThis.process.env, ...env("server"), ...publicKeys,
       NATS_LISTEN: "127.0.0.1:-1", NATS_STORE_DIR: `${directory}/store` } });
+    registerChildCleanup(process);
     const exited = once(process, "exit");
     const ready = new Promise<void>((done, reject) => {
       let output = "";

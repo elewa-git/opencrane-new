@@ -68,6 +68,12 @@ it.each(["projection", "dispatcher"])("%s consumes EVENTS but cannot append or c
     .toEqual([command]);
 });
 
+it("closes a NATS fixture created inside a test", async () => {
+  const testFixture = await natsFixture();
+  await testFixture.close();
+  expect(testFixture.store).toBeDefined();
+});
+
 it.each(["computer", "gateway"])("%s cannot access events or JetStream", async (identity) => {
   const connection = await fixture.client(identity);
   const head = await fixture.store.head();
