@@ -301,10 +301,15 @@ async function privatePids() {
   return JSON.parse(await podExec(source));
 }
 async function released() {
-  await until(async function clean() {
-    return (await privatePids()).length === 0
-      && JSON.parse(await podExec(`console.log(JSON.stringify((await import('node:fs')).readdirSync('/home/private')))`)).length === 0;
-  }, 'private processes and homes removed', 5000);
+  try {
+    await until(async function clean() {
+      return (await privatePids()).length === 0
+        && JSON.parse(await podExec(`console.log(JSON.stringify((await import('node:fs')).readdirSync('/home/private')))`)).length === 0;
+    }, 'private processes and homes removed', 5000);
+  } catch {
+    check('private release remaining', false, 'A process or home survived the five-second limit');
+    throw new Error('Private process or home leaked');
+  }
 }
 async function scan(name, active = false) {
   const paths = ['/home/agent', '/tmp', '/home/tool', '/run/executor', '/home/codex', '/run/codex', '/dev/shm'];

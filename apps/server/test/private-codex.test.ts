@@ -6,7 +6,7 @@ import { memoryFreeConfig, privateConfig, privateEnvironments } from '../../comp
 import { codexConnection } from '../../computer/src/codex-connection.ts';
 import { privateCodexLaunch } from '../../computer/src/private-codex.ts';
 
-it('disables tools and persistent history in the private config and shared prompt files in both', () => {
+const disablesToolsAndPersistentHistoryInThePrivate = () => {
   const config = privateConfig('test-model');
   const required = ['model = "test-model"', 'model_provider = "local"',
     'approval_policy = "never"', 'sandbox_mode = "read-only"', 'web_search = "disabled"',
@@ -25,13 +25,19 @@ it('disables tools and persistent history in the private config and shared promp
     expect(text).not.toContain('[projects]');
   }
   expect(privateEnvironments()).toBe('include_local = false\n');
-});
+};
+it(
+  'disables tools and persistent history in the private config and shared prompt files in both',
+  disablesToolsAndPersistentHistoryInThePrivate
+);
 
-it('delivers server requests to the handler and sends its JSON-RPC error reply', async () => {
+const deliversServerRequestsToTheHandlerAndSends = async () => {
   const input = new PassThrough();
   const output = new PassThrough();
   const lines: string[] = [];
-  function capture(chunk: Buffer) { lines.push(chunk.toString()); }
+  function capture(chunk: Buffer) {
+    lines.push(chunk.toString());
+  }
   input.on('data', capture);
   function message(value: Record<string, unknown>) {
     connection.reply(value['id'], { code: -32601, message: 'Not available in a private turn' });
@@ -42,9 +48,13 @@ it('delivers server requests to the handler and sends its JSON-RPC error reply',
   expect(JSON.parse(lines[0]!)).toEqual({ id: 12,
     error: { code: -32601, message: 'Not available in a private turn' } });
   output.end();
-});
+};
+it(
+  'delivers server requests to the handler and sends its JSON-RPC error reply',
+  deliversServerRequestsToTheHandlerAndSends
+);
 
-it('rejects pending calls once without exposing malformed model text anywhere', async () => {
+const rejectsPendingCallsOnceWithoutExposingMalformedModel = async () => {
   const input = new PassThrough();
   const output = new PassThrough();
   const failed = vi.fn();
@@ -56,10 +66,17 @@ it('rejects pending calls once without exposing malformed model text anywhere', 
     expect(await rejection).not.toContain('PRIVATE-malformed-canary');
     expect(failed).toHaveBeenCalledExactlyOnceWith();
     expect(stderr).not.toHaveBeenCalled();
-  } finally { stderr.mockRestore(); output.end(); }
-});
+  } finally {
+    stderr.mockRestore();
+    output.end();
+  }
+};
+it(
+  'rejects pending calls once without exposing malformed model text anywhere',
+  rejectsPendingCallsOnceWithoutExposingMalformedModel
+);
 
-it('uses a 16Mi memory volume for private homes and keeps every memory volume at 16Mi', () => {
+const usesA16MiMemoryVolumeForPrivateHomes = () => {
   const source = readFileSync(new URL('../../computer/sandbox-template.json', import.meta.url), 'utf8');
   const template = z.object({ spec: z.object({ podTemplate: z.object({ spec: z.object({
     volumes: z.array(z.object({ name: z.string(), emptyDir: z.object({
@@ -72,9 +89,13 @@ it('uses a 16Mi memory volume for private homes and keeps every memory volume at
   for (const volume of spec.volumes) {
     if (volume.emptyDir?.medium === 'Memory') expect(volume.emptyDir.sizeLimit).toBe('16Mi');
   }
-});
+};
+it(
+  'uses a 16Mi memory volume for private homes and keeps every memory volume at 16Mi',
+  usesA16MiMemoryVolumeForPrivateHomes
+);
 
-it('launches private Codex as UID 1003 with ignored stderr and only its six environment keys', () => {
+const launchesPrivateCodexAsUID1003WithIgnored = () => {
   const launch = privateCodexLaunch('/home/private/turn-1', 'caller');
   expect(launch.command).toBe('/usr/bin/setpriv');
   expect(launch.args).toEqual(['--reuid=1003', '--regid=1003', '--clear-groups',
@@ -84,4 +105,8 @@ it('launches private Codex as UID 1003 with ignored stderr and only its six envi
       HOME: '/home/private/turn-1', CODEX_HOME: '/home/private/turn-1/codex',
       CODEX_SQLITE_HOME: '/home/private/turn-1/codex', TMPDIR: '/home/private/turn-1/tmp',
       PROXY_CALLER_TOKEN: 'caller' } });
-});
+};
+it(
+  'launches private Codex as UID 1003 with ignored stderr and only its six environment keys',
+  launchesPrivateCodexAsUID1003WithIgnored
+);

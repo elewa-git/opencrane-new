@@ -27,7 +27,7 @@ function finish(sequence: number, turnId: string, type = 'agent.turn_completed')
   return row(sequence, type, { turnId });
 }
 
-it('keeps only the requester’s messages and completed replies in row order', () => {
+const keepsOnlyTheRequesterSMessagesAndCompleted = () => {
   const first = message(1, 'member-canary');
   const rows = [first, message(2, 'bob-canary', 'bob'), reply(3, first.event.id, 'reply-one'),
     reply(4, first.event.id, 'reply-two'), finish(5, first.event.id)];
@@ -46,9 +46,13 @@ it('keeps only the requester’s messages and completed replies in row order', (
     assistant: ['reply-one', 'reply-two'] }], omittedExchanges: 0 });
   expect(JSON.stringify(result)).not.toContain('bob-canary');
   for (const type of ignored) expect(JSON.stringify(result)).not.toContain(`${type}-canary`);
-});
+};
+it(
+  'keeps only the requester’s messages and completed replies in row order',
+  keepsOnlyTheRequesterSMessagesAndCompleted
+);
 
-it('keeps no request text for failed, stopped, unfinished or lost-output turns', () => {
+const keepsNoRequestTextForFailedStoppedUnfinished = () => {
   const rows: StoredEvent[] = [];
   for (const [index, type] of ['agent.turn_failed', 'agent.turn_stop_requested',
     'unfinished', 'agent.output_lost'].entries()) {
@@ -61,9 +65,13 @@ it('keeps no request text for failed, stopped, unfinished or lost-output turns',
   expect(result?.exchanges).toHaveLength(4);
   for (const exchange of result!.exchanges) expect(exchange).toMatchObject({ outcome: 'not_completed' });
   expect(JSON.stringify(result)).not.toMatch(/secret-|reply-/u);
-});
+};
+it(
+  'keeps no request text for failed, stopped, unfinished or lost-output turns',
+  keepsNoRequestTextForFailedStoppedUnfinished
+);
 
-it('uses earlier messages even when their replies finish after the current message', () => {
+const usesEarlierMessagesEvenWhenTheirRepliesFinish = () => {
   const first = message(1, 'earlier');
   const current = message(2, 'current');
   const rows = [first, current, reply(3, first.event.id, 'late-reply'),
@@ -72,9 +80,13 @@ it('uses earlier messages even when their replies finish after the current messa
   expect(privateContext(rows, current, 'alice', decrypt)).toEqual({ exchanges: [
     { at: first.event.time, member: 'earlier', assistant: ['late-reply'] },
   ], omittedExchanges: 0 });
-});
+};
+it(
+  'uses earlier messages even when their replies finish after the current message',
+  usesEarlierMessagesEvenWhenTheirRepliesFinish
+);
 
-it('takes newest whole exchanges and counts older exchanges omitted at the byte limit', () => {
+const takesNewestWholeExchangesAndCountsOlderExchanges = () => {
   const rows: StoredEvent[] = [];
   for (let index = 0; index < 4; index++) {
     const request = message(index * 3 + 1, `member-${index}`);
@@ -86,9 +98,13 @@ it('takes newest whole exchanges and counts older exchanges omitted at the byte 
   expect(result?.exchanges).toHaveLength(2);
   expect(result?.exchanges[0]).toMatchObject({ member: 'member-2', assistant: ['界'.repeat(3000)] });
   expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(PRIVATE_CONTEXT_LIMIT_BYTES);
-});
+};
+it(
+  'takes newest whole exchanges and counts older exchanges omitted at the byte limit',
+  takesNewestWholeExchangesAndCountsOlderExchanges
+);
 
-it('omits an oversized newest exchange without taking smaller older exchanges', () => {
+const omitsAnOversizedNewestExchangeWithoutTakingSmaller = () => {
   const small = message(1, 'small');
   const big = message(4, 'huge');
   const rows = [small, reply(2, small.event.id, 'small-reply'), finish(3, small.event.id),
@@ -96,9 +112,17 @@ it('omits an oversized newest exchange without taking smaller older exchanges', 
   expect(privateContext(rows, message(8, 'now'), 'alice', decrypt)).toEqual({
     exchanges: [], omittedExchanges: 2,
   });
-});
+};
+it(
+  'omits an oversized newest exchange without taking smaller older exchanges',
+  omitsAnOversizedNewestExchangeWithoutTakingSmaller
+);
 
-it('returns no context when there are no earlier exchanges', () => {
+const returnsNoContextWhenThereAreNoEarlier = () => {
   const current = message(1, 'now');
   expect(privateContext([current, message(2, 'future')], current, 'alice', decrypt)).toBeUndefined();
-});
+};
+it(
+  'returns no context when there are no earlier exchanges',
+  returnsNoContextWhenThereAreNoEarlier
+);

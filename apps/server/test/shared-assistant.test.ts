@@ -732,8 +732,13 @@ async function privateServerFixture(name: string, personal = false) {
   const websocketServer = new WebSocketServer({ server });
   let computerSocket!: WebSocket;
   const frames: Record<string, unknown>[] = [];
-  function collect(raw: Buffer) { frames.push(z.record(z.string(), z.unknown()).parse(JSON.parse(raw.toString()))); }
-  function connected(socket: WebSocket) { computerSocket = socket; socket.on('message', collect); }
+  function collect(raw: Buffer) {
+    frames.push(z.record(z.string(), z.unknown()).parse(JSON.parse(raw.toString())));
+  }
+  function connected(socket: WebSocket) {
+    computerSocket = socket;
+    socket.on('message', collect);
+  }
   websocketServer.on('connection', connected);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -750,28 +755,37 @@ async function privateServerFixture(name: string, personal = false) {
     previous.set(member, sequence);
     computerSocket.send(JSON.stringify(value));
     await until(function acknowledged() {
-      return frames.some(function matches(frame) { return frame['sequence'] === sequence; })
+      return frames.some(function matches(frame) {
+        return frame['sequence'] === sequence;
+      })
         || link.socket.readyState !== WebSocket.OPEN;
     }, 65_000);
-    return frames.find(function matches(frame) { return frame['sequence'] === sequence; });
+    return frames.find(function matches(frame) {
+      return frame['sequence'] === sequence;
+    });
   }
   async function closeFixture() {
-    computerSocket.terminate(); link.socket.terminate(); await link.settled();
-    websocketServer.close(); server.close();
+    computerSocket.terminate();
+    link.socket.terminate();
+    await link.settled();
+    websocketServer.close();
+    server.close();
   }
   return { context, post, report, frames, link, close: closeFixture, tokens, server, computerSocket };
 }
 
-it.each(['memory_free', undefined])('refuses a team start reported as %s before opening access, without closing the bridge', async mode => {
+const refusesMismatchedTeamModeBeforeAccessCheck = async (mode: string | undefined) => {
   const test = await privateServerFixture(`mode-${String(mode)}`);
   const fence = vi.spyOn(modelAuthority, 'authorityFence');
   try {
-    await test.post('alice', `wrong-mode-${mode}`); await test.post('bob', `right-mode-${mode}`);
+    await test.post('alice', `wrong-mode-${mode}`);
+    await test.post('bob', `right-mode-${mode}`);
     fence.mockClear();
     const extra = { threadId: 'wrong-mode-thread', ...(mode ? { executionMode: mode } : {}) };
     const refused = await test.report('alice', `wrong-mode-${mode}`, 'agent.turn_started', extra);
     expect(refused).toMatchObject({ refused: 'Execution mode mismatch' });
-    expect(refused).not.toHaveProperty('token'); expect(refused).not.toHaveProperty('context');
+    expect(refused).not.toHaveProperty('token');
+    expect(refused).not.toHaveProperty('context');
     expect(fence).not.toHaveBeenCalled();
     const rows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
     expect(rows.at(-1)?.event.data).toMatchObject({ status: 'failed' });
@@ -780,13 +794,21 @@ it.each(['memory_free', undefined])('refuses a team start reported as %s before 
     expect(admitted).toHaveProperty('token');
     await test.report('bob', `right-mode-${mode}`, 'agent.turn_completed');
     expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
-  } finally { fence.mockRestore(); await test.close(); }
-});
+  } finally {
+    fence.mockRestore();
+    await test.close();
+  }
+};
+it.each(['memory_free', undefined])(
+  'refuses a team start reported as %s before opening access, without closing the bridge',
+  refusesMismatchedTeamModeBeforeAccessCheck
+);
 
-it('refuses private thread reuse by the same requester and retains the cross-requester refusal', async () => {
+const refusesPrivateThreadReuseByTheSameRequester = async () => {
   const test = await privateServerFixture('thread-reuse');
   try {
-    await test.post('alice', 'thread-first'); await test.post('alice', 'thread-second');
+    await test.post('alice', 'thread-first');
+    await test.post('alice', 'thread-second');
     await test.post('bob', 'thread-bob');
     await test.report('alice', 'thread-first', 'agent.turn_started', {
       threadId: 'reused-private', executionMode: 'restricted' });
@@ -802,10 +824,16 @@ it('refuses private thread reuse by the same requester and retains the cross-req
     const reusedThread = { threadId: 'reused-private', executionMode: 'restricted' };
     await test.report('bob', 'thread-bob', 'agent.turn_started', reusedThread);
     expect((await closed)[0]).toBe(1008);
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'refuses private thread reuse by the same requester and retains the cross-requester refusal',
+  refusesPrivateThreadReuseByTheSameRequester
+);
 
-it('sends only Alice’s completed exchange after admission and no private context to Bob or memory-free work', async () => {
+const sendsOnlyAliceSCompletedExchangeAfterAdmission = async () => {
   const test = await privateServerFixture('context');
   try {
     await test.post('alice', 'context-first', 'alice-request-canary');
@@ -821,7 +849,8 @@ it('sends only Alice’s completed exchange after admission and no private conte
       threadId: 'context-next-thread', executionMode: 'restricted' });
     expect(ack).toHaveProperty('context');
     const text = JSON.stringify(ack);
-    expect(text).toContain('alice-request-canary'); expect(text).toContain('alice-reply-canary');
+    expect(text).toContain('alice-request-canary');
+    expect(text).toContain('alice-reply-canary');
     expect(text).not.toMatch(/delta-only-canary|reasoning-canary|commandDigest/u);
     await test.post('bob', 'context-bob');
     const bob = await test.report('bob', 'context-bob', 'agent.turn_started', {
@@ -830,11 +859,18 @@ it('sends only Alice’s completed exchange after admission and no private conte
     await test.post('alice', 'context-tools', 'tools', true);
     const tools = await test.report('alice', 'context-tools', 'agent.turn_started', {
       threadId: 'context-tools-thread', executionMode: 'memory_free' });
-    expect(tools).toHaveProperty('token'); expect(tools).not.toHaveProperty('context');
-  } finally { await test.close(); }
-});
+    expect(tools).toHaveProperty('token');
+    expect(tools).not.toHaveProperty('context');
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'sends only Alice’s completed exchange after admission and no private context to Bob or memory-free work',
+  sendsOnlyAliceSCompletedExchangeAfterAdmission
+);
 
-it('reads long private context only after the turn append and keeps the four small access streams', async () => {
+const readsLongPrivateContextOnlyAfterTheTurn = async () => {
   const test = await privateServerFixture('long-context');
   try {
     await test.post('alice', 'long-first');
@@ -860,7 +896,8 @@ it('reads long private context only after the turn append and keeps the four sma
       const ack = await test.report('alice', 'long-next', 'agent.turn_started', {
         threadId: 'long-thread', executionMode: 'restricted' });
       expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
-      expect(ack).toHaveProperty('context'); expect(ack).toHaveProperty('token');
+      expect(ack).toHaveProperty('context');
+      expect(ack).toHaveProperty('token');
       expect(fence.mock.calls[0]?.[2]).toEqual(['member-alice', `assistant-${test.context.assistantId}`,
         'team-private-long-context', 'team-private-long-context']);
       const opened = fence.mock.invocationCallOrder[0]!;
@@ -872,13 +909,28 @@ it('reads long private context only after the turn append and keeps the four sma
       for (const [index, call] of reads.mock.calls.entries()) {
         if (call[0] === 'conversation-long-context-alice') contextReads.push(reads.mock.invocationCallOrder[index]!);
       }
-      expect(contextReads.some(function during(order) { return order > opened && order < saved; })).toBe(false);
-      expect(contextReads.some(function after(order) { return order > saved; })).toBe(true);
-    } finally { reads.mockRestore(); appends.mockRestore(); fence.mockRestore(); }
-  } finally { await test.close(); }
-}, 120_000);
+      expect(contextReads.some(function during(order) {
+        return order > opened && order < saved;
+      })).toBe(false);
+      expect(contextReads.some(function after(order) {
+        return order > saved;
+      })).toBe(true);
+    } finally {
+      reads.mockRestore();
+      appends.mockRestore();
+      fence.mockRestore();
+    }
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'reads long private context only after the turn append and keeps the four small access streams',
+  readsLongPrivateContextOnlyAfterTheTurn,
+  120_000
+);
 
-it('stores lost output, accepts replay over text, and rejects replay over a start report', async () => {
+const storesLostOutputAcceptsReplayOverTextAnd = async () => {
   const test = await privateServerFixture('output-lost');
   try {
     await test.post('alice', 'output-turn');
@@ -897,10 +949,16 @@ it('stores lost output, accepts replay over text, and rejects replay over a star
       { ...base, sequence: 3, previousSequence: 2, type: 'agent.output_lost' })).rejects.toThrow('Report sequence reused');
     const rows = await history(nats.store, 'conversation-output-lost-alice', 'test');
     expect(rows.at(-2)?.event.type).toBe('agent.output_lost');
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'stores lost output, accepts replay over text, and rejects replay over a start report',
+  storesLostOutputAcceptsReplayOverTextAnd
+);
 
-it('stores the memory-free request and refuses changed retries and other modes', async () => {
+const storesTheMemoryFreeRequestAndRefusesChanged = async () => {
   const test = await privateServerFixture('request-mode');
   try {
     const url = '/api/conversations/request-mode-alice/messages';
@@ -913,10 +971,16 @@ it('stores the memory-free request and refuses changed retries and other modes',
     }
     const rows = await history(nats.store, 'conversation-request-mode-alice', 'test');
     expect(rows.at(-1)?.event.data).toMatchObject({ executionMode: 'memory_free' });
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'stores the memory-free request and refuses changed retries and other modes',
+  storesTheMemoryFreeRequestAndRefusesChanged
+);
 
-it.each([false, true])('dispatches required execution modes, personal=%s', async personal => {
+const dispatchesRequiredExecutionModes = async (personal: boolean) => {
   const test = await privateServerFixture(`dispatch-${String(personal)}`, personal);
   const stop = new AbortController();
   const watcherPool = new Pool({ connectionString: await dbs.postgres() });
@@ -924,7 +988,9 @@ it.each([false, true])('dispatches required execution modes, personal=%s', async
   await conversations.create(watcherDb);
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   const credentials = vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
-  function rewrite(request: { url?: string }) { request.url = '/bridge'; }
+  function rewrite(request: { url?: string }) {
+    request.url = '/bridge';
+  }
   test.server.on('upgrade', rewrite);
   const address = test.server.address();
   if (!address || typeof address === 'string') throw new Error('No port');
@@ -939,8 +1005,12 @@ it.each([false, true])('dispatches required execution modes, personal=%s', async
     }
     work = watchBridges({ ...chat!, db: watcherDb }, test.tokens, kube, `http://127.0.0.1:${address.port}`, stop.signal);
     await until(function dispatched() {
-      return test.frames.some(function first(frame) { return frame['id'] === `dispatch-first-${personal}`; })
-        && test.frames.some(function tools(frame) { return frame['id'] === `dispatch-tools-${personal}`; });
+      return test.frames.some(function first(frame) {
+        return frame['id'] === `dispatch-first-${personal}`;
+      })
+        && test.frames.some(function tools(frame) {
+          return frame['id'] === `dispatch-tools-${personal}`;
+        });
     });
     await delay(300);
     const expected = personal ? 'memory_free' : 'restricted';
@@ -949,8 +1019,15 @@ it.each([false, true])('dispatches required execution modes, personal=%s', async
     expect(test.frames).toContainEqual(expect.objectContaining({ type: 'turn',
       id: `dispatch-tools-${personal}`, executionMode: 'memory_free' }));
   } finally {
-    stop.abort(); await work; credentials.mockRestore(); await test.close();
+    stop.abort();
+    await work;
+    credentials.mockRestore();
+    await test.close();
     await conversations.drop(watcherDb);
     await watcherPool.end();
   }
-});
+};
+it.each([false, true])(
+  'dispatches required execution modes, personal=%s',
+  dispatchesRequiredExecutionModes
+);

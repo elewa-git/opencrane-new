@@ -207,10 +207,32 @@
       "base": "8b3ad76c8f6298aa86b6d5d42a22b215bd9484fb"
     },
     "fullRootAfterRebase": {
-      "result": "PARTIAL",
-      "reason": "Running with the required PostgreSQL URL and two workers",
+      "result": "FAIL",
+      "passed": 1883,
+      "failed": 11,
+      "skipped": 15,
+      "files": 124,
+      "passedFiles": 112,
+      "failedFiles": 8,
+      "skippedFiles": 4,
+      "durationSeconds": 3576.97,
       "integerLoadAtStart": 8,
-      "liveQualificationProcessesAtStart": []
+      "liveQualificationProcessesAtStart": [],
+      "base": "8b3ad76c8f6298aa86b6d5d42a22b215bd9484fb",
+      "failures": [
+        "Upload: cyclic FAT-chain HTTP responsiveness child process failed",
+        "Approvals: encrypted Ask card upstream call timed out",
+        "Approvals: current approval returned 503 after an older turn failed",
+        "Chat access: 1,502-event send returned 503",
+        "Chat access: 160-conversation list took 1,681 ms against a 1,500 ms assertion",
+        "Shared assistant: 2,000-row private context socket closed before acknowledgement",
+        "Shared assistant: personal execution-mode dispatch exceeded 30 seconds",
+        "Live view: second-team access socket hung up",
+        "Bridge replay: older Alice/Bob journal service outcome timed out",
+        "Chat reads: 1,500-event personal conversation check failed",
+        "Audit browser: web build did not finish before the test deadline"
+      ],
+      "scope": "Final product code, including active-thread guard and five-second cleanup; test formatting and stronger acknowledged-prepared fixture also checked separately"
     },
     "focusedRebasedRun": {
       "result": "FAIL",
@@ -238,6 +260,42 @@
       "shared-assistant": "FAIL",
       "chat-access-regression": "FAIL"
     },
-    "cleanupTimerLint": "PASS"
+    "cleanupTimerLint": "PASS",
+    "finalPrivateSuites": {
+      "result": "PASS",
+      "passed": 65,
+      "files": 3,
+      "after": "Named callbacks, expanded statements and acknowledged-but-not-executed restart fixture"
+    },
+    "finalTestStyleLint": "PASS",
+    "finalServerTypecheck": "PASS",
+    "acknowledgedPreparedMainRed": {
+      "result": "FAIL as expected",
+      "failed": 1,
+      "skipped": 53,
+      "unhandledErrors": 0,
+      "base": "8b3ad76c8f6298aa86b6d5d42a22b215bd9484fb",
+      "failure": "The acknowledged prepared private turn has no terminal failed report after channel restart",
+      "scope": "Isolated copy of checked main source; strengthened fixture checked after implementation"
+    },
+    "longContextAndDispatchRecheck": {
+      "result": "FAIL",
+      "passed": 2,
+      "failed": 1,
+      "skipped": 23,
+      "failure": "Private acknowledgement socket was closing on the 2,000-row case; both dispatch cases passed"
+    },
+    "longContextReadDiagnosis": {
+      "result": "FAIL",
+      "passed": 0,
+      "failed": 1,
+      "skipped": 25,
+      "subject": "conversation-long-context-alice",
+      "rowsRead": 906,
+      "elapsedMs": 10003.525169,
+      "errorName": "TimeoutError",
+      "stage": "Initial history read before admission; the access check and context build were not reached",
+      "instrumentation": "Temporary timing wrapper removed after the check; production limits unchanged"
+    }
   }
 }

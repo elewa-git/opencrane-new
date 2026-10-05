@@ -1,7 +1,8 @@
 # Private team turns check record
 
 Date: 5 October 2026. Branch: `work/p4-14-private-turns`.
-Base: `8b3ad76`, current `origin/main`, including direct member chats.
+Draft pull request: [#197](https://github.com/elewa-git/opencrane-new/pull/197).
+Checked base: `8b3ad76`, including direct member chats. Main has since advanced.
 The first two full runs used `667d1e4`, before that update landed.
 These checks use disposable NATS, PostgreSQL, OpenFGA and computer fixtures.
 No paid model call or owner stack is used. The live probe has its own namespace,
@@ -61,7 +62,7 @@ A stored text report stays stored when such a replay covers its sequence.
 | Focused suites, earlier complete run | PASS | All 11 requested files; 124 tests passed |
 | Focused suites, final shared-database run | FAIL | 97 passed, 3 failed, 26 skipped; PostgreSQL rejected excess connections |
 | Focused suites after rebase | FAIL | 163 passed, 2 failed in 14 files; the two long-session cases failed |
-| Full root suite after rebase | PARTIAL | Running; started at integer load 8 with no live-view process active |
+| Full root suite after rebase | FAIL | 1,883 passed, 11 failed, 15 skipped; 124 files; started at integer load 8 |
 | Full root suite, first run | FAIL | 1,845 passed, 3 failed, 15 skipped; 119 files |
 | Full root suite, complete rerun | FAIL | 1,846 passed, 2 failed, 15 skipped; 119 files |
 | Image filesystem checks | PASS | Built source and protected files matched this checkout at the check |
@@ -69,8 +70,10 @@ A stored text report stays stored when such a replay covers its sequence.
 | Pinned private config and ephemeral read-only thread | PASS | Local Docker, including private core limit 0; no model call |
 | Pinned private turn and offered tools | PASS | Local Responses fixture completed; the request offered no tools |
 | Authority performance check repeated separately | PASS | Existing 100,000-event test; 46-second run after host load fell |
-| build.sh image publication and gVisor checks | PARTIAL | Registry push reset the connection; both live scripts NOT RUN |
+| build.sh image publication and gVisor checks | PARTIAL | Registry push reset the connection; all three gVisor scripts NOT RUN |
 | Probe journeys and measurements | NOT RUN | J1–J7 and Pod measurements could not use the new image |
+| Acknowledged prepared restart on checked main | FAIL as expected | One failure, 53 skipped; required terminal report absent |
+| Long-context and dispatch recheck | FAIL | Both dispatch cases passed; the long-context socket closed |
 | Local Responses provider fixture | PASS | Plain, reasoning, compaction, held release and four tool attempts |
 
 Commands run under `nice -n 10`. The focused suites are private-context,
@@ -80,7 +83,7 @@ bridge-suspend, shared-runtime, chat, chat-http and upload. Service suites use
 Safe command logs are on the builder host under `/tmp/p414-*.log`.
 The provider is a local Responses fixture, never a paid provider.
 
-Both full runs started below integer host load 12. The first run failed the
+All three full runs started below integer host load 12. The rebased run checked that no live-view qualification process was active. The first run failed the
 long-context setup, an existing bridge replay case and an existing authority
 performance case. The setup now seeds its encrypted fixture message through the existing fixture
 helper, without the command adapter searching the long stream for retries. All requested focused suites subsequently passed.
@@ -96,7 +99,7 @@ A later focused run used the shared PostgreSQL test server while other builds we
 running. PostgreSQL returned "too many clients already" to bridge replay and chat.
 Upload timed out and the shared-assistant fixture timed out before its tests ran.
 Those failures remain recorded. The three private suites passed all 65 tests.
-The last full run predates the final active-thread collision guard; its two new
+The earlier complete rerun predates the active-thread collision guard; its two new
 channel cases were observed failing before that guard and passing afterwards.
 
 The four affected service files were repeated with disposable PostgreSQL fixtures.
@@ -110,7 +113,29 @@ chat-access-regression. Twelve files passed. Shared-assistant passed 25 of 26
 cases; its long private acknowledgement closed before context arrived. The
 unchanged direct-chat long-session send returned 503. No production read or
 access budget is raised. Lint, typecheck and all 96 catalogue types pass on
-the new base.
+the checked base.
+
+The final root run used the rebased source and final five-second process cleanup.
+It passed 1,883 tests, failed eleven and skipped fifteen. The failures cover
+upload responsiveness, two approval calls, two chat access checks, the long private
+context acknowledgement, personal dispatch, live view, bridge replay, a long
+personal chat and the audit browser build. Host load rose after the run began.
+The log records timeouts, 503 responses and socket closures; these failures are
+not excused or marked as passes.
+
+The restart fixture was strengthened after implementation. The original prepared
+case had not acknowledged its start. The replacement waits for the acknowledgement,
+holds the grant before the execution marker, then restarts the channel. The current
+code passes both prepared and executing cases. The acknowledged prepared case
+fails on the checked main source because it does not produce the required failed
+report. This late correction is recorded separately from the initial red tests.
+The final three private suites pass all 65 tests with the stronger fixture.
+
+The long-context case was also measured on its own. Its initial history read
+returned 906 rows in 10,003 ms, then raised `TimeoutError`. Admission and the
+context build were not reached. Both personal and team dispatch cases passed in
+the preceding isolated run. The temporary timing wrapper is removed. The ten-second
+history budget and two-second access budget stay unchanged.
 
 ## Findings about the supplied plan
 
@@ -151,9 +176,9 @@ complete canary probe exceed the target. None of the listed checks was removed.
 | Area | Added | Removed | Total |
 | --- | ---: | ---: | ---: |
 | Product | 922 | 202 | 1,124 |
-| Tests | 836 | 6 | 842 |
-| Probe and provider | 740 | 0 | 740 |
-| Docs and recorded evidence | 584 | 29 | 613 |
+| Tests | 1,131 | 6 | 1,137 |
+| Probe and provider | 745 | 0 | 745 |
+| Docs and recorded evidence | 667 | 29 | 696 |
 
 ## Rollout and remaining work
 

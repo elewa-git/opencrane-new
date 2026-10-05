@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -12,23 +12,28 @@ import type { PrivateSession, TurnDriver, Turn } from '../../computer/src/turn-r
 import { parseTurn } from '../../computer/src/turn-runner.ts';
 import { PRIVATE_TURN_NOTE, CONTEXT_PREAMBLE, privateTurnInput } from '../../computer/src/turn-input.ts';
 
-function until(check: () => boolean | Promise<boolean>) { return waitUntil(check, 1500); }
+function until(check: () => boolean | Promise<boolean>) {
+  return waitUntil(check, 1500);
+}
 
 function deferred<Value>() {
   let resolve!: (value: Value) => void;
-  const promise = new Promise<Value>(function register(settle) { resolve = settle; });
+  const promise = new Promise<Value>(function register(settle) {
+    resolve = settle;
+  });
   return { promise, resolve };
 }
 type TestSession = PrivateSession & { threadId: string; rpc: ReturnType<typeof vi.fn<(method: string, params: Record<string, unknown>) => Promise<unknown>>>;
   close: ReturnType<typeof vi.fn>; end(this: void): void };
 async function fixture(options: { path?: string; ephemeral?: boolean; context?: unknown;
-  acknowledge?: boolean; noPrivate?: boolean; delayedStart?: boolean; threadId?: string } = {}) {
+  acknowledge?: boolean; noPrivate?: boolean; delayedStart?: boolean; delayedGrant?: boolean; threadId?: string } = {}) {
   const directory = options.path ?? mkdtempSync(`${tmpdir()}/private-turn-`);
   const journal = `${directory}/reports`;
   const server = createServer();
   const reports: BridgeReport[] = [];
   const sessions: TestSession[] = [];
   const starting = deferred<unknown>();
+  const granting = deferred<void>();
   const persistentRpc = vi.fn(function rpc(method: string) {
     if (method.startsWith('thread/')) return Promise.resolve({ thread: { id: 'persistent-thread' } });
     return Promise.resolve({ turn: { id: 'persistent-turn' } });
@@ -36,7 +41,9 @@ async function fixture(options: { path?: string; ephemeral?: boolean; context?: 
   function privateSession() {
     const closure = deferred<void>();
     const threadId = options.threadId ?? `private-${sessions.length + 1}`;
-    function close() { closure.resolve(); }
+    function close() {
+      closure.resolve();
+    }
     function rpc(method: string, _params: Record<string, unknown>) {
       if (method === 'thread/start') return Promise.resolve({ thread: {
         id: threadId, ephemeral: options.ephemeral ?? true,
@@ -50,8 +57,15 @@ async function fixture(options: { path?: string; ephemeral?: boolean; context?: 
     sessions.push(session);
     return Promise.resolve(session);
   }
-  function credential() { return { value: 'computer', expiresAt: Date.now() + 120_000 }; }
-  const driver: TurnDriver = { rpc: persistentRpc, grant: vi.fn(), credential, journal };
+  function credential() {
+    return { value: 'computer', expiresAt: Date.now() + 120_000 };
+  }
+  function installGrant(_threadId: string, _conversationId: string, token: string) {
+    if (options.delayedGrant && token) return granting.promise;
+    return Promise.resolve();
+  }
+  const grants = vi.fn(installGrant);
+  const driver: TurnDriver = { rpc: persistentRpc, grant: grants, credential, journal };
   if (!options.noPrivate) driver.privateSession = privateSession;
   let channel = bridgeChannel(server, driver);
   server.listen(0, '127.0.0.1');
@@ -100,13 +114,17 @@ async function fixture(options: { path?: string; ephemeral?: boolean; context?: 
   async function reconnect(since: number, restart = false) {
     socket.terminate();
     await once(socket, 'close');
-    if (restart) { await channel.close(); channel = bridgeChannel(server, driver); }
+    if (restart) {
+      await channel.close();
+      channel = bridgeChannel(server, driver);
+    }
     socket = await connect(since);
   }
   async function close() {
     socket.terminate();
     for (const session of sessions) session.end();
     await channel.close();
+    granting.resolve();
     server.close();
     rmSync(directory, { recursive: true, force: true });
   }
@@ -121,54 +139,81 @@ async function fixture(options: { path?: string; ephemeral?: boolean; context?: 
     await until(hasStarted);
   }
   return { send, notify, finish, running, terminals, reconnect, close, journal, directory,
-    sessions, reports, persistentRpc, starting, socket };
+    sessions, reports, persistentRpc, starting, grants, socket };
 }
 
-it('opens fresh ephemeral private threads without calling the persistent driver', async () => {
+const opensFreshEphemeralPrivateThreadsWithoutCallingThe = async () => {
   const test = await fixture();
   try {
-    test.send(); await test.running(); test.finish();
+    test.send();
+    await test.running();
+    test.finish();
     await until(() => test.terminals('alice').length === 1);
-    test.send('alice-next'); await test.running(2);
+    test.send('alice-next');
+    await test.running(2);
     expect(test.sessions[1]!.rpc).toHaveBeenCalledWith('thread/start', {
       model: 'gpt-6.1-sol', approvalPolicy: 'never', sandbox: 'read-only',
       ephemeral: true, environments: [],
     });
     expect(test.persistentRpc).not.toHaveBeenCalled();
     for (const session of test.sessions) expect(session.rpc).not.toHaveBeenCalledWith('thread/resume', expect.anything());
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'opens fresh ephemeral private threads without calling the persistent driver',
+  opensFreshEphemeralPrivateThreadsWithoutCallingThe
+);
 
-it.each(['restricted', 'memory_free'])('keeps an active private turn when a %s turn returns its thread id', async mode => {
+const keepsActivePrivateTurnOnThreadCollision = async (mode: string) => {
   const test = await fixture({ threadId: 'persistent-thread' });
   try {
     test.send('alice');
     await test.running();
     test.send('bob', mode);
-    function bobFailed() { return test.terminals('bob').length === 1; }
+    function bobFailed() {
+      return test.terminals('bob').length === 1;
+    }
     await until(bobFailed);
     expect(test.terminals('bob')[0]?.type).toBe('agent.turn_failed');
     test.finish();
-    function aliceCompleted() { return test.terminals('alice').length === 1; }
+    function aliceCompleted() {
+      return test.terminals('alice').length === 1;
+    }
     await until(aliceCompleted);
     expect(test.terminals('alice')[0]?.type).toBe('agent.turn_completed');
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it.each(['restricted', 'memory_free'])(
+  'keeps an active private turn when a %s turn returns its thread id',
+  keepsActivePrivateTurnOnThreadCollision
+);
 
-it('fails and closes a private thread whose state has a disk path', async () => {
+const failsAndClosesAPrivateThreadWhoseState = async () => {
   const test = await fixture({ ephemeral: false });
   try {
-    test.send(); await until(() => test.terminals('alice').length === 1);
+    test.send();
+    await until(() => test.terminals('alice').length === 1);
     expect(test.terminals('alice')[0]!.type).toBe('agent.turn_failed');
     expect(test.sessions[0]!.close).toHaveBeenCalled();
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'fails and closes a private thread whose state has a disk path',
+  failsAndClosesAPrivateThreadWhoseState
+);
 
-it('keeps message, context and every reply canary out of both persistent journals', async () => {
+const keepsMessageContextAndEveryReplyCanaryOut = async () => {
   const context = { exchanges: [{ member: 'context-canary' }], omittedExchanges: 0 };
   const test = await fixture({ context });
   try {
-    test.send(); await test.running();
+    test.send();
+    await test.running();
     const threadId = test.sessions[0]!.threadId;
     test.notify(threadId, 'item/agentMessage/delta', { delta: 'delta-canary', itemId: 'reply' });
     test.notify(threadId, 'item/reasoning/summaryTextDelta', { delta: 'reasoning-canary' });
@@ -183,51 +228,97 @@ it('keeps message, context and every reply canary out of both persistent journal
     for (const line of lines.slice(1)) expect(JSON.parse(line)).toMatchObject({ memoryOnly: true });
     for (const report of test.reports) expect(report).not.toHaveProperty('memoryOnly');
     expect(JSON.stringify(test.reports)).toContain('reply-canary');
-    const start = test.sessions[0]!.rpc.mock.calls.find(function isStart(call) { return call[0] === 'turn/start'; });
+    const start = test.sessions[0]!.rpc.mock.calls.find(function isStart(call) {
+      return call[0] === 'turn/start';
+    });
     expect(JSON.stringify(start)).toContain(JSON.stringify(CONTEXT_PREAMBLE).slice(1, -1));
     expect(JSON.stringify(start)).toContain('context-canary');
     test.notify(threadId, 'item/completed', { item: { type: 'commandExecution', command: 'secret-command', exitCode: 0 } });
     expect(readFileSync(test.journal, 'utf8')).not.toMatch(/commandDigest|agent.command_ran/u);
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'keeps message, context and every reply canary out of both persistent journals',
+  keepsMessageContextAndEveryReplyCanaryOut
+);
 
-it('fails memory-free work that receives private context', async () => {
+const failsMemoryFreeWorkThatReceivesPrivateContext = async () => {
   const test = await fixture({ context: { exchanges: [], omittedExchanges: 0 } });
   try {
-    test.send('alice', 'memory_free'); await until(() => test.terminals('alice').length === 1);
+    test.send('alice', 'memory_free');
+    await until(() => test.terminals('alice').length === 1);
     expect(test.persistentRpc).not.toHaveBeenCalledWith('turn/start', expect.anything());
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'fails memory-free work that receives private context',
+  failsMemoryFreeWorkThatReceivesPrivateContext
+);
 
-it.each([false, true])('fails unfinished private work after restart, executed=%s, without rerunning', async executed => {
-  const test = await fixture({ acknowledge: executed });
+const failsUnfinishedPrivateWorkAfterRestart = async (executed: boolean) => {
+  const test = await fixture({ delayedGrant: !executed });
   try {
-    test.send(); await until(() => test.reports.length === 1);
-    if (executed) await test.running();
+    test.send();
+    function receivedAcknowledgement() {
+      return test.grants.mock.calls.some(function issued(call) {
+        return call[2] === 'turn-token';
+      });
+    }
+    await until(receivedAcknowledgement);
+    if (executed) {
+      await test.running();
+    } else {
+      expect(existsSync(`${test.journal}.executions`)).toBe(false);
+    }
     await test.reconnect(0, true);
     await until(() => test.terminals('alice').length === 1);
+    const callsAfterRecovery = test.sessions[0]!.rpc.mock.calls.length;
     test.send();
-    await new Promise<void>(function wait(resolve) { setTimeout(resolve, 30); });
+    await new Promise<void>(function wait(resolve) {
+      setTimeout(resolve, 30);
+    });
     expect(test.sessions).toHaveLength(1);
+    expect(test.sessions[0]!.rpc.mock.calls).toHaveLength(callsAfterRecovery);
     expect(test.terminals('alice')[0]!.type).toBe('agent.turn_failed');
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it.each([false, true])(
+  'fails unfinished private work after restart, executed=%s, without rerunning',
+  failsUnfinishedPrivateWorkAfterRestart
+);
 
-it.each(['restart', 'ack', 'resume'])('replays private text as lost output after %s', async path => {
+const replaysPrivateTextAsLostOutput = async (path: string) => {
   const test = await fixture();
   try {
-    test.send(); await test.running();
+    test.send();
+    await test.running();
     test.notify(test.sessions[0]!.threadId, 'item/agentMessage/delta', { delta: 'lost-canary', itemId: 'reply' });
     await until(() => test.reports.length === 2);
-    await new Promise<void>(function wait(resolve) { setTimeout(resolve, 30); });
+    await new Promise<void>(function wait(resolve) {
+      setTimeout(resolve, 30);
+    });
     await test.reconnect(path === 'resume' ? 2 : 0, path === 'restart');
     if (path === 'resume') await test.reconnect(0);
-    await until(() => test.reports.some(function lost(report) { return report.type === 'agent.output_lost'; }));
+    await until(() => test.reports.some(function lost(report) {
+      return report.type === 'agent.output_lost';
+    }));
     expect(test.reports.at(-1)).not.toHaveProperty('text');
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it.each(['restart', 'ack', 'resume'])(
+  'replays private text as lost output after %s',
+  replaysPrivateTextAsLostOutput
+);
 
-it('forgets text covered by resume even when its acknowledgement was lost', () => {
+const forgetsTextCoveredByResumeEvenWhenIts = () => {
   const directory = mkdtempSync(`${tmpdir()}/private-resume-`);
   try {
     const journal = reportJournal({ journal: `${directory}/reports` });
@@ -235,52 +326,88 @@ it('forgets text covered by resume even when its acknowledgement was lost', () =
       executionMode: 'restricted' }, 'agent.message_delta', { text: 'secret' });
     journal.replay(1, new Map(), vi.fn());
     expect(report).not.toHaveProperty('text');
-  } finally { rmSync(directory, { recursive: true, force: true }); }
-});
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
+it(
+  'forgets text covered by resume even when its acknowledgement was lost',
+  forgetsTextCoveredByResumeEvenWhenIts
+);
 
 const schema = z.array(z.string()).parse(JSON.parse(readFileSync(new URL('../../computer/test/fixtures/thread-item-types.json', import.meta.url), 'utf8')));
 const allowedTypes = ['userMessage', 'agentMessage', 'reasoning', 'contextCompaction'];
-function isRefused(type: string) { return !allowedTypes.includes(type); }
+function isRefused(type: string) {
+  return !allowedTypes.includes(type);
+}
 const refusedTypes = schema.filter(isRefused);
 for (const method of ['item/started', 'item/completed']) {
-  it.each(refusedTypes)(`refuses %s arriving through ${method} even if Codex later says completed`, async type => {
+  const refusesUnexpectedPrivateItem = async (type: string) => {
     const test = await fixture();
     try {
-      test.send(); await test.running();
+      test.send();
+      await test.running();
       test.notify(test.sessions[0]!.threadId, method, { item: { type, command: 'private-command', exitCode: 0 } });
-      await until(() => test.sessions[0]!.rpc.mock.calls.some(function interrupted(call) { return call[0] === 'turn/interrupt'; }));
+      await until(() => test.sessions[0]!.rpc.mock.calls.some(function interrupted(call) {
+        return call[0] === 'turn/interrupt';
+      }));
       test.finish();
       await until(() => test.terminals('alice').length === 1);
       expect(test.terminals('alice')).toMatchObject([{ type: 'agent.turn_failed', reason: 'restricted_tool_refused' }]);
-    } finally { await test.close(); }
-  });
+    } finally {
+      await test.close();
+    }
+  };
+  it.each(refusedTypes)(
+    `refuses %s arriving through ${method} even if Codex later says completed`,
+    refusesUnexpectedPrivateItem
+  );
 }
 
-it.each(allowedTypes)('accepts the private item type %s', async type => {
+const acceptsAllowedPrivateItem = async (type: string) => {
   const test = await fixture();
   try {
-    test.send(); await test.running();
+    test.send();
+    await test.running();
     test.notify(test.sessions[0]!.threadId, 'item/started', { item: { type } });
-    test.finish(); await until(() => test.terminals('alice').length === 1);
+    test.finish();
+    await until(() => test.terminals('alice').length === 1);
     expect(test.terminals('alice')[0]!.type).toBe('agent.turn_completed');
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it.each(allowedTypes)(
+  'accepts the private item type %s',
+  acceptsAllowedPrivateItem
+);
 
-it('fails only the crashed private turn once while another member completes', async () => {
+const failsOnlyTheCrashedPrivateTurnOnceWhile = async () => {
   const test = await fixture();
   try {
-    test.send(); test.send('bob'); await test.running(2);
-    test.sessions[0]!.end(); await until(() => test.terminals('alice').length === 1);
-    test.finish(1); await until(() => test.terminals('bob').length === 1);
+    test.send();
+    test.send('bob');
+    await test.running(2);
+    test.sessions[0]!.end();
+    await until(() => test.terminals('alice').length === 1);
+    test.finish(1);
+    await until(() => test.terminals('bob').length === 1);
     expect(test.terminals('alice')).toMatchObject([{ type: 'agent.turn_failed' }]);
     expect(test.terminals('bob')).toMatchObject([{ type: 'agent.turn_completed' }]);
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'fails only the crashed private turn once while another member completes',
+  failsOnlyTheCrashedPrivateTurnOnceWhile
+);
 
-it.each([false, true])('closes only the private process after Stop rejects, pending start=%s', async delayedStart => {
+const closesOnlyThePrivateProcessAfterStopRejects = async (delayedStart: boolean) => {
   const test = await fixture({ delayedStart });
   try {
-    test.send(); await test.running();
+    test.send();
+    await test.running();
     function rejectInterrupt(method: string) {
       if (method === 'turn/interrupt') return Promise.reject(new Error('Unavailable'));
       return Promise.resolve({});
@@ -291,51 +418,89 @@ it.each([false, true])('closes only the private process after Stop rejects, pend
     await until(() => test.terminals('alice').length === 1);
     expect(test.socket.readyState).toBe(WebSocket.OPEN);
     expect(test.sessions[0]!.close).toHaveBeenCalled();
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it.each([false, true])(
+  'closes only the private process after Stop rejects, pending start=%s',
+  closesOnlyThePrivateProcessAfterStopRejects
+);
 
-it('leaves a third private turn unreserved until a free slot and a new delivery', async () => {
+const leavesAThirdPrivateTurnUnreservedUntilA = async () => {
   const test = await fixture();
   try {
-    test.send(); test.send('bob'); await test.running(2); test.send('carol');
-    await new Promise<void>(function wait(resolve) { setTimeout(resolve, 30); });
+    test.send();
+    test.send('bob');
+    await test.running(2);
+    test.send('carol');
+    await new Promise<void>(function wait(resolve) {
+      setTimeout(resolve, 30);
+    });
     expect(test.sessions).toHaveLength(2);
-    test.finish(); await until(() => test.terminals('alice').length === 1);
-    test.send('carol'); await test.running(3);
+    test.finish();
+    await until(() => test.terminals('alice').length === 1);
+    test.send('carol');
+    await test.running(3);
     expect(test.sessions).toHaveLength(3);
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'leaves a third private turn unreserved until a free slot and a new delivery',
+  leavesAThirdPrivateTurnUnreservedUntilA
+);
 
-it('fails a private turn when the driver cannot open a private session', async () => {
+const failsAPrivateTurnWhenTheDriverCannot = async () => {
   const test = await fixture({ noPrivate: true });
   try {
-    test.send(); await until(() => test.terminals('alice').length === 1);
+    test.send();
+    await until(() => test.terminals('alice').length === 1);
     expect(test.persistentRpc).not.toHaveBeenCalled();
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'fails a private turn when the driver cannot open a private session',
+  failsAPrivateTurnWhenTheDriverCannot
+);
 
-it('resumes only earlier memory-free work after a private turn in the same conversation', async () => {
+const resumesOnlyEarlierMemoryFreeWorkAfterA = async () => {
   const test = await fixture();
   try {
     test.send('alice', 'memory_free');
     await until(() => test.persistentRpc.mock.calls.length === 2);
     test.notify('persistent-thread', 'turn/completed', { turn: { status: 'completed' } });
-    test.send('alice-private'); await test.running(); test.finish();
+    test.send('alice-private');
+    await test.running();
+    test.finish();
     await until(() => test.terminals('alice-private').length === 1);
     test.send('alice-next', 'memory_free');
     await until(() => test.persistentRpc.mock.calls.length === 4);
     expect(test.persistentRpc).toHaveBeenCalledWith('thread/resume', { threadId: 'persistent-thread' });
-  } finally { await test.close(); }
-});
+  } finally {
+    await test.close();
+  }
+};
+it(
+  'resumes only earlier memory-free work after a private turn in the same conversation',
+  resumesOnlyEarlierMemoryFreeWorkAfterA
+);
 
-it('rejects invalid context objects before building a private prompt', () => {
+const rejectsInvalidContextObjectsBeforeBuildingAPrivate = () => {
   for (const value of [null, [], { exchanges: [], omittedExchanges: -1 }, { exchanges: 'bad', omittedExchanges: 0 }]) {
     expect(() => privateTurnInput('message', value)).toThrow();
   }
-});
+};
+it(
+  'rejects invalid context objects before building a private prompt',
+  rejectsInvalidContextObjectsBeforeBuildingAPrivate
+);
 
 
-it('defaults old frames to memory-free and rejects unknown execution modes', () => {
+const defaultsOldFramesToMemoryFreeAndRejects = () => {
   const frame = { id: 'turn', conversationId: 'conversation', assistantId: 'assistant',
     text: 'message', token: 'turn-token', expiresAt: Date.now() + 60_000 };
   const turn: Turn = parseTurn(frame);
@@ -343,4 +508,8 @@ it('defaults old frames to memory-free and rejects unknown execution modes', () 
   expect(parseTurn({ ...frame, executionMode: 'restricted' }).executionMode).toBe('restricted');
   expect(() => parseTurn({ ...frame, executionMode: 'unknown' })).toThrow();
   expect(privateTurnInput('hello', undefined)).toBe(PRIVATE_TURN_NOTE + 'New message:\nhello');
-});
+};
+it(
+  'defaults old frames to memory-free and rejects unknown execution modes',
+  defaultsOldFramesToMemoryFreeAndRejects
+);
