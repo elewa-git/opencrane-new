@@ -1,24 +1,57 @@
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { authorityFence, payingGroupAuthority } from '@opencrane/models';
+import { authorityFence, payingGroupAuthority, PayingGroupRefused } from '@opencrane/models';
 export interface ViewAccessOptions {
   silo: string;
   store: EventStore;
   binding: Binding;
   deadline?: number;
 }
+export type ViewCheckBoundary =
+  'event_store' | 'authorisation' | 'deadline' | 'authority_changed';
+// Match the message thrown by the shared freshness check in libs/models/src/authority.ts.
+const authorityChangedMessage = 'Authority changed';
+// Keep a removed silo member as a denial while other team changes wait for IAM.
+const activeSiloMembershipRequiredMessage = 'Active silo membership required';
+
 export class ViewCheckUnavailable extends Error {
-  readonly boundary: 'event_store' | 'authorisation' | 'deadline';
+  readonly boundary: ViewCheckBoundary;
 
   constructor(
-    boundary: 'event_store' | 'authorisation' | 'deadline',
+    boundary: ViewCheckBoundary,
     options?: ErrorOptions,
   ) {
     super('View authority unavailable', options);
     this.boundary = boundary;
   }
 }
+function isAuthorityMoved(error: unknown): boolean {
+  if (error instanceof PayingGroupRefused) {
+    return true;
+  }
+  if (error instanceof Error) {
+    return error.message === authorityChangedMessage;
+  }
+  return false;
+}
+
+async function confirmSnapshotStillCurrent(fresh: () => Promise<void>) {
+  try {
+    await fresh();
+  } catch (error) {
+    if (!isAuthorityMoved(error)) {
+      throw error;
+    }
+    // Treat this answer as unconfirmed: new events arrived on a watched stream
+    // while this check ran, so the answer may be out of date.
+    // Give it no lease time, but do not refuse access. The next check reads those
+    // events and closes the view if access really ended.
+    const errorOptions = { cause: error };
+    throw new ViewCheckUnavailable('authority_changed', errorOptions);
+  }
+}
+
 export const viewCheckMs = 1200;
 
 const identity = z.object({ assistantId: z.string() });
@@ -149,7 +182,9 @@ async function conversationDesktop(options: ViewAccessOptions, memberId: string,
     memberId, conversationId, computer.computerId, desktop.receipts);
   if (permission.status === 'unavailable') throw new ViewCheckUnavailable('authorisation');
   if (!permission.allowed) throw new Error('Access changed');
-  await desktop.fresh();
+  // Read removals before checking for new events. This keeps revocation within
+  // two seconds even when every check sees chat activity.
+  await confirmSnapshotStillCurrent(desktop.fresh);
   return computer;
 }
 
@@ -197,6 +232,28 @@ async function belongsToGroup(options: ViewAccessOptions, groupId: string, membe
   const membership = rows.findLast(matchesMember);
   return membership?.event.type === 'team.member_added';
 }
+async function confirmTeamAuthority(options: ViewAccessOptions, memberId: string,
+  groupId: string) {
+  try {
+    return await payingGroupAuthority(
+      options.store, options.silo, memberId, groupId, options.binding, options.deadline);
+  } catch (error) {
+    if (!(error instanceof PayingGroupRefused)) {
+      throw error;
+    }
+    if (error.message === activeSiloMembershipRequiredMessage) {
+      throw error;
+    }
+    // Run this only after the team stream showed the member in the team.
+    // Its refusals mean either 'not confirmed yet' (IAM still applying a team change,
+    // a slow read, new team events) or a removal that this check's own reads will also find.
+    // Treat both as unconfirmed: no lease is earned, and the next check's own reads deny
+    // a real removal.
+    const errorOptions = { cause: error };
+    throw new ViewCheckUnavailable('authorisation', errorOptions);
+  }
+}
+
 async function desktopAccess(options: ViewAccessOptions, memberId: string,
   conversationId: string, computerId: string) {
   const { store, silo } = options;
@@ -208,16 +265,30 @@ async function desktopAccess(options: ViewAccessOptions, memberId: string,
   if (direct?.kind === 'member') return { receipts: [direct.eventId], fresh };
   const groupFences: (() => Promise<void>)[] = [];
   const receipts: string[] = [];
+  let unconfirmedTeam: ViewCheckUnavailable | undefined;
   for (const [groupId, source] of current) {
     if (source.kind !== 'team') continue;
     // Use current event membership even when IAM has not applied a removal yet.
     if (!await belongsToGroup(options, groupId, memberId)) continue;
-    const groupFence = await payingGroupAuthority(
-      store, silo, memberId, groupId, options.binding, options.deadline);
-    groupFences.push(groupFence);
-    receipts.push(source.eventId);
+    try {
+      const groupFence = await confirmTeamAuthority(options, memberId, groupId);
+      groupFences.push(groupFence);
+      receipts.push(source.eventId);
+    } catch (error) {
+      if (!(error instanceof ViewCheckUnavailable)) {
+        throw error;
+      }
+      // Try the other granted teams before waiting for IAM to apply this one.
+      unconfirmedTeam = error;
+      continue;
+    }
   }
-  if (!receipts.length) throw new Error('Desktop access required');
+  if (!receipts.length) {
+    if (unconfirmedTeam) {
+      throw unconfirmedTeam;
+    }
+    throw new Error('Desktop access required');
+  }
   async function checkFresh() {
     await fresh();
     for (const groupFence of groupFences) await groupFence();

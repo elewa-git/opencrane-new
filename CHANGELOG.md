@@ -9,6 +9,7 @@
 - The four app READMEs now explain their place in the system and what people can do with them.
 - The event libraries now have plain guides for people, with detailed contracts kept in README.robot.md.
 - The root README now explains in plain words what each part of OpenCrane does, with one system diagram and an honest status. A new glossary explains the shared words, and the planned customer installation now lives in docs/architecture/target.md.
+- The live view of an assistant's computer stays up while the assistant works: a check that sees new chat, file or grant activity waits for the next check instead of closing the view. Real revocations still close it within 2 seconds. Live qualification of #77 is still pending.
 
 - Fleet Codex work, Angular dev-server builds and repository checks run at lower CPU priority; repeated live-view receipts capture host pressure and server scheduling delay.
 

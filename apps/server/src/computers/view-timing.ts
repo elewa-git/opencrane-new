@@ -1,5 +1,5 @@
 import type { FastifyBaseLogger } from 'fastify';
-import { ViewCheckUnavailable } from './view-access.ts';
+import { ViewCheckUnavailable, type ViewCheckBoundary } from './view-access.ts';
 
 export type DesktopTiming = (
   stage: 'pod_lookup',
@@ -54,7 +54,7 @@ type Outcome = 'started' | 'ok' | 'unavailable' | 'denied' | 'error'
   | 'disconnected' | 'access_changed' | 'expired' | 'protocol' | 'slow_viewer'
   | 'upstream' | 'shutdown';
 interface Details {
-  boundary?: 'event_store' | 'authorisation' | 'deadline';
+  boundary?: ViewCheckBoundary;
   phase?: 'admission' | 'upgrade' | 'post_audit' | 'renewal';
   checkedAtMonotonic?: number;
   validUntil?: number;
