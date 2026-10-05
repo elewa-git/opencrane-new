@@ -187,7 +187,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
 | `computer.view_refused` | authenticated proxy | audit | Safe refusal metadata on `view-<attemptId>`; no connection or lifecycle effect. The additive reason `unavailable` means access checks did not answer within the 5 s retry window, or the member lookup was unavailable. |
-| `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | Audit on `view-<sessionId>`; no lifecycle effect or replayed connection. Start records a maximum two-minute ticket and stop records its reason. The additive reason `unavailable` means access could not be confirmed when the permission lease lapsed, or for 10 s before a first valid lease. |
+| `computer.view_started` / `computer.view_stopped` | authenticated proxy | audit | Audit on `view-<sessionId>`; no lifecycle effect or replayed connection. Start records a maximum two-minute ticket and stop records its reason. The additive reason `unavailable` means there was no confirmed access for 10 s, either before the first valid lease or after a lease lapsed. |
 | `takeover.started` / `takeover.ended` | live-view proxy | computers, audit | pause / resume the agent |
 | `toolset.changed` | admin command (publishes a computer profile) | toolsets | notify admins for review; computers adopt it at their next claim or resume |
 

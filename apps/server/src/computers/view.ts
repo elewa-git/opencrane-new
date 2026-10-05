@@ -1,3 +1,4 @@
+import { hasRoom, ViewDelivery } from './view-delivery.ts';
 import {
   checkFailureDetails, checkOutcome, relativeLeaseExpiry, timeStage, viewTiming,
   leaseCheckDetails, type DesktopTiming,
@@ -50,6 +51,7 @@ interface ViewerSession {
   upgradeAt: number;
   sessionStartedAt: number;
   lease: ViewLease<Computer>;
+  delivery: ViewDelivery;
   expiryTimer: ReturnType<typeof setTimeout>;
   stop: (reason: StopReason) => void;
   stopped: boolean;
@@ -231,13 +233,15 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         session.desktopOpening = true;
         void openDesktop(session);
       }
+      session.delivery.leaseResumed();
     }
     function renewed() {
-      /* The lease engine owns renewal; this session sends no renewal notices. */
+      session.delivery.leaseRenewed();
     }
     function paused() {
       timing('lease_pause', 'unavailable');
-      stopSession(session, 'unavailable');
+      // Keeping transports open grants nothing; it only saves the reconnect.
+      session.delivery.leasePaused();
     }
     function denied() {
       stopSession(session, 'access_changed');
@@ -256,10 +260,11 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
     const events = { resumed, renewed, paused, denied, unconfirmed };
     const lease: ViewLease<Computer> = new ViewLease(check, computer, events);
+    const delivery = new ViewDelivery(lease, expiresAt, stop);
     const expiryTimer = setTimeout(expired, Math.max(0, expiresAt - monotonicClock.now()));
     const session: ViewerSession = {
       request, socket, head, ticket, computer, audit, expiresAt, timing, upgradeAt,
-      lease, expiryTimer, stop, stopped: false, desktopOpening: false, sessionStartedAt,
+      lease, delivery, expiryTimer, stop, stopped: false, desktopOpening: false, sessionStartedAt,
     };
     stops.add(stop);
     socket.once('close', disconnected);
@@ -272,7 +277,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
   }
 
   async function openDesktop(session: ViewerSession) {
-    if (!deliverableOrStopSession(session)) return;
+    if (!canOpenDesktop(session)) return;
     session.upstreamAt = performance.now();
     const { timing } = session;
     function open() {
@@ -304,18 +309,14 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
   }
 
-  function deliverableOrStopSession(session: ViewerSession) {
+  function canOpenDesktop(session: ViewerSession) {
     if (session.stopped) return false;
     const now = monotonicClock.now();
     if (now >= session.expiresAt) {
       stopSession(session, 'expired');
       return false;
     }
-    if (!session.lease.allows(now)) {
-      stopSession(session, 'unavailable');
-      return false;
-    }
-    return true;
+    return session.lease.allows(now);
   }
 
   function connectViewer(session: ViewerSession, viewer: WebSocket) {
@@ -323,12 +324,8 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     const { timing } = session;
     const upstream = session.upstream;
     if (!upstream) throw new Error('Desktop missing');
-    const desktop = upstream;
+    session.delivery.attach(viewer, upstream);
     timing('websocket_upgrade', 'ok', performance.now() - session.upgradeAt);
-    // bufferedAmount includes socket and frame queues. Reserve the automatic close reply.
-    function room(frameBytes: number) {
-      return !session.stopped && viewer.bufferedAmount + frameBytes + 127 <= 4 * 1024 * 1024;
-    }
     let pingWindow = Date.now();
     let pings = 0;
     function pong(bytes: Buffer) {
@@ -338,7 +335,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
         pings = 0;
       }
       pings++;
-      if (pings > 16 || !room(bytes.length + 2)) {
+      if (pings > 16 || !hasRoom(viewer, bytes.length + 2)) {
         stopSession(session, 'slow_viewer');
         return;
       }
@@ -354,12 +351,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
       stopSession(session, 'upstream');
     }
     function forwardViewer(bytes: Buffer) {
-      if (!deliverableOrStopSession(session)) return;
-      if (desktop.writableLength + bytes.length > 4 * 1024 * 1024) {
-        stopSession(session, 'slow_viewer');
-        return;
-      }
-      desktop.write(bytes);
+      session.delivery.toDesktop(bytes);
     }
     const accept = viewerStream(forwardViewer, protocolFault);
     function receiveViewer(bytes: RawData, binary: boolean) {
@@ -371,14 +363,9 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     }
     let receivedBytes = false;
     let forwardedFrame = false;
-    function forwardDisplay(bytes: Buffer, framebuffer: boolean) {
-      if (!deliverableOrStopSession(session)) return;
-      if (!room(bytes.length + 14)) {
-        stopSession(session, 'slow_viewer');
-        return;
-      }
-      viewer.send(bytes);
-      if (framebuffer && !forwardedFrame) {
+    function forwardDisplay(bytes: Buffer, setup: boolean) {
+      const delivered = session.delivery.toBrowser(bytes, setup);
+      if (delivered && !setup && !forwardedFrame) {
         forwardedFrame = true;
         timing('first_browser_frame', 'ok', performance.now() - session.upstreamAt!);
       }
@@ -407,6 +394,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     session.timing('stop', reason, 0,
       relativeLeaseExpiry(session.lease.validUntilAt(), session.sessionStartedAt));
     session.lease.stop();
+    session.delivery.stop();
     clearTimeout(session.expiryTimer);
     stops.delete(session.stop);
     session.upstream?.destroy();

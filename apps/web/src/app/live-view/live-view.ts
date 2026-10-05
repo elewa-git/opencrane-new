@@ -14,6 +14,7 @@ import {
   type OnChanges,
   type SimpleChanges,
 } from '@angular/core';
+import { LeaseChannel, type LeaseNotice } from './lease-channel';
 import type RFB from '@novnc/novnc/lib/rfb.js';
 
 type ViewerConstructor = typeof RFB;
@@ -59,6 +60,21 @@ export class LiveView implements OnDestroy, OnChanges {
   private viewer: RFB | undefined;
   private socket: WebSocket | undefined;
   private attempt = 0;
+  private channel: LeaseChannel | undefined;
+  private viewerConstructor: ViewerConstructor | undefined;
+  private viewerToken = 0;
+  private connected = false;
+  private viewerConnected = false;
+  private serverPaused = true;
+  private locallyExpired = true;
+  private leaseTimer: ReturnType<typeof setTimeout> | undefined;
+  private leaseDeadline = -Infinity;
+  protected readonly accessConfirmed = signal(false);
+
+  protected connectionDetail() {
+    if (this.accessConfirmed()) return 'Access confirmed. Starting the desktop…';
+    return 'Checking your access…';
+  }
   protected viewState(): PresentationState {
     if (this.state() === 'Connecting') return 'checking';
     if (this.state() === 'Viewing') return 'ready';
@@ -90,12 +106,34 @@ export class LiveView implements OnDestroy, OnChanges {
   }
   ngOnDestroy(): void { this.close('Disconnected'); }
   protected close(state: string): void {
-    this.captureAbort?.abort(); this.capturing.set(false);
+    this.captureAbort?.abort();
+    this.capturing.set(false);
     this.captureStatus.set('');
-    this.attempt++; this.viewer?.disconnect(); this.socket?.close();
-    this.viewer = undefined; this.socket = undefined; this.display().nativeElement.replaceChildren(); this.state.set(state);
+    this.attempt++;
+    clearTimeout(this.leaseTimer);
+    this.clearPicture();
+    this.socket?.close();
+    this.socket = undefined;
+    this.channel = undefined;
+    this.connected = false;
+    this.accessConfirmed.set(false);
+    this.serverPaused = true;
+    this.locallyExpired = true;
+    this.state.set(state);
     this.viewedAt.set(undefined);
   }
+
+  private clearPicture() {
+    // Disconnect events from the old viewer must not close its replacement or the session.
+    this.viewerToken++;
+    const viewer = this.viewer;
+    this.viewer = undefined;
+    this.viewerConnected = false;
+    viewer?.disconnect();
+    this.channel?.detachViewer();
+    this.display().nativeElement.replaceChildren();
+  }
+
   protected async capture(): Promise<void> {
     if (this.capturing() || this.state() !== 'Viewing') return;
     const attempt = this.attempt;
@@ -128,7 +166,8 @@ export class LiveView implements OnDestroy, OnChanges {
     } finally { if (attempt === this.attempt) this.capturing.set(false); }
   }
   private async open(): Promise<void> {
-    const attempt = ++this.attempt; this.state.set('Connecting');
+    const attempt = ++this.attempt;
+    this.state.set('Connecting');
     try {
       const url = `/api/conversations/${encodeURIComponent(this.conversationId())}/view`;
       const response = await fetch(url, { method: 'POST', headers: { 'x-opencrane-view': '1' } });
@@ -137,39 +176,113 @@ export class LiveView implements OnDestroy, OnChanges {
       if (response.status === 503) return this.close('Failed');
       if (!response.ok) throw new Error('View unavailable');
       const result: unknown = await response.json();
-      if (!result || typeof result !== 'object' || !('ticket' in result) || typeof result.ticket !== 'string') throw new Error('View unavailable');
-      const Rfb = await this.loadViewer();
+      if (!result || typeof result !== 'object' || !('ticket' in result)
+        || typeof result.ticket !== 'string') {
+        throw new Error('View unavailable');
+      }
+      this.viewerConstructor = await this.loadViewer();
       if (attempt !== this.attempt) return;
-      const address = new URL(`/ws/conversations/${encodeURIComponent(this.conversationId())}/view`, location.href); address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(address, ['binary', result.ticket]); this.socket = socket;
+      const path = `/ws/conversations/${encodeURIComponent(this.conversationId())}/view`;
+      const address = new URL(path, location.href);
+      address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(address, ['binary', result.ticket]);
+      this.socket = socket;
       const onSocketClose = this.socketClosed.bind(this, attempt);
       socket.addEventListener('close', onSocketClose);
-      const viewer = new Rfb(this.display().nativeElement, socket);
-      this.viewer = viewer;
-      viewer.viewOnly = true;
-      viewer.scaleViewport = this.fit();
-      viewer.resizeSession = false;
-      viewer.focusOnClick = false;
-      const onConnected = this.connected.bind(this, attempt);
-      const onDisconnected = this.disconnected.bind(this, attempt);
-      viewer.addEventListener('connect', onConnected);
-      viewer.addEventListener('disconnect', onDisconnected);
-    } catch { if (attempt === this.attempt) this.close('Disconnected'); }
+      function notice(this: LiveView, lease: LeaseNotice) {
+        if (attempt === this.attempt) this.onLeaseNotice(attempt, lease);
+      }
+      function invalid(this: LiveView) {
+        if (attempt === this.attempt) this.close('Disconnected');
+      }
+      const onNotice = notice.bind(this);
+      const onInvalid = invalid.bind(this);
+      const events = { notice: onNotice, invalid: onInvalid };
+      this.channel = new LeaseChannel(socket, events);
+      this.startViewer(attempt);
+    } catch {
+      if (attempt === this.attempt) this.close('Disconnected');
+    }
   }
+
+  private startViewer(attempt: number) {
+    const channel = this.channel;
+    const Rfb = this.viewerConstructor;
+    if (!channel || !Rfb || attempt !== this.attempt) return;
+    const token = ++this.viewerToken;
+    const port = channel.attachViewer();
+    const viewer = new Rfb(this.display().nativeElement, port);
+    this.viewer = viewer;
+    this.viewerConnected = false;
+    viewer.viewOnly = true;
+    viewer.scaleViewport = this.fit();
+    viewer.resizeSession = false;
+    viewer.focusOnClick = false;
+    function connected(this: LiveView) {
+      if (attempt !== this.attempt || token !== this.viewerToken) return;
+      this.connected = true;
+      this.viewerConnected = true;
+      this.updateViewState();
+    }
+    function disconnected(this: LiveView) {
+      if (attempt === this.attempt && token === this.viewerToken) this.close('Disconnected');
+    }
+    const onConnected = connected.bind(this);
+    const onDisconnected = disconnected.bind(this);
+    viewer.addEventListener('connect', onConnected);
+    viewer.addEventListener('disconnect', onDisconnected);
+    if (channel.handshakeComplete) channel.replayHandshake();
+  }
+
+  private onLeaseNotice(attempt: number, notice: LeaseNotice) {
+    const channel = this.channel;
+    if (!channel) return;
+    if (notice.lease === 'valid') {
+      this.serverPaused = false;
+      this.accessConfirmed.set(true);
+      this.armLeaseDeadline(channel.localDeadline(notice));
+      if (!this.viewer && channel.handshakeComplete) this.startViewer(attempt);
+    } else {
+      this.serverPaused = true;
+      this.accessConfirmed.set(false);
+      if (channel.handshakeComplete) this.clearPicture();
+    }
+    this.updateViewState();
+  }
+
+  private armLeaseDeadline(deadline: number) {
+    clearTimeout(this.leaseTimer);
+    this.leaseDeadline = deadline;
+    this.locallyExpired = performance.now() >= deadline;
+    const expire = this.expireLease.bind(this);
+    const remainingMs = Math.max(0, deadline - performance.now());
+    this.leaseTimer = setTimeout(expire, remainingMs);
+  }
+
+  private expireLease() {
+    this.locallyExpired = true;
+    this.updateViewState();
+  }
+
+  private updateViewState() {
+    // connect may follow a stalled browser timer; compare the clock again before showing pixels.
+    this.locallyExpired ||= performance.now() >= this.leaseDeadline;
+    if (!this.connected) {
+      this.state.set('Connecting');
+    } else if (this.serverPaused || this.locallyExpired || !this.viewerConnected) {
+      this.state.set('Paused');
+    } else {
+      if (this.state() !== 'Viewing') {
+        this.viewedAt.set(new Date().toISOString());
+      }
+      this.state.set('Viewing');
+    }
+  }
+
   private socketClosed(attempt: number, event: CloseEvent): void {
     if (attempt !== this.attempt) return;
     const state = stateForCloseCode(event.code);
     this.close(state);
-  }
-
-  private connected(attempt: number): void {
-    if (attempt !== this.attempt) return;
-    this.state.set('Viewing');
-    this.viewedAt.set(new Date().toISOString());
-  }
-
-  private disconnected(attempt: number): void {
-    if (attempt === this.attempt) this.close('Disconnected');
   }
 
 }

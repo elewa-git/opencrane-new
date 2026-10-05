@@ -1,3 +1,4 @@
+import { nextBinaryMessage, recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
 import { IncomingMessage } from 'node:http';
 import { once } from 'node:events';
 import { Duplex, PassThrough } from 'node:stream';
@@ -178,12 +179,17 @@ async function closesForCheckFailure(scenario: { mode: 'unavailable' | 'deny'; c
     const admission = await fixture.post();
     const issued = admission.json<{ ticket: string; sessionId: string }>();
     socket = await fixture.connect(issued.ticket);
-    expect((await once(socket, 'message'))[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    expect(await nextBinaryMessage(socket)).toEqual(Buffer.from('RFB 003.008\n'));
+    const notices = recordLeaseNotices(socket);
     const closed = once(socket, 'close');
     const began = performance.now();
     fixture.setMode(scenario.mode);
-    expect((await closed)[0]).toBe(scenario.code);
-    expect(performance.now() - began).toBeLessThan(2000);
+    if (scenario.mode === 'unavailable') {
+      await expectUnavailablePause(socket, began, notices);
+    } else {
+      expect((await closed)[0]).toBe(scenario.code);
+      expect(performance.now() - began).toBeLessThan(2000);
+    }
     async function stopped() {
       return (await fixture.records(issued.sessionId)).length === 2;
     }

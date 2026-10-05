@@ -1,3 +1,4 @@
+import { nextBinaryMessage, recordLeaseNotices, expectUnavailablePause } from './support/rfb-viewer.ts';
 import { grantStream } from '@opencrane/authz';
 import { viewFixture } from './support/view-fixture.ts';
 import { once } from 'node:events';
@@ -148,9 +149,10 @@ it('denies delayed grants, revoked tickets and audit outages, and closes viewers
     const valid = await ticket();
     const socket = new WebSocket(`${address.replace('http:', 'ws:')}${url.replace(/^\/api/u, '/ws')}`, ['binary', valid.ticket], { headers });
     socket.on('error', () => undefined); await once(socket, 'open');
-    const closed = once(socket, 'close'), started = performance.now();
+    const notices = recordLeaseNotices(socket);
+    const started = performance.now();
     await fga.pause(); paused = true;
-    expect((await closed)[0]).toBe(4503); expect(performance.now()-started).toBeLessThan(2000);
+    await expectUnavailablePause(socket, started, notices);
     expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(503);
     await until(async () => (await history(nats.store, `view-${valid.sessionId}`, 'test')).length === 2);
     const records = await history(nats.store, `view-${valid.sessionId}`, 'test');
@@ -322,8 +324,8 @@ it('admits bounded slow authority reads and keeps their desktop stream connected
     socket.on('error', () => undefined); await once(socket, 'open');
     await delay(3500);
     expect(socket.readyState).toBe(WebSocket.OPEN);
-    const display = once(socket, 'message'); readable.write(Buffer.from('RFB 003.008\n'));
-    expect((await display)[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    const display = nextBinaryMessage(socket); readable.write(Buffer.from('RFB 003.008\n'));
+    expect(await display).toEqual(Buffer.from('RFB 003.008\n'));
   } finally {
     socket?.terminate(); vi.restoreAllMocks(); proxy.closeAllConnections(); await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();
   }
@@ -427,13 +429,29 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
     expect(admitted.statusCode).toBe(200);
     const address = await fixture.app.listen({ host: '127.0.0.1', port: 0 });
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admitted.json<{ ticket: string }>().ticket], { headers });
-    socket.on('error', () => undefined); expect((await once(socket, 'message'))[0]).toEqual(Buffer.from('RFB 003.008\n'));
+    socket.on('error', () => undefined); expect(await nextBinaryMessage(socket)).toEqual(Buffer.from('RFB 003.008\n'));
     slow = true; await pending;
-    const closed = once(socket, 'close'), revokedAt = performance.now();
+    const notices = recordLeaseNotices(socket);
+    let closeCode: unknown;
+    socket.once('close', function closed(code: number) { closeCode = code; });
+    const revokedAt = performance.now();
     await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
     blocked = true;
-    expect([4003, 4503]).toContain((await closed)[0]);
+    function deniedOrPaused() {
+      return closeCode === 4003 || notices.some(function paused(entry) {
+        return entry.notice.lease === 'paused';
+      });
+    }
+    await until(deniedOrPaused, 2000);
     expect(performance.now() - revokedAt).toBeLessThan(2000);
+    if (closeCode !== 4003) {
+      let binaryAfterPause = false;
+      socket.on('message', function receive(_bytes: unknown, binary: boolean) {
+        if (binary) binaryAfterPause = true;
+      });
+      await delay(500);
+      expect(binaryAfterPause).toBe(false);
+    }
   } finally {
     release(); socket?.terminate(); vi.restoreAllMocks(); proxy.closeAllConnections();
     await new Promise<void>(resolve => proxy.close(() => resolve())); await fixture.close();

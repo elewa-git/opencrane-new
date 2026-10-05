@@ -55,6 +55,8 @@ export async function confirmAccess<T>(check: () => Promise<T>, clock = monotoni
   throw new ViewAccessUnconfirmed('Access checks did not answer in time');
 }
 
+export type LeaseNotice = { lease: 'paused' } | { lease: 'valid'; at: number; until: number };
+
 interface LeaseEvents {
   resumed(): void;
   renewed(): void;
@@ -67,6 +69,7 @@ export class ViewLease<Computer> {
   private state: 'proving' | 'valid' | 'paused' | 'stopped' = 'proving';
   private validUntil = -Infinity;
   private outsideSince = 0;
+  private origin = 0;
   private inFlight = 0;
   private interval: ReturnType<typeof setInterval> | undefined;
   private lapseTimer: ReturnType<typeof setTimeout> | undefined;
@@ -87,7 +90,8 @@ export class ViewLease<Computer> {
 
   start() {
     if (this.state === 'stopped' || this.interval !== undefined) return;
-    this.outsideSince = this.clock.now();
+    this.origin = this.clock.now();
+    this.outsideSince = this.origin;
     this.startCheck();
     if (this.isStopped()) return;
     const tick = this.tick.bind(this);
@@ -102,6 +106,15 @@ export class ViewLease<Computer> {
   validUntilAt(): number | undefined {
     if (this.validUntil === -Infinity) return undefined;
     return this.validUntil;
+  }
+
+  notice(): LeaseNotice {
+    const now = this.clock.now();
+    if (!this.allows(now)) return { lease: 'paused' };
+    const at = Math.floor(now - this.origin);
+    const until = Math.floor(this.validUntil - this.origin);
+    if (until - at < 1) return { lease: 'paused' };
+    return { lease: 'valid', at, until };
   }
 
   stop() {
