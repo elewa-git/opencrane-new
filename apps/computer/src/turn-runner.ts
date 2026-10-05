@@ -9,6 +9,7 @@ export interface Turn {
   id: string;
   conversationId: string;
   assistantId: string;
+  requesterId?: string;
   text: string;
   token: string;
   expiresAt: number;
@@ -56,7 +57,12 @@ export function parseTurn(value: Record<string, unknown>): Turn {
   if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) {
     throw new Error('Expired turn');
   }
+  const requesterId = value['requesterId'];
+  if (requesterId !== undefined && (typeof requesterId !== 'string' || !requesterId)) {
+    throw new Error('Invalid requester');
+  }
   return {
+    ...(typeof requesterId === 'string' ? { requesterId } : {}),
     id: requiredString(value, 'id'),
     conversationId: requiredString(value, 'conversationId'),
     assistantId: requiredString(value, 'assistantId'),
@@ -160,9 +166,10 @@ class TurnRunner {
     return report.type === 'agent.turn_started';
   }
 
-  private lastThreadReport(conversationId: string) {
+  private lastThreadReport(input: Turn) {
     function reportHasThread(report: BridgeReport) {
-      return report.conversationId === conversationId && Boolean(report.threadId);
+      return report.conversationId === input.conversationId
+        && report.requesterId === input.requesterId && Boolean(report.threadId);
     }
     return this.journal.findLast(reportHasThread);
   }
@@ -236,7 +243,7 @@ class TurnRunner {
   }
 
   private async prepareAndRun(input: Turn) {
-    const previousReport = this.lastThreadReport(input.conversationId);
+    const previousReport = this.lastThreadReport(input);
     const previousThread = previousReport?.threadId;
     let method: string;
     let params: Record<string, unknown>;

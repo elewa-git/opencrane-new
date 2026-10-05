@@ -29,9 +29,9 @@ function verifyRetry(previous: StoredEvent, input: Input, context: Context, keys
     (create ? data['assistantId'] !== input.assistantId || data['mode'] !== input.mode || data['payingGroupId'] !== input.payingGroupId : keys.decrypt(context.silo, input.conversationId, data) !== input.text)) throw new Error('Id reused');
 }
 type Store = Pick<EventStore, 'readStream' | 'append'>;
-export async function chatHistory(store: Pick<EventStore, 'readStream'>, silo: string, conversation: string) {
+export async function chatHistory(store: Pick<EventStore, 'readStream'>, silo: string, conversation: string, deadline = performance.now() + 10_000) {
   const rows: StoredEvent[] = [];
-  for await (const row of store.readStream(`conversation-${conversation}`, 1, performance.now() + 10_000)) {
+  for await (const row of store.readStream(`conversation-${conversation}`, 1, deadline)) {
     if (row.event.silo !== silo) throw new Error('Conversation silo mismatch');
     rows.push(row);
   }
@@ -39,14 +39,15 @@ export async function chatHistory(store: Pick<EventStore, 'readStream'>, silo: s
 }
 
 /** Authorisation and key provisioning precede this command; its only write is one conditional append. */
-export async function chatCommand(store: Store, keys: ReturnType<typeof conversationKeys>, context: { silo: string; memberId: string }, value: z.input<typeof chatInput>, fresh?: () => Promise<void>) {
+export async function chatCommand(store: Store, keys: ReturnType<typeof conversationKeys>, context: { silo: string; memberId: string }, value: z.input<typeof chatInput>, fresh?: (() => Promise<void>) & { deadline?: number }) {
   const input = chatInput.parse(value);
   if ('assistantId' in input && input.mode !== 'agent_session') throw new Error('Phase 2 supports only agent_session conversations');
-  const rows = await chatHistory(store, context.silo, input.conversationId);
+  const rows = await chatHistory(store, context.silo, input.conversationId, fresh?.deadline);
   const create = 'assistantId' in input, type = create ? 'conversation.created' : 'stopTurnId' in input ? 'agent.turn_stop_requested' : 'message.posted';
   const previous = rows.find(r => r.event.id === input.id);
   if (previous) {
     verifyRetry(previous, input, context, keys);
+    await fresh?.();
     return { status: 'appended' as const, sequence: previous.sequence };
   }
   validateConversation(rows, input, context.memberId);
@@ -59,7 +60,7 @@ export async function chatCommand(store: Store, keys: ReturnType<typeof conversa
   } });
   if (result.status !== 'appended') return result;
   // The adapter may have recognised a concurrent retry; verify its committed payload too.
-  const saved = (await chatHistory(store, context.silo, input.conversationId)).find(r => r.event.id === input.id);
+  const saved = (await chatHistory(store, context.silo, input.conversationId, fresh?.deadline)).find(r => r.event.id === input.id);
   if (!saved) throw new Error('Append outcome unavailable');
   verifyRetry(saved, input, context, keys);
   return result;

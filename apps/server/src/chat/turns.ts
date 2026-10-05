@@ -1,4 +1,5 @@
-import { history, payingGroupAuthority } from '@opencrane/models';
+import type { Binding } from '@opencrane/authz';
+import { authorityFence, history, payingGroupAuthority } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
@@ -7,25 +8,31 @@ import { ReportRejected } from './reports.ts';
 
 const binding = z.object({ conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(), requesterId: z.string(), task: z.literal('chat_turn'), payingGroupId: z.string().optional() });
 /** Each lifecycle command makes one conditional append. Reports cannot reopen a closed turn. */
-export async function turnCommand(store: EventStore, context: { silo: string; computerId: string; assistantId: string },
+export async function turnCommand(store: EventStore, context: { silo: string; computerId: string; assistantId: string; binding?: Binding },
   input: { conversationId: string; turnId: string; threadId?: string | undefined; status: 'started' | 'completed' | 'failed'; replay?: boolean }) {
-  const rows = await chatHistory(store, context.silo, input.conversationId);
+  const subjects = [`computer-${context.assistantId}`, `assistant-${context.assistantId}`,
+    `conversation-${input.conversationId}`];
+  const fresh = await authorityFence(store, performance.now(), subjects);
+  const rows = await chatHistory(store, context.silo, input.conversationId, fresh.deadline);
   const created = z.object({ assistantId: z.string() }).parse(rows.find(r => r.event.type === 'conversation.created')?.event.data);
   const message = rows.find(r => r.event.id === input.turnId && r.event.type === 'message.posted');
   if (created.assistantId !== context.assistantId || !message) throw new ReportRejected('Unrequested turn');
   const events = [];
-  for await (const row of store.readStream(`computer-${context.assistantId}`)) {
+  for await (const row of store.readStream(`computer-${context.assistantId}`, 1, fresh.deadline)) {
     if (row.event.silo !== context.silo) throw new ReportRejected('Computer silo mismatch');
     events.push(row);
   }
   const data = decideTurn(events, rows, input, context.computerId, z.object({ authorId: z.string() }).parse(message.event.data).authorId);
   if (!data) return;
+  fresh.include(`member-${data.requesterId}`);
+  requireThreadOwner(events, data);
   if (newAdmission(input.status, events, input.turnId)) {
-    data.payingGroupId = await payingGroup(store, context.silo, context.assistantId, rows, data.requesterId);
+    data.payingGroupId = await payingGroup(store, context.silo, context.assistantId, rows, data.requesterId, context.binding, fresh);
   }
   const type = input.status === 'started' ? 'computer.turn_started' : 'computer.turn_closed';
   const id = createHash('sha256').update(`${context.computerId}:${input.turnId}:${type}`).digest('hex');
   const eventData = { ...data, assistantId: context.assistantId, computerId: context.computerId, ...(input.status === 'started' ? {} : { status: input.status }) };
+  await fresh();
   const result = await store.append({ expectedSequence: events.at(-1)?.sequence ?? 0, event: {
     id, commandId: id, type, subject: `computer-${context.assistantId}`, silo: context.silo,
     source: 'opencrane-server', principal: { kind: 'system', id: 'turn-lifecycle' }, time: new Date().toISOString(),
@@ -33,7 +40,7 @@ export async function turnCommand(store: EventStore, context: { silo: string; co
   } });
   if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
   const committed = [];
-  for await (const row of store.readStream(`computer-${context.assistantId}`)) committed.push(row);
+  for await (const row of store.readStream(`computer-${context.assistantId}`, 1, fresh.deadline)) committed.push(row);
   const saved = committed.find(r => r.event.id === id);
   verifyBinding(saved, data);
   return input.status === 'started' ? { ...data, threadId: z.string().parse(data.threadId) } : undefined;
@@ -69,17 +76,27 @@ function verifyBinding(saved: StoredEvent | undefined, expected: z.infer<typeof 
   if (!saved || JSON.stringify(binding.parse(saved.event.data)) !== JSON.stringify(expected)) throw new ReportRejected('Turn binding conflict');
 }
 
-async function payingGroup(store: EventStore, silo: string, assistantId: string, conversation: StoredEvent[], requesterId: string) {
-  const assistant = (await history(store, `assistant-${assistantId}`, silo)).find(r => r.event.type === 'assistant.created');
-  const kind = z.object({ kind: z.enum(['personal', 'team']) }).parse(assistant?.event.data).kind;
+async function payingGroup(store: EventStore, silo: string, assistantId: string, conversation: StoredEvent[], requesterId: string,
+  iam: Binding | undefined, fresh: Awaited<ReturnType<typeof authorityFence>>) {
+  const assistant = (await history(store, `assistant-${assistantId}`, silo, fresh.deadline)).find(r => r.event.type === 'assistant.created');
+  const details = z.object({ kind: z.enum(['personal', 'team']), ownerId: z.string() })
+    .parse(assistant?.event.data);
+  const kind = details.kind;
   if (kind === 'team') {
-    const group = z.object({ payingGroupId: z.string().optional() }).parse(conversation.find(r => r.event.type === 'conversation.created')?.event.data).payingGroupId;
+    const created = z.object({ createdBy: z.string(), payingGroupId: z.string().optional() })
+      .parse(conversation.find(r => r.event.type === 'conversation.created')?.event.data);
+    if (created.createdBy !== requesterId) throw new ReportRejected('Private requester mismatch');
+    const group = created.payingGroupId;
     if (!group) throw new ReportRejected('Paying group unavailable for shared work');
-    const fresh = await payingGroupAuthority(store, silo, requesterId, group);
-    await fresh();
+    fresh.include(`team-${group}`, `team-${details.ownerId}`);
+    for (const groupId of new Set([group, details.ownerId])) {
+      const groupAuthority = await payingGroupAuthority(store, silo, requesterId,
+        groupId, iam, fresh.deadline);
+      await groupAuthority();
+    }
     return group;
   }
-  const ceilings = (await history(store, `budget-${silo}`, silo)).filter(r => r.event.type === 'budget.ceiling_set');
+  const ceilings = (await history(store, `budget-${silo}`, silo, fresh.deadline)).filter(r => r.event.type === 'budget.ceiling_set');
   for (const row of ceilings.reverse()) {
     const d = z.object({ scope: z.string(), defaultPayingGroupId: z.string().optional() }).parse(row.event.data);
     if (d.scope === 'global' && d.defaultPayingGroupId) return d.defaultPayingGroupId;
@@ -89,4 +106,16 @@ async function payingGroup(store: EventStore, silo: string, assistantId: string,
 
 function newAdmission(status: string, events: StoredEvent[], turnId: string) {
   return status === 'started' && !events.some(r => r.event.type === 'computer.turn_started' && binding.parse(r.event.data).turnId === turnId);
+}
+
+function requireThreadOwner(events: StoredEvent[], input: z.infer<typeof binding>) {
+  for (const row of events) {
+    if (row.event.type !== 'computer.turn_started') continue;
+    const previous = binding.parse(row.event.data);
+    if (previous.threadId !== input.threadId) continue;
+    if (previous.requesterId !== input.requesterId ||
+        previous.conversationId !== input.conversationId) {
+      throw new ReportRejected('Thread belongs to another requester or conversation');
+    }
+  }
 }

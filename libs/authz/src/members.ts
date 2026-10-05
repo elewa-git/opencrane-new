@@ -68,9 +68,24 @@ export function memberAuthorisation(binding: Binding) {
     if (event.subject !== grantStream(resourceType, resourceId)) throw new Error('Grant subject mismatch');
     const target = objectId('resource', binding.silo, resourceType, resourceId);
     const grantee = field(event.data, 'granteeId');
-    const existing = (await client.read({ object: target, relation: 'use' }))
-      .filter(t => ['person', 'assistant', 'team'].some(kind => t.user === objectId(kind, binding.silo, grantee) + (kind === 'team' ? '#member' : '')));
     const kind = event.type === 'grant.given' ? field(event.data, 'granteeKind') : undefined;
+    let identityKinds = ['person', 'assistant', 'team'];
+    if (kind) {
+      let identityKind = kind;
+      if (kind === 'member') identityKind = 'person';
+      identityKinds = [identityKind];
+    }
+    const users = new Set<string>();
+    for (const identityKind of identityKinds) {
+      const user = objectId(identityKind, binding.silo, grantee);
+      users.add(identityKind === 'team' ? `${user}#member` : user);
+    }
+    function matchesGrantee(tuple: Tuple) {
+      return users.has(tuple.user);
+    }
+    // A grant for an assistant must not replace its owning group's grant with the same id.
+    const current = await client.read({ object: target, relation: 'use' });
+    const existing = current.filter(matchesGrantee);
     const desired = kind ? [{ object: target, relation: 'use', user: objectId(kind === 'member' ? 'person' : kind, binding.silo, grantee) + (kind === 'team' ? '#member' : '') }] : [];
     await client.write([receipt, ...desired.filter(t => !existing.some(e => same(t, e)))], existing.filter(t => !desired.some(d => same(t, d))));
     return;

@@ -9,7 +9,7 @@ import type { conversationKeys } from './keys.ts';
 export class ReportRejected extends Error {}
 
 const reportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
-  turnId: z.string(), assistantId: z.string(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
+  turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   type: z.enum(['agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
@@ -29,6 +29,11 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
   const rows = await chatHistory(store, context.silo, report.conversationId);
   const created = z.object({ assistantId: z.string() }).parse(rows.find(r => r.event.type === 'conversation.created')?.event.data);
   if (created.assistantId !== context.assistantId || !rows.some(r => r.event.type === 'message.posted' && r.event.id === report.turnId)) throw new ReportRejected('Unrequested report');
+  if (report.requesterId) {
+    const message = rows.find(row => row.event.id === report.turnId);
+    const author = z.object({ authorId: z.string() }).parse(message?.event.data);
+    if (author.authorId !== report.requesterId) throw new ReportRejected('Requester mismatch');
+  }
   const previous = rows.find(r => r.event.report?.computerId === context.computerId && r.event.report.sequence === report.sequence);
   if (previous) { verifyDigest(previous, digest); return 'duplicate' as const; }
   if (report.previousSequence === undefined

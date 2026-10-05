@@ -86,6 +86,10 @@ async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof c
   const payingGroupId = data(turn.event)['payingGroupId'];
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
   if (data(assistant.event)['kind'] === 'team') {
+    if (data(created.event)['createdBy'] !== t.requester) throw new Error('Private requester refused');
+    if (data(created.event)['payingGroupId'] !== payingGroupId) {
+      throw new RequestRefused('Shared payer binding mismatch');
+    }
     fresh.include(`team-${payingGroupId}`);
     const groupAuthority = await payingGroupAuthority(
       actor.store, actor.silo, t.requester, payingGroupId, binding, fresh.deadline);

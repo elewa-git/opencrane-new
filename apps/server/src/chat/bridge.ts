@@ -20,7 +20,7 @@ import type { ChatOptions } from './routes.ts';
 
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
 
-export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' | 'keys'>, input: { url: string; computerId: string; assistantId: string; bearer: string }, tokens?: Tokens) {
+export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' | 'keys'> & Partial<Pick<ChatOptions, 'binding'>>, input: { url: string; computerId: string; assistantId: string; bearer: string }, tokens?: Tokens) {
   const socket = new WebSocket(input.url, { headers: { 'x-bridge-token': input.bearer }, maxPayload: 256 * 1024, handshakeTimeout: 5000 });
   socket.on('error', () => socket.terminate());
   await once(socket, 'open');
@@ -42,7 +42,7 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
       const previous = report.previousSequence === undefined ? legacyPending : Promise.resolve();
       queue.pending = Promise.all([queue.pending, previous]).then(async () => {
         if (socket.readyState !== socket.OPEN) return;
-        const context = { silo: options.silo, ...input };
+        const context = { silo: options.silo, ...(options.binding ? { binding: options.binding } : {}), ...input };
         const result = await recordReport(options.store, options.keys, context, value);
         let grant;
         if (report.type.startsWith('agent.turn_')) {
@@ -92,7 +92,7 @@ export async function connectBridge(options: Pick<ChatOptions, 'silo' | 'store' 
 }
 
 /** One outbound socket per computer; polling durable messages recovers a server restart without resending completed turns. */
-export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> & { objects?: Client }, tokens: Tokens, kube: SandboxClient, proxyUrl: string, signal: AbortSignal, logger: Logger = createLogger('bridge')) {
+export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> & Partial<Pick<ChatOptions, 'binding'>> & { objects?: Client }, tokens: Tokens, kube: SandboxClient, proxyUrl: string, signal: AbortSignal, logger: Logger = createLogger('bridge')) {
   const refused = new Set<string>();
   const links = new Map<string, Awaited<ReturnType<typeof connectBridge>>>();
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
@@ -155,6 +155,7 @@ export async function watchBridges(options: Pick<ChatOptions, 'silo' | 'store' |
             const { fileId, name, mime } = fileUploadedDataSchema.parse(row.event.data); return { fileId, name, mime };
           });
           link.socket.send(JSON.stringify({ type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
+            requesterId: z.object({ authorId: z.string() }).parse(message.event.data).authorId,
             assistantId: conversation.assistantId, text: options.keys.decrypt(options.silo, conversation.conversationId, message.event.data),
             attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
             token: 'preparing', expiresAt: Date.now() + 120_000 }));

@@ -58,7 +58,9 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
     if (event.silo !== silo) continue;
     const d = data(event);
     if (event.type === 'assistant.created' && d['kind'] === 'team') teams.add(`team-${String(d['ownerId'])}`);
-    if (event.type === 'grant.given') grants.set(String(d['granteeId']), d);
+    if (event.type === 'grant.given' && d['granteeKind'] === 'team') {
+      grants.set(String(d['granteeId']), d);
+    }
     if (event.type === 'grant.revoked') grants.delete(String(d['granteeId']));
   }
   for (const d of grants.values()) if (d['granteeKind'] === 'team') teams.add(`team-${String(d['granteeId'])}`);

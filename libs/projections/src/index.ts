@@ -15,7 +15,7 @@ export {
 } from "./runner.ts";
 export { members } from "./members.ts";
 export { mcpCatalogue } from "./mcp-catalogue.ts";
-export { computers } from './computers.ts';
+export { computers, mapComputerRows, type ComputerDbRow } from './computers.ts';
 export {
   rebuildMemberProjection,
   rebuildMcpCatalogueProjection,

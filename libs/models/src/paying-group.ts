@@ -5,7 +5,10 @@ import { data } from './state.ts';
 
 export class PayingGroupRefused extends Error {}
 function isMemberState(row: StoredEvent) {
-  return ['member.joined', 'member.role_changed', 'member.removed'].includes(row.event.type);
+  const memberStateTypes = [
+    'silo.owner_bootstrapped', 'member.joined', 'member.role_changed', 'member.removed',
+  ];
+  return memberStateTypes.includes(row.event.type);
 }
 function isCreated(row: StoredEvent) {
   return row.event.type === 'team.created';

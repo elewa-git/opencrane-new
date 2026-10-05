@@ -7,6 +7,7 @@ export interface BridgeReport {
   conversationId: string;
   turnId: string;
   assistantId: string;
+  requesterId?: string;
   type: string;
   commandDigest?: string;
   exitCode?: number;
@@ -19,6 +20,7 @@ interface ReportInput {
   id: string;
   conversationId: string;
   assistantId: string;
+  requesterId?: string;
 }
 
 interface JournalDriver {
@@ -63,6 +65,8 @@ function parseStoredReport(line: string): BridgeReport {
     assistantId: requiredString(value, 'assistantId'),
     type: requiredString(value, 'type'),
   };
+  const requesterId = optionalString(value, 'requesterId');
+  if (requesterId) report.requesterId = requesterId;
   const previousSequence = optionalNumber(value, 'previousSequence');
   const commandDigest = optionalString(value, 'commandDigest');
   const exitCode = optionalNumber(value, 'exitCode');
@@ -158,6 +162,7 @@ export function reportJournal(driver: JournalDriver) {
     const report: BridgeReport = {
       conversationId: input.conversationId,
       assistantId: input.assistantId,
+      ...(input.requesterId ? { requesterId: input.requesterId } : {}),
       turnId,
       type,
       ...extra,

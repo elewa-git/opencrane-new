@@ -164,7 +164,11 @@ export const teamMemberRemovedDataSchema = z
 // Pod/claim, but the stream subject is always the assistant's id.
 
 export const assistantCreatedDataSchema = z
-  .object({ assistantId: id, ownerId: id, kind: z.enum(['personal', 'team']) })
+  .object({ assistantId: id, ownerId: id, kind: z.enum(['personal', 'team']),
+    name: z.string().trim().min(1).max(200).optional(),
+    grants: z.array(z.object({ resourceType: z.enum(['model', 'mcp_server']),
+      resourceId: id }).strict()).min(1).max(32).optional(),
+  })
   .strict();
 
 export const assistantSettingsChangedDataSchema = z

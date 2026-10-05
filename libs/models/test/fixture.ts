@@ -84,7 +84,8 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   await append('assistant-assistant', 'assistant.created', { assistantId: 'assistant', ownerId: team ? 'sales' : 'alice', kind: team ? 'team' : 'personal' });
   await append('computer-assistant', 'computer.claimed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:initial', generation: 1 });
   await append('computer-assistant', 'computer.ready', { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
-  await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' });
+  await append('conversation-conversation', 'conversation.created', { conversationId: 'conversation', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
+    ...(team ? { payingGroupId: 'sales' } : {}) });
   await append('conversation-conversation', 'agent.turn_started', { conversationId: 'conversation', assistantId: 'assistant', turnId: 'turn' });
   await append('computer-assistant', 'computer.turn_started', { assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation', turnId: 'turn', threadId: 'thread', requesterId: 'alice', task: 'chat_turn', payingGroupId: team ? 'sales' : 'personal-default' });
   const { publicKey, privateKey } = await generateKeyPair('ES256', { extractable: true });

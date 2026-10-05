@@ -24,6 +24,7 @@
   open conversation. The spending-limit message says an Owner or Admin can help, or the limit
   resets each month. On phones, the message field sits above full-width, borderless attach and
   send buttons. The session panel leaves out placeholder Decisions and People sections.
+- Shared-assistant backend first half: admins create group-owned assistants with explicit grants and one computer; members get private requester-bound sessions and fixed paying-group admission. Personal credential profiles, screens and fresh-install qualification remain pending (#89).
 
 - Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.

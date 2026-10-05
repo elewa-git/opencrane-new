@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import type { EventStore } from '@opencrane/event-store';
 import type { EventEnvelope } from '@opencrane/events';
@@ -7,27 +8,65 @@ import { registerHandler } from '@opencrane/handlers';
 import { envelope, history } from './actor.ts';
 import { data, models } from './state.ts';
 
+function defaultGrantee(trigger: EventEnvelope) {
+  const member = trigger.type === 'member.joined' || trigger.type === 'silo.owner_bootstrapped';
+  const field = member ? 'memberId' : 'assistantId';
+  const granteeId = z.string().parse(data(trigger)[field]);
+  const granteeKind = member ? 'member' : 'assistant';
+  return { resourceType: 'model', granteeId, granteeKind };
+}
+
 /** One command, one conditional append; existing grants and revocations win. */
-async function seedGrant(store: EventStore, trigger: EventEnvelope, model: string) {
-  const member = (trigger.type === 'member.joined' || trigger.type === 'silo.owner_bootstrapped');
-  const granteeId = data(trigger)[member ? 'memberId' : 'assistantId'];
+async function seedGrant(store: EventStore, trigger: EventEnvelope, model: string,
+  explicit?: { resourceType: string; granteeId: string; granteeKind: string }) {
+  const target = explicit ?? defaultGrantee(trigger);
+  const { granteeId, resourceType, granteeKind } = target;
   if (typeof granteeId !== 'string') throw new Error('Missing model grantee');
-  const subject = grantStream('model', model);
+  const subject = grantStream(resourceType, model);
   const rows = await history(store, subject, trigger.silo);
-  if (rows.some(row => data(row.event)['granteeId'] === granteeId)) return;
-  const id = `initial-model-grant-${createHash('sha256').update(JSON.stringify([trigger.silo, member, granteeId, model])).digest('hex')}`;
+  function matchesGrantee(row: typeof rows[number]) {
+    const previous = data(row.event);
+    if (previous['granteeId'] !== granteeId) return false;
+    // Existing revocations have no kind and must keep denying every matching id on replay.
+    if (row.event.type === 'grant.revoked') return true;
+    return previous['granteeKind'] === granteeKind;
+  }
+  if (rows.some(matchesGrantee)) return;
+  const id = `initial-model-grant-${createHash('sha256').update(JSON.stringify([trigger.silo, resourceType, granteeKind, granteeId, model])).digest('hex')}`;
+  let grantedBy = 'installation';
+  if (explicit && trigger.principal) grantedBy = trigger.principal.id;
   const event = envelope(trigger.silo, subject, 'grant.given', {
-    resourceType: 'model', resourceId: model, granteeId,
-    granteeKind: member ? 'member' : 'assistant', grantedBy: 'installation',
+    resourceType, resourceId: model, granteeId, granteeKind,
+    grantedBy,
   }, id);
   const result = await store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
   if (result.status !== 'appended') throw new Error('Initial model grant append failed; retry the reaction');
 }
 
 export function modelGrantHandler(store: EventStore) {
-  return registerHandler('seed-model-grants', async event => {
-    for (const model of models.filter(row => !row.retired)) await seedGrant(store, event, model.id);
-  });
+  async function seedSelection(event: EventEnvelope) {
+    if (event.type === 'assistant.created' && data(event)['kind'] === 'team') {
+      const schema = z.object({ assistantId: z.string(), ownerId: z.string(),
+        grants: z.array(z.object({ resourceType: z.string(), resourceId: z.string() })).optional() });
+      const shared = schema.parse(event.data);
+      // Old team events with no explicit selection grant nothing; ownership is not tool authority.
+      for (const grant of shared.grants ?? []) {
+        const assistant = { resourceType: grant.resourceType,
+          granteeId: shared.assistantId, granteeKind: 'assistant' };
+        const group = { resourceType: grant.resourceType,
+          granteeId: shared.ownerId, granteeKind: 'team' };
+        await seedGrant(store, event, grant.resourceId, assistant);
+        await seedGrant(store, event, grant.resourceId, group);
+      }
+      return;
+    }
+    function activeModel(model: typeof models[number]) {
+      return !model.retired;
+    }
+    const activeModels = models.filter(activeModel);
+    for (const model of activeModels) await seedGrant(store, event, model.id);
+  }
+  return registerHandler('seed-model-grants', seedSelection);
 }
 
 /** Run once during upgrade, with writers stopped; safe to resume after failure. */
