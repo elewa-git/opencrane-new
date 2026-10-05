@@ -1,0 +1,33 @@
+.account { max-width: 488px; }
+h1 { margin: 0 0 2px; }
+.intro { margin: 0 0 18px; color: var(--oc-ink-muted); font-size: 12px; line-height: 1.5; }
+.identity { margin: 0 0 18px; }
+h2 { margin: 0 0 6px; font-size: 12px; font-weight: 600; }
+.value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-control);
+  background: var(--oc-surface-subtle);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.source { margin: 5px 0 0; color: var(--oc-ink-muted); font-size: 11px; }
+.account > oc-shared-state { margin-top: 14px; }
+a { color: var(--oc-accent-dark); }
+.sign-in-link a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+@media (max-width: 700px) {
+  .account { max-width: none; }
+  .intro { margin-bottom: 18px; font-size: 14px; }
+  .identity { margin-bottom: 20px; }
+  .value { min-height: 44px; font-size: 14px; }
+  .source { font-size: 12px; }
+}

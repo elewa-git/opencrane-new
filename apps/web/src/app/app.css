@@ -1,3 +1,4 @@
 :host { display: block; min-height: 100dvh; background: var(--oc-surface-app); }
 :host(.workspace-root) { min-height: 0; height: 100dvh; overflow: hidden; }
 h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
+:host(.settings-root) h1 { margin: 0 0 2px; }

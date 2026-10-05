@@ -1,0 +1,34 @@
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/workspace" aria-label="OpenCrane workspace">
+      <oc-brand-mark /> Open<span class="brand-accent">Crane</span>
+    </a>
+    <a class="back" href="/workspace">‹ Back to workspace</a>
+    <p class="section-label">Your settings</p>
+    <nav aria-label="Personal settings">
+      @for (page of pages; track page.id) {
+        <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
+          {{ page.label }}
+        </a>
+      }
+    </nav>
+  </aside>
+  <header class="mobile-bar">
+    <a class="mobile-back" href="/workspace">‹ Back to workspace</a>
+    <span>{{ pageLabel() }}</span>
+    <button #menuButton type="button" aria-label="Open personal settings navigation"
+      aria-controls="personal-settings-menu" [attr.aria-expanded]="menuOpen()"
+      (click)="menuOpen.set(true)">☰</button>
+  </header>
+  <main ocPaperSurface="main"><ng-content /></main>
+</div>
+<oc-navigation-menu id="personal-settings-menu" label="Personal settings"
+  [open]="menuOpen()" [returnFocusTo]="menuButton" (closed)="menuOpen.set(false)">
+  <a class="menu-back" href="/workspace">‹ Back to workspace</a>
+  <p class="section-label">Your settings</p>
+    @for (page of pages; track page.id) {
+      <a [href]="page.href" [attr.aria-current]="activePage() === page.id ? 'page' : null">
+        {{ page.label }}
+      </a>
+    }
+</oc-navigation-menu>

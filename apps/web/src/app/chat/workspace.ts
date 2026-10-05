@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';
+import { BrandMark } from '../ui/brand-mark';
 import { sessionSlug } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ChatComposer } from './composer';
@@ -26,7 +27,7 @@ import { LiveView } from '../live-view/live-view';
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, FoldLoader, ChatComposer, FilePreview, LiveView,
-    NgTemplateOutlet, ChatIcon,
+    NgTemplateOutlet, ChatIcon, BrandMark,
   ],
   providers: [ChatSession, WebSocketService],
   templateUrl: './workspace.html',

@@ -2,6 +2,30 @@
   <oc-claim />
 } @else if (workspacePage) {
   <oc-workspace />
+} @else if (accountPath) {
+  <oc-personal-settings-shell [activePage]="settingsPage">
+    @if (!settingsPage) {
+      <h1>Page not found</h1>
+      <p>This address does not match a personal settings page.</p>
+    } @else {
+      @if (settingsPage === 'account') {
+        <oc-account-screen />
+      } @else {
+        <h1>{{ personalSettingsPageLabel(settingsPage) }}</h1>
+        @if (settingsPage === 'preferences') {
+          <oc-shared-state kind="not_configured" message="Not available yet"
+            detail="Personal preferences are not available yet." [showAction]="false" />
+        } @else if (settingsPage === 'assistant') {
+          <oc-shared-state kind="not_configured" message="Not available yet"
+            detail="Your assistant is assigned in the workspace. Persona and setup details are not available yet."
+            [showAction]="false" />
+        } @else {
+          <oc-shared-state kind="not_configured" message="Not available yet"
+            detail="Your personal tool connections are not available yet." [showAction]="false" />
+        }
+      }
+    }
+  </oc-personal-settings-shell>
 } @else if (auditConversation) {
   <oc-audit [conversationId]="auditConversation" />
 } @else if (!orgPage) {

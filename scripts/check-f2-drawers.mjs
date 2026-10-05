@@ -495,6 +495,9 @@ async function computerFixture(page) {
   }
   function attachViewer(socket) {
     activeSocket = socket;
+    // The viewer stays paused until the server confirms access with a lease notice.
+    const accessNotice = '{"lease":"valid","at":0,"until":1500}';
+    socket.send(accessNotice);
     let step = 0;
     function handshake() {
       if (step === 0) {

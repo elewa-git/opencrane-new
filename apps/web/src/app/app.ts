@@ -12,23 +12,33 @@ import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
 import { normalisePathname, organisationPage, organisationPageLabel } from './organisation/pages';
+import { AccountScreen } from './settings/account-screen';
+import { PersonalSettingsShell } from './settings/personal-settings-shell';
+import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
 
 @Component({
   selector: 'app-root',
   imports: [
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, OrganisationShell,
+    AccountScreen, PersonalSettingsShell,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.workspace-root]': 'workspacePage' },
+  host: {
+    '[class.workspace-root]': 'workspacePage',
+    '[class.settings-root]': 'accountPath',
+  },
 })
 export class App {
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
+  protected readonly settingsPage = personalSettingsPage(this.pathname);
+  protected readonly accountPath = this.pathname === '/account'
+    || this.pathname.startsWith('/account/');
   protected readonly activePage = organisationPage(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
@@ -36,6 +46,7 @@ export class App {
   protected readonly statesPage = this.pathname === '/org/states';
   protected readonly organisation = document
     .querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
+  protected readonly personalSettingsPageLabel = personalSettingsPageLabel;
 
   protected unavailableTitle(): string {
     return organisationPageLabel(this.activePage) ?? 'Page not found';

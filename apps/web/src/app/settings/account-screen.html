@@ -1,0 +1,31 @@
+<section class="account" [attr.aria-busy]="identityState() === 'loading'">
+  <h1 #accountHeading tabindex="-1">Account</h1>
+  <p class="intro">Your identity and preferences. Fields from single sign-on are read-only.</p>
+  <p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
+  @if (identityState() === 'loading') {
+    <oc-shared-state kind="checking" message="Checking your signed-in identity"
+      [showAction]="false" />
+  } @else if (identityState() === 'signed-out') {
+    <oc-shared-state kind="access_changed" message="Your session expired" [showAction]="false" />
+    <p class="sign-in-link"><a href="/">Sign in again</a></p>
+  } @else if (identityState() === 'failed') {
+    <oc-shared-state kind="failed" message="Couldn't load your identity"
+      detail="Nothing changed. You can try again."
+      [safeToRetry]="true" (action)="retryIdentity()" />
+  } @else {
+    <section class="identity">
+      <h2>Name</h2>
+      @if (identityName()) {
+        <p class="value"><oc-icon name="closed" />{{ identityName() }}</p>
+        <p class="source"><oc-icon name="closed" /> Supplied by your identity provider</p>
+      } @else {
+        <oc-shared-state kind="not_configured" message="Name not provided"
+          detail="The current identity response does not include a display name."
+          [showAction]="false" />
+      }
+    </section>
+    <oc-shared-state kind="not_configured" message="Profile details not available yet"
+      detail="Email, organisation, role and groups, and preferred display name are not available yet."
+      [showAction]="false" />
+  }
+</section>
