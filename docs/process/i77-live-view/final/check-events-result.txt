@@ -1,0 +1,4 @@
+started=2026-10-05T05:24:21Z
+command=nice -n 10 npm run check:events
+exit=0
+wall_seconds=1

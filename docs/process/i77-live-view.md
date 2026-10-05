@@ -424,3 +424,86 @@ its 1,000 ms bound. A single-worker retry of the volume test then received a
 403 unavailable response from its decision service. The host was under
 concurrent test load; these are failed runs, not passes. Live qualification
 remains **FAIL**.
+
+## Final qualification — 5 October 2026
+
+**FAIL: 4/10 viewer runs passed.** The acceptance condition is ten of ten runs
+with explicit revocation clearing the viewer within **2,000 ms**. Runs 1, 2,
+3 and 8 passed that bound. Runs 4–7, 9 and 10 disconnected before reaching the
+“Viewing” state, so revocation was not reached on those runs. The table reports
+the per-run result, measured revoke-to-clear time, pause record, CPU pressure and
+secondary server run-delay delta. Full receipts and timing files are in
+[the final batch directory](i77-live-view/final/).
+
+Before the final secondary claim, host readings were load average **18.05 /
+16.66 / 14.92**, **8 CPUs**, and CPU pressure `some avg10=29.76%`
+(`avg60=47.77%`, `avg300=52.08%`). Each run's CPU pressure is the harness's
+`some avg10` value after waiting up to 120 seconds for pressure below 20%.
+Run delay is the secondary server's `/proc/<pid>/schedstat` run-delay delta,
+converted from nanoseconds to milliseconds. Pause duration is recorded only
+when the browser journey completes; failed runs did not produce a pause count
+or pause duration. Server-side `lease_pause` timing markers are called out in
+the result where present.
+
+| Run | Width | Result | Revoke-to-clear | Pauses / pause ms | CPU pressure some avg10 | Server run delay |
+| ---: | ---: | --- | --- | --- | ---: | ---: |
+| 1 | 390px | PASS | 421 ms | 0 / 0 | 48.06% | 6,403.5 ms |
+| 2 | 1280px | PASS | 430 ms | 0 / 0 | 59.95% | 6,603.1 ms |
+| 3 | 390px | PASS | 386 ms | 0 / 0 | 64.18% | 5,880.5 ms |
+| 4 | 1280px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 50.74% | 11,096.4 ms |
+| 5 | 390px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 41.65% | 6,729.9 ms |
+| 6 | 1280px | FAIL; disconnected before Viewing | NOT REACHED | Pause marker; duration not captured | 49.35% | 8,456.8 ms |
+| 7 | 390px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 24.48% | 5,907.1 ms |
+| 8 | 1280px | PASS | 497 ms | 0 / 0 | 61.93% | 10,221.1 ms |
+| 9 | 390px | FAIL; disconnected before Viewing | NOT REACHED | Not captured | 67.63% | 13,357.2 ms |
+| 10 | 1280px | FAIL; disconnected before Viewing | NOT REACHED | Pause marker; duration not captured | 36.15% | 15,071.9 ms |
+
+Failure timing evidence:
+
+- Run 4 returned admission HTTP 200, upgraded and received its first browser
+  frame at **2,535 ms**. It stopped as disconnected at **5,907 ms**; retries
+  also closed before “Viewing”. No revocation was attempted.
+- Run 5 returned admission HTTP 200 and received its first browser frame at
+  **1,225 ms**, then disconnected at **3,491 ms**. A later check succeeded,
+  after the browser socket had closed. No revocation was attempted.
+- Run 6 received its first browser frame at **2,220 ms**. A renewal timed out
+  after **1,201 ms** and emitted `lease_pause` at **4,292 ms**; a check succeeded
+  **305 ms** later, but the socket disconnected at **4,614 ms**, before Viewing.
+- Run 7 received its first browser frame at **1,309 ms**, disconnected at
+  **2,414 ms**, then recorded an unavailable check (**1,253 ms**) and a denied
+  check (**1,108 ms**). No revocation was attempted.
+- Run 9 received its first browser frame at **2,079 ms**, disconnected at
+  **4,267 ms**, then recorded a denied check at **4,969 ms**. No revocation was
+  attempted.
+- Run 10 emitted `lease_pause` at **3,063 ms** and resumed after a successful
+  check at **3,205 ms**. It received its first browser frame at **2,684 ms**,
+  disconnected at **5,139 ms**, and then recorded two unavailable checks
+  (**1,213 ms** and **1,293 ms**) followed by a successful check. No revocation
+  was attempted.
+
+The first two attempts on updated main failed before viewer admission because
+`browserLiveViewJourney` installed its state observer before the modal existed
+and queried `aria-label` although the native dialog uses `aria-labelledby`.
+For the final measured batch only, I temporarily moved that observer after the
+initial unavailable dialog opened and targeted the labelled dialog. This was a
+local dev-stack test-harness adjustment; it is not in the branch. Application
+source and every viewer, lease and revocation deadline remained unchanged. The
+checked-in harness was restored after the run.
+
+The final `up.sh --fresh` journey with that temporary harness adjustment passed
+the upload and live-view steps, then failed at the later audit privacy-canary
+assertion. The post-batch `journey.sh` invocation failed earlier at the chat
+`.caret` wait; upload and live view were not reached in that invocation. Stack
+2 teardown **PASS**ed through the shell EXIT trap. No owner stack or Docker
+daemon settings were changed.
+
+On current `origin/main` (#158 included), lint, typecheck and `check:events`
+**PASS**ed. The full root suite **FAIL**ed: **1,604 passed, 15 skipped, 1
+failed test and 1 failed suite** across 106 files (100 passed, 4 skipped, 2
+failed). `libs/models/test/gateway.test.ts` failed with JetStream “heartbeats
+missed”; `apps/server/test/integrations.test.ts` failed its Chromium dev-proxy
+refresh assertion. Isolated retries of both files then **PASS**ed: gateway,
+80 passed / 1 skipped; integrations, 20 passed. The infra TypeScript check also
+passed on the rebased revision with the temporary harness adjustment. Logs,
+commands and timings are retained in [the final batch directory](i77-live-view/final/).
+The live qualification remains **FAIL**.

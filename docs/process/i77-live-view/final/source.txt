@@ -1,0 +1,4 @@
+source_commit=cfbf50aa4293af78e90883cce2e848d51fb5a263
+initial_main_commit=304639b
+rebase_target=cfbf50a (#158)
+temporary_harness_edit=infra/dev-stack/browser-live-view.ts; restored before commit

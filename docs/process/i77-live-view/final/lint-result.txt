@@ -1,0 +1,4 @@
+started=2026-10-05T05:19:57Z
+command=nice -n 10 npm run lint
+exit=0
+wall_seconds=145

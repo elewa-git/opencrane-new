@@ -1,0 +1,6 @@
+timestamp_utc=2026-10-05T04:36:09Z
+loadavg=18.05 16.66 14.92 11/2488 3783022
+nproc=8
+pressure_cpu_begin
+some avg10=29.76 avg60=47.77 avg300=52.08 total=91888823567
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0

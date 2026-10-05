@@ -1,0 +1,4 @@
+started=2026-10-05T05:22:27Z
+command=nice -n 10 npm run typecheck
+exit=0
+wall_seconds=109
