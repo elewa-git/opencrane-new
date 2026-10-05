@@ -6,7 +6,7 @@ Sign-in and short-lived [access passes](../../GLOSSARY.md#access-token) for peop
 
 ## Where it fits
 
-This is a shared library used by the back end, background workers and the models process. It talks to Zitadel during sign-in and uses the event store when it checks computer credentials.
+This is a shared library used by the back end, background workers and the models process. It talks to Zitadel during sign-in and uses the [event store](../../GLOSSARY.md#event-log-event-store) when it checks computer credentials.
 
 ```mermaid
 flowchart LR
@@ -14,6 +14,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
+  auth -->|checks computer records| events["libs/event-store<br/>saved events"]
 ```
 
 ## What it is responsible for
