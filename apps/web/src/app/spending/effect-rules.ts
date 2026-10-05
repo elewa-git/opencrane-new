@@ -15,6 +15,13 @@ export interface SentResolution {
   command: ResolutionCommand;
 }
 
+export interface PendingResolution extends SentResolution {
+  inFlight: boolean;
+  noticeShown: boolean;
+  controller: AbortController;
+  noticeMessage: string;
+}
+
 type ResolutionViewState = 'matching' | 'already' | 'settled' | 'released'
   | 'pending' | 'not_recorded' | 'changed' | 'idle';
 
@@ -118,7 +125,32 @@ function resolutionMatches(
 ): boolean {
   return resolution.outcome === command.outcome
     && resolution.settledCents === command.settledCents
-    && JSON.stringify(resolution.evidence) === JSON.stringify(command.evidence);
+    && evidenceMatches(resolution.evidence, command.evidence);
+}
+
+// Compare named fields so harmless object key order changes do not change the receipt.
+function evidenceMatches(
+  recorded: Array<Record<string, string | number | boolean>>,
+  command: ResolutionCommand['evidence'],
+): boolean {
+  if (recorded.length !== command.length) return false;
+  for (let index = 0; index < recorded.length; index += 1) {
+    if (!evidenceEntryMatches(recorded[index]!, command[index]!)) return false;
+  }
+  return true;
+}
+
+function evidenceEntryMatches(
+  recorded: Record<string, string | number | boolean>,
+  command: Record<string, string | number | boolean>,
+): boolean {
+  const recordedKeys = Object.keys(recorded);
+  const commandKeys = Object.keys(command);
+  if (recordedKeys.length !== commandKeys.length) return false;
+  for (const key of recordedKeys) {
+    if (recorded[key] !== command[key]) return false;
+  }
+  return true;
 }
 
 export function resolutionWord(outcome: 'settled' | 'released'): string {

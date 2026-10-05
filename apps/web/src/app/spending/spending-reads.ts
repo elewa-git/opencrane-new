@@ -10,6 +10,8 @@ export type ReadResult<T> =
   | { state: 'ready'; value: T }
   | { state: 'failed' | 'unavailable' | 'access_changed' | 'not_found' };
 
+export type SpendingReadState = 'loading' | 'ready' | 'failed' | 'unavailable';
+
 export async function readBudget(signal: AbortSignal): Promise<ReadResult<BudgetSummary>> {
   const result = await readResponse('/api/org/models', budgetResponseSchema, signal);
   return extractBudget(result);

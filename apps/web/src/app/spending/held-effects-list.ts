@@ -4,6 +4,7 @@ import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
 import { isRecordedNotApplied, reasons, utcDateTime } from './effect-rules';
 import { money } from './spending-money';
+import type { SpendingReadState } from './spending-reads';
 
 @Component({
   selector: 'oc-held-effects-list',
@@ -15,7 +16,7 @@ import { money } from './spending-money';
 export class HeldEffectsList {
   readonly effects = input.required<EffectStatus[]>();
   readonly waitingCount = input.required<number>();
-  readonly loadState = input.required<string>();
+  readonly loadState = input.required<SpendingReadState>();
   readonly hasLoaded = input.required<boolean>();
   readonly checkStatus = output<{ permitId: string; opener: HTMLElement }>();
   readonly retry = output<void>();

@@ -18,11 +18,6 @@ input, select, button {
 }
 label { margin-top: 8px; }
 button { cursor: pointer; }
-button.primary {
-  border-color: var(--oc-primary-500);
-  background: var(--oc-primary-500);
-  color: var(--oc-primary-contrast);
-}
 button:disabled, fieldset:disabled { opacity: .65; }
 :focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
 @media (max-width: 600px) {

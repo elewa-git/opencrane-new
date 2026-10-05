@@ -3,6 +3,9 @@
   (closed)="markClosed()">
   <div class="drawer-content">
     <p role="status" aria-live="polite">{{ message() }}</p>
+    @if (readState() === 'reading') {
+      <oc-grain-loader height="8px" />
+    }
     @if (effect(); as current) {
       <dl class="facts">
         <div><dt>Reference</dt><dd class="mono">{{ current.permitId }}</dd></div>
@@ -23,28 +26,24 @@
         } @else {
           <p>Can't confirm with this evidence. The hold stays.</p>
         }
-      } @else if (submitState() === 'already' && current.resolution !== null) {
-        <p>This hold was already resolved: {{ resolutionWord(current.resolution.outcome) }}
-          {{ money(current.resolution.settledCents) }}. Your resolution was not applied.</p>
-      } @else if (submitState() === 'matching') {
-        <p>A resolution matching yours is recorded.</p>
       } @else if (current.resolution !== null && current.state === 'outcome_unknown') {
         <p>A resolution is recorded, but a later usage record does not match it.
           This can't be resolved here. The hold stays.</p>
       }
       @if (formAvailable()) {
         <form id="resolution-form" (submit)="onSubmit($event)">
-          <fieldset [disabled]="readState() === 'reading'">
+          <fieldset [disabled]="readState() === 'reading' || submitState() === 'saving'
+            || submitState() === 'lost'">
             <legend>Resolve this hold</legend>
             <label class="choice" for="outcome-settled">
               <input id="outcome-settled" type="radio" name="outcome" value="settled"
                 [checked]="outcome() === 'settled'" (change)="outcome.set('settled')" />
               <span><strong>Settle</strong><span>Record the confirmed cost.</span></span>
             </label>
-            <label class="choice" for="outcome-released"
-              [attr.aria-describedby]="!releasable() ? 'release-help' : null">
+            <label class="choice" for="outcome-released">
               <input id="outcome-released" type="radio" name="outcome" value="released"
                 [checked]="outcome() === 'released'" [disabled]="!releasable()"
+                [attr.aria-describedby]="!releasable() ? 'release-help' : null"
                 (change)="outcome.set('released')" />
               <span><strong>Release</strong><span>Confirm this call was never sent.</span></span>
             </label>

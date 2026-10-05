@@ -19,7 +19,9 @@
       [showAction]="false" />
     <button class="secondary" type="button" (click)="retry.emit()">Try again</button>
   } @else if (effects().length === 0) {
-    <p>✓ No uncertain effects. Nothing is waiting for final usage.</p>
+    <oc-shared-state kind="confirmed"
+      message="No uncertain effects. Nothing is waiting for final usage."
+      [showAction]="false" />
   } @else {
     <table>
       <thead><tr><th scope="col">Reference</th><th scope="col">Held</th>

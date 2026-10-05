@@ -193,6 +193,64 @@ it('sends integer cents, prevents duplicate saves, requires a fresh read after u
   expect(root.textContent).not.toContain('personal-default');
 });
 
+it('keeps typed budget values when validation fails', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(defaultFetch());
+  const root = await mountScreen();
+  inputValue(root, '#monthly-ceiling', '45000');
+  inputValue(root, '#default-group', 'bad group!');
+  root.querySelector<HTMLFormElement>('.budget-form')?.requestSubmit();
+
+  await vi.waitFor(() => expect(root.textContent).toContain('Enter a valid id'));
+  expect(root.querySelector<HTMLInputElement>('#monthly-ceiling')?.value).toBe('45000');
+  expect(root.querySelector<HTMLInputElement>('#default-group')?.value).toBe('bad group!');
+  expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(0);
+});
+
+it('keeps the typed ceiling after an uncertain budget save and checks status with one GET', async () => {
+  const rejectSave = true;
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async function budgetStatus(input, init) {
+    const url = requestUrl(input);
+    if (url === '/api/org/models' && init?.method === 'POST' && rejectSave) {
+      return await jsonReply(503);
+    }
+    return await defaultFetch()(input);
+  });
+  const root = await mountScreen();
+  inputValue(root, '#monthly-ceiling', '30000');
+  root.querySelector<HTMLFormElement>('.budget-form')?.requestSubmit();
+  await vi.waitFor(() => expect(root.textContent).toContain('Could not confirm the change'));
+  expect(root.querySelector<HTMLInputElement>('#monthly-ceiling')?.value).toBe('30000');
+  expect(root.textContent).toContain('Change reference:');
+
+  const checksBefore = fetchMock.mock.calls.filter(call =>
+    requestUrl(call[0]) === '/api/org/models' && call[1]?.method !== 'POST',
+  ).length;
+  root.querySelector<HTMLButtonElement>('.budget-form oc-shared-state button')?.click();
+  await vi.waitFor(() => expect(fetchMock.mock.calls.filter(call =>
+    requestUrl(call[0]) === '/api/org/models' && call[1]?.method !== 'POST',
+  )).toHaveLength(checksBefore + 1));
+  expect(fetchMock.mock.calls.filter(call => call[1]?.method === 'POST')).toHaveLength(1);
+});
+
+it('uses a new command id for each budget save in one visit', async () => {
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(defaultFetch());
+  const root = await mountScreen();
+  const form = root.querySelector<HTMLFormElement>('.budget-form');
+  form?.requestSubmit();
+  await vi.waitFor(() => expect(root.textContent).toContain('Budget saved'));
+  form?.requestSubmit();
+  await vi.waitFor(() => expect(fetchMock.mock.calls.filter(call =>
+    call[1]?.method === 'POST',
+  )).toHaveLength(2));
+  const ids: string[] = [];
+  for (const call of fetchMock.mock.calls.filter(call => call[1]?.method === 'POST')) {
+    const command = z.object({ commandId: z.string() }).parse(parseRequestBody(call[1]));
+    ids.push(command.commandId);
+  }
+  expect(new Set(ids).size).toBe(2);
+  expect(ids.every(id => /^[0-9a-f-]{36}$/u.test(id))).toBe(true);
+});
+
 it('keeps running calls in the waiting count without a Check status button', async () => {
   const running = effect({ permitId: 'permit-running', reasons: [], conflict: false });
   vi.spyOn(globalThis, 'fetch').mockImplementation(async function listHeldAndRunning(input) {
@@ -347,6 +405,78 @@ it('does not send a second POST while the first resolution is pending', async ()
   expect(fetchMock.mock.calls.filter(isResolveCall)).toHaveLength(1);
   finishPost?.(reply(503, { status: 'unavailable' }));
   await vi.waitFor(() => expect(root.textContent).toContain('Not recorded. Nothing changed.'));
+});
+
+it('reopens an in-flight hold without saying it was not recorded or enabling another save', async () => {
+  let finishPost: ((response: Response) => void) | undefined;
+  let settled = false;
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async function heldResolution(input) {
+    const url = requestUrl(input);
+    if (url === '/api/org/models') return await jsonReply(200, { budget });
+    if (url === '/api/org/effects') return await jsonReply(200, { effects: [effect()] });
+    if (url.endsWith('/resolve')) {
+      return await new Promise<Response>(resolve => { finishPost = resolve; });
+    }
+    if (settled) {
+      return await jsonReply(200, detail({
+        state: 'settled', label: 'Settled', settledCents: 120, sequence: 4,
+        resolution: {
+          outcome: 'settled', settledCents: 120,
+          evidence: [{ kind: 'provider_receipt', reference: 'provider-receipt-1',
+            digest: 'a'.repeat(64), amountCents: 120 }],
+        },
+      }));
+    }
+    return await jsonReply(200, detail());
+  });
+  const root = await mountScreen();
+  openReview(root);
+  await waitForForm(root);
+  await fillSettleForm(root);
+  submitButton(root).click();
+
+  const dialog = root.querySelector<HTMLDialogElement>('dialog[open]');
+  dialog?.dispatchEvent(new Event('cancel', { cancelable: true }));
+  openReview(root);
+  await vi.waitFor(() => expect(root.textContent).toContain('A resolution for this hold'));
+  expect(root.textContent).toContain('Its reference is');
+  expect(root.textContent).not.toContain('Not recorded. Nothing changed.');
+  expect(submitButton(root).getAttribute('aria-disabled')).toBe('true');
+
+  submitButton(root).click();
+  expect(fetchMock.mock.calls.filter(isResolveCall)).toHaveLength(1);
+  settled = true;
+  finishPost?.(reply(202, { status: 'appended' }));
+  await vi.waitFor(() => expect(root.textContent).toContain('Settled €1.20 for permit-1'));
+  expect(fetchMock.mock.calls.filter(isResolveCall)).toHaveLength(1);
+});
+
+it('shows a refusal on the page when the resolution drawer closed before the reply', async () => {
+  let finishPost: ((response: Response) => void) | undefined;
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async function refusedClosedPost(input) {
+    const url = requestUrl(input);
+    if (url === '/api/org/models') return await jsonReply(200, { budget });
+    if (url === '/api/org/effects') return await jsonReply(200, { effects: [effect()] });
+    if (url.endsWith('/resolve')) {
+      return await new Promise<Response>(resolve => { finishPost = resolve; });
+    }
+    return await jsonReply(200, detail());
+  });
+  const root = await mountScreen();
+  openReview(root);
+  await waitForForm(root);
+  await fillSettleForm(root);
+  submitButton(root).click();
+  root.querySelector<HTMLDialogElement>('dialog[open]')?.dispatchEvent(
+    new Event('cancel', { cancelable: true }),
+  );
+  finishPost?.(reply(400, { status: 'invalid' }));
+
+  await vi.waitFor(() => expect(root.textContent).toContain(
+    'The server refused this entry. Nothing was recorded.',
+  ));
+  expect(root.querySelector('oc-effect-resolution-drawer')).toBeNull();
+  expect(fetchMock.mock.calls.filter(isResolveCall)).toHaveLength(1);
 });
 
 it('checks a closed pending resolution with one GET after a lost reply', async () => {
@@ -607,7 +737,7 @@ it('keeps loaded data after a read failure and shows separate unavailable states
   await vi.waitFor(() => expect(root.textContent).toContain('permit-1'));
   failReads = true;
   root.querySelector<HTMLButtonElement>('.refresh-actions button')?.click();
-  await vi.waitFor(() => expect(root.textContent).toContain('Showing what we loaded at'));
+  await vi.waitFor(() => expect(root.textContent).toContain('Showing the last spending details'));
   expect(root.textContent).toContain('permit-1');
   fetchMock.mockImplementation(async function unavailableReads(input) {
     const url = requestUrl(input);
@@ -615,7 +745,7 @@ it('keeps loaded data after a read failure and shows separate unavailable states
     return await jsonReply(200, detail());
   });
   root.querySelector<HTMLButtonElement>('.refresh-actions button')?.click();
-  await vi.waitFor(() => expect(root.textContent).toContain('Budget service unavailable'));
-  expect(root.textContent).toContain('Spend evidence unavailable');
+  await vi.waitFor(() => expect(root.textContent).toContain('Showing the last spending details'));
+  expect(root.querySelectorAll('.stale')).toHaveLength(1);
   expect(root.textContent).toContain('permit-1');
 });

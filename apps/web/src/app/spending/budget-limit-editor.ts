@@ -1,12 +1,13 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, type SimpleChanges } from '@angular/core';
 import type { BudgetSummary } from '@opencrane/protocol';
 import { z } from 'zod';
 import { SharedState } from '../shared-state/shared-state';
 import { parseCents } from './effect-rules';
+import type { SpendingReadState } from './spending-reads';
 
 const scopeSchema = z.enum(['global', 'paying_group', 'assistant']);
 
-export type BudgetEditorLoadState = 'loading' | 'ready' | 'failed' | 'unavailable';
+export type BudgetEditorLoadState = SpendingReadState;
 export type BudgetEditorSaveState = 'idle' | 'applying' | 'confirmed' | 'unknown' | 'needs_input';
 
 @Component({
@@ -23,6 +24,7 @@ export class BudgetLimitEditor {
   readonly evidenceAt = input<string>();
   readonly changeReference = input('');
   readonly saveRequested = output<unknown>();
+  readonly checkStatus = output<void>();
 
   protected scope: z.infer<typeof scopeSchema> = 'global';
   protected scopeId = '';
@@ -30,7 +32,8 @@ export class BudgetLimitEditor {
   protected daily = '';
   protected defaultGroup = '';
 
-  ngOnChanges(): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['budget']) return;
     const current = this.budget();
     this.defaultGroup = current.defaultPayingGroupId ?? '';
     this.daily = String(current.dailyCeilingCents);

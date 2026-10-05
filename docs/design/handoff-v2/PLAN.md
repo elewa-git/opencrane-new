@@ -293,7 +293,7 @@ Their parent owns HTTP and emits/reloads typed results; money stays integer cent
 | P3-15 [#56](https://github.com/elewa-git/opencrane-new/issues/56) | SPD-01, SPD-03, SPD-06–09, SPD-20–28, SPD-30–35 | SpendingSummary, MoneyCard, EffectResolutionDrawer, EffectEvidenceList, HingeDrawer | E **exists**, B **exists**. First build unknown-effects list and resolution drawer; show held/settled separately, original permit, recorded observations, structured evidence entry, safe integer validation, pending reaction, conflicts, role loss and Check status. Broader SPD summary attribution waits for P4-26. |
 | P4-26 [#108](https://github.com/elewa-git/opencrane-new/issues/108) | SPD-01–09, SPD-04-RM, SPD-20–28, SPD-30–35, SPD-40–46, SPD-50–54 | SpendingSummary, MoneyCard, BudgetLimitForm, EffectResolutionDrawer, BudgetStopNotice | B **exists**, E **exists**, G **branch available**. Named assistant/payer choices, root/routine joins, personal default and hard-stop consequences **need building** with P4-11/P4-24. Finish scope selection, lowering review, zero, rollover and linked chat; reuse the P3-15 drawer. |
 
-Bind E exactly: List `{ effects }`; detail supplies `sequence`, `state`,
+Bind E exactly: list `{ effects }`; detail supplies `sequence`, `state`,
 `reservedAt`, `reservedCents`, nullable `settledCents`, model/price table,
 observations/resolution and `csrf`. Resolve with `commandId`,
 `expectedSequence`, `outcome: settled|released`, `settledCents`, and 1–10

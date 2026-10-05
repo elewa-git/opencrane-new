@@ -1,12 +1,16 @@
-import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
+import {
+  afterNextRender, ChangeDetectionStrategy, Component, ElementRef, inject, Injector,
+  input, output, signal,
+} from '@angular/core';
 import type { EffectDetail, EffectStatus } from '@opencrane/protocol';
 import { HingeDrawer } from '../ui/hinge-drawer';
 import {
   canRelease, canResolve, monthPeriod, normaliseDigest, parseCents, recordedAmounts,
-  reasons as effectReasons, resolutionWord, utcDateTime, validReference,
+  reasons as effectReasons, utcDateTime, validReference,
 } from './effect-rules';
 import type { ResolutionCommand } from './effect-rules';
 import { EffectEvidenceList } from './effect-evidence-list';
+import { GrainLoader } from '../ui/grain-loader';
 import { money } from './spending-money';
 
 export type DrawerReadState = 'idle' | 'reading' | 'ready' | 'failed' | 'not_found';
@@ -16,12 +20,14 @@ export type DrawerSubmitState = 'idle' | 'saving' | 'pending' | 'invalid' | 'una
 
 @Component({
   selector: 'oc-effect-resolution-drawer',
-  imports: [HingeDrawer, EffectEvidenceList],
+  imports: [HingeDrawer, EffectEvidenceList, GrainLoader],
   templateUrl: './effect-resolution-drawer.html',
   styleUrl: './effect-resolution-drawer.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class EffectResolutionDrawer {
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
   readonly permitId = input.required<string>();
   readonly listEffect = input<EffectStatus>();
   readonly effect = input<EffectDetail | undefined>();
@@ -58,10 +64,6 @@ export class EffectResolutionDrawer {
     return `${money(effect.reservedCents)} reserved`;
   }
 
-  protected resolutionWord(outcome: 'settled' | 'released'): string {
-    return resolutionWord(outcome);
-  }
-
   protected releasable(): boolean {
     const effect = this.effect();
     return effect !== undefined && canRelease(effect);
@@ -81,6 +83,7 @@ export class EffectResolutionDrawer {
   }
 
   protected centsError(): string | undefined {
+    if (this.outcome() === 'released') return undefined;
     if (!this.attempted() && this.centsText().trim() === '') return undefined;
     const cents = parseCents(this.centsText());
     if (cents === undefined) {
@@ -106,7 +109,8 @@ export class EffectResolutionDrawer {
   }
 
   protected submitAllowed(): boolean {
-    if (this.readState() === 'reading' || this.submitState() === 'saving') return false;
+    if (this.readState() === 'reading' || this.submitState() === 'saving'
+      || this.submitState() === 'lost') return false;
     return this.resolvable() && this.outcomeAllowed();
   }
 
@@ -188,23 +192,16 @@ export class EffectResolutionDrawer {
   }
 
   private fieldsValid(): boolean {
-    if (this.outcome() === 'settled' && parseCents(this.centsText()) === undefined) return false;
-    if (this.outcome() === 'settled' && this.centsError()) return false;
-    if (!validReference(this.referenceText())) return false;
-    if (!normaliseDigest(this.digestText())) return false;
-    if (this.outcome() === 'released' && !this.checkedNotDispatched()) return false;
-    if (this.referenceError() || this.digestError()) return false;
-    return true;
+    return !this.centsError() && !this.referenceError() && !this.digestError()
+      && !this.notDispatchedError();
   }
 
   private focusFirstInvalidField(): void {
-    queueMicrotask(focusInvalidField);
+    afterNextRender(() => {
+      const invalidField = this.host.nativeElement.querySelector<HTMLElement>(
+        '[aria-invalid="true"]',
+      );
+      invalidField?.focus();
+    }, { injector: this.injector });
   }
-}
-
-function focusInvalidField(): void {
-  const invalidField = document.querySelector<HTMLElement>(
-    'oc-effect-resolution-drawer [aria-invalid="true"]',
-  );
-  invalidField?.focus();
 }

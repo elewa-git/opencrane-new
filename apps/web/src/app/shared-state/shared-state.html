@@ -40,8 +40,10 @@
     }
     @if (stateTime()) { <time class="detail" [attr.datetime]="timestamp()">{{ stateTime() }}</time> }
     @if (changeReference()) {
-      <code class="detail" [attr.aria-hidden]="hideReferenceFromAnnouncement() ? 'true' : null">
-        {{ changeReference() }}</code>
+      <span class="detail" [attr.aria-hidden]="hideReferenceFromAnnouncement() ? 'true' : null">
+        Change reference: <code
+          [attr.aria-hidden]="hideReferenceFromAnnouncement() ? 'true' : null">
+          {{ changeReference() }}</code></span>
     }
   </span>
   @if (shownAction(); as label) {

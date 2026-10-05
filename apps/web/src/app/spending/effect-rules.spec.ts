@@ -1,4 +1,4 @@
-import type { EffectStatus } from '@opencrane/protocol';
+import type { EffectDetail, EffectStatus } from '@opencrane/protocol';
 import {
   canRelease, canResolve, needsReview, normaliseDigest, parseCents, resolutionView,
   recordedAmounts, validReference, waitingForUsage,
@@ -74,6 +74,36 @@ it('compares a sent resolution only with the permit that received it', () => {
   });
   expect(resolutionView(first, sent, '10:00 UTC').state).toBe('not_recorded');
 });
+
+it.each(['settled', 'resolution_pending'] as const)(
+  'recognises another recorded resolution after a %s response', state => {
+    const sent = {
+      permitId: 'permit-1', expectedSequence: 3,
+      command: {
+        commandId: 'command-1', expectedSequence: 3, outcome: 'settled' as const,
+        settledCents: 120,
+        evidence: [{ kind: 'provider_receipt', reference: 'mine', digest: 'a'.repeat(64),
+          amountCents: 120 }],
+      },
+    };
+    const otherResolution = {
+      outcome: 'settled' as const,
+      settledCents: 180,
+      evidence: [{ kind: 'provider_receipt' as const, reference: 'other',
+        digest: 'b'.repeat(64), amountCents: 180 }],
+    };
+    const actual: EffectDetail = { ...effect({
+      state,
+      resolution: otherResolution,
+      settledCents: state === 'settled' ? 180 : null,
+    }), csrf: 'c'.repeat(64) };
+
+    expect(resolutionView(actual, sent, '10:00 UTC')).toMatchObject({
+      state: 'already',
+      message: 'This hold was already resolved: Settled €1.80. Your resolution was not applied.',
+    });
+  },
+);
 
 it.each(['1.2', '1e3', '0x10', '-1', '01', '', '9007199254740992'])(
   'rejects invalid cents text %s', (text) => {

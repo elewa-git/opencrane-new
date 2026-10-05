@@ -1,17 +1,15 @@
 <form class="budget-form" (submit)="save($event)">
   @if (saveState() === 'applying') {
-    <oc-shared-state kind="applying" message="Saving budget…"
-      [showAction]="false" [detail]="'Change reference: ' + changeReference()"
+      <oc-shared-state kind="applying" message="Saving budget…"
+      [showAction]="false"
       [changeReference]="changeReference()" />
   } @else if (saveState() === 'confirmed') {
-    <oc-shared-state kind="confirmed" message="Budget saved"
-      [detail]="'Change reference: ' + changeReference()"
+      <oc-shared-state kind="confirmed" message="Budget saved"
       [evidenceAt]="evidenceAt()" [changeReference]="changeReference()" />
   } @else if (saveState() === 'unknown') {
-    <oc-shared-state kind="unknown"
+      <oc-shared-state kind="unknown"
       message="Could not confirm the change. Check status before editing again."
-      [detail]="'Change reference: ' + changeReference()"
-      [changeReference]="changeReference()" />
+      [changeReference]="changeReference()" (action)="checkStatus.emit()" />
   } @else if (saveState() === 'needs_input') {
     <oc-shared-state kind="needs_input"
       message="Enter a valid id and non-negative whole euro cents in the safe integer range."

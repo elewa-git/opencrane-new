@@ -22,6 +22,11 @@ const budget = {
   reservedCents: 120, ceilingCents: 20000, dailyCeilingCents: 2000, ceilings: [],
 };
 
+function budgetFor(state) {
+  if (state.id !== 'SPD-01') return budget;
+  return { ...budget, monthCents: 0, reservedCents: 0 };
+}
+
 function makeEffect(state) {
   const observations = [];
   let reasons = ['settle_timeout'];
@@ -100,7 +105,7 @@ async function apiFixture(route, state) {
     if (state.id === 'SPD-08' || state.id === 'SPD-35') return route.fulfill(response(403, { status: 'refused' }));
     if (state.id === 'SPD-03') await waitForLoadingCapture();
     if (state.id === 'SPD-06' && state.refreshFailed) return route.fulfill(response(500, { status: 'failed' }));
-    return route.fulfill(response(200, { budget }));
+    return route.fulfill(response(200, { budget: budgetFor(state) }));
   }
   if (path === '/api/org/effects') {
     if (state.id === 'SPD-07') return route.fulfill(response(503, { status: 'unavailable' }));
@@ -200,7 +205,7 @@ async function prepareState(page, state) {
   if (state.id === 'SPD-06') {
     state.refreshFailed = true;
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();
-    await page.getByText('Showing what we loaded at', { exact: false }).first().waitFor();
+    await page.getByText('Showing the last spending details', { exact: false }).waitFor();
     return;
   }
   if (state.id === 'SPD-09') {
@@ -213,7 +218,7 @@ async function prepareState(page, state) {
   if (state.id === 'SPD-20' || state.id === 'SPD-23') return;
   await openDrawer(page);
   if (state.id === 'SPD-21') {
-    await page.getByText('Reading this hold…', { exact: true }).waitFor();
+    await page.getByText('Reading recorded evidence for permit-1…', { exact: true }).waitFor();
     return;
   }
   if (state.id === 'SPD-25') {
@@ -221,6 +226,9 @@ async function prepareState(page, state) {
     return;
   }
   if (state.id === 'SPD-27') {
+    await page.getByRole('button', { name: 'Settle', exact: true }).click();
+    assert.equal(await page.evaluate(() => globalThis.document.activeElement?.id), 'settle-cents',
+      'Empty submit focuses the first invalid field');
     await page.locator('#settle-cents').fill('1.2');
     await page.locator('#receipt-reference').fill('bad reference');
     await page.locator('#receipt-digest').fill('abc');
@@ -244,7 +252,11 @@ async function prepareState(page, state) {
         await page.getByText('We couldn\'t tell whether the resolution', { exact: false })
           .first().waitFor();
       }
-      if (state.id === 'SPD-30') await page.getByText('Saving resolution', { exact: false }).first().waitFor();
+      if (state.id === 'SPD-30') {
+        await page.getByText('A resolution for this hold is still being sent.', {
+          exact: false,
+        }).first().waitFor();
+      }
     }
   }
   if (state.id === 'SPD-33') {
@@ -316,8 +328,10 @@ async function captureState(browser, id, width, motion, captures) {
   await waitForReady(page, id);
   await prepareState(page, state);
   await assertDrawerFooter(page, id);
-  await page.evaluate(waitForAnimations);
+  if (id !== 'SPD-03') await page.evaluate(waitForAnimations);
   await page.evaluate(waitForFonts);
+  await assertReferenceLayout(page, id);
+  await assertSecondaryButtonStyle(page);
   await assertPhoneLayout(page, width);
   if (width !== 320) {
     const name = `${id}-${width}-${motion ? 'reduce' : 'normal'}.png`;
@@ -326,6 +340,28 @@ async function captureState(browser, id, width, motion, captures) {
   }
   if (width <= 390) await assertEscapeFocus(page);
   await page.close();
+}
+
+async function assertReferenceLayout(page, id) {
+  if (!id.startsWith('SPD-2') && !id.startsWith('SPD-3')) return;
+  const values = page.locator('oc-held-effects-list .reference-values').first();
+  if (await values.count() === 0) return;
+  const text = await values.innerText();
+  assert.match(text, /permit-1\ngpt-6\.1-sol\n/,
+    'Permit, model and reservation time appear on separate lines');
+}
+
+async function assertSecondaryButtonStyle(page) {
+  const button = page.locator('button.secondary').first();
+  if (await button.count() === 0) return;
+  const style = await button.evaluate(readSecondaryButtonStyle);
+  assert.equal(style.color, 'rgb(11, 119, 135)', 'Secondary button text has clear contrast');
+  assert.equal(style.borderStyle, 'solid', 'Secondary button has a visible border');
+}
+
+function readSecondaryButtonStyle(button) {
+  const style = globalThis.getComputedStyle(button);
+  return { color: style.color, borderStyle: style.borderStyle };
 }
 
 async function assertDrawerFooter(page, id) {
@@ -379,14 +415,33 @@ function frameName(id) {
   return {
     id,
     result: 'adapted',
-    differences: [
-      'No tabs or search controls.',
-      'No work, payer or requester columns.',
-      'No separate Reason box or chg_ resolver reference.',
-      'The existing budget form remains available.',
-      'Held effects appear before the budget cards.',
-      'Money bars show settled and reserved amounts in two segments.',
-      'Each resolution contains one evidence entry.',
-    ],
+    differences: frameDifferences(id),
   };
+}
+
+function frameDifferences(id) {
+  const byId = {
+    'SPD-01': ['No held rows are present.', 'Monthly usage and reservations are zero.'],
+    'SPD-03': ['Held spend and budget replies are still loading.', 'No budget fields or held rows are shown yet.'],
+    'SPD-06': ['A refresh failed.', 'The last successful spend and budget values remain visible.'],
+    'SPD-07': ['The spend and budget services did not answer.', 'No saved amounts are shown.'],
+    'SPD-08': ['The Owner or Admin role is missing.', 'Protected amounts and hold references are cleared.'],
+    'SPD-09': ['Organisation navigation is open.', 'The spending list remains behind the menu.'],
+    'SPD-20': ['The held row is shown without its detail drawer.', 'No search or column filters are present.'],
+    'SPD-21': ['Recorded evidence is still loading.', 'The drawer has no evidence or resolution form yet.'],
+    'SPD-22': ['One hold reason is present.', 'No usage observation has been recorded.'],
+    'SPD-23': ['Several hold reasons and conflicting evidence are present.', 'Resolution is blocked.'],
+    'SPD-24': ['One recorded usage amount is shown.', 'The amount must match before settlement.'],
+    'SPD-25': ['The release choice is selected.', 'A checked non-dispatch record is required.'],
+    'SPD-26': ['Recorded usage amounts disagree.', 'Resolution is blocked.'],
+    'SPD-27': ['Invalid fields are shown after submit and Enter.', 'The first invalid field receives focus.'],
+    'SPD-28': ['The entered amount is higher than the hold.', 'The full settled amount will be recorded.'],
+    'SPD-30': ['The resolution POST is still in flight.', 'The drawer offers no second command.'],
+    'SPD-31': ['The hold has been settled.', 'The evidence remains available for review.'],
+    'SPD-32': ['The POST reply could not be confirmed.', 'The command reference remains available for a GET check.'],
+    'SPD-33': ['A different resolution is already recorded.', 'The new resolution was not applied.'],
+    'SPD-34': ['The hold sequence changed during review.', 'The evidence must be refreshed.'],
+    'SPD-35': ['Access was refused on a narrow screen.', 'Protected amounts and hold references are cleared.'],
+  };
+  return byId[id];
 }

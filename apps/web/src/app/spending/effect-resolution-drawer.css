@@ -27,10 +27,6 @@ input[type=radio], input[type=checkbox] { width: 20px; height: 20px; }
 .error { color: #9c241e; }
 footer[overlayFooter] { display: flex; justify-content: flex-end; gap: 10px; }
 button { min-height: 44px; padding: 8px 14px; }
-button.primary { border-color: var(--oc-primary-500); background: var(--oc-primary-500);
-  color: var(--oc-primary-contrast); }
-button.secondary { border-color: var(--oc-primary-500); background: white;
-  color: var(--oc-primary-500); }
 button:disabled, button[aria-disabled="true"] { opacity: .65; }
 .cancel { background: white; }
 @media (max-width: 600px) {
