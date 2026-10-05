@@ -262,32 +262,56 @@ Ask records `approval_required` without dispatch; approval creation/consumption
 belongs to P3-2. Lossless approval argument binding belongs there too.
 
 Model and MCP admission share `currentAuthority`: current member/role, team
-membership, assistant activity, conversation, explicit requester and assistant
-resource grants, lifecycle tokens and delegation. OpenFGA is queried at higher
-consistency on every call. Receipt reads run in groups of at most 16; every relevant
-event receipt must exist before a projection can authorise; lag denies. A two-second
-freshness budget starts when the decision request arrives. One global head (metadata,
-not a log scan) fixes the snapshot. Authority reads use exact member, assistant,
-conversation and resource-grant subjects, starting at position 1 and stopping at
-that head. Team subjects come only from the assistant owner and current team grants
-for that resource. The turn lifecycle lives on the exact computer and conversation
-subjects; MCP policy lives on the exact server subject.
+membership, assistant activation, conversation participation, requester and
+assistant grants, and OpenFGA permission checks. Every required event must have
+reached OpenFGA before admission. Decision receipts cover the requester, assistant
+and team grants, including revoked team grants. Another member's direct grant
+needs no receipt for this call.
+
+Decisions read computer credentials and full computer/conversation histories first,
+with their own read deadline. They capture a log position before those histories,
+then start the access check. The whole decision keeps its original two-second
+deadline; reading history does not buy more time. `decisionActivity` reads only
+new computer and conversation events after the captured position. It refuses
+participant changes, a closed conversation, changes to the computer's identity or
+ready state, and a stop, completion, failure or computer close for the current turn.
+The recorded ready computer must match the one that supplied the token check.
+Other conversations' computer turn events, file uploads/deliveries/rejections,
+posted messages and output reports leave ordinary call access unchanged.
+
+`decisionAuthorityFence` checks only the small member, ownership, assistant,
+resource-grant, discovered team and MCP policy streams. It ignores member
+invitations, ownership changes for other members, changes to other team members
+and direct grants for unrelated grantees. Shared spending checks the caller's
+current group membership and waits for that person's changes to reach OpenFGA.
+Team grants stay strict because they can supply access to the requester.
+The shared `authorityFence` and `conversationAccessFence` keep their existing rules.
+All failures caused by a relevant change retain the exact `Authority changed`
+message used by the live-view checks. This design filters unrelated events rather
+than retrying a reservation or a single-use approval.
 
 `authorityFence` returns a freshness check with `include(...subjects)`, `head` and
-the original absolute `deadline`. Gateway and approval reads share that deadline,
-including credential, policy and approval-history reads; store retries cannot reset it.
-Callers add exact subjects as verified credentials, policy and paying-group bindings
-reveal them. Subjects discovered later still use the original snapshot head.
-Before reservation (inside the budget queue), approval use and final admission,
-any authority change after the snapshot or an expired two-second budget denies.
-Command, file, reasoning and message output reports can advance the exact
-conversation head; the fence then rechecks every watched subject. Stop, turn
-lifecycle, participant and conversation changes still refuse admission.
-Independent assistant, conversation, active-turn and IAM reads run together.
-Unrelated IAM, budget and audit traffic do not invalidate authority. No permission
-or event-history cache survives a decision. The read cost follows the selected
-subjects' histories, not the whole silo; long individual histories may still need
-a fenced projection. Approval card listing remains a separate replay query.
+an absolute `deadline`. Decision policy, approval and access reads share the
+access deadline. Store retries and budget-queue waits cannot reset it. Discovered
+subjects use the same starting position. Before reservation, approval use and
+final admission, a relevant change or an expired check refuses the call. A failure
+before reservation holds no money. A failure after reservation releases the
+unsent hold at zero cents. No permission or event-history cache survives a decision.
+
+Ask tools keep stricter conversation checks: a posted message or a new turn
+invalidates the old approval, as do stops and closes for its bound turn. Decision
+approval reads reuse the earlier conversation history, and the final activity
+check catches later invalidation. The conditional `approval.used` append still
+allows one use only. Approval card listing and human decisions keep their existing
+read and write checks.
+
+The tests in `test/decision-fence.test.ts` adapt the event-store probes for #164.
+They cover each harmless event and real revocation through model and MCP HTTP
+admission, early and late money safety, the computer-token handover, unrelated
+projection delays, full-history ordering and single-use approval admission.
+The existing gateway and server approval tests cover real gateway forwarding,
+late revocation and message invalidation. The tests use disposable services and
+scripted providers; they make no paid model calls.
 
 Memory scopes are empty. Personal work retains the installation's paying group;
 team turns require an explicit paying-group binding; there is no fabricated

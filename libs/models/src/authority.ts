@@ -8,12 +8,15 @@ import { memberStateTypes } from './ownership.ts';
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>) {
+  fresh?: Awaited<ReturnType<typeof authorityFence>>, conversationRows?: StoredEvent[]) {
   fresh ??= await authorityFence(store, performance.now());
   const auth = memberAuthorisation(binding);
   const facts = [], receipts: string[] = [];
   let active = true;
-  const subjects = [`ownership-${binding.silo}`, `member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, grantStream(resourceType, resourceId)];
+  const subjects = [`ownership-${binding.silo}`, `member-${requester}`,
+    `assistant-${assistant}`, grantStream(resourceType, resourceId)];
+  // Reuse a caller's earlier chat read only when it also checks later access changes.
+  if (!conversationRows) subjects.push(`conversation-${conversation}`);
   fresh.include(...subjects, ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
   const snapshotHead = fresh.head;
   const deadline = fresh.deadline;
@@ -21,14 +24,18 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
     return readAt(store, subject, snapshotHead, deadline);
   }
   const histories = await Promise.all(subjects.map(readSubject));
-  const teams = authorityTeams(histories.flat(), binding.silo);
+  if (conversationRows) histories.push(conversationRows);
+  const initialRows = histories.flat();
+  const teams = authorityTeams(initialRows, binding.silo);
+  const forDecision = conversationRows !== undefined;
+  const decisionGrantees = grantReceiptGrantees(initialRows, requester, assistant, forDecision);
   fresh.include(...teams);
   const teamReads = [...teams].map(readSubject);
   histories.push(...await Promise.all(teamReads));
   for (const row of histories.flat().sort((a, b) => a.sequence - b.sequence)) {
     const e = row.event, d = data(e);
     if (e.silo !== binding.silo) continue;
-    if (relevant(e, requester, assistant, conversation, resourceType, resourceId)) {
+    if (relevant(e, requester, assistant, conversation, resourceType, resourceId, decisionGrantees)) {
       receipts.push(e.id);
       facts.push([e.id, row.sequence, d]);
     }
@@ -68,14 +75,47 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
   return teams;
 }
 
-function relevant(e: EventEnvelope, requester: string, assistant: string, conversation: string, resourceType: string, resourceId: string) {
-  const d = data(e);
-  return (e.subject === `ownership-${e.silo}` && (e.type === 'ownership.seeded' || d['memberId'] === requester)) ||
-      (e.subject === `member-${requester}` && memberStateTypes.includes(e.type)) ||
-      (e.subject === `assistant-${assistant}` && e.type === 'assistant.created') ||
-      (e.type.startsWith('team.') && (d['memberId'] === requester || e.type === 'team.created')) ||
-      (d['conversationId'] === conversation && ['conversation.created', 'participant.added', 'participant.removed'].includes(e.type)) ||
-      (e.type.startsWith('grant.') && d['resourceType'] === resourceType && d['resourceId'] === resourceId);
+function grantReceiptGrantees(rows: StoredEvent[], requester: string, assistant: string,
+  forDecision: boolean) {
+  if (!forDecision) return undefined;
+  const grantees = new Set([requester, assistant]);
+  for (const { event } of rows) {
+    const fields = data(event);
+    // Keep teams whose grants were revoked too. The permissions service may
+    // still allow the old grant until it applies the revocation.
+    if (event.type === 'grant.given' && fields['granteeKind'] === 'team') {
+      grantees.add(String(fields['granteeId']));
+    }
+  }
+  return grantees;
+}
+
+function relevant(event: EventEnvelope, requester: string, assistant: string,
+  conversation: string, resourceType: string, resourceId: string,
+  decisionGrantees?: Set<string>) {
+  const fields = data(event);
+  if (event.subject === `ownership-${event.silo}`) {
+    return event.type === 'ownership.seeded' || fields['memberId'] === requester;
+  }
+  if (event.subject === `member-${requester}`) return memberStateTypes.includes(event.type);
+  if (event.subject === `assistant-${assistant}`) return event.type === 'assistant.created';
+  if (event.type.startsWith('team.')) {
+    return fields['memberId'] === requester || event.type === 'team.created';
+  }
+  const changesParticipation = [
+    'conversation.created', 'participant.added', 'participant.removed',
+  ].includes(event.type);
+  if (fields['conversationId'] === conversation && changesParticipation) return true;
+  return relevantGrant(event, resourceType, resourceId, decisionGrantees);
+}
+
+function relevantGrant(event: EventEnvelope, resourceType: string, resourceId: string,
+  decisionGrantees?: Set<string>) {
+  if (!event.type.startsWith('grant.')) return false;
+  const fields = data(event);
+  if (fields['resourceType'] !== resourceType || fields['resourceId'] !== resourceId) return false;
+  if (decisionGrantees && !decisionGrantees.has(String(fields['granteeId']))) return false;
+  return true;
 }
 
 async function readAt(store: EventStore, subject: string, head: number, deadline: number) {
@@ -184,4 +224,51 @@ function changesChatAccess(subject: string, type: string) {
     return memberStateTypes.includes(type);
   }
   return true;
+}
+
+/** Keep other callers strict; only decisions can ignore unrelated access events. */
+export async function decisionAuthorityFence(store: EventStore, started: number,
+  subjects: string[], requesterId: string, assistantId: string) {
+  const grantees = new Set([requesterId, assistantId]);
+  async function checkDecisionChanges(store: EventStore, subject: string, from: number,
+    to: number, deadline: number) {
+    for await (const row of store.readStream(subject, from, deadline)) {
+      if (row.sequence > to) break;
+      if (!unrelatedDecisionEvent(row.event, requesterId, grantees)) {
+        throw new Error('Authority changed');
+      }
+    }
+  }
+  const authority = await createAuthorityFence(
+    store, started, subjects, Infinity, checkDecisionChanges);
+  const includeSubjects = authority.include;
+  function include(...subjects: string[]) {
+    includeSubjects(...subjects);
+    for (const subject of subjects) {
+      if (subject.startsWith('team-')) grantees.add(subject.slice('team-'.length));
+    }
+  }
+  const snapshot = { include };
+  return Object.assign(authority, snapshot);
+}
+
+function unrelatedDecisionEvent(event: EventEnvelope, requesterId: string,
+  grantees: Set<string>) {
+  const fields = data(event);
+  if (event.type === 'grant.given' || event.type === 'grant.revoked') {
+    // Refuse team grant changes because they may alter this person's access.
+    return fields['granteeKind'] !== 'team' && !grantees.has(String(fields['granteeId']));
+  }
+  if (event.subject.startsWith('ownership-')) {
+    const changesOwner = ['ownership.transferred', 'ownership.stepped_down'].includes(event.type);
+    return changesOwner && fields['memberId'] !== requesterId;
+  }
+  if (event.subject.startsWith('member-')) {
+    return event.type === 'member.invited';
+  }
+  if (event.subject.startsWith('team-')) {
+    const changesMembership = ['team.member_added', 'team.member_removed'].includes(event.type);
+    return changesMembership && fields['memberId'] !== requesterId;
+  }
+  return false;
 }
