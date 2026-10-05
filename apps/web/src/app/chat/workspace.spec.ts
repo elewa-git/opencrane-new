@@ -18,7 +18,118 @@ function politeStatusText(root: HTMLElement): string {
   return messages.join(' ');
 }
 
+interface DownloadScenario {
+  name: string;
+  expectedVisible: boolean;
+  rows: object[];
+}
+
+async function checkDownloadVisibility(scenario: DownloadScenario): Promise<void> {
+  history.replaceState({}, '', '/workspace?conversation=chat');
+  vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+    const path = input instanceof Request ? input.url : String(input);
+    const pathname = new URL(path, location.origin).pathname;
+    let body: object;
+    if (pathname === '/auth/me') {
+      body = { authenticated: true, user: { name: 'Alex' } };
+    } else if (pathname === '/api/chat') {
+      body = { memberId: 'me', assistantId: 'assistant' };
+    } else if (pathname === '/api/conversations') {
+      body = { rows: [{
+        conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
+        createdAt: '2026-10-03T10:00:00Z', status: 'open',
+      }] };
+    } else {
+      body = {
+        rows: scenario.rows,
+        position: scenario.rows.length,
+        generation: 1,
+        computerState: 'ready',
+      };
+    }
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  });
+
+  const socket: SocketLike = {
+    readyState: 1, onopen: null, onclose: null, onerror: null,
+    onmessage: null, send: vi.fn(), close: vi.fn(),
+  };
+  TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY, useValue: () => socket }] });
+  const fixture = TestBed.createComponent(Workspace);
+  await fixture.whenStable();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
+  await vi.waitFor(() => expect(root.querySelector('.file-card')).not.toBeNull());
+  const download = root.querySelector('.file-card a');
+  expect(download !== null).toBe(scenario.expectedVisible);
+  fixture.destroy();
+}
+
+const downloadScenarios: DownloadScenario[] = [
+  {
+    name: 'your own upload',
+    expectedVisible: true,
+    rows: [{
+      id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+      data: {
+        conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
+        name: 'brief.pdf', mime: 'application/pdf',
+      },
+    }],
+  },
+  {
+    name: 'another member’s ordinary upload',
+    expectedVisible: false,
+    rows: [{
+      id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+      data: {
+        conversationId: 'chat', fileId: 'file', uploadedBy: 'someone-else',
+        name: 'brief.pdf', mime: 'application/pdf',
+      },
+    }],
+  },
+  {
+    name: 'an assistant file',
+    expectedVisible: false,
+    rows: [
+      {
+        id: 'message', position: 1, type: 'message.posted', time: '2026-10-03T10:00:00Z',
+        data: { text: 'Create a brief', authorId: 'me' },
+      },
+      {
+        id: 'assistant-file', position: 2, type: 'agent.file_changed',
+        time: '2026-10-03T10:00:01Z',
+        data: { turnId: 'message', path: 'brief.pdf', changeType: 'created' },
+      },
+    ],
+  },
+  {
+    name: 'your upload in a closed conversation',
+    expectedVisible: false,
+    rows: [
+      {
+        id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
+        data: {
+          conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
+          name: 'brief.pdf', mime: 'application/pdf',
+        },
+      },
+      {
+        id: 'closed', position: 2, type: 'conversation.closed',
+        time: '2026-10-03T10:00:01Z', data: {},
+      },
+    ],
+  },
+];
+
+function runDownloadScenario(scenario: DownloadScenario): Promise<void> {
+  return checkDownloadVisibility(scenario);
+}
+
 afterEach(() => { vi.restoreAllMocks(); history.replaceState({}, '', '/'); });
+
+it.each(downloadScenarios)('shows Download only when the route can serve $name', runDownloadScenario);
 
 it.each([500, 503, 403])('does not show empty states after a %s conversation read', async status => {
   history.replaceState({}, '', '/workspace?conversation=chat');

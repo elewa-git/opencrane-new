@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ChatIcon } from './icon';
 import type { ToolActivityRecord } from './chat-state';
+import { shortTime } from './file-presentation';
 
 @Component({
   selector: 'oc-tool-activity-line',
@@ -26,10 +27,6 @@ export class ToolActivityLine {
   }
 
   protected time(): string {
-    const date = new Date(this.record().time);
-    return date.toLocaleTimeString('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return shortTime(this.record().time);
   }
 }

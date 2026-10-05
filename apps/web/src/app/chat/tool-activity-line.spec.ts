@@ -4,6 +4,7 @@ import { ToolActivityLine } from './tool-activity-line';
 it.each([
   { label: 'Command completed', detail: 'Exit code 0', failed: false, result: 'Completed' },
   { label: 'Command failed', detail: 'Exit code 1', failed: true, result: 'Failed' },
+  { label: 'Reply failed', detail: 'Run interrupted', failed: true, result: 'Failed', tool: 'agent run' },
 ])('shows the recorded $label result without a retry action', record => {
   const fixture = TestBed.createComponent(ToolActivityLine);
   fixture.componentRef.setInput('record', {
@@ -21,4 +22,5 @@ it.each([
   expect(root.querySelector('[data-state="failed"]') !== null).toBe(record.failed);
   expect(root.querySelector('button')).toBeNull();
   expect(root.textContent).toContain('Not reported');
+  if ('tool' in record) expect(root.textContent).toContain(record.tool);
 });

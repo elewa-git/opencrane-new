@@ -72,6 +72,15 @@ function panelAnimation(node) {
   return style.animationName;
 }
 
+function agentBadgeStyle(node) {
+  const style = globalThis.getComputedStyle(node);
+  return {
+    background: style.backgroundColor,
+    fontFamily: style.fontFamily,
+    padding: style.padding,
+  };
+}
+
 async function scrollTranscriptToLatest(page) {
   const transcript = page.locator('.transcript');
   await transcript.evaluate(scrollElementToLatest);
@@ -127,6 +136,11 @@ async function checkFileCard(page, width) {
   const assistantCard = page.locator('oc-conversation-file-card:has(.file-card.created)');
   await assistantCard.waitFor();
   assert((await assistantCard.innerText()).includes('quarterly-board-pack.xlsx'));
+  const assistantBadge = assistantCard.locator('.file-card .agent-badge');
+  const badgeStyle = await assistantBadge.evaluate(agentBadgeStyle);
+  assert.equal(badgeStyle.background, 'rgb(238, 250, 252)');
+  assert(badgeStyle.fontFamily.includes('DM Mono'));
+  assert.equal(badgeStyle.padding, '2px 4px');
   assert.equal(await assistantCard.getByRole('link', { name: /Download/ }).count(), 0);
   const screenshotCard = page.locator('oc-conversation-file-card').filter({
     hasText: 'quarterly-screen-capture.png',
@@ -267,9 +281,9 @@ try {
     files: captures,
     environment: 'Built Angular assets; Chromium; intercepted protocol fixtures; no stack',
     frames: [
-      'WRK-01-1280', 'WRK-01-390', 'WRK-01-320',
+      'WRK-01-1280', 'WRK-01-390',
       'WRK-03-1280', 'WRK-03-390', 'WRK-04-1280', 'WRK-04-390',
-      'WRK-83-1280', 'WRK-83-390', 'WRK-83-320',
+      'WRK-80-1280', 'WRK-80-390', 'WRK-83-1280', 'WRK-83-390',
       'WRK-40-1280', 'WRK-40-390', 'WRK-41-1280', 'WRK-41-390',
       'WRK-42-1280', 'WRK-42-390', 'SPD-54-1280', 'SPD-54-390',
     ],
@@ -277,7 +291,8 @@ try {
       'Sanitised tool line opens by keyboard and keeps a 2px focus ring',
       'Failed commands and turns show failure without offering a retry',
       'Budget stop tells the reader who can help and when it resets',
-      'Only readable uploads and screenshots offer Download',
+      'Open conversations offer Download for your own uploads and screenshots',
+      'Assistant file badges keep their colour, spacing and mono font',
       'Failed and refused reads never look like empty conversations',
       'Phone panel keeps Files and Activity tabs and closes with Escape',
       '44px phone file actions',

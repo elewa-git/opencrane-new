@@ -65,7 +65,7 @@ export class Workspace implements OnInit {
   protected readonly uploads = computed(() => this.chat.attachments().filter(file => !file.screenshot));
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
-  protected readonly reason = computed(() => this.chat.rows().some(row => row.type === 'conversation.closed') ? 'This session is closed. Start a new session to continue.' : this.chat.denied() ? 'Sign in to send messages.' : this.chat.loading() ? 'Loading your workspace…' : this.chat.railUnavailable() ? 'Reconnect to your pod to start a session.' : !this.chat.selected() && !this.recipient() ? 'Choose your agent to start a session.' : !this.chat.assistantId() ? 'Your personal agent is being prepared. Refresh shortly.' : '');
+  protected readonly reason = computed(this.composerReason.bind(this));
   private lastTranscript = '';
   private pendingToolFocus = '';
   private focusComposerAfterNavigation = false;
@@ -167,7 +167,7 @@ export class Workspace implements OnInit {
   protected rowStatus(id: string, status = 'open'): string {
     if (id !== this.chat.selected()) return status;
     if (this.chat.active()) return 'working';
-    if (this.chat.rows().some(row => row.type === 'conversation.closed')) return 'closed';
+    if (this.isClosedConversation()) return 'closed';
     return this.chat.turns().filter(turn => turn.author === 'agent').at(-1)?.state ?? status;
   }
   protected words(status: string): string { return ({ working: 'Working', done: 'Done', stopped: 'Stopped', failed: 'Failed', closed: 'Closed', open: 'Open' } as Record<string, string>)[status] ?? 'Open'; }
@@ -178,6 +178,18 @@ export class Workspace implements OnInit {
     if (this.chat.loading()) return 'Loading conversation…';
     if (this.chat.denied()) return 'Conversation access changed';
     return 'Conversation loaded';
+  }
+  private isClosedConversation(): boolean {
+    return this.chat.rows().some(row => row.type === 'conversation.closed');
+  }
+  private composerReason(): string {
+    if (this.isClosedConversation()) return 'This session is closed. Start a new session to continue.';
+    if (this.chat.denied()) return 'Sign in to send messages.';
+    if (this.chat.loading()) return 'Loading your workspace…';
+    if (this.chat.railUnavailable()) return 'Reconnect to your pod to start a session.';
+    if (!this.chat.selected() && !this.recipient()) return 'Choose your agent to start a session.';
+    if (!this.chat.assistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
+    return '';
   }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }
   protected isScreenshot(path: string): boolean { return this.screenshots().some(file => file.path === path); }
@@ -190,6 +202,7 @@ export class Workspace implements OnInit {
     return fileUrl(this.chat.selected(), path, true);
   }
   protected canDownload(path: string): boolean {
+    if (this.isClosedConversation()) return false;
     const file = this.chat.attachments().find(attachment => attachment.path === path);
     // Ordinary uploads are private to their uploader; screenshots are readable by session members.
     return !!file && (!!file.screenshot || file.uploadedBy === this.chat.memberId());

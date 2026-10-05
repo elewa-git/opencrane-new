@@ -27,11 +27,7 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
   font: 10px var(--oc-font-mono);
 }
 .citation::before { content: ''; position: absolute; width: 44px; height: 44px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
-.file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .a2ui { white-space: normal; border: 1px solid #9fdde8; background: white; border-radius: 10px; padding: 15px; font-size: 13px; }
-.agent-badge { display: inline-block; margin-right: 4px; padding: 2px 4px;
-  border-radius: 3px; background: #eefafc; color: var(--oc-accent-dark);
-  font: 10px var(--oc-font-mono); }
 .a2ui header {
   font-size: 11px;
   color: var(--oc-ink-muted);

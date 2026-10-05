@@ -107,7 +107,7 @@ try {
       if (state === 'reloaded') await page.reload();
       await card.waitFor(); await card.locator('img').evaluate((image: HTMLImageElement) => image.decode());
       await page.screenshot({ path: `${output}/${run}-${state}-conversation-${width}.png`, fullPage: true });
-      await card.getByRole('button', { name: 'Open', exact: true }).click();
+      await card.getByRole('button', { name: `Open ${file.name}`, exact: true }).click();
       await preview.getByText('Preview ready', { exact: true }).waitFor();
       await preview.locator('img').evaluate((image: HTMLImageElement) => image.decode());
       await page.keyboard.press('Escape'); await preview.waitFor({ state: 'hidden' });

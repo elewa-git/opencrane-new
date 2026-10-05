@@ -85,8 +85,13 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   await panel.getByRole('heading', { name: 'Attached by you · 1' }).waitFor();
   if (width === 390) await panel.getByRole('button', { name: 'Back', exact: true }).click();
   await page.screenshot({ path: `${screenshots}/upload-${width}.png`, fullPage: true });
-  await target(page.locator('.transcript .file-card').getByRole('button', { name: 'Open', exact: true }));
-  await openPreview(page.locator('.transcript .file-card').getByRole('button', { name: 'Open', exact: true }));
+  const uploadedFileCard = page.locator('.transcript .file-card');
+  const openProjectFile = uploadedFileCard.getByRole('button', {
+    name: 'Open project.pdf',
+    exact: true,
+  });
+  await target(openProjectFile);
+  await openPreview(openProjectFile);
   let preview = page.getByRole('dialog', { name: 'project.pdf', exact: true });
   assert.equal(await preview.locator('iframe').count(), 1);
   // Full Chromium includes the native PDF viewer; headless-shell cannot render PDF.
@@ -134,7 +139,12 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   ]) {
     await choose(file);
     await uploaded();
-    await openPreview(page.locator('.transcript .file-card').filter({ hasText: file.name }).getByRole('button', { name: 'Open', exact: true }));
+    const fileCard = page.locator('.transcript .file-card').filter({ hasText: file.name });
+    const openFile = fileCard.getByRole('button', {
+      name: `Open ${file.name}`,
+      exact: true,
+    });
+    await openPreview(openFile);
     preview = page.getByRole('dialog', { name: file.name, exact: true });
     if (file.name.endsWith('.txt')) assert.equal(await preview.locator('pre').innerText(), file.buffer.toString());
     else assert(await preview.locator('img').evaluate(async img => { await (img as HTMLImageElement).decode(); return (img as HTMLImageElement).naturalWidth > 0; }));

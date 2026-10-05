@@ -15,14 +15,6 @@
   border-color: #9fdde8;
 }
 
-.file-name {
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .file-card strong {
   display: block;
   overflow: hidden;
