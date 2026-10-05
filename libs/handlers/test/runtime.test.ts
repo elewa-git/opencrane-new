@@ -92,9 +92,15 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
 
     it("fans out catalogue subscriptions and keeps each stream serial while other streams run in parallel", async () => {
       f = await fixture();
-      let release!: () => void;
-      const otherStarted = new Promise<void>((resolve) => {
-        release = resolve;
+      // Alice's and Bob's first jobs each wait until the other has started, so the
+      // two streams must overlap whichever one the queue picks first.
+      let aliceStarted!: () => void;
+      let bobStarted!: () => void;
+      const aliceHasStarted = new Promise<void>((resolve) => {
+        aliceStarted = resolve;
+      });
+      const bobHasStarted = new Promise<void>((resolve) => {
+        bobStarted = resolve;
       });
       const active = new Set<string>();
       let maximum = 0;
@@ -104,10 +110,12 @@ describe.skipIf(!process.env["PG_TEST_URL"])(
           active.add(event.subject);
           maximum = Math.max(maximum, active.size);
           if (event.id === "a0") {
-            await otherStarted;
+            aliceStarted();
+            await bobHasStarted;
           }
           if (event.id === "b0") {
-            release();
+            bobStarted();
+            await aliceHasStarted;
           }
           await effect(event, tx);
           active.delete(event.subject);
