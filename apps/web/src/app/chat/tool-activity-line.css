@@ -23,11 +23,11 @@
 }
 
 [data-state='done'] {
-  color: #2a7d4f;
+  color: var(--oc-success-admin);
 }
 
 [data-state='failed'] {
-  color: #c1392b;
+  color: var(--oc-danger-admin);
 }
 
 .chevron {

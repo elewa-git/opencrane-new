@@ -30,14 +30,23 @@ kbd { font: 11px var(--oc-font-mono); background: #eef1f2; border: 1px solid #de
 .disabled textarea { display: none; }
 .disabled-field { display: flex; align-items: center; gap: 10px; min-height: 54px; font-size: 13px; }
 @media(max-width: 700px) {
-  .composer { display: grid; grid-template-columns: 44px minmax(0,1fr) 44px; align-items: end; gap: 8px; padding: 0; border: 0; box-shadow: none; background: transparent; }
+  .composer {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) minmax(44px, auto);
+    align-items: end;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    box-shadow: none;
+    background: transparent;
+  }
   .toolbar { display: contents; }
   textarea { grid-column: 1 / -1; grid-row: 1; min-height: 48px; max-height: 140px; background: white; border: 1px solid #d9dfe0; border-radius: 12px; padding: 10px; line-height: 22px; }
   .toolbar button { min-width: 44px; min-height: 44px; }
   #attach-toggle { grid-column: 1; grid-row: 2; border: 1px solid #d9dfe0; background: white; }
   .send,.stop { grid-column: 3; grid-row: 2; }
   .hint,.mode,.spacer { display: none; }
-  .mobile-mode { display: flex; grid-column: 2; grid-row: 2; min-height: 44px; padding: 4px; }
+  .mobile-mode { display: flex; min-height: 44px; padding: 4px; }
   .attach-menu button { min-height: 44px; }
   .disabled { display: block; padding: 10px; background: #eef1f2; }
 }

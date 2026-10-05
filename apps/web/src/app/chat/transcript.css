@@ -28,18 +28,10 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
 }
 .citation::before { content: ''; position: absolute; width: 44px; height: 44px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
 .file-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.file-type {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: var(--oc-ink-muted);
-  color: #fff;
-  border-radius: 3px;
-  padding: 3px;
-  font: 9px var(--oc-font-mono);
-}
 .a2ui { white-space: normal; border: 1px solid #9fdde8; background: white; border-radius: 10px; padding: 15px; font-size: 13px; }
+.agent-badge { display: inline-block; margin-right: 4px; padding: 2px 4px;
+  border-radius: 3px; background: #eefafc; color: var(--oc-accent-dark);
+  font: 10px var(--oc-font-mono); }
 .a2ui header {
   font-size: 11px;
   color: var(--oc-ink-muted);
@@ -87,9 +79,3 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
   background: #eefafc;
   color: var(--oc-accent-dark);
 }
-
-.file-type[data-type=PDF] { background: #c1392b; }
-.file-type[data-type=DOCX] { background: #2a5c9a; }
-.file-type[data-type=XLSX] { background: #2a7d4f; }
-
-.screenshot-thumbnail{width:72px;height:54px;object-fit:contain;flex-shrink:0;background:#172a2d;border-radius:4px}

@@ -65,13 +65,6 @@ h1 { min-width: 0; flex: 1; font-size: 15px; font-weight: 600; white-space: nowr
 .transcript { min-height: 0; overflow: auto; padding: 28px 28px 8px; }
 .transcript-inner { width: 100%; max-width: 780px; margin: auto; }
 .draft { background: white; border: 1px solid #dee3e4; border-radius: 10px; padding: 14px; margin-bottom: 24px; }
-.empty-conversation {
-  margin-bottom: 24px;
-  padding: 14px;
-  border: 1px solid #dee3e4;
-  border-radius: 10px;
-  background: white;
-}
 .to-line { display: flex; align-items: center; gap: 12px; font-size: 12px; }
 .to-label { color: var(--oc-ink-muted); font-size: 12.5px; }
 .recipient { display: inline-flex; align-items: center; position: relative; gap: 6px; border: 1px solid #9fdde8; border-radius: 6px; padding: 4px 8px; background: #eefafc; }

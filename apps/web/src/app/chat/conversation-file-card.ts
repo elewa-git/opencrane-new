@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import { DogEar } from '../ui/paper';
+import { fileName, fileType, fileUrl, shortTime } from './file-presentation';
 
 @Component({
   selector: 'oc-conversation-file-card',
@@ -13,21 +14,18 @@ export class ConversationFileCard {
   readonly path = input.required<string>();
   readonly createdAt = input.required<string>();
   readonly createdBy = input.required<'you' | 'participant' | 'assistant'>();
+  readonly downloadAllowed = input(false);
   readonly thumbnailUrl = input('');
   readonly opened = output<string>();
-  readonly downloaded = output<string>();
   readonly filesOpened = output<void>();
 
-  protected readonly name = computed(this.fileName.bind(this));
-  protected readonly type = computed(this.fileType.bind(this));
-  protected readonly downloadUrl = computed(this.authorisedDownloadUrl.bind(this));
+  protected readonly name = computed(this.displayName.bind(this));
+  protected readonly nameId = computed(this.fileNameId.bind(this));
+  protected readonly type = computed(this.displayType.bind(this));
+  protected readonly downloadUrl = computed(this.fileDownloadUrl.bind(this));
 
   protected open(): void {
     this.opened.emit(this.path());
-  }
-
-  protected markDownloaded(): void {
-    this.downloaded.emit(this.path());
   }
 
   protected showFiles(): void {
@@ -35,29 +33,23 @@ export class ConversationFileCard {
   }
 
   protected time(): string {
-    const date = new Date(this.createdAt());
-    return date.toLocaleTimeString('en-GB', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return shortTime(this.createdAt());
   }
 
-  private fileName(): string {
-    const path = this.path();
-    const parts = path.split('/');
-    return parts.at(-1) ?? path;
+  private displayName(): string {
+    return fileName(this.path());
   }
 
-  private fileType(): string {
-    const fileName = this.name();
-    const parts = fileName.split('.');
-    const extension = parts.at(-1) ?? 'FILE';
-    return extension.toUpperCase().slice(0, 5);
+  private displayType(): string {
+    return fileType(this.path());
   }
 
-  private authorisedDownloadUrl(): string {
-    const conversation = encodeURIComponent(this.conversationId());
-    const path = encodeURIComponent(this.path());
-    return `/api/conversations/${conversation}/files/view?path=${path}`;
+  private fileDownloadUrl(): string {
+    return fileUrl(this.conversationId(), this.path());
+  }
+
+  private fileNameId(): string {
+    const safePath = encodeURIComponent(this.path()).replaceAll('%', '-');
+    return `file-name-${safePath}`;
   }
 }

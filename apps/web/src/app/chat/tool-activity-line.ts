@@ -1,13 +1,6 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import { ChatIcon } from './icon';
-
-export interface ToolActivityRecord {
-  id: string;
-  label: string;
-  detail: string;
-  failed: boolean;
-  time: string;
-}
+import type { ToolActivityRecord } from './chat-state';
 
 @Component({
   selector: 'oc-tool-activity-line',
@@ -18,16 +11,6 @@ export interface ToolActivityRecord {
 })
 export class ToolActivityLine {
   readonly record = input.required<ToolActivityRecord>();
-  readonly detailsOpened = output<string>();
-
-  protected toggleDetails(event: Event, details: HTMLDetailsElement): void {
-    event.preventDefault();
-    details.open = !details.open;
-    if (details.open) {
-      this.detailsOpened.emit(this.record().id);
-    }
-  }
-
   protected toolName(): string {
     if (this.record().label === 'Reply failed') {
       return 'agent run';
@@ -37,9 +20,9 @@ export class ToolActivityLine {
 
   protected result(): string {
     if (this.record().failed) {
-      return `execution · ${this.record().detail}`;
+      return `Failed · ${this.record().detail}`;
     }
-    return `none · ${this.record().detail}`;
+    return `Completed · ${this.record().detail}`;
   }
 
   protected time(): string {

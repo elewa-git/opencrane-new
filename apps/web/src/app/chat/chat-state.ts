@@ -4,8 +4,16 @@ import type { ChatRow } from '@opencrane/protocol';
 export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
   state: 'working' | 'done' | 'failed' | 'stopped';
-  tools: { id: string; label: string; detail: string; failed: boolean; time: string }[];
+  tools: ToolActivityRecord[];
   files: string[]; budgetStop?: 'budget_exhausted';
+}
+
+export interface ToolActivityRecord {
+  id: string;
+  label: string;
+  detail: string;
+  failed: boolean;
+  time: string;
 }
 
 /** Rendering is a replay of server rows. Stop freezes only its turn, at the recorded position. */
@@ -46,12 +54,17 @@ function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>): void 
     if (row.type === 'agent.turn_failed') turn.state = 'failed';
     if (row.type === 'agent.command_ran') turn.tools.push({ id: row.id, label: data.exitCode === 0 ? 'Command completed' : 'Command failed',
       detail: `Exit code ${data.exitCode ?? 'unknown'}`, failed: data.exitCode !== 0, time: row.time });
-    if (row.type === 'agent.file_changed' && data.path) turn.files.push(data.path);
+    if (row.type === 'agent.file_changed') addAvailableFile(turn, data);
     if (['agent.message_delta', 'agent.message_completed'].includes(row.type)) {
       const id = data.messageId ?? row.id;
       parts.set(id, (row.type === 'agent.message_delta' ? parts.get(id) ?? '' : '') + (data.text ?? ''));
       turn.text = [...parts.values()].join('\n\n');
     }
+}
+
+function addAvailableFile(turn: Turn, data: ChatRow['data']): void {
+  if (!data.path || data['changeType'] === 'deleted') return;
+  turn.files.push(data.path);
 }
 
 const attachment = z.object({ conversationId: z.string(), fileId: z.string(), name: z.string(), mime: z.string(), uploadedBy: z.string(), screenshot: z.object({ computerId: z.string(), generation: z.number(), capturedAt: z.string() }).optional() });

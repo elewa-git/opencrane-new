@@ -1,15 +1,8 @@
 .budget-stop {
   margin-top: 12px;
   padding: 12px;
-  border: 1px solid #efcf99;
+  border: 1px solid var(--oc-warning-border);
   border-radius: 8px;
-  background: #fffaf0;
-  color: #2b3133;
-}
-
-.budget-stop p {
-  margin: 8px 0 0 25px;
-  color: #4f575a;
-  font-size: 12px;
-  line-height: 1.5;
+  background: var(--oc-warning-notice);
+  color: var(--oc-ink-strong);
 }

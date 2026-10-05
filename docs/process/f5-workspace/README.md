@@ -1,60 +1,76 @@
-# F5 shared workspace pieces
+# Shared workspace pieces
 
-Source receipt for issue #135 (parent #130), 5 October 2026, `work/f5-workspace`.
-Visual references are in `/home/jente/dev/design-handoffs/v2/`.
+The web app contains this chat workspace beside the computer viewer and other
+shared UI pieces. The workspace reads chat and file data from the server.
 
-## Scope and data
+```mermaid
+flowchart TD
+  web[Web app]
+  workspace[Chat workspace]
+  viewer[Computer viewer]
+  shared[Shared UI pieces]
+  server[Server]
+  web --> workspace
+  web --> viewer
+  web --> shared
+  workspace <--> server
+```
 
-The transcript now uses `ToolActivityLine` for sanitised command results,
-`ConversationFileCard` for authorised conversation file paths and
-`BudgetStopNotice` for the recorded `budget_exhausted` decision. Tool details do
-not offer a new-message retry. File open and download use the existing authorised
-conversation file route, and the existing Files action opens the Session panel.
-The budget stop says which scope, limit, reset time and
-held amount are missing because the chat decision event does not provide them.
+This workspace shows a conversation and its session files. It turns saved chat
+events into message rows, file cards and a spending-limit notice. It also shows
+an empty conversation and the session Files and Activity views.
 
-The existing F1 `SharedState`, F2 `HingeDrawer`, paper and loaders, and F3 shell
-are reused. The workspace adds the handoff's empty-conversation and no-screenshots
-states, and the phone composer places the message field above its toolbar. Approval
-decisions remain in the existing `ApprovalCards` contract. The Session panel no
-longer claims decision or people counts that its chat endpoints do not return.
+The file route serves uploads and screenshots that the signed-in viewer may
+read. Assistant workspace paths are not files on that route, so their cards do
+not show Download. Deleted workspace paths do not appear as file cards.
 
-Chromium captures use the repository's intercepted protocol fixtures. Their
-display names and file text are test data, not production workspace content. The
-product view is populated only from the current chat and file responses.
+The spending-limit notice tells a reader that an Owner or Admin can review the
+limit, or that they can wait for the next monthly budget period in UTC. It does
+not show a scope, amount, reset date or held amount because the saved decision
+does not include those values.
+
+The workspace uses the shared states, drawers, paper details, loaders and
+session shell already in the web app. Its tools are read-only details. They do
+not offer a retry that would start a new message.
 
 ## Visual comparison
 
-[`visual.json`](visual.json) lists all captures and browser checks. Captures cover
-1280px and 390px with normal and reduced motion.
+[`visual.json`](visual.json) records the browser captures and checks at
+1280px, 390px and 320px, with normal and reduced motion.
 
-| Reference | Capture | Comparison |
+| Reference | Capture | What the capture shows |
 | --- | --- | --- |
-| WRK-01, desktop and phone | `empty-workspace-*` | Keeps the existing workspace rail/header and docked composer. The empty selected conversation uses a truthful “No messages yet” state; names, recipient text and sample messages from the frame are omitted. |
-| WRK-80, desktop and phone | `empty-workspace-*`, `phone-panel-*` | Reuses the Session panel and native Files/Activity tabs. The Files view says “No screenshots yet” and points to the existing computer viewer. Existing watch and history controls remain. |
-| WRK-01 tool line | `workspace-effects-*` | Reuses the transcript position and quiet disclosure. The component shows the recorded command result, generic provider availability and timestamp; no inferred retry or provider data is shown. |
-| WRK-80 file card | `workspace-effects-*` | Uses the authorized file path and recorded turn time. Open and Download use the existing conversation file route. |
-| WRK-40–45 and SPD-54 budget stop | `workspace-effects-*` | Matches the inline stop placement and shared blocked-state glyph. The actual chat event only supplies `budget_exhausted`, so scope, amount, reset date and held spend remain explicitly unavailable. |
+| WRK-01 | `empty-workspace-*` | The empty conversation in the existing workspace. |
+| WRK-03 and WRK-04 | `workspace-effects-*` | A tool result in the transcript. The tool details stay inline; the reference opens a side drawer or a phone page. |
+| WRK-40, WRK-41, WRK-42 and SPD-54 | `workspace-effects-*` | The spending-limit notice. The reference has a “Stopped: limit reached” header chip and a stop tool line; this build has neither. |
+| WRK-40, WRK-41, WRK-42 and SPD-54 | `workspace-effects-*` | The reference keeps the title ink-coloured and colours only its glyph red. This build colours the whole title red. |
+| WRK-80 | `empty-workspace-*`, `phone-panel-*` | The session Files view and its empty screenshot hint. The reference uses a camera glyph; this build uses the shared empty-state ring. |
+| WRK-01 | `empty-workspace-*` | The reference has one “No files yet” state. This build uses one screenshot hint that also tells readers where attached and created files appear. |
+| WRK-83 | `workspace-effects-*` | File cards with readable names. The reference says “Captured by Alex”, shows a UTC time and `1440 × 900`, and uses full-width phone actions. This build shows the event time and only offers downloads the route can serve. |
+| SPD-54 | `workspace-effects-*` | The phone composer. The reference puts the field and toolbar in one bordered card; this build keeps a separate field above loose buttons. |
 
-The linked designs show example people, titles, dollar amounts and reset dates.
-Those details are not represented as live values in the captures. The stop notice
-is therefore a truthful adaptation, not an exact reproduction of those example
-states.
+The reference budget cards include example people, dollar amounts and reset
+dates. Those values are not in the saved decision, so this build does not show
+them. The file cards also do not show a separate capture time or image size.
 
-## Source checks
+## Checks
+
+Report each check as PASS, FAIL, PARTIAL or NOT RUN. These browser fixtures use
+sample data and do not qualify a fresh installation.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Lint | PASS | Repo-wide lint; seven existing ESLint warnings, no errors; dependencies, unused-code, Markdown, links and fixtures passed. |
-| Typecheck | PASS | `npm run typecheck` across all workspaces. |
-| Event catalogue | PASS | `npm run check:events`; all 89 event types agree on the rebased main. |
-| Angular production build | PASS | `npm run build -w apps/web`; existing bundle/CSS budget and noVNC CommonJS warnings. |
-| Angular tests | PASS | 19 files, 130 tests. The first rebased run timed out twice while source checks ran concurrently; the isolated full suite passed. |
-| F1 visual check | PASS | 56 captures; shared states, phone targets, keyboard focus and reduced motion. |
-| F2 visual check | PASS | 38 captures; restored the Files action and added the short valid lease required by the current live-view contract in the computer fixture. |
-| F3 visual check | PASS | 22 captures; navigation, routes and screen moves. |
-| F5 visual check | PASS | 10 Chromium captures; workspace states, keyboard tool disclosure, file actions, budget truth and phone panel checks. |
-| Chat-browser journey | PASS | The root suite's budget-stop expectation was updated to assert the truthful missing-scope notice; `node scripts/check-chat-browser.mjs` passed. |
-| Focused backend reruns | PASS | Five cases from the original base and both failures from the rebased root run passed alone. |
-| Full root suite | PASS | Final rebased run: 1,605 passed / 15 skipped (102 files passed, 4 skipped); started at integer load 4. Two earlier timeouts during overlapping workspace runs passed alone before this clean full run. The pre-rebase root run also passed 1,569 tests. |
-| Fresh-install live qualification | NOT RUN | Source capture uses intercepted fixtures; no live silo journey was requested. |
+| Lint | PASS | `nice -n 10 npm run lint`; six existing warnings in unrelated files and no errors. |
+| Typecheck | PASS | `nice -n 10 npm run typecheck` across all workspaces. |
+| Event catalogue | PASS | `nice -n 10 npm run check:events`; all 95 event types agree. |
+| Angular build | PASS | `nice -n 10 npm run build -w apps/web`; existing bundle, workspace CSS budget and noVNC warnings. |
+| Angular tests | PASS | 23 files and 152 tests passed under `nice -n 10`. |
+| F1 visual check | PASS | 56 captures. |
+| F2 visual check | PASS | 38 captures; Files and file preview actions use their named accessible labels. |
+| F3 visual check | PASS | 22 captures. |
+| F4 visual check | PASS | 20 captures. |
+| F5 visual check | PASS | 18 captures at 1280px, 390px and 320px, with normal and reduced motion. |
+| Chat browser | PASS | `nice -n 10 node scripts/check-chat-browser.mjs`; keyboard, streaming, budget, focus and responsive checks. |
+| Full root suite | PARTIAL | 1,686 passed and 15 skipped across 108 files; one gateway test timed out. The 81-test gateway file passed alone: 80 passed and one skipped. |
+| Fresh-install live qualification | NOT RUN | No live installation is covered by these browser fixtures. |
+| Dev-stack budget journey | NOT RUN | Run only through the claimed secondary stack when a budget journey is requested. |

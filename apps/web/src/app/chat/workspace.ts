@@ -24,6 +24,7 @@ import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
+import { fileName, fileType, fileUrl, shortTime } from './file-presentation';
 
 @Component({
   selector: 'oc-workspace',
@@ -170,7 +171,14 @@ export class Workspace implements OnInit {
     return this.chat.turns().filter(turn => turn.author === 'agent').at(-1)?.state ?? status;
   }
   protected words(status: string): string { return ({ working: 'Working', done: 'Done', stopped: 'Stopped', failed: 'Failed', closed: 'Closed', open: 'Open' } as Record<string, string>)[status] ?? 'Open'; }
-  protected time(value: string): string { return new Date(value).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
+  protected time(value: string): string { return shortTime(value); }
+  protected conversationStatus(): string {
+    const announcement = this.chat.announcement();
+    if (announcement) return announcement;
+    if (this.chat.loading()) return 'Loading conversation…';
+    if (this.chat.denied()) return 'Conversation access changed';
+    return 'Conversation loaded';
+  }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }
   protected isScreenshot(path: string): boolean { return this.screenshots().some(file => file.path === path); }
   protected fileCreator(author: 'you' | 'person' | 'agent'): 'you' | 'participant' | 'assistant' {
@@ -178,9 +186,16 @@ export class Workspace implements OnInit {
     if (author === 'person') return 'participant';
     return 'you';
   }
-  protected screenshotUrl(path: string): string { return `/api/conversations/${encodeURIComponent(this.chat.selected())}/files/view?preview=true&path=${encodeURIComponent(path)}`; }
-  protected name(path: string): string { return path.split('/').at(-1) ?? path; }
-  protected type(path: string): string { return path.split('.').at(-1)?.toUpperCase().slice(0, 5) ?? 'FILE'; }
+  protected screenshotUrl(path: string): string {
+    return fileUrl(this.chat.selected(), path, true);
+  }
+  protected canDownload(path: string): boolean {
+    const file = this.chat.attachments().find(attachment => attachment.path === path);
+    // Ordinary uploads are private to their uploader; screenshots are readable by session members.
+    return !!file && (!!file.screenshot || file.uploadedBy === this.chat.memberId());
+  }
+  protected name(path: string): string { return fileName(path); }
+  protected type(path: string): string { return fileType(path); }
   protected textParts(text: string): { text: string; kind: 'text' | 'bold' | 'citation' | 'a2ui' }[] {
     return text.replace(/\s+(?=\[\d+\])/g, '\u00a0').split(/(\*\*[^*]+\*\*|\[\d+\]|```a2ui[\s\S]*?(?:```|$))/g).filter(Boolean).map(part => ({
       text: part.startsWith('**') ? part.slice(2, -2) : part,

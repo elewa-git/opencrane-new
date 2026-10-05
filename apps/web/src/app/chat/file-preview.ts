@@ -7,6 +7,7 @@ import {
   type OnDestroy,
 } from '@angular/core';
 import { DomSanitizer, type SafeResourceUrl } from '@angular/platform-browser';
+import { fileName, fileUrl } from './file-presentation';
 
 @Component({
   selector: 'oc-file-preview',
@@ -44,7 +45,7 @@ export class FilePreview implements OnDestroy {
   readonly path = input.required<string>();
   readonly conversationId = input.required<string>();
   readonly closed = output<void>();
-  protected readonly originalUrl = computed(() => `/api/conversations/${encodeURIComponent(this.conversationId())}/files/view?path=${encodeURIComponent(this.path())}`);
+  protected readonly originalUrl = computed(() => fileUrl(this.conversationId(), this.path()));
   protected readonly status = signal('Loading preview…');
   protected readonly statusKind = signal<PresentationState>('checking');
   protected readonly evidenceAt = signal<string | undefined>(undefined);
@@ -54,16 +55,12 @@ export class FilePreview implements OnDestroy {
   protected readonly safeUrl = signal<SafeResourceUrl | undefined>(undefined);
   private readonly sanitizer = inject(DomSanitizer);
   private readonly abort = new AbortController();
-  protected readonly filename = computed(this.fileName.bind(this));
+  protected readonly filename = computed(() => fileName(this.path()));
   constructor() {
     afterNextRender(this.startLoading.bind(this));
   }
   private startLoading(): void {
     void this.load();
-  }
-  private fileName(): string {
-    const parts = this.path().split('/');
-    return parts.at(-1) ?? this.path();
   }
   ngOnDestroy(): void { this.abort.abort(); if (this.url()) URL.revokeObjectURL(this.url()); }
   private async load(): Promise<void> {

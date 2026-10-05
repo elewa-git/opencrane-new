@@ -21,7 +21,9 @@
         <oc-icon name="panel" />
       </button>
     </header>
-    <span class="sr-only" role="status" aria-live="polite">{{ chat.loading() ? 'Loading conversation…' : chat.denied() ? 'Conversation access changed' : 'Conversation loaded' }}</span>
+    <span class="sr-only" role="status" aria-live="polite">
+      {{ conversationStatus() }}
+    </span>
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
       <div class="transcript-inner">
         @if (chat.loading()) { <div class="skeleton" aria-hidden="true">
@@ -39,8 +41,9 @@
             <p class="draft-note">@if (!chat.assistantId()) { No personal agent yet. Your agent is being prepared. } @else if (recipient()) { <oc-icon name="agent" /> Agent session — every message starts a governed run. Locks when you send. } @else { Choose your agent to start a session. }</p>
           </section>
         }
-        @if (chat.selected() && !chat.loading() && !chat.turns().length) {
-          <section class="empty-conversation" aria-label="Empty conversation">
+        @if (chat.selected() && !chat.loading() && !chat.error() && !chat.denied()
+          && !chat.busy() && !chat.turns().length) {
+          <section class="draft" aria-label="Empty conversation">
             <oc-shared-state kind="not_configured" message="No messages yet"
               detail="Send a message to start this conversation." [showAction]="false" />
           </section>
@@ -60,10 +63,11 @@
               @for (file of turn.files; track file) {
                 <oc-conversation-file-card [conversationId]="chat.selected()" [path]="file"
                   [createdAt]="turn.time" [createdBy]="fileCreator(turn.author)"
+                  [downloadAllowed]="canDownload(file)"
                   [thumbnailUrl]="isScreenshot(file) ? screenshotUrl(file) : ''"
                   (opened)="preview.set($event)" (filesOpened)="showFiles()" />
               }
-              @if (turn.budgetStop) { <oc-budget-stop-notice [reason]="turn.budgetStop" /> }
+              @if (turn.budgetStop) { <oc-budget-stop-notice /> }
               @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
             </div>
           </article>
@@ -212,9 +216,11 @@
         @if (uploads().length) { <h2>Attached by you · {{ uploads().length }}</h2> }
         @for (file of uploads(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><span class="file-type" [attr.data-type]="type(file.name)">{{ type(file.name) }}</span><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (screenshots().length) { <h2>Screenshots · {{ screenshots().length }}</h2> }
-        @if (!screenshots().length) {
+        @if (chat.selected() && !chat.loading() && !chat.denied() && !chat.error()
+          && !chat.busy() && !screenshots().length) {
           <oc-shared-state kind="not_configured" message="No screenshots yet"
-            detail="Open the computer viewer and choose Screenshot." [showAction]="false" />
+            detail="Open the computer viewer and choose Screenshot. Files you attach or create appear here."
+            [showAction]="false" />
         }
         @for (file of screenshots(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt="Computer desktop" loading="lazy"><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
@@ -227,7 +233,6 @@
             </span>
           </button>
         }
-        @if (!files().length && !chat.attachments().length) { <p>Files created in this session will appear here.</p> }
       </section>
       <footer class="panel-footnote">Saved files remain in the transcript after retries and session close.</footer>
     } @else {

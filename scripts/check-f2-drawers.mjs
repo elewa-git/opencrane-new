@@ -185,7 +185,7 @@ function scrollBehaviour(panel) {
 async function checkFile(page, width, motion) {
   const cards = page.locator('.transcript .file-card');
   const opener = cards.filter({ hasText: 'notes.txt' });
-  const button = opener.getByRole('button', { name: 'Open', exact: true });
+  const button = opener.getByRole('button', { name: 'Open notes.txt', exact: true });
   await button.focus();
   await page.keyboard.press('Enter');
   const sheet = page.getByRole('dialog', { name: 'notes.txt', exact: true });
@@ -577,7 +577,7 @@ async function checkComputerStates(page, width, motion) {
 
 async function checkFilesOpener(page) {
   const files = page.locator('.transcript .file-card').first().getByRole('button', {
-    name: 'Files', exact: true,
+    name: 'Open session files', exact: true,
   });
   await files.click();
   const panel = page.getByRole('dialog', { name: 'Session', exact: true });

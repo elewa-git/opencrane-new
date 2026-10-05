@@ -11,7 +11,49 @@ function closePanelDialog(this: HTMLDialogElement): void {
   this.dispatchEvent(new Event('close'));
 }
 
+function politeStatusText(root: HTMLElement): string {
+  const statuses = root.querySelectorAll('[role="status"][aria-live="polite"]');
+  const messages: string[] = [];
+  for (const status of statuses) messages.push(status.textContent ?? '');
+  return messages.join(' ');
+}
+
 afterEach(() => { vi.restoreAllMocks(); history.replaceState({}, '', '/'); });
+
+it.each([500, 503, 403])('does not show empty states after a %s conversation read', async status => {
+  history.replaceState({}, '', '/workspace?conversation=chat');
+  vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+    const path = input instanceof Request ? input.url : String(input);
+    if (path.startsWith('/api/conversations/chat/messages')) {
+      return Promise.resolve(new Response('{}', { status }));
+    }
+    let body: object;
+    if (path === '/auth/me') {
+      body = { authenticated: true, user: { name: 'Alex' } };
+    } else if (path === '/api/chat') {
+      body = { memberId: 'me', assistantId: 'assistant' };
+    } else {
+      body = { rows: [] };
+    }
+    return Promise.resolve(new Response(JSON.stringify(body)));
+  });
+  const socket: SocketLike = {
+    readyState: 1, onopen: null, onclose: null, onerror: null,
+    onmessage: null, send: vi.fn(), close: vi.fn(),
+  };
+  TestBed.configureTestingModule({ providers: [{ provide: SOCKET_FACTORY, useValue: () => socket }] });
+  const fixture = TestBed.createComponent(Workspace);
+  await fixture.whenStable();
+
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('No workspace root');
+  const expectedMessage = status === 403 ? 'Access unavailable' : 'Could not load the conversation';
+  await vi.waitFor(() => expect(root.textContent).toContain(expectedMessage));
+  expect(root.textContent).not.toContain('No messages yet');
+  root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
+  await fixture.whenStable();
+  expect(root.textContent).not.toContain('No screenshots yet');
+});
 it('renders streamed replies, wake progress and durable Stop, then replays the stopped partial', async () => {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [{ id: 'create', position: 1, type: 'conversation.created', time: '2026-10-02T10:00:00Z', data: {} },
@@ -39,8 +81,10 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   await fixture.whenStable();
   const budgetNotice = root.querySelector('oc-budget-stop-notice');
   expect(budgetNotice?.textContent).toContain('Spending limit reached');
-  expect(budgetNotice?.textContent).toContain('scope, limit, reset time or held amount');
-  expect(budgetNotice?.textContent).not.toContain('Owner or Admin');
+  expect(politeStatusText(root)).toContain('Spending limit reached');
+  expect(budgetNotice?.querySelector('[role="alert"]')).toBeNull();
+  expect(budgetNotice?.textContent).toContain('An Owner or Admin can review the limit');
+  expect(budgetNotice?.textContent).toContain('next monthly budget period (UTC)');
   message('agent.turn_stop_requested', 6, { turnId: 'message' });
   message('agent.message_completed', 7, { turnId: 'message', messageId: 'reply', text: 'Hello there and more' });
   await fixture.whenStable(); expect(root.textContent).toContain('Stopped'); expect(root.textContent).not.toContain('and more');

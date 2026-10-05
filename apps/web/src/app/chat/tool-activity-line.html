@@ -1,5 +1,5 @@
 <details class="tool-line" [id]="'tool-' + record().id" #details>
-  <summary [attr.aria-expanded]="details.open" (click)="toggleDetails($event, details)">
+  <summary>
     <oc-icon class="state-mark" [attr.data-state]="record().failed ? 'failed' : 'done'"
       [name]="record().failed ? 'failed' : 'done'" />
     {{ record().label }}
@@ -12,6 +12,7 @@
       <dt>provider</dt><dd>Not reported</dd>
       <dt>time</dt><dd>{{ time() }} · retries not reported</dd>
     </dl>
+    <!-- Keep missing provider data unknown; this row cannot safely start a new message retry. -->
     <footer>Details are sanitised. Tokens, cookies and headers are never shown.</footer>
   </div>
 </details>

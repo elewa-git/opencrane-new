@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { SharedState } from '../shared-state/shared-state';
 
 @Component({
@@ -9,5 +9,4 @@ import { SharedState } from '../shared-state/shared-state';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class BudgetStopNotice {
-  readonly reason = input.required<'budget_exhausted'>();
 }

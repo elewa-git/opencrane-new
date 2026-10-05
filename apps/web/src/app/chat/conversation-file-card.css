@@ -49,60 +49,34 @@
   text-decoration: none;
 }
 
-.file-type {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  padding: 3px;
-  border-radius: 3px;
-  background: var(--oc-ink-muted);
-  color: #fff;
-  font: 9px var(--oc-font-mono);
-}
-
-.file-type[data-type='PDF'] {
-  background: #c1392b;
-}
-
-.file-type[data-type='DOCX'] {
-  background: #2a5c9a;
-}
-
-.file-type[data-type='XLSX'] {
-  background: #2a7d4f;
-}
-
-.agent-badge {
-  display: inline-block;
-  margin-right: 4px;
-  padding: 2px 4px;
-  border-radius: 3px;
-  background: #eefafc;
-  color: var(--oc-accent-dark);
-  font: 10px var(--oc-font-mono);
-}
-
-.screenshot-thumbnail {
-  width: 72px;
-  height: 54px;
-  flex-shrink: 0;
-  border-radius: 4px;
-  background: #172a2d;
-  object-fit: contain;
-}
-
 @media (max-width: 700px) {
+  .file-card .screenshot-thumbnail {
+    grid-column: 1 / -1;
+  }
+
   .file-card {
-    width: 100%;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 8px;
     padding: 10px;
+  }
+
+  .file-name {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .file-card strong {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .file-card button,
   .file-card a {
-    display: inline-flex;
-    min-width: 44px;
+    display: flex;
+    grid-column: 1 / -1;
+    width: 100%;
     min-height: 44px;
     align-items: center;
     justify-content: center;

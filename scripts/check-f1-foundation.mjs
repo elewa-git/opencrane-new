@@ -432,7 +432,7 @@ async function checkWorkspace(browser, width, motion, scenario) {
     await capture(page, 'panel-file-focus', width, motion);
     if (width === 390) await page.keyboard.press('Escape');
     await page.route('**/api/conversations/chat/files/view?*', previewReply);
-    await page.locator('.file-card').getByRole('button', { name: 'Open', exact: true }).click();
+    await page.locator('.file-card').getByRole('button', { name: /^Open (?!session files)/ }).click();
     await page.getByText('Preview ready', { exact: true }).waitFor();
     await checkStatusRegions(page);
     await capture(page, 'file-preview', width, motion);

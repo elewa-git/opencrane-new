@@ -9,10 +9,18 @@ export async function chatFixture(page, scenario = 'live') {
     return row;
   };
   add('conversation.created', {});
-  if (!['draft', 'attach', 'no-agent', 'queued'].includes(scenario)) {
+  if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued'].includes(scenario)) {
     const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
-    if (scenario !== 'folding') {
+    if (scenario === 'workspace-evidence') {
+      add('agent.command_ran', { turnId: human.id, exitCode: 1, commandDigest: 'a'.repeat(64) });
+      add('agent.file_changed', { turnId: human.id, path: 'quarterly-board-pack.xlsx', changeType: 'created' });
+      add('decision.recorded', { turnId: human.id, reason: 'budget_exhausted' });
+      add('agent.turn_failed', { turnId: human.id });
+      add('file.uploaded', { conversationId: 'chat', fileId: 'screen', uploadedBy: 'another-member',
+        name: 'quarterly-screen-capture.png', mime: 'image/png',
+        screenshot: { computerId: 'computer', generation: 1, capturedAt: '2026-10-02T10:42:00Z' } });
+    } else if (scenario !== 'folding') {
       add('agent.command_ran', { turnId: human.id, exitCode: scenario === 'tools' ? 1 : 0, commandDigest: 'a'.repeat(64) });
       const text = scenario === 'a2ui' ? 'Here is the overview.\n\n```a2ui\n{"type":"summary"}\n```'
         : 'I’ve pulled the numbers from Finance and the notes from the last review.\n\n**Revenue is up 18% quarter on quarter**, with the strongest growth in the enterprise segment. The main risk is the timing of two renewals. [1]\n\nThe draft is ready for your review. I’ve highlighted the assumptions that still need a decision.';
@@ -38,6 +46,10 @@ export async function chatFixture(page, scenario = 'live') {
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
     if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant' });
+    if (url.pathname.endsWith('/messages') && scenario.startsWith('read-')) {
+      const status = Number(scenario.slice('read-'.length));
+      return route.fulfill({ status, contentType: 'application/json', body: '{}' });
+    }
     if (url.pathname.endsWith('/files/view')) return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
     if (request.method() === 'POST') {
       const command = request.postDataJSON(); commands.push(command);

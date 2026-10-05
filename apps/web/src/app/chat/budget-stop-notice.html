@@ -1,6 +1,6 @@
-<section class="budget-stop" aria-label="Spending limit stop" role="alert">
-  <oc-shared-state kind="blocked" message="Spending limit reached" [showAction]="false" />
-  <p>
-    The chat response does not include the affected scope, limit, reset time or held amount.
-  </p>
+<section class="budget-stop" aria-label="Spending limit stop">
+  <oc-shared-state kind="blocked" message="Spending limit reached"
+    detail="An Owner or Admin can review the limit, or wait for the next monthly budget period (UTC)."
+    [showAction]="false" />
+  <!-- The saved decision does not include the affected scope, amount or reset date. -->
 </section>
