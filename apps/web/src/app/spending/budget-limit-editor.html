@@ -1,0 +1,47 @@
+<form class="budget-form" (submit)="save($event)">
+  @if (saveState() === 'applying') {
+    <oc-shared-state kind="applying" message="Saving budget…"
+      [showAction]="false" [detail]="'Change reference: ' + changeReference()"
+      [changeReference]="changeReference()" />
+  } @else if (saveState() === 'confirmed') {
+    <oc-shared-state kind="confirmed" message="Budget saved"
+      [detail]="'Change reference: ' + changeReference()"
+      [evidenceAt]="evidenceAt()" [changeReference]="changeReference()" />
+  } @else if (saveState() === 'unknown') {
+    <oc-shared-state kind="unknown"
+      message="Could not confirm the change. Check status before editing again."
+      [detail]="'Change reference: ' + changeReference()"
+      [changeReference]="changeReference()" />
+  } @else if (saveState() === 'needs_input') {
+    <oc-shared-state kind="needs_input"
+      message="Enter a valid id and non-negative whole euro cents in the safe integer range."
+      [showAction]="false" />
+  }
+  <fieldset [disabled]="loadState() !== 'ready' || saveState() === 'applying'
+    || saveState() === 'unknown'">
+    <legend>Set a hard ceiling</legend>
+    <label for="budget-scope">Budget scope</label>
+    <select id="budget-scope" #scopeInput (change)="select(scopeInput.value)">
+      <option value="global">Global</option>
+      <option value="paying_group">Paying group</option>
+      <option value="assistant">Assistant</option>
+    </select>
+    @if (scope !== 'global') {
+      <label for="budget-id">{{ scope === 'paying_group' ? 'Paying group id' : 'Assistant id' }}</label>
+      <input id="budget-id" required [value]="scopeId" #idInput
+        (input)="scopeId = idInput.value" />
+    }
+    <label for="monthly-ceiling">Monthly ceiling (euro cents)</label>
+    <input id="monthly-ceiling" type="number" min="0" step="1" required [value]="monthly"
+      #monthlyInput (input)="monthly = monthlyInput.value" />
+    @if (scope === 'global') {
+      <label for="daily-ceiling">Daily safety cap (euro cents)</label>
+      <input id="daily-ceiling" type="number" min="0" step="1" required [value]="daily"
+        #dailyInput (input)="daily = dailyInput.value" />
+      <label for="default-group">Default paying group for new personal work</label>
+      <input id="default-group" required [value]="defaultGroup" #defaultInput
+        (input)="defaultGroup = defaultInput.value" />
+    }
+    <button type="submit" class="primary">Save budget</button>
+  </fieldset>
+</form>

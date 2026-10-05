@@ -5,9 +5,7 @@ h1 { font-size: 24px; }
 .money-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .period-line { margin: 8px 0 14px; }
 .refresh-actions { display: flex; justify-content: flex-end; margin: 8px 0; }
-.budget-form fieldset { display: grid; gap: 8px; min-width: 0; margin: 18px 0; padding: 16px; }
-legend { font-weight: 600; }
-input, select, button, .access-state a {
+button, .access-state a {
   box-sizing: border-box;
   min-width: 0;
   min-height: 44px;
@@ -16,9 +14,13 @@ input, select, button, .access-state a {
   border-radius: 6px;
   font: inherit;
 }
-label { margin-top: 8px; }
-button { background: #0db5cc; color: #16191a; cursor: pointer; }
-button:disabled, fieldset:disabled { opacity: .65; }
+button { cursor: pointer; }
+button.primary {
+  border-color: var(--oc-primary-500);
+  background: var(--oc-primary-500);
+  color: var(--oc-primary-contrast);
+}
+button.secondary { border-color: var(--oc-primary-500); background: white; color: var(--oc-primary-500); }
 .notice, .unavailable, .stale, .access-state {
   margin: 16px 0;
   padding: 16px;
@@ -28,14 +30,14 @@ button:disabled, fieldset:disabled { opacity: .65; }
 }
 .notice, .unavailable, .stale { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .notice p, .stale p { margin: 0; }
+.stale-notice { margin: 16px 0; }
 .money-cards.skeletons { margin: 16px 0; }
 section[aria-label="Spend evidence"] { min-width: 0; }
-.stale-data { opacity: .58; }
-.stale-data button { opacity: 1; }
+:host button:not(.primary):not(.secondary) { border-color: var(--oc-primary-500); }
 :focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
 @media (max-width: 600px) {
   .money-cards { grid-template-columns: minmax(0, 1fr); }
-  input, select, .budget-form button, .unavailable button, .stale button, .notice button {
+  .unavailable button, .stale button, .notice button, .refresh-actions button {
     width: 100%;
   }
   .unavailable, .stale, .notice { align-items: stretch; flex-direction: column; }

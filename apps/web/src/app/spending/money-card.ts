@@ -23,10 +23,17 @@ export class MoneyCard {
     return ceiling - this.settledCents() - this.reservedCents();
   }
 
-  protected barWidth(): string {
+  protected settledWidth(): string {
+    return this.segmentWidth(this.settledCents());
+  }
+
+  protected reservedWidth(): string {
+    return this.segmentWidth(this.reservedCents());
+  }
+
+  private segmentWidth(cents: number): string {
     const ceiling = this.ceilingCents();
-    if (ceiling === undefined || ceiling === 0) return '0%';
-    const used = this.settledCents() + this.reservedCents();
-    return `${Math.min(100, Math.max(0, used / ceiling * 100))}%`;
+    if (ceiling === undefined || ceiling <= 0) return '0%';
+    return `${Math.min(100, Math.max(0, cents / ceiling * 100))}%`;
   }
 }

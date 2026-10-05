@@ -2,26 +2,38 @@ import {
   ChangeDetectionStrategy, Component, signal, type OnDestroy, type OnInit,
 } from '@angular/core';
 import {
-  budgetCommandSchema, budgetSummarySchema, effectDetailResponseSchema,
-  effectListResponseSchema, type BudgetSummary, type EffectDetail, type EffectStatus,
+  budgetCommandSchema, type BudgetSummary, type EffectDetail, type EffectStatus,
 } from '@opencrane/protocol';
 import { z } from 'zod';
 import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
-import { EffectResolutionDrawer, type ResolutionCommand } from './effect-resolution-drawer';
+import {
+  EffectResolutionDrawer, type DrawerReadState, type DrawerSubmitState,
+} from './effect-resolution-drawer';
 import { HeldEffectsList } from './held-effects-list';
+import { BudgetLimitEditor } from './budget-limit-editor';
+import type { BudgetEditorLoadState, BudgetEditorSaveState } from './budget-limit-editor';
 import { MoneyCard } from './money-card';
-import { isRecordedNotApplied, monthPeriod, needsReview, waitingForUsage } from './effect-rules';
+import {
+  isRecordedNotApplied, monthPeriod, needsReview, resolutionView,
+  utcClockTime, waitingForUsage,
+} from './effect-rules';
+import type { ResolutionCommand, SentResolution } from './effect-rules';
+import {
+  budgetResponseSchema, readBudget, readEffect, readEffects,
+} from './spending-reads';
+import type { ReadResult } from './spending-reads';
+import { lostReplyMessage, readStateFor, spendingPageStatus } from './spending-view';
 import { money } from './spending-money';
 
-const budgetResponseSchema = z.object({ budget: budgetSummarySchema });
-const budgetScopeSchema = z.enum(['global', 'paying_group', 'assistant']);
-type ReadState = 'loading' | 'ready' | 'failed' | 'unavailable';
+type ReadState = BudgetEditorLoadState;
+type BudgetSaveState = BudgetEditorSaveState;
 
 @Component({
   selector: 'oc-spending',
   imports: [
     SharedState, GrainLoader, MoneyCard, HeldEffectsList, EffectResolutionDrawer,
+    BudgetLimitEditor,
   ],
   templateUrl: './spending.html',
   styleUrl: './spending.css',
@@ -31,35 +43,35 @@ export class SpendingScreen implements OnInit, OnDestroy {
   protected readonly budget = signal<BudgetSummary | undefined>(undefined);
   protected readonly effects = signal<EffectStatus[]>([]);
   protected readonly budgetState = signal<ReadState>('loading');
+  protected readonly budgetSaveState = signal<BudgetSaveState>('idle');
+  protected readonly changeReference = signal('');
   protected readonly effectsState = signal<ReadState>('loading');
   protected readonly budgetLoadedAt = signal<string | undefined>(undefined);
   protected readonly effectsLoadedAt = signal<string | undefined>(undefined);
   protected readonly pageStatus = signal('Loading spending…');
   protected readonly drawerEffect = signal<EffectDetail | undefined>(undefined);
-  protected readonly drawerReadState = signal('idle');
-  protected readonly drawerSubmitState = signal('idle');
+  protected readonly drawerReadState = signal<DrawerReadState>('idle');
+  protected readonly drawerSubmitState = signal<DrawerSubmitState>('idle');
+  protected readonly drawerMessage = signal('');
+  protected readonly drawerListEffect = signal<EffectStatus | undefined>(undefined);
   protected readonly pageNotice = signal('');
   protected readonly accessLost = signal(false);
   protected readonly returnFocusTo = signal<HTMLElement | undefined>(undefined);
   protected readonly period = signal('');
-  protected scope: z.infer<typeof budgetScopeSchema> = 'global';
-  protected scopeId = '';
-  protected monthly = '';
-  protected daily = '';
-  protected defaultGroup = '';
   protected readonly money = money;
   protected readonly monthPeriod = monthPeriod;
 
+  // Ignore late replies after a refusal, even when the request cannot be stopped in time.
   private accessGeneration = 0;
   private budgetReadController?: AbortController;
   private effectsReadController?: AbortController;
-  private detailReadController?: AbortController;
+  private readonly detailReadControllers = new Map<string, AbortController>();
   private budgetSaveController?: AbortController;
   private resolveController?: AbortController;
   private selectedPermitId: string | undefined;
-  private expectedSequence: number | undefined;
-  private sentCommand: ResolutionCommand | undefined;
-  private activeDrawerRead = false;
+  private readonly sentResolutions = new Map<string, SentResolution>();
+  private pageNoticePermitId: string | undefined;
+  private readonly pendingResolutionPermitIds = new Set<string>();
 
   ngOnInit(): void {
     void this.loadBudget();
@@ -78,25 +90,25 @@ export class SpendingScreen implements OnInit, OnDestroy {
     this.budgetReadController = controller;
     const generation = this.accessGeneration;
     if (!this.budget()) this.budgetState.set('loading');
-    try {
-      const response = await fetch('/api/org/models', { signal: controller.signal });
-      if (this.accessChanged(response, generation)) return;
-      if (this.isStale(generation, controller)) return;
-      if (response.status === 503) {
-        this.budgetState.set('unavailable');
-        return;
-      }
-      if (!response.ok) throw new Error('Budget read failed');
-      const raw: unknown = await response.json();
-      if (this.isStale(generation, controller)) return;
-      const result = budgetResponseSchema.parse(raw);
-      this.acceptBudget(result.budget);
-      this.budgetLoadedAt.set(new Date().toISOString());
-      this.budgetState.set('ready');
-    } catch {
-      if (this.isStale(generation, controller)) return;
-      this.budgetState.set('failed');
+    const result = await readBudget(controller.signal);
+    if (this.isStale(generation, controller)) return;
+    if (result.state === 'access_changed') {
+      this.clearProtectedData();
+      return;
     }
+    this.budgetState.set(readStateFor(result));
+    if (result.state !== 'ready') {
+      this.updatePageStatus();
+      return;
+    }
+    this.acceptBudget(result.value);
+    this.budgetLoadedAt.set(new Date().toISOString());
+    // A successful new read gives the owner fresh values after an uncertain save.
+    if (this.budgetSaveState() === 'unknown') {
+      this.budgetSaveState.set('idle');
+      this.changeReference.set('');
+    }
+    this.updatePageStatus();
   }
 
   protected async loadEffects(): Promise<void> {
@@ -105,26 +117,18 @@ export class SpendingScreen implements OnInit, OnDestroy {
     this.effectsReadController = controller;
     const generation = this.accessGeneration;
     if (!this.effectsLoadedAt()) this.effectsState.set('loading');
-    try {
-      const response = await fetch('/api/org/effects', { signal: controller.signal });
-      if (this.accessChanged(response, generation)) return;
-      if (this.isStale(generation, controller)) return;
-      if (response.status === 503) {
-        this.effectsState.set('unavailable');
-        return;
-      }
-      if (!response.ok) throw new Error('Spend evidence read failed');
-      const raw: unknown = await response.json();
-      if (this.isStale(generation, controller)) return;
-      const result = effectListResponseSchema.parse(raw);
-      this.effects.set(result.effects);
-      this.effectsLoadedAt.set(new Date().toISOString());
-      this.effectsState.set('ready');
-      this.pageStatus.set('Spending loaded');
-    } catch {
-      if (this.isStale(generation, controller)) return;
-      this.effectsState.set('failed');
+    const result = await readEffects(controller.signal);
+    if (this.isStale(generation, controller)) return;
+    if (result.state === 'access_changed') {
+      this.clearProtectedData();
+      return;
     }
+    this.effectsState.set(readStateFor(result));
+    if (result.state === 'ready') {
+      this.effects.set(result.value);
+      this.effectsLoadedAt.set(new Date().toISOString());
+    }
+    this.updatePageStatus();
   }
 
   protected refreshReads(): void {
@@ -144,12 +148,13 @@ export class SpendingScreen implements OnInit, OnDestroy {
     return this.selectedPermitId ?? '';
   }
 
+  protected selectedListEffect(): EffectStatus | undefined {
+    return this.drawerListEffect();
+  }
+
   protected loadedTime(value: string | undefined): string {
     if (!value) return '';
-    const time = new Intl.DateTimeFormat('en-GB', {
-      hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hourCycle: 'h23',
-    }).format(new Date(value));
-    return `${time} UTC`;
+    return utcClockTime(value);
   }
 
   protected waitingCount(): number {
@@ -162,10 +167,11 @@ export class SpendingScreen implements OnInit, OnDestroy {
     this.closeDrawerRead();
     this.selectedPermitId = event.permitId;
     this.returnFocusTo.set(event.opener);
+    this.drawerListEffect.set(this.findEffect(event.permitId));
     this.drawerEffect.set(undefined);
     this.drawerReadState.set('reading');
     this.drawerSubmitState.set('idle');
-    this.pageNotice.set('');
+    this.drawerMessage.set('Reading this hold…');
     void this.readDetail(event.permitId, true);
   }
 
@@ -176,15 +182,19 @@ export class SpendingScreen implements OnInit, OnDestroy {
   }
 
   protected async checkPageStatus(): Promise<void> {
-    const permitId = this.selectedPermitId;
+    const permitId = this.pageNoticePermitId;
     if (!permitId) return;
+    // Checking an uncertain command only reads its permit. It never repeats the POST.
     await this.readDetail(permitId, false);
   }
 
   protected closeDrawer(): void {
     const permitId = this.selectedPermitId;
-    if (this.drawerSubmitState() === 'saving' && permitId) {
-      this.pageNotice.set(`We couldn't confirm the resolution for ${permitId}. Check status reads it. It won't send it again.`);
+    const saveIsPending = this.drawerSubmitState() === 'saving';
+    if (saveIsPending && permitId) {
+      const commandId = this.sentResolutions.get(permitId)?.command.commandId ?? 'unknown';
+      this.pageNotice.set(lostReplyMessage(permitId, commandId));
+      this.pageNoticePermitId = permitId;
     }
     this.closeDrawerRead();
     this.selectedPermitId = undefined;
@@ -196,14 +206,18 @@ export class SpendingScreen implements OnInit, OnDestroy {
   protected async sendResolution(command: ResolutionCommand): Promise<void> {
     const effect = this.drawerEffect();
     const permitId = this.selectedPermitId;
-    if (!effect || !permitId || this.drawerSubmitState() === 'saving') return;
-    this.sentCommand = command;
-    this.expectedSequence = command.expectedSequence;
+    if (!effect || !permitId || this.drawerSubmitState() === 'saving'
+      || this.pendingResolutionPermitIds.has(permitId)) return;
+    this.sentResolutions.set(permitId, {
+      permitId, expectedSequence: command.expectedSequence, command,
+    });
+    this.pendingResolutionPermitIds.add(permitId);
     const generation = this.accessGeneration;
     const controller = new AbortController();
     this.resolveController = controller;
+    // Keep the POST alive when the drawer closes so its reply can still be checked.
     this.drawerSubmitState.set('saving');
-    this.pageStatus.set(`Saving resolution for ${permitId}…`);
+    this.drawerMessage.set(`Saving resolution for ${permitId}…`);
     try {
       const response = await fetch(`/api/org/effects/${encodeURIComponent(permitId)}/resolve`, {
         method: 'POST',
@@ -216,66 +230,88 @@ export class SpendingScreen implements OnInit, OnDestroy {
       });
       if (this.accessChanged(response, generation)) return;
       if (this.isStale(generation, controller)) return;
-      if (response.status === 202) {
-        this.drawerSubmitState.set('pending');
-        this.pageStatus.set('Resolution recorded. Checking its state…');
-        await this.readDetail(permitId, this.selectedPermitId === permitId);
-        return;
-      }
-      if (response.status === 400) {
-        this.drawerSubmitState.set('invalid');
-        this.pageStatus.set('The server refused this entry. Nothing was recorded.');
-        return;
-      }
-      if (response.status === 404) {
-        this.drawerSubmitState.set('unavailable');
-        this.pageStatus.set('This hold could not be found.');
-        return;
-      }
-      if (response.status === 409) {
-        const body: unknown = await response.json();
-        if (this.isStale(generation, controller)) return;
-        const status = z.object({ status: z.string() }).parse(body).status;
-        if (status === 'held') {
-          this.drawerSubmitState.set('held');
-          this.pageStatus.set("Can't confirm with this evidence. The hold stays.");
-          return;
-        }
-        await this.readDetail(permitId, this.selectedPermitId === permitId);
-        return;
-      }
-      this.drawerSubmitState.set('lost');
-      this.pageNotice.set(`We couldn't confirm the resolution for ${permitId}. Check status reads it. It won't send it again.`);
-      this.pageStatus.set(`We couldn't confirm the resolution for ${permitId}. Check status reads it. It won't send it again.`);
-      await this.readDetail(permitId, this.selectedPermitId === permitId);
+      await this.handleResolutionResponse(response, permitId, command, generation, controller);
     } catch {
       if (this.isStale(generation, controller)) return;
-      this.drawerSubmitState.set('lost');
-      this.pageNotice.set(`We couldn't confirm the resolution for ${permitId}. Check status reads it. It won't send it again.`);
-      this.pageStatus.set(`We couldn't confirm the resolution for ${permitId}. Check status reads it. It won't send it again.`);
-      await this.readDetail(permitId, this.selectedPermitId === permitId);
+      this.showLostReply(permitId, command.commandId);
+      await this.rereadCommandPermit(permitId);
+    } finally {
+      this.pendingResolutionPermitIds.delete(permitId);
     }
   }
 
-  protected select(scope: string): void {
-    this.scope = budgetScopeSchema.parse(scope);
-    this.scopeId = '';
-    const current = this.budget();
-    this.monthly = this.scope === 'global' && current ? String(current.ceilingCents) : '';
+  private async handleResolutionResponse(
+    response: Response,
+    permitId: string,
+    command: ResolutionCommand,
+    generation: number,
+    controller: AbortController,
+  ): Promise<void> {
+    if (response.status === 202) {
+      this.setActiveDrawerState(permitId, 'pending', 'Resolution recorded. Checking its state…');
+      if (!this.selectedPermitId) {
+        this.pageNotice.set(`Resolution recorded for ${permitId}. Check status to read it again.`);
+        this.pageNoticePermitId = permitId;
+      }
+      await this.rereadCommandPermit(permitId);
+      return;
+    }
+    if (response.status === 400 || response.status === 404) {
+      this.showRejectedResolution(response.status, permitId);
+      return;
+    }
+    if (response.status === 409) {
+      await this.handleResolutionConflict(response, permitId, generation, controller);
+      return;
+    }
+    this.showLostReply(permitId, command.commandId);
+    await this.rereadCommandPermit(permitId);
   }
 
-  protected async saveBudget(event: Event): Promise<void> {
-    event.preventDefault();
+  private async handleResolutionConflict(
+    response: Response,
+    permitId: string,
+    generation: number,
+    controller: AbortController,
+  ): Promise<void> {
+    const body: unknown = await response.json();
+    if (this.isStale(generation, controller)) return;
+    const status = z.object({ status: z.string() }).parse(body).status;
+    if (status === 'held') {
+      this.setActiveDrawerState(permitId, 'held',
+        "Can't confirm with this evidence. The hold stays.");
+      this.clearPageNotice(permitId);
+      this.sentResolutions.delete(permitId);
+      return;
+    }
+    await this.rereadCommandPermit(permitId);
+  }
+
+  private showRejectedResolution(status: 400 | 404, permitId: string): void {
+    if (status === 400) {
+      this.setActiveDrawerState(permitId, 'invalid',
+        'The server refused this entry. Nothing was recorded.');
+    } else {
+      this.setActiveDrawerState(permitId, 'unavailable', 'This hold could not be found.');
+    }
+    this.clearPageNotice(permitId);
+    this.sentResolutions.delete(permitId);
+  }
+
+  protected async saveBudget(value: unknown): Promise<void> {
     const current = this.budget();
-    if (!current || this.budgetState() !== 'ready') return;
-    const command = this.budgetCommand(current);
-    const parsed = budgetCommandSchema.safeParse(command);
-    if (!parsed.success) return;
-    this.budgetSaveController?.abort();
+    if (!current || this.budgetState() !== 'ready'
+      || this.budgetSaveState() === 'applying' || this.budgetSaveState() === 'unknown') return;
+    const parsed = budgetCommandSchema.safeParse(value);
+    if (!parsed.success) {
+      this.budgetSaveState.set('needs_input');
+      return;
+    }
     const controller = new AbortController();
     this.budgetSaveController = controller;
     const generation = this.accessGeneration;
-    this.budgetState.set('loading');
+    this.budgetSaveState.set('applying');
+    this.changeReference.set(parsed.data.commandId);
     try {
       const response = await fetch('/api/org/models', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -290,172 +326,177 @@ export class SpendingScreen implements OnInit, OnDestroy {
       this.acceptBudget(result.budget);
       this.budgetLoadedAt.set(new Date().toISOString());
       this.budgetState.set('ready');
+      this.budgetSaveState.set('confirmed');
     } catch {
       if (this.isStale(generation, controller)) return;
-      this.budgetState.set('failed');
+      this.budgetSaveState.set('unknown');
     }
-  }
-
-  protected budgetCommand(current: BudgetSummary): unknown {
-    const shared = {
-      commandId: crypto.randomUUID(), expectedSequence: current.sequence,
-      scope: this.scope, ceilingCents: this.wholeCents(this.monthly),
-    };
-    if (this.scope === 'global') {
-      return {
-        ...shared, dailyCeilingCents: this.wholeCents(this.daily),
-        defaultPayingGroupId: this.defaultGroup,
-      };
-    }
-    return { ...shared, scopeId: this.scopeId };
   }
 
   private async readDetail(permitId: string, drawerOpen: boolean): Promise<void> {
-    this.detailReadController?.abort();
+    this.detailReadControllers.get(permitId)?.abort();
     const controller = new AbortController();
-    this.detailReadController = controller;
-    this.activeDrawerRead = drawerOpen;
+    this.detailReadControllers.set(permitId, controller);
     const generation = this.accessGeneration;
     if (drawerOpen) this.drawerReadState.set('reading');
     try {
-      const response = await fetch(`/api/org/effects/${encodeURIComponent(permitId)}`, {
-        signal: controller.signal,
-      });
-      if (this.responseIsStale(response, generation, controller)) return;
-      if (!response.ok) {
-        this.showDetailReadFailure(response, drawerOpen);
-        return;
-      }
-      const raw: unknown = await response.json();
+      const result = await readEffect(permitId, controller.signal);
       if (this.isStale(generation, controller)) return;
-      const detail = effectDetailResponseSchema.parse(raw);
-      if (this.selectedPermitId !== permitId && drawerOpen) return;
-      if (drawerOpen) {
-        this.drawerEffect.set(detail);
-        this.drawerReadState.set('ready');
-      }
-      if (['settled', 'released'].includes(detail.state)) {
-        await Promise.all([this.loadBudget(), this.loadEffects()]);
-      } else {
-        await this.loadEffects();
-      }
-      if (this.isStale(generation, controller)) return;
-      this.classifyDetail(detail, drawerOpen);
+      await this.acceptDetailRead(result, permitId, drawerOpen, generation, controller);
     } catch {
       if (this.isStale(generation, controller)) return;
-      if (drawerOpen) this.drawerReadState.set('failed');
+      this.showDetailReadFailure('failed', permitId, drawerOpen);
     } finally {
-      if (this.detailReadController === controller) this.activeDrawerRead = false;
+      if (this.detailReadControllers.get(permitId) === controller) {
+        this.detailReadControllers.delete(permitId);
+      }
     }
   }
 
-  private classifyDetail(detail: EffectDetail, drawerOpen: boolean): void {
+  private async acceptDetailRead(
+    result: ReadResult<EffectDetail>,
+    permitId: string,
+    drawerOpen: boolean,
+    generation: number,
+    controller: AbortController,
+  ): Promise<void> {
+    if (result.state === 'access_changed') {
+      this.clearProtectedData();
+      return;
+    }
+    if (result.state !== 'ready') {
+      this.showDetailReadFailure(result.state, permitId, drawerOpen);
+      return;
+    }
+    const detail = result.value;
+    if (this.selectedPermitId !== permitId && drawerOpen) return;
+    this.showDetailInDrawer(detail, permitId, drawerOpen);
+    await this.refreshAfterDetailRead(detail);
+    if (this.isStale(generation, controller)) return;
+    this.classifyCurrentDetail(detail, permitId);
+  }
+
+  private showDetailInDrawer(
+    detail: EffectDetail,
+    permitId: string,
+    drawerOpen: boolean,
+  ): void {
+    if (!drawerOpen || this.selectedPermitId !== permitId) return;
+    this.drawerEffect.set(detail);
+    this.drawerReadState.set('ready');
+    this.drawerMessage.set('Hold details loaded.');
+  }
+
+  private async refreshAfterDetailRead(detail: EffectDetail): Promise<void> {
     if (detail.state === 'settled' || detail.state === 'released') {
-      this.showResolvedDetail(detail);
+      await Promise.all([this.loadBudget(), this.loadEffects()]);
       return;
     }
-    if (detail.state === 'resolution_pending') {
-      this.showPendingDetail();
+    await this.loadEffects();
+  }
+
+  private classifyCurrentDetail(detail: EffectDetail, permitId: string): void {
+    const belongsToOpenView = this.selectedPermitId === permitId;
+    const belongsToPageNotice = !this.selectedPermitId
+      && this.pageNoticePermitId === permitId;
+    if (!belongsToOpenView && !belongsToPageNotice) return;
+    this.classifyDetail(detail, belongsToOpenView, belongsToPageNotice);
+  }
+
+  private setActiveDrawerState(
+    permitId: string,
+    state: DrawerSubmitState,
+    message: string,
+  ): void {
+    if (this.selectedPermitId !== permitId) return;
+    this.drawerSubmitState.set(state);
+    this.drawerMessage.set(message);
+  }
+
+  private clearPageNotice(permitId: string): void {
+    if (this.pageNoticePermitId !== permitId) return;
+    this.pageNotice.set('');
+    this.pageNoticePermitId = undefined;
+  }
+
+  private showLostReply(permitId: string, commandId: string): void {
+    const message = lostReplyMessage(permitId, commandId);
+    this.pageNotice.set(message);
+    this.pageNoticePermitId = permitId;
+    this.setActiveDrawerState(permitId, 'lost', message);
+  }
+
+  private async rereadCommandPermit(permitId: string): Promise<void> {
+    if (this.selectedPermitId === permitId) {
+      await this.readDetail(permitId, true);
       return;
     }
-    if (detail.resolution && this.sentCommand) {
-      this.showPriorResolution(detail);
+    if (!this.selectedPermitId) await this.readDetail(permitId, false);
+  }
+
+  private classifyDetail(
+    detail: EffectDetail,
+    drawerOpen: boolean,
+    pageNoticeOpen: boolean,
+  ): void {
+    const sentResolution = this.sentResolutions.get(detail.permitId);
+    const result = resolutionView(detail, sentResolution, utcClockTime(new Date()));
+    if (drawerOpen) {
+      this.drawerSubmitState.set(result.state);
+      this.drawerMessage.set(result.message);
+      if (result.state === 'idle') this.drawerReadState.set('ready');
+    }
+    if (pageNoticeOpen) this.pageStatus.set(result.message);
+    if (result.clearSentCommand) this.clearSentResolution(detail.permitId);
+    this.clearPageNotice(detail.permitId);
+  }
+
+  private showDetailReadFailure(
+    failureState: 'failed' | 'unavailable' | 'not_found',
+    permitId: string,
+    drawerOpen: boolean,
+  ): void {
+    if (drawerOpen) {
+      const drawerFailure = failureState === 'not_found' ? 'not_found' : 'failed';
+      this.drawerReadState.set(drawerFailure);
+    }
+    if (failureState === 'not_found') {
+      this.setActiveDrawerState(permitId, 'unavailable', 'This hold could not be found.');
+      if (!drawerOpen && this.pageNoticePermitId === permitId) {
+        this.pageStatus.set('This hold could not be found.');
+      }
       return;
     }
-    this.showNoResolution(detail, drawerOpen);
-  }
-
-  private showResolvedDetail(detail: EffectDetail): void {
-    this.drawerSubmitState.set(detail.state);
-    const amount = detail.settledCents ?? 0;
-    let message = `${this.resolutionWord(detail)} ${money(amount)} for ${detail.permitId}. Checked ${this.checkedTime()}.`;
-    if (detail.state === 'settled' && amount > detail.reservedCents) {
-      message += ` Settled ${money(amount)} (${amount} cents). This is more than the ${money(detail.reservedCents)} hold. The full amount is recorded.`;
+    if (drawerOpen) {
+      this.drawerMessage.set('Could not read this hold. Check status to read it again.');
     }
-    this.pageStatus.set(message);
-    this.pageNotice.set('');
-  }
-
-  private resolutionWord(detail: EffectDetail): string {
-    if (detail.state === 'settled') return 'Settled';
-    return 'Released';
-  }
-
-  private showPendingDetail(): void {
-    this.drawerSubmitState.set('pending');
-    this.pageStatus.set('Recorded. Waiting for the budget to apply it.');
-  }
-
-  private showPriorResolution(detail: EffectDetail): void {
-    const resolution = detail.resolution;
-    const sentCommand = this.sentCommand;
-    if (!resolution || !sentCommand) return;
-    const matches = resolution.outcome === sentCommand.outcome
-      && resolution.settledCents === sentCommand.settledCents
-      && JSON.stringify(resolution.evidence) === JSON.stringify(sentCommand.evidence);
-    if (matches) {
-      this.drawerSubmitState.set('matching');
-      this.pageStatus.set('A resolution matching yours is recorded.');
-    } else {
-      this.drawerSubmitState.set('already');
-      const outcome = resolution.outcome === 'settled' ? 'Settled' : 'Released';
-      this.pageStatus.set(`This hold was already resolved: ${outcome} ${money(resolution.settledCents)}. Your resolution was not applied.`);
+    if (!drawerOpen && this.pageNoticePermitId === permitId) {
+      this.pageStatus.set('Could not read the resolution status. Try again.');
     }
-    this.pageNotice.set('');
-  }
-
-  private showNoResolution(detail: EffectDetail, drawerOpen: boolean): void {
-    if (this.expectedSequence !== undefined && detail.sequence === this.expectedSequence) {
-      this.drawerSubmitState.set('not_recorded');
-      this.pageStatus.set('Not recorded. Nothing changed.');
-    } else if (this.expectedSequence !== undefined && detail.sequence !== this.expectedSequence) {
-      this.drawerSubmitState.set('changed');
-      this.pageStatus.set('The evidence changed while you were reviewing. Refresh and review again.');
-    } else if (drawerOpen) {
-      this.drawerReadState.set('ready');
-      this.drawerSubmitState.set('idle');
-      this.pageStatus.set(`No new evidence (checked ${this.checkedTime()}). The hold stays.`);
-    }
-    this.pageNotice.set('');
-  }
-
-  private showDetailReadFailure(response: Response, drawerOpen: boolean): void {
-    if (!drawerOpen) return;
-    const failureState = response.status === 404 ? 'not_found' : 'failed';
-    this.drawerReadState.set(failureState);
-    if (response.status === 404) this.pageStatus.set('This hold could not be found.');
-  }
-
-  private checkedTime(): string {
-    return new Intl.DateTimeFormat('en-GB', {
-      hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hourCycle: 'h23',
-    }).format(new Date()) + ' UTC';
   }
 
   private acceptBudget(current: BudgetSummary): void {
     this.budget.set(current);
-    this.defaultGroup = current.defaultPayingGroupId ?? '';
-    this.daily = String(current.dailyCeilingCents);
-    if (this.scope === 'global') this.monthly = String(current.ceilingCents);
     if (current.periodStart) this.period.set(monthPeriod(current.periodStart));
   }
 
-  private wholeCents(text: string): number {
-    const trimmed = text.trim();
-    if (!/^(0|[1-9]\d*)$/u.test(trimmed)) return NaN;
-    const cents = Number(trimmed);
-    if (!Number.isSafeInteger(cents)) return NaN;
-    return cents;
+  private findEffect(permitId: string): EffectStatus | undefined {
+    for (const effect of this.effects()) {
+      if (effect.permitId === permitId) return effect;
+    }
+    return undefined;
+  }
+
+  private clearSentResolution(permitId: string): void {
+    this.sentResolutions.delete(permitId);
+  }
+
+  private updatePageStatus(): void {
+    this.pageStatus.set(spendingPageStatus(this.budgetState(), this.effectsState()));
   }
 
   private isStale(generation: number, controller: AbortController): boolean {
     return controller.signal.aborted || generation !== this.accessGeneration;
-  }
-
-  private responseIsStale(
-    response: Response, generation: number, controller: AbortController,
-  ): boolean {
-    return this.accessChanged(response, generation) || this.isStale(generation, controller);
   }
 
   private accessChanged(response: Response, generation: number): boolean {
@@ -468,17 +509,16 @@ export class SpendingScreen implements OnInit, OnDestroy {
     this.accessGeneration += 1;
     this.abortReads();
     this.budget.set(undefined);
+    this.budgetSaveState.set('idle');
+    this.changeReference.set('');
     this.effects.set([]);
     this.drawerEffect.set(undefined);
     this.drawerReadState.set('idle');
     this.drawerSubmitState.set('idle');
     this.selectedPermitId = undefined;
-    this.expectedSequence = undefined;
-    this.sentCommand = undefined;
-    this.defaultGroup = '';
-    this.scopeId = '';
-    this.monthly = '';
-    this.daily = '';
+    this.sentResolutions.clear();
+    this.pageNoticePermitId = undefined;
+    this.pendingResolutionPermitIds.clear();
     this.budgetLoadedAt.set(undefined);
     this.effectsLoadedAt.set(undefined);
     this.pageNotice.set('');
@@ -487,13 +527,15 @@ export class SpendingScreen implements OnInit, OnDestroy {
   }
 
   private closeDrawerRead(): void {
-    if (this.activeDrawerRead) this.detailReadController?.abort();
-    this.activeDrawerRead = false;
+    const permitId = this.selectedPermitId;
+    if (!permitId) return;
+    this.detailReadControllers.get(permitId)?.abort();
   }
 
   private abortReads(): void {
     this.budgetReadController?.abort();
     this.effectsReadController?.abort();
-    this.detailReadController?.abort();
+    for (const controller of this.detailReadControllers.values()) controller.abort();
+    this.detailReadControllers.clear();
   }
 }

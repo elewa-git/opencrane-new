@@ -1,20 +1,18 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
-import type { EffectDetail } from '@opencrane/protocol';
+import type { EffectDetail, EffectStatus } from '@opencrane/protocol';
 import { HingeDrawer } from '../ui/hinge-drawer';
 import {
   canRelease, canResolve, monthPeriod, normaliseDigest, parseCents, recordedAmounts,
-  utcDateTime, validReference,
+  reasons as effectReasons, resolutionWord, utcDateTime, validReference,
 } from './effect-rules';
+import type { ResolutionCommand } from './effect-rules';
 import { EffectEvidenceList } from './effect-evidence-list';
 import { money } from './spending-money';
 
-export interface ResolutionCommand {
-  commandId: string;
-  expectedSequence: number;
-  outcome: 'settled' | 'released';
-  settledCents: number;
-  evidence: Array<Record<string, string | number | boolean>>;
-}
+export type DrawerReadState = 'idle' | 'reading' | 'ready' | 'failed' | 'not_found';
+export type DrawerSubmitState = 'idle' | 'saving' | 'pending' | 'invalid' | 'unavailable'
+  | 'held' | 'lost' | 'settled' | 'released' | 'matching' | 'already'
+  | 'not_recorded' | 'changed';
 
 @Component({
   selector: 'oc-effect-resolution-drawer',
@@ -25,14 +23,15 @@ export interface ResolutionCommand {
 })
 export class EffectResolutionDrawer {
   readonly permitId = input.required<string>();
+  readonly listEffect = input<EffectStatus>();
   readonly effect = input<EffectDetail | undefined>();
-  readonly readState = input.required<string>();
-  readonly submitState = input.required<string>();
+  readonly readState = input.required<DrawerReadState>();
+  readonly submitState = input.required<DrawerSubmitState>();
   readonly message = input.required<string>();
   readonly opener = input<HTMLElement>();
   readonly refresh = output<void>();
-  readonly submit = output<ResolutionCommand>();
-  readonly close = output<void>();
+  readonly resolve = output<ResolutionCommand>();
+  readonly dismissed = output<void>();
   protected readonly outcome = signal<'settled' | 'released'>('settled');
   protected readonly centsText = signal('');
   protected readonly referenceText = signal('');
@@ -49,7 +48,18 @@ export class EffectResolutionDrawer {
   }
 
   protected formAvailable(): boolean {
-    return this.resolvable() && !['held', 'changed', 'already'].includes(this.submitState());
+    return this.resolvable() && !['held', 'changed', 'already', 'lost', 'pending', 'matching',
+      'settled', 'released'].includes(this.submitState());
+  }
+
+  protected description(): string {
+    const effect = this.effect() ?? this.listEffect();
+    if (!effect) return 'Hold details are loading';
+    return `${money(effect.reservedCents)} reserved`;
+  }
+
+  protected resolutionWord(outcome: 'settled' | 'released'): string {
+    return resolutionWord(outcome);
   }
 
   protected releasable(): boolean {
@@ -66,8 +76,7 @@ export class EffectResolutionDrawer {
   protected reasons(): string {
     const effect = this.effect();
     if (!effect) return '';
-    const labels: string[] = [...effect.reasons];
-    if (effect.conflict) labels.push('conflict');
+    const labels = effectReasons(effect);
     return labels.length === 0 ? 'None recorded' : labels.join(', ');
   }
 
@@ -105,7 +114,11 @@ export class EffectResolutionDrawer {
     event.preventDefault();
     this.attempted.set(true);
     const effect = this.effect();
-    if (!effect || !this.submitAllowed() || !this.fieldsValid()) return;
+    if (!effect || !this.submitAllowed() || this.submitState() === 'saving') return;
+    if (!this.fieldsValid()) {
+      this.focusFirstInvalidField();
+      return;
+    }
     const digest = normaliseDigest(this.digestText());
     const reference = this.referenceText().trim();
     if (!digest || !validReference(reference)) return;
@@ -125,11 +138,11 @@ export class EffectResolutionDrawer {
         evidence: [{ kind: 'provider_receipt', reference, digest, amountCents: settledCents }],
       };
     }
-    this.submit.emit(command);
+    this.resolve.emit(command);
   }
 
   protected markClosed(): void {
-    this.close.emit();
+    this.dismissed.emit();
   }
 
   protected parseAmount(): number | undefined {
@@ -183,4 +196,15 @@ export class EffectResolutionDrawer {
     if (this.referenceError() || this.digestError()) return false;
     return true;
   }
+
+  private focusFirstInvalidField(): void {
+    queueMicrotask(focusInvalidField);
+  }
+}
+
+function focusInvalidField(): void {
+  const invalidField = document.querySelector<HTMLElement>(
+    'oc-effect-resolution-drawer [aria-invalid="true"]',
+  );
+  invalidField?.focus();
 }

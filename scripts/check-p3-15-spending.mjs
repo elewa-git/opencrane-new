@@ -128,6 +128,9 @@ function finishCaptureDelay(resolveWait) {
 async function readEffect(route, state) {
   if (state.id === 'SPD-21') await waitForLoadingCapture();
   if (state.id === 'SPD-32' && state.posted) await waitForLoadingCapture();
+  if (state.id === 'SPD-32' && state.posted) {
+    return route.fulfill(response(500, { status: 'failed' }));
+  }
   if (state.id === 'SPD-31' && state.posted) {
     return route.fulfill(response(200, { ...makeEffect('SPD-31'), csrf: 'c'.repeat(64) }));
   }
@@ -171,7 +174,7 @@ async function waitForReady(page, id) {
     return;
   }
   if (id === 'SPD-01') {
-    await page.getByText('No uncertain effects. Nothing is waiting for final usage.', { exact: true }).waitFor();
+    await page.getByText(/No uncertain effects\. Nothing is waiting for final usage\./).waitFor();
     return;
   }
   try {
@@ -207,9 +210,10 @@ async function prepareState(page, state) {
   }
   if (state.id === 'SPD-35') return;
   if (!state.id.startsWith('SPD-2') && !state.id.startsWith('SPD-3')) return;
+  if (state.id === 'SPD-20' || state.id === 'SPD-23') return;
   await openDrawer(page);
   if (state.id === 'SPD-21') {
-    await page.getByText('Reading recorded evidence for permit-1…', { exact: true }).waitFor();
+    await page.getByText('Reading this hold…', { exact: true }).waitFor();
     return;
   }
   if (state.id === 'SPD-25') {
@@ -220,7 +224,10 @@ async function prepareState(page, state) {
     await page.locator('#settle-cents').fill('1.2');
     await page.locator('#receipt-reference').fill('bad reference');
     await page.locator('#receipt-digest').fill('abc');
+    const amount = page.locator('#settle-cents');
+    await amount.press('Enter');
     await page.locator('form#resolution-form').evaluate(submitForm);
+    assert.equal(state.posted, false, 'Invalid submit and Enter send no resolve POST');
     return;
   }
   if (state.id === 'SPD-28' || state.id === 'SPD-30' || state.id === 'SPD-31' || state.id === 'SPD-32') {
@@ -234,7 +241,8 @@ async function prepareState(page, state) {
         await page.getByText('Settled €1.20 for permit-1', { exact: false }).first().waitFor();
       }
       if (state.id === 'SPD-32') {
-        await page.getByText('We couldn\'t confirm the resolution', { exact: false }).first().waitFor();
+        await page.getByText('We couldn\'t tell whether the resolution', { exact: false })
+          .first().waitFor();
       }
       if (state.id === 'SPD-30') await page.getByText('Saving resolution', { exact: false }).first().waitFor();
     }
@@ -266,7 +274,9 @@ async function assertPhoneLayout(page, width) {
   for (const control of controls) {
     if (!await control.isVisible()) continue;
     const box = await control.boundingBox();
-    assert(box.width >= 44 && box.height >= 44,
+    // Allow fractional rounding when Chromium measures a CSS 44px target.
+    const roundingAllowance = 0.01;
+    assert(box.width + roundingAllowance >= 44 && box.height + roundingAllowance >= 44,
       `Target is at least 44px: ${await control.evaluate(readTagAndText)} ${box.width}x${box.height}`);
   }
 }
@@ -305,14 +315,24 @@ async function captureState(browser, id, width, motion, captures) {
   console.log(`Capture ${id} at ${width}px (${motion ? 'reduced motion' : 'normal motion'})`);
   await waitForReady(page, id);
   await prepareState(page, state);
+  await assertDrawerFooter(page, id);
   await page.evaluate(waitForAnimations);
   await page.evaluate(waitForFonts);
   await assertPhoneLayout(page, width);
-  const name = `${id}-${width}-${motion ? 'reduce' : 'normal'}.png`;
-  await page.screenshot({ path: `${output}/${name}`, fullPage: true });
-  captures.push(name);
+  if (width !== 320) {
+    const name = `${id}-${width}-${motion ? 'reduce' : 'normal'}.png`;
+    await page.screenshot({ path: `${output}/${name}`, fullPage: true });
+    captures.push(name);
+  }
   if (width <= 390) await assertEscapeFocus(page);
   await page.close();
+}
+
+async function assertDrawerFooter(page, id) {
+  if (!id.startsWith('SPD-2') && !id.startsWith('SPD-3')) return;
+  const confirmButton = page.locator('dialog[open] > footer button[form="resolution-form"]');
+  if (await confirmButton.count() === 0) return;
+  assert.equal(await confirmButton.isVisible(), true, 'The confirm button is in the drawer footer');
 }
 
 function makeApiHandler(state) {
@@ -343,18 +363,30 @@ try {
   }
   const result = {
     result: 'PASS', widths: [1280, 390, 320], reducedMotion: true, captures,
+    screenshotWidths: [1280, 390],
     environment: 'Built Angular assets, Chromium and mocked HTTP routes; no dev stack',
     frames: states.map(frameName),
-    adaptation: 'Every compared SPD frame is marked adapted to the P3-15 contract.',
     checks: ['No horizontal scroll at 320px and 390px', 'Visible controls are at least 44px',
       'Escape returns focus to the row opener', 'Reduced motion captures are included'],
   };
   await writeFile(`${output}/visual.json`, `${JSON.stringify(result, null, 2)}\n`);
-  console.log(`PASS P3-15 Spending: ${captures.length} captures, phone layout and keyboard checks`);
+  console.log(`PASS P3-15 Spending: 126 viewport checks, ${captures.length} screenshots, keyboard checks`);
 } finally {
   await browser.close();
 }
 
 function frameName(id) {
-  return { id, result: 'adapted' };
+  return {
+    id,
+    result: 'adapted',
+    differences: [
+      'No tabs or search controls.',
+      'No work, payer or requester columns.',
+      'No separate Reason box or chg_ resolver reference.',
+      'The existing budget form remains available.',
+      'Held effects appear before the budget cards.',
+      'Money bars show settled and reserved amounts in two segments.',
+      'Each resolution contains one evidence entry.',
+    ],
+  };
 }

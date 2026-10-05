@@ -1,4 +1,130 @@
-import type { EffectStatus } from '@opencrane/protocol';
+import type { EffectDetail, EffectStatus } from '@opencrane/protocol';
+import { money } from './spending-money';
+
+export interface ResolutionCommand {
+  commandId: string;
+  expectedSequence: number;
+  outcome: 'settled' | 'released';
+  settledCents: number;
+  evidence: Array<Record<string, string | number | boolean>>;
+}
+
+export interface SentResolution {
+  permitId: string;
+  expectedSequence: number;
+  command: ResolutionCommand;
+}
+
+type ResolutionViewState = 'matching' | 'already' | 'settled' | 'released'
+  | 'pending' | 'not_recorded' | 'changed' | 'idle';
+
+export interface ResolutionView {
+  state: ResolutionViewState;
+  message: string;
+  clearSentCommand: boolean;
+}
+
+export function resolutionView(
+  detail: EffectDetail,
+  sent: SentResolution | undefined,
+  checkedAt: string,
+): ResolutionView {
+  if (detail.resolution && sent?.permitId === detail.permitId) {
+    return matchingResolutionView(detail, sent.command);
+  }
+  if (detail.state === 'settled' || detail.state === 'released') {
+    return resolvedView(detail, checkedAt);
+  }
+  if (detail.state === 'resolution_pending') {
+    return {
+      state: 'pending', message: 'Recorded. Waiting for the budget to apply it.',
+      clearSentCommand: false,
+    };
+  }
+  if (sent?.permitId === detail.permitId) {
+    return notRecordedView(detail, sent);
+  }
+  return {
+    state: 'idle', message: `No new evidence (checked ${checkedAt}). The hold stays.`,
+    clearSentCommand: false,
+  };
+}
+
+function matchingResolutionView(
+  detail: EffectDetail,
+  command: ResolutionCommand,
+): ResolutionView {
+  const resolution = detail.resolution;
+  if (!resolution) throw new Error('Missing resolution');
+  if (!resolutionMatches(resolution, command)) {
+    const outcome = resolutionWord(resolution.outcome);
+    return {
+      state: 'already',
+      message: `This hold was already resolved: ${outcome} `
+        + `${money(resolution.settledCents)}. Your resolution was not applied.`,
+      clearSentCommand: true,
+    };
+  }
+  if (detail.state === 'resolution_pending') {
+    return {
+      state: 'pending',
+      message: 'A resolution matching yours is recorded. Waiting for the budget to apply it.',
+      clearSentCommand: true,
+    };
+  }
+  if (detail.state === 'settled' || detail.state === 'released') {
+    const outcome = resolutionWord(detail.state);
+    return {
+      state: detail.state,
+      message: `A resolution matching yours is recorded. ${outcome} `
+        + `${money(resolution.settledCents)} for ${detail.permitId}.`,
+      clearSentCommand: true,
+    };
+  }
+  return {
+    state: 'matching', message: 'A resolution matching yours is recorded. The hold stays reserved.',
+    clearSentCommand: true,
+  };
+}
+
+function resolvedView(detail: EffectDetail, checkedAt: string): ResolutionView {
+  const outcome = detail.state === 'settled' ? 'settled' : 'released';
+  const amount = detail.settledCents ?? 0;
+  let message = `${resolutionWord(outcome)} ${money(amount)} for ${detail.permitId}. `
+    + `Checked ${checkedAt}.`;
+  if (detail.state === 'settled' && amount > detail.reservedCents) {
+    message += ` Settled ${money(amount)} (${amount} cents). This is more than the `
+      + `${money(detail.reservedCents)} hold. The full amount is recorded.`;
+  }
+  return { state: outcome, message, clearSentCommand: true };
+}
+
+function notRecordedView(detail: EffectDetail, sent: SentResolution): ResolutionView {
+  if (detail.sequence === sent.expectedSequence) {
+    return {
+      state: 'not_recorded', message: 'Not recorded. Nothing changed.', clearSentCommand: true,
+    };
+  }
+  return {
+    state: 'changed',
+    message: 'The evidence changed while you were reviewing. Refresh and review again.',
+    clearSentCommand: true,
+  };
+}
+
+function resolutionMatches(
+  resolution: NonNullable<EffectDetail['resolution']>,
+  command: ResolutionCommand,
+): boolean {
+  return resolution.outcome === command.outcome
+    && resolution.settledCents === command.settledCents
+    && JSON.stringify(resolution.evidence) === JSON.stringify(command.evidence);
+}
+
+export function resolutionWord(outcome: 'settled' | 'released'): string {
+  if (outcome === 'settled') return 'Settled';
+  return 'Released';
+}
 
 export function needsReview(effect: EffectStatus): boolean {
   return effect.state === 'outcome_unknown'
@@ -21,7 +147,8 @@ export function recordedAmounts(effect: EffectStatus): number[] {
 }
 
 export function canResolve(effect: EffectStatus): boolean {
-  return needsReview(effect) && effect.resolution === null && recordedAmounts(effect).length <= 1;
+  return needsReview(effect) && !effect.conflict && effect.resolution === null
+    && recordedAmounts(effect).length <= 1;
 }
 
 export function canRelease(effect: EffectStatus): boolean {
@@ -59,6 +186,13 @@ export function utcDateTime(value: string): string {
   }).format(date) + ' UTC';
 }
 
+export function utcClockTime(value: Date | string): string {
+  const date = typeof value === 'string' ? new Date(value) : value;
+  return new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit', minute: '2-digit', timeZone: 'UTC', hourCycle: 'h23',
+  }).format(date) + ' UTC';
+}
+
 export function monthPeriod(value: string): string {
   const date = new Date(value);
   const month = new Intl.DateTimeFormat('en-GB', {
@@ -71,7 +205,7 @@ export function monthPeriod(value: string): string {
   return `${month} · resets ${reset}, 00:00 UTC`;
 }
 
-export function reasonLabel(reason: EffectStatus['reasons'][number]): string {
+function reasonLabel(reason: EffectStatus['reasons'][number]): string {
   const labels: Record<EffectStatus['reasons'][number], string> = {
     settle_timeout: '? Final usage not received',
     computer_lost: '? Computer lost',
@@ -80,4 +214,12 @@ export function reasonLabel(reason: EffectStatus['reasons'][number]): string {
     transport_failure: '? Reply lost in transit',
   };
   return labels[reason];
+}
+
+export function reasons(effect: EffectStatus): string[] {
+  const labels: string[] = [];
+  for (const reason of effect.reasons) labels.push(reasonLabel(reason));
+  if (effect.conflict) labels.push('⚠ Conflicting evidence');
+  if (labels.length === 0) labels.push('✓ No hold reason');
+  return labels;
 }

@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { EffectStatus } from '@opencrane/protocol';
+import { SharedState } from '../shared-state/shared-state';
 import { GrainLoader } from '../ui/grain-loader';
-import { isRecordedNotApplied, reasonLabel, utcDateTime } from './effect-rules';
+import { isRecordedNotApplied, reasons, utcDateTime } from './effect-rules';
 import { money } from './spending-money';
 
 @Component({
   selector: 'oc-held-effects-list',
-  imports: [GrainLoader],
+  imports: [GrainLoader, SharedState],
   templateUrl: './held-effects-list.html',
   styleUrl: './held-effects-list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -17,14 +18,18 @@ export class HeldEffectsList {
   readonly loadState = input.required<string>();
   readonly hasLoaded = input.required<boolean>();
   readonly checkStatus = output<{ permitId: string; opener: HTMLElement }>();
+  readonly retry = output<void>();
   protected readonly money = money;
   protected readonly utcDateTime = utcDateTime;
 
   protected reasons(effect: EffectStatus): string[] {
-    const labels: string[] = [];
-    for (const reason of effect.reasons) labels.push(reasonLabel(reason));
-    if (effect.conflict) labels.push('⚠ Conflicting evidence');
-    return labels;
+    return reasons(effect);
+  }
+
+  protected waitingLabel(): string {
+    const count = this.waitingCount();
+    if (count === 1) return '1 call still waiting for final usage.';
+    return `${count} calls still waiting for final usage.`;
   }
 
   protected recorded(effect: EffectStatus): boolean {

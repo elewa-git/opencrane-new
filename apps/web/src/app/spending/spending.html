@@ -1,40 +1,61 @@
 <h1>Spending</h1>
 <p class="intro">One charge counts towards the global, paying-group and optional assistant ceilings.</p>
-<div role="status" aria-live="polite" class="page-status">{{ pageStatus() }}</div>
+  @if (!accessLost()) {
+    <div role="status" aria-live="polite" class="page-status">{{ pageStatus() }}</div>
+  }
 @if (accessLost()) {
   <section class="access-state">
-    <p>Spending needs the Owner or Admin role.</p>
+    <oc-shared-state kind="access_changed" message="Spending needs the Owner or Admin role."
+      [showAction]="false" />
     <a href="/workspace">Back to workspace</a>
   </section>
 } @else {
   @if (pageNotice()) {
-    <aside class="notice" role="status" aria-live="polite">
+    <aside class="notice">
       <p>{{ pageNotice() }}</p>
       <button type="button" (click)="checkPageStatus()">Check status</button>
     </aside>
   }
   <div class="refresh-actions">
-    <button type="button" (click)="refreshReads()">Refresh</button>
+    <button type="button" class="secondary refresh" (click)="refreshReads()">Refresh</button>
   </div>
+  <section aria-label="Spend evidence"
+    [class.stale-data]="['failed', 'unavailable'].includes(effectsState()) && !!effectsLoadedAt()">
+    @if (effectsState() === 'unavailable') {
+      <aside class="unavailable">
+        <oc-shared-state kind="failed" message="Spend evidence unavailable" [showAction]="false" />
+        <button type="button" class="secondary" (click)="loadEffects()">Try again</button>
+      </aside>
+    } @else if (effectsState() === 'failed' && effectsLoadedAt()) {
+      <div class="stale">
+        <p>⚠ Showing what we loaded at {{ loadedTime(effectsLoadedAt()) }}.</p>
+        <button class="secondary" type="button" (click)="loadEffects()">Refresh</button>
+      </div>
+    }
+    <oc-held-effects-list [effects]="heldEffects()" [waitingCount]="waitingCount()"
+      [loadState]="effectsState()" [hasLoaded]="!!effectsLoadedAt()"
+      (checkStatus)="openEffect($event)" (retry)="loadEffects()" />
+  </section>
   <section aria-label="Budget service"
     [class.stale-data]="['failed', 'unavailable'].includes(budgetState()) && !!budget()">
     @if (budgetState() === 'unavailable') {
       <aside class="unavailable">
         <oc-shared-state kind="failed" message="Budget service unavailable" [showAction]="false" />
-        <button type="button" (click)="loadBudget()">Try again</button>
+        <button type="button" class="secondary" (click)="loadBudget()">Try again</button>
       </aside>
     } @else if (budgetState() === 'loading' && !budget()) {
-      <p role="status">Loading budget…</p>
+      <p>Loading budget…</p>
       <div class="money-cards skeletons" aria-hidden="true">
         <oc-grain-loader height="180px" /><oc-grain-loader height="180px" />
       </div>
+    } @else if (budgetState() === 'failed' && !budget()) {
+      <oc-shared-state kind="failed" message="Could not load budgets. Check status before editing."
+        [safeToRetry]="true" actionLabel="Try again" (action)="loadBudget()" />
     }
     @if (budget(); as currentBudget) {
       @if (budgetState() === 'failed') {
-        <div class="stale">
-        <p>Showing what we loaded at {{ loadedTime(budgetLoadedAt()) }}.</p>
-          <button class="refresh" type="button" (click)="loadBudget()">Refresh</button>
-        </div>
+        <p class="stale-notice">⚠ Showing what we loaded at {{ loadedTime(budgetLoadedAt()) }}.</p>
+        <button class="secondary" type="button" (click)="loadBudget()">Refresh</button>
       }
       <p class="period-line">@if (period()) { {{ period() }} · }
         Amounts are in EUR, stored as whole euro cents.</p>
@@ -50,57 +71,19 @@
       </section>
       <p>Personal work pays through <strong>{{ currentBudget.defaultPayingGroupId
         || 'Default group not configured' }}</strong>. Shared work needs an explicit paying group.</p>
-      <form class="budget-form" (submit)="saveBudget($event)">
-        <fieldset [disabled]="budgetState() !== 'ready'">
-          <legend>Set a hard ceiling</legend>
-          <label for="budget-scope">Budget scope</label>
-          <select id="budget-scope" #scopeInput (change)="select(scopeInput.value)">
-            <option value="global">Global</option>
-            <option value="paying_group">Paying group</option>
-            <option value="assistant">Assistant</option>
-          </select>
-          @if (scope !== 'global') {
-            <label for="budget-id">{{ scope === 'paying_group' ? 'Paying group id' : 'Assistant id' }}</label>
-            <input id="budget-id" required [value]="scopeId" #idInput
-              (input)="scopeId = idInput.value" />
-          }
-          <label for="monthly-ceiling">Monthly ceiling (euro cents)</label>
-          <input id="monthly-ceiling" type="number" min="0" step="1" required [value]="monthly"
-            #monthlyInput (input)="monthly = monthlyInput.value" />
-          @if (scope === 'global') {
-            <label for="daily-ceiling">Daily safety cap (euro cents)</label>
-            <input id="daily-ceiling" type="number" min="0" step="1" required [value]="daily"
-              #dailyInput (input)="daily = dailyInput.value" />
-            <label for="default-group">Default paying group for new personal work</label>
-            <input id="default-group" required [value]="defaultGroup" #defaultInput
-              (input)="defaultGroup = defaultInput.value" />
-          }
-          <button type="submit">Save budget</button>
-        </fieldset>
-      </form>
+      @if (currentBudget.monthCents === 0 && currentBudget.reservedCents === 0) {
+        <p>○ No usage this month.</p>
+      }
+      <oc-budget-limit-editor [budget]="currentBudget" [loadState]="budgetState()"
+        [saveState]="budgetSaveState()" [evidenceAt]="budgetLoadedAt()"
+        [changeReference]="changeReference()" (saveRequested)="saveBudget($event)" />
     }
-  </section>
-  <section aria-label="Spend evidence"
-    [class.stale-data]="['failed', 'unavailable'].includes(effectsState()) && !!effectsLoadedAt()">
-    @if (effectsState() === 'unavailable') {
-      <aside class="unavailable">
-        <oc-shared-state kind="failed" message="Spend evidence unavailable" [showAction]="false" />
-        <button type="button" (click)="loadEffects()">Try again</button>
-      </aside>
-    } @else if (effectsState() === 'failed' && effectsLoadedAt()) {
-      <div class="stale">
-        <p>Showing what we loaded at {{ loadedTime(effectsLoadedAt()) }}.</p>
-        <button type="button" (click)="loadEffects()">Refresh</button>
-      </div>
-    }
-    <oc-held-effects-list [effects]="heldEffects()" [waitingCount]="waitingCount()"
-      [loadState]="effectsState()" [hasLoaded]="!!effectsLoadedAt()"
-      (checkStatus)="openEffect($event)" />
   </section>
   @if (selectedPermit()) {
-    <oc-effect-resolution-drawer [permitId]="selectedPermit()" [effect]="drawerEffect()"
-      [readState]="drawerReadState()" [message]="pageStatus()"
+    <oc-effect-resolution-drawer [permitId]="selectedPermit()" [listEffect]="selectedListEffect()"
+      [effect]="drawerEffect()" [readState]="drawerReadState()" [message]="drawerMessage()"
       [submitState]="drawerSubmitState()" [opener]="returnFocusTo()"
-      (refresh)="checkDrawerStatus()" (submit)="sendResolution($event)" (close)="closeDrawer()" />
+      (refresh)="checkDrawerStatus()" (resolve)="sendResolution($event)"
+      (dismissed)="closeDrawer()" />
   }
 }

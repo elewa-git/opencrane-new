@@ -1,13 +1,14 @@
 import { z } from 'zod';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
+const priceTableId = z.string().min(1);
 const cents = z.number().int().nonnegative().safe();
 const usageSchema = z.object({
   inputTokens: z.number().int().nonnegative(),
   outputTokens: z.number().int().nonnegative(),
   cachedInputTokens: z.number().int().nonnegative().optional(),
   cacheWriteTokens: z.number().int().nonnegative().optional(),
-  priceTableId: id,
+  priceTableId,
 }).strict();
 const evidenceSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -27,7 +28,7 @@ export const effectStatusSchema = z.object({
   reservedCents: cents,
   settledCents: cents.nullable(),
   model: z.string().min(1),
-  priceTableId: id,
+  priceTableId,
   sequence: z.number().int().nonnegative(),
   state: z.enum(['outcome_unknown', 'resolution_pending', 'settled', 'released']),
   label: z.string(),

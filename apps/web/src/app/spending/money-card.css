@@ -6,6 +6,9 @@ dl { margin: 16px 0; }
 dl div { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; }
 dt { color: #4f575a; }
 dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
-.bar { height: 8px; overflow: hidden; border-radius: 8px; background: #e9edee; }
-.bar span { display: block; height: 100%; background: #0a8497; }
+.bar { display: flex; height: 8px; overflow: hidden; border-radius: 8px; background: #e9edee; }
+.bar span { display: block; height: 100%; }
+.bar .settled { background: var(--oc-primary-500); }
+.bar .reserved { background: repeating-linear-gradient(135deg, #555 0 2px, #ddd 2px 5px); }
+.legend { display: flex; gap: 16px; font-size: 13px; }
 @media (max-width: 600px) { dl div { align-items: start; } }

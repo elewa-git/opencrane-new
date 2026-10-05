@@ -126,15 +126,16 @@ status; 401/403 clears protected tool details. Desktop and 390px browser evidenc
 comes from `apps/server/test/integrations.test.ts` with real API dependencies.
 
 `/org/models` is Models & providers: the pinned registry remains here, with provider
-and routing editing explicitly unavailable. `/org/spending` owns the existing budget
-summary and single editor. It displays global and configured paying-group/assistant
-monthly ceilings, current charges and held reservations, and edits safe integer EUR
-cents through the unchanged `/api/org/models` API. It lists only effects that need
-review, keeps running calls in a waiting count, and reads recorded evidence before
-resolving an effect. Settle and release commands use one structured evidence entry;
-the page never repeats a resolve POST after an uncertain reply. Access loss clears
-budgets, effect references and the open drawer. The authenticated browser journey
-covers 1280px, 390px and 320px.
+and routing editing explicitly unavailable. `/org/spending` shows the existing budget
+summary and editor, then lists held spend before the budget cards. It displays global
+and configured paying-group/assistant monthly ceilings, current charges and held
+reservations. It edits whole euro cents through `/api/org/models`. Running calls stay
+in a waiting count. Owners and admins can read a hold's evidence and send one settlement
+or release command with one evidence entry. A lost reply keeps its command reference
+and offers a GET status check; the browser never repeats that POST. Each pending command
+stays with its permit while another hold is open. Access loss clears budgets, effect
+references and the open drawer. The browser check captures 1280px and 390px screens and
+checks layout at 320px.
 
 The chat's 8g approval cards restore from the authenticated approval endpoint above
 the composer. Requested cards show every reviewed field, expiry and conditional

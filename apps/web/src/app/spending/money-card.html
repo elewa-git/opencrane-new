@@ -14,5 +14,9 @@
       </dd></div>
     }
   </dl>
-  <div class="bar" aria-hidden="true"><span [style.width]="barWidth()"></span></div>
+  <div class="bar" aria-hidden="true">
+    <span class="settled" [style.width]="settledWidth()"></span>
+    <span class="reserved" [style.width]="reservedWidth()"></span>
+  </div>
+  <p class="legend"><span>Settled</span><span>Reserved</span></p>
 </article>

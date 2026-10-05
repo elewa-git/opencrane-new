@@ -1,0 +1,30 @@
+:host { display: block; min-width: 0; }
+.budget-form fieldset {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 18px 0;
+  padding: 16px;
+}
+legend { font-weight: 600; }
+input, select, button {
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #aeb8ba;
+  border-radius: 6px;
+  font: inherit;
+}
+label { margin-top: 8px; }
+button { cursor: pointer; }
+button.primary {
+  border-color: var(--oc-primary-500);
+  background: var(--oc-primary-500);
+  color: var(--oc-primary-contrast);
+}
+button:disabled, fieldset:disabled { opacity: .65; }
+:focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
+@media (max-width: 600px) {
+  input, select, .budget-form button { width: 100%; }
+}

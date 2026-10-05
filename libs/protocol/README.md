@@ -19,7 +19,7 @@ flowchart LR
 ## What it is responsible for
 
 - Define the messages exchanged over the live browser connection.
-- Define the data returned for chat, computers, integrations, budgets, approvals and the history of changes.
+- Define the data returned for chat, computers, integrations, budgets, held spend and the history of changes.
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
 - Check flat group rows and create or remove commands for the People & groups screen.

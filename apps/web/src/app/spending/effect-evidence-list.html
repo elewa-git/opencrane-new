@@ -20,7 +20,7 @@
   @if (resolution(); as recorded) {
     <article>
       <strong>Resolution recorded</strong>
-      <p>{{ recorded.outcome === 'settled' ? 'Settled' : 'Released' }}
+      <p>{{ resolutionWord(recorded.outcome) }}
         {{ money(recorded.settledCents) }} ({{ recorded.settledCents }} cents)</p>
     </article>
   }

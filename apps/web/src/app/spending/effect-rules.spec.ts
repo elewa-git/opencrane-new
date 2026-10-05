@@ -1,7 +1,7 @@
 import type { EffectStatus } from '@opencrane/protocol';
 import {
-  canRelease, canResolve, needsReview, normaliseDigest, parseCents, recordedAmounts,
-  validReference, waitingForUsage,
+  canRelease, canResolve, needsReview, normaliseDigest, parseCents, resolutionView,
+  recordedAmounts, validReference, waitingForUsage,
 } from './effect-rules';
 
 function effect(overrides: Partial<EffectStatus> = {}): EffectStatus {
@@ -43,6 +43,36 @@ it('allows release only when no recorded observation has a cost', () => {
   ] });
   expect(canRelease(free)).toBe(true);
   expect(canRelease(charged)).toBe(false);
+});
+
+it('does not offer a resolution when evidence conflicts with one recorded amount', () => {
+  const conflict = effect({
+    conflict: true,
+    reasons: ['settle_timeout'],
+    observations: [{ eventId: 'event-1', outcome: 'success', costCents: 120 }],
+  });
+
+  expect(recordedAmounts(conflict)).toEqual([120]);
+  expect(canResolve(conflict)).toBe(false);
+});
+
+it('compares a sent resolution only with the permit that received it', () => {
+  const first = { ...effect(), csrf: 'c'.repeat(64) };
+  const other = { ...first, permitId: 'permit-2', sequence: 7 };
+  const sent = {
+    permitId: first.permitId,
+    expectedSequence: first.sequence,
+    command: {
+      commandId: 'command-1', expectedSequence: first.sequence, outcome: 'settled' as const,
+      settledCents: 120, evidence: [],
+    },
+  };
+
+  expect(resolutionView(other, sent, '10:00 UTC').state).toBe('idle');
+  expect(resolutionView({ ...first, sequence: 4 }, sent, '10:00 UTC')).toMatchObject({
+    state: 'changed', clearSentCommand: true,
+  });
+  expect(resolutionView(first, sent, '10:00 UTC').state).toBe('not_recorded');
 });
 
 it.each(['1.2', '1e3', '0x10', '-1', '01', '', '9007199254740992'])(
