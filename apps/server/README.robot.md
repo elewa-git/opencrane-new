@@ -599,3 +599,13 @@ the server with status 1 so its supervisor can restart chat delivery.
 The models process keeps one usage-file byte
 offset for its 100 ms ticks. Each tick also checks NATS metadata so an idle
 process still detects an outage and restarts after the existing 15-second limit.
+## Private team turns
+
+Team messages default to restricted execution. Only `executionMode: "memory_free"`
+selects shared tools and persistent thread state. Personal turns stay memory-free.
+Admission checks modes and private thread reuse before opening the existing four
+small access streams. Context is rebuilt after admission with the ten-second chat
+history budget. It contains only the requester's earlier completed exchanges,
+up to 24 KiB, and time-only records of unfinished work. It is never stored.
+The [HTTP contract](../../docs/api/shared-assistants.md#private-turns-and-memory-free-turns)
+and [check record](../../docs/process/p4-14-private-turns-evidence.md) give the details.

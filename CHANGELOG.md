@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Group members' private chats with a shared assistant now run in a private mode that keeps their messages, replies and the assistant's working state off the shared computer's disk. Tools are off in these turns. The chat screens, including the choice of a memory-free turn with tools, come next (#96).
+- Shared prompt files and skill instructions are now off in personal and memory-free Codex turns as well as private turns.
+
 - Rewrote the access, AI and shared-library READMEs for new engineers, and kept their detailed contracts in README.robot.md.
 
 - The four app READMEs now explain their place in the system and what people can do with them.

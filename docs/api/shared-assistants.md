@@ -1,10 +1,10 @@
 # Shared assistants HTTP interface
 
 Create a group assistant with selected model and MCP access on one computer.
-Members get their own chat transcripts and execution threads. Screens, personal
+Members get their own chat transcripts. Private turns start fresh execution threads. Screens, personal
 MCP credentials and fresh-install checks remain pending.
 
-All members' turns share one disk and one browser profile. Tools can read work
+Memory-free team turns share one disk and one browser profile. Tools can read work
 files written by another member. Uploads and attachments into team-kind sessions
 are refused until each member has their own workspace. Credentials for individual
 members must never be written to that disk or browser profile. Separate threads
@@ -86,7 +86,7 @@ Use the existing chat routes:
 | Method and route | Input | Result |
 | --- | --- | --- |
 | `POST /api/conversations` | `{ id, conversationId, assistantId, payingGroupId }` | Existing append receipt |
-| `POST /api/conversations/:conversationId/messages` | `{ id, text }` or `{ id, stopTurnId }` | Existing message/stop receipt |
+| `POST /api/conversations/:conversationId/messages` | `{ id, text, executionMode? }` or `{ id, stopTurnId }` | Existing message/stop receipt |
 | `GET /api/conversations` | None | Only the requester's permitted sessions |
 | `GET /api/conversations/:conversationId/messages` | Optional `since` | Permitted private transcript |
 
@@ -123,8 +123,8 @@ member, assistant, owner-group and payer streams. Personal posts and turn admiss
 keep their existing behaviour and have no new access deadline. Stop checks team
 ownership and access, but skips the payer because stopping does not spend money.
 New team turns require an OpenFGA binding so they cannot skip IAM receipts. Each
-admitted thread belongs to one requester and conversation. The bridge resumes
-only matching requester history. Old journal entries without requester metadata
+admitted thread belongs to one requester and conversation. For memory-free turns, the bridge resumes
+only matching requester history. Old memory-free journal entries without requester metadata
 start a fresh context on their next turn, including existing personal sessions.
 A final membership or payer refusal closes only that turn as failed. The bridge
 acknowledges the refusal without a turn token, and the computer drops the waiting
@@ -142,6 +142,34 @@ Desktop access needs a separate `shared_desktop` grant. That grant shows the
 computer's shared desktop, including every member's browser activity. It does not
 provide a private browser profile.
 
+## Private turns and memory-free turns
+
+A message to a team assistant defaults to a private turn (`restricted` on the
+bridge connection). It runs in a short-lived Codex process whose home is in RAM.
+Shell, file, browser and code tools are off. Shared prompt files and skill
+instructions are off in both execution modes, including personal sessions.
+
+The server sends earlier completed exchanges from the same requester only after
+admitting the new turn. It leaves unfinished work as a time and `not_completed`,
+without its request text. Nothing resumes an old private Codex thread.
+
+An API caller can post `executionMode: "memory_free"` to use tools and the shared
+disk. That turn continues its own earlier memory-free thread and receives no
+earlier private context. Personal sessions always use memory-free turns. A retry
+must keep the same mode as well as the same id and text. Other mode values are
+refused. The chat's choice between these modes comes in the next change.
+
+A bridge restart or Pod replacement fails unfinished private work, even if it had
+not executed. Nothing repeats it. Memory-free prepared work retries, while
+executed work fails. If private reply text disappeared before the server stored
+it, the computer reports `agent.output_lost`. A saved text report stays saved when
+a later lost-output replay describes that same sequence.
+
+A mode mismatch or private thread reuse within the same requester's session
+fails only that turn. Its refused acknowledgement contains neither a token nor
+context. Other members keep working. Reporting another member's thread still
+closes the bridge connection under the existing thread ownership check.
+
 ## Refusals and remaining checks
 
 401 means no session. 400 means invalid input. 403 means wrong Origin or silo,
@@ -153,6 +181,6 @@ file refusals explain the payer or upload restriction without returning content.
 
 Memory stays disabled. MCP currently admits only credential-free connections.
 This change does not supply personal credentials or a company fallback. Two real
-requester profiles at a recording MCP upstream, pinned Codex/gVisor execution and
-fresh-install journeys are **NOT RUN**. File and browser isolation between members
+requester profiles at a recording MCP upstream remain **NOT RUN**. Private
+Codex/gVisor checks are recorded in the [private-turn check record](../process/p4-14-private-turns-evidence.md). File and browser isolation between members
 is **absent**. See the [check record](../process/p4-7-backend-evidence.md).

@@ -183,7 +183,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
-| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message and thread; closed is permanent |
+| `computer.turn_started` / `computer.turn_closed` | server turn command | admission and idle-suspend fence on the computer stream | started binds the requested message, thread and `executionMode`; closed is permanent |
 | `computer.suspended` / `computer.resumed` | server (intent) | computers (resume has the rotated token id) | reconciler applies operating mode; resume delivers refreshed credentials |
 | `computer.lost` | server (Pod gone) | computers | mark in-flight effects of this computer `effect.uncertain`; re-claim when needed |
 | `computer.retired` | server | computers | delete snapshots after retention |
@@ -220,10 +220,11 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `conversation.created` | command | conversations (immutable `mode`: `agent_session` binds one assistant; `direct` records exactly two distinct `participantIds`, including `createdBy`, with no assistant; group admission is deferred; missing mode in older assistant events reads as `agent_session`) | OpenFGA participants |
 | `participant.added` / `participant.removed` | command | conversations | OpenFGA participants; stream access updated |
 | `message.posted` | person, or the system for routines | messages | browser delivery (WebSocket) in every mode; only `agent_session` dispatches to its assistant's computer and wakes it if suspended |
-| `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity | browser (WebSocket); notify on failure |
+| `agent.turn_started` / `agent.turn_completed` / `agent.turn_failed` | bridge (reported) | activity (`executionMode` on starts; `restricted_tool_refused` on failures) | browser (WebSocket); notify on failure |
 | `agent.turn_stop_requested` | member command | activity; freeze partial text at this position | bridge interrupts an active turn; queued turns do not start; browser keeps partial text on replay |
 | `agent.message_delta` | bridge (reported) | messages | encrypted text deltas; browser replay with positions and generations |
 | `agent.message_completed` | bridge (reported) | messages | browser (WebSocket). Encrypted deltas are retained for gap-free replay |
+| `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
 | `file.uploaded` | upload or explicit screenshot command after a clean scan and promotion | conversation files, conversations | deliver bytes over the bridge; wake a suspended computer |
@@ -240,21 +241,33 @@ one bounded framebuffer request on an explicit member command; replay never capt
 pixels or scans bytes again. Screenshot reads require current conversation participation
 and membership, independently of the original capture's desktop grant.
 
-Bridge reports describe activity; they never open model admission. The server's
-separate turn command binds a requested message to its actual Codex thread,
-requester and task on the computer stream. A terminal server event is permanent,
-even if it precedes start admission. The same stream prevents idle suspend while
-a turn is admitted. If suspend wins before admission, an unexecuted preparation
-retries after wake; a report alone never marks execution as having happened.
+Bridge reports describe activity and grant no authority. The separate server turn
+command binds the requested message to its Codex thread, requester, task and
+execution mode on the computer stream. A terminal server event is permanent.
+The same stream prevents idle suspend while an admitted turn remains open.
 
-Bridge reports carry the computer id, a unique increasing per-computer sequence
-and a digest in the envelope. Per-conversation predecessor positions allow
-independent persistence; reconnect uses the largest contiguous committed position.
-The server checks the committed digest before acknowledging a report.
-Encrypted message deltas and completed text share the conversation key; replay
-rebuilds the messages/activity feed without invoking Codex. Turns interrupted after their durable execution marker are
-reported failed and are never automatically repeated. Prepared, unexecuted turns
-retry with a fresh grant after reconnect or Pod replacement.
+Private team turns use a fresh process and ephemeral thread. After a bridge
+restart or Pod replacement, every unfinished private turn fails, including one
+that was prepared but never executed. It never runs again without a new message.
+Memory-free turns keep their persistent Codex thread: prepared turns retry with
+a fresh grant, while turns with an execution marker fail and never repeat.
+
+The private journal on the computer's disk holds only report sequence, type and
+ids, marked `memoryOnly: true`. Reply text remains in bridge memory until an
+acknowledgement or a reconnect position confirms storage. A replay whose text is
+gone becomes `agent.output_lost`. Reports retain per-computer sequence numbers,
+stable event ids and per-conversation predecessor checks. Reconnect uses the
+largest contiguous committed position. A lost-output replay over an already
+stored text report is a duplicate; it does not replace that saved text.
+
+After admission, the server rebuilds context from conversation events with its
+own ten-second read budget. Only the requester's earlier human messages start
+exchanges. Completed replies may arrive after the next message was posted.
+Whole newest exchanges fit within 24 KiB of JSON. Unfinished or lost-output
+exchanges include only their time and `not_completed`, without request text.
+Deltas, reasoning, tool results, files, approvals and decisions are excluded.
+Context goes only in an admitted private start acknowledgement and is never
+stored. Memory-free turns receive no earlier private context.
 
 ### Tools, approvals and effects
 

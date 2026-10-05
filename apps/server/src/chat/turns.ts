@@ -25,7 +25,14 @@ const budgetDetails = z.object({
 });
 
 type TurnBinding = z.infer<typeof binding>;
+export type ExecutionMode = 'restricted' | 'memory_free';
+export function requiredExecutionMode(assistantKind: string, requested: unknown): ExecutionMode {
+  if (assistantKind !== 'team' || requested === 'memory_free') return 'memory_free';
+  return 'restricted';
+}
+
 type TurnInput = {
+  executionMode?: ExecutionMode | undefined;
   conversationId: string; turnId: string; threadId?: string | undefined;
   status: 'started' | 'completed' | 'failed'; replay?: boolean;
 };
@@ -39,18 +46,20 @@ type WriteAuthority = Awaited<ReturnType<typeof authorityFence>>;
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
   const rows = await chatHistory(store, context.silo, input.conversationId);
-  const requesterId = requestedTurn(rows, context.assistantId, input.turnId);
+  const requested = requestedTurn(rows, context.assistantId, input.turnId);
   const subject = `computer-${context.assistantId}`;
   const events = await computerHistory(store, subject, context.silo, performance.now() + 10_000);
-  const data = decideTurn(events, rows, input, context.computerId, requesterId);
+  const data = decideTurn(events, rows, input, context.computerId, requested.requesterId);
   if (!data) return;
   let fresh: WriteAuthority | undefined;
   let status = input.status;
   let refusal: TurnAdmissionRejected | undefined;
   requireThreadOwner(events, data);
+  let executionMode = storedExecutionMode(events, input.turnId);
   if (newAdmission(input.status, events, input.turnId)) {
     try {
-      const admission = await payingGroup(store, context, rows, data.requesterId);
+      executionMode = input.executionMode ?? 'memory_free';
+      const admission = await admitTurn(store, context, rows, events, data, requested.executionMode, executionMode);
       data.payingGroupId = admission.payer;
       fresh = admission.fresh;
     } catch (error) {
@@ -65,15 +74,14 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   const id = hash.digest('hex');
   const eventData: TurnBinding & {
     assistantId: string; computerId: string; status?: 'completed' | 'failed';
+    executionMode?: ExecutionMode;
   } = { ...data, assistantId: context.assistantId, computerId: context.computerId };
   const event = {
     id, commandId: id, type, subject, silo: context.silo,
     source: 'opencrane-server', principal: { kind: 'system' as const, id: 'turn-lifecycle' },
     time: new Date().toISOString(), data: eventData,
   };
-  if (status !== 'started') {
-    eventData.status = status;
-  }
+  addLifecycleDetails(eventData, status, executionMode);
   await fresh?.();
   const result = await store.append({ expectedSequence: events.at(-1)?.sequence ?? 0, event });
   if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
@@ -83,7 +91,8 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   }
   verifyBinding(committed.find(isSaved), data);
   if (refusal) throw refusal;
-  if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId) };
+  if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
+    executionMode: executionMode ?? 'memory_free' };
   return undefined;
 }
 
@@ -106,7 +115,9 @@ function requestedTurn(rows: StoredEvent[], assistantId: string, turnId: string)
   }
   const message = rows.find(isRequestedMessage);
   if (created.assistantId !== assistantId || !message) throw new ReportRejected('Unrequested turn');
-  return z.object({ authorId: z.string() }).parse(message.event.data).authorId;
+  const details = z.object({ authorId: z.string(), executionMode: z.literal('memory_free').optional() })
+    .parse(message.event.data);
+  return { requesterId: details.authorId, executionMode: details.executionMode };
 }
 function isComputerLifecycle(row: StoredEvent) {
   return !row.event.type.startsWith('computer.turn_');
@@ -183,11 +194,14 @@ function verifyBinding(saved: StoredEvent | undefined, expected: TurnBinding) {
   }
 }
 
-async function payingGroup(store: EventStore, context: TurnContext,
-  conversation: StoredEvent[], requesterId: string) {
+async function assistantDetailsFor(store: EventStore, context: TurnContext) {
   const assistant = await creationEvent(store, context.silo,
     `assistant-${context.assistantId}`, 'assistant.created');
-  const details = assistantDetails.parse(assistant.data);
+  return assistantDetails.parse(assistant.data);
+}
+
+async function payingGroup(store: EventStore, context: TurnContext,
+  conversation: StoredEvent[], requesterId: string, details: z.infer<typeof assistantDetails>) {
   if (details.kind === 'team') {
     if (!context.binding) throw new ReportRejected('IAM binding required for a new team turn');
     const group = sessionPayer(conversation, requesterId, details.payingGroupId);
@@ -249,7 +263,50 @@ function requireThreadOwner(events: StoredEvent[], input: TurnBinding) {
 }
 
 function isFinalAdmissionRefusal(error: unknown): error is Error {
+  if (error instanceof TurnAdmissionRejected) return true;
   if (error instanceof MemberAccessRefused) return true;
   return error instanceof PayingGroupRefused &&
     error.message !== 'Paying group authority changed; try again';
+}
+
+
+function requireFreshPrivateThread(events: StoredEvent[], input: TurnBinding, mode: ExecutionMode) {
+  for (const row of events) {
+    if (row.event.type !== 'computer.turn_started') continue;
+    const previous = binding.parse(row.event.data);
+    if (previous.turnId === input.turnId || previous.threadId !== input.threadId) continue;
+    const previousMode = z.object({ executionMode: z.enum(['restricted', 'memory_free']).optional() })
+      .parse(row.event.data).executionMode;
+    if (mode === 'restricted' || previousMode === 'restricted') {
+      throw new TurnAdmissionRejected('Private thread reused');
+    }
+  }
+}
+
+function storedExecutionMode(events: StoredEvent[], turnId: string) {
+  let executionMode: ExecutionMode | undefined;
+  for (const row of events) {
+    if (row.event.type !== 'computer.turn_started') continue;
+    const stored = z.object({ turnId: z.string(),
+      executionMode: z.enum(['restricted', 'memory_free']).optional() }).parse(row.event.data);
+    if (stored.turnId === turnId) executionMode = stored.executionMode;
+  }
+  return executionMode;
+}
+
+async function admitTurn(store: EventStore, context: TurnContext, rows: StoredEvent[],
+  events: StoredEvent[], data: TurnBinding, requested: unknown, mode: ExecutionMode) {
+  const details = await assistantDetailsFor(store, context);
+  const required = requiredExecutionMode(details.kind, requested);
+  if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
+  requireFreshPrivateThread(events, data, mode);
+  return payingGroup(store, context, rows, data.requesterId, details);
+}
+
+
+function addLifecycleDetails(data: { executionMode?: ExecutionMode; status?: 'completed' | 'failed' },
+  status: TurnInput['status'], executionMode: ExecutionMode | undefined) {
+  if (status === 'started') {
+    if (executionMode !== undefined) data.executionMode = executionMode;
+  } else data.status = status;
 }

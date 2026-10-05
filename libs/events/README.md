@@ -38,6 +38,8 @@ flowchart LR
 - List which named background reactions subscribe to each event type.
 - Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
 
+It also records when part of a private reply was lost before the server could save it.
+
 ## Processes it handles
 
 1. **The event store checks an event before saving it.** It passes the event to

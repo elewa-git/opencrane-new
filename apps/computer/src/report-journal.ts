@@ -14,9 +14,13 @@ export interface BridgeReport {
   threadId?: string;
   messageId?: string;
   text?: string;
+  executionMode?: 'restricted' | 'memory_free';
+  reason?: 'restricted_tool_refused';
+  memoryOnly?: boolean;
 }
 
 interface ReportInput {
+  executionMode?: 'restricted' | 'memory_free';
   id: string;
   conversationId: string;
   assistantId: string;
@@ -92,6 +96,7 @@ function parseStoredReport(line: string): BridgeReport {
   if (text !== undefined) {
     report.text = text;
   }
+  readStorageDetails(value, report);
   return report;
 }
 
@@ -169,15 +174,23 @@ export function reportJournal(driver: JournalDriver) {
       sequence: reports.length + 1,
     };
     if (input.requesterId) report.requesterId = input.requesterId;
-    const serializedReport = JSON.stringify(report);
+    if (input.executionMode !== undefined) report.executionMode = input.executionMode;
+    if (input.executionMode === 'restricted' && report.text !== undefined) report.memoryOnly = true;
+    const serializedReport = storedLine(report);
     const reportLine = `${serializedReport}\n`;
     appendFileSync(driver.journal, reportLine, { mode: 0o600, flush: true });
     reports.push(report);
     return report;
   }
 
+  function forgetText(sequence: number) {
+    const report = reports[sequence - 1];
+    if (report?.memoryOnly) delete report.text;
+  }
+
   function replay(since: number, waiting: Map<number, unknown>, send: (report: BridgeReport) => void) {
     for (const report of reports) {
+      if (report.sequence <= since) forgetText(report.sequence);
       if (report.sequence > since || waiting.has(report.sequence)) {
         send(report);
       }
@@ -191,5 +204,48 @@ export function reportJournal(driver: JournalDriver) {
     executions.add(turnId);
   }
 
-  return { reports, executions, load, findLast, append, replay, recordExecution };
+  return { reports, executions, load, findLast, append, replay, recordExecution, forgetText };
+}
+
+
+function storedLine(report: BridgeReport) {
+  if (!report.memoryOnly) return JSON.stringify(report);
+  const { text: _text, ...outline } = report;
+  return JSON.stringify(outline);
+}
+
+export function wireReport(report: BridgeReport): BridgeReport {
+  if (!report.memoryOnly) return report;
+  if (report.text !== undefined) {
+    const { memoryOnly: _memoryOnly, ...withText } = report;
+    return withText;
+  }
+  const lost: BridgeReport = {
+    sequence: report.sequence,
+    conversationId: report.conversationId,
+    turnId: report.turnId,
+    assistantId: report.assistantId,
+    type: 'agent.output_lost',
+  };
+  if (report.previousSequence !== undefined) lost.previousSequence = report.previousSequence;
+  if (report.requesterId !== undefined) lost.requesterId = report.requesterId;
+  return lost;
+}
+
+function readStorageDetails(value: Record<string, unknown>, report: BridgeReport) {
+  const mode = value['executionMode'];
+  if (mode !== undefined) {
+    if (mode !== 'restricted' && mode !== 'memory_free') throw new Error('Invalid journal mode');
+    report.executionMode = mode;
+  }
+  const reason = value['reason'];
+  if (reason !== undefined) {
+    if (reason !== 'restricted_tool_refused') throw new Error('Invalid journal reason');
+    report.reason = reason;
+  }
+  const memoryOnly = value['memoryOnly'];
+  if (memoryOnly !== undefined) {
+    if (typeof memoryOnly !== 'boolean') throw new Error('Invalid journal storage');
+    report.memoryOnly = memoryOnly;
+  }
 }

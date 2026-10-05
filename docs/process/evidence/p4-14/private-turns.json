@@ -1,0 +1,243 @@
+{
+  "result": "PARTIAL",
+  "memoryAdmission": "DISABLED",
+  "checks": {
+    "J1": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    },
+    "J2": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    },
+    "J3": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    },
+    "J4": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    },
+    "J5": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    },
+    "J6": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    },
+    "J7": {
+      "result": "NOT RUN",
+      "reason": "Local registry rejects push connections; new digest cannot reach gVisor"
+    }
+  },
+  "conditions": {
+    "F1": {
+      "result": "FAIL",
+      "hostSwaps": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t3959012\t\t-2\n",
+      "reason": "Host swap is on. Private Pod, pause and container cgroups are NOT RUN."
+    },
+    "F2": {
+      "result": "FAIL",
+      "guest": "NOT RUN",
+      "hostCorePattern": "|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E",
+      "localDockerPrivateCoreLimit": "PASS"
+    },
+    "F3": {
+      "result": "NOT RUN",
+      "reason": "New image could not be pushed to the local registry"
+    }
+  },
+  "date": "2026-10-05",
+  "base": "8b3ad76c8f6298aa86b6d5d42a22b215bd9484fb",
+  "measurements": {
+    "podMounts": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "privateNodeMount": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "privateStatfs": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "writableCensus": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "coreLimits": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "swapCgroups": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "nodeSwaps": {
+      "result": "FAIL",
+      "value": "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/swapfile                               file\t\t8388604\t\t3958756\t\t-2\n"
+    },
+    "hostCorePattern": {
+      "result": "FAIL",
+      "value": "|/usr/share/apport/apport -p%p -s%s -c%c -d%d -P%P -u%u -g%g -F%F -- %E"
+    },
+    "privateHomePeakBytes": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "initialiseLatency": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "twoTurnPeakMemory": {
+      "result": "NOT RUN",
+      "reason": "No Pod from the new image"
+    },
+    "runscOptions": {
+      "result": "NOT RUN",
+      "value": "[plugins.'io.containerd.cri.v1.runtime'.containerd.runtimes.'runsc']\n  runtime_type = \"io.containerd.runsc.v1\"",
+      "reason": "Main runsc block read; any separate runsc.toml remains unchecked"
+    }
+  },
+  "imageChecks": {
+    "filesystem": "PASS",
+    "licences": "PASS",
+    "licencePackages": "384/384",
+    "noticeFiles": 91,
+    "privateConfig": "PASS",
+    "ephemeralReadOnlyThread": "PASS",
+    "privateCoreLimit": "PASS",
+    "pinnedCodex": "0.159.2",
+    "environment": "Local Docker; gVisor NOT RUN",
+    "runMjs": "NOT RUN",
+    "privateProbe": "NOT RUN",
+    "buildSh": "PARTIAL",
+    "blocker": "Push to 127.0.0.1:5001 failed with connection reset by peer",
+    "privateTurnFixture": "PASS",
+    "privateOfferedTools": [],
+    "execHostMjs": "NOT RUN"
+  },
+  "localImage": "sha256:bc7fce43c82cf915593ab75e80017d7cfacc32c8f62cc07e6f0dfeaab88a89a6",
+  "trackedImage": "k3d-ocn-registry:5000/opencrane/computer@sha256:688db3cbc1558d8ab2f5ffb2cd008ab05390489b83cc41effd6e0fb028189d77",
+  "fallbacks": [],
+  "limitations": [
+    "UID 1003 can write /tmp on node disk and /dev/shm; TMPDIR does not forbid other writes.",
+    "UID 1003 can also write world-writable workspace directories made by memory-free tools.",
+    "Concurrent private processes and homes share UID 1003; only the absence of tools separates them.",
+    "UID 1003 can read the workspace and reach loopback ports 8080, 8081 and 6901.",
+    "Every UID 1000 process can reach private.sock, including persistent Codex and its connectors.",
+    "Bridge heap and supervisor stream buffers are swappable under F1.",
+    "The PVC retains memory-free content by design.",
+    "Text-free outline lines remain on the PVC. Counts expose reply size and timing, and ids come from the client."
+  ],
+  "sourceChecks": {
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "checkEvents": "PASS",
+    "eventTypes": 96,
+    "focusedSuites": "FAIL",
+    "fullRootFirstRun": {
+      "result": "FAIL",
+      "passed": 1845,
+      "failed": 3,
+      "skipped": 15,
+      "failingFiles": [
+        "shared-assistant.test.ts",
+        "bridge-replay.test.ts",
+        "authority-volume.test.ts"
+      ],
+      "base": "667d1e47dce3b5b0f4c60f93e5a3a669f3dd28ea"
+    },
+    "providerFixture": "PASS",
+    "authorityVolumeRecheck": "PASS",
+    "fullRoot": {
+      "result": "FAIL",
+      "passed": 1846,
+      "failed": 2,
+      "skipped": 15,
+      "durationSeconds": 1378.24,
+      "failures": [
+        "Assistant selection returned 503 in the existing other-member IAM-delay test",
+        "Existing gateway audit test exceeded its 40-second limit"
+      ],
+      "scope": "Before the final active-thread collision guard; the guard passed focused channel tests",
+      "base": "667d1e47dce3b5b0f4c60f93e5a3a669f3dd28ea"
+    },
+    "focusedFirstPassingRun": {
+      "result": "PASS",
+      "passed": 124,
+      "files": 11
+    },
+    "focusedFinalSharedDatabaseRun": {
+      "result": "FAIL",
+      "passed": 97,
+      "failed": 3,
+      "skipped": 26,
+      "files": 11,
+      "failures": [
+        "Shared-assistant fixture timed out before its tests ran",
+        "Bridge replay and chat: PostgreSQL too many clients already",
+        "Upload exceeded its 180-second limit"
+      ]
+    },
+    "privateSuites": {
+      "result": "PASS",
+      "passed": 65,
+      "files": 3
+    },
+    "activePrivateThreadCollisionRed": {
+      "result": "FAIL as expected",
+      "failed": 2,
+      "skipped": 52
+    },
+    "gatewayAuditRecheck": "PASS",
+    "preRebaseIsolatedServiceRun": {
+      "result": "FAIL",
+      "passed": 46,
+      "failed": 1,
+      "files": 4,
+      "failure": "Long fixture message append unavailable before admission; now uses the existing seed helper"
+    },
+    "rebasedGates": {
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "checkEvents": "PASS",
+      "base": "8b3ad76c8f6298aa86b6d5d42a22b215bd9484fb"
+    },
+    "fullRootAfterRebase": {
+      "result": "PARTIAL",
+      "reason": "Running with the required PostgreSQL URL and two workers",
+      "integerLoadAtStart": 8,
+      "liveQualificationProcessesAtStart": []
+    },
+    "focusedRebasedRun": {
+      "result": "FAIL",
+      "passed": 163,
+      "failed": 2,
+      "files": 14,
+      "failures": [
+        "Private start acknowledgement closed on the 2,000-row conversation",
+        "Unchanged direct-chat long-session send returned 503 on 1,502 rows"
+      ]
+    },
+    "focusedFileResults": {
+      "private-context": "PASS",
+      "private-codex": "PASS",
+      "private-turn-channel": "PASS",
+      "bridge-channel": "PASS",
+      "bridge-replay": "PASS",
+      "bridge-suspend": "PASS",
+      "shared-runtime": "PASS",
+      "chat": "PASS",
+      "chat-http": "PASS",
+      "upload": "PASS",
+      "direct-chat": "PASS",
+      "direct-chat-http": "PASS",
+      "shared-assistant": "FAIL",
+      "chat-access-regression": "FAIL"
+    },
+    "cleanupTimerLint": "PASS"
+  }
+}

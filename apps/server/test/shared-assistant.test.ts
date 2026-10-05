@@ -1,10 +1,16 @@
+import { Pool } from 'pg';
 import { createServer } from 'node:http';
 import { generateKeyPairSync } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { tokenIssuer } from '@opencrane/auth';
 import { bridgeChannel } from '../../computer/src/channel.ts';
 import { connectBridge } from '../src/chat/bridge.ts';
-import { WebSocket } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
+import * as modelAuthority from '@opencrane/models';
+import { chatCommand } from '../src/chat/commands.ts';
+import { recordReport } from '../src/chat/reports.ts';
+import { watchBridges } from '../src/chat/bridge.ts';
+import { SandboxClient } from '../../ops/src/kubernetes.ts';
 import { once } from 'node:events';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -292,7 +298,7 @@ async function refusesSwappedThreadAtAdmission() {
   });
   const context = { silo: 'test', computerId, assistantId: 'team-shared' };
   const alice = { conversationId: 'alice', turnId: 'message-alice',
-    threadId: 'alice-thread', status: 'started' as const };
+    threadId: 'alice-thread', status: 'started' as const, executionMode: 'restricted' as const };
   await expect(turnCommand(nats.store, context, alice)).rejects.toThrow('binding');
   const authorisedContext = { ...context, binding: auth.binding };
   const first = await turnCommand(nats.store, authorisedContext, alice);
@@ -485,7 +491,8 @@ async function refusesOnlyTheUnpaidTurn() {
   function rpc(method: string, params: Record<string, unknown>) {
     if (method === 'thread/start') {
       threadCount++;
-      return Promise.resolve({ thread: { id: `admission-thread-${threadCount}` } });
+      return Promise.resolve({ thread: { id: `admission-thread-${threadCount}`,
+        ephemeral: true, path: null, environments: [] } });
     }
     if (method === 'turn/start') executedThreads.push(params['threadId']);
     return Promise.resolve({});
@@ -494,7 +501,10 @@ async function refusesOnlyTheUnpaidTurn() {
   function credential() {
     return { value: 'test-computer', expiresAt: Date.now() + 120_000 };
   }
-  const driver = { rpc, grant, credential, journal: `${directory}/admission-reports` };
+  function privateSession() {
+    return Promise.resolve({ rpc, close() {}, closed: new Promise<void>(function pending() {}) });
+  }
+  const driver = { rpc, privateSession, grant, credential, journal: `${directory}/admission-reports` };
   const channel = bridgeChannel(server, driver);
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -512,6 +522,7 @@ async function refusesOnlyTheUnpaidTurn() {
   function send(member: string) {
     const input = { type: 'turn', id: `message-admission-${member}`,
       conversationId: `admission-${member}`, requesterId: member, assistantId,
+      executionMode: 'restricted',
       text: 'Start work', token: 'preparing', expiresAt: Date.now() + 60_000 };
     link.socket.send(JSON.stringify(input));
   }
@@ -682,3 +693,264 @@ async function keepsOneRequestDeadline() {
   }
 }
 it('late identity resolution cannot restart the assistant creation deadline', keepsOneRequestDeadline);
+
+
+async function privateServerFixture(name: string, personal = false) {
+  if (!chat) throw new Error('Missing chat fixture');
+  const assistantId = `team-private-${name}`;
+  const computerId = `private-${name}`;
+  const group = `private-${name}`;
+  await append(`team-${group}`, 'team.created', { teamId: group, name: group, createdBy: 'owner' });
+  for (const member of ['alice', 'bob']) {
+    await append(`team-${group}`, 'team.member_added', { teamId: group, memberId: member, addedBy: 'owner' });
+  }
+  await append(`assistant-${assistantId}`, 'assistant.created', { assistantId,
+    ownerId: personal ? 'alice' : group, kind: personal ? 'personal' : 'team', payingGroupId: group });
+  await append(`computer-${assistantId}`, 'computer.claimed', {
+    assistantId, computerId, generation: 1, tokenId: 'token:test' });
+  await append(`computer-${assistantId}`, 'computer.ready', {
+    assistantId, computerId, generation: 1, podUid: 'pod' });
+  for (const member of ['alice', 'bob']) {
+    const conversationId = `${name}-${member}`;
+    chat.keys.provision('test', conversationId);
+    await append(`conversation-${conversationId}`, 'conversation.created', {
+      conversationId, assistantId, createdBy: member, mode: 'agent_session', payingGroupId: group });
+  }
+  const key = generateKeyPairSync('ec', { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' }, publicKeyEncoding: { type: 'spki', format: 'pem' } });
+  const keyPath = `${directory}/${name}-key.pem`;
+  await writeFile(keyPath, key.privateKey, { mode: 0o600 });
+  const tokens = await tokenIssuer({ privateKeyPath: keyPath, issuer: 'https://bridge.test/' });
+  const context = { silo: 'test', assistantId, computerId, binding: auth.binding };
+  async function post(member: string, id: string, text = id, memoryFree = false) {
+    const result = await chatCommand(nats.store, chat!.keys, { silo: 'test', memberId: member },
+      { id, text, conversationId: `${name}-${member}`,
+        ...(memoryFree ? { executionMode: 'memory_free' as const } : {}) });
+    expect(result.status).toBe('appended');
+  }
+  const server = createServer();
+  const websocketServer = new WebSocketServer({ server });
+  let computerSocket!: WebSocket;
+  const frames: Record<string, unknown>[] = [];
+  function collect(raw: Buffer) { frames.push(z.record(z.string(), z.unknown()).parse(JSON.parse(raw.toString()))); }
+  function connected(socket: WebSocket) { computerSocket = socket; socket.on('message', collect); }
+  websocketServer.on('connection', connected);
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('No port');
+  const link = await connectBridge(chat, { ...context, bearer: 'test',
+    url: `ws://127.0.0.1:${address.port}/bridge` }, tokens);
+  let sequence = 0;
+  const previous = new Map<string, number>();
+  async function report(member: string, turnId: string, type: string, extra: Record<string, unknown> = {}) {
+    const conversationId = `${name}-${member}`;
+    const value = { sequence: ++sequence, previousSequence: previous.get(member) ?? 0,
+      conversationId, turnId, assistantId, requesterId: member, type, ...extra };
+    previous.set(member, sequence);
+    computerSocket.send(JSON.stringify(value));
+    await until(function acknowledged() {
+      return frames.some(function matches(frame) { return frame['sequence'] === sequence; })
+        || link.socket.readyState !== WebSocket.OPEN;
+    }, 65_000);
+    return frames.find(function matches(frame) { return frame['sequence'] === sequence; });
+  }
+  async function closeFixture() {
+    computerSocket.terminate(); link.socket.terminate(); await link.settled();
+    websocketServer.close(); server.close();
+  }
+  return { context, post, report, frames, link, close: closeFixture, tokens, server, computerSocket };
+}
+
+it.each(['memory_free', undefined])('refuses a team start reported as %s before opening access, without closing the bridge', async mode => {
+  const test = await privateServerFixture(`mode-${String(mode)}`);
+  const fence = vi.spyOn(modelAuthority, 'authorityFence');
+  try {
+    await test.post('alice', `wrong-mode-${mode}`); await test.post('bob', `right-mode-${mode}`);
+    fence.mockClear();
+    const extra = { threadId: 'wrong-mode-thread', ...(mode ? { executionMode: mode } : {}) };
+    const refused = await test.report('alice', `wrong-mode-${mode}`, 'agent.turn_started', extra);
+    expect(refused).toMatchObject({ refused: 'Execution mode mismatch' });
+    expect(refused).not.toHaveProperty('token'); expect(refused).not.toHaveProperty('context');
+    expect(fence).not.toHaveBeenCalled();
+    const rows = await history(nats.store, `computer-${test.context.assistantId}`, 'test');
+    expect(rows.at(-1)?.event.data).toMatchObject({ status: 'failed' });
+    const admitted = await test.report('bob', `right-mode-${mode}`, 'agent.turn_started', {
+      threadId: 'right-mode-thread', executionMode: 'restricted' });
+    expect(admitted).toHaveProperty('token');
+    await test.report('bob', `right-mode-${mode}`, 'agent.turn_completed');
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+  } finally { fence.mockRestore(); await test.close(); }
+});
+
+it('refuses private thread reuse by the same requester and retains the cross-requester refusal', async () => {
+  const test = await privateServerFixture('thread-reuse');
+  try {
+    await test.post('alice', 'thread-first'); await test.post('alice', 'thread-second');
+    await test.post('bob', 'thread-bob');
+    await test.report('alice', 'thread-first', 'agent.turn_started', {
+      threadId: 'reused-private', executionMode: 'restricted' });
+    await test.report('alice', 'thread-first', 'agent.turn_completed');
+    const refused = await test.report('alice', 'thread-second', 'agent.turn_started', {
+      threadId: 'reused-private', executionMode: 'restricted' });
+    expect(refused).toMatchObject({ refused: 'Private thread reused' });
+    expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+    await expect(turnCommand(nats.store, test.context, { conversationId: 'thread-reuse-bob',
+      turnId: 'thread-bob', threadId: 'reused-private', status: 'started',
+      executionMode: 'restricted' })).rejects.toThrow('another requester');
+    const closed = once(test.link.socket, 'close');
+    const reusedThread = { threadId: 'reused-private', executionMode: 'restricted' };
+    await test.report('bob', 'thread-bob', 'agent.turn_started', reusedThread);
+    expect((await closed)[0]).toBe(1008);
+  } finally { await test.close(); }
+});
+
+it('sends only Alice’s completed exchange after admission and no private context to Bob or memory-free work', async () => {
+  const test = await privateServerFixture('context');
+  try {
+    await test.post('alice', 'context-first', 'alice-request-canary');
+    await test.report('alice', 'context-first', 'agent.turn_started', {
+      threadId: 'context-first-thread', executionMode: 'restricted' });
+    await test.report('alice', 'context-first', 'agent.message_delta', { messageId: 'reply', text: 'delta-only-canary' });
+    await test.report('alice', 'context-first', 'agent.reasoning_summarised', { text: 'reasoning-canary' });
+    await test.report('alice', 'context-first', 'agent.command_ran', { commandDigest: 'a'.repeat(64), exitCode: 0 });
+    await test.report('alice', 'context-first', 'agent.message_completed', { messageId: 'reply', text: 'alice-reply-canary' });
+    await test.report('alice', 'context-first', 'agent.turn_completed');
+    await test.post('alice', 'context-next');
+    const ack = await test.report('alice', 'context-next', 'agent.turn_started', {
+      threadId: 'context-next-thread', executionMode: 'restricted' });
+    expect(ack).toHaveProperty('context');
+    const text = JSON.stringify(ack);
+    expect(text).toContain('alice-request-canary'); expect(text).toContain('alice-reply-canary');
+    expect(text).not.toMatch(/delta-only-canary|reasoning-canary|commandDigest/u);
+    await test.post('bob', 'context-bob');
+    const bob = await test.report('bob', 'context-bob', 'agent.turn_started', {
+      threadId: 'context-bob-thread', executionMode: 'restricted' });
+    expect(JSON.stringify(bob)).not.toContain('alice-');
+    await test.post('alice', 'context-tools', 'tools', true);
+    const tools = await test.report('alice', 'context-tools', 'agent.turn_started', {
+      threadId: 'context-tools-thread', executionMode: 'memory_free' });
+    expect(tools).toHaveProperty('token'); expect(tools).not.toHaveProperty('context');
+  } finally { await test.close(); }
+});
+
+it('reads long private context only after the turn append and keeps the four small access streams', async () => {
+  const test = await privateServerFixture('long-context');
+  try {
+    await test.post('alice', 'long-first');
+    const content = chat!.keys.encrypt('test', 'long-context-alice', 'delta');
+    const events = [];
+    for (let index = 0; index < 2000; index++) {
+      const event = envelope('test', 'conversation-long-context-alice', 'agent.message_delta', {
+        conversationId: 'long-context-alice', turnId: 'long-first', messageId: 'reply',
+        contentType: 'text', ...content }, `long-delta-${index}`);
+      events.push(event);
+    }
+    await nats.seed(events);
+    const nextContent = chat!.keys.encrypt('test', 'long-context-alice', 'next message');
+    const nextMessage = envelope('test', 'conversation-long-context-alice', 'message.posted', {
+      conversationId: 'long-context-alice', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...nextContent,
+    }, 'long-next');
+    await nats.seed([nextMessage]);
+    const reads = vi.spyOn(nats.store, 'readStream');
+    const appends = vi.spyOn(nats.store, 'append');
+    const fence = vi.spyOn(modelAuthority, 'authorityFence');
+    try {
+      const ack = await test.report('alice', 'long-next', 'agent.turn_started', {
+        threadId: 'long-thread', executionMode: 'restricted' });
+      expect(test.link.socket.readyState).toBe(WebSocket.OPEN);
+      expect(ack).toHaveProperty('context'); expect(ack).toHaveProperty('token');
+      expect(fence.mock.calls[0]?.[2]).toEqual(['member-alice', `assistant-${test.context.assistantId}`,
+        'team-private-long-context', 'team-private-long-context']);
+      const opened = fence.mock.invocationCallOrder[0]!;
+      const turnAppendIndex = appends.mock.calls.findIndex(function isTurnAppend(call) {
+        return z.object({ type: z.string() }).parse(call[0].event).type === 'computer.turn_started';
+      });
+      const saved = appends.mock.invocationCallOrder[turnAppendIndex]!;
+      const contextReads: number[] = [];
+      for (const [index, call] of reads.mock.calls.entries()) {
+        if (call[0] === 'conversation-long-context-alice') contextReads.push(reads.mock.invocationCallOrder[index]!);
+      }
+      expect(contextReads.some(function during(order) { return order > opened && order < saved; })).toBe(false);
+      expect(contextReads.some(function after(order) { return order > saved; })).toBe(true);
+    } finally { reads.mockRestore(); appends.mockRestore(); fence.mockRestore(); }
+  } finally { await test.close(); }
+}, 120_000);
+
+it('stores lost output, accepts replay over text, and rejects replay over a start report', async () => {
+  const test = await privateServerFixture('output-lost');
+  try {
+    await test.post('alice', 'output-turn');
+    const base = { conversationId: 'output-lost-alice', turnId: 'output-turn',
+      assistantId: test.context.assistantId, requesterId: 'alice' };
+    const output = { ...base, sequence: 1, previousSequence: 0, type: 'agent.message_completed',
+      messageId: 'reply', text: 'output-canary' };
+    expect(await recordReport(nats.store, chat!.keys, test.context, output)).toBe('recorded');
+    expect(await recordReport(nats.store, chat!.keys, test.context,
+      { ...base, sequence: 1, previousSequence: 0, type: 'agent.output_lost' })).toBe('duplicate');
+    expect(await recordReport(nats.store, chat!.keys, test.context,
+      { ...base, sequence: 2, previousSequence: 1, type: 'agent.output_lost' })).toBe('recorded');
+    await recordReport(nats.store, chat!.keys, test.context,
+      { ...base, sequence: 3, previousSequence: 2, type: 'agent.turn_started', threadId: 'lost-thread' });
+    await expect(recordReport(nats.store, chat!.keys, test.context,
+      { ...base, sequence: 3, previousSequence: 2, type: 'agent.output_lost' })).rejects.toThrow('Report sequence reused');
+    const rows = await history(nats.store, 'conversation-output-lost-alice', 'test');
+    expect(rows.at(-2)?.event.type).toBe('agent.output_lost');
+  } finally { await test.close(); }
+});
+
+it('stores the memory-free request and refuses changed retries and other modes', async () => {
+  const test = await privateServerFixture('request-mode');
+  try {
+    const url = '/api/conversations/request-mode-alice/messages';
+    const posted = await request('POST', url, { id: 'requested-tools', text: 'tools',
+      executionMode: 'memory_free' }, 'alice');
+    expect(posted.statusCode, posted.body).toBe(200);
+    expect((await request('POST', url, { id: 'requested-tools', text: 'tools' }, 'alice')).statusCode).toBe(409);
+    for (const executionMode of ['restricted', 'other']) {
+      expect((await request('POST', url, { id: 'invalid-mode', text: 'tools', executionMode }, 'alice')).statusCode).toBe(400);
+    }
+    const rows = await history(nats.store, 'conversation-request-mode-alice', 'test');
+    expect(rows.at(-1)?.event.data).toMatchObject({ executionMode: 'memory_free' });
+  } finally { await test.close(); }
+});
+
+it.each([false, true])('dispatches required execution modes, personal=%s', async personal => {
+  const test = await privateServerFixture(`dispatch-${String(personal)}`, personal);
+  const stop = new AbortController();
+  const watcherPool = new Pool({ connectionString: await dbs.postgres() });
+  const watcherDb = pgDb(watcherPool);
+  await conversations.create(watcherDb);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials').mockResolvedValue(undefined);
+  function rewrite(request: { url?: string }) { request.url = '/bridge'; }
+  test.server.on('upgrade', rewrite);
+  const address = test.server.address();
+  if (!address || typeof address === 'string') throw new Error('No port');
+  let work: Promise<void> | undefined;
+  try {
+    await test.post('alice', `dispatch-first-${personal}`);
+    await test.post('bob', `dispatch-tools-${personal}`, 'tools', true);
+    for (const member of ['alice', 'bob']) {
+      const rows = await history(nats.store, `conversation-dispatch-${personal}-${member}`, 'test');
+      const created = rows[0]!;
+      await conversations.apply(watcherDb, created.event, created.sequence);
+    }
+    work = watchBridges({ ...chat!, db: watcherDb }, test.tokens, kube, `http://127.0.0.1:${address.port}`, stop.signal);
+    await until(function dispatched() {
+      return test.frames.some(function first(frame) { return frame['id'] === `dispatch-first-${personal}`; })
+        && test.frames.some(function tools(frame) { return frame['id'] === `dispatch-tools-${personal}`; });
+    });
+    await delay(300);
+    const expected = personal ? 'memory_free' : 'restricted';
+    expect(test.frames).toContainEqual(expect.objectContaining({ type: 'turn',
+      id: `dispatch-first-${personal}`, executionMode: expected }));
+    expect(test.frames).toContainEqual(expect.objectContaining({ type: 'turn',
+      id: `dispatch-tools-${personal}`, executionMode: 'memory_free' }));
+  } finally {
+    stop.abort(); await work; credentials.mockRestore(); await test.close();
+    await conversations.drop(watcherDb);
+    await watcherPool.end();
+  }
+});

@@ -89,6 +89,10 @@
                 "mountPath": "/home/desktop"
               },
               {
+                "name": "private",
+                "mountPath": "/home/private"
+              },
+              {
                 "name": "tmp",
                 "mountPath": "/tmp"
               },
@@ -124,6 +128,13 @@
           },
           {
             "name": "desktop",
+            "emptyDir": {
+              "medium": "Memory",
+              "sizeLimit": "16Mi"
+            }
+          },
+          {
+            "name": "private",
             "emptyDir": {
               "medium": "Memory",
               "sizeLimit": "16Mi"

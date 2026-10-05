@@ -13,7 +13,8 @@ import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
-import { turnCommand, TurnAdmissionRejected } from './turns.ts';
+import { turnCommand, TurnAdmissionRejected, requiredExecutionMode, type ExecutionMode } from './turns.ts';
+import { privateContext } from './private-context.ts';
 import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
 import { agentSession, recordReport, reportPosition, ReportRejected } from './reports.ts';
@@ -26,7 +27,8 @@ type ReportQueue = { pending: Promise<void>; count: number; bytes: number };
 const receiptData = z.object({ type: z.literal('file_received') });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
-  turnId: z.string(), type: z.string(), threadId: z.string().optional(),
+  turnId: z.string(), type: z.string(),
+  executionMode: z.enum(['restricted', 'memory_free']).optional(), threadId: z.string().optional(),
 });
 
 type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
@@ -62,7 +64,7 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
   if (options.binding) context.binding = options.binding;
   const result = await recordReport(options.store, options.keys, context, value);
   const acknowledgement: {
-    type: string; sequence: number; token?: string; expiresAt?: number; refused?: string;
+    type: string; sequence: number; token?: string; expiresAt?: number; refused?: string; context?: unknown;
   } = { type: 'ack', sequence: report.sequence };
   if (report.type.startsWith('agent.turn_')) {
     const status = turnStatus(report.type);
@@ -81,6 +83,19 @@ async function acknowledgeReport(options: BridgeOptions, input: BridgeInput,
       const grant = await credentials.turn(turn);
       acknowledgement.token = grant.value;
       acknowledgement.expiresAt = grant.expiresAt;
+      if (binding.executionMode === 'restricted') {
+        const rows = await chatHistory(options.store, options.silo, report.conversationId);
+        function isMessage(row: ChatRows[number]) {
+          return row.event.type === 'message.posted' && row.event.id === report.turnId;
+        }
+        const message = rows.find(isMessage);
+        if (!message) throw new Error('Requested message unavailable');
+        function decrypt(data: unknown) {
+          return options.keys.decrypt(options.silo, report.conversationId, data);
+        }
+        const context = privateContext(rows, message, binding.requesterId, decrypt);
+        if (context !== undefined) acknowledgement.context = context;
+      }
     }
   }
   if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(acknowledgement));
@@ -351,12 +366,13 @@ function attachmentsBefore(rows: ChatRows, uploads: Upload[], sequence: number) 
 }
 
 function sendTurn(options: WatchOptions, socket: WebSocket, conversation: AgentSession,
-  rows: ChatRows, uploads: Upload[], message: ChatRows[number]) {
-  const attachments = attachmentsBefore(rows, uploads, message.sequence);
+  rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
+  const attachments = executionMode === 'restricted'
+    ? [] : attachmentsBefore(rows, uploads, message.sequence);
   const requester = z.object({ authorId: z.string() }).parse(message.event.data);
   const text = options.keys.decrypt(options.silo, conversation.conversationId, message.event.data);
   const turn = { type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
-    requesterId: requester.authorId, assistantId: conversation.assistantId, text,
+    requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
     attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
     token: 'preparing', expiresAt: Date.now() + 120_000 };
   socket.send(JSON.stringify(turn));
@@ -406,7 +422,15 @@ async function processConversation(options: WatchOptions, tokens: Tokens,
   if (current.type !== 'computer.ready' || refused.has(computer.computerId)) return true;
   const link = await connection(computer.computerId, conversation.assistantId);
   await deliverUploads(options.objects, link, uploads);
-  if (message) sendTurn(options, link.socket, conversation, rows, allUploads, message);
+  if (message) {
+    const created = await creationEvent(options.store, options.silo,
+      `assistant-${conversation.assistantId}`, 'assistant.created');
+    const assistant = z.object({ kind: z.string() }).parse(created.data);
+    const requested = z.object({ executionMode: z.literal('memory_free').optional() })
+      .parse(message.event.data);
+    const mode = requiredExecutionMode(assistant.kind, requested.executionMode);
+    sendTurn(options, link.socket, conversation, rows, allUploads, message, mode);
+  }
   return true;
 }
 

@@ -1,7 +1,10 @@
-// S0.3's disk layout and S0.1b's fixed executor launcher.
-import { mkdirSync, lstatSync, openSync, closeSync, fstatSync, fchmodSync, fchownSync, constants, symlinkSync, rmSync } from 'node:fs';
+// Prepare protected homes and start the computer's separate user processes.
+import { mkdirSync, lstatSync, openSync, closeSync, fstatSync, fchmodSync, fchownSync, constants, symlinkSync, rmSync, readdirSync, writeFileSync, chownSync, chmodSync } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer, connect } from 'node:net';
+import { randomBytes } from 'node:crypto';
+import { privateConfig, privateEnvironments } from './codex-config.ts';
+import { privateCodexLaunch } from './private-codex.ts';
+import { createServer, connect, type Socket } from 'node:net';
 // Resolve each child through an open parent; mutate only the checked descriptor.
 function directory(parent: number, name: string, uid: number, mode: number, gid = uid) {
   const path = `/proc/self/fd/${parent}/${name}`;
@@ -40,17 +43,88 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   for (const [name, uid] of [['codex', 1000], ['tool', 1001], ['desktop', 1002]] as const) {
     closeSync(directory(home, name, uid, 0o700));
   }
+  closeSync(directory(home, 'private', 0, 0o711));
+  for (const name of readdirSync('/home/private')) {
+    if (name.startsWith('turn-')) rmSync(`/home/private/${name}`, { recursive: true, force: true });
+  }
   closeSync(directory(run, 'codex', 1000, 0o700));
   closeSync(directory(run, 'executor', 0, 0o750, 1000));
   closeSync(agent); closeSync(home); closeSync(run);
   rmSync('/home/codex/.codex', { recursive: true, force: true });
   symlinkSync('/home/agent/codex', '/home/codex/.codex');
+  const caller = randomBytes(32).toString('hex');
+  const privateChildren = new Set<ChildProcess>();
+  let privateCounter = 0;
+
+  function startPrivateCodex(socket: Socket, caller: string) {
+    const privateHome = `/home/private/turn-${++privateCounter}`;
+    let child: ChildProcess | undefined;
+    let exited = false;
+    let timer: NodeJS.Timeout | undefined;
+    function removeHome() {
+      rmSync(privateHome, { recursive: true, force: true });
+    }
+    function childExited() {
+      exited = true;
+      if (timer) clearTimeout(timer);
+      if (child) privateChildren.delete(child);
+      socket.destroy();
+      removeHome();
+    }
+    function killAsPrivateUser() {
+      if (exited || !child?.pid) return;
+      const killer = spawn('/usr/bin/setpriv', ['--reuid=1003', '--regid=1003',
+        '--clear-groups', '--', '/bin/kill', '-KILL', String(child.pid)], { stdio: 'ignore' });
+      killer.on('error', socketClosed);
+    }
+    function socketClosed() {
+      child?.stdin?.destroy();
+      if (!exited && !timer) timer = setTimeout(killAsPrivateUser, 5000);
+    }
+    function socketFailed() { socket.destroy(); socketClosed(); }
+    try {
+      mkdirSync(privateHome, { mode: 0o700 });
+      for (const name of ['codex', 'tmp', 'work']) mkdirSync(`${privateHome}/${name}`, { mode: 0o700 });
+      writeFileSync(`${privateHome}/codex/config.toml`, privateConfig(process.env['MODEL'] ?? 'stub-model'));
+      writeFileSync(`${privateHome}/codex/environments.toml`, privateEnvironments());
+      for (const path of [privateHome, `${privateHome}/codex`, `${privateHome}/tmp`, `${privateHome}/work`,
+        `${privateHome}/codex/config.toml`, `${privateHome}/codex/environments.toml`]) {
+        chownSync(path, 1003, 1003);
+      }
+      for (const path of [privateHome, `${privateHome}/codex`, `${privateHome}/tmp`, `${privateHome}/work`]) {
+        chmodSync(path, 0o700);
+      }
+      // Keep stderr out of Pod logs and files in a RAM home owned by UID 1003.
+      // Share this UID between private turns; tools being absent keeps members apart.
+      // Allow writes to /tmp, /dev/shm and world-writable workspace directories.
+      // Allow workspace reads and loopback ports 8080, 8081 and 6901.
+      // Deny access to executor, control, persistent Codex and tool homes by directory modes.
+      // Allow every UID 1000 process, including persistent Codex, to reach private.sock.
+      const launch = privateCodexLaunch(privateHome, caller);
+      child = spawn(launch.command, launch.args, launch.options);
+      privateChildren.add(child);
+      child.on('error', childExited);
+      child.on('exit', childExited);
+      if (!child.stdin || !child.stdout) throw new Error('Missing private pipes');
+      child.stdin.on('error', socketFailed);
+      socket.on('error', socketFailed);
+      socket.on('close', socketClosed);
+      socket.pipe(child.stdin);
+      child.stdout.pipe(socket);
+    } catch {
+      socket.destroy();
+      if (child) socketClosed();
+      else removeHome();
+    }
+  }
+
   const children = new Set<ChildProcess>();
   let stopping = false;
   const stop = (code: number) => {
     if (stopping) return;
     stopping = true;
     for (const child of children) child.kill('SIGTERM');
+    for (const child of privateChildren) child.stdin?.destroy();
     setTimeout(() => process.exit(code), 500).unref();
   };
   const watch = (child: ChildProcess, required: boolean) => {
@@ -60,7 +134,7 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
     return child;
   };
   process.on('SIGTERM', () => stop(0)); process.on('SIGINT', () => stop(0));
-  for (const name of ['exec', 'host']) rmSync(`/run/executor/${name}.sock`, { force: true });
+  for (const name of ['exec', 'host', 'private']) rmSync(`/run/executor/${name}.sock`, { force: true });
   for (const name of ['control', 'app']) rmSync(`/run/codex/${name}.sock`, { force: true });
   const executor = (args: string[]) => createServer(socket => {
     const child = watch(spawn('/usr/local/bin/tool-user', args, { stdio: ['pipe', 'pipe', 'inherit'] }), false);
@@ -72,13 +146,15 @@ if (process.argv[2] === 'connect' || process.argv[2] === 'connect-host') {
   });
   // Only UID 1000 can traverse this root-owned directory. No path-based socket chmod/chown.
   process.umask(0o111);
+  function privateConnection(socket: Socket) { startPrivateCodex(socket, caller); }
+  createServer(privateConnection).listen('/run/executor/private.sock');
   executor(['host']).listen('/run/executor/host.sock', () => {
     executor([]).listen('/run/executor/exec.sock', () => {
       process.umask(0o077);
       watch(spawn('/usr/bin/setpriv', ['--no-new-privs', '/usr/local/bin/node', '--experimental-strip-types', '/app/src/desktop.ts'], { stdio: 'inherit' }), true);
       watch(spawn('/usr/local/bin/node', ['--experimental-strip-types', '/app/src/bridge.ts'], {
         uid: 1000, gid: 1000, stdio: 'inherit',
-        env: { PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'], MODEL: process.env['MODEL'] ?? 'stub-model' },
+        env: { PATH: process.env['PATH'], HOME: '/home/codex', GATEWAY: process.env['GATEWAY'], MODEL: process.env['MODEL'] ?? 'stub-model', PROXY_CALLER_TOKEN: caller },
       }), true);
     });
   });

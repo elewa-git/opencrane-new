@@ -285,8 +285,11 @@ export const participantRemovedDataSchema = z
   .strict();
 
 export const agentTurnStartedDataSchema = z
-  .object({ conversationId: id, turnId: id, assistantId: id, threadId: id.optional() })
+  .object({ conversationId: id, turnId: id, assistantId: id, threadId: id.optional(),
+    executionMode: z.enum(['restricted', 'memory_free']).optional() })
   .strict();
+
+export const agentOutputLostDataSchema = z.object({ conversationId: id, turnId: id }).strict();
 
 export const agentTurnCompletedDataSchema = z.object({ conversationId: id, turnId: id }).strict();
 export const agentTurnStopRequestedDataSchema = z.object({ conversationId: id, turnId: id, requestedBy: id }).strict();
@@ -560,6 +563,7 @@ export const securityAlertRaisedDataSchema = z
 // Server-owned admission and suspend fence; reports never carry this authority.
 export const computerTurnStartedDataSchema = z.object({
   assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id, requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
+  executionMode: z.enum(['restricted', 'memory_free']).optional(),
 }).strict();
 export const computerTurnClosedDataSchema = computerTurnStartedDataSchema.extend({ threadId: id.optional(), status: z.enum(['completed', 'failed']) });
 

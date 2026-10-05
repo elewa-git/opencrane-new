@@ -4,6 +4,8 @@
 
 A private cloud computer where each person's assistant does its work. Each computer is a locked-down Linux container. It holds Codex (OpenAI's coding agent), a web browser and a remote desktop. Kubernetes, the system that runs containers, starts one for each person.
 
+Private turns run in a short-lived, tool-free Codex process whose files live only in memory.
+
 ## Where it fits
 
 This is the personal computers layer. `apps/ops` starts and pauses computers. `apps/server` sends chat turns and files and can show a read-only desktop view. The computer sends model requests through agentgateway, the AI gateway in the server's models process.
@@ -13,6 +15,8 @@ flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
   server["apps/server<br/>the back end"] <-->|chat turns and reports| computer
+  computer -->|runs private turns| private["Private Codex<br/>temporary process"]
+  private -->|sends model requests| gateway
   computer -->|sends model requests| gateway["agentgateway<br/>model gateway"]
 ```
 
