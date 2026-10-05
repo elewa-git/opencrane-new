@@ -6,7 +6,8 @@ Queue and run background reactions to events.
 A [reaction](../../GLOSSARY.md#reaction-handler) is work that follows a saved
 event, such as creating an assistant after a member joins. This package sends
 each reaction to a job queue in PostgreSQL and runs the jobs. `apps/ops` starts
-the dispatcher and workers.
+the [dispatcher](../../GLOSSARY.md#dispatcher), the background program that
+sends events to registered reactions, and the workers that run them.
 
 ## Where it fits
 

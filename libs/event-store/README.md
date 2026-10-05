@@ -33,8 +33,8 @@ flowchart LR
 
 ## Processes it handles
 
-1. **The server records a change.** It sends an event and the stream position it
-   expects. The store saves it or reports a conflict if another change came first.
+1. **The server records a change.** It sends an event and the place it expects in
+   the event list. The store saves it or reports a conflict if another change came first.
 2. **A worker catches up.** It reads events after its saved position, handles them
    in order and can continue from that position after it restarts.
 
