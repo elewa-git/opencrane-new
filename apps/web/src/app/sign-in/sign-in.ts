@@ -2,9 +2,10 @@ import { ChangeDetectionStrategy, Component, inject, signal, viewChild, ElementR
 import { NAVIGATE } from '../core/navigate';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { SharedState } from '../shared-state/shared-state';
+import { BrandMark } from '../ui/brand-mark';
 
 @Component({
-  selector: 'oc-sign-in', imports: [SharedState, FoldLoader], templateUrl: './sign-in.html', styleUrl: './sign-in.css',
+  selector: 'oc-sign-in', imports: [SharedState, FoldLoader, BrandMark], templateUrl: './sign-in.html', styleUrl: './sign-in.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SignIn implements AfterViewInit, OnDestroy {

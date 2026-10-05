@@ -12,12 +12,18 @@
     "account-1280-no-preference.png",
     "preferences-1280-no-preference.png",
     "my-tools-1280-no-preference.png",
+    "assistant-1280-no-preference.png",
+    "session-expired-1280-no-preference.png",
+    "identity-failed-1280-no-preference.png",
     "account-1280-reduce.png",
     "preferences-1280-reduce.png",
     "my-tools-1280-reduce.png",
     "account-390-no-preference.png",
     "preferences-390-no-preference.png",
     "my-tools-390-no-preference.png",
+    "assistant-390-no-preference.png",
+    "session-expired-390-no-preference.png",
+    "identity-failed-390-no-preference.png",
     "menu-390-no-preference.png",
     "account-390-reduce.png",
     "preferences-390-reduce.png",
@@ -27,9 +33,18 @@
   "environment": "Built Angular assets; Chromium; disposable identity fixture; no silo stack",
   "comparedFrames": [
     "ONB-50",
+    "ONB-51",
     "ONB-52",
     "INT-60",
     "INT-61"
+  ],
+  "knownDifferences": [
+    "The settings sidebar has no viewer name or initials row, matching the organisation shell.",
+    "Account omits Email, Organisation, Role, preferred-name, assistant-card, Save and Open My tools controls.",
+    "My tools omits the INT-60 and INT-61 introductory line.",
+    "Preferences omits the ONB-52 Personal · only you label.",
+    "The account logo is not the smaller, lighter ONB-50 mark.",
+    "The Assistant page reports missing persona details and provisioning status."
   ],
   "scope": "Settings shell, available identity name, and honest unavailable screen bodies"
 }

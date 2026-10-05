@@ -2,24 +2,28 @@
   <oc-claim />
 } @else if (workspacePage) {
   <oc-workspace />
-} @else if (settingsPage) {
+} @else if (accountPath) {
   <oc-personal-settings-shell [activePage]="settingsPage">
-    @if (settingsPage === 'account') {
-      <oc-account-screen />
+    @if (!settingsPage) {
+      <h1>Page not found</h1>
+      <p>This address does not match a personal settings page.</p>
     } @else {
-      <h1>{{ settingsTitle() }}</h1>
-      @if (settingsPage === 'preferences') {
-        <oc-shared-state kind="not_configured" message="Not available yet"
-          detail="Personal preferences need the P4-16 API and P4-18 screen."
-          [showAction]="false" />
-      } @else if (settingsPage === 'assistant') {
-        <oc-shared-state kind="not_configured" message="Not available yet"
-          detail="Personal assistant status and persona reads are not available until P4-18 lands."
-          [showAction]="false" />
+      @if (settingsPage === 'account') {
+        <oc-account-screen />
       } @else {
-        <oc-shared-state kind="not_configured" message="Not available yet"
-          detail="Personal tool connection reads are not available until P3-8 and P3-9 land."
-          [showAction]="false" />
+        <h1>{{ personalSettingsPageLabel(settingsPage) }}</h1>
+        @if (settingsPage === 'preferences') {
+          <oc-shared-state kind="not_configured" message="Not available yet"
+            detail="Personal preferences are not available yet." [showAction]="false" />
+        } @else if (settingsPage === 'assistant') {
+          <oc-shared-state kind="not_configured" message="Not available yet"
+            detail="Your assistant assignment is available in the workspace. Persona details and
+              provisioning status are not available yet."
+            [showAction]="false" />
+        } @else {
+          <oc-shared-state kind="not_configured" message="Not available yet"
+            detail="Your personal tool connections are not available yet." [showAction]="false" />
+        }
       }
     }
   </oc-personal-settings-shell>

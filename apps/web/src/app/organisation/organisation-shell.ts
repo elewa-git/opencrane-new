@@ -3,13 +3,14 @@ import {
 } from '@angular/core';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface } from '../ui/paper';
+import { BrandMark } from '../ui/brand-mark';
 import { organisationPageLabel, organisationPages, type OrganisationPage } from './pages';
 
 @Component({
   selector: 'oc-organisation-shell',
-  imports: [NavigationMenu, PaperSurface],
+  imports: [NavigationMenu, PaperSurface, BrandMark],
   templateUrl: './organisation-shell.html',
-  styleUrl: './organisation-shell.css',
+  styleUrls: ['../ui/shell.css', './organisation-shell.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '(window:resize)': 'resized()' },
 })

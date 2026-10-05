@@ -20,34 +20,55 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
-describe('MCP register', () => {
-  let fetchSpy: MockInstance<typeof fetch>;
+let fetchSpy: MockInstance<typeof fetch>;
 
+function webSocketIsConnected(): boolean {
+  return false;
+}
+
+function configureAppTestBed(): void {
+  const state = signal<'idle'>('idle');
+  const webSocketService = {
+    state: state.asReadonly(),
+    isConnected: computed(webSocketIsConnected),
+    messages: signal([]).asReadonly(),
+    lastMessage: signal(undefined).asReadonly(),
+    connect: vi.fn(),
+    disconnect: vi.fn(),
+    send: vi.fn(),
+  };
+  const providers = [
+    { provide: NAVIGATE, useValue: vi.fn() },
+    { provide: WebSocketService, useValue: webSocketService },
+  ];
+  const testModule = { imports: [App], providers };
+  TestBed.configureTestingModule(testModule);
+}
+
+function create(reply: Response = response(loaded)): ComponentFixture<App> {
+  fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
+  configureAppTestBed();
+  const fixture = TestBed.createComponent(App);
+  fixture.detectChanges();
+  return fixture;
+}
+
+function root(fixture: ComponentFixture<App>): HTMLElement {
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
+  return element;
+}
+
+function button(rootElement: HTMLElement, label: string): HTMLButtonElement {
+  const buttons = [...rootElement.querySelectorAll('button')];
+  const found = buttons.find((item) => item.textContent?.trim() === label);
+  if (!(found instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`);
+  return found;
+}
+
+describe('MCP register', () => {
   beforeEach(() => globalThis.history.replaceState({}, '', '/org/integrations'));
   afterEach(() => { fetchSpy?.mockRestore(); globalThis.history.replaceState({}, '', '/'); });
-
-  function create(reply: Response = response(loaded)): ComponentFixture<App> {
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
-    const state = signal<'idle'>('idle');
-    TestBed.configureTestingModule({ imports: [App], providers: [{ provide: NAVIGATE, useValue: vi.fn() }, { provide: WebSocketService, useValue: {
-      state: state.asReadonly(), isConnected: computed(() => false), messages: signal([]).asReadonly(),
-      lastMessage: signal(undefined).asReadonly(), connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
-    } }] });
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    return fixture;
-  }
-
-  function root(fixture: ComponentFixture<App>): HTMLElement {
-    const element: unknown = fixture.nativeElement;
-    if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
-    return element;
-  }
-  function button(rootElement: HTMLElement, label: string): HTMLButtonElement {
-    const found = [...rootElement.querySelectorAll('button')].find((item) => item.textContent?.trim() === label);
-    if (!(found instanceof HTMLButtonElement)) throw new Error(`Missing button ${label}`);
-    return found;
-  }
 
   it('loads typed rows and filters the counted tabs', async () => {
     const fixture = create();
@@ -203,35 +224,11 @@ describe('MCP register', () => {
 });
 
 describe('personal settings shell', () => {
-  let fetchSpy: MockInstance<typeof fetch>;
-
   beforeEach(() => globalThis.history.replaceState({}, '', '/account'));
   afterEach(() => {
     fetchSpy?.mockRestore();
     globalThis.history.replaceState({}, '', '/');
   });
-
-  function create(reply: Response): ComponentFixture<App> {
-    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
-    const state = signal<'idle'>('idle');
-    TestBed.configureTestingModule({ imports: [App], providers: [
-      { provide: NAVIGATE, useValue: vi.fn() },
-      { provide: WebSocketService, useValue: {
-        state: state.asReadonly(), isConnected: computed(() => false),
-        messages: signal([]).asReadonly(), lastMessage: signal(undefined).asReadonly(),
-        connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
-      } },
-    ] });
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    return fixture;
-  }
-
-  function root(fixture: ComponentFixture<App>): HTMLElement {
-    const element: unknown = fixture.nativeElement;
-    if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
-    return element;
-  }
 
   it('loads only the identity name and marks unavailable profile fields', async () => {
     const fixture = create(response({ authenticated: true, user: { name: 'Taylor Example' } }));
@@ -239,7 +236,8 @@ describe('personal settings shell', () => {
     expect(root(fixture).querySelectorAll('.sidebar nav a')).toHaveLength(4);
     expect(root(fixture).querySelector('[aria-current="page"]')?.getAttribute('href')).toBe('/account');
     expect(root(fixture).textContent).toContain('Profile details not available yet');
-    expect(root(fixture).textContent).toContain('Email, organisation name, role and groups');
+    expect(root(fixture).textContent).toContain('Email, organisation, role and groups');
+    expect(root(fixture).querySelector('.identity')?.hasAttribute('aria-labelledby')).toBe(false);
     expect(root(fixture).textContent).not.toContain('alex@');
     const status = root(fixture).querySelector('[role="status"][aria-live="polite"]');
     expect(status?.textContent).toContain('Identity loaded from your current session');
@@ -264,22 +262,91 @@ describe('personal settings shell', () => {
     const fixture = create(response({}));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe('My tools');
-    expect(element.textContent).toContain('Personal tool connection reads are not available');
+    expect(element.textContent).toContain('Your personal tool connections are not available yet.');
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
     expect(element.querySelector('.sidebar a.back[href="/workspace"]')?.textContent)
       .toContain('Back to workspace');
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('keeps workspace navigation usable from every settings destination', () => {
-    globalThis.history.replaceState({}, '', '/account/preferences');
+  function checkSettingsDestination(pathname: string, expectedHeading: string): void {
+    globalThis.history.replaceState({}, '', pathname);
     const fixture = create(response({}));
     const element = root(fixture);
-    expect(element.querySelector('h1')?.textContent).toBe('Preferences');
-    expect(element.textContent).toContain('Personal preferences need the P4-16 API and P4-18 screen.');
+    expect(element.querySelector('h1')?.textContent).toBe(expectedHeading);
+    expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
     expect(element.querySelector('.sidebar nav a[aria-current="page"]')?.getAttribute('href'))
-      .toBe('/account/preferences');
+      .toBe(pathname);
     expect(element.querySelector('.sidebar .back')?.getAttribute('href')).toBe('/workspace');
     expect(element.querySelector('oc-composer')).toBeNull();
-  });
+  }
+
+  it.each([
+    ['/account', 'Account'],
+    ['/account/preferences', 'Preferences'],
+    ['/account/assistant', 'Assistant'],
+    ['/account/tools', 'My tools'],
+  ])('opens settings destination %s', checkSettingsDestination);
+
+  function checkUnknownAccountRoute(pathname: string): void {
+    globalThis.history.replaceState({}, '', pathname);
+    const fixture = create(response({}));
+    const element = root(fixture);
+    expect(element.textContent).toContain('Page not found');
+    expect(element.textContent)
+      .toContain('This address does not match a personal settings page.');
+    expect(element.querySelector('.sidebar nav')).not.toBeNull();
+    expect(element.querySelector('oc-sign-in')).toBeNull();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  }
+
+  const unknownSettingsPaths = ['/account/unknown', '/account/tools/extra'];
+  it.each(unknownSettingsPaths)(
+    'shows an unknown settings route inside its shell at %s', checkUnknownAccountRoute,
+  );
+
+  async function checkSignedOutIdentity(): Promise<void> {
+    const fixture = create(response({ authenticated: false, user: null }));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Your session expired'));
+    const state = root(fixture).querySelector('oc-shared-state .state');
+    expect(state?.getAttribute('data-state')).toBe('access_changed');
+    expect(state?.getAttribute('data-glyph-name')).toBe('access_changed');
+    expect(root(fixture).querySelector('a[href="/"]')?.textContent).toBe('Sign in again');
+    expect(root(fixture).textContent).not.toContain('Identity unavailable');
+    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim()).toBe('');
+  }
+
+  it('shows a lock state and sign-in link when the identity says the session expired',
+    checkSignedOutIdentity);
+
+  async function checkServerErrorCanBeRetried(): Promise<void> {
+    const fixture = create(response({ error: 'unavailable' }, 500));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load your identity"));
+    expect(root(fixture).querySelector('oc-shared-state .state')?.getAttribute('data-state'))
+      .toBe('failed');
+    expect(button(root(fixture), 'Try again')).toBeTruthy();
+    expect(root(fixture).textContent).not.toContain('Sign in again');
+    const identity = { authenticated: true, user: { name: 'Taylor Example' } };
+    fetchSpy.mockResolvedValueOnce(response(identity));
+    button(root(fixture), 'Try again').click();
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Taylor Example'));
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim())
+      .toContain('Identity loaded from your current session.');
+  }
+
+  it('offers a retry after a server error and repeats the identity read',
+    checkServerErrorCanBeRetried);
+
+  async function checkInvalidJsonUsesFailedState(): Promise<void> {
+    const invalidJson = new Response('{not json', { status: 200 });
+    const fixture = create(invalidJson);
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load your identity"));
+    expect(button(root(fixture), 'Try again')).toBeTruthy();
+    expect(root(fixture).textContent).not.toContain('Sign in again');
+    expect(root(fixture).querySelector('.sr-only')?.textContent?.trim()).toBe('');
+  }
+
+  it('uses the failed state when the identity response is not valid JSON',
+    checkInvalidJsonUsesFailedState);
 });

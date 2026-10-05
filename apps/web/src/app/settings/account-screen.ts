@@ -10,6 +10,8 @@ const identityResponse = z.object({
   user: z.object({ name: z.string().optional() }).nullable(),
 });
 
+type IdentityState = 'loading' | 'ready' | 'signed-out' | 'failed';
+
 @Component({
   selector: 'oc-account-screen',
   imports: [ChatIcon, SharedState],
@@ -18,11 +20,10 @@ const identityResponse = z.object({
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AccountScreen implements OnDestroy {
-  protected readonly loading = signal(true);
+  protected readonly identityState = signal<IdentityState>('loading');
   protected readonly identityName = signal('');
-  protected readonly unavailable = signal('');
   protected readonly announcement = signal('');
-  private readonly request = new AbortController();
+  private request = new AbortController();
 
   constructor() {
     afterNextRender(this.startIdentityCheck.bind(this));
@@ -33,20 +34,27 @@ export class AccountScreen implements OnDestroy {
   }
 
   private async loadIdentity(): Promise<void> {
+    this.identityState.set('loading');
+    this.identityName.set('');
+    this.announcement.set('Checking your signed-in identity.');
+    this.request.abort();
+    const request = new AbortController();
+    this.request = request;
     try {
       const response = await fetch('/auth/me', {
         cache: 'no-store',
-        signal: this.request.signal,
+        signal: request.signal,
       });
       if (!response.ok) throw new Error('Identity read failed');
       const body: unknown = await response.json();
       const identity = identityResponse.parse(body);
       if (!identity.authenticated) {
-        this.unavailable.set('Sign in to your organisation to load your identity.');
-        this.announcement.set('Sign in to your organisation to load your identity.');
+        this.identityState.set('signed-out');
+        this.announcement.set('');
         return;
       }
       this.identityName.set(identity.user?.name?.trim() ?? '');
+      this.identityState.set('ready');
       if (this.identityName()) {
         this.announcement.set('Identity loaded from your current session.');
       } else {
@@ -55,17 +63,18 @@ export class AccountScreen implements OnDestroy {
         );
       }
     } catch (error) {
+      if (request.signal.aborted) return;
       if (error instanceof DOMException && error.name === 'AbortError') return;
-      this.unavailable.set('We could not load identity from your current session.');
-      this.announcement.set('We could not load identity from your current session.');
-    } finally {
-      if (!this.request.signal.aborted) this.loading.set(false);
+      this.identityState.set('failed');
+      this.announcement.set('');
     }
   }
 
   private startIdentityCheck(): void {
-    if (this.request.signal.aborted) return;
-    this.announcement.set('Checking your signed-in identity.');
+    void this.loadIdentity();
+  }
+
+  protected retryIdentity(): void {
     void this.loadIdentity();
   }
 }

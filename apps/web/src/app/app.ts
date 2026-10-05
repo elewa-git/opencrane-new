@@ -14,7 +14,7 @@ import { OrganisationShell } from './organisation/organisation-shell';
 import { normalisePathname, organisationPage, organisationPageLabel } from './organisation/pages';
 import { AccountScreen } from './settings/account-screen';
 import { PersonalSettingsShell } from './settings/personal-settings-shell';
-import { personalSettingsPage } from './settings/pages';
+import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
 
 @Component({
   selector: 'app-root',
@@ -26,7 +26,10 @@ import { personalSettingsPage } from './settings/pages';
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '[class.workspace-root]': 'workspacePage' },
+  host: {
+    '[class.workspace-root]': 'workspacePage',
+    '[class.settings-root]': 'accountPath',
+  },
 })
 export class App {
   private readonly pathname = normalisePathname(globalThis.location.pathname);
@@ -34,6 +37,8 @@ export class App {
   protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
   protected readonly settingsPage = personalSettingsPage(this.pathname);
+  protected readonly accountPath = this.pathname === '/account'
+    || this.pathname.startsWith('/account/');
   protected readonly activePage = organisationPage(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
@@ -41,21 +46,9 @@ export class App {
   protected readonly statesPage = this.pathname === '/org/states';
   protected readonly organisation = document
     .querySelector<HTMLMetaElement>('meta[name=opencrane-org]')?.content || 'Your organisation';
+  protected readonly personalSettingsPageLabel = personalSettingsPageLabel;
 
   protected unavailableTitle(): string {
     return organisationPageLabel(this.activePage) ?? 'Page not found';
-  }
-
-  protected settingsTitle(): string {
-    if (this.settingsPage === 'preferences') {
-      return 'Preferences';
-    }
-    if (this.settingsPage === 'assistant') {
-      return 'Assistant';
-    }
-    if (this.settingsPage === 'tools') {
-      return 'My tools';
-    }
-    return 'Account';
   }
 }

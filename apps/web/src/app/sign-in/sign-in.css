@@ -1,6 +1,7 @@
 :host { display: grid; place-items: center; min-height: calc(100dvh - 40px); }
 .sign-in { position: relative; width: min(100%, 520px); min-height: 420px; padding: 36px 56px 32px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-panel); background: var(--oc-surface-paper); }
 .brand { position: absolute; top: 18px; left: 20px; display: flex; align-items: center; gap: 7px; text-decoration: none; color: var(--oc-ink-strong); font-size: 14.5px; font-weight: 600; letter-spacing: -.2px; }
+.brand oc-brand-mark { margin-right: 0; }
 .accent { color: var(--oc-accent); }
 .content { display: flex; flex-direction: column; gap: 14px; }
 h1 { margin: 0 0 6px; font: var(--oc-type-section); letter-spacing: -.4px; }

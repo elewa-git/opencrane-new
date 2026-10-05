@@ -2,16 +2,19 @@
   <h1>Account</h1>
   <p class="intro">Your identity and preferences. Fields from single sign-on are read-only.</p>
   <p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
-  @if (loading()) {
+  @if (identityState() === 'loading') {
     <oc-shared-state kind="checking" message="Checking your signed-in identity"
       [showAction]="false" />
-  } @else if (unavailable()) {
-    <oc-shared-state kind="failed" message="Identity unavailable" [detail]="unavailable()"
-      [showAction]="false" />
-    <p class="sign-in-link"><a href="/">Return to sign in</a></p>
+  } @else if (identityState() === 'signed-out') {
+    <oc-shared-state kind="access_changed" message="Your session expired" [showAction]="false" />
+    <p class="sign-in-link"><a href="/">Sign in again</a></p>
+  } @else if (identityState() === 'failed') {
+    <oc-shared-state kind="failed" message="Couldn't load your identity"
+      detail="The identity check failed. You can repeat the read safely."
+      [safeToRetry]="true" (action)="retryIdentity()" />
   } @else {
-    <section class="identity" aria-labelledby="identity-heading">
-      <h2 id="identity-heading">Name</h2>
+    <section class="identity">
+      <h2>Name</h2>
       @if (identityName()) {
         <p class="value"><oc-icon name="closed" />{{ identityName() }}</p>
         <p class="source"><oc-icon name="closed" /> Supplied by your identity provider</p>
@@ -22,7 +25,7 @@
       }
     </section>
     <oc-shared-state kind="not_configured" message="Profile details not available yet"
-      detail="Email, organisation name, role and groups, and preferred display name need the profile API planned for P4-18."
+      detail="Email, organisation, role and groups, and preferred display name are not available yet."
       [showAction]="false" />
   }
 </section>

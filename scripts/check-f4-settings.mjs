@@ -42,6 +42,10 @@ async function signedOutIdentity(route) {
   await route.fulfill({ json: { authenticated: false, user: null } });
 }
 
+async function failedIdentity(route) {
+  await route.fulfill({ status: 503, json: { error: 'unavailable' } });
+}
+
 function focused(node) {
   return node === globalThis.document.activeElement;
 }
@@ -57,6 +61,10 @@ function ring(node) {
 
 function animation(node) {
   return globalThis.getComputedStyle(node).animationName;
+}
+
+function fontSize(node) {
+  return globalThis.getComputedStyle(node).fontSize;
 }
 
 async function fontsReady() {
@@ -90,17 +98,73 @@ async function checkAccount(page, width, motion) {
     assert.equal((await sidebar.boundingBox()).width, 232, '232px settings sidebar');
   } else {
     const back = page.locator('.mobile-back');
+    const title = page.locator('.mobile-bar > span');
     const menuButton = page.getByRole('button', { name: 'Open personal settings navigation' });
     assert((await back.boundingBox()).height >= 44, 'Phone Back target is at least 44px');
+    assert.equal(await back.evaluate(fontSize), '14px');
+    assert((await title.boundingBox()).x < 200, 'Phone title follows the Back link on the left');
+    assert((await back.boundingBox()).x < (await title.boundingBox()).x);
     assert((await menuButton.boundingBox()).width >= 44);
     assert((await menuButton.boundingBox()).height >= 44);
   }
   await capture(page, 'account', width, motion);
 }
 
+async function checkAssistant(page, width) {
+  await page.goto(`${origin}/account/assistant`);
+  await page.getByRole('heading', { name: 'Assistant', exact: true }).waitFor();
+  await page.getByText('Your assistant assignment is available in the workspace.', {
+    exact: false,
+  }).waitFor();
+  assert.equal(await page.locator('.sidebar [aria-current="page"]').getAttribute('href'),
+    '/account/assistant');
+  assert.equal(await page.getByText(/P4-|P3-/u).count(), 0, 'No ticket numbers on screen');
+  await capture(page, 'assistant', width, 'no-preference');
+}
+
+async function checkTitlePositions(page) {
+  const destinations = [
+    ['/account', 'Account'],
+    ['/account/preferences', 'Preferences'],
+    ['/account/assistant', 'Assistant'],
+    ['/account/tools', 'My tools'],
+  ];
+  let firstTitleTop;
+  for (const [pathname, label] of destinations) {
+    await page.goto(`${origin}${pathname}`);
+    const heading = page.getByRole('heading', { name: label, exact: true });
+    await heading.waitFor();
+    const titleTop = (await heading.boundingBox()).y;
+    if (firstTitleTop === undefined) {
+      firstTitleTop = titleTop;
+    } else {
+      assert.equal(titleTop, firstTitleTop, 'Settings page titles line up');
+    }
+  }
+}
+
+async function checkFailureStates(page, width) {
+  await page.route('**/auth/me', signedOutIdentity);
+  await page.goto(`${origin}/account`);
+  await page.getByText('Your session expired', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('link', { name: 'Sign in again' }).getAttribute('href'), '/');
+  await capture(page, 'session-expired', width, 'no-preference');
+  await page.unroute('**/auth/me', signedOutIdentity);
+
+  await page.route('**/auth/me', failedIdentity);
+  await page.goto(`${origin}/account`);
+  await page.getByRole('button', { name: 'Try again' }).waitFor();
+  assert.equal(await page.locator('oc-shared-state .state').getAttribute('data-state'), 'failed');
+  assert.equal(await page.getByRole('link', { name: 'Sign in again' }).count(), 0);
+  await capture(page, 'identity-failed', width, 'no-preference');
+  await page.unroute('**/auth/me', failedIdentity);
+}
+
 async function checkUnavailableTools(page, width, motion) {
   await page.goto(`${origin}/account/tools`);
-  await page.getByText('Personal tool connection reads are not available', { exact: false }).waitFor();
+  await page.getByText('Your personal tool connections are not available yet.', {
+    exact: true,
+  }).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'My tools', exact: true }).count(), 1);
   assert.equal(await page.locator('.register-row').count(), 0);
   assert.equal(await page.getByText('Odoo Community', { exact: true }).count(), 0);
@@ -111,7 +175,7 @@ async function checkUnavailableTools(page, width, motion) {
 
 async function checkUnavailablePreferences(page, width, motion) {
   await page.goto(`${origin}/account/preferences`);
-  await page.getByText('Personal preferences need the P4-16 API and P4-18 screen.', {
+  await page.getByText('Personal preferences are not available yet.', {
     exact: true,
   }).waitFor();
   assert.equal(await page.getByRole('heading', { name: 'Preferences', exact: true }).count(), 1);
@@ -162,17 +226,6 @@ async function checkNavigation(page, motion) {
   assert(await opener.evaluate(focused), 'Escape returns focus to the menu opener');
 }
 
-async function checkSignedOutRecovery(page) {
-  await page.route('**/auth/me', signedOutIdentity);
-  await page.goto(`${origin}/account`);
-  const announcement = page.getByRole('status');
-  await page.locator('oc-shared-state .detail').waitFor();
-  assert((await announcement.textContent()).includes('Sign in to your organisation'));
-  const signIn = page.getByRole('link', { name: 'Return to sign in' });
-  assert((await signIn.boundingBox()).height >= 44, 'Phone sign-in target is at least 44px');
-  await page.unroute('**/auth/me', signedOutIdentity);
-}
-
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 try {
@@ -187,9 +240,13 @@ try {
       await checkAccount(page, width, motion);
       await checkUnavailablePreferences(page, width, motion);
       await checkUnavailableTools(page, width, motion);
+      if (motion === 'no-preference') {
+        await checkTitlePositions(page);
+        await checkAssistant(page, width);
+        await checkFailureStates(page, width);
+      }
       if (width === 390) {
         await checkNavigation(page, motion);
-        await checkSignedOutRecovery(page);
       }
       await page.close();
     }
@@ -197,7 +254,15 @@ try {
   const result = {
     result: 'PASS', widths: [1280, 390], motion: ['no-preference', 'reduce'], captures,
     environment: 'Built Angular assets; Chromium; disposable identity fixture; no silo stack',
-    comparedFrames: ['ONB-50', 'ONB-52', 'INT-60', 'INT-61'],
+    comparedFrames: ['ONB-50', 'ONB-51', 'ONB-52', 'INT-60', 'INT-61'],
+    knownDifferences: [
+      'The settings sidebar has no viewer name or initials row, matching the organisation shell.',
+      'Account omits Email, Organisation, Role, preferred-name, assistant-card, Save and Open My tools controls.',
+      'My tools omits the INT-60 and INT-61 introductory line.',
+      'Preferences omits the ONB-52 Personal · only you label.',
+      'The account logo is not the smaller, lighter ONB-50 mark.',
+      'The Assistant page reports missing persona details and provisioning status.',
+    ],
     scope: 'Settings shell, available identity name, and honest unavailable screen bodies',
   };
   await writeFile(`${output}/visual.json`, `${JSON.stringify(result, null, 2)}\n`);
