@@ -50,7 +50,8 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
         return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
       }
       if (options.store) {
-        await activeMember(options.store, options.binding, memberId, true);
+        const authority = { requiredRole: 'admin' as const };
+        await activeMember(options.store, options.binding, memberId, authority);
       }
       return await authorisedRequest(path, request, reply, config, options, memberId, now());
     } catch (error) {

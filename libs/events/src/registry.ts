@@ -1,4 +1,5 @@
 import { ownershipEvents } from './ownership-events.ts';
+import { providerEvents } from './provider-events.ts';
 import { auditEvents } from './audit-events.ts';
 import { mcpEvents } from './mcp-events.ts';
 import { decisionEvents } from './decision-events.ts';
@@ -28,6 +29,7 @@ import * as data from './data.ts';
 const DIGEST_EXAMPLE = '0123456789abcdef'.repeat(4);
 
 export const eventRegistry: readonly EventDefinition[] = [
+  ...providerEvents,
   ...fileEvents,
   ...identityEvents,
   ...ownershipEvents,

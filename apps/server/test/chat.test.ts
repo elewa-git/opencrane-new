@@ -7,6 +7,25 @@ import { chatCommand, chatHistory } from '../src/chat/commands.ts';
 import { recordReport } from '../src/chat/reports.ts';
 import { conversationKeys } from '../src/chat/keys.ts';
 
+async function reservesProviderConversationPrefix() {
+  const nats = await natsFixture();
+  const directory = await mkdtemp(`${tmpdir()}/chat-provider-prefix-`);
+  try {
+    const keys = conversationKeys(directory);
+    const context = { silo: 'test', memberId: 'alice' };
+    const input = { id: 'create-reserved', conversationId: 'provider-primary',
+      assistantId: 'assistant' };
+    keys.provision(context.silo, input.conversationId);
+    await expect(chatCommand(nats.store, keys, context, input)).rejects.toThrow();
+    expect(await nats.store.head('conversation-provider-primary')).toBe(0);
+  } finally {
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+it('reserves the provider conversation prefix for verification accounting',
+  reservesProviderConversationPrefix);
+
 it('creates and posts with event-id retries, rejects changed retries, and stores only encrypted text', async () => {
   const nats = await natsFixture(), directory = await mkdtemp(`${tmpdir()}/chat-keys-`);
   try {

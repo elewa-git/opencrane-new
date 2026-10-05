@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import { authorityFence, currentMembership, history } from '@opencrane/models';
+import type { Binding } from '@opencrane/authz';
+import { authorityFence, history, activeMember,
+  MemberAccessRefused as GroupRefused } from '@opencrane/models';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 function hasNoNul(value: string) {
@@ -14,34 +15,8 @@ const groupInput = z.discriminatedUnion('action', [
   z.object({ action: z.enum(['add', 'remove']), commandId: id, groupId: id, memberId: id }).strict(),
 ]);
 type GroupInput = z.infer<typeof groupInput>;
-export class GroupRefused extends Error {}
+export { GroupRefused, activeMember };
 export class GroupConflict extends Error {}
-
-/** Pending owner/role changes deny access until their IAM receipts exist. */
-export async function activeMember(
-  store: EventStore, binding: Binding, memberId: string, admin = false,
-  fresh?: Awaited<ReturnType<typeof authorityFence>>,
-) {
-  fresh ??= await authorityFence(store, performance.now());
-  const membership = await currentMembership(store, binding.silo, memberId, fresh);
-  if (!membership.role) {
-    throw new GroupRefused('Active silo membership required');
-  }
-  if (admin && !['owner', 'admin'].includes(membership.role)) {
-    throw new GroupRefused('Owner or Admin required');
-  }
-  const auth = memberAuthorisation(binding);
-  const relation = admin ? 'admin' : 'member';
-  const permission = await auth.check(memberId, relation);
-  if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-  if (!permission.allowed) throw new GroupRefused('Membership unavailable');
-  for (const row of membership.facts) {
-    if (!await auth.applied(row.event.id)) {
-      throw new GroupRefused('Membership is still being applied');
-    }
-  }
-  await fresh();
-}
 
 function eventType(input: GroupInput) {
   if (input.action === 'create') return 'team.created';
@@ -88,9 +63,11 @@ export async function groupCommand(
   const subjects = [`member-${memberId}`];
   if (input.action !== 'create') subjects.push(`member-${input.memberId}`);
   const fresh = await authorityFence(store, performance.now(), subjects);
-  await activeMember(store, binding, memberId, true, fresh);
+  const administratorAuthority = { requiredRole: 'admin' as const, fresh };
+  await activeMember(store, binding, memberId, administratorAuthority);
   if (input.action !== 'create') {
-    await activeMember(store, binding, input.memberId, false, fresh);
+    const memberAuthority = { requiredRole: 'member' as const, fresh };
+    await activeMember(store, binding, input.memberId, memberAuthority);
   }
   const rows = await history(store, subject, binding.silo);
   checkHistory(rows, input.groupId);

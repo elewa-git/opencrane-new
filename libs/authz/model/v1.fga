@@ -36,3 +36,10 @@ type resource
 type team
   relations
     define member: [person]
+
+# Provider configuration grants no model use; management follows current silo roles.
+type provider
+  relations
+    define silo: [silo]
+    define manage: admin from silo
+    define read: manage

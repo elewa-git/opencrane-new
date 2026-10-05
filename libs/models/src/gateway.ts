@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process';
+import { providerGatewayRoutes } from './provider-gateway.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
@@ -54,8 +55,16 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
       transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },
     }, backends: [{ host: route.upstream }] };
 }
-function gatewayConfig(port: number, readinessPort: number, decisionUrl: string, keyFile: string, issuer: string, upstream?: string, mcpRoutes: McpRoute[] = []) {
+function gatewayConfig(
+  port: number, readinessPort: number, decisionUrl: string, keyFile: string,
+  issuer: string, upstream?: string, mcpRoutes: McpRoute[] = [],
+) {
   const decision = new URL(decisionUrl);
+  function configuredMcpRoute(route: McpRoute) {
+    return mcpRoute(route, decisionUrl, issuer);
+  }
+  const providerRoutes = providerGatewayRoutes(decisionUrl, issuer, upstream);
+  const configuredMcpRoutes = mcpRoutes.map(configuredMcpRoute);
   return {
     config: { adminAddr: 'off', statsAddr: 'off', readinessAddr: `127.0.0.1:${readinessPort}` },
     gateways: { default: { port } },
@@ -64,7 +73,9 @@ function gatewayConfig(port: number, readinessPort: number, decisionUrl: string,
       cachedInputTokens: 'has(llm.cachedInputTokens) ? llm.cachedInputTokens : uint(0)',
       cacheWriteTokens: 'has(llm.cacheCreationInputTokens) ? llm.cacheCreationInputTokens : uint(0)',
       decisionRequestId: 'response.headers["x-request-id"]' } } },
-    routes: [...mcpRoutes.map(route => mcpRoute(route, decisionUrl, issuer)), { name: 'models', gateways: 'default', matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
+    routes: [...providerRoutes, ...configuredMcpRoutes, {
+      name: 'models', gateways: 'default',
+      matches: [{ path: { exact: '/v1/responses' }, method: 'POST' }],
       policies: {
           jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
           location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
@@ -106,8 +117,15 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
   }
 }
 export function gatewayUsage(line: string) {
-  const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
   const status = logNumber(line, 'http\\.status');
+  // Provider attempts already record dispatch and result on their own stream.
+  // They have no native usage reservation, so the ordinary refusal fallback would invent rows.
+  const providerRoute =
+    /\broute=default\/provider-(?:openai|anthropic)-(?:reachability|test)(?=\s|$)/u;
+  if (providerRoute.test(line) && status !== 401) {
+    return undefined;
+  }
+  const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
   if (!id) {
     if (status === undefined) return undefined;
     // JWT failures have no decision. Refusals use the decision's response id, never a request header.

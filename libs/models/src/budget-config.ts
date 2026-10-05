@@ -1,41 +1,56 @@
-import { currentMembership } from './ownership.ts';
+import { activeMember, MemberAccessRefused } from './member-authority.ts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import type { Binding } from '@opencrane/authz';
 import { tokenVerifier } from '@opencrane/auth';
 import type { JSONWebKeySet } from 'jose';
 import { BudgetActor } from './actor.ts';
 import { authorityFence } from './authority.ts';
 import { budgetSummary } from './state.ts';
+import { budgetCommandSchema } from '@opencrane/protocol';
 
 export class BudgetAccessRefused extends Error {}
-const claims = z.object({ typ: z.literal('budget-admin'), silo: z.string(), memberId: z.string(), commandDigest: z.string() });
-/** The server signs the exact command after session/Origin checks; identity alone is never authority. */
-export async function configureBudget(actor: BudgetActor, binding: Binding, identity: { jwks: JSONWebKeySet; issuer: string }, raw: unknown, authorization?: string) {
+const claims = z.object({ typ: z.enum(['budget-admin', 'provider-verification']),
+  silo: z.string(), memberId: z.string(), commandDigest: z.string() });
+/** The server signs the exact command after session and Origin checks. */
+export async function configureBudget(actor: BudgetActor, binding: Binding,
+  identity: { jwks: JSONWebKeySet; issuer: string }, raw: unknown, authorization?: string) {
   const started = performance.now();
-  const checked = await verifyCommand(identity, authorization);
+  const checked = await verifyCommand(identity, raw, actor.silo, authorization);
   const fresh = await authorityFence(actor.store, started, [`member-${checked.memberId}`]);
-  if (checked.silo !== actor.silo || binding.silo !== actor.silo || checked.commandDigest !== createHash('sha256').update(JSON.stringify(raw)).digest('hex')) throw new BudgetAccessRefused('Access changed');
-  const permission = await memberAuthorisation(binding).check(checked.memberId, 'admin');
-  if (permission.status === 'unavailable') throw new Error('Budget authority unavailable');
-  if (!permission.allowed) throw new BudgetAccessRefused('Access changed');
-  const membership = await currentMembership(actor.store, actor.silo, checked.memberId, fresh);
-  if (!['owner', 'admin'].includes(membership.role)) {
+  if (binding.silo !== actor.silo) {
     throw new BudgetAccessRefused('Access changed');
   }
-  const auth = memberAuthorisation(binding);
-  for (const row of membership.facts) {
-    if (!await auth.applied(row.event.id)) {
-      throw new Error('IAM projection behind');
+  const authority = { requiredRole: 'admin' as const, fresh };
+  try {
+    await activeMember(actor.store, binding, checked.memberId, authority);
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) {
+      throw new BudgetAccessRefused(error.message);
     }
+    throw error;
   }
-  const { commandId, expectedSequence, ...payload } = z.object({ commandId: z.string().regex(/^[\w-]{1,200}$/u), expectedSequence: z.int().nonnegative() }).passthrough().parse(raw);
-  const result = await actor.configure({ ...payload, setBy: checked.memberId }, commandId, expectedSequence, fresh);
+  const { commandId, expectedSequence, ...payload } = budgetCommandSchema.parse(raw);
+  const configuration = { ...payload, setBy: checked.memberId };
+  const result = await actor.configure(configuration, commandId, expectedSequence, fresh);
   return { ...result, budget: budgetSummary(actor.state, actor.now()) };
 }
 
-async function verifyCommand(identity: { jwks: JSONWebKeySet; issuer: string }, authorization?: string) {
+export async function verifyCommand(identity: { jwks: JSONWebKeySet; issuer: string },
+  raw: unknown, silo: string, authorization?: string,
+  audience: 'budget-admin' | 'provider-verification' = 'budget-admin') {
   try {
-    return claims.parse(await tokenVerifier(identity.jwks, identity.issuer).verify(authorization?.replace(/^Bearer /u, '') ?? '', 'budget-admin'));
-  } catch { throw new BudgetAccessRefused('Invalid budget command capability'); }
+    const verifier = tokenVerifier(identity.jwks, identity.issuer);
+    const token = authorization?.replace(/^Bearer /u, '') ?? '';
+    const checked = claims.parse(await verifier.verify(token, audience));
+    const hash = createHash('sha256');
+    hash.update(JSON.stringify(raw));
+    const digest = hash.digest('hex');
+    if (checked.typ !== audience || checked.silo !== silo || checked.commandDigest !== digest) {
+      throw new BudgetAccessRefused('Access changed');
+    }
+    return checked;
+  } catch {
+    throw new BudgetAccessRefused('Invalid command capability');
+  }
 }

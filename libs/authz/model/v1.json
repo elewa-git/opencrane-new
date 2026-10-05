@@ -241,6 +241,46 @@
           }
         }
       }
+    },
+    {
+      "type": "provider",
+      "relations": {
+        "silo": {
+          "this": {}
+        },
+        "manage": {
+          "tupleToUserset": {
+            "computedUserset": {
+              "relation": "admin"
+            },
+            "tupleset": {
+              "relation": "silo"
+            }
+          }
+        },
+        "read": {
+          "computedUserset": {
+            "relation": "manage"
+          }
+        }
+      },
+      "metadata": {
+        "relations": {
+          "silo": {
+            "directly_related_user_types": [
+              {
+                "type": "silo"
+              }
+            ]
+          },
+          "manage": {
+            "directly_related_user_types": []
+          },
+          "read": {
+            "directly_related_user_types": []
+          }
+        }
+      }
     }
   ]
 }

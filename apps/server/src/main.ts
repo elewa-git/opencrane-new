@@ -1,4 +1,4 @@
-import { seedOwnership } from '@opencrane/models';
+import { seedOwnership, providerSecrets } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
 import { storageClient } from './files/storage.ts';
@@ -74,6 +74,13 @@ const app = buildServer(authConfig, {
   ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(files ? { files } : {}),
+  ...(realtime && events && modelDb ? { providers: {
+    silo: realtime.binding.silo, store: events.store, db: modelDb.db,
+    feed: realtime.feed, binding: realtime.binding,
+    ...(process.env['PROVIDER_SECRETS_DIR'] ? {
+      secrets: providerSecrets(process.env['PROVIDER_SECRETS_DIR']) } : {}),
+    ...(budget ? { verification: budget } : {}),
+  } } : {}),
   ...(realtime && events && modelDb ? { groups: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(realtime && events && modelDb ? { ownership: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,

@@ -5,7 +5,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
 import { connectEventStore, isEventStoreUnavailable } from '@opencrane/event-store';
 import { connectProjectionDb } from '@opencrane/projections';
-import { BudgetActor, startDecision, startGateway, ingestUsage } from '@opencrane/models';
+import { providerSecrets, BudgetActor, startDecision, startGateway,
+  ingestUsage } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import type { JSONWebKeySet } from 'jose';
@@ -44,8 +45,26 @@ try {
   await db.db.lock!(`budget-leader:${silo}`, async locked => {
     const actor = new BudgetActor(events.store, silo);
     await actor.start(2000, 20000, process.env['DEFAULT_PAYING_GROUP_ID'] ?? 'installation-default');
-    const decision = await startDecision(actor, { jwks, issuer: required('TOKEN_ISSUER') }, { silo, apiUrl: required('OPENFGA_API_URL'),
-      storeId: required('OPENFGA_STORE_ID'), authorizationModelId: required('OPENFGA_MODEL_ID') }, Number(required('MODEL_DECISION_PORT')), process.env['CONVERSATION_KEYS_DIR'] ? conversationKeys(process.env['CONVERSATION_KEYS_DIR']) : undefined);
+    const identity = { jwks, issuer: required('TOKEN_ISSUER') };
+    const binding = { silo, apiUrl: required('OPENFGA_API_URL'),
+      storeId: required('OPENFGA_STORE_ID'),
+      authorizationModelId: required('OPENFGA_MODEL_ID') };
+    const conversationKeyDirectory = process.env['CONVERSATION_KEYS_DIR'];
+    let keys: ReturnType<typeof conversationKeys> | undefined;
+    if (conversationKeyDirectory) {
+      keys = conversationKeys(conversationKeyDirectory);
+    }
+    const providerSecretDirectory = process.env['PROVIDER_SECRETS_DIR'];
+    let verification: Parameters<typeof startDecision>[5];
+    if (providerSecretDirectory) {
+      verification = {
+        secrets: providerSecrets(providerSecretDirectory),
+        gatewayUrl: `http://127.0.0.1:${required('MODEL_GATEWAY_PORT')}`,
+      };
+    }
+    const decisionPort = Number(required('MODEL_DECISION_PORT'));
+    const decision = await startDecision(actor, identity, binding, decisionPort,
+      keys, verification);
     let gateway: Awaited<ReturnType<typeof startGateway>> | undefined;
     try {
       gateway = await startGateway({ binary: required('AGENTGATEWAY_BINARY'), configFile: `${directory}/gateway.json`,

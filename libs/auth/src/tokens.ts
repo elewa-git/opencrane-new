@@ -62,6 +62,10 @@ export async function tokenIssuer(options: TokenOptions) {
     budget(input: { silo: string; memberId: string; commandDigest: string }) {
       return issue({ typ: 'budget-admin', silo: input.silo, memberId: input.memberId, commandDigest: input.commandDigest }, 'budget-admin', 30);
     },
+    providerVerification(input: { silo: string; memberId: string; commandDigest: string }) {
+      const payload = { typ: 'provider-verification', ...input };
+      return issue(payload, 'provider-verification', 30);
+    },
     computer(input: { silo: string; computerId: string; assistantId: string; generation: number; tokenId?: string }) {
       return issue({ typ: 'computer', silo: input.silo, computer: input.computerId,
         assistant: input.assistantId, generation: input.generation }, computerTokenAudience, options.computerTtlSeconds ?? 600, input.tokenId);
