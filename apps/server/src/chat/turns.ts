@@ -1,5 +1,5 @@
 import type { Binding } from '@opencrane/authz';
-import { authorityFence, history, payingGroupAuthority, PayingGroupRefused, MemberAccessRefused,
+import { authorityFence, history, groupMembership, PayingGroupRefused, MemberAccessRefused,
   activeMember } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -134,6 +134,15 @@ function isClosedTurn(row: StoredEvent) {
 function isStartedTurn(row: StoredEvent) {
   return row.event.type === 'computer.turn_started';
 }
+function isRefusedAdmission(closed: StoredEvent | undefined, started: StoredEvent | undefined,
+  rows: StoredEvent[], input: TurnInput) {
+  if (!closed || started || input.status !== 'started') {
+    return false;
+  }
+  const status = closedTurnDetails.parse(closed.event.data).status;
+  return status === 'failed' && !reportedClosed(rows, input.turnId);
+}
+
 function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput,
   computerId: string, requesterId: string) {
   function isMatchingTurn(row: StoredEvent) {
@@ -143,10 +152,7 @@ function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput
   const turns = events.filter(isMatchingTurn);
   const closed = turns.find(isClosedTurn);
   const started = turns.find(isStartedTurn);
-  const closedStatus = closed && closedTurnDetails.parse(closed.event.data).status;
-  const refusedBeforeStart = closed && !started &&
-    closedStatus === 'failed' && !reportedClosed(rows, input.turnId);
-  if (refusedBeforeStart && input.status === 'started') {
+  if (isRefusedAdmission(closed, started, rows, input)) {
     throw new TurnAdmissionRejected('Turn admission was refused');
   }
   const recoveringClosed = input.replay && input.status === 'started' &&
@@ -192,9 +198,8 @@ async function payingGroup(store: EventStore, context: TurnContext,
     const memberAuthority = { requiredRole: 'member' as const, fresh };
     await activeMember(store, context.binding, requesterId, memberAuthority);
     for (const groupId of new Set([group, details.ownerId])) {
-      const groupAuthority = await payingGroupAuthority(store, context.silo, requesterId,
+      await groupMembership(store, context.silo, requesterId,
         groupId, context.binding, fresh.deadline);
-      await groupAuthority();
     }
     return { payer: group, fresh };
   }

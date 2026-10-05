@@ -6,7 +6,7 @@ import { currentMembership } from './ownership.ts';
 
 export class MemberAccessRefused extends Error {}
 
-/** Pending ownership, role changes and removals deny access until their IAM receipts exist. */
+/** Deny access until the access system has applied ownership, role changes and removals. */
 export async function activeMember(
   store: EventStore, binding: Binding, memberId: string,
   options: { requiredRole: 'member' | 'admin'; fresh?: Awaited<ReturnType<typeof authorityFence>> },

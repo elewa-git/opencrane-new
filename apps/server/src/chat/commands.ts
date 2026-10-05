@@ -50,7 +50,8 @@ function verifyRetry(previous: StoredEvent, input: Input, context: Context, keys
 }
 
 export async function chatHistory(store: Pick<EventStore, 'readStream'>,
-  silo: string, conversation: string, deadline = performance.now() + 10_000) {
+  silo: string, conversation: string) {
+  const deadline = performance.now() + 10_000;
   const rows: StoredEvent[] = [];
   for await (const row of store.readStream(`conversation-${conversation}`, 1, deadline)) {
     if (row.event.silo !== silo) throw new Error('Conversation silo mismatch');

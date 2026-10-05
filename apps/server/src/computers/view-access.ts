@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { grantStream, memberAuthorisation, type Binding } from '@opencrane/authz';
 import { isEventStoreUnavailable, type EventStore, type StoredEvent } from '@opencrane/event-store';
-import { authorityFence, payingGroupAuthority, PayingGroupRefused } from '@opencrane/models';
+import {
+  authorityFence, payingGroupAuthority, PayingGroupRefused, AuthorityApplying,
+} from '@opencrane/models';
 export interface ViewAccessOptions {
   silo: string;
   store: EventStore;
@@ -238,17 +240,14 @@ async function confirmTeamAuthority(options: ViewAccessOptions, memberId: string
     return await payingGroupAuthority(
       options.store, options.silo, memberId, groupId, options.binding, options.deadline);
   } catch (error) {
-    if (!(error instanceof PayingGroupRefused)) {
+    if (!(error instanceof PayingGroupRefused) && !(error instanceof AuthorityApplying)) {
       throw error;
     }
     if (error.message === activeSiloMembershipRequiredMessage) {
       throw error;
     }
-    // Run this only after the team stream showed the member in the team.
-    // Its refusals mean either 'not confirmed yet' (IAM still applying a team change,
-    // a slow read, new team events) or a removal that this check's own reads will also find.
-    // Treat both as unconfirmed: no lease is earned, and the next check's own reads deny
-    // a real removal.
+    // Retry while the access system applies a team change or the store is slow.
+    // Check events on each attempt so a real removal still denies access.
     const errorOptions = { cause: error };
     throw new ViewCheckUnavailable('authorisation', errorOptions);
   }

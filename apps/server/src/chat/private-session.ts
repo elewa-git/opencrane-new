@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import {
-  authorityFence, AuthorityApplying, groupMembership, payingGroupAuthority,
+  authorityFence, AuthorityApplying, groupMembership,
 } from '@opencrane/models';
 import type { EventStore } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -136,9 +136,8 @@ export async function sharedAssistantAuthority(options: SessionAuthorityOptions,
   const assistant = assistantSchema.parse(event.data);
   fresh.include(`team-${assistant.ownerId}`, `team-${payingGroupId}`);
   for (const groupId of new Set([assistant.ownerId, payingGroupId])) {
-    const group = await payingGroupAuthority(options.store, options.silo, memberId,
+    await groupMembership(options.store, options.silo, memberId,
       groupId, options.binding, fresh.deadline);
-    await group();
   }
   const auth = memberAuthorisation(options.binding);
   if (!await auth.applied(event.id)) {

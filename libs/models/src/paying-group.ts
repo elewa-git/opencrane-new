@@ -42,14 +42,10 @@ function requireMembership(groupRows: StoredEvent[], memberRows: StoredEvent[],
   }
 }
 async function requireApplied(binding: Binding, silo: string, requesterId: string,
-  groupId: string, groupRows: StoredEvent[], memberRows: StoredEvent[]) {
+  groupId: string, groupReceipts: StoredEvent[], memberRows: StoredEvent[]) {
   if (binding.silo !== silo) throw new PayingGroupRefused('Wrong silo');
   const auth = memberAuthorisation(binding);
   const memberReceipts = memberRows.filter(needsReceipt);
-  function concernsRequester(row: StoredEvent) {
-    return row.event.type === 'team.created' || data(row.event)['memberId'] === requesterId;
-  }
-  const groupReceipts = groupRows.filter(concernsRequester);
   const receiptRows = [...groupReceipts, ...memberReceipts];
   for (const row of receiptRows) {
     if (!await auth.applied(row.event.id)) {
@@ -71,10 +67,15 @@ export async function groupMembership(store: EventStore, silo: string, requester
   const { groupRows, memberRows } = await readMembership(
     store, silo, requesterId, groupId, deadline);
   requireMembership(groupRows, memberRows, requesterId, groupId);
-  await requireApplied(binding, silo, requesterId, groupId, groupRows, memberRows);
+  function concernsRequester(row: StoredEvent) {
+    return row.event.type === 'team.created' || data(row.event)['memberId'] === requesterId;
+  }
+  // Check this requester while the access system applies other members' changes.
+  const groupReceipts = groupRows.filter(concernsRequester);
+  await requireApplied(binding, silo, requesterId, groupId, groupReceipts, memberRows);
 }
 
-/** Shared spending requires both active silo membership and current group membership. */
+/** Require active silo and group membership before allowing shared spending. */
 export async function payingGroupAuthority(store: EventStore, silo: string,
   requesterId: string, groupId: string, binding?: Binding, callerDeadline = Infinity) {
   const started = performance.now();
@@ -83,6 +84,7 @@ export async function payingGroupAuthority(store: EventStore, silo: string,
     store, silo, requesterId, groupId, deadline);
   requireMembership(groupRows, memberRows, requesterId, groupId);
   if (binding) {
+    // Wait for every group change to reach the access system before spending or sharing the desktop.
     await requireApplied(binding, silo, requesterId, groupId, groupRows, memberRows);
   }
   async function fresh() {
