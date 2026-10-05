@@ -183,13 +183,11 @@ describe('MCP register', () => {
     expect(root(fixture).querySelector('#integration-search')).toBeNull();
     expect(root(fixture).querySelector('a[href="/org/integrations/new"]')).toBeNull();
     expect(root(fixture).querySelector('#refresh-integrations')).toBeNull();
-
-    expect(root(fixture).querySelector('#refresh-integrations')).toBeNull();
   });
 
   it('searches by name and host, keeps tab counts unfiltered and announces visible results',
     async () => {
-      const fixture = create();
+      const fixture = await create();
       await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
       const search = root(fixture).querySelector<HTMLInputElement>('#integration-search');
       if (!search) throw new Error('Missing integration search');
@@ -198,7 +196,7 @@ describe('MCP register', () => {
       fixture.detectChanges();
       expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1);
       expect(root(fixture).querySelector('[role="status"]')?.textContent)
-        .toContain('1 integrations');
+        .toContain('1 integration');
       expect(root(fixture).textContent).toContain('All · 3');
       search.value = 'broken.example.test';
       search.dispatchEvent(new Event('input', { bubbles: true }));
@@ -214,7 +212,7 @@ describe('MCP register', () => {
   it('gives each integration a detail link and only offers review for pending review', async () => {
     const connection = row('protected', 'needs_input',
       'A scoped validation connection is required. Protected discovery is not available yet.');
-    const fixture = create(response({
+    const fixture = await create(response({
       rows: [...loaded.rows, connection], loadedAt: loaded.loadedAt,
     } satisfies IntegrationsResponse));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(4));
@@ -228,7 +226,7 @@ describe('MCP register', () => {
   });
 
   it('announces one integration in the attention tab with singular wording', async () => {
-    const fixture = create(response({
+    const fixture = await create(response({
       rows: [row('pricing', 'needs_input', 'Pending review')], loadedAt: loaded.loadedAt,
     } satisfies IntegrationsResponse));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1));
@@ -239,15 +237,15 @@ describe('MCP register', () => {
   });
 
   it('does not move focus on a first-load access refusal', async () => {
-    const fixture = create(new Response(null, { status: 403 }));
+    const fixture = await create(new Response(null, { status: 403 }));
     const startingFocus = globalThis.document.activeElement;
     await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
     expect(globalThis.document.activeElement).toBe(startingFocus);
   });
 
-  it('keeps the add route on the existing discovery screen', () => {
+  it('keeps the add route on the existing discovery screen', async () => {
     globalThis.history.replaceState({}, '', '/org/integrations/new');
-    const fixture = create();
+    const fixture = await create();
     expect(root(fixture).querySelector('oc-mcp-install')).not.toBeNull();
   });
 

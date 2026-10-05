@@ -28,9 +28,9 @@ flowchart LR
 | --- | --- | --- |
 | `nice -n 10 npm run lint` | PASS | All lint checks passed; ESLint reported six warnings in unchanged files. |
 | `nice -n 10 npm run typecheck` | PASS | All workspaces passed. |
-| `nice -n 10 npm run check:events` | PASS | All 95 event types match the catalogue. |
-| `nice -n 10 npm run build -w apps/web` | PASS | Angular production build completed with existing bundle and CSS budget warnings. |
-| `nice -n 10 npm run test -w apps/web -- --watch=false` | PASS | 222 tests passed across 29 files. |
+| `nice -n 10 npm run check:events` | PASS | All 96 event types match the catalogue. |
+| `nice -n 10 npm run build -w apps/web` | PASS | Angular production build completed with CSS budget and CommonJS warnings. |
+| `nice -n 10 npm run test -w apps/web -- --watch=false` | PASS | 262 tests passed across 30 files. |
 | `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- --maxWorkers=2` | PARTIAL | The first full run had 1,838 passed, 3 failed and 15 skipped. It found old screen assertions and a theme radius mismatch, which have since been fixed. The authority-volume test returned 403 under shared load. Targeted theme, authority and server integration checks later passed; the server integration file passed all 21 tests. A clean full rerun has not happened. |
 | Visual F1 | PASS | 56 captures; updated the old register count and refresh-control assertions. |
 | Visual F2 | PASS | 38 captures. |
@@ -41,7 +41,7 @@ flowchart LR
 | Dev-stack journey | NOT RUN | No secondary stack was requested. |
 | Fresh-install qualification | NOT RUN | This screen change does not qualify a fresh installation. |
 
-The screen code, tests and notes contain about 1,680 written lines. The visual record and its
+The screen code, tests and notes contain about 1,700 written lines. The visual record and its
 58 PNG captures are evidence and are not part of that count.
 
 The server does not yet publish integrations, read grants, mark tools as reviewed, remove

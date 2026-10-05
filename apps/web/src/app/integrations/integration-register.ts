@@ -86,6 +86,7 @@ export class IntegrationRegister implements OnInit, OnDestroy {
     if (this.selectedTab() === 'review') {
       return count === 1 ? '1 integration pending review' : `${count} integrations pending review`;
     }
+    if (count === 1) return '1 integration';
     return `${count} integrations`;
   }
 
