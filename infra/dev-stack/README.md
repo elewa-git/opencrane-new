@@ -191,7 +191,7 @@ start. Through the command NKey it conditionally appends `member.invited` and
 `member.joined`, binding that issuer and subject to owner member `jente-rosseel`.
 Existing stream state is checked first, so plain and `--fresh` runs do not duplicate it.
 This dev-only bootstrap for `jente@elewa.ke` remains in place. Production installs
-use the [one-time token command and claim screen](../../apps/server/README.md#first-owner-bootstrap-12),
+use the [one-time token command and claim screen](../../apps/server/README.robot.md#first-owner-bootstrap-12),
 which refuse a silo that already has an owner. Dev exceptions for external
 identities do not apply to the token claim; its user must belong to the configured
 organisation. Ownership transfer is a separate feature (#24).
@@ -331,7 +331,7 @@ repeat startup stops the server, dispatcher and model services first to keep
 event writers out of the migration. The journey checks existing model grant
 history and waits for new member/assistant grants in OpenFGA before chat.
 Older silos still need the controlled OpenFGA and dispatcher subscription
-upgrade described in the [ops instructions](../../apps/ops/README.md#model-grant-upgrade).
+upgrade described in the [ops instructions](../../apps/ops/README.robot.md#model-grant-upgrade).
 
 The joined member's Ready computer receives a lifecycle turn credential. The
 journey installs it over the private control socket, then runs as the Codex UID

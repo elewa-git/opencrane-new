@@ -1,6 +1,7 @@
 {
   "name": "@opencrane/computer",
   "private": true,
+  "description": "A private cloud computer where each person's assistant does its work.",
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",

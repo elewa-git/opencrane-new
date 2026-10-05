@@ -66,7 +66,7 @@ declarations entering durable inventory. Each correction began with a failing
 test at the confirmed inventory validator seam, followed by the fix. The HTTPS
 quarantine seam also reproduced the missing durable rejection evidence before
 the event schema was extended. The current implementation and exclusion policy
-are documented in the [server contract](../../apps/server/README.md#remote-mcp-registration-p3-3).
+are documented in the [server contract](../../apps/server/README.robot.md#remote-mcp-registration-p3-3).
 
 | Regression | Failing-before evidence | Passing-after evidence |
 | --- | --- | --- |

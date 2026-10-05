@@ -245,7 +245,7 @@ append; conflicts fail for ordered retry. Existing grant history, including a
 revocation, takes precedence. Duplicate delivery cannot restore revoked access.
 OpenFGA only projects these events; rebuild never manufactures grants.
 
-Existing silos must run the [upgrade command](../../apps/ops/README.md#model-grant-upgrade)
+Existing silos must run the [upgrade command](../../apps/ops/README.robot.md#model-grant-upgrade)
 before rebuilding OpenFGA with the updated model and enabling decisions.
 The dev-stack startup hook belongs to the separate dev-stack change; no shared
 stack files or processes were changed here.

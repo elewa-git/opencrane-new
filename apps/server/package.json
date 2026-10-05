@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OIDC sign-in plus GET /healthz and a WebSocket hello-echo gated on a valid session.",
+  "description": "The back end for OpenCrane sign-in, conversations and organisation settings.",
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node --experimental-strip-types src/main.ts",

@@ -20,7 +20,7 @@ Client messages are `hello`, `validateEvent` or `subscribe`; resumed subscriptio
 carry a projection generation, and every members reply carries that generation.
 Server messages include hello echoes, errors, validation results and versioned members updates. See
 [messages.ts](src/messages.ts), [realtime.ts](src/realtime.ts) and the
-[subscription contract](../../apps/server/README.md#members-realtime-and-shutdown).
+[subscription contract](../../apps/server/README.robot.md#members-realtime-and-shutdown).
 The event-validation request carries `unknown` data: the server must validate it
 against the [event catalogue package](../events/README.md) before accepting it.
 `integrationsResponseSchema` defines MCP register rows and their shared state kinds;
@@ -58,4 +58,4 @@ Audit history uses `auditFilterSchema` and `auditResponseSchema`: request/permit
 conversation/turn ids, separate decision and observed outcome, integer cents and
 fixed readable reasons. Strict metadata schemas reject private payload fields.
 The Angular history views use this same contract; no event payload is passed to
-browser rendering. See the [HTTP contract](../../apps/server/README.md#permission-scoped-audit-p3-19).
+browser rendering. See the [HTTP contract](../../apps/server/README.robot.md#permission-scoped-audit-p3-19).

@@ -58,7 +58,7 @@ no rights. `member_changes` stores each resulting row with its event-log positio
 These tables, member rows and checkpoints share the same transaction. `pg_notify`
 is called in that transaction and delivered after commit, with no SQL business rules.
 `connectMemberFeed` owns a read pool and a dedicated LISTEN connection; callers
-close the feed on shutdown. See the [server contract](../../apps/server/README.md#members-realtime-and-shutdown).
+close the feed on shutdown. See the [server contract](../../apps/server/README.robot.md#members-realtime-and-shutdown).
 An existing projection needs an offline rebuild to fill these new tables.
 This invitation view accompanies the catalogue's invitations
 projection; invitation delivery is outside this package.

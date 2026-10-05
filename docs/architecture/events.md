@@ -472,7 +472,7 @@ an optional safe `name`, a definition `revision` digest and a fixed `reason` cod
 These entries carry no definition or policy and are excluded from `toolCount`
 and `schemaDigest`. They remain available in event-backed discovery status for
 review; legacy events without this field remain readable. See the
-[discovery validation contract](../../apps/server/README.md#remote-mcp-registration-p3-3).
+[discovery validation contract](../../apps/server/README.robot.md#remote-mcp-registration-p3-3).
 
 `mcp.tool_mode_set` adds `connectionId` and `toolRevision`; both must match the
 current reviewed tool for execution. Legacy name-only events remain readable but
@@ -525,7 +525,7 @@ The budget reaction raises one `security.alert_raised` for an unmatched model
 observation, including a reservation without an allowing decision. Missing usage
 keeps the reservation and outcome uncertain. Projection replay dispatches nothing,
 releases no credential and settles no money. See the
-[audit read contract](../../apps/server/README.md#permission-scoped-audit-p3-19).
+[audit read contract](../../apps/server/README.robot.md#permission-scoped-audit-p3-19).
 
 If the actual model cost exceeds its reservation, settlement retains the full
 charge and raises one `security.alert_raised` per permit with reason
