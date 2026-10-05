@@ -71,6 +71,7 @@ export class Workspace implements OnInit {
   protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
   protected readonly rejectedScreenshotIds = computed(this.rejectedScreenshotFileIds.bind(this));
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
+  protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
   protected readonly reason = computed(this.composerReason.bind(this));
@@ -80,25 +81,8 @@ export class Workspace implements OnInit {
   private previousCaptureConversation = this.chat.selected();
   private previousCaptureDenied = this.chat.denied();
   constructor() {
-    effect(() => {
-      const conversationId = this.chat.selected();
-      const denied = this.chat.denied();
-      if (conversationId !== this.previousCaptureConversation || (!this.previousCaptureDenied && denied)) {
-        this.capture.reset();
-        this.preview.set('');
-      }
-      this.previousCaptureConversation = conversationId;
-      this.previousCaptureDenied = denied;
-    });
-    afterEveryRender(() => {
-      const content = this.chat.turns().map(turn => turn.text + turn.state + turn.files.join() + turn.tools.length).join('');
-      if (content !== this.lastTranscript) {
-        this.lastTranscript = content;
-        const element = this.transcriptElement()?.nativeElement;
-        if (element) requestAnimationFrame(() => { element.scrollTop = element.scrollHeight; });
-      }
-      this.focusPendingComposer();
-    });
+    effect(this.resetCaptureWhenSessionChanges.bind(this));
+    afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
   protected async send(text: string): Promise<void> { if (await this.chat.send(text)) this.draft.set(''); }
@@ -167,7 +151,13 @@ export class Workspace implements OnInit {
       this.panel.set(true);
     }
   }
-  protected captureBusy(): boolean { return this.capture.state().phase === 'saving'; }
+  protected captureBusy(): boolean {
+    return this.capture.state().phase === 'saving' || this.statusChecking();
+  }
+  protected captureCanStart(): boolean {
+    const state = this.capture.state();
+    return state.phase !== 'unknown' || Boolean(state.checkedAt);
+  }
   protected async startCapture(): Promise<void> {
     await this.capture.start(this.chat.selected(), this.screenshotIds());
     await this.chat.refresh();
@@ -177,22 +167,30 @@ export class Workspace implements OnInit {
     await this.chat.refresh();
   }
   protected async checkCaptureStatus(): Promise<void> {
-    await this.chat.refresh();
-    this.capture.markChecked();
-    this.showFiles();
+    const state = this.capture.state();
+    if (state.phase !== 'unknown' || this.statusChecking()) return;
+    this.statusChecking.set(true);
+    try {
+      const readSucceeded = await this.chat.refresh();
+      if (!readSucceeded) return;
+      this.capture.markChecked(state.startedAt);
+      this.showFiles();
+    } finally {
+      this.statusChecking.set(false);
+    }
   }
   protected showCaptureLine(): boolean {
     const state = this.capture.state();
     const model = this.captureViewModel();
     if (!model || this.chat.denied()) return false;
-    if (state.phase === 'saved' && !state.repeated
-      && this.hasTranscriptScreenshot(state.fileId)) {
-      return false;
-    }
     if (state.phase === 'rejected' && this.rejectedScreenshotIds().includes(state.fileId)) {
       return false;
     }
     return true;
+  }
+  protected captureLineVisuallyHidden(): boolean {
+    const state = this.capture.state();
+    return state.phase === 'saved' && this.hasTranscriptScreenshot(state.fileId);
   }
   protected hasScreenshot(files: string[]): boolean {
     for (const path of files) {
@@ -222,6 +220,13 @@ export class Workspace implements OnInit {
     const createdBy = file.uploadedBy === this.chat.memberId() ? 'you' : 'participant';
     return capturedByLine(createdBy, facts);
   }
+  protected hideBrokenThumbnail(event: Event): void {
+    const image = event.currentTarget;
+    if (!(image instanceof HTMLImageElement)) return;
+    const fallback = image.nextElementSibling;
+    if (fallback instanceof HTMLElement) fallback.hidden = false;
+    image.hidden = true;
+  }
   protected screenshotCreator(path: string): 'you' | 'participant' {
     const file = this.chat.attachments().find(attachment => attachment.path === path);
     if (!file || file.uploadedBy !== this.chat.memberId()) return 'participant';
@@ -231,6 +236,32 @@ export class Workspace implements OnInit {
     this.desktop.set(globalThis.innerWidth >= 1100);
     if (this.desktop()) this.panelOverlay.set(false);
     if (globalThis.innerWidth > 700) this.rail.set(false);
+  }
+  private resetCaptureWhenSessionChanges(): void {
+    const conversationId = this.chat.selected();
+    const denied = this.chat.denied();
+    const conversationChanged = conversationId !== this.previousCaptureConversation;
+    const accessWasRevoked = !this.previousCaptureDenied && denied;
+    if (conversationChanged || accessWasRevoked) {
+      this.capture.reset();
+      this.preview.set('');
+    }
+    this.previousCaptureConversation = conversationId;
+    this.previousCaptureDenied = denied;
+  }
+  private afterRender(): void {
+    const turns = this.chat.turns();
+    const content = turns.map(turn => turn.text + turn.state + turn.files.join()
+      + turn.tools.length).join('');
+    if (content !== this.lastTranscript) {
+      this.lastTranscript = content;
+      const element = this.transcriptElement()?.nativeElement;
+      if (element) requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
+    }
+    this.focusPendingComposer();
+  }
+  private scrollTranscriptToBottom(element: HTMLElement): void {
+    element.scrollTop = element.scrollHeight;
   }
   private isPanelExpanded(): boolean {
     if (this.desktop()) return this.panel();

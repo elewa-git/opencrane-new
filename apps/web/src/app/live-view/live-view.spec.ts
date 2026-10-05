@@ -4,6 +4,18 @@ import { LIVE_VIEWER, LiveView } from './live-view';
 import type { RawChannel } from '@novnc/novnc/lib/rfb.js';
 
 afterEach(function restoreGlobals() { vi.useRealTimers(); vi.unstubAllGlobals(); });
+it('keeps the initial disconnected status paused with only its state label', () => {
+  const fixture = TestBed.createComponent(LiveView);
+  fixture.componentRef.setInput('conversationId', 'chat');
+  fixture.detectChanges();
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
+  const status = element.querySelector('dialog [role="status"]');
+  expect(status?.querySelector('[data-state]')?.getAttribute('data-state')).toBe('paused');
+  expect(status?.textContent?.trim()).toBe('Disconnected');
+  fixture.destroy();
+});
+
 it('clears the desktop and explains a refused view without offering control', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 403 })));
   const fixture = TestBed.createComponent(LiveView);
@@ -107,6 +119,21 @@ async function watchFakeView(status: number) {
   await fixture.whenStable();
   return { fixture, element, request };
 }
+
+it('offers Screenshot only while the viewer is Viewing', async () => {
+  const { fixture, element } = await watchFakeView(503);
+  const states = ['Disconnected', 'Unavailable', 'Paused', 'Connecting', 'Failed',
+    'Access changed'];
+  for (const state of states) {
+    fixture.componentInstance['state'].set(state);
+    fixture.detectChanges();
+    const screenshotButtons = [...element.querySelectorAll('button')]
+      .filter(button => button.textContent?.trim() === 'Screenshot');
+    expect(screenshotButtons).toHaveLength(0);
+  }
+  fixture.destroy();
+});
+
 async function unconfirmedBrowserAdmission() {
   const { fixture, element, request } = await watchFakeView(503);
   expect(element.textContent).toContain('Failed');
@@ -143,9 +170,14 @@ it('shows Screenshot only while Viewing and keeps its keyboard action disabled w
   if (!screenshot) throw new Error('Missing Screenshot action');
   const requested = vi.fn();
   fixture.componentInstance.captureRequested.subscribe(requested);
+  screenshot.focus();
   fixture.componentRef.setInput('captureBusy', true);
   fixture.detectChanges();
-  expect(screenshot.disabled).toBe(true);
+  expect(screenshot.getAttribute('aria-disabled')).toBe('true');
+  expect(screenshot.disabled).toBe(false);
+  expect(document.activeElement).toBe(screenshot);
+  screenshot.click();
+  expect(requested).not.toHaveBeenCalled();
   fixture.componentRef.setInput('captureBusy', false);
   fixture.detectChanges();
   screenshot.focus();
@@ -213,11 +245,12 @@ it('offers Reconnect when disconnected and gives the unavailable screenshot expl
   fixture.detectChanges();
   expect(element.textContent).toContain('Reconnect to take a screenshot.');
   expect(element.querySelector('.retry')?.textContent).toContain('Reconnect');
-  expect(element.textContent).not.toContain('Screenshot</button>');
+  expect([...element.querySelectorAll('button')]
+    .filter(button => button.textContent?.trim() === 'Screenshot')).toHaveLength(0);
   fixture.componentInstance['state'].set('Unavailable');
   fixture.detectChanges();
   expect(element.textContent)
-    .toContain('Screenshots are not available until you can watch this computer.');
+    .toContain('New screenshots are not available until you can watch this computer.');
 });
 
 it('hides expired pixels, clears paused pixels and rebuilds the viewer without another POST',

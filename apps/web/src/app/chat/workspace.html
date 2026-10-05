@@ -54,7 +54,7 @@
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
-          <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.file-turn]="hasScreenshot(turn.files)" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
+          <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
             @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true"><oc-icon [name]="turn.author === 'agent' ? 'agent' : 'open'" /></span> }
             <div class="message-content">
               @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}@if (turn.endedAt) { · {{ duration(turn.time, turn.endedAt) }}s }</time></header> }
@@ -84,7 +84,7 @@
           </article>
         }
         @if (!chat.denied()) {
-          <div class="capture-line"
+          <div class="capture-line" [class.sr-only]="captureLineVisuallyHidden()"
             [attr.role]="panelExpanded() || chat.loading() ? null : 'status'"
             [attr.aria-live]="panelExpanded() || chat.loading() ? null : 'polite'">
             @if (showCaptureLine()) {
@@ -93,9 +93,11 @@
                 [evidenceAt]="captureViewModel()!.evidenceAt"
                 [timestamp]="captureViewModel()!.timestamp"
                 [safeToRetry]="captureViewModel()!.safeToRetry" [announce]="false"
+                [showAction]="!captureBusy()"
                 (action)="captureAction()" />
               @if (captureViewModel()!.repeatAvailable) {
-                <button type="button" class="repeat-capture" (click)="repeatCapture()">
+                <button type="button" class="repeat-capture" [disabled]="captureBusy()"
+                  (click)="repeatCapture()">
                   Send the same request again
                 </button>
               }
@@ -237,7 +239,9 @@
     </div>
     @if (chat.selected() && !chat.denied()) {
       <oc-live-view [conversationId]="chat.selected()" [capture]="captureViewModel()"
-        [captureBusy]="captureBusy()" (captureRequested)="startCapture()"
+        [captureBusy]="captureBusy()" [captureChecking]="statusChecking()"
+        [captureCanStart]="captureCanStart()"
+        (captureRequested)="startCapture()"
         (captureRepeated)="repeatCapture()" (captureStatusChecked)="checkCaptureStatus()" />
     }
     @if (chat.selected()) {
@@ -257,7 +261,18 @@
             detail="Open the computer viewer and choose Screenshot. Files you attach or create appear here."
             [showAction]="false" />
         }
-        @for (file of screenshots(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt="" loading="lazy"><span class="file-name">{{ file.name }}</span><small>{{ capturedLine(file) }}</small></button> }
+        @for (file of screenshots(); track file.fileId) {
+          <button type="button" class="panel-file screenshot-panel-file"
+            (click)="preview.set(file.path)">
+            <img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt=""
+              loading="lazy" (error)="hideBrokenThumbnail($event)">
+            <span class="file-type screenshot-type" hidden>{{ type(file.name) }}</span>
+            <span class="screenshot-panel-details">
+              <span class="file-name">{{ file.name }}</span>
+              <small>{{ capturedLine(file) }}</small>
+            </span>
+          </button>
+        }
         @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
         @for (file of files(); track file) {
           <button type="button" class="panel-file created" (click)="preview.set(file)">

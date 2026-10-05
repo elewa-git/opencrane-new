@@ -4,12 +4,14 @@
   @if (capture(); as state) {
     <oc-shared-state [kind]="state.kind" [message]="state.message" [detail]="state.detail"
       [evidenceAt]="state.evidenceAt" [timestamp]="state.timestamp"
-      [safeToRetry]="state.safeToRetry" (action)="captureAction()" />
+      [safeToRetry]="state.safeToRetry" [showAction]="!captureBusy()"
+      (action)="captureAction()" />
     @if (state.repeatAvailable) { <ng-container [ngTemplateOutlet]="repeatButton" /> }
   }
 </div>
 <ng-template #repeatButton>
-  <button type="button" class="repeat-capture" (click)="repeatCapture()">
+  <button type="button" class="repeat-capture" [disabled]="captureBusy()"
+    (click)="repeatCapture()">
     Send the same request again
   </button>
 </ng-template>
@@ -18,7 +20,7 @@
   @if (state() === 'Unavailable') {
     <p>A conversation participant needs a shared-desktop grant and a ready computer to watch.
       Ask the desktop owner for access.</p>
-    <p>Screenshots are not available until you can watch this computer.</p>
+      <p>New screenshots are not available until you can watch this computer.</p>
   }
   <div role="status" aria-live="polite">
     <oc-shared-state [kind]="viewState()" [message]="state()"
@@ -45,7 +47,9 @@
   @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
   @if (state() === 'Viewing') {
     <div class="tools">
-      <button type="button" [disabled]="captureBusy()" (click)="requestCapture()">
+      <button type="button"
+        [attr.aria-disabled]="captureBusy() || !captureCanStart() ? 'true' : null"
+        (click)="requestCapture()">
         Screenshot
       </button>
       <button type="button" [attr.aria-pressed]="fit()" (click)="zoom(true)">Fit</button>
@@ -55,10 +59,14 @@
     </div>
   }
   <div class="capture-status" role="status" aria-live="polite">
+    @if (captureChecking()) {
+      <p>Checking Files. Wait for the read to finish before starting another screenshot.</p>
+    }
     @if (capture(); as captureState) {
       <oc-shared-state [kind]="captureState.kind" [message]="captureState.message"
         [detail]="captureState.detail" [evidenceAt]="captureState.evidenceAt"
         [timestamp]="captureState.timestamp" [safeToRetry]="captureState.safeToRetry"
+        [showAction]="!captureBusy()"
         (action)="captureAction()" />
       @if (captureState.repeatAvailable) {
         <ng-container [ngTemplateOutlet]="repeatButton" />

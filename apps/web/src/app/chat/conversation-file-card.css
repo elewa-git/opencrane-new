@@ -59,6 +59,10 @@
   object-fit: contain;
   background: #f0f3f3;
 }
+.screenshot-card .screenshot-thumbnail {
+  display: block;
+  height: auto;
+}
 .screenshot-card figcaption,
 .screenshot-card small { overflow-wrap: anywhere; }
 .screenshot-card figcaption { margin-top: 8px; font-size: 13px; }

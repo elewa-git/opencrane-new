@@ -166,14 +166,17 @@ host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
 [Licence and live evidence](../../docs/process/live-view-evidence.md).
 
 The viewer's **Screenshot** button starts one capture and save request. It shows one
-saving message and disables the button until the request ends. A saved PNG appears in
-the transcript and Files panel with a caption and capture facts. Its preview shows the
-image, the computer id, the generation number and a download link. A 503 offers a
-same-key retry. An unanswered request offers Check status, which reads the feed again,
-and a separate same-key resend. Pressing Screenshot always starts a new capture with
-a new key. A scan rejection appears once in the transcript and does not show the file
-name. A 401 or 403 asks the person to check access; a later denial clears file details
-and closes the preview. Thumbnail and preview failures have their own retry states.
+saving message and stays focused while the request runs. A saved PNG appears in the
+transcript and Files panel with a name, caption and capture facts. Its preview shows
+the image, the computer id, the generation number and a download link. A 503 offers a
+same-key retry. An unanswered request shows its command id and says that its result
+could not be confirmed. It keeps the Screenshot action unavailable until Check status
+successfully reads the feed. That read marks only the unanswered request it began for.
+The same-key resend appears after a successful read. A new Screenshot after that read
+uses a new command id. A failed read never says that Files were read. A scan rejection
+appears once in the transcript and does not show the file name. A 401 or 403 asks the
+person to check access; a later denial clears file details and closes the preview.
+Thumbnail and preview failures have their own retry states.
 The [screenshot screen receipt](../../docs/process/p3-18-screens/README.md) records browser
 captures and checks. The [earlier screenshot receipt](../../docs/process/p3-18-screenshots.md)
 records the service journey. Sample browser checks do not qualify a fresh installation.

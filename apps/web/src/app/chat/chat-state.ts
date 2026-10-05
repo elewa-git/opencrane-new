@@ -95,6 +95,8 @@ const attachment = z.object({ conversationId: z.string(), fileId: z.string(), na
     computerId: z.string(), generation: z.number(), capturedAt: z.string(), width: z.number(),
     height: z.number(),
   }).optional() });
+const rejectedScreenshotSchema = z.object({ fileId: z.string(), uploadedBy: z.string(),
+  screenshot: z.object({ capturedAt: z.string() }) });
 export function uploadedFile(row: ChatRow) {
   if (row.type !== 'file.uploaded') return undefined;
   const parsed = attachment.safeParse(row.data);
@@ -105,8 +107,7 @@ export function uploadedFile(row: ChatRow) {
 
 function rejectedScreenshot(row: ChatRow): { fileId: string; uploadedBy: string; capturedAt: string } | undefined {
   if (row.type !== 'file.rejected') return undefined;
-  const parsed = z.object({ fileId: z.string(), uploadedBy: z.string(),
-    screenshot: z.object({ capturedAt: z.string() }) }).safeParse(row.data);
+  const parsed = rejectedScreenshotSchema.safeParse(row.data);
   if (!parsed.success) return undefined;
   return { fileId: parsed.data.fileId, uploadedBy: parsed.data.uploadedBy,
     capturedAt: parsed.data.screenshot.capturedAt };

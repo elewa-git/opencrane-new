@@ -1,3 +1,5 @@
+// File-view interaction adapted from Open Terminal b58442aa8599755525878f917b621e0145b0e8f7 (MIT).
+// Original/preview fallback and workspace root: see docs/design/chat/OPEN-TERMINAL-LICENSE.txt.
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import {
@@ -28,7 +30,8 @@ interface PreviewFailure {
     </div>
     @if (failure()) {
       @if (failure()!.action === 'access') {
-        <button class="preview-action" type="button" (click)="checkAccessAndReload()">
+        <button class="preview-action preview-access" type="button"
+          (click)="checkAccessAndReload()">
           Check access and reopen
         </button>
       }
@@ -65,6 +68,7 @@ interface PreviewFailure {
       background: var(--oc-accent); color: var(--oc-ink-strong);
       border-radius: var(--oc-radius-button); text-decoration: none; font: inherit; }
     .preview-action { margin: 8px 0; background: white; }
+    .preview-access { background: var(--oc-accent); }
     iframe { width: 100%; height: 60dvh; border: 0; }
     img { display: block; max-width: 100%; max-height: 50dvh; object-fit: contain; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -76,6 +80,7 @@ interface PreviewFailure {
     .computer-id { font-family: var(--oc-font-mono); }
     @media (max-width: 600px) {
       a { display: flex; width: 100%; }
+      .preview-action { display: flex; width: 100%; }
       .screenshot-facts { grid-template-columns: minmax(0, 1fr); gap: 3px; }
       .screenshot-facts dd + dt { margin-top: 8px; }
     }
@@ -205,9 +210,7 @@ export class FilePreview implements OnDestroy {
   private screenshotLine(): string {
     const facts = this.screenshot();
     if (!facts) return 'File preview';
-    const line = capturedByLine(this.createdBy(), facts);
-    if (this.createdBy() !== 'you') return line;
-    return line.replace(` · ${imageSize(facts.width, facts.height)}`, '');
+    return capturedByLine(this.createdBy(), facts, false);
   }
 
   private sheetDescription(): string {

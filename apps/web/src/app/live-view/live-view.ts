@@ -48,6 +48,8 @@ export class LiveView implements OnDestroy, OnChanges {
   readonly conversationId = input.required<string>();
   readonly capture = input<CaptureViewModel | undefined>();
   readonly captureBusy = input(false);
+  readonly captureChecking = input(false);
+  readonly captureCanStart = input(true);
   readonly captureRequested = output<void>();
   readonly captureRepeated = output<void>();
   readonly captureStatusChecked = output<void>();
@@ -129,9 +131,13 @@ export class LiveView implements OnDestroy, OnChanges {
     this.display().nativeElement.replaceChildren();
   }
 
-  protected requestCapture(): void { this.captureRequested.emit(); }
+  protected requestCapture(): void {
+    if (this.captureBusy() || !this.captureCanStart()) return;
+    this.captureRequested.emit();
+  }
 
   protected captureAction(): void {
+    if (this.captureBusy()) return;
     if (this.capture()?.kind === 'unknown') {
       this.captureStatusChecked.emit();
       return;
@@ -141,7 +147,10 @@ export class LiveView implements OnDestroy, OnChanges {
     }
   }
 
-  protected repeatCapture(): void { this.captureRepeated.emit(); }
+  protected repeatCapture(): void {
+    if (this.captureBusy()) return;
+    this.captureRepeated.emit();
+  }
   private async open(): Promise<void> {
     const attempt = ++this.attempt;
     this.state.set('Connecting');

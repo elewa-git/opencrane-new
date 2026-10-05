@@ -49,8 +49,12 @@ function allTabCountsAreUnknown(nodes) {
   return true;
 }
 
-function frameName(index) {
-  return `WRK-${80 + index}`;
+function screenshotFrameNames() {
+  const frames = [];
+  for (let index = 0; index < 12; index++) {
+    frames.push(`WRK-${80 + index}`);
+  }
+  return frames;
 }
 
 const screenshotFileId = 'screen-1';
@@ -75,13 +79,28 @@ const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900">'
 
 function makePreviewPng() {
   const canvas = globalThis.document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
+  canvas.width = 1440;
+  canvas.height = 900;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Canvas is unavailable');
   context.fillStyle = '#172a2d';
-  context.fillRect(0, 0, 1, 1);
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = '#e4f6f9';
+  context.fillRect(80, 76, 1280, 64);
+  context.fillStyle = '#fbfcfc';
+  context.fillRect(80, 176, 800, 560);
+  context.fillStyle = '#0a6f7e';
+  context.font = '32px sans-serif';
+  context.fillText('Computer desktop', 110, 120);
+  context.fillStyle = '#4f575a';
+  context.font = '20px sans-serif';
+  context.fillText('Captured screen preview', 110, 220);
   return canvas.toDataURL('image/png').split(',')[1];
+}
+
+function screenshotThumbnailLoaded() {
+  const image = globalThis.document.querySelector('.screenshot-card img');
+  return image?.tagName === 'IMG' && image.complete && image.naturalWidth > 0;
 }
 
 function addScreenshot(fixture, rejected = false) {
@@ -218,11 +237,11 @@ async function installScreenshotRoute(page, fixture, firstMode) {
     const requestKey = route.request().headers()['idempotency-key'];
     keys.push(requestKey);
     if (mode === 'hold') {
+      addScreenshot(fixture);
+      fileAppended = true;
       await new Promise(holdScreenshotReply);
       await route.fulfill({ status: 201, contentType: 'application/json',
         body: JSON.stringify({ status: 'appended', fileId }) });
-      addScreenshot(fixture);
-      fileAppended = true;
       return;
     }
     if (mode === 'unknown') {
@@ -281,6 +300,23 @@ async function saveScreenshotFrame(browser, width, state, mode) {
     await viewer.getByText("Screenshot wasn't saved", { exact: true }).waitFor();
   }
   await capture(context.page, state, width);
+  if (['wrk-81-saving', 'wrk-82-saving', 'wrk-83-saved', 'wrk-85-failed']
+    .includes(state)) {
+    await context.page.keyboard.press('Escape');
+    await viewer.waitFor({ state: 'hidden' });
+    if (state === 'wrk-83-saved') {
+      await context.page.locator('.entry-capture-status')
+        .getByText('Screenshot saved', { exact: true }).waitFor();
+    } else {
+      await context.page.locator('.capture-line').waitFor();
+    }
+    await context.page.locator('.panel-section[aria-label="Files"]').waitFor();
+    await capture(context.page, `${state}-workspace`, width);
+    if (width < 1100) {
+      await closePhoneSessionPanel(context.page);
+      await capture(context.page, `${state}-chat`, width);
+    }
+  }
   route.release();
   await context.page.close();
 }
@@ -299,6 +335,30 @@ async function savedScreenshot(browser, width, preview = false, thumbStatus = 20
   const card = context.page.locator('.screenshot-card');
   await card.waitFor();
   await context.page.getByText('Screenshot of kijani-sales-01.', { exact: false }).first().waitFor();
+  if (thumbStatus === 200) {
+    await context.page.evaluate(waitForPageAnimations);
+    await context.page.waitForFunction(screenshotThumbnailLoaded);
+    const thumbnail = await card.locator('img').evaluate(function readThumbnailSize(image) {
+      const bounds = image.getBoundingClientRect();
+      return { width: bounds.width, height: bounds.height };
+    });
+    const expectedHeight = thumbnail.width * 10 / 16;
+    assert(Math.abs(thumbnail.height - expectedHeight) < 2,
+      `Card thumbnail keeps its 16:10 ratio at ${width}px: `
+        + `${thumbnail.width} × ${thumbnail.height}`);
+  } else {
+    const failedPreview = card.locator('.thumbnail-error');
+    await failedPreview.waitFor();
+    await context.page.evaluate(waitForPageAnimations);
+    const failedBounds = await failedPreview.boundingBox();
+    assert(failedBounds);
+    assert(Math.abs(failedBounds.height - failedBounds.width * 10 / 16) < 2,
+      `Failed card preview keeps its 16:10 ratio at ${width}px`);
+  }
+  const panelName = context.page.locator('.screenshot-panel-file .file-name').first();
+  await panelName.waitFor();
+  const panelNameWidth = await panelName.evaluate(node => node.getBoundingClientRect().width);
+  assert(panelNameWidth > 0, `Files shows the screenshot name at ${width}px`);
   if (preview) {
     await closePhoneSessionPanel(context.page);
     if (thumbStatus === 200) {
@@ -375,6 +435,22 @@ async function checkKeyboardAndRepeatedRetries(browser) {
   await context.page.close();
 }
 
+async function checkScreenshotFocusDuringSave(browser) {
+  const context = await openWorkspace(browser, 390);
+  const route = await installScreenshotRoute(context.page, context.fixture, 'hold');
+  const { viewer } = await openViewer(context.page);
+  const screenshot = viewer.getByRole('button', { name: 'Screenshot', exact: true });
+  await focusByKeyboard(context.page, screenshot);
+  await context.page.keyboard.press('Enter');
+  await viewer.getByText('Capturing and saving screenshot…', { exact: true }).waitFor();
+  assert.equal(await screenshot.evaluate(nodeIsFocused), true,
+    'Screenshot keeps keyboard focus while its request is saving');
+  assert.equal(await screenshot.getAttribute('aria-disabled'), 'true');
+  route.release();
+  await viewer.getByText('Screenshot saved', { exact: true }).waitFor();
+  await context.page.close();
+}
+
 async function unknownAndRepeated(browser, width) {
   const context = await openWorkspace(browser, width);
   const route = await installScreenshotRoute(context.page, context.fixture, 'unknown');
@@ -382,6 +458,9 @@ async function unknownAndRepeated(browser, width) {
   await viewer.getByRole('button', { name: 'Screenshot', exact: true }).click();
   await viewer.getByText('Screenshot outcome unknown', { exact: true }).waitFor();
   const originalKey = keys.at(-1);
+  const screenshot = viewer.getByRole('button', { name: 'Screenshot', exact: true });
+  assert.equal(await screenshot.getAttribute('aria-disabled'), 'true',
+    'Screenshot stays unavailable until the status read completes');
   await viewer.getByRole('button', { name: 'Check status', exact: true }).click();
   await viewer.getByText('Files read again at', { exact: false }).waitFor();
   route.setMode('saved');
@@ -390,6 +469,10 @@ async function unknownAndRepeated(browser, width) {
   assert.equal(keys.at(-1), originalKey, 'Unknown resend repeats the same key');
   assert.equal(await context.page.locator('.screenshot-card').count(), 1,
     'Repeated request keeps one transcript card');
+  await viewer.getByRole('button', { name: 'Screenshot', exact: true }).click();
+  await viewer.getByText('Screenshot already saved', { exact: true }).waitFor();
+  assert.notEqual(keys.at(-1), originalKey,
+    'A new screenshot after the checked request gets a new key');
   await context.page.keyboard.press('Escape');
   await closePhoneSessionPanel(context.page);
   await capture(context.page, 'wrk-91-repeated', width);
@@ -457,8 +540,11 @@ async function disconnectedViewer(browser, width, unavailable = false) {
     const viewer = context.page.getByRole('dialog', { name: 'Computer view', exact: true });
     await viewer.getByText('Unavailable', { exact: true }).waitFor();
     assert((await viewer.innerText()).includes(
-      'Screenshots are not available until you can watch this computer.',
+      'New screenshots are not available until you can watch this computer.',
     ));
+    assert.equal(await viewer.getByRole('button', {
+      name: 'Screenshot', exact: true,
+    }).count(), 0);
   } else {
     const { computer, viewer } = await openViewer(context.page);
     computer.disconnect();
@@ -519,7 +605,10 @@ async function main() {
       await deniedPreview(browser, width);
       await unknownAndRepeated(browser, width);
     }
+    await disconnectedViewer(browser, 1280, true);
     await disconnectedViewer(browser, 390, true);
+    await disconnectedViewer(browser, 320, true);
+    await checkScreenshotFocusDuringSave(browser);
     await checkKeyboardAndRepeatedRetries(browser);
     await reducedMotionCaptures(browser);
   } finally {
@@ -532,7 +621,7 @@ async function main() {
     captures: captures.length,
     files: captures,
     environment: 'Built Angular assets; Chromium; intercepted protocol fixtures; no stack',
-    frames: Array.from({ length: 12 }, frameName),
+    frames: screenshotFrameNames(),
     checks: [
       'No horizontal overflow at 1280px, 390px and 320px',
       'Capture, card, preview and retry actions meet phone target sizes',

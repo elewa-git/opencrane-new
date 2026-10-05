@@ -122,8 +122,15 @@ export class ChatSession implements OnDestroy {
     } catch (error) { this.queued.set(true); this.fail(error); return false; }
     finally { this.busy.set(false); }
   }
-  async refresh(): Promise<void> {
-    try { await this.catchUp(this.selected(), this.revision); } catch (error) { this.fail(error); }
+  async refresh(): Promise<boolean> {
+    this.error.set('');
+    try {
+      await this.catchUp(this.selected(), this.revision);
+      return !this.error();
+    } catch (error) {
+      this.fail(error);
+      return false;
+    }
   }
   reconnect(): void { this.socket.connect(); }
   async stop(): Promise<void> {

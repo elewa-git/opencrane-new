@@ -5,12 +5,12 @@ import type { PresentationState } from '../shared-state/shared-state';
 
 export type CaptureState =
   | { phase: 'idle' }
-  | { phase: 'saving' }
+  | { phase: 'saving'; commandId: string }
   | { phase: 'saved'; fileId: string; repeated: boolean }
   | { phase: 'rejected'; fileId: string; answeredAt: string }
-  | { phase: 'failed'; answeredAt: string; sameKeyRetry: boolean }
+  | { phase: 'failed'; commandId: string; answeredAt: string; sameKeyRetry: boolean }
   | { phase: 'access_changed'; answeredAt: string; signIn: boolean }
-  | { phase: 'unknown'; startedAt: string; checkedAt?: string };
+  | { phase: 'unknown'; commandId: string; startedAt: string; checkedAt?: string };
 
 export interface CaptureViewModel {
   kind: PresentationState;
@@ -25,24 +25,29 @@ export interface CaptureViewModel {
 @Injectable()
 export class ScreenshotCapture implements OnDestroy {
   readonly state = signal<CaptureState>({ phase: 'idle' });
-  private key = '';
   private abort = new AbortController();
   private requestNumber = 0;
 
   async start(conversationId: string, knownScreenshotIds: string[]): Promise<void> {
-    if (this.state().phase === 'saving') return;
-    this.key = crypto.randomUUID();
-    await this.send(conversationId, knownScreenshotIds);
+    const state = this.state();
+    if (state.phase === 'saving') return;
+    if (state.phase === 'unknown' && !state.checkedAt) return;
+    const commandId = crypto.randomUUID();
+    await this.send(commandId, conversationId, knownScreenshotIds);
   }
 
   async repeat(conversationId: string, knownScreenshotIds: string[]): Promise<void> {
-    if (this.state().phase === 'saving' || !this.key) return;
-    await this.send(conversationId, knownScreenshotIds);
+    const state = this.state();
+    if (state.phase === 'saving') return;
+    if (state.phase === 'unknown' && !state.checkedAt) return;
+    if (state.phase === 'unknown' || (state.phase === 'failed' && state.sameKeyRetry)) {
+      await this.send(state.commandId, conversationId, knownScreenshotIds);
+    }
   }
 
-  markChecked(): void {
+  markChecked(startedAt: string): void {
     const state = this.state();
-    if (state.phase === 'unknown') {
+    if (state.phase === 'unknown' && state.startedAt === startedAt) {
       this.state.set({ ...state, checkedAt: new Date().toISOString() });
     }
   }
@@ -51,7 +56,6 @@ export class ScreenshotCapture implements OnDestroy {
     this.requestNumber++;
     this.abort.abort();
     this.abort = new AbortController();
-    this.key = '';
     this.state.set({ phase: 'idle' });
   }
 
@@ -59,17 +63,20 @@ export class ScreenshotCapture implements OnDestroy {
     this.reset();
   }
 
-  private async send(conversationId: string, knownScreenshotIds: string[]): Promise<void> {
+  private async send(
+    commandId: string,
+    conversationId: string,
+    knownScreenshotIds: string[],
+  ): Promise<void> {
     const requestNumber = ++this.requestNumber;
     const knownIds = [...knownScreenshotIds];
-    const key = this.key;
-    this.state.set({ phase: 'saving' });
+    this.state.set({ phase: 'saving', commandId });
     try {
       const response = await fetch(
         `/api/conversations/${encodeURIComponent(conversationId)}/screenshots`,
         {
           method: 'POST',
-          headers: { 'x-opencrane-view': '1', 'idempotency-key': key },
+          headers: { 'x-opencrane-view': '1', 'idempotency-key': commandId },
           signal: AbortSignal.any([
             this.abort.signal,
             AbortSignal.timeout(90_000),
@@ -79,14 +86,15 @@ export class ScreenshotCapture implements OnDestroy {
       const answeredAt = new Date().toISOString();
       const result = await readReply(response);
       if (requestNumber !== this.requestNumber) return;
-      this.applyReply(response.status, result, answeredAt, knownIds);
+      this.applyReply(commandId, response.status, result, answeredAt, knownIds);
     } catch {
       if (requestNumber !== this.requestNumber) return;
-      this.state.set({ phase: 'unknown', startedAt: new Date().toISOString() });
+      this.state.set({ phase: 'unknown', commandId, startedAt: new Date().toISOString() });
     }
   }
 
   private applyReply(
+    commandId: string,
     status: number,
     result: CaptureReply,
     answeredAt: string,
@@ -99,15 +107,13 @@ export class ScreenshotCapture implements OnDestroy {
           fileId: result.fileId,
           repeated: knownIds.includes(result.fileId),
         });
-        this.key = '';
         return;
       }
-      this.state.set({ phase: 'unknown', startedAt: answeredAt });
+      this.state.set({ phase: 'unknown', commandId, startedAt: answeredAt });
       return;
     }
     if (status === 422) {
       this.state.set({ phase: 'rejected', fileId: result.fileId ?? '', answeredAt });
-      this.key = '';
       return;
     }
     if (status === 401 || status === 403) {
@@ -115,11 +121,10 @@ export class ScreenshotCapture implements OnDestroy {
       return;
     }
     if (status === 503) {
-      this.state.set({ phase: 'failed', answeredAt, sameKeyRetry: true });
+      this.state.set({ phase: 'failed', commandId, answeredAt, sameKeyRetry: true });
       return;
     }
-    this.state.set({ phase: 'failed', answeredAt, sameKeyRetry: false });
-    this.key = '';
+    this.state.set({ phase: 'failed', commandId, answeredAt, sameKeyRetry: false });
   }
 }
 
@@ -182,12 +187,18 @@ export function captureView(
   }
   if (state.checkedAt) {
     return view('unknown', 'Screenshot outcome unknown',
-      `Files read again at ${utcDateTime(state.checkedAt)}. If your screenshot is not there, send the same request again. It cannot make a second copy.`,
+      checkedUnknownDetail(state.checkedAt, state.commandId),
       false, true);
   }
   return view('unknown', 'Screenshot outcome unknown',
-    "The server did not answer, so this screenshot may or may not be saved. Check status reads this conversation's files again.",
-    false, true);
+    `We couldn't tell whether it was recorded. Check its status before sending again. Reference: ${state.commandId}.`,
+    false, false);
+}
+
+function checkedUnknownDetail(checkedAt: string, commandId: string): string {
+  const readTime = utcDateTime(checkedAt);
+  return `Files read again at ${readTime}. If your screenshot is not there, send the same `
+    + `request again. It cannot make a second copy. Reference: ${commandId}.`;
 }
 
 function findAttachmentById(fileId: string, attachment: ChatAttachment): boolean {

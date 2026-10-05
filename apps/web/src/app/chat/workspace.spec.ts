@@ -8,6 +8,7 @@ interface CaptureWorkspace {
   calls: string[];
   setReply(status: number): void;
   denyFeedRead(): void;
+  setMessageStatus(status: number): void;
   rows: Record<string, unknown>[];
 }
 
@@ -17,6 +18,7 @@ async function createCaptureWorkspace(initialRows: Record<string, unknown>[] = [
   const calls: string[] = [];
   let replyStatus = 201;
   let denyMessages = false;
+  let messageStatus = 200;
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const path = input instanceof Request ? input.url : String(input);
     const pathname = new URL(path, location.origin).pathname;
@@ -46,6 +48,9 @@ async function createCaptureWorkspace(initialRows: Record<string, unknown>[] = [
     }
     if (pathname.endsWith('/messages')) {
       if (denyMessages) return Promise.resolve(new Response('{}', { status: 403 }));
+      if (messageStatus !== 200) {
+        return Promise.resolve(new Response('{}', { status: messageStatus }));
+      }
       const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
       const visibleRows = rows.filter(row => Number(row['position']) > since);
       return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
@@ -75,6 +80,7 @@ async function createCaptureWorkspace(initialRows: Record<string, unknown>[] = [
     fixture, root, calls, rows,
     setReply(status) { replyStatus = status; },
     denyFeedRead() { denyMessages = true; },
+    setMessageStatus(status) { messageStatus = status; },
   };
 }
 
@@ -249,16 +255,39 @@ it('reads status without sending another screenshot request', async () => {
   expect(finalScreenshotPosts).toBe(screenshotPosts);
   expect(context.calls.some(call => call.startsWith('GET ') && call.includes('/messages')))
     .toBe(true);
+  const state = context.fixture.componentInstance['capture'].state();
+  expect(state.phase).toBe('unknown');
+  if (state.phase === 'unknown') expect(state.checkedAt).toBeDefined();
+  expect(context.fixture.componentInstance['chat'].error()).toBe('');
+  context.fixture.destroy();
+});
+
+it('does not say Files were read after a failed status read', async () => {
+  const context = await createCaptureWorkspace();
+  context.setReply(0);
+  await context.fixture.componentInstance['startCapture']();
+  context.fixture.detectChanges();
+  expect(context.fixture.componentInstance['capture'].state().phase).toBe('unknown');
+
+  context.setMessageStatus(500);
+  await context.fixture.componentInstance['checkCaptureStatus']();
+  context.fixture.detectChanges();
+
+  expect(context.root.textContent).toContain('Could not load the conversation');
+  expect(context.root.textContent).not.toContain('Files read again');
   expect(context.fixture.componentInstance['capture'].state().phase).toBe('unknown');
   context.fixture.destroy();
 });
 
-it('shows one card and hides the new-save line after the feed contains its file', async () => {
+it('shows one card and keeps the saved announcement when the feed contains its file', async () => {
   const context = await createCaptureWorkspace();
   await context.fixture.componentInstance['startCapture']();
   await vi.waitFor(() => expect(context.root.querySelectorAll('.screenshot-card'))
     .toHaveLength(1));
-  expect(context.root.querySelector('.capture-line')?.textContent).not.toContain('Screenshot saved');
+  const status = context.root.querySelector('.capture-line');
+  expect(status?.getAttribute('role')).toBe('status');
+  expect(status?.textContent).toContain('Screenshot saved');
+  expect(status?.classList.contains('sr-only')).toBe(true);
   context.fixture.destroy();
 });
 

@@ -56,7 +56,10 @@ export function screenshotCaption(computerId: string): string {
 export function capturedByLine(
   createdBy: 'you' | 'participant' | 'assistant',
   facts: ScreenshotFacts,
+  includeImageSize = true,
 ): string {
   if (createdBy !== 'you') return 'Captured by another participant';
-  return `Captured by you · ${utcDateTime(facts.capturedAt)} · ${imageSize(facts.width, facts.height)}`;
+  const capturedAt = utcDateTime(facts.capturedAt);
+  if (!includeImageSize) return `Captured by you · ${capturedAt}`;
+  return `Captured by you · ${capturedAt} · ${imageSize(facts.width, facts.height)}`;
 }
