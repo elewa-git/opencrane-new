@@ -12,6 +12,8 @@ export type ViewCheckBoundary =
   'event_store' | 'authorisation' | 'deadline' | 'authority_changed';
 // Match the message thrown by the shared freshness check in libs/models/src/authority.ts.
 const authorityChangedMessage = 'Authority changed';
+// Keep a removed silo member as a denial while other team changes wait for IAM.
+const activeSiloMembershipRequiredMessage = 'Active silo membership required';
 
 export class ViewCheckUnavailable extends Error {
   readonly boundary: ViewCheckBoundary;
@@ -239,7 +241,7 @@ async function confirmTeamAuthority(options: ViewAccessOptions, memberId: string
     if (!(error instanceof PayingGroupRefused)) {
       throw error;
     }
-    if (error.message === 'Active silo membership required') {
+    if (error.message === activeSiloMembershipRequiredMessage) {
       throw error;
     }
     // Run this only after the team stream showed the member in the team.

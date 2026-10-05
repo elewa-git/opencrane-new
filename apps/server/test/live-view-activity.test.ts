@@ -6,7 +6,7 @@ import { encodeSession } from '@opencrane/auth';
 import { grantStream, memberAuthorisation } from '@opencrane/authz';
 import { until } from '@opencrane/authz/testing';
 import { getEventDefinition } from '@opencrane/events';
-import { authorityFence, history } from '@opencrane/models';
+import { authorityFence, history, payingGroupAuthority } from '@opencrane/models';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { z } from 'zod';
@@ -38,6 +38,12 @@ const timingSchema = z.object({
   stage: z.literal('lease_check'),
   outcome: z.literal('unavailable'),
   boundary: z.literal('authority_changed'),
+});
+const authorisationTimingSchema = z.object({
+  operation: z.literal('view.timing'),
+  stage: z.literal('lease_check'),
+  outcome: z.literal('unavailable'),
+  boundary: z.literal('authorisation'),
 });
 let fixture: Fixture | undefined;
 let socket: WebSocket | undefined;
@@ -307,6 +313,13 @@ function hasUnavailableTimingBefore(closedAt = Infinity) {
   }
   return logs.some(matches);
 }
+function hasAuthorisationUnavailableTiming() {
+  function matches(entry: (typeof logs)[number]) {
+    const record: unknown = JSON.parse(entry.line);
+    return authorisationTimingSchema.safeParse(record).success;
+  }
+  return logs.some(matches);
+}
 async function keepsViewerOpen(injection: Injection, point: InjectionPoint,
   throughTeam = false) {
   const current = await createFixture();
@@ -393,10 +406,21 @@ async function resumesAfterTeamApplied() {
   const observed = await startViewer(current);
   const injection = teamChange('viewers', 'bob', 'team.member_added');
   const event = await appendInjection(current, injection);
-  await delay(1000);
+  const appendedAt = performance.now();
+  const waitUntilLeaseExpires = Math.max(0, appendedAt + 2000 - performance.now());
+  await delay(waitUntilLeaseExpires);
   expect(observed.viewer.readyState).toBe(WebSocket.OPEN);
   expect(observed.result()).toBeUndefined();
   expect(await stopReason(current)).toBeUndefined();
+  function pausedAfterJoin(entry: (typeof observed.notices)[number]) {
+    return entry.at > appendedAt && entry.notice.lease === 'paused';
+  }
+  expect(observed.notices.some(pausedAfterJoin)).toBe(true);
+  function validAfterLeaseExpiry(entry: (typeof observed.notices)[number]) {
+    return entry.at >= appendedAt + 1500 && entry.notice.lease === 'valid';
+  }
+  expect(observed.notices.some(validAfterLeaseExpiry)).toBe(false);
+  expect(hasAuthorisationUnavailableTiming()).toBe(true);
   const appliedAt = performance.now();
   const authorisation = memberAuthorisation(current.binding);
   await authorisation.handler.handle(event, current.db);
@@ -410,6 +434,22 @@ async function resumesAfterTeamApplied() {
   expect(observed.viewer.readyState).toBe(WebSocket.OPEN);
   expect(observed.result()).toBeUndefined();
   expect(await stopReason(current)).toBeUndefined();
+}
+async function deniesOtherFreshnessErrors() {
+  const current = await createFixture();
+  await grantDirectly(current);
+  const observed = await startViewer(current);
+  const realHead = current.nats.store.head.bind(current.nats.store);
+  async function headWithMemberReadFailure(subject?: string, deadline?: number) {
+    if (subject === 'member-alice') {
+      throw new Error('boom');
+    }
+    return realHead(subject, deadline);
+  }
+  vi.spyOn(current.nats.store, 'head').mockImplementation(headWithMemberReadFailure);
+  const closed = await observed.closed;
+  expect(closed.code).toBe(4003);
+  expect(closed.reason).toBe('access_changed');
 }
 async function closesTeamRemoval() {
   const current = await createFixture();
@@ -438,6 +478,7 @@ function teamTests() {
   it('stays open when another member joins the team during a check', keepsTeamJoinOpen, 30_000);
   it("stays open while IAM has not applied another member's team join, then resumes",
     resumesAfterTeamApplied, 30_000);
+  it('denies a plain error from the final freshness check', deniesOtherFreshnessErrors, 30_000);
   it('closes within 2,000 ms when alice leaves the team during a check',
     closesTeamRemoval, 30_000);
   it('keeps viewing through a second team while the first team is still being applied',
@@ -479,7 +520,7 @@ async function closesRevocation(testCase: (typeof revocationCases)[number]) {
     expect(hasUnavailableTimingBefore(closed.at)).toBe(true);
   }
 }
-async function closesDuringContinuousActivity() {
+async function closesDuringContinuousActivity(revokedType: string) {
   const current = await createFixture();
   await grantDirectly(current);
   const observed = await startViewer(current);
@@ -488,10 +529,10 @@ async function closesDuringContinuousActivity() {
   await armed.injected;
   await delay(1000);
   expect(observed.viewer.readyState).toBe(WebSocket.OPEN);
-  const revoked = revocation('grant.revoked');
+  const revoked = revocation(revokedType);
   await appendInjection(current, revoked);
   const revokedAt = performance.now();
-  await expectRevoked(current, observed, revokedAt, 'grant.revoked / continuous activity');
+  await expectRevoked(current, observed, revokedAt, `${revokedType} / continuous activity`);
 }
 async function refusesRevokedUpgrade(point: InjectionPoint) {
   const current = await createFixture();
@@ -526,7 +567,8 @@ async function refusesRevokedUpgrade(point: InjectionPoint) {
 }
 function revocationTests() {
   it.each(revocationCases)('$type at $point closes within 2,000 ms', closesRevocation, 30_000);
-  it('closes within 2,000 ms when access is revoked while every check sees chat activity',
+  it.each(['grant.revoked', 'member.removed'])(
+    'closes within 2,000 ms for %s while every check sees chat activity',
     closesDuringContinuousActivity, 30_000);
   it.each(injectionPoints)('a grant revocation inside the upgrade check at %s refuses the upgrade',
     refusesRevokedUpgrade, 30_000);
@@ -554,3 +596,19 @@ async function keepsExactChangedMessage() {
 }
 it('throws the exact Authority changed message when the watched history moves',
   keepsExactChangedMessage, 30_000);
+
+async function keepsActiveSiloMembershipRefusalMessage() {
+  const current = await createFixture();
+  await grantThroughTeam(current);
+  const removed = eventInjection('member-alice', 'member.removed', {
+    memberId: 'alice', removedBy: 'owner',
+  });
+  await appendInjection(current, removed);
+  const authority = payingGroupAuthority(
+    current.nats.store, 'test', 'alice', 'viewers', current.binding);
+  await expect(authority).rejects.toMatchObject({
+    message: 'Active silo membership required',
+  });
+}
+it('keeps the exact refusal message for a removed silo member',
+  keepsActiveSiloMembershipRefusalMessage, 30_000);
