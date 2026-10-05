@@ -1,0 +1,2 @@
+PASS dev-only owner bootstrap: jente-rosseel owner; OpenFGA owner=true
+Dev stack failed; inspect private logs in /home/jente/.config/opencrane/dev-stack-2

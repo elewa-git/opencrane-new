@@ -29,13 +29,14 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     for (let attempt = 0; attempt < 3; attempt++) {
       previewTransport = '';
       await button.click();
-      const ready = page.getByText('✓ Preview ready', { exact: true });
-      await ready.or(page.getByText('⊘ Preview unavailable.', { exact: false })).waitFor();
+      const ready = page.getByText('Preview ready', { exact: true });
+      const unavailable = page.getByText('Preview unavailable.', { exact: false });
+      await ready.or(unavailable).waitFor();
       if (await ready.isVisible()) return;
       assert(previewTransport === 'net::ERR_NETWORK_CHANGED' && attempt < 2,
         `Promoted preview unavailable (${previewTransport || 'no browser transport error'})`);
       previewRetries++;
-      await page.getByRole('button', { name: 'Close file preview' }).click();
+      await page.getByRole('button', { name: 'Close preview', exact: true }).click();
       await delay(1000);
     }
   };
@@ -78,13 +79,15 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   assert.equal(list.rows.length, 1);
   await page.locator('.transcript .file-card').filter({ hasText: 'project.pdf' }).waitFor();
   if (width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-  const panel = page.locator(width === 390 ? '.panel-dialog' : '.desktop-panel');
+  const panel = width === 390
+    ? page.getByRole('dialog', { name: 'Session', exact: true })
+    : page.getByRole('complementary', { name: 'Session panel', exact: true });
   await panel.getByRole('heading', { name: 'Attached by you · 1' }).waitFor();
-  if (width === 390) await page.getByRole('button', { name: 'Close session panel' }).click();
+  if (width === 390) await panel.getByRole('button', { name: 'Back', exact: true }).click();
   await page.screenshot({ path: `${screenshots}/upload-${width}.png`, fullPage: true });
   await target(page.locator('.transcript .file-card').getByRole('button', { name: 'Open', exact: true }));
   await openPreview(page.locator('.transcript .file-card').getByRole('button', { name: 'Open', exact: true }));
-  const preview = page.getByRole('dialog', { name: 'File preview', exact: true });
+  let preview = page.getByRole('dialog', { name: 'project.pdf', exact: true });
   assert.equal(await preview.locator('iframe').count(), 1);
   // Full Chromium includes the native PDF viewer; headless-shell cannot render PDF.
   const renderedBy = Date.now() + 30_000;
@@ -99,12 +102,12 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
   assert.equal(original.headers()['content-type'], 'application/pdf');
   assert((await original.body()).equals(uploadPdf()), 'Preview/download are the promoted original');
   if (width === 390) {
-    await target(preview.getByRole('button', { name: 'Close file preview' }));
+    await target(preview.getByRole('button', { name: 'Close preview', exact: true }));
     await target(preview.getByRole('link', { name: 'Download original file', exact: false }));
     assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   }
   await page.screenshot({ path: `${screenshots}/preview-${width}.png`, fullPage: true });
-  await page.getByRole('button', { name: 'Close file preview' }).click();
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
   // The answer is absent from the question. The stub must receive the converted text in the turn.
   await composer.fill('What is the project code in the attached PDF?');
@@ -132,9 +135,10 @@ export async function browserUploadJourney(page: Page, origin: string, screensho
     await choose(file);
     await uploaded();
     await openPreview(page.locator('.transcript .file-card').filter({ hasText: file.name }).getByRole('button', { name: 'Open', exact: true }));
+    preview = page.getByRole('dialog', { name: file.name, exact: true });
     if (file.name.endsWith('.txt')) assert.equal(await preview.locator('pre').innerText(), file.buffer.toString());
     else assert(await preview.locator('img').evaluate(async img => { await (img as HTMLImageElement).decode(); return (img as HTMLImageElement).naturalWidth > 0; }));
-    await page.getByRole('button', { name: 'Close file preview' }).click();
+    await preview.getByRole('button', { name: 'Close preview', exact: true }).click();
   }
   assert.equal(((await (await page.request.get(filesUrl)).json()) as { rows: unknown[] }).rows.length, 3, 'Refused files never appear');
   console.log(`PASS browser upload ${width}px: PDF → ClamAV → MarkItDown → bounded turn context → Willow-47; ${retries} upload retries, ${previewRetries} preview retries, no duplicate files; reload; EICAR/type/size refused; promoted PDF/text/image previews; screenshots`);

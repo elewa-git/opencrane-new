@@ -14,6 +14,17 @@ import { directory } from './config.ts';
 type Desktop = { assistant_id: string; computer_id: string; generation: number };
 type Append = (type: string, subject: string, data: Record<string, unknown>) => Promise<void>;
 
+function hasVisibleDesktopPixels(dialog: Element): boolean {
+  const canvas = dialog.querySelector<HTMLCanvasElement>('canvas');
+  if (!canvas || canvas.width !== 800 || canvas.height !== 600) return false;
+  const bytes = canvas.getContext('2d')!.getImageData(0, 0, 800, 600).data;
+  for (let pixelIndex = 0; pixelIndex < bytes.length; pixelIndex++) {
+    const value = bytes[pixelIndex];
+    if (pixelIndex % 4 !== 3 && value !== bytes[pixelIndex % 4]) return true;
+  }
+  return false;
+}
+
 /** Real sign-in, conversation, desktop and assistant turn through the generated frontend proxy. */
 export async function browserLiveViewJourney(page: Page, origin: string, computer: Desktop, input: {
   member: string; admin: string; silo: string; store: EventStore; append: Append;
@@ -86,17 +97,10 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   const admitted = await (await started).json() as { sessionId: string };
   await viewer.getByText('Viewing', { exact: true }).waitFor({ timeout: 20_000 });
   const canvas = viewer.locator('canvas');
-  function hasDecodedPixels() {
-    const canvas = document.querySelector<HTMLCanvasElement>('dialog[aria-label="Computer view"][open] canvas');
-    if (!canvas || canvas.width !== 800 || canvas.height !== 600) return false;
-    const bytes = canvas.getContext('2d')!.getImageData(0, 0, 800, 600).data;
-    function different(value: number, index: number) {
-      return index % 4 !== 3 && value !== bytes[index % 4];
-    }
-    return bytes.some(different);
-  }
+  const viewerElement = await viewer.elementHandle();
+  assert(viewerElement, 'Computer view dialog is present');
   async function decodedPixels() {
-    await page.waitForFunction(hasDecodedPixels);
+    await page.waitForFunction(hasVisibleDesktopPixels, viewerElement);
   }
   await whileViewing(decodedPixels);
   async function zoomControls() {
@@ -153,12 +157,11 @@ export async function browserLiveViewJourney(page: Page, origin: string, compute
   assert.equal(watchingAudit[0]?.event.type, 'computer.view_started');
   const revokedAt = performance.now();
   await append('grant.revoked', grantStream('shared_desktop', computer.computer_id), { ...grant, revokedBy: admin });
-  await page.waitForFunction(function hidden() {
-    const dialog = document.querySelector('dialog[aria-label="Computer view"][open]')!;
+  await page.waitForFunction(function hidden(dialog: Element) {
     const state = dialog.querySelector('[role="status"]')!.textContent!.trim();
     const display = dialog.querySelector<HTMLElement>('.display')!;
     return state === 'Access changed' || (state === 'Paused' && display.hidden);
-  }, undefined, { timeout: 2000 });
+  }, viewerElement, { timeout: 2000 });
   const revokedMs = Math.round(performance.now() - revokedAt);
   await viewer.getByText('Access changed', { exact: true }).waitFor({ timeout: 12_000 });
   assert.equal(await viewer.locator('canvas').count(), 0, 'Revocation clears protected pixels');
