@@ -40,8 +40,15 @@ flowchart LR
 
 ## How to run or test it
 
-Run the package type check with `npm run typecheck -w libs/event-store`.
-The public helper `wireSubject` turns an event stream name into its NATS name:
+Run the type check and event-store tests with these commands. The test command
+needs the local NATS test server fetched first. The helper `wireSubject` turns an
+event stream name into its NATS name:
+
+```sh
+npm run typecheck -w libs/event-store
+sh scripts/fetch-nats.sh
+npx vitest run libs/event-store/test
+```
 
 ```ts
 import { wireSubject } from '@opencrane/event-store';

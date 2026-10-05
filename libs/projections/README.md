@@ -44,15 +44,34 @@ flowchart LR
 
 ## How to run or test it
 
-Run the package type check with `npm run typecheck -w libs/projections`.
-With a runner already connected to a database, event source and logger, a worker
-can use the exported `members` projection like this:
+Run the type check and focused tests with these commands. The tests need the
+local NATS test server fetched first:
+
+```sh
+npm run typecheck -w libs/projections
+sh scripts/fetch-nats.sh
+npx vitest run libs/projections/test
+```
+
+This example connects the event store and database, then fills the member tables:
 
 ```ts
-import { ProjectionRunner, members } from '@opencrane/projections';
+import { connectEventStore } from '@opencrane/event-store';
+import { createLogger } from '@opencrane/observability';
+import { connectProjectionDb, ProjectionRunner, members } from '@opencrane/projections';
 
+const logger = createLogger('members');
+function logDatabaseError(error: Error): void {
+  logger.error({ err: error }, 'Projection database connection failed');
+}
+
+const eventStore = await connectEventStore();
+const database = connectProjectionDb(process.env['DATABASE_URL']!, logDatabaseError);
+const runner = new ProjectionRunner(database.db, eventStore.store, logger);
 await runner.initialise(members);
 await runner.run(members);
+await database.close();
+await eventStore.close();
 ```
 
 ## Where to read more

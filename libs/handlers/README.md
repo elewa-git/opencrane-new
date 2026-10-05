@@ -42,14 +42,29 @@ flowchart LR
 
 ## How to run or test it
 
-Run the package type check with `npm run typecheck -w libs/handlers`.
-The host defines `claimComputer` as a function that takes an event and a database
-transaction. It registers that reaction by its name from the shared event list:
+Run the type check and focused tests with these commands. The tests need the
+local NATS test server. Set `PG_TEST_URL` to a PostgreSQL admin connection whose
+role can create databases to include the PostgreSQL tests:
+
+```sh
+npm run typecheck -w libs/handlers
+sh scripts/fetch-nats.sh
+npx vitest run libs/handlers/test
+```
+
+Reactions receive the saved event and a database transaction. This small example
+passes the event id through the transaction; real reactions update their own tables:
 
 ```ts
+import type { EventEnvelope } from '@opencrane/events';
 import { registerHandler } from '@opencrane/handlers';
+import type { Query } from '@opencrane/projections';
 
-const handler = registerHandler('claim-computer', claimComputer);
+async function checkEvent(event: EventEnvelope, transaction: Query): Promise<void> {
+  await transaction.query('SELECT $1::text', [event.id]);
+}
+
+const handler = registerHandler('claim-computer', checkEvent);
 ```
 
 ## Where to read more

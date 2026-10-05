@@ -39,7 +39,12 @@ flowchart LR
 
 ## How to run or test it
 
-Run the type check with `npm run typecheck -w libs/events`. A small real call is:
+Run the type check and focused tests with these commands. A small real call is:
+
+```sh
+npm run typecheck -w libs/events
+npx vitest run libs/events/test
+```
 
 ```ts
 import { parseEventByType } from '@opencrane/events';
