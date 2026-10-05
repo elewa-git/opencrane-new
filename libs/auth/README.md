@@ -1,76 +1,53 @@
 # Auth
 
-Auth provides OIDC login/logout, encrypted session and login-flow cookies, and
-step-up freshness checks for the [server](../../apps/server/README.md).
-It does not grant product permissions or store membership projections.
+## What this is
 
-## Public contract
+Sign-in and short-lived [access passes](../../GLOSSARY.md#access-token) for people and computers. The library sends people to [Zitadel](../../GLOSSARY.md#zitadel-sign-in-service), keeps their sign-in in a protected cookie, and checks it on later requests. It also makes short-lived passes for computers and chat turns.
 
-Import `@opencrane/auth`; [src/index.ts](src/index.ts) is the public entrypoint.
-`@opencrane/auth/testing` exposes the loopback provider used by server contract tests.
-From the repository root, this example demonstrates same-origin return-path handling:
+## Where it fits
 
-```sh
-node --experimental-strip-types --input-type=module -e "import { sanitizeReturnTo } from '@opencrane/auth'; console.log(sanitizeReturnTo('https://untrusted.example/'))"
+This is a shared library used by the back end, background workers and the models process. It talks to Zitadel during sign-in and uses the event store when it checks computer credentials.
+
+```mermaid
+flowchart LR
+  server["apps/server<br/>back end"] -.-> auth["libs/auth<br/>sign-in and passes"]
+  ops["apps/ops<br/>background workers"] -.-> auth
+  models["libs/models<br/>AI access and spending"] -.-> auth
+  auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
 ```
 
-It prints `/`. Callers must load validated settings with `loadAuthConfig`, preserve the
-flow cookie through callback, and check session expiry and operation authority.
-Use `hasRecentAuth` for freshness based on the provider's `auth_time`, not login time.
-The provider verifies PKCE, state and nonce through openid-client.
-`SessionInvalidError`, `SessionExpiredError`, `FlowInvalidError` and `OidcLoginError`
-identify rejected data. Configuration errors stop startup; callers sanitise public errors.
-Pass the encrypted session’s `idToken` to `buildLogoutUrl` for RP-initiated logout.
-The server uses that URL only in a 303 `Location` header after a native form POST;
-never return it in JSON or expose it to page JavaScript or logs.
-Zitadel ends all accounts in the current browser, not just the hinted account.
-Older sessions without a token and provider discovery failures yield `null`.
-The server requires the exact Origin and a valid, correctly pinned session before
-clearing its cookie. `/auth/me` exposes only public identity fields.
+## What it is responsible for
 
-## Configuration and verification
+- Send a person to Zitadel and check the sign-in response using OIDC, a standard sign-in method.
+- Keep sign-in and sign-in-flow details in protected cookies.
+- Check that a person belongs to this silo's organisation and that a sensitive action follows a recent sign-in.
+- Keep return links on the same website and end the Zitadel browser session at sign-out.
+- Sign and check short-lived passes for computers and individual chat turns.
+- Check computer and turn passes against the computer's recorded state.
 
-The [configuration source](src/config.ts) owns variable names, required settings and defaults.
-Defaults include secure cookies, a 12-hour session, five-minute step-up freshness,
-`oc_session`/`oc_auth_flow`, `openid profile email`, and `org_id`/`roles` claims.
-Zitadel needs its provider-specific claim names and matching scopes.
-Production requires an organisation pin. Keep the cookie key in the secret store;
-`OIDC_CLIENT_SECRET_ENV_VAR` names the variable through which a client secret is injected.
-`OIDC_EXTRA_IDENTITIES` is an environment-specific JSON array of `{ "issuer", "subject" }`
-objects and defaults to empty. An entry bypasses only the organisation mismatch: the
-token must still be signed by the configured issuer, and both strings must match exactly.
-Never put email addresses, usernames or roles in this list. Servers must use
-`isIdentityAllowed` when rechecking an encrypted session as well as at callback time.
-Insecure HTTP and non-secure cookies expose credentials and are only for local tests.
+## Processes it handles
+
+1. **A person signs in.** The server asks this library for a sign-in link and sends the browser to Zitadel. The library checks the response and gives the server a protected session cookie.
+2. **A person signs out or confirms a sensitive action.** The server clears the cookie and sends the browser to Zitadel to end its session, or asks for a fresh sign-in when the current one is too old.
+3. **A computer starts a chat turn.** The worker gives it a short-lived computer pass, and the server gives it a pass for that turn. The models process checks both passes before allowing an AI call.
+
+## How to run or test it
 
 ```sh
 npm test -- libs/auth
 npm run typecheck -w libs/auth
 ```
 
-Tests exercise cookies, expiry, malformed config, PKCE, exact issuer/subject exceptions
-and cross-organisation refusal
-against a disposable loopback provider. The [dev-stack journey](../../infra/dev-stack/README.md) also exercises real Zitadel,
-including logout, a mismatched organisation pin and a short-lived session.
-There is no database state to replay here; rotating the cookie key invalidates old cookies.
-Runtime dependencies are jose, openid-client, Zod and the event-store contract. See the [plan](../../plan.md) for
-identity boundaries and [server](../../apps/server/README.md) for the logout response contract.
+A small example checks that a return link stays on this website:
 
-## Computer and turn credentials
+```ts
+import { sanitizeReturnTo } from '@opencrane/auth';
 
-`tokenIssuer` signs ES256 computer grants (10 minutes) and turn grants (2 minutes).
-It exports public `jwks`; `tokenVerifier(jwks, issuer)` applies the same strict
-signature, audience and lifetime checks without loading a private key.
-`computerCredentials(store, tokens, silo)` issues a turn for a Ready computer and
-checks both headers against its event-backed assistant, computer id, generation
-and rotated token id. The signed `thread` must match the actual Codex `session-id`;
-`conversation`, `requester`, `task` and allowed `model` are also signed. Issuance
-requires `threadId`, `task` and the model chosen by the server from its routing
-table. Model admission refuses a request whose model differs from the grant.
-An optional active turn token id further narrows `check`; model admission
-reads only server-owned `computer.turn_started` / `computer.turn_closed` authority
-and checks live permissions before reserving money. A closed turn cannot reopen.
-`check(headers, activeTurnId, deadline)` also accepts an absolute `performance.now()`
-deadline so its event reads stop retrying with the caller's authority check.
-Old readiness events without a generation fail closed until the reconciler observes
-and records readiness again. Token values never enter events or projections.
+const returnPath = sanitizeReturnTo('https://outside.example/');
+```
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): settings, pass contents, security rules and detailed tests.
+- [The server](../../apps/server/README.md) uses the sign-in flow and cookie.
+- [The glossary](../../GLOSSARY.md#access-token) explains access passes.

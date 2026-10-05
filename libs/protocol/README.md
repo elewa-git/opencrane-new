@@ -1,59 +1,51 @@
 # Protocol
 
-Protocol defines shared browser/server message schemas so the two sides cannot drift
-through separate declarations. It owns wire shapes, not authentication, persistence
-or event business rules. Both [web](../../apps/web/README.md) and
-[server](../../apps/server/README.md) consume it.
+## What this is
 
-## Public contract and usage
+Shared message shapes for the OpenCrane browser app and back end. Both sides use the same schemas to check messages before using them. The package also defines the shapes for chat, computers, integrations, budgets, approvals and audit history.
 
-Import `@opencrane/protocol` through [src/index.ts](src/index.ts).
-From the repository root:
+## Where it fits
 
-```sh
-node --experimental-strip-types --input-type=module -e "import { clientMessageSchema } from '@opencrane/protocol'; console.log(clientMessageSchema.parse({type: 'hello', text: 'Hello'}))"
+This shared library is used by the browser app, back end, projections and models library. It depends on Zod, a data-checking library, and does not store [events](../../GLOSSARY.md#event) or decide who may act.
+
+```mermaid
+flowchart LR
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>shared message shapes"]
+  server["apps/server<br/>back end"] -.-> protocol
+  projections["libs/projections<br/>read tables"] -.-> protocol
+  models["libs/models<br/>AI access and spending"] -.-> protocol
 ```
 
-Client messages are `hello`, `validateEvent` or `subscribe`; resumed subscriptions
-carry a projection generation, and every members reply carries that generation.
-Server messages include hello echoes, errors, validation results and versioned members updates. See
-[messages.ts](src/messages.ts), [realtime.ts](src/realtime.ts) and the
-[subscription contract](../../apps/server/README.md#members-realtime-and-shutdown).
-The event-validation request carries `unknown` data: the server must validate it
-against the [event catalogue package](../events/README.md) before accepting it.
-`integrationsResponseSchema` defines MCP register rows and their shared state kinds;
-`integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
+## What it is responsible for
 
-`chatContextSchema` includes the authorised member’s optional display name and
-personal assistant id. `sessionSlug` formats the first message consistently for
-the server list, rail and header. Conversation list status distinguishes `stopped` from
-`done`; both are derived from events, never a separate stored status.
+- Define the messages exchanged over the live browser connection.
+- Define the data returned for chat, computers, integrations, budgets, approvals and audit history.
+- Reject messages with missing, extra or incorrectly typed fields.
+- Provide the same schemas and types to browser and Node.js code.
 
-Use `safeParse` when rejected input is expected, or handle the Zod error from `parse`.
-Strict message schemas reject unknown fields, wrong discriminants and malformed values.
-A matching static type does not guarantee a successful request or authorisation.
-Callers must authenticate the socket, authorise operations and handle remote failures.
+## Processes it handles
 
-## Verification and dependencies
+1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
+2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.
+3. **A person reviews change history.** The server filters the response, then both sides use the same shapes for the request and result.
+
+## How to run or test it
 
 ```sh
 npm test -- libs/protocol
 npm run typecheck -w libs/protocol
 ```
 
-Tests cover valid/invalid messages. Server tests cover the
-runtime socket boundary; Angular tests cover client handling. This skeleton is not a
-live-qualified chat or command protocol and stores no recoverable state.
-The only runtime dependency is Zod; the package is usable by browser and Node code.
-See the [repository architecture](../../README.md) and [plan](../../plan.md).
+A small example checks a greeting from the browser:
 
-Chat HTTP response schemas (`chatContextSchema`, `chatListSchema`,
-`chatFeedSchema`, `chatRowSchema`) validate browser reads. Known display fields
-are typed; unrendered event fields stay opaque. `WebSocketService.received` in the
-web app delivers each validated envelope without Angular signal coalescing.
+```ts
+import { clientMessageSchema } from '@opencrane/protocol';
 
-Audit history uses `auditFilterSchema` and `auditResponseSchema`: request/permit/
-conversation/turn ids, separate decision and observed outcome, integer cents and
-fixed readable reasons. Strict metadata schemas reject private payload fields.
-The Angular history views use this same contract; no event payload is passed to
-browser rendering. See the [HTTP contract](../../apps/server/README.md#permission-scoped-audit-p3-19).
+const message = clientMessageSchema.parse({ type: 'hello', text: 'Hello' });
+```
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): message contracts and test detail.
+- [The browser app](../../apps/web/README.md) and [the back end](../../apps/server/README.md) share these shapes.
+- [The glossary](../../GLOSSARY.md) explains shared system terms.

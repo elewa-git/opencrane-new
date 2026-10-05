@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The typed messages shared by the server and the web app (the WebSocket protocol and the logout reply), so the two never keep their own copies.",
+  "description": "Shared message shapes for the OpenCrane browser app and back end.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

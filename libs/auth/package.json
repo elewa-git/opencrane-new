@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "OIDC sign-in: the login/callback/logout flow, an encrypted session cookie, and a step-up check. Ported and slimmed from OpenCrane 1's Express auth library for Fastify.",
+  "description": "Sign-in and short-lived access passes for people and computers.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

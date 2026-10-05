@@ -23,5 +23,6 @@
     "@opencrane/auth": "0.1.0",
     "@opencrane/protocol": "0.1.0"
   },
-  "license": "AGPL-3.0-or-later"
+  "license": "AGPL-3.0-or-later",
+  "description": "The AI access and spending library for OpenCrane."
 }
