@@ -14,8 +14,7 @@ const MAX_TURN_GRANT_LIFETIME_MS = 120_000;
 const UPSTREAM_REQUEST_TIMEOUT_MS = 120_000;
 
 interface Grant { computer: string; token: string; expires: number }
-export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }) {
-  const caller = randomBytes(32).toString('hex');
+export async function proxy(gateway: string, options = { callerPath: '/home/codex/caller', controlSocket: '/run/codex/control.sock', port: 8080 }, caller = randomBytes(32).toString('hex')) {
   let deadline = Date.now() + CALLER_CREDENTIAL_LIFETIME_MS;
   const turns = new Map<string, Grant>();
   writeFileSync(options.callerPath, caller, { mode: 0o600 });

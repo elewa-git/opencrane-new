@@ -36,6 +36,7 @@ export const messagePostedDataSchema = z
     ciphertext: ciphertextSchema,
     keyId: keyIdSchema,
     contentType: z.enum(['text', 'markdown']),
+    executionMode: z.literal('memory_free').optional(),
   })
   .strict();
 

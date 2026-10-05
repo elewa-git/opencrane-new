@@ -369,3 +369,6 @@ start; saved event ids prevent duplicate records.
 The budget actor remembers reservations with saved uncertainty. `expire()` skips
 their repeated timeout checks. A restarted actor checks each old reservation once
 and remembers the existing uncertainty. Later usage still records its observation.
+Lost-output reports grant no authority. The existing output-report allowlist
+accepts `agent.output_lost` so it cannot refuse an in-flight call or a reader.
+Private turn admission keeps its existing small access streams.

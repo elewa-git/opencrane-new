@@ -152,10 +152,12 @@ async function createAuthorityFence(store: EventStore, started: number,
 async function checkOutputReports(store: EventStore, subject: string, from: number,
   to: number, deadline: number) {
   if (!subject.startsWith('conversation-')) throw new Error('Authority changed');
+  // Treat output reports, including lost output, as granting no authority.
+  // Keep them from refusing an in-flight call or a reader.
   for await (const row of store.readStream(subject, from, deadline)) {
     if (row.sequence > to) break;
     if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
-      'agent.message_delta', 'agent.message_completed'].includes(row.event.type)) {
+      'agent.message_delta', 'agent.message_completed', 'agent.output_lost'].includes(row.event.type)) {
       throw new Error('Authority changed');
     }
   }

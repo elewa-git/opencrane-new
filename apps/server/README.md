@@ -36,6 +36,10 @@ flowchart LR
 - Keeps each member's group chat private while they share the assistant's computer.
 - Provides the one-time command used to claim a new installation.
 
+Private team turns receive earlier completed replies from the same member. The
+computer starts a fresh Codex process for each private team turn. Disk isolation is
+not yet proven on a live computer; memory features stay off until it is.
+
 ## Processes it handles
 
 1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie.

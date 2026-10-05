@@ -183,3 +183,17 @@ Claim has four meanings in OpenCrane:
 - To claim a test stack is to reserve one numbered dev stack.
 - The claims in a sign-in token are the named fields inside it, such as who the person
   is.
+
+## Private turn
+
+A private turn is work in a member's team session that runs in a fresh, tool-free
+Codex process. Its files use a memory volume on the shared computer. Swap can
+still write those files and process memory to disk. Isolation is not yet proven
+on a live computer; memory features stay off until it is. After a restart,
+unfinished work fails and is never repeated.
+
+## Memory-free turn
+
+A memory-free turn can use tools and the shared disk. It continues its earlier
+memory-free Codex thread and receives no earlier private context. Personal
+sessions always use this kind of turn.

@@ -15,7 +15,8 @@ export const chatInput = z.union([
     mode: z.literal('agent_session').default('agent_session'), payingGroupId: id.optional(),
   }).strict(),
   z.object({ id, conversationId, mode: z.literal('direct'), colleagueId: id }).strict(),
-  z.object({ id, conversationId, text: z.string().trim().min(1).max(32_000) }).strict(),
+  z.object({ id, conversationId, text: z.string().trim().min(1).max(32_000),
+    executionMode: z.literal('memory_free').optional() }).strict(),
   z.object({ id, conversationId, stopTurnId: id }).strict(),
 ]);
 type Input = z.infer<typeof chatInput>;
@@ -49,7 +50,8 @@ function verifyRetry(
   } else if ('stopTurnId' in input) {
     matches = data['turnId'] === input.stopTurnId;
   } else {
-    matches = keys.decrypt(context.silo, input.conversationId, data) === input.text;
+    matches = keys.decrypt(context.silo, input.conversationId, data) === input.text
+      && data['executionMode'] === input.executionMode;
   }
   if (!matches) throw new ChatConflict('Id reused');
 }
@@ -122,9 +124,11 @@ function commandData(input: Input, context: Context, keys: ReturnType<typeof con
     return { conversationId, turnId: input.stopTurnId, requestedBy: context.memberId };
   }
   const encrypted = keys.encrypt(context.silo, conversationId, input.text);
-  return {
+  const data = {
     conversationId, authorId: context.memberId, authorKind: 'human', contentType: 'text', ...encrypted,
   };
+  if (input.executionMode) return { ...data, executionMode: input.executionMode };
+  return data;
 }
 
 function validateConversation(rows: StoredEvent[], input: Input, memberId: string) {

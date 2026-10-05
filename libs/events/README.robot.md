@@ -47,3 +47,8 @@ See the [architecture and plan](../../plan.md) and the [server](../../apps/serve
 New event-store commands require a non-empty `commandId` and `principal`.
 The envelope keeps `commandId` optional so older stored events still parse;
 its scope is the principal and entity subject, as [principle 7](../../docs/architecture/events.md#principles) specifies.
+
+Private-turn reports add `agent.output_lost` to the conversation stream. Message
+commands may request `executionMode: "memory_free"`; agent and computer start
+events record the optional restricted/memory-free mode. A private tool refusal
+uses `restricted_tool_refused`. See the [event catalogue](../../docs/architecture/events.md#conversations-and-agent-activity).

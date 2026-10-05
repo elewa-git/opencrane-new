@@ -1,0 +1,28 @@
+{
+  "result": "NOT RUN",
+  "memoryAdmission": "DISABLED",
+  "checks": {
+    "J1": {
+      "result": "NOT RUN"
+    },
+    "J2": {
+      "result": "NOT RUN"
+    },
+    "J3": {
+      "result": "NOT RUN"
+    },
+    "J4": {
+      "result": "NOT RUN"
+    },
+    "J5": {
+      "result": "NOT RUN"
+    },
+    "J6": {
+      "result": "NOT RUN"
+    },
+    "J7": {
+      "result": "NOT RUN"
+    }
+  },
+  "measurements": {}
+}

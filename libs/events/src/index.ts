@@ -49,3 +49,5 @@ export { providerIdSchema, providerModelIdSchema, providerKeySchema,
 
 export { assistantGrantSchema, assistantCreatedDataSchema,
   conversationCreatedDataSchema, hasDirectParticipants } from './data.ts';
+
+export { agentOutputLostDataSchema } from './data.ts';

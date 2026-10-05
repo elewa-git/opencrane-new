@@ -3,12 +3,13 @@
 For people, read [README.md](README.md) first.
 
 Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
-accepts 383/383 packages. ONNX Runtime is retained: its wheel contains no
+accepts 384/384 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
 are removed. Both decisions require reviewed, exact installed-file evidence.
 
-The checked template pins the tested release image at
-`sha256:24298d7546b149db86b1ce26828576add20a96842b6d35084beeba3a3e2c2916`.
+The current image build and publication results are in the
+[private-turn check record](../../docs/process/p4-14-private-turns-evidence.md).
+The older image receipt below describes the earlier memory-free release.
 This lifecycle build adds `/credentials`: the worker POSTs a short-lived computer
 credential through the Kubernetes Pod proxy; the bridge atomically stores it in
 `/run/codex/computer.json` (UID 1000, mode 0600, memory-backed). The existing private
@@ -104,7 +105,7 @@ The collector includes NOTICE, NOTICE.md, ThirdPartyNotices*, COPYING*,
 LICEN[CS]E* and metadata-named files, including Python RECORD-owned files outside
 `dist-info`. Every collected notice must belong to a scanned package and have
 an exact reviewed hash and primary/bundled classification. The independent
-image completeness check covers 89 installed notice and metadata-named files.
+image completeness check covers 91 installed notice and metadata-named files.
 Regressions reject an ordinary MIT package with a redistribution-forbidden
 notice, unlisted NOTICE files and missing metadata-named files.
 
@@ -243,7 +244,105 @@ P2-3 adds the existing workspace dependency ws 8.22.0 (MIT) to the image. Its
 installed metadata and full licence are checksum-pinned in the reviewed licence
 file. The bridge fsyncs reported events to a private PVC outbox before sending,
 replays from the server acknowledgement, and waits for a fresh thread-bound grant
-before execution. Prepared messages survive replacement and retry; a separate
+before execution. Prepared memory-free messages survive replacement and retry; unfinished private messages fail; a separate
 fsynced execution marker prevents automatically repeating uncertain effects.
 Older journals without that marker distinction remain uncertain. Saved Codex threads resume on the same PVC. Reports carry no turn
 or computer credential. See [bridge evidence](../../docs/process/bridge-evidence.md).
+
+## Private turns
+
+Team messages default to `restricted`, unless posted with `memory_free`.
+Each private turn opens a new Codex process and ephemeral thread as UID 1003.
+It never resumes a thread. At most two private turns prepare or run together.
+Its home is `/home/private/turn-<n>`, with config, temporary files and working
+files inside. The supervisor removes it after the process exits. Socket closure
+ends input. After 5 seconds it tries SIGKILL as UID 1003 if needed. A failed kill
+is checked and retried twice, one second apart. Each failure writes the fixed line
+`Private process cleanup failed`, with no private text. The five-second cleanup
+and removal during the turn are not yet proven under gVisor; J4 and J6 are NOT RUN.
+Disk isolation is not yet proven on a live computer; memory features stay off until it is.
+A private child error fails its own connection, rather than the supervisor.
+Stderr is discarded. The whole container inherits a hard core-file limit of zero.
+
+| Writable place | Backing | Who can write | Private text allowed? |
+| --- | --- | --- | --- |
+| Bridge memory | Process RAM | UID 1000 bridge | Yes, until acknowledged; swappable here |
+| Supervisor stream buffers | Process RAM | Root supervisor | Yes, while passing bytes; swappable here |
+| Private Codex memory | Process RAM | UID 1003 Codex | Yes; swappable here |
+| `/home/private/turn-<n>` | 16Mi Memory volume | UID 1003 | Yes; swappable here; gVisor backing not yet measured |
+| `/home/agent/codex` | PVC | UID 1000 | No; only text-free private outlines |
+| `/home/agent/workspace` (`/workspace`) | PVC | UID 1001; UID 1003 in world-writable directories | No |
+| `/home/agent/profile` | PVC | UID 1002 | No |
+| `/home/codex` | 16Mi Memory volume; `.codex` links to PVC | UID 1000 | No |
+| `/run/codex` | 16Mi Memory volume | UID 1000 | No |
+| `/home/desktop` | 16Mi Memory volume | UID 1002 | No |
+| `/run/executor` | Node disk | Root | No |
+| `/home/tool` | Node disk | UID 1001 | No |
+| `/tmp` | Node disk | All users | No |
+| `/dev/shm` | Runtime shared memory | All users | No |
+
+All private processes share UID 1003. The kernel does not separate two members'
+concurrent homes or processes; only the absence of tools does. UID 1003 can read
+the workspace and reach loopback ports 8080, 8081 and 6901. Directory permissions are intended to prevent reading `/run/executor`, `/run/codex`, `/home/codex`, `/home/agent/codex`
+and `/home/tool`; this is not yet checked under gVisor. Every UID 1000 process can reach `private.sock`, including
+memory-free Codex and its connectors; this socket is not exclusive to the bridge.
+Codex uses its RAM `TMPDIR`, but the kernel still permits writes to `/tmp`,
+`/dev/shm` and world-writable workspace directories. The live probe checks them.
+
+The PVC journal stores a text-free line for each private text report, marked
+`memoryOnly: true`. Its text remains in bridge memory until acknowledged or
+covered by `resume.since`. Replay with missing text sends `agent.output_lost`.
+Outline lines expose reply timing and size through the number of deltas. They
+also contain client-chosen ids, up to 200 characters for conversation and turn ids.
+The execution marker remains unchanged and contains only turn ids.
+
+After a restart or replacement, every started unfinished private turn fails,
+even if it had not executed. Its thread died with the old process. Memory-free
+prepared turns retry; executed turns fail. Private context is rebuilt by the
+server after admission and never stored on the computer. Memory-free turns do
+not receive it and cannot resume a former private thread.
+
+Both configs switch shared prompt files and skill instructions off. Personal
+and memory-free tools otherwise retain their existing persistent home and work.
+No fallback is enabled without a failing pinned-image check. The live canary probe
+and its provider are on `work/p4-14-qualification`, outside this change.
+The local `test/private-capabilities.mjs` runs a private turn through `private.sock`
+with the template's exact capabilities and a stub provider. It uses Docker's runc
+runtime and does not qualify gVisor isolation.
+[Check record](../../docs/process/p4-14-private-turns-evidence.md).
+Memory admission remains disabled while swap, host crash dumps or the live proof
+fail. This developer box cannot qualify swap or host core-dump isolation.
+
+## Local bridge credential limit
+
+The loopback `POST /credentials` handler currently accepts a replacement credential
+without authentication. A local desktop or memory-free Codex process can replace
+it, open `/bridge`, disconnect the server and read private reports waiting in memory.
+It can also forge a start acknowledgement with private context. Tool-free private
+turns cannot currently make these calls, but this gap must be closed before they
+get tools or memory. The hardening work is [#200](https://github.com/elewa-git/opencrane-new/issues/200).
+
+## Private-turn rollout
+
+1. The new computer image is published and its digest is pinned in `sandbox-template.json`.
+2. Each silo's admission policy is regenerated from that template with
+   `node infra/dev-stack/computer-admission.mjs <NAMESPACE>`.
+3. The new server is deployed.
+4. Running team computers are replaced by suspending and resuming them through the normal lifecycle.
+
+Between steps 3 and 4, old computers refuse default private team turns because
+those images do not report restricted execution. Personal and memory-free turns
+continue. Old admission policies refuse the new private memory volume, so step 2
+must precede computer replacement.
+
+Memory-free start reports omit `executionMode`. A new computer can therefore run
+personal and memory-free work against an older server. Restricted start reports
+still need the new server. A server rollback is safe only after team traffic is
+paused and all private turns have ended; team traffic must remain memory-free
+until the server supports restricted reports again. A computer rollback requires
+restoring the old server before allowing default team traffic.
+
+`COMPUTER_PUSH_REGISTRY` sets the host address used by `build.sh` for publishing;
+it defaults to `127.0.0.1:5001`. The Pod image always uses `k3d-ocn-registry:5000`.
+A temporary user-space forwarder can reach the same registry when its published
+host port is broken. This does not change Docker settings or host networking.

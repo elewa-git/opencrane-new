@@ -12,7 +12,9 @@ export class ReportRejected extends Error {}
 const reportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
-  type: z.enum(['agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
+  executionMode: z.enum(['restricted', 'memory_free']).optional(),
+  reason: z.enum(['bridge_interrupted', 'restricted_tool_refused']).optional(),
+  type: z.enum(['agent.output_lost', 'agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
 export async function reportPosition(store: EventStore, silo: string, computerId: string) {
   const sequences = new Set<number>();
@@ -36,7 +38,10 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
     if (author.authorId !== report.requesterId) throw new ReportRejected('Requester mismatch');
   }
   const previous = rows.find(r => r.event.report?.computerId === context.computerId && r.event.report.sequence === report.sequence);
-  if (previous) { verifyDigest(previous, digest); return 'duplicate' as const; }
+  if (previous) {
+    verifyReportReplay(previous, report, digest);
+    return 'duplicate' as const;
+  }
   if (report.previousSequence === undefined
     ? report.sequence - 1 !== await reportPosition(store, context.silo, context.computerId)
     : report.previousSequence !== lastReportSequence(rows, context.computerId)) throw new ReportRejected('Report sequence gap');
@@ -55,13 +60,32 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
 }
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
-  const data = report.type === 'agent.command_ran' ? { ...common, commandDigest: z.string().parse(report.commandDigest), exitCode: z.number().parse(report.exitCode) }
-    : report.type === 'agent.reasoning_summarised' ? { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) }
-    : report.type === 'agent.turn_started' ? { ...common, assistantId, ...(report.threadId ? { threadId: report.threadId } : {}) }
-    : report.type === 'agent.turn_failed' ? { ...common, reason: 'bridge_interrupted' }
-    : report.type === 'agent.turn_completed' ? common
-    : { ...common, messageId: z.string().parse(report.messageId), contentType: 'text', ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
-  return data;
+  if (report.type === 'agent.command_ran') {
+    return { ...common, commandDigest: z.string().parse(report.commandDigest),
+      exitCode: z.number().parse(report.exitCode) };
+  } else if (report.type === 'agent.reasoning_summarised') {
+    return { ...common, ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
+  } else if (report.type === 'agent.turn_started') {
+    const data: typeof common & { assistantId: string; threadId?: string;
+      executionMode?: 'restricted' | 'memory_free' } = { ...common, assistantId };
+    if (report.threadId) data.threadId = report.threadId;
+    if (report.executionMode) data.executionMode = report.executionMode;
+    return data;
+  } else if (report.type === 'agent.turn_failed') {
+    return { ...common, reason: report.reason ?? 'bridge_interrupted' };
+  } else if (report.type === 'agent.turn_completed' || report.type === 'agent.output_lost') {
+    return common;
+  } else {
+    return { ...common, messageId: z.string().parse(report.messageId), contentType: 'text',
+      ...keys.encrypt(silo, report.conversationId, z.string().parse(report.text)) };
+  }
+}
+
+function isLostOutputReplay(previous: StoredEvent, report: z.infer<typeof reportSchema>) {
+  if (report.type !== 'agent.output_lost') return false;
+  const data = z.object({ turnId: z.string().optional() }).parse(previous.event.data);
+  return data.turnId === report.turnId && ['agent.message_delta', 'agent.message_completed',
+    'agent.reasoning_summarised', 'agent.output_lost'].includes(previous.event.type);
 }
 
 function verifyDigest(row: StoredEvent | undefined, digest: string) {
@@ -78,4 +102,8 @@ export function agentSession(rows: StoredEvent[]) {
   const created = conversationCreatedDataSchema.parse(rows.find(isCreated)?.event.data);
   if (created.mode !== 'agent_session') throw new ReportRejected('Human conversation');
   return created;
+}
+
+function verifyReportReplay(previous: StoredEvent, report: z.infer<typeof reportSchema>, digest: string) {
+  if (!isLostOutputReplay(previous, report)) verifyDigest(previous, digest);
 }

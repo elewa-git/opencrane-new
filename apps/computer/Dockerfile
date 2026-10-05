@@ -50,4 +50,4 @@ RUN mkdir -p /usr/local/libexec && \
 COPY src ./src
 RUN chmod 0755 /app/src && chmod 0444 /app/src/* && chmod 0555 /usr/local/bin/tool-user
 ENV PATH="/opt/python/bin:/usr/local/bin:/usr/bin:/bin"
-CMD ["node", "--experimental-strip-types", "/app/src/entrypoint.ts"]
+CMD ["/usr/bin/prlimit", "--core=0:0", "--", "node", "--experimental-strip-types", "/app/src/entrypoint.ts"]

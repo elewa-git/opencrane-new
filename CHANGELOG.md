@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Group members' private chats with a shared assistant now use a temporary Codex process with tools off and files in a memory volume. Swap can still write private text to disk. Isolation is not yet proven on a live computer; memory features stay off until it is. The chat screens, including the choice of a memory-free turn with tools, come next (#96).
+- Shared prompt files and skill instructions are now off in personal and memory-free Codex turns as well as private turns.
+
 - Rewrote the access, AI and shared-library READMEs for new engineers, and kept their detailed contracts in README.robot.md.
 
 - The four app READMEs now explain their place in the system and what people can do with them.

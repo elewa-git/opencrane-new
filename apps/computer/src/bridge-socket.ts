@@ -2,7 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { record } from './http.ts';
-import type { BridgeReport } from './report-journal.ts';
+import { wireReport, type BridgeReport } from './report-journal.ts';
 import { parseTurn, type TurnDriver } from './turn-runner.ts';
 import { filePackets } from './files.ts';
 
@@ -200,7 +200,7 @@ export function bridgeSocket(
       socket.close(1013);
       return;
     }
-    socket.send(JSON.stringify(report));
+    socket.send(JSON.stringify(wireReport(report)));
   }
 
   function resume(since: unknown) {

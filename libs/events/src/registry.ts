@@ -187,6 +187,13 @@ export const eventRegistry: readonly EventDefinition[] = [
     { conversationId: 'conv_1', turnId: 'turn_1', reason: 'model_error' },
   ),
   event(
+    'agent.output_lost',
+    'conversation',
+    'Part of a private reply was lost when the computer restarted before the server stored it',
+    data.agentOutputLostDataSchema,
+    { conversationId: 'conv_1', turnId: 'turn_1' },
+  ),
+  event(
     'agent.reasoning_summarised',
     'conversation',
     'The bridge reported a reasoning summary for a turn.',

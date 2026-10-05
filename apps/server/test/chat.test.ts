@@ -200,13 +200,13 @@ it('binds personal paying group at admission, keeps it on retries and refuses sh
     await actor.configure({ scope: 'global', ceilingCents: 20000, defaultPayingGroupId: 'new-default', setBy: 'alice' });
     expect(await turnCommand(nats.store, context, input)).toMatchObject({ payingGroupId: 'personal-default' });
     expect((await history(nats.store, 'computer-personal', 'test')).filter(r => r.event.type === 'computer.turn_started')).toHaveLength(1);
-    await expect(turnCommand(nats.store, teamContext, { conversationId: 'team', turnId: 'message-team', threadId: 'team-thread', status: 'started' })).rejects.toThrow('Paying group unavailable');
+    await expect(turnCommand(nats.store, teamContext, { conversationId: 'team', turnId: 'message-team', threadId: 'team-thread', status: 'started', executionMode: 'restricted' })).rejects.toThrow('Paying group unavailable');
     keys.provision('test', 'team-selected');
     await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-selected', conversationId: 'team-selected', assistantId: 'team', payingGroupId: 'sales' });
     await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message-selected', conversationId: 'team-selected', text: 'Hello' });
     const selected = await history(nats.store, 'conversation-team-selected', 'test');
     await auth.handler.handle(selected[0]!.event, pgDb(dbs.queue));
-    expect(await turnCommand(nats.store, teamContext, { conversationId: 'team-selected', turnId: 'message-selected', threadId: 'selected-thread', status: 'started' })).toMatchObject({ payingGroupId: 'sales' });
+    expect(await turnCommand(nats.store, teamContext, { conversationId: 'team-selected', turnId: 'message-selected', threadId: 'selected-thread', status: 'started', executionMode: 'restricted' })).toMatchObject({ payingGroupId: 'sales' });
     await expect(chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create-selected', conversationId: 'team-selected', assistantId: 'team', payingGroupId: 'different' })).rejects.toThrow('Id reused');
 
   } finally {
