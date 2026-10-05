@@ -6,7 +6,7 @@ export { taskRouting, modelForTask, type TaskKind } from './routing.ts';
 export { readToolPolicy, setToolPolicy } from './tool-policy.ts';
 export { modelGrantHandler, migrateModelGrants } from './grants.ts';
 
-export { payingGroupAuthority, PayingGroupRefused } from './paying-group.ts';
+export { payingGroupAuthority, groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 export { initialiseBudgetProjection, rebuildBudgetProjection } from './rebuild.ts';
 
 export { approvalCards, readApproval, decideApproval } from './approvals.ts';
@@ -24,4 +24,4 @@ export { providerSecrets, type ProviderSecrets } from './provider-secrets.ts';
 export { providerVerificationSchema, requestProviderVerification, providerTestQuote,
   type ProviderVerificationOptions } from './provider-verification.ts';
 
-export { activeMember, MemberAccessRefused } from './member-authority.ts';
+export { activeMember, readActiveMember, MemberAccessRefused } from './member-authority.ts';

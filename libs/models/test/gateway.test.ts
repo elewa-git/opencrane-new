@@ -1237,7 +1237,7 @@ it('refuses suspension during event-backed credential validation',
   refusesSuspensionDuringCredentialRead, 40_000);
 
 async function fencesDistinctPayingGroupAfterAudit() {
-  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true, 'manual', 'finance');
   const originalAppend = setup.nats.store.append.bind(setup.nats.store);
   try {
     await setup.append('team-finance', 'team.created', {
@@ -1246,12 +1246,18 @@ async function fencesDistinctPayingGroupAfterAudit() {
     await setup.append('team-finance', 'team.member_added', {
       teamId: 'finance', memberId: 'alice', addedBy: 'alice',
     });
+    await setup.append('conversation-finance', 'conversation.created', {
+      conversationId: 'finance', assistantId: 'assistant', createdBy: 'alice',
+      mode: 'agent_session', payingGroupId: 'finance',
+    });
+    setup.keys.provision('test', 'finance');
     await setup.append('computer-assistant', 'computer.turn_started', {
-      assistantId: 'assistant', computerId: 'computer', conversationId: 'conversation',
+      assistantId: 'assistant', computerId: 'computer', conversationId: 'finance',
       turnId: 'finance-turn', threadId: 'finance-thread', requesterId: 'alice',
       task: 'chat_turn', payingGroupId: 'finance',
     });
-    const claims = { ...setup.t, turn: 'finance-turn', thread: 'finance-thread' };
+    const claims = { ...setup.t, conversation: 'finance',
+      turn: 'finance-turn', thread: 'finance-thread' };
     const token = await setup.sign(claims, 'decision-service');
     async function removeAfterAudit(command: Parameters<typeof originalAppend>[0]) {
       const result = await originalAppend(command);

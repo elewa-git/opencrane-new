@@ -63,15 +63,37 @@ export function memberAuthorisation(binding: Binding) {
     return;
   }
 
+  function granteeUser(kind: string, id: string) {
+    let identityKind = kind;
+    if (kind === 'member') identityKind = 'person';
+    const user = objectId(identityKind, binding.silo, id);
+    if (kind === 'team') return `${user}#member`;
+    return user;
+  }
+
   async function applyGrant(event: EventEnvelope, receipt: Tuple) {
     const resourceType = field(event.data, 'resourceType'), resourceId = field(event.data, 'resourceId');
     if (event.subject !== grantStream(resourceType, resourceId)) throw new Error('Grant subject mismatch');
     const target = objectId('resource', binding.silo, resourceType, resourceId);
     const grantee = field(event.data, 'granteeId');
-    const existing = (await client.read({ object: target, relation: 'use' }))
-      .filter(t => ['person', 'assistant', 'team'].some(kind => t.user === objectId(kind, binding.silo, grantee) + (kind === 'team' ? '#member' : '')));
     const kind = event.type === 'grant.given' ? field(event.data, 'granteeKind') : undefined;
-    const desired = kind ? [{ object: target, relation: 'use', user: objectId(kind === 'member' ? 'person' : kind, binding.silo, grantee) + (kind === 'team' ? '#member' : '') }] : [];
+    let identityKinds = ['member', 'assistant', 'team'];
+    if (kind) identityKinds = [kind];
+    const users = new Set<string>();
+    for (const identityKind of identityKinds) {
+      users.add(granteeUser(identityKind, grantee));
+    }
+    function matchesGrantee(tuple: Tuple) {
+      return users.has(tuple.user);
+    }
+    // A grant for an assistant must not replace its owning group's grant with the same id.
+    const current = await client.read({ object: target, relation: 'use' });
+    const existing = current.filter(matchesGrantee);
+    const desired: Tuple[] = [];
+    if (kind) {
+      const user = granteeUser(kind, grantee);
+      desired.push({ object: target, relation: 'use', user });
+    }
     await client.write([receipt, ...desired.filter(t => !existing.some(e => same(t, e)))], existing.filter(t => !desired.some(d => same(t, d))));
     return;
   }

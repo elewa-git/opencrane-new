@@ -4,8 +4,12 @@ import { history } from './actor.ts';
 import { data } from './state.ts';
 
 export class PayingGroupRefused extends Error {}
+export class AuthorityApplying extends Error {}
 function isMemberState(row: StoredEvent) {
-  return ['member.joined', 'member.role_changed', 'member.removed'].includes(row.event.type);
+  const memberStateTypes = [
+    'silo.owner_bootstrapped', 'member.joined', 'member.role_changed', 'member.removed',
+  ];
+  return memberStateTypes.includes(row.event.type);
 }
 function isCreated(row: StoredEvent) {
   return row.event.type === 'team.created';
@@ -15,15 +19,10 @@ function needsReceipt(row: StoredEvent) {
 }
 async function readMembership(store: EventStore, silo: string, requesterId: string,
   groupId: string, deadline: number) {
-  try {
-    const [groupRows, memberRows] = await Promise.all([
-      history(store, `team-${groupId}`, silo, deadline),
-      history(store, `member-${requesterId}`, silo, deadline),
-    ]);
-    return { groupRows, memberRows };
-  } catch {
-    throw new PayingGroupRefused('Paying group unavailable or spending permission refused');
-  }
+  const groupRead = history(store, `team-${groupId}`, silo, deadline);
+  const memberRead = history(store, `member-${requesterId}`, silo, deadline);
+  const [groupRows, memberRows] = await Promise.all([groupRead, memberRead]);
+  return { groupRows, memberRows };
 }
 function requireMembership(groupRows: StoredEvent[], memberRows: StoredEvent[],
   requesterId: string, groupId: string) {
@@ -43,24 +42,40 @@ function requireMembership(groupRows: StoredEvent[], memberRows: StoredEvent[],
   }
 }
 async function requireApplied(binding: Binding, silo: string, requesterId: string,
-  groupId: string, groupRows: StoredEvent[], memberRows: StoredEvent[]) {
+  groupId: string, groupReceipts: StoredEvent[], memberRows: StoredEvent[]) {
   if (binding.silo !== silo) throw new PayingGroupRefused('Wrong silo');
   const auth = memberAuthorisation(binding);
+  const memberReceipts = memberRows.filter(needsReceipt);
+  const receiptRows = [...groupReceipts, ...memberReceipts];
+  for (const row of receiptRows) {
+    if (!await auth.applied(row.event.id)) {
+      throw new AuthorityApplying('Group membership is still being applied; try again shortly');
+    }
+  }
   const memberPermission = await auth.check(requesterId, 'member');
   const groupPermission = await auth.team(requesterId, groupId);
+  if (memberPermission.status === 'unavailable' || groupPermission.status === 'unavailable') {
+    throw new Error('IAM unavailable');
+  }
   if (!memberPermission.allowed || !groupPermission.allowed) {
     throw new PayingGroupRefused('Paying group unavailable or spending permission refused');
   }
-  const memberReceipts = memberRows.filter(needsReceipt);
-  const receiptRows = [...groupRows, ...memberReceipts];
-  for (const row of receiptRows) {
-    if (!await auth.applied(row.event.id)) {
-      throw new PayingGroupRefused('Paying group membership is still being applied; try again shortly');
-    }
-  }
 }
 
-/** Shared spending requires both active silo membership and current group membership. */
+export async function groupMembership(store: EventStore, silo: string, requesterId: string,
+  groupId: string, binding: Binding, deadline = Infinity) {
+  const { groupRows, memberRows } = await readMembership(
+    store, silo, requesterId, groupId, deadline);
+  requireMembership(groupRows, memberRows, requesterId, groupId);
+  function concernsRequester(row: StoredEvent) {
+    return row.event.type === 'team.created' || data(row.event)['memberId'] === requesterId;
+  }
+  // Check this requester while the access system applies other members' changes.
+  const groupReceipts = groupRows.filter(concernsRequester);
+  await requireApplied(binding, silo, requesterId, groupId, groupReceipts, memberRows);
+}
+
+/** Require active silo and group membership before allowing shared spending. */
 export async function payingGroupAuthority(store: EventStore, silo: string,
   requesterId: string, groupId: string, binding?: Binding, callerDeadline = Infinity) {
   const started = performance.now();
@@ -69,6 +84,7 @@ export async function payingGroupAuthority(store: EventStore, silo: string,
     store, silo, requesterId, groupId, deadline);
   requireMembership(groupRows, memberRows, requesterId, groupId);
   if (binding) {
+    // Wait for every group change to reach the access system before spending or sharing the desktop.
     await requireApplied(binding, silo, requesterId, groupId, groupRows, memberRows);
   }
   async function fresh() {

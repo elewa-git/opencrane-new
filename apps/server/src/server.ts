@@ -1,5 +1,6 @@
 import { registerOwnershipRoutes } from './members/ownership-routes.ts';
 import { registerProviderRoutes, type ProviderOptions } from './providers/routes.ts';
+import { registerAssistantRoutes } from './assistants/routes.ts';
 import { registerScreenshots } from './computers/screenshots.ts';
 import { registerEffectRoutes } from './effects/routes.ts';
 import { registerGroupRoutes, type GroupOptions } from './members/group-routes.ts';
@@ -73,6 +74,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerEffectRoutes(app, authConfig, options.integrations);
   registerComputerRoutes(app, authConfig, options.computers);
   registerChatRoutes(app, authConfig, options.chat);
+  registerAssistantRoutes(app, authConfig, options.chat);
   registerAuditRoutes(app, authConfig, options.audit);
   registerLiveView(app, authConfig, options.liveView);
 

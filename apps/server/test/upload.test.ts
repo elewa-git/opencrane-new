@@ -112,6 +112,34 @@ it('scans before storage, publishes only clean files and rebuilds its list from 
       expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/files`, headers, payload: Buffer.from('No access') })).statusCode).toBe(403);
       expect((await app.inject({ url: `/api/conversations/${conversationId}/files`, headers })).statusCode).toBe(403);
     }
+    for (const [subject, type, data] of [
+      ['team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }],
+      ['team-sales', 'team.member_added', {
+        teamId: 'sales', memberId: 'alice', addedBy: 'alice',
+      }],
+      ['assistant-team-sales', 'assistant.created', {
+        assistantId: 'team-sales', ownerId: 'sales', kind: 'team', payingGroupId: 'sales',
+      }],
+      ['conversation-team-session', 'conversation.created', {
+        conversationId: 'team-session', assistantId: 'team-sales', createdBy: 'alice',
+        mode: 'agent_session', payingGroupId: 'sales',
+      }],
+    ] as const) {
+      const event = envelope('test', subject, type, data);
+      const expectedSequence = await nats.store.head(subject);
+      await nats.store.append({ event, expectedSequence });
+      await auth.handler.handle(event, db);
+    }
+    const teamUpload = { method: 'POST' as const,
+      url: '/api/conversations/team-session/files', headers, payload: Buffer.from('Private notes') };
+    const refusedUpload = await app.inject(teamUpload);
+    expect(refusedUpload.statusCode, refusedUpload.body).toBe(403);
+    const removal = envelope('test', 'team-sales', 'team.member_removed', {
+      teamId: 'sales', memberId: 'alice', removedBy: 'alice',
+    });
+    await nats.store.append({ event: removal, expectedSequence: await nats.store.head('team-sales') });
+    const removedUpload = await app.inject(teamUpload);
+    expect(removedUpload.statusCode, removedUpload.body).toBe(403);
     expect((await app.inject({ method: 'POST', url, headers, payload: Buffer.from('Meeting at ten.') })).statusCode).toBe(201);
     await runner.run(files);
     const list = await app.inject({ url, headers });
@@ -314,8 +342,13 @@ it('does not resend acknowledged uploads after reconnect even when workspace byt
   const { chatCommand, chatHistory } = await import('../src/chat/commands.ts');
   const { conversationKeys } = await import('../src/chat/keys.ts');
   const { fileCommand } = await import('../src/files/commands.ts');
+  const { envelope } = await import('@opencrane/models');
   const directory = await mkdtemp(`${tmpdir()}/file-bridge-`), server = createServer(), nats = await natsFixture();
   const keys = conversationKeys(directory); keys.provision('test', 'conversation');
+  const assistant = envelope('test', 'assistant-assistant', 'assistant.created', {
+    assistantId: 'assistant', ownerId: 'alice', kind: 'personal',
+  });
+  await nats.store.append({ event: assistant, expectedSequence: 0 });
   await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'create', conversationId: 'conversation', assistantId: 'assistant' });
   const bytes = Buffer.alloc(160_000, 'a'), sha256 = createHash('sha256').update(bytes).digest('hex');
   const file = { conversationId: 'conversation', fileId: 'file', name: 'notes.txt', mime: 'text/plain', size: bytes.length, sha256, objectKey: 'test/file', uploadedBy: 'alice' };

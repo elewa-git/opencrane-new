@@ -46,3 +46,5 @@ export { ownershipSeededSchema, ownershipTransferredSchema,
 export { providerIdSchema, providerModelIdSchema, providerKeySchema,
   providerModelsSchema, providerRequestedSchema,
   providerDispatchedSchema, providerResultSchema } from './provider-events.ts';
+
+export { assistantGrantSchema, assistantCreatedDataSchema } from './data.ts';

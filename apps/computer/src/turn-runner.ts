@@ -9,6 +9,7 @@ export interface Turn {
   id: string;
   conversationId: string;
   assistantId: string;
+  requesterId?: string;
   text: string;
   token: string;
   expiresAt: number;
@@ -30,7 +31,7 @@ interface TurnRunnerState {
   running: Map<string, Turn>;
   cancelled: Set<string>;
   codexTurns: Map<string, string>;
-  waiting: Map<number, (grant: { token: string; expiresAt: number }) => void>;
+  waiting: Map<number, (grant: { token: string; expiresAt: number } | Error) => void>;
 }
 
 function requiredString(value: Record<string, unknown>, name: string) {
@@ -56,7 +57,11 @@ export function parseTurn(value: Record<string, unknown>): Turn {
   if (typeof expiresAt !== 'number' || expiresAt <= Date.now()) {
     throw new Error('Expired turn');
   }
-  return {
+  const requesterId = value['requesterId'];
+  if (requesterId !== undefined && (typeof requesterId !== 'string' || !requesterId)) {
+    throw new Error('Invalid requester');
+  }
+  const turn: Turn = {
     id: requiredString(value, 'id'),
     conversationId: requiredString(value, 'conversationId'),
     assistantId: requiredString(value, 'assistantId'),
@@ -67,6 +72,8 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     attachments: value['attachments'],
     omittedAttachments,
   };
+  if (typeof requesterId === 'string') turn.requesterId = requesterId;
+  return turn;
 }
 
 function containsTurn(turns: Iterable<Turn>, turnId: string) {
@@ -160,9 +167,10 @@ class TurnRunner {
     return report.type === 'agent.turn_started';
   }
 
-  private lastThreadReport(conversationId: string) {
+  private lastThreadReport(input: Turn) {
     function reportHasThread(report: BridgeReport) {
-      return report.conversationId === conversationId && Boolean(report.threadId);
+      return report.conversationId === input.conversationId
+        && report.requesterId === input.requesterId && Boolean(report.threadId);
     }
     return this.journal.findLast(reportHasThread);
   }
@@ -209,9 +217,16 @@ class TurnRunner {
     sequence: number,
     previousStart: BridgeReport | undefined,
     resolve: (grant: { token: string; expiresAt: number }) => void,
-    _reject: (reason?: unknown) => void,
+    reject: (reason?: unknown) => void,
   ) {
-    this.state.waiting.set(sequence, resolve);
+    function settle(grant: { token: string; expiresAt: number } | Error) {
+      if (grant instanceof Error) {
+        reject(grant);
+      } else {
+        resolve(grant);
+      }
+    }
+    this.state.waiting.set(sequence, settle);
     if (previousStart) {
       this.send(previousStart);
     }
@@ -236,7 +251,7 @@ class TurnRunner {
   }
 
   private async prepareAndRun(input: Turn) {
-    const previousReport = this.lastThreadReport(input.conversationId);
+    const previousReport = this.lastThreadReport(input);
     const previousThread = previousReport?.threadId;
     let method: string;
     let params: Record<string, unknown>;
@@ -324,6 +339,11 @@ class TurnRunner {
       throw new Error('Invalid ack');
     }
     const resolve = this.state.waiting.get(sequence);
+    if (resolve && typeof value?.['refused'] === 'string') {
+      this.state.waiting.delete(sequence);
+      resolve(new Error(value['refused']));
+      return;
+    }
     if (resolve && typeof value?.['token'] === 'string'
       && typeof value['expiresAt'] === 'number' && value['expiresAt'] > Date.now()) {
       this.state.waiting.delete(sequence);

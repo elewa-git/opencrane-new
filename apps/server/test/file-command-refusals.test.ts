@@ -28,7 +28,7 @@ it('returns a typed 403 refusal for delivery without a matching upload', async (
     sequence: 1,
     event: {
       id: 'created', commandId: 'created', silo: 'test', subject: 'conversation-conversation',
-      type: 'conversation.created', data: { conversationId: 'conversation', createdBy: 'alice' },
+      type: 'conversation.created', data: { conversationId: 'conversation', createdBy: 'alice', assistantId: 'personal' },
       correlation: {},
       principal: { kind: 'human', id: 'alice' }, source: 'test', time: new Date().toISOString(),
     },
@@ -42,7 +42,12 @@ it('returns a typed 403 refusal for delivery without a matching upload', async (
       principal: { kind: 'human', id: 'alice' }, source: 'test', time: new Date().toISOString(),
     },
   };
+  const assistant: StoredEvent = { ...conversation, event: { ...conversation.event,
+    type: 'assistant.created', subject: 'assistant-personal',
+    data: { assistantId: 'personal', ownerId: 'alice', kind: 'personal' },
+  } };
   const rowsBySubject = new Map([
+    ['assistant-personal', [assistant]],
     ['conversation-conversation', [conversation]],
     ['member-alice', [membership]],
   ]);

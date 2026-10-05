@@ -120,6 +120,12 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-05 | [#155](https://github.com/elewa-git/opencrane-new/pull/155) (#103) | P4-21 provider backend | Late-admission outcomes, zero-cent rejection settlement and undispatched hold recovery; own source gates PASS | PARTIAL | Code 1a4c49c on main cfbf50a; 95 catalogue types; full root 1,684 passed / 15 skipped; preceding focused NATS teardown FAIL retained; UI and fresh install NOT RUN | [Provider backend receipt](p4-21-backend-evidence.md) |
 | 2026-10-05 | Pending (#77) | Live-view check pauses on chat activity | Access checks that see new chat, file, grant or team activity wait for the next check; revocation guards | PARTIAL | source gates as measured; live batch NOT RUN | [i77-fence-evidence.md](i77-fence-evidence.md) |
 
+## Phase 4
+
+| Date (UTC) | PR | Feature or issue | What was qualified | Result | Key numbers | Evidence |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-05 | Pending (#89) | P4-7 backend first half | Shared creation, private requester threads, fixed payer, long personal chats and per-turn refusals; credential profiles and fresh installation remain pending | PARTIAL | Lint/typecheck/catalogue PASS; requested suites PASS in both root runs; final root FAIL (1,747 passed / 2 failed / 15 skipped): Chromium polling moved to draft #191, and live-view removal returned 4503 instead of 4003; removal case PASS alone on main and this branch; 71 compatibility tests PASS; live profiles and fresh-install checks NOT RUN; draft, not ready to land | [Backend receipt](p4-7-backend-evidence.md) |
+
 ## Still NOT RUN
 
 The evidence does not qualify these conditions yet:

@@ -179,7 +179,7 @@ The dev stack retains its explicit invitation/join bootstrap for `jente@elewa.ke
 
 | Event | Emitted by | Projections | Reactions |
 | --- | --- | --- | --- |
-| `assistant.created` | reaction or admin | assistants (owner, kind, scope) | OpenFGA `acts_for`; claim a computer; seed model `grant.given` |
+| `assistant.created` | reaction or admin | assistants (owner, kind, scope, fixed team payer) | OpenFGA `acts_for`; claim one computer; personal model defaults or explicit team resource `grant.given` |
 | `assistant.settings_changed` | owner or admin | assistants (model, persona, tools) | update the computer's configuration on next wake |
 | `computer.claimed` | server (claim intent) | computers (generation, token id) | reconciler creates the claim and delivers the committed credential |
 | `computer.ready` | reconciler (Pod ready, credential delivered) | computers (Sandbox and Pod UIDs) | deliver queued messages and decisions |
