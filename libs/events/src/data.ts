@@ -553,7 +553,11 @@ export const decisionRecordedDataSchema = z.object({
 export const computerViewDataSchema = z.object({ sessionId: id, conversationId: id, computerId: id,
   assistantId: id, memberId: id, generation: z.int().positive(), expiresAt: z.iso.datetime({ offset: true }) }).strict();
 export const computerViewStoppedDataSchema = computerViewDataSchema.extend({ reason: z.enum([
-  'disconnected', 'access_changed', 'expired', 'protocol', 'slow_viewer', 'upstream', 'shutdown',
+  'disconnected', 'access_changed', 'expired', 'protocol', 'slow_viewer', 'upstream', 'shutdown', 'unavailable',
 ]) });
 
-export const computerViewRefusedDataSchema = z.object({ attemptId: id, reason: z.enum(['admission', 'upgrade', 'capacity']), conversationId: id.optional() }).strict();
+export const computerViewRefusedDataSchema = z.object({
+  attemptId: id,
+  reason: z.enum(['admission', 'upgrade', 'capacity', 'unavailable']),
+  conversationId: id.optional(),
+}).strict();

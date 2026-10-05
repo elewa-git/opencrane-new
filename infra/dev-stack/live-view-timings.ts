@@ -12,7 +12,7 @@ export async function collectViewTimings(sessionId: string, output: string) {
   const contents = await readFile(`${directory}/server.log`, 'utf8');
   const records: Record<string, unknown>[] = [];
   const fields = ['time', 'sessionId', 'stage', 'outcome', 'durationMs',
-    'elapsedMs', 'phase', 'checkedAt', 'validUntil', 'boundary'];
+    'elapsedMs', 'phase', 'checkedAtMonotonic', 'validUntil', 'boundary'];
   for (const line of contents.split('\n')) {
     if (!line.startsWith('{')) continue;
     let parsed: unknown;

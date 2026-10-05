@@ -22,4 +22,7 @@ button {
 }
 .display[hidden] { display: none; }
 .tools { display: flex; gap: 12px; flex-wrap: wrap; }
-@media (max-width: 600px) { .tools button { width: 100%; } }
+@media (max-width: 600px) {
+  .tools button,
+  .retry { width: 100%; }
+}

@@ -1,10 +1,38 @@
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import {
-  ChangeDetectionStrategy, Component, ElementRef, input, output, signal, viewChild,
-  type OnDestroy, type OnChanges, type SimpleChanges,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  InjectionToken,
+  input,
+  output,
+  signal,
+  viewChild,
+  type OnDestroy,
+  type OnChanges,
+  type SimpleChanges,
 } from '@angular/core';
 import type RFB from '@novnc/novnc/lib/rfb.js';
+
+type ViewerConstructor = typeof RFB;
+async function loadViewer(): Promise<ViewerConstructor> {
+  const viewer = await import('./viewer');
+  return viewer.default;
+}
+function viewerFactory() {
+  return loadViewer;
+}
+const viewerProvider = { factory: viewerFactory };
+export const LIVE_VIEWER = new InjectionToken<() => Promise<ViewerConstructor>>(
+  'live viewer', viewerProvider,
+);
+function stateForCloseCode(code: number) {
+  if (code === 4003) return 'Access changed';
+  if (code === 4503) return 'Failed';
+  return 'Disconnected';
+}
 
 @Component({
   selector: 'oc-live-view',
@@ -27,12 +55,14 @@ export class LiveView implements OnDestroy, OnChanges {
   private readonly display = viewChild.required<ElementRef<HTMLElement>>('display');
   protected readonly state = signal('Disconnected');
   protected readonly fit = signal(true);
+  private readonly loadViewer = inject(LIVE_VIEWER);
   private viewer: RFB | undefined;
   private socket: WebSocket | undefined;
   private attempt = 0;
   protected viewState(): PresentationState {
     if (this.state() === 'Connecting') return 'checking';
     if (this.state() === 'Viewing') return 'ready';
+    if (this.state() === 'Failed') return 'failed';
     if (this.state() === 'Access changed' || this.state() === 'Not available') {
       return 'access_changed';
     }
@@ -45,6 +75,9 @@ export class LiveView implements OnDestroy, OnChanges {
   protected panelClosed(): void {
     this.viewOpen.set(false);
     this.close('Disconnected');
+  }
+  protected retry(): void {
+    void this.open();
   }
   protected zoom(fit: boolean): void { this.fit.set(fit); if (this.viewer) this.viewer.scaleViewport = fit; }
   ngOnChanges(changes: SimpleChanges): void {
@@ -100,10 +133,11 @@ export class LiveView implements OnDestroy, OnChanges {
       const response = await fetch(url, { method: 'POST', headers: { 'x-opencrane-view': '1' } });
       if (attempt !== this.attempt) return;
       if (response.status === 401 || response.status === 403) return this.close('Not available');
+      if (response.status === 503) return this.close('Failed');
       if (!response.ok) throw new Error('View unavailable');
       const result: unknown = await response.json();
       if (!result || typeof result !== 'object' || !('ticket' in result) || typeof result.ticket !== 'string') throw new Error('View unavailable');
-      const { default: Rfb } = await import('./viewer');
+      const Rfb = await this.loadViewer();
       if (attempt !== this.attempt) return;
       const address = new URL(`/ws/conversations/${encodeURIComponent(this.conversationId())}/view`, location.href); address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const socket = new WebSocket(address, ['binary', result.ticket]); this.socket = socket;
@@ -123,7 +157,7 @@ export class LiveView implements OnDestroy, OnChanges {
   }
   private socketClosed(attempt: number, event: CloseEvent): void {
     if (attempt !== this.attempt) return;
-    const state = event.code === 4003 ? 'Access changed' : 'Disconnected';
+    const state = stateForCloseCode(event.code);
     this.close(state);
   }
 

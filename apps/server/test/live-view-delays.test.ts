@@ -6,6 +6,8 @@ import { expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { encodeSession } from '@opencrane/auth';
 import { grantStream } from '@opencrane/authz';
+import { history } from '@opencrane/models';
+import { until } from '@opencrane/authz/testing';
 import { parseEventByType } from '@opencrane/events';
 import { viewFixture } from './support/view-fixture.ts';
 
@@ -43,7 +45,7 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
     if (boundary === 'NATS outage') {
       const closed = once(socket, 'close'), unavailableAt = performance.now();
       nats.pauseResponses(true);
-      expect((await closed)[0]).toBe(4003);
+      expect((await closed)[0]).toBe(4503);
       const expiredMs = Math.round(performance.now() - unavailableAt);
       expect(expiredMs).toBeLessThan(2000);
       console.log(JSON.stringify({ scenario: 'NATS outage', expiredMs, timings }));
@@ -111,6 +113,14 @@ it.each(['recovered', 'unavailable', 'revoked'])('requires a fresh successful po
     } else {
       await expect(displayed).rejects.toThrow();
       expect(opened).toBe(0);
+      const sessionId = admission.json<{ sessionId: string }>().sessionId;
+      async function stopped() {
+        return (await history(nats.store, `view-${sessionId}`, 'test')).length === 2;
+      }
+      await until(stopped);
+      const records = await history(nats.store, `view-${sessionId}`, 'test');
+      const reason = mode === 'unavailable' ? 'unavailable' : 'access_changed';
+      expect(records[1]?.event.data).toMatchObject({ reason });
     }
   } finally { socket?.terminate(); vi.restoreAllMocks(); await fixture.close(); }
 }, 30_000);
@@ -155,7 +165,7 @@ it('admits slow authority and audit reads while a slow desktop opens and deliver
     console.log(JSON.stringify({ scenario: 'slow admission, audit and desktop', admissionMs, openMs, displayMs: Math.round(performance.now() - started) }));
     const closed = once(socket, 'close'); socket.terminate(); await closed;
     readDelay = 1300;
-    expect((await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers })).statusCode).toBe(503);
   } finally { socket?.terminate(); vi.restoreAllMocks(); await fixture.close(); }
 }, 30_000);
 

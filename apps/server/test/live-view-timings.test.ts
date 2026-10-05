@@ -13,10 +13,18 @@ const timingRecord = z.object({
   stage: z.string(),
   outcome: z.string(),
   phase: z.string().optional(),
+  elapsedMs: z.number().optional(),
+  checkedAtMonotonic: z.number().optional(),
+  validUntil: z.number().optional(),
   sessionId: z.string(),
   durationMs: z.number(),
 });
 type Timing = z.infer<typeof timingRecord>;
+
+function isLeaseReceipt(timing: Timing) {
+  return timing.stage === 'lease_check' && typeof timing.checkedAtMonotonic === 'number'
+    && typeof timing.validUntil === 'number';
+}
 
 async function admitView(fixture: Awaited<ReturnType<typeof viewFixture>>) {
   const { app, append, config } = fixture;
@@ -108,7 +116,8 @@ async function firstFrameDuringLateCheck() {
     const timings: Timing[] = [];
     const allowedTimingKeys = new Set([
       'level', 'time', 'pid', 'hostname', 'name', 'msg', 'operation', 'sessionId', 'stage',
-      'outcome', 'durationMs', 'elapsedMs', 'boundary', 'phase', 'checkedAt', 'validUntil',
+      'outcome', 'durationMs', 'elapsedMs', 'boundary', 'phase',
+      'checkedAtMonotonic', 'validUntil',
     ]);
     for (const line of logs) {
       const value: unknown = JSON.parse(line);
@@ -131,6 +140,12 @@ async function firstFrameDuringLateCheck() {
     const unavailable = { stage: 'lease_check', phase: 'renewal', outcome: 'unavailable' };
     const matching: unknown = expect.objectContaining(unavailable);
     expect(timings).toContainEqual(matching);
+    const leaseReceipt = timings.find(isLeaseReceipt);
+    expect(leaseReceipt).toBeDefined();
+    const stopReceipt = timings.find(function isStopWithLeaseExpiry(timing) {
+      return timing.stage === 'stop' && timing.validUntil !== undefined;
+    });
+    expect(stopReceipt?.validUntil).toBeLessThan(30_000);
     for (const timing of timings) expect(timing.durationMs).toBeGreaterThanOrEqual(0);
     const contents = logs.join('');
     expect(contents).not.toContain(issued.ticket);
@@ -170,7 +185,7 @@ async function noFrameBeforeLeaseExpiry() {
     const closed = once(socket, 'close');
     const unavailableAt = performance.now();
     nats.pauseResponses(true);
-    expect((await closed)[0]).toBe(4003);
+    expect((await closed)[0]).toBe(4503);
     expect(performance.now() - unavailableAt).toBeLessThan(2000);
     expect(messages).toEqual([]);
   } finally {

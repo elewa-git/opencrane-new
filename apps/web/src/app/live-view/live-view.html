@@ -10,6 +10,10 @@
     <oc-shared-state [kind]="viewState()" [message]="state()"
       [evidenceAt]="viewedAt()" [showAction]="false" />
   </div>
+  @if (state() === 'Failed') {
+    <p>Access checks didn't answer in time, so nothing is shown.</p>
+    <button type="button" class="retry" (click)="retry()">Try again</button>
+  }
   @if (state() === 'Access changed') { <p>Ask the desktop owner for access, or sign in again.</p> }
   <div class="display" #display tabindex="0" aria-label="Read-only computer display"
     [attr.aria-busy]="state() === 'Connecting' || capturing()"

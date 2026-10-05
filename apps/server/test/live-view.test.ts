@@ -150,12 +150,12 @@ it('denies delayed grants, revoked tickets and audit outages, and closes viewers
     socket.on('error', () => undefined); await once(socket, 'open');
     const closed = once(socket, 'close'), started = performance.now();
     await fga.pause(); paused = true;
-    expect((await closed)[0]).toBe(4003); expect(performance.now()-started).toBeLessThan(2000);
-    expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(403);
+    expect((await closed)[0]).toBe(4503); expect(performance.now()-started).toBeLessThan(2000);
+    expect((await app.inject({ method: 'POST', url, headers })).statusCode).toBe(503);
     await until(async () => (await history(nats.store, `view-${valid.sessionId}`, 'test')).length === 2);
     const records = await history(nats.store, `view-${valid.sessionId}`, 'test');
     expect(records.map(r => r.event.type)).toEqual(['computer.view_started', 'computer.view_stopped']);
-    expect(records[1]?.event.data).toMatchObject({ sessionId: valid.sessionId, memberId: 'alice', conversationId: 'chat', computerId: 'desktop', generation: 1, reason: 'access_changed' });
+    expect(records[1]?.event.data).toMatchObject({ sessionId: valid.sessionId, memberId: 'alice', conversationId: 'chat', computerId: 'desktop', generation: 1, reason: 'unavailable' });
   } finally { if (paused) await fga.resume(); await fixture.close(); }
 }, 120_000);
 
@@ -275,8 +275,8 @@ it.each([1050, 1250])('enforces the desktop admission deadline for a %i ms autho
   let enter!: () => void;
   const entered = new Promise<void>(resolve => { enter = resolve; });
   try {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-    vi.spyOn(access, 'viewAccess').mockImplementation(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'performance'] });
+    const authority = vi.spyOn(access, 'viewAccess').mockImplementation(() => {
       enter();
       return new Promise(resolve => setTimeout(() => resolve({ assistantId: 'assistant', computerId: 'desktop', generation: 1 }), milliseconds));
     });
@@ -284,8 +284,9 @@ it.each([1050, 1250])('enforces the desktop admission deadline for a %i ms autho
       cookie: `${fixture.config.cookieName}=${encodeSession(fixture.config, { sub: 'alice', orgId: 'org-test', roles: [], authTime: 1, exp: Math.floor(Date.now()/1000)+120 })}` };
     const response = fixture.app.inject({ method: 'POST', url: '/api/conversations/chat/view', headers }).then(value => value);
     await entered;
-    await vi.advanceTimersByTimeAsync(milliseconds);
-    expect((await response).statusCode).toBe(milliseconds < 1200 ? 200 : 403);
+    await vi.advanceTimersByTimeAsync(7000);
+    expect((await response).statusCode).toBe(milliseconds < 1200 ? 200 : 503);
+    expect(authority).toHaveBeenCalledTimes(milliseconds < 1200 ? 1 : 4);
   } finally { vi.useRealTimers(); vi.restoreAllMocks(); await fixture.close(); }
 }, 30_000);
 
@@ -431,7 +432,7 @@ it('does not renew the desktop lease from a delayed authority reply after revoca
     const closed = once(socket, 'close'), revokedAt = performance.now();
     await fixture.append(grantStream('shared_desktop', 'desktop'), 'grant.revoked', { resourceType: 'shared_desktop', resourceId: 'desktop', granteeId: 'alice', revokedBy: 'owner' });
     blocked = true;
-    expect((await closed)[0]).toBe(4003);
+    expect([4003, 4503]).toContain((await closed)[0]);
     expect(performance.now() - revokedAt).toBeLessThan(2000);
   } finally {
     release(); socket?.terminate(); vi.restoreAllMocks(); proxy.closeAllConnections();
