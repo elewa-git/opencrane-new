@@ -154,29 +154,38 @@ async function conflictsOnAuthorityChange() {
 it('a change to watched authority returns an ownership conflict before append',
   conflictsOnAuthorityChange);
 
-async function refusesChangedAuditAuthority() {
-  const original = nats.store.head.bind(nats.store);
-  let changed = false;
-  async function changeAuthority(subject?: string, deadline?: number) {
-    if (subject === 'member-owner' && !changed) {
-      changed = true;
-      await append('member-owner', 'member.invited', {
-        memberId: 'owner', email: 'owner@example.test', role: 'admin', invitedBy: 'admin',
-        invitationId: 'audit-authority-race', expiresAt: '2026-11-01T00:00:00Z',
+async function readsAuditDuringChatActivity() {
+  const original = nats.store.readStream.bind(nats.store);
+  let activityAppended = false;
+  async function* appendChatActivityBeforeMembershipRead(
+    ...streamArguments: Parameters<typeof nats.store.readStream>
+  ) {
+    const [subject, fromSequence, deadline] = streamArguments;
+    if (subject === 'member-owner' && !activityAppended) {
+      activityAppended = true;
+      await append('conversation-private-owner-chat', 'message.posted', {
+        conversationId: 'private-owner-chat',
+        authorId: 'owner',
+        authorKind: 'human',
+        ciphertext: Buffer.from('ordinary chat activity').toString('base64'),
+        keyId: 'key:owner-test',
+        contentType: 'text',
       });
     }
-    return original(subject, deadline);
+    yield* original(subject, fromSequence, deadline);
   }
-  const spy = vi.spyOn(nats.store, 'head').mockImplementation(changeAuthority);
+  const spy = vi.spyOn(nats.store, 'readStream')
+    .mockImplementation(appendChatActivityBeforeMembershipRead);
   try {
     const response = await request('GET', undefined, 'idp-owner', '/api/org/history');
-    expect(response.statusCode).toBe(403);
-    expect(response.json()).toMatchObject({ status: 'refused' });
+    expect(response.statusCode).toBe(200);
+    expect(activityAppended).toBe(true);
   } finally {
     spy.mockRestore();
   }
 }
-it('audit refuses a mid-read authority change with 403', refusesChangedAuditAuthority);
+it('does not refuse audit reads when ordinary chat activity arrives during the access check',
+  readsAuditDuringChatActivity);
 
 async function readsReceiptWithNewBound() {
   const input = { action: 'transfer', commandId: 'slow-append', successorId: 'admin',

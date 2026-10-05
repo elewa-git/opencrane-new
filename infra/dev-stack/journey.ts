@@ -190,8 +190,12 @@ try {
     };
     page.on('requestfailed', failed);
     try {
-      await browserChatJourney(page, origin, secondary ? auditPrompt : undefined);
-      memberChatUrls.push(page.url());
+      const auditConversationUrl = await browserChatJourney(
+        page,
+        origin,
+        secondary ? auditPrompt : undefined,
+      );
+      memberChatUrls.push(auditConversationUrl);
       await browserLiveViewJourney(page, origin, computer!, { member, admin, silo, store: events.store, append, until,
         desktopAllowed: async () => (await authz.desktop(member, computer!.computer_id)).allowed });
       await page.goto(origin);

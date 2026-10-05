@@ -367,8 +367,12 @@ conversation read permission and returns only that requester's actions.
 `GET /api/org/history` requires live Owner/Admin membership and returns safe
 organisation metadata. Neither route decrypts text or approval details, nor returns
 credential references, bearer material, raw arguments or gateway diagnostics.
-Membership/conversation stream heads and OpenFGA receipts fence each read; lag,
-outage or a changed scope refuses it. No audit read scans global event history.
+The server reads the indexed audit rows first. It then checks the member's current
+role and OpenFGA permission once. PostgreSQL gives each query a one-second limit.
+The access check reads only member and ownership history; it never reads the
+conversation event stream or rejects the result because ordinary chat activity
+arrived during the read. A missing membership receipt or permission outage refuses
+the request. No audit read scans global event history.
 
 Filters: `requestId`, `turnId`, `decision` (`allow`, `ask`, `deny`) and `before`
 (an exclusive event-position cursor). Pages contain at most 50 anchors with all
