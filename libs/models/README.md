@@ -2,7 +2,7 @@
 
 ## What this is
 
-The AI access and spending library for OpenCrane. Its running part is the models process, started by `apps/server`; it sits beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also owns model choice, prices, [budgets](../../GLOSSARY.md#budget), tool rules, approvals, provider settings, grants, ownership and spending records.
+The AI access and spending library for OpenCrane. Its running part is the models process, started by `apps/server`; it sits beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also owns model choice, prices, [budgets](../../GLOSSARY.md#budget), tool rules, approvals, provider settings, [grants](../../GLOSSARY.md#grant), ownership and spending records.
 
 ## Where it fits
 
@@ -33,7 +33,7 @@ flowchart LR
 
 1. **A person sends a chat message.** The server and computer choose a model for the task. The models process checks the passes, permissions and budget, then agentgateway sends an allowed call to the provider.
 2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full reservation stays in place for review.
-3. **An owner changes access or spending.** The server records the change, and background work updates the permission store or spending tables from the event history.
+3. **An owner changes access or spending.** The server records the change as an [event](../../GLOSSARY.md#event), and background work updates the permission store or spending tables from the event history.
 
 ## How to run or test it
 

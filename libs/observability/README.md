@@ -28,7 +28,7 @@ flowchart LR
 ## Processes it handles
 
 1. **A service starts.** It creates a logger and turns on tracing only when a collector address is configured.
-2. **A request or background job runs.** The library carries its safe identifiers into log lines. For a handler, it records the start, result and duration, then passes any failure back to the caller.
+2. **A request or background job runs.** The library carries its safe identifiers into log lines. For a [handler](../../GLOSSARY.md#reaction-handler), background work that responds to an event, it records the start, result and duration, then passes any failure back to the caller.
 3. **A service shuts down.** It asks the tracing SDK to send waiting records and reports any flush error through the supplied callback.
 
 ## How to run or test it
