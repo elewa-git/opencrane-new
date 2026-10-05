@@ -305,7 +305,7 @@ not receive it and cannot resume a former private thread.
 Both configs switch shared prompt files and skill instructions off. Personal
 and memory-free tools otherwise retain their existing persistent home and work.
 No fallback is enabled without a failing pinned-image check. The live canary probe
-and its provider are on `work/p4-14-qualification`, outside this change.
+and its provider are included on `work/p4-14-qualification`.
 The local `test/private-capabilities.mjs` runs a private turn through `private.sock`
 with the template's exact capabilities and a stub provider. It uses Docker's runc
 runtime and does not qualify gVisor isolation.
@@ -346,3 +346,18 @@ restoring the old server before allowing default team traffic.
 it defaults to `127.0.0.1:5001`. The Pod image always uses `k3d-ocn-registry:5000`.
 A temporary user-space forwarder can reach the same registry when its published
 host port is broken. This does not change Docker settings or host networking.
+
+## Private-turn qualification scripts
+
+`test/private-turns.mjs` runs J1–J7 in its disposable `p414-private` namespace.
+`test/private-provider.mjs` supplies local Responses replies. `test/private-driver.mjs`
+runs inside the computer and sends bridge acknowledgements or direct private socket
+requests. `test/private-scanner.mjs` scans real files for the supplied canary patterns.
+The driver and scanner are mounted through the same fixture ConfigMap as the provider.
+They are plain JavaScript files, with one statement per line.
+
+`build.sh` runs this probe after the existing image checks and before moving the
+release tag. The probe replaces only its own JSON results; source checks remain in
+the Markdown check record. The JSON starts at NOT RUN until a real probe writes it.
+Syntax checks and a local scanner fixture pass. The complete driver and all private
+gVisor journeys remain NOT RUN on this branch. This branch has no PR yet.

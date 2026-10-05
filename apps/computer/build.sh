@@ -31,6 +31,7 @@ path.write_text(json.dumps(template, indent=2) + '\n')
 PYTHON
 node --experimental-strip-types test/exec-host.mjs
 node test/run.mjs
+node test/private-turns.mjs
 docker tag ocn-computer-runtime "$push_registry"/opencrane/computer:p2-1
 docker push "$push_registry"/opencrane/computer:p2-1
 docker inspect ocn-computer-runtime --format '{{.Size}}' > .state/image-size.txt

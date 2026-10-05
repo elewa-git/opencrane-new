@@ -1,8 +1,13 @@
 # Private team turns check record
 
-Date: 5 October 2026. Branch: `work/p4-14-private-turns`.
-Draft PR: [#197](https://github.com/elewa-git/opencrane-new/pull/197).
+Date: 5 October 2026. Source branch: `work/p4-14-private-turns` at `d440eda`.
+Source draft PR: [#197](https://github.com/elewa-git/opencrane-new/pull/197).
 Base: `913e6cf`. The rebase completed and main's dispatch retry is preserved.
+
+The qualification scripts are on `work/p4-14-qualification`, based on the source
+fixes. This branch has no PR. Syntax checks and the standalone scanner fixture pass.
+The complete driver, image build with the restored probe and J1–J7 remain NOT RUN.
+The source and image checks below apply to `d440eda`; they do not qualify this probe.
 
 ## Current results
 
@@ -135,7 +140,7 @@ That branch is pushed without a PR. This split follows the latest #96 decision.
 The remaining diff is about 3,000 added/removed lines, including the new local
 capability fixture. It still exceeds the approximately 1,800-line allowance.
 The required product and regression tests remain together; no size approval is
-claimed. Final non-generated counts against `origin/main` are:
+claimed. The primary PR's final non-generated counts against `origin/main` are:
 
 | Area | Added and removed lines |
 | --- | --- |
