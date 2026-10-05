@@ -1,7 +1,8 @@
 # Live view pauses while access checks are unavailable — #77, PR 2 of 2
 
-**Status: PARTIAL.** All source gates pass on the final stack. Fresh-install live
-qualification and real Kasm pause/replay remain **NOT RUN** in this change.
+**Status: PARTIAL.** Requested rebase checks pass; the first complete root gate
+is **FAIL**, with both failed cases passing unchanged in isolation. Fresh-install
+live qualification and real Kasm pause/replay remain **NOT RUN** in this change.
 
 Built on PR 1 (#147) in `work/i77-pause`, on 4 October 2026.
 Failing-first and initial source checks used
@@ -102,3 +103,71 @@ The fresh-install ten-run batch at 1280 and 390 px runs after PR 2 and the ops
 change. Keeping Kasm/Xvnc paused during a partly completed startup handshake
 for up to 10 s is also **unverified**. These checks do not close #77 or claim the
 live capability is done.
+
+## Rebase onto main — 5 October 2026
+
+The exact requested command, `git fetch && git rebase --onto origin/main 722c2a5 work/i77-pause`,
+completed onto `af7dfc9` (#147 squash merge). Git reported completion, no rebase state remains,
+and `origin/main` is an ancestor of the branch. Both PR 2 commits were retained.
+
+Conflict and merge decisions:
+
+- `apps/web/src/app/live-view/live-view.ts` conflicted in both commits. Kept main's
+  F1 SharedState rendering, capture outcome states and timestamps, and F2 ModalSheet
+  framing, focus/close wiring and separate HTML/CSS. Combined these with PR 2's lease
+  channel, minimum-offset deadline, pause canvas removal and replacement viewer replay.
+  Moved connecting/paused copy into the HTML and retained the review fix that hides
+  checking copy once access is confirmed. Browser tests now assert the shared checking,
+  paused and ready states within ModalSheet, alongside the original pause/resume proofs.
+- `apps/server/src/computers/view.ts` merged automatically. Checked the result against
+  main: PR 2's delivery gates, held bytes and notices retain main's timing records,
+  relative lease expiry and admission/upgrade lease engine. Terminal denial, expiry,
+  protocol and transport stops remain fenced; pause alone keeps transports open.
+- `apps/server/src/computers/view-access.ts` needed no conflict resolution and is
+  unchanged from main. The read retry's single shared deadline, late-check mapping,
+  every authority fence and #145's denial-first order are preserved.
+- `CHANGELOG.md` and `docs/process/ledger.md` merged by union, retaining every main
+  entry and adding PR 2's entries. `docs/process/benchmarks.jsonl` is unchanged from
+  main; PR 2 added no benchmark rows to union.
+
+The lease settings remain 1,500 ms / 1,200 ms / 250 ms / 5 checks in flight.
+No deadline, fence or existing assertion was relaxed. The real-noVNC pause/replay
+specification from the second PR 2 commit remains present.
+
+Validation uses Node 22.23.3 in this worktree, its own installed dependencies,
+disposable service fixtures and `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres`.
+Every gate, suite and build runs under `nice -n 10`. Safe local logs are in
+`/tmp/i77-pause-main-evidence/`. This is source validation, not fresh-install qualification.
+
+First validation source: rebased `09b69b1` plus the browser resolution/readability
+changes and added SharedState/ModalSheet assertions committed with this receipt.
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | PASS; six existing function-size warnings |
+| `npm run typecheck` | PASS; every workspace |
+| `npm run check:events` | PASS; 86 event types agree |
+| `npm run test -w apps/web -- --watch=false` | PASS; 18 files / 119 tests, including real-noVNC pause/replay |
+| `npm run build -w apps/web` | PASS; bundle/CSS-budget and noVNC CommonJS warnings |
+| `npm test -- apps/server/test/live-view*.test.ts apps/server/test/view-lease.test.ts apps/server/test/view-delivery.test.ts --maxWorkers=2` | PASS; 97 tests / two opt-in k3d tests skipped; 226.90 s |
+| `npm test -- --maxWorkers=2 --reporter=verbose` | FAIL; 97 files passed / two failed / four skipped; 1,575 tests passed / two failed / 15 skipped; 1,383.34 s |
+| Exact failure replay, both files with `--maxWorkers=1` and the original test names | PASS; two tests passed / 14 unselected tests skipped; 83.38 s |
+| Final browser ESLint and `git diff --check` | PASS |
+
+The full root failures were:
+
+- `apps/server/test/realtime.test.ts:261`: the paused-consumer test expected
+  close code 1013 but received 1006. Its unchanged one-worker replay passed.
+- `libs/models/test/authority-volume.test.ts:70`: the 100,000-event bound test
+  expected MCP HTTP 200 but received 403. Its unchanged replay passed all routes,
+  both before and after seeding 100,000 unrelated events.
+
+Both failing tests and their production paths are unchanged from the tested main
+snapshot. Host load was 22.41 near the first failure and 19.89 near the second;
+load alone is not a reproduced cause. The complete root gate remains FAIL despite
+isolated passes. No timeout, deadline, fence, heartbeat or assertion was changed.
+These results do not claim source ready or capability done.
+
+Main advanced during the run with #152 at `ce0e07b` (fixture cleanup and gateway
+startup diagnostics). The branch is being brought onto that main commit before
+its final combined-source verification and push.

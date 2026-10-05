@@ -140,17 +140,21 @@ it('hides expired pixels, clears paused pixels and rebuilds the viewer without a
     const { fixture, element, request } = await watchFakeView(200);
     expect(element.textContent).toContain('Connecting');
     expect(element.textContent).toContain('Checking your access…');
+    expect(element.querySelector('oc-modal-sheet')).not.toBeNull();
+    expect(element.querySelector('oc-shared-state [data-state="checking"]')).not.toBeNull();
     const socket = FakeSocket.last;
     socket.readyState = 1;
     socket.dispatchEvent(new Event('open'));
     socket.message('{"lease":"valid","at":0,"until":1500}');
     await fixture.whenStable();
     expect(element.textContent).toContain('Access confirmed. Starting the desktop…');
+    expect(element.textContent).not.toContain("Checking that you're in this computer's audience");
     for (let index = 0; index < 4; index++) socket.message(new ArrayBuffer(1));
     const first = FakeRfb.instances[0]!;
     first.dispatchEvent(new Event('connect'));
     await fixture.whenStable();
     expect(element.textContent).toContain('Viewing');
+    expect(element.querySelector('oc-shared-state [data-state="ready"]')).not.toBeNull();
     await vi.advanceTimersByTimeAsync(1500);
     await fixture.whenStable();
     expect(element.textContent).toContain('Paused');
@@ -162,6 +166,7 @@ it('hides expired pixels, clears paused pixels and rebuilds the viewer without a
     expect(first.disconnect).toHaveBeenCalledOnce();
     expect(element.querySelector('canvas')).toBeNull();
     expect(element.textContent).toContain('Paused — checking your access');
+    expect(element.querySelector('oc-shared-state [data-state="paused"]')).not.toBeNull();
     socket.message('{"lease":"valid","at":1500,"until":3000}');
     await fixture.whenStable();
     expect(FakeRfb.instances).toHaveLength(2);
@@ -170,6 +175,7 @@ it('hides expired pixels, clears paused pixels and rebuilds the viewer without a
     FakeRfb.instances[1]!.dispatchEvent(new Event('connect'));
     await fixture.whenStable();
     expect(element.textContent).toContain('Viewing');
+    expect(element.querySelector('oc-shared-state [data-state="ready"]')).not.toBeNull();
     expect(request).toHaveBeenCalledOnce();
     fixture.destroy();
   });

@@ -166,7 +166,8 @@ export class LiveView implements OnDestroy, OnChanges {
     } finally { if (attempt === this.attempt) this.capturing.set(false); }
   }
   private async open(): Promise<void> {
-    const attempt = ++this.attempt; this.state.set('Connecting');
+    const attempt = ++this.attempt;
+    this.state.set('Connecting');
     try {
       const url = `/api/conversations/${encodeURIComponent(this.conversationId())}/view`;
       const response = await fetch(url, { method: 'POST', headers: { 'x-opencrane-view': '1' } });
@@ -175,11 +176,17 @@ export class LiveView implements OnDestroy, OnChanges {
       if (response.status === 503) return this.close('Failed');
       if (!response.ok) throw new Error('View unavailable');
       const result: unknown = await response.json();
-      if (!result || typeof result !== 'object' || !('ticket' in result) || typeof result.ticket !== 'string') throw new Error('View unavailable');
+      if (!result || typeof result !== 'object' || !('ticket' in result)
+        || typeof result.ticket !== 'string') {
+        throw new Error('View unavailable');
+      }
       this.viewerConstructor = await this.loadViewer();
       if (attempt !== this.attempt) return;
-      const address = new URL(`/ws/conversations/${encodeURIComponent(this.conversationId())}/view`, location.href); address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const socket = new WebSocket(address, ['binary', result.ticket]); this.socket = socket;
+      const path = `/ws/conversations/${encodeURIComponent(this.conversationId())}/view`;
+      const address = new URL(path, location.href);
+      address.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const socket = new WebSocket(address, ['binary', result.ticket]);
+      this.socket = socket;
       const onSocketClose = this.socketClosed.bind(this, attempt);
       socket.addEventListener('close', onSocketClose);
       function notice(this: LiveView, lease: LeaseNotice) {
@@ -188,10 +195,14 @@ export class LiveView implements OnDestroy, OnChanges {
       function invalid(this: LiveView) {
         if (attempt === this.attempt) this.close('Disconnected');
       }
-      const events = { notice: notice.bind(this), invalid: invalid.bind(this) };
+      const onNotice = notice.bind(this);
+      const onInvalid = invalid.bind(this);
+      const events = { notice: onNotice, invalid: onInvalid };
       this.channel = new LeaseChannel(socket, events);
       this.startViewer(attempt);
-    } catch { if (attempt === this.attempt) this.close('Disconnected'); }
+    } catch {
+      if (attempt === this.attempt) this.close('Disconnected');
+    }
   }
 
   private startViewer(attempt: number) {
@@ -216,8 +227,10 @@ export class LiveView implements OnDestroy, OnChanges {
     function disconnected(this: LiveView) {
       if (attempt === this.attempt && token === this.viewerToken) this.close('Disconnected');
     }
-    viewer.addEventListener('connect', connected.bind(this));
-    viewer.addEventListener('disconnect', disconnected.bind(this));
+    const onConnected = connected.bind(this);
+    const onDisconnected = disconnected.bind(this);
+    viewer.addEventListener('connect', onConnected);
+    viewer.addEventListener('disconnect', onDisconnected);
     if (channel.handshakeComplete) channel.replayHandshake();
   }
 
@@ -242,7 +255,8 @@ export class LiveView implements OnDestroy, OnChanges {
     this.leaseDeadline = deadline;
     this.locallyExpired = performance.now() >= deadline;
     const expire = this.expireLease.bind(this);
-    this.leaseTimer = setTimeout(expire, Math.max(0, deadline - performance.now()));
+    const remainingMs = Math.max(0, deadline - performance.now());
+    this.leaseTimer = setTimeout(expire, remainingMs);
   }
 
   private expireLease() {
@@ -253,12 +267,15 @@ export class LiveView implements OnDestroy, OnChanges {
   private updateViewState() {
     // connect may follow a stalled browser timer; compare the clock again before showing pixels.
     this.locallyExpired ||= performance.now() >= this.leaseDeadline;
-    if (!this.connected) this.state.set('Connecting');
-    else if (this.serverPaused || this.locallyExpired || !this.viewerConnected) {
+    if (!this.connected) {
+      this.state.set('Connecting');
+    } else if (this.serverPaused || this.locallyExpired || !this.viewerConnected) {
       this.state.set('Paused');
     } else {
+      if (this.state() !== 'Viewing') {
+        this.viewedAt.set(new Date().toISOString());
+      }
       this.state.set('Viewing');
-      this.viewedAt.set(new Date().toISOString());
     }
   }
 
