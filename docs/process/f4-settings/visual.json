@@ -1,0 +1,35 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": [
+    "account-1280-no-preference.png",
+    "preferences-1280-no-preference.png",
+    "my-tools-1280-no-preference.png",
+    "account-1280-reduce.png",
+    "preferences-1280-reduce.png",
+    "my-tools-1280-reduce.png",
+    "account-390-no-preference.png",
+    "preferences-390-no-preference.png",
+    "my-tools-390-no-preference.png",
+    "menu-390-no-preference.png",
+    "account-390-reduce.png",
+    "preferences-390-reduce.png",
+    "my-tools-390-reduce.png",
+    "menu-390-reduce.png"
+  ],
+  "environment": "Built Angular assets; Chromium; disposable identity fixture; no silo stack",
+  "comparedFrames": [
+    "ONB-50",
+    "ONB-52",
+    "INT-60",
+    "INT-61"
+  ],
+  "scope": "Settings shell, available identity name, and honest unavailable screen bodies"
+}

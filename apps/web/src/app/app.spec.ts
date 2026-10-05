@@ -201,3 +201,85 @@ describe('MCP register', () => {
     expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/auth/me');
   });
 });
+
+describe('personal settings shell', () => {
+  let fetchSpy: MockInstance<typeof fetch>;
+
+  beforeEach(() => globalThis.history.replaceState({}, '', '/account'));
+  afterEach(() => {
+    fetchSpy?.mockRestore();
+    globalThis.history.replaceState({}, '', '/');
+  });
+
+  function create(reply: Response): ComponentFixture<App> {
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
+    const state = signal<'idle'>('idle');
+    TestBed.configureTestingModule({ imports: [App], providers: [
+      { provide: NAVIGATE, useValue: vi.fn() },
+      { provide: WebSocketService, useValue: {
+        state: state.asReadonly(), isConnected: computed(() => false),
+        messages: signal([]).asReadonly(), lastMessage: signal(undefined).asReadonly(),
+        connect: vi.fn(), disconnect: vi.fn(), send: vi.fn(),
+      } },
+    ] });
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  function root(fixture: ComponentFixture<App>): HTMLElement {
+    const element: unknown = fixture.nativeElement;
+    if (!(element instanceof HTMLElement)) throw new Error('Expected HTML root');
+    return element;
+  }
+
+  it('loads only the identity name and marks unavailable profile fields', async () => {
+    const fixture = create(response({ authenticated: true, user: { name: 'Taylor Example' } }));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Taylor Example'));
+    expect(root(fixture).querySelectorAll('.sidebar nav a')).toHaveLength(4);
+    expect(root(fixture).querySelector('[aria-current="page"]')?.getAttribute('href')).toBe('/account');
+    expect(root(fixture).textContent).toContain('Profile details not available yet');
+    expect(root(fixture).textContent).toContain('Email, organisation name, role and groups');
+    expect(root(fixture).textContent).not.toContain('alex@');
+    const status = root(fixture).querySelector('[role="status"][aria-live="polite"]');
+    expect(status?.textContent).toContain('Identity loaded from your current session');
+    expect(status?.textContent).not.toContain('Taylor Example');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const request = fetchSpy.mock.calls[0];
+    if (!request) throw new Error('Expected an identity request');
+    expect(request[0]).toBe('/auth/me');
+    const requestOptions = request[1];
+    expect(requestOptions?.cache).toBe('no-store');
+    expect(requestOptions?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('shows no invented identity name when the provider omitted it', async () => {
+    const fixture = create(response({ authenticated: true, user: { name: '  ' } }));
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain('Name not provided'));
+    expect(root(fixture).textContent).not.toContain('Taylor Example');
+  });
+
+  it('keeps the unavailable destinations in the settings shell without making reads', () => {
+    globalThis.history.replaceState({}, '', '/account/tools');
+    const fixture = create(response({}));
+    const element = root(fixture);
+    expect(element.querySelector('h1')?.textContent).toBe('My tools');
+    expect(element.textContent).toContain('Personal tool connection reads are not available');
+    expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
+    expect(element.querySelector('.sidebar a.back[href="/workspace"]')?.textContent)
+      .toContain('Back to workspace');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('keeps workspace navigation usable from every settings destination', () => {
+    globalThis.history.replaceState({}, '', '/account/preferences');
+    const fixture = create(response({}));
+    const element = root(fixture);
+    expect(element.querySelector('h1')?.textContent).toBe('Preferences');
+    expect(element.textContent).toContain('Personal preferences need the P4-16 API and P4-18 screen.');
+    expect(element.querySelector('.sidebar nav a[aria-current="page"]')?.getAttribute('href'))
+      .toBe('/account/preferences');
+    expect(element.querySelector('.sidebar .back')?.getAttribute('href')).toBe('/workspace');
+    expect(element.querySelector('oc-composer')).toBeNull();
+  });
+});

@@ -1,0 +1,28 @@
+<section class="account">
+  <h1>Account</h1>
+  <p class="intro">Your identity and preferences. Fields from single sign-on are read-only.</p>
+  <p class="sr-only" role="status" aria-live="polite">{{ announcement() }}</p>
+  @if (loading()) {
+    <oc-shared-state kind="checking" message="Checking your signed-in identity"
+      [showAction]="false" />
+  } @else if (unavailable()) {
+    <oc-shared-state kind="failed" message="Identity unavailable" [detail]="unavailable()"
+      [showAction]="false" />
+    <p class="sign-in-link"><a href="/">Return to sign in</a></p>
+  } @else {
+    <section class="identity" aria-labelledby="identity-heading">
+      <h2 id="identity-heading">Name</h2>
+      @if (identityName()) {
+        <p class="value"><oc-icon name="closed" />{{ identityName() }}</p>
+        <p class="source"><oc-icon name="closed" /> Supplied by your identity provider</p>
+      } @else {
+        <oc-shared-state kind="not_configured" message="Name not provided"
+          detail="The current identity response does not include a display name."
+          [showAction]="false" />
+      }
+    </section>
+    <oc-shared-state kind="not_configured" message="Profile details not available yet"
+      detail="Email, organisation name, role and groups, and preferred display name need the profile API planned for P4-18."
+      [showAction]="false" />
+  }
+</section>

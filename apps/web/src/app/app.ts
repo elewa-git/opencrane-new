@@ -12,12 +12,16 @@ import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
 import { normalisePathname, organisationPage, organisationPageLabel } from './organisation/pages';
+import { AccountScreen } from './settings/account-screen';
+import { PersonalSettingsShell } from './settings/personal-settings-shell';
+import { personalSettingsPage } from './settings/pages';
 
 @Component({
   selector: 'app-root',
   imports: [
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, OrganisationShell,
+    AccountScreen, PersonalSettingsShell,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -29,6 +33,7 @@ export class App {
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
+  protected readonly settingsPage = personalSettingsPage(this.pathname);
   protected readonly activePage = organisationPage(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
@@ -39,5 +44,18 @@ export class App {
 
   protected unavailableTitle(): string {
     return organisationPageLabel(this.activePage) ?? 'Page not found';
+  }
+
+  protected settingsTitle(): string {
+    if (this.settingsPage === 'preferences') {
+      return 'Preferences';
+    }
+    if (this.settingsPage === 'assistant') {
+      return 'Assistant';
+    }
+    if (this.settingsPage === 'tools') {
+      return 'My tools';
+    }
+    return 'Account';
   }
 }
