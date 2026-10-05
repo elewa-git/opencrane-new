@@ -207,6 +207,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
 export async function watchBridges(options: WatchOptions, tokens: Tokens,
   kube: SandboxClient, proxyUrl: string, signal: AbortSignal,
   logger: Logger = createLogger('bridge')) {
+  let previousHead: number | undefined;
+  let pending = true;
   const refused = new Set<string>();
   const links = new Map<string, Awaited<ReturnType<typeof connectBridge>>>();
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
@@ -230,17 +232,27 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   }
   async function process(conversation: AgentSession) {
     try {
-      await processConversation(options, tokens, conversation, refused, connection);
+      return await processConversation(options, tokens, conversation, refused, connection);
     } catch {
-      // Retry from the saved message when a dependency recovers.
+      // Retry after a failed read even when no new event arrives.
+      return true;
     }
   }
   try {
     while (!signal.aborted) {
+      const head = await options.store.head();
+      if (head === previousHead && !pending) {
+        await delay(250, undefined, { signal });
+        continue;
+      }
+      const tableBehind = await conversationTableBehind(options.db, head);
       const conversations = await listConversations(options.db, options.silo);
       const sessions = conversations.filter(isAgentSession);
-      const pending = sessions.map(process);
-      await Promise.all(pending);
+      const processing = sessions.map(process);
+      const pendingResults = await Promise.all(processing);
+      pending = tableBehind || pendingResults.includes(true);
+      // Keep the position from before the pass so events arriving during it are read next time.
+      previousHead = head;
       await delay(250, undefined, { signal });
     }
   } catch (error) {
@@ -365,7 +377,7 @@ async function processConversation(options: WatchOptions, tokens: Tokens,
     return row.event.type === 'conversation.closed';
   }
   const current = lifecycle.findLast(isLifecycle)?.event;
-  if (!current || rows.some(isConversationClosed)) return;
+  if (!current || rows.some(isConversationClosed)) return false;
   const computer = computerData.parse(current.data);
   const closed = new Set<string>();
   for (const row of lifecycle) {
@@ -377,15 +389,16 @@ async function processConversation(options: WatchOptions, tokens: Tokens,
     conversation.conversationId, rows, closed);
   const allUploads = await conversationUploads(options, rows);
   const uploads = pendingUploads(rows, allUploads, computer.computerId);
-  if (!message && !uploads.length) return;
+  if (!message && !uploads.length) return false;
   if (current.type === 'computer.suspended') {
     await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
-    return;
+    return true;
   }
-  if (current.type !== 'computer.ready' || refused.has(computer.computerId)) return;
+  if (current.type !== 'computer.ready' || refused.has(computer.computerId)) return true;
   const link = await connection(computer.computerId, conversation.assistantId);
   await deliverUploads(options.objects, link, uploads);
   if (message) sendTurn(options, link.socket, conversation, rows, allUploads, message);
+  return true;
 }
 
 async function conversationUploads(options: Pick<ChatOptions, 'store' | 'silo'>,
@@ -409,6 +422,14 @@ async function conversationUploads(options: Pick<ChatOptions, 'store' | 'silo'>,
     return fileUploadedDataSchema.parse(row.event.data);
   }
   return uploads.map(uploadedFile);
+}
+
+async function conversationTableBehind(db: ChatOptions['db'], head: number) {
+  // Keep polling until the table includes conversations created before this pass.
+  const checkpoint = await db.query<{ sequence: string }>(
+    'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['conversations']);
+  const position = Number(checkpoint.rows[0]?.sequence ?? 0);
+  return position < head;
 }
 
 function sendStop(socket: WebSocket, rows: ChatRows, turnId: string, conversationId: string) {

@@ -74,6 +74,7 @@ try {
         mcpRoutes: z.array(z.object({ serverId: z.string(), connectionId: z.string(), upstream: z.string() }).strict())
           .parse(JSON.parse(process.env['MODEL_MCP_ROUTES'] ?? '[]')),
       });
+      const usageCursor = { offset: 0 };
       let eventStoreUnavailableSince: number | undefined;
       let eventStoreUnavailableErrorName: string | undefined;
       while (!stop.signal.aborted) {
@@ -81,7 +82,9 @@ try {
         if (!gateway.healthy()) throw new Error('Gateway stopped');
         let budgetTickSucceeded = false;
         try {
-          await ingestUsage(actor, `${directory}/usage.jsonl`);
+          // Check NATS availability even when no new usage needs recording.
+          await events.store.head();
+          await ingestUsage(actor, `${directory}/usage.jsonl`, usageCursor);
           await actor.period();
           await actor.expire();
           budgetTickSucceeded = true;

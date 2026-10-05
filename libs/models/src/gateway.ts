@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { providerGatewayRoutes } from './provider-gateway.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, open, readFile, writeFile, type FileHandle } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { connect } from 'node:net';
@@ -96,26 +96,97 @@ const observation = z.union([
     cachedInputTokens: z.int().nonnegative().optional(), cacheWriteTokens: z.int().nonnegative().optional() }).strict(),
   z.object({ id: z.uuid(), outcome: z.literal('error') }).strict(),
 ]);
-export async function ingestUsage(actor: BudgetActor, file: string) {
-  let text: string;
-  try { text = await readFile(file, 'utf8'); } catch (error) {
+export interface UsageCursor {
+  offset: number;
+  identity?: string;
+  size?: number;
+  modifiedAt?: number;
+  lastLine?: Buffer;
+}
+
+async function recordUsageLine(actor: BudgetActor, line: string) {
+  const parsed: unknown = JSON.parse(line);
+  const value = observation.parse(parsed);
+  if ('reason' in value) {
+    const subject = `gateway-${value.id}`;
+    const rows = await history(actor.store, subject, actor.silo);
+    const eventId = `${value.id}:gateway`;
+    function alreadyRecorded(row: typeof rows[number]) {
+      return row.event.id === eventId;
+    }
+    if (rows.some(alreadyRecorded)) return;
+    const payload = { requestId: value.id, outcome: value.outcome, reason: value.reason };
+    const event = envelope(actor.silo, subject, 'gateway.observation_recorded', payload, eventId);
+    const command = { event, expectedSequence: rows.at(-1)?.sequence ?? 0 };
+    const result = await actor.store.append(command);
+    if (result.status !== 'appended') throw new Error('Gateway evidence unavailable');
+  } else if ('uncertainReason' in value) {
+    await actor.uncertain(value.id, value.uncertainReason);
+  } else if ('outcome' in value) {
+    await actor.effect(value.id, undefined, value.outcome);
+  } else {
+    const { id, ...usage } = value;
+    await actor.effect(id, usage);
+  }
+}
+
+async function usageFileSize(handle: FileHandle, cursor: UsageCursor) {
+  const details = await handle.stat();
+  const identity = `${details.dev}:${details.ino}`;
+  const replaced = cursor.identity !== identity;
+  const shrunk = details.size < (cursor.size ?? 0);
+  const modified = details.mtimeMs !== cursor.modifiedAt;
+  const rewritten = modified && details.size === cursor.size;
+  let reset = replaced || shrunk || rewritten;
+  if (!reset && modified && cursor.lastLine) {
+    // Compare the last saved line, including its request id, after the file grows.
+    const saved = cursor.lastLine;
+    const current = Buffer.alloc(saved.length);
+    const position = cursor.offset - saved.length;
+    const result = await handle.read(current, 0, current.length, position);
+    reset = result.bytesRead !== saved.length || !current.equals(saved);
+  }
+  if (reset) {
+    cursor.offset = 0;
+    delete cursor.lastLine;
+  }
+  cursor.identity = identity;
+  cursor.size = details.size;
+  cursor.modifiedAt = details.mtimeMs;
+  return details.size;
+}
+
+export async function ingestUsage(actor: BudgetActor, file: string,
+  cursor: UsageCursor = { offset: 0 }) {
+  let handle;
+  try {
+    handle = await open(file, 'r');
+  } catch (error) {
     if (z.object({ code: z.literal('ENOENT') }).safeParse(error).success) return;
     throw error;
   }
-  // A killed writer can leave one incomplete final line. Its reservation stays charged.
-  for (const line of text.split('\n').slice(0, -1)) {
-    const value = observation.parse(JSON.parse(line));
-    if ('reason' in value) {
-      const subject = `gateway-${value.id}`, rows = await history(actor.store, subject, actor.silo);
-      const eventId = `${value.id}:gateway`;
-      if (rows.some(row => row.event.id === eventId)) continue;
-      const event = envelope(actor.silo, subject, 'gateway.observation_recorded', { requestId: value.id, outcome: value.outcome, reason: value.reason }, eventId);
-      if ((await actor.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 })).status !== 'appended') throw new Error('Gateway evidence unavailable');
-    } else if ('uncertainReason' in value) await actor.uncertain(value.id, value.uncertainReason);
-    else if ('outcome' in value) await actor.effect(value.id, undefined, value.outcome);
-    else { const { id, ...usage } = value; await actor.effect(id, usage); }
+  try {
+    const size = await usageFileSize(handle, cursor);
+    const bytes = Buffer.alloc(size - cursor.offset);
+    if (!bytes.length) return;
+    const result = await handle.read(bytes, 0, bytes.length, cursor.offset);
+    const content = bytes.subarray(0, result.bytesRead);
+    let start = 0;
+    let end = content.indexOf(10, start);
+    // Advance past a complete line only after its event has been saved successfully.
+    while (end !== -1) {
+      const line = content.subarray(start, end).toString('utf8');
+      await recordUsageLine(actor, line);
+      cursor.offset += end - start + 1;
+      cursor.lastLine = Buffer.from(content.subarray(start, end + 1));
+      start = end + 1;
+      end = content.indexOf(10, start);
+    }
+  } finally {
+    await handle.close();
   }
 }
+
 export function gatewayUsage(line: string) {
   const status = logNumber(line, 'http\\.status');
   // Provider attempts already record dispatch and result on their own stream.

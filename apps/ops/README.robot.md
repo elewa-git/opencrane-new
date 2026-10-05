@@ -210,3 +210,17 @@ live rows, checkpoint and version so startup can retry. A changed rebuild bumps
 the generation; repeat startup and an equal verified replay leave it unchanged.
 Use `--verify` after upgrade to compare totals; it refuses mismatched legacy rows
 without repairing them. Replay uses reader credentials and publishes no events.
+
+## Idle polling
+
+The computer watcher reads the whole event log once after restart, then reads only
+events after its last processed position. It keeps computer history and conversation
+activity in memory. These copies can be rebuilt from events.
+
+A successful mode patch is remembered by the Kubernetes client. The same mode is
+not patched again; a failed patch is retried. Suspended, lost and retired computers
+need no further work until their lifecycle event changes. Running computers still
+check Pod identity and renew credentials at the existing 250 ms interval. Idle
+checks run at most once every 30 seconds, including during Kubernetes retries.
+They read any new events after the Pod check so a newly posted message prevents suspension. A pending message prevents suspension
+until a completed or failed turn is recorded.
