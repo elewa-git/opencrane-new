@@ -285,7 +285,7 @@ try {
         await page.getByLabel('Group name').fill('Uncertain group');
         await page.getByRole('button', { name: 'Create group' }).click();
         await page.getByText('Couldn\'t confirm “Uncertain group” was created').waitFor();
-        await page.getByText("We couldn't tell whether the server recorded it").waitFor();
+        await page.getByText('Check its status before sending the same request again.').waitFor();
         await capture(page, 'unknown', width, motion);
         const postsBeforeCheck = createBodies.length;
         await page.getByRole('button', { name: 'Check status' }).click();
@@ -294,8 +294,9 @@ try {
         await capture(page, 'unknown-not-found', width, motion);
         changeUnavailable = true;
         await page.getByRole('button', { name: 'Check status' }).click();
-        await page.getByText("We couldn't tell whether the server recorded it").waitFor();
+        await page.getByText('Couldn\'t confirm “Uncertain group” was created').waitFor();
         assert.equal(await page.getByText('Still applying “Uncertain group”').count(), 0);
+        await page.getByRole('button', { name: 'Send the same request again' }).waitFor();
         await capture(page, 'unknown-unavailable', width, motion);
         changeUnavailable = false;
         await page.getByRole('button', { name: 'Send the same request again' }).click();

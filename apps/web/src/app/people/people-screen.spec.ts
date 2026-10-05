@@ -44,7 +44,9 @@ function rootElement(fixture: ComponentFixture<PeopleScreen>): HTMLElement {
   if (!(element instanceof HTMLElement)) throw new Error('Expected a screen element');
   return element;
 }
-type SeenRequest = { url: string; method: string; body: string | undefined };
+type SeenRequest = {
+  url: string; method: string; body: string | undefined; signal: AbortSignal | null | undefined;
+};
 type RequestHandler = (request: SeenRequest) => Response | Promise<Response>;
 function makeResponse(body: unknown, status = 200): Response {
   return reply(body, status);
@@ -57,6 +59,7 @@ async function mountWithFetch(
       url: requestUrl(input),
       method: options?.method ?? 'GET',
       body: typeof options?.body === 'string' ? options.body : undefined,
+      signal: options?.signal,
     };
     return Promise.resolve(handler(request));
   });
@@ -186,6 +189,55 @@ it('submits with Enter, trims the name and keeps the same command id through the
   expect(root.textContent).toContain('Group “Finance” created');
 });
 
+it('creates a new group with new ids after the first group is current', async () => {
+  const posts: string[] = [];
+  const createdGroups = new Map<string, typeof sampleGroup>();
+  const fixture = await mountWithFetch((request) => {
+    if (request.method === 'POST') {
+      const command = parseCreateCommand(request.body);
+      posts.push(request.body ?? '');
+      createdGroups.set(command.groupId, { ...sampleGroup, groupId: command.groupId,
+        name: command.name, members: [] });
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId });
+    }
+    if (request.url.includes('/changes/')) {
+      const command = parseCreateCommand(posts.at(-1));
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId, projection: { content: 'current', iam: 'current' } });
+    }
+    return makeResponse({ rows: [...createdGroups.values()] });
+  });
+  const root = rootElement(fixture);
+
+  await createGroup(root, fixture, 'Field team');
+  await createGroup(root, fixture, 'Finance');
+
+  const firstCommand = parseCreateCommand(posts[0]);
+  const secondCommand = parseCreateCommand(posts[1]);
+  expect(secondCommand.name).toBe('Finance');
+  expect(secondCommand.commandId).not.toBe(firstCommand.commandId);
+  expect(secondCommand.groupId).not.toBe(firstCommand.groupId);
+  expect(root.textContent).toContain('Group “Finance” created');
+});
+
+async function createGroup(
+  root: HTMLElement, fixture: ComponentFixture<PeopleScreen>, name: string,
+): Promise<void> {
+  button(root, 'New group').click();
+  await settle(fixture);
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = name;
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  button(root, 'Create group').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain(`Group “${name}” created`);
+  });
+}
+
 function isStatusRequest(request: SeenRequest): boolean {
   return request.url.includes('/changes/');
 }
@@ -223,8 +275,12 @@ it('keeps an unknown create available after opening and cancelling the drawer', 
   await settle(fixture);
   await vi.waitFor(() => {
     fixture.detectChanges();
-    expect(root.textContent).toContain("We couldn't tell whether the server recorded it");
+    expect(root.textContent).toContain('Couldn\'t confirm “Finance” was created');
   });
+  expect(root.textContent).toContain('Check its status before sending the same request again.');
+  const reference = root.querySelector('p code')?.textContent;
+  expect(reference).toBeTruthy();
+  expect(root.querySelector('[role="status"] code')?.getAttribute('aria-hidden')).toBe('true');
   const createRequest = requests.find((request) => request.method === 'POST');
   const commandId = parseCreateCommand(createRequest?.body).commandId;
   button(root, 'New group').click();
@@ -278,4 +334,132 @@ it('shows neutral status after a failed list read succeeds on retry', async () =
     expect(root.textContent).toContain('Groups loaded');
   });
   expect(root.textContent).not.toContain('Groups are unavailable right now');
+});
+
+it('clears loaded rows when a later refresh shows that access has changed', async () => {
+  let reads = 0;
+  const fixture = await mountWithFetch(() => {
+    reads += 1;
+    if (reads === 1) return makeResponse({ rows: [sampleGroup] });
+    return makeResponse({ status: 'refused' }, 403);
+  });
+  const root = rootElement(fixture);
+  expect(root.textContent).toContain('Sales team');
+
+  button(root, 'Refresh list').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Your access changed');
+  });
+
+  expect(root.textContent).not.toContain('Sales team');
+  expect(root.querySelector('[aria-label="Groups"]')).toBeNull();
+});
+
+it('keeps a confirmed create message when the list reread fails', async () => {
+  let reads = 0;
+  let createdCommand: ReturnType<typeof parseCreateCommand> | undefined;
+  const fixture = await mountWithFetch((request) => {
+    if (request.method === 'POST') {
+      createdCommand = parseCreateCommand(request.body);
+      return makeResponse({ status: 'appended', groupId: createdCommand.groupId, sequence: 1,
+        changeId: createdCommand.commandId });
+    }
+    if (request.url.includes('/changes/')) {
+      const command = createdCommand;
+      if (!command) throw new Error('Expected the create command before its status read');
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId, projection: { content: 'current', iam: 'current' } });
+    }
+    reads += 1;
+    if (reads === 1) return makeResponse({ rows: [sampleGroup] });
+    return makeResponse({ status: 'unavailable' }, 503);
+  });
+  const root = rootElement(fixture);
+
+  await createGroup(root, fixture, 'Finance');
+
+  expect(root.textContent).toContain('Group “Finance” created');
+  expect(root.textContent).toContain("We couldn't refresh groups");
+});
+
+it('ignores a late current status reply after access is refused', async () => {
+  let releaseStatus: ((response: Response) => void) | undefined;
+  let listReads = 0;
+  const fixture = await mountWithFetch((request) => {
+    if (request.method === 'POST') {
+      const command = parseCreateCommand(request.body);
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId });
+    }
+    if (request.url.includes('/changes/')) {
+      return new Promise((resolve) => { releaseStatus = resolve; });
+    }
+    if (request.url === '/api/groups') {
+      listReads += 1;
+      if (listReads === 1) return makeResponse({ rows: [sampleGroup] });
+    }
+    return makeResponse({ status: 'refused' }, 401);
+  });
+  const root = rootElement(fixture);
+  button(root, 'New group').click();
+  await settle(fixture);
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = 'Finance';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  button(root, 'Create group').click();
+  await vi.waitFor(() => expect(releaseStatus).toBeDefined());
+
+  button(root, 'Refresh list').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Your access changed');
+  });
+  releaseStatus?.(makeResponse({ status: 'appended', groupId: 'finance-id', sequence: 1,
+    changeId: 'late-command', projection: { content: 'current', iam: 'current' } }));
+  await settle(fixture);
+
+  expect(root.textContent).toContain('Your access changed');
+  expect(root.textContent).not.toContain('Finance');
+  expect(root.querySelector('[aria-label="Groups"]')).toBeNull();
+});
+
+it('aborts an in-progress create poll when the screen is destroyed', async () => {
+  let releaseStatus: ((response: Response) => void) | undefined;
+  let statusSignal: AbortSignal | null | undefined;
+  const statusReads: string[] = [];
+  const fixture = await mountWithFetch((request) => {
+    if (request.method === 'POST') {
+      const command = parseCreateCommand(request.body);
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId });
+    }
+    if (request.url.includes('/changes/')) {
+      statusReads.push(request.url);
+      statusSignal = request.signal;
+      return new Promise((resolve) => { releaseStatus = resolve; });
+    }
+    return makeResponse({ rows: [sampleGroup] });
+  });
+  const root = rootElement(fixture);
+  button(root, 'New group').click();
+  await settle(fixture);
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = 'Finance';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  button(root, 'Create group').click();
+  await vi.waitFor(() => expect(releaseStatus).toBeDefined());
+
+  fixture.destroy();
+  expect(statusSignal?.aborted).toBe(true);
+  releaseStatus?.(makeResponse({ status: 'appended', groupId: 'finance-id', sequence: 1,
+    changeId: 'late-command', projection: { content: 'applying', iam: 'applying' } }));
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(statusReads).toHaveLength(1);
 });

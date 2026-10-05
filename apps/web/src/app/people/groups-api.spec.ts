@@ -63,6 +63,30 @@ it('stops after twenty reads and uses the same command id each time', async () =
   vi.unstubAllGlobals();
 });
 
+it('stops polling after the screen is destroyed', async () => {
+  vi.useFakeTimers();
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', (input: RequestInfo | URL) => {
+    requests.push(requestUrl(input));
+    return Promise.resolve(new Response(JSON.stringify({ status: 'appended', groupId: 'group',
+      sequence: 1, changeId: 'change',
+      projection: { content: 'applying', iam: 'applying' } })));
+  });
+  const controller = new AbortController();
+  const pending = followChange('group', 'command', controller.signal);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(requests).toHaveLength(1);
+
+  controller.abort();
+  await vi.advanceTimersByTimeAsync(500);
+
+  await expect(pending).resolves.toEqual({ kind: 'unavailable' });
+  expect(requests).toHaveLength(1);
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
 it('keeps not-found and unavailable status reads distinct', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 404 })));
   await expect(followChange('group', 'command', new AbortController().signal))

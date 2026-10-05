@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { grantSentence, isDuplicateName, newGroupId, useGrants } from './group-wording';
+import { grantResourceLabel, isDuplicateName, newGroupId, useGrants } from './group-wording';
 import type { GroupRow } from '@opencrane/protocol';
 
 const row = {
@@ -22,7 +22,7 @@ it('checks duplicate names without case or surrounding spaces', () => {
 });
 
 it('uses clear wording and omits acts-for grants from the Grants list', () => {
-  expect(grantSentence(row.access.grants[0]!)).toBe('Can use model gpt');
-  expect(grantSentence(row.access.grants[1]!)).toBe('Assistant helper works for this group');
+  expect(grantResourceLabel(row.access.grants[0]!.resourceType)).toBe('model');
+  expect(grantResourceLabel(row.access.grants[1]!.resourceType)).toBe('assistant');
   expect(useGrants(row.access.grants)).toHaveLength(1);
 });

@@ -10,14 +10,15 @@
       [disabled]="state() === 'access'" (click)="openDrawer(createButton)">New group</button>
   </div>
 </div>
-<div role="status" aria-live="polite">
+<div>
   @if (state() === 'loading') {
-    <oc-shared-state kind="checking" message="Loading groups…" />
+    <oc-shared-state kind="checking" message="Loading groups…" [announce]="true" />
   } @else if (operationKind() === 'confirmed') {
     <oc-shared-state kind="confirmed" [message]="operation()"
       [detail]="'Group and access records were current when checked at ' + checkTime() +
         ' UTC. It has no members yet. Creating a group grants nothing.'"
-      [changeReference]="changeReference()" actionLabel="Open group" [showAction]="false" />
+      [changeReference]="changeReference()" [hideReferenceFromAnnouncement]="true"
+      actionLabel="Open group" [showAction]="false" [announce]="true" />
     <a class="button secondary" [href]="'/org/people/groups/' + highlightedGroupId()">Open group</a>
     @if (state() === 'failed') {
       <div class="refresh-notice"><div><strong>Showing what we loaded at {{ loadedTime() }}</strong>
@@ -25,32 +26,38 @@
     }
   } @else if (operationKind() === 'unknown' || operationKind() === 'applying') {
     <oc-shared-state [kind]="operationKind()" [message]="operation()"
-      [detail]="operationKind() === 'applying'
-        ? 'The change was recorded. Its records are not current yet.'
-        : retryAfterNotFound() ? '' : 'Check its status before sending the same request again.'"
-      [changeReference]="changeReference()" [showAction]="false" />
-    <button type="button" class="button secondary" (click)="checkStatus()">Check status</button>
+      [detail]="statusDetail()" [changeReference]="changeReference()"
+      [hideReferenceFromAnnouncement]="true" [showAction]="false" [announce]="true" />
+    @if (operationKind() === 'unknown') {
+      <button type="button" class="button secondary" (click)="checkStatus()">Check status</button>
+    }
     @if (retryAfterNotFound()) {
       <button type="button" class="button secondary" (click)="resend()">
         Send the same request again</button>
     }
+  } @else if (operationKind() === 'refused') {
+    <oc-shared-state kind="refused" [message]="operation()" [showAction]="false"
+      [announce]="true" />
   } @else if (state() === 'access') {
     <oc-shared-state kind="access_changed" message="Your access changed"
       [detail]="accessDetail()"
-      [showAction]="false" />
+      [showAction]="false" [announce]="true" />
   } @else if (state() === 'failed' && !loadedAt()) {
     <oc-shared-state kind="failed" message="Groups are unavailable right now"
       detail="Nothing changed. Reading again is safe." [safeToRetry]="true"
-      actionLabel="Try again" (action)="load()" />
+      actionLabel="Try again" (action)="load()" [announce]="true" />
   } @else if (state() === 'retrying') {
-    <span class="sr-only">{{ operation() }}</span>
+    <span class="sr-only" role="status" aria-live="polite">{{ operation() }}</span>
   } @else if (state() === 'failed') {
     <div class="refresh-notice"><div><strong>Showing what we loaded at {{ loadedTime() }}</strong>
       <p>We couldn't refresh groups. Nothing changed because of this.</p></div>
       <button class="button secondary" type="button" (click)="load()">Refresh list</button>
     </div>
   } @else {
-    <span class="sr-only">{{ operation() }}</span>
+    <span class="sr-only" role="status" aria-live="polite">{{ operation() }}</span>
+  }
+  @if (changeReference()) {
+    <p>Reference: <code>{{ changeReference() }}</code></p>
   }
 </div>
 @if (state() !== 'access') {

@@ -13,7 +13,6 @@
     @if (group().members.length === 0) {
       <oc-shared-state kind="not_configured" message="No members yet" [showAction]="false" />
     }
-    <p>{{ sourceLabel(group().membershipSource) }}</p>
   </section>
   <section class="paper-card" [ocDogEar]="true"><h2>Shared assistant</h2>
     @if (sharedAssistantIds(group().access.grants).length) {
@@ -24,9 +23,11 @@
     } @else { <p>No shared assistant</p> }
   </section>
   <section class="paper-card" [ocDogEar]="true"><h2>Grants</h2>
-    <p>{{ useGrants(group().access.grants).length }} · Members get these while they belong</p>
+    <p>{{ grantCountLabel(useGrants(group().access.grants).length) }} ·
+      Members get these while they belong</p>
     <ul>@for (grant of useGrants(group().access.grants); track grant.resourceId) {
-      <li>{{ grantSentence(grant) }}</li>
+      <li>Can use {{ grantResourceLabel(grant.resourceType) }}
+        <code>{{ grant.resourceId }}</code></li>
     }</ul>
   </section>
 </div>

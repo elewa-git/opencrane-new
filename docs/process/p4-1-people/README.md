@@ -25,10 +25,10 @@ People & groups frames. A state listed for a width is captured at 1280px, 390px 
 | PPL-03 | `empty-*`, `no-match-*` | Empty groups and empty search use words and one action. They have no illustration. |
 | PPL-04 | `loading-*` | Four grain rows show loading. |
 | PPL-05 | `stale-*` | The notice gives the last successful load time. It says a failed read did not change data. |
-| PPL-06 | `create-duplicate-*`, `unknown-*`, `unknown-not-found-*`, `unknown-unavailable-*` (1280px only) | There is no description field. Duplicate names are checked against loaded names. An unknown result tells the Owner to check its status before sending again. A not-found result has no extra detail. |
+| PPL-06 | `create-duplicate-*`, `unknown-*`, `unknown-not-found-*`, `unknown-unavailable-*` (1280px only) | There is no description field. Duplicate names are checked against loaded names. An unknown result says which group could not be confirmed and gives the advice once. A not-found result has no extra detail. |
 | PPL-07 | `created-*` | “Open group” replaces “Add members”. The detail gives the time when both records were checked, not when the change happened. |
 | PPL-08 | `menu-*` | The organisation shell supplies the phone menu and returns focus to its button. |
-| PPL-10 | `detail-local-*`, `detail-empty-*`, `detail-not-found-*` | There is no email, role, Since or More action. Members appear in a full-width list after three summary cards. The unavailable Add members message replaces the frame’s Add members action. Grants shows only use grants; the shared assistant has its own card. |
+| PPL-10 | `detail-local-*`, `detail-empty-*`, `detail-not-found-*` | There is no email, role, Since or More action. Three summary cards show the member count and source, shared assistant and grants before the full-width member list. The unavailable Add members message replaces the frame’s Add members action. Grants shows only use grants; the shared assistant has its own card. |
 | PPL-12 | `detail-supplied-*` | The page has no provider name, sync time or “How sync works” link. The membership notice is grey. The page has no add-members message. |
 | PPL-13–15 | — | The removal screens and their captures are added by the next change. |
 | PPL-16 | `access-changed-*`, `session-ended-*` (1280px only) | Access loss clears group and member details. Session-ended wording differs from a role change. |
@@ -40,10 +40,12 @@ work. A check that was not run is not evidence that the feature works.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Lint | PASS | `nice -n 10 npm run lint`; six existing line-count warnings remain. |
-| Typecheck | PASS | `nice -n 10 npm run typecheck -w apps/web`. |
+| Lint | PASS | `nice -n 10 npm run lint`; seven line-count warnings were reported in other files. |
+| Typecheck | PASS | `nice -n 10 npm run typecheck`. |
+| Event catalogue | PASS | `nice -n 10 npm run check:events`; all 95 event types agree. |
 | Angular build | PASS | `nice -n 10 npm run build -w apps/web`; the bundle, People & groups CSS and noVNC warnings remain. |
-| Angular tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 27 files and 181 tests passed. |
+| Focused People and API tests | PASS | 27 tests passed across four files. |
+| Angular tests | FAIL | 27 files; 181 passed and 6 unrelated shared-state, register and chat tests failed under shared host load. |
 | People visual check | PASS | 78 captures at 1280px, 390px and 320px, with normal and reduced motion. |
 | F1 visual check | PASS | 56 captures. |
 | F2 visual check | PASS | 38 captures. |

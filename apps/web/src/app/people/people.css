@@ -57,7 +57,7 @@ p, small { color: var(--oc-ink-admin-muted); }
   background: var(--oc-info-notice); border: 1px solid var(--oc-border-default);
   border-radius: var(--oc-radius-card); }
 .supplied p { margin: 6px 0 0; }
-.field-error { color: var(--oc-warning-text); }
+.field-error { color: var(--oc-danger); }
 .skeleton-row { margin: 10px 0; }
 nav[aria-label=Breadcrumb] { margin: 0 0 16px; overflow-wrap: anywhere; }
 nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-items: center;
@@ -76,7 +76,7 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
 .lock { position: relative; display: inline-block; width: 12px; height: 9px;
   margin: 0 2px; border: 1.5px solid currentColor; border-radius: 2px;
   vertical-align: -1px; }
-.lock::before { position: absolute; top: -7px; left: 2px; width: 5px; height: 6px;
+.lock::before { position: absolute; top: -5px; left: 2px; width: 5px; height: 6px;
   border: 1.5px solid currentColor; border-bottom: 0; border-radius: 5px 5px 0 0;
   content: ''; }
 .add-members { margin-top: 20px; }

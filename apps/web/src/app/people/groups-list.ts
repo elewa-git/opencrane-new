@@ -9,7 +9,6 @@ export class GroupsList {
   readonly rows = input.required<GroupRow[]>();
   readonly highlightedGroupId = input<string>();
   protected readonly memberCountLabel = memberCountLabel;
-  protected readonly sharedAssistantIds = sharedAssistantIds;
   protected readonly sourceLabel = sourceLabel;
 
   protected assistantLine(group: GroupRow): string {

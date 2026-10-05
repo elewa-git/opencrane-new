@@ -53,6 +53,7 @@ export class PeopleScreen implements OnInit, OnDestroy {
 
   protected select(tab: Tab): void { this.selectedTab.set(tab); }
   protected openDrawer(button: HTMLButtonElement): void {
+    if (!this.hasUnresolvedCreate()) this.pendingCreate = undefined;
     this.opener = button;
     this.drawerOpen.set(true);
     this.draftName.set('');
@@ -81,6 +82,13 @@ export class PeopleScreen implements OnInit, OnDestroy {
   protected hasUnresolvedCreate(): boolean {
     return this.pendingCreate !== undefined &&
       (this.operationKind() === 'unknown' || this.operationKind() === 'applying');
+  }
+  protected statusDetail(): string {
+    if (this.operationKind() === 'applying') {
+      return 'The change was recorded. Its records are not current yet.';
+    }
+    if (this.retryAfterNotFound()) return '';
+    return 'Check its status before sending the same request again.';
   }
   protected async create(): Promise<void> {
     if (this.createDisabled()) return;
@@ -215,8 +223,7 @@ export class PeopleScreen implements OnInit, OnDestroy {
         return;
       }
       this.operationKind.set('unknown');
-      this.operation.set(`Couldn't confirm “${pendingCreate.name}” was created. ` +
-        "We couldn't tell whether the server recorded it. Check its status before sending again.");
+      this.operation.set(`Couldn't confirm “${pendingCreate.name}” was created`);
       return;
     }
     // Describe when both reads were current, not when the group was created.
@@ -224,6 +231,7 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.operation.set(`Group “${pendingCreate.name}” created`);
     this.operationKind.set('confirmed');
     this.highlightedGroupId.set(pendingCreate.groupId);
+    this.pendingCreate = undefined;
     await this.load();
   }
   private async handleCreateFailure(result: Exclude<Awaited<ReturnType<typeof sendCreateGroup>>,
@@ -231,13 +239,17 @@ export class PeopleScreen implements OnInit, OnDestroy {
     const kind = result.kind;
     if (kind === 'invalid') {
       this.pendingCreate = undefined;
+      this.retryAfterNotFound.set(false);
       this.draftError.set('The server refused this name. Use 1 to 200 characters.');
+      this.showResendFailure('The server refused this name. Nothing was created.');
       return;
     }
     if (kind === 'conflict') {
       this.pendingCreate = undefined;
+      this.retryAfterNotFound.set(false);
       this.draftError.set('This group changed or already exists. Nothing was created. ' +
         'Cancel, refresh the list and try again.');
+      this.showResendFailure('This group changed or already exists. Nothing was created.');
       return;
     }
     if (kind === 'access_changed') {
@@ -246,19 +258,25 @@ export class PeopleScreen implements OnInit, OnDestroy {
     }
     if (kind === 'refused') {
       this.pendingCreate = undefined;
+      this.retryAfterNotFound.set(false);
       await this.load();
       if (!this.request.signal.aborted && this.state() !== 'access') {
         this.draftError.set('The server refused this change. Nothing was created.');
+        this.showResendFailure('The server refused this change. Nothing was created.');
       }
       return;
     }
     this.drawerOpen.set(false);
     this.changeReference.set(this.pendingCreate?.commandId);
     const groupName = this.pendingCreate?.name ?? this.draftName().trim();
-    this.operation.set(`Couldn't confirm “${groupName}” ` +
-      'was created. We couldn\'t tell whether the server recorded it. Check its status before ' +
-      'sending again.');
+    this.operation.set(`Couldn't confirm “${groupName}” was created`);
+    this.retryAfterNotFound.set(false);
     this.operationKind.set('unknown');
+  }
+  private showResendFailure(message: string): void {
+    this.operation.set(message);
+    this.operationKind.set('refused');
+    this.changeReference.set(undefined);
   }
   private clearForAccessChange(status?: number): void {
     // Clear protected names and references before a late response can redraw them.
@@ -268,6 +286,7 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.draftName.set('');
     this.drawerOpen.set(false);
     this.pendingCreate = undefined;
+    this.retryAfterNotFound.set(false);
     this.changeReference.set(undefined);
     this.state.set('access');
     this.operationKind.set('access_changed');
