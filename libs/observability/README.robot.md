@@ -3,8 +3,8 @@
 For people, read [README.md](README.md) first.
 
 This package supplies structured logs, async context and manual handler spans for
-Node services. The [server](../../apps/server/README.md), background workers, event
-handlers and projections use it for logs and traces. It does not store business truth
+Node services. The server, background workers, event handlers and projections use it
+for logs. Only the server starts tracing. It does not store business truth
 or guarantee delivery to a collector.
 
 ## Public contract and usage

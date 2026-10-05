@@ -2,7 +2,7 @@
 
 ## What this is
 
-The AI access and spending library for OpenCrane. Its running part is the models process, started by `apps/server`; it sits beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also owns model choice, prices, [budgets](../../GLOSSARY.md#budget), tool rules, approvals, provider settings, [grants](../../GLOSSARY.md#grant), ownership and spending records.
+The AI access and spending library for OpenCrane. Its running part is the models process, a separate program whose start file lives in `apps/server` (`src/models-main.ts`). It runs beside [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), which forwards AI requests. The library also picks the model for each task, keeps the price list and [budgets](../../GLOSSARY.md#budget), holds the [tool rules](../../GLOSSARY.md#tool-rule-allow-ask-block) and the one-time approvals for Ask tools, and records who owns the silo.
 
 ## Where it fits
 
@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -->|starts models process| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.-> models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -22,18 +22,18 @@ flowchart LR
 
 - Choose an AI model for each task from a fixed routing table.
 - Keep model prices and estimate each request's cost before sending it.
-- Set daily and monthly spending limits for the silo, groups and assistants.
+- Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
 - Hold money before an AI call and settle the charge when usage is reported.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
 - Start agentgateway without giving its provider key to the server or computer.
-- Record provider use and keep the reservation when a call's result is unknown.
-- Manage model and tool grants, group spending, ownership, provider settings and safe spending history.
+- Record what the AI provider used. When the result of a call is unknown, keep the held money in place until an owner or admin settles it.
+- Give new members and assistants access to the active models ([grants](../../GLOSSARY.md#grant)), record the silo's first owner, store the AI provider settings that admins enter, and show spending history without private details.
 
 ## Processes it handles
 
-1. **A person sends a chat message.** The server and computer choose a model for the task. The models process checks the passes, permissions and budget, then agentgateway sends an allowed call to the provider.
-2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the full reservation stays in place for review.
-3. **An owner changes access or spending.** The server records the change as an [event](../../GLOSSARY.md#event), and background work updates the permission store or spending tables from the event history.
+1. **A person sends a chat message.** The server and the computer pick the model for the task. The computer sends the AI call to agentgateway. agentgateway asks the models process, which checks the passes, permissions and budget and holds the money. If the call is allowed, agentgateway sends it to the AI provider.
+2. **An AI call finishes.** The gateway reports its use and the library settles the held amount. If the result cannot be confirmed, the held money stays in place for review.
+3. **An admin or owner changes access or spending.** The change is saved as an [event](../../GLOSSARY.md#event): the server saves tool rules and grants, and the models process saves spending limits. Background workers then update OpenFGA and the spending tables.
 
 ## How to run or test it
 
@@ -41,6 +41,8 @@ flowchart LR
 npm test -- libs/models
 npm run typecheck -w libs/models
 ```
+
+Some tests use Docker and a PostgreSQL test database. README.robot.md lists what they need.
 
 A small example selects the model for a chat turn:
 
@@ -53,5 +55,5 @@ const model = modelForTask('chat_turn');
 ## Where to read more
 
 - [README.robot.md](README.robot.md): exact prices, limits, settings, event rules and test detail.
-- [The server](../../apps/server/README.md) starts the models process.
+- [The server](../../apps/server/README.md) holds the start file for the models process.
 - [The glossary](../../GLOSSARY.md#models-process) explains the running process and AI gateway.

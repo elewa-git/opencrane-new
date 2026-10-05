@@ -14,14 +14,14 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
-  auth -->|checks computer records| events["libs/event-store<br/>saved events"]
+  auth -->|reads computer events| events["Event log<br/>saved events"]
 ```
 
 ## What it is responsible for
 
 - Send a person to Zitadel and check the sign-in response using OIDC, a standard sign-in method.
-- Keep sign-in and sign-in-flow details in protected cookies.
-- Check that a person belongs to this silo's organisation and that a sensitive action follows a recent sign-in.
+- Keep the signed-in person, and the details of a sign-in still in progress, in encrypted cookies.
+- Check that a person belongs to this [silo](../../GLOSSARY.md#silo)'s organisation and that a sensitive action follows a recent sign-in.
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
 - Sign and check short-lived passes for computers and individual chat turns.
 - Check computer and turn passes against the computer's recorded state.
@@ -29,8 +29,9 @@ flowchart LR
 ## Processes it handles
 
 1. **A person signs in.** The server asks this library for a sign-in link and sends the browser to Zitadel. The library checks the response and gives the server a protected session cookie.
-2. **A person signs out or confirms a sensitive action.** The server clears the cookie and sends the browser to Zitadel to end its session, or asks for a fresh sign-in when the current one is too old.
-3. **A computer starts a chat turn.** The worker gives it a short-lived computer pass, and the server gives it a pass for that turn. The models process checks both passes before allowing an AI call.
+2. **A person signs out.** The server clears the cookie and sends the browser to Zitadel to end its session.
+3. **A person confirms a sensitive action.** If the sign-in is too old, the server asks the person to sign in again.
+4. **A computer runs a chat turn.** When the computer is ready, a background worker gives it a computer pass. For each chat turn, the server gives it a turn pass. The models process checks both passes before it allows an AI call.
 
 ## How to run or test it
 

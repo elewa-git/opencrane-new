@@ -2,11 +2,11 @@
 
 ## What this is
 
-Shared message shapes for the OpenCrane browser app and back end. Both sides use the same schemas to check messages before using them. The package also defines the shapes for chat, computers, integrations, budgets, approvals and audit history.
+Shared message shapes for the OpenCrane browser app and back end. Both sides use the same schemas, written rules for what each message must contain, to check messages before using them. The package also defines the shapes for chat, computers, integrations, budgets, approvals and the history of changes.
 
 ## Where it fits
 
-This shared library is used by the browser app, back end, projections and models library. It depends on Zod, a data-checking library, and does not store [events](../../GLOSSARY.md#event) or decide who may act.
+This shared library is used by the browser app (`apps/web`), the back end (`apps/server`), the [read-table](../../GLOSSARY.md#read-table-projection) library (`libs/projections`) and the models library (`libs/models`). It depends on Zod, a library for checking data. It does not store [events](../../GLOSSARY.md#event) or decide who may act.
 
 ```mermaid
 flowchart LR
@@ -19,15 +19,15 @@ flowchart LR
 ## What it is responsible for
 
 - Define the messages exchanged over the live browser connection.
-- Define the data returned for chat, computers, integrations, budgets, approvals and audit history.
-- Reject messages with missing, extra or incorrectly typed fields.
+- Define the data returned for chat, computers, integrations, budgets, approvals and the history of changes.
+- Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
 
 ## Processes it handles
 
 1. **A browser sends a live message.** The server checks the message against the shared schema before handling it. The browser checks server replies before showing them.
 2. **A person opens a conversation or settings page.** The server returns data in a shared shape, and the browser checks that shape before drawing the page.
-3. **A person reviews change history.** The server filters the response, then both sides use the same shapes for the request and result.
+3. **A person reviews the history of changes.** The server filters the response, then both sides use the same shapes for the request and result.
 
 ## How to run or test it
 

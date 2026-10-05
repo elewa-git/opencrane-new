@@ -2,7 +2,7 @@
 
 ## What this is
 
-Shared logs and optional traces for OpenCrane services and background work. Logs are structured JSON lines, with sensitive details removed. Traces can show how long background work takes when a trace collector is configured.
+Shared logs and optional traces for OpenCrane services and background work. Logs are JSON lines with sensitive details removed. The server can also send traces, timing records that show how long each step took, when a trace collector is set up. The background workers do not send traces yet.
 
 ## Where it fits
 
@@ -20,16 +20,16 @@ flowchart LR
 ## What it is responsible for
 
 - Write structured log lines and remove sensitive fields and web address queries.
-- Carry safe request details through asynchronous work.
+- Carry request details, such as a request id, into later work, so that every log line for one request can be linked.
 - Record when an event handler starts, finishes or fails, and how long it takes.
 - Start optional OpenTelemetry traces, timing records that link work across services.
 - Flush waiting traces during shutdown and report flush failures to the caller.
 
 ## Processes it handles
 
-1. **A service starts.** It creates a logger and turns on tracing only when a collector address is configured.
+1. **The server starts.** It creates a logger, and turns on tracing only when a collector address is set. The background workers create a logger but do not start tracing yet.
 2. **A request or background job runs.** The library carries its safe identifiers into log lines. For a [handler](../../GLOSSARY.md#reaction-handler), background work that responds to an event, it records the start, result and duration, then passes any failure back to the caller.
-3. **A service shuts down.** It asks the tracing SDK to send waiting records and reports any flush error through the supplied callback.
+3. **The server shuts down.** It asks the tracing library to send any timing records still waiting. If that fails, it logs the error and still shuts down.
 
 ## How to run or test it
 
