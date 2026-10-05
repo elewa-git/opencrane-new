@@ -1,8 +1,8 @@
 # Live view pauses while access checks are unavailable — #77, PR 2 of 2
 
-**Status: PARTIAL.** Requested rebase checks pass; the first complete root gate
-is **FAIL**, with both failed cases passing unchanged in isolation. Fresh-install
-live qualification and real Kasm pause/replay remain **NOT RUN** in this change.
+**Status: PARTIAL.** All requested focused rebase checks pass. Both complete
+root runs are **FAIL**; the final run has one unrelated gateway-test timeout.
+Fresh-install live qualification and real Kasm pause/replay remain **NOT RUN**.
 
 Built on PR 1 (#147) in `work/i77-pause`, on 4 October 2026.
 Failing-first and initial source checks used
@@ -169,5 +169,41 @@ isolated passes. No timeout, deadline, fence, heartbeat or assertion was changed
 These results do not claim source ready or capability done.
 
 Main advanced during the run with #152 at `ce0e07b` (fixture cleanup and gateway
-startup diagnostics). The branch is being brought onto that main commit before
-its final combined-source verification and push.
+startup diagnostics). A further `git rebase origin/main` completed without any
+conflict. Final combined-source verification uses `0a7ee4d` on that main commit.
+
+### Final combined-source verification
+
+All commands below use the same PostgreSQL URL and `nice -n 10` as above.
+The final source is `0a7ee4d`; only this receipt and its ledger index change afterwards.
+The branch contains main at `ce0e07b`, both pause commits and the browser conflict
+resolution. No rebase state remains. Changelog and ledger union checks pass;
+benchmarks, shared authority deadlines, gateway diagnostics and fixture cleanup
+retain every main change.
+
+| Command | Result |
+| --- | --- |
+| `npm run lint` | PASS; six existing function-size warnings |
+| `npm run typecheck` | PASS; every workspace |
+| `npm run check:events` | PASS; 86 event types agree |
+| `npm run test -w apps/web -- --watch=false` | PASS; 18 files / 119 tests, including real-noVNC pause/replay |
+| `npm run build -w apps/web` | PASS; existing bundle/CSS-budget and noVNC CommonJS warnings |
+| Requested live-view, view-lease and view-delivery group, repeated inside the final root run | PASS; 97 tests / two opt-in k3d tests skipped |
+| `npm test -- --maxWorkers=1 --reporter=verbose` | FAIL; 98 files passed / one failed / four skipped; 1,579 tests passed / one failed / 15 skipped; 3,212.48 s |
+
+Both failures from the first complete run passed in this complete rerun:
+realtime paused-consumer reconnect and the 100,000-event authority-volume bound.
+The final failure is `libs/models/test/gateway.test.ts:759`, the native Codex
+request-shape case, which exceeded its existing 40,000 ms limit. The case and
+its production path are unchanged from final main. This is a new failure from
+the combined full run, not an isolated-replay pass being counted as a green gate.
+The first exact replay failed in its suite's `beforeAll` fixture: the gateway
+exited with code 1 and `Error: readiness server starts`, so the selected case
+was NOT RUN (81 cases skipped). The same command was repeated once with unchanged
+limits and passed: one test / 80 unselected skips, 16.70 s. Both replay logs are
+retained as `final-failure-replay.log` and `final-failure-replay-2.log`. The full
+run's timeout is still a failure; the isolated pass does not turn the root gate green.
+
+The complete root gate remains FAIL. Independent review, hosted CI and fresh-install
+Kasm qualification remain pending; the PR stays draft. No timeout, deadline,
+fence, heartbeat, queue bound, permission check or existing assertion was relaxed.
