@@ -1,0 +1,3 @@
+command=nice -n 10 npx tsc --noEmit -p infra/dev-stack/tsconfig.json
+exit=0
+result=PASS with temporary local observer-order/selector adjustment; product code and deadlines unchanged
