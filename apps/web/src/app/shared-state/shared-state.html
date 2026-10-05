@@ -39,7 +39,10 @@
       <span class="detail">Evidence: <time [attr.datetime]="evidenceAt()">{{ evidenceTime() }}</time></span>
     }
     @if (stateTime()) { <time class="detail" [attr.datetime]="timestamp()">{{ stateTime() }}</time> }
-    @if (changeReference()) { <code class="detail">{{ changeReference() }}</code> }
+    @if (changeReference()) {
+      <code class="detail" [attr.aria-hidden]="hideReferenceFromAnnouncement() ? 'true' : null">
+        {{ changeReference() }}</code>
+    }
   </span>
   @if (shownAction(); as label) {
     <button type="button" class="state-action" (click)="action.emit()">{{ label }}</button>

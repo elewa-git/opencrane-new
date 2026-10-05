@@ -1,0 +1,22 @@
+<ul aria-label="Groups" class="group-list">
+  @for (group of rows(); track group.groupId) {
+    <li [class.highlighted]="highlightedGroupId() === group.groupId">
+      <a class="group-row" [href]="'/org/people/groups/' + group.groupId">
+        <span class="group-name"><span class="column-label">Group: </span>
+          <strong>{{ group.name }}</strong>
+          <small>{{ highlightedGroupId() === group.groupId ? 'New' : assistantLine(group) }}</small>
+        </span>
+        <span><span class="column-label">Members: </span>{{ memberCountLabel(group.members.length) }}</span>
+        <span><span class="column-label">Source: </span>{{ sourceLabel(group.membershipSource) }}</span>
+        <span class="row-status"><span class="column-label">Status: </span>
+          @if (!group.members.length) {
+            <oc-shared-state kind="not_configured" message="No members yet" [showAction]="false" />
+          } @else if (group.membershipSource === 'identity_provider') {
+            <span class="lock" aria-hidden="true"></span> Read-only here
+          } @else { Editable here }
+        </span>
+        <span class="chevron" aria-hidden="true">›</span>
+      </a>
+    </li>
+  }
+</ul>

@@ -8,7 +8,8 @@ function checkTrailingSlash(pathname: string): void {
 
 const destinations = [
   '/org', '/org/integrations', '/org/integrations/new',
-  '/org/integrations/server/tools', '/org/spending', '/org/models',
+  '/org/integrations/server/tools', '/org/spending', '/org/models', '/org/people',
+  '/org/people/groups/sales-team',
 ];
 it.each(destinations)(
   'retains the destination with a trailing slash at %s', checkTrailingSlash,
@@ -17,6 +18,8 @@ it.each(destinations)(
 function checkNonNavigationPages(): void {
   expect(organisationPage('/org/states')).toBeUndefined();
   expect(organisationPage('/org/missing')).toBeUndefined();
+  expect(organisationPage('/org/people/groups')).toBeUndefined();
+  expect(organisationPage('/org/people/groups/' + 'x'.repeat(201))).toBeUndefined();
   expect(organisationPageLabel(undefined)).toBeUndefined();
   expect(normalisePathname('/')).toBe('/');
 }

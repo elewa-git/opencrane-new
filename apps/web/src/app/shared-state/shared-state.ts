@@ -47,6 +47,7 @@ export class SharedState {
   readonly evidenceAt = input<string>();
   readonly timestamp = input<string>();
   readonly changeReference = input<string>();
+  readonly hideReferenceFromAnnouncement = input(false);
   // Repeated rows stay silent. The operation's container normally owns announcements.
   readonly announce = input(false);
   readonly action = output<void>();

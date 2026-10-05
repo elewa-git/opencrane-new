@@ -211,8 +211,20 @@ describe('MCP register', () => {
     }
   }
 
-  const unavailablePaths = ['/org/overview', '/org/people', '/org/routines', '/org/missing'];
+  const unavailablePaths = ['/org/overview', '/org/routines', '/org/missing'];
   it.each(unavailablePaths)('shows truthful availability at %s', checkUnavailablePage);
+
+  it.each(['/org/people', '/org/people/groups/sales-team'])(
+    'mounts People & groups at %s', async (pathname) => {
+      globalThis.history.replaceState({}, '', pathname);
+      const fixture = create(response({ rows: [] }));
+      await fixture.whenStable();
+      const element = root(fixture);
+      expect(element.querySelector('.sidebar [aria-current="page"]')?.getAttribute('href'))
+        .toBe('/org/people');
+      expect(element.querySelector('oc-people-screen, oc-group-detail-screen')).not.toBeNull();
+      fixture.destroy();
+    });
 
   it('keeps the existing sign-in shell outside /org routes', () => {
     globalThis.history.replaceState({}, '', '/');

@@ -9,6 +9,11 @@ export const organisationPages = [
 ] as const;
 
 export type OrganisationPage = typeof organisationPages[number]['id'];
+const peopleGroupPath = /^\/org\/people\/groups\/([\w-]{1,200})$/u;
+
+export function peopleGroupId(pathname: string): string | undefined {
+  return peopleGroupPath.exec(normalisePathname(pathname))?.[1];
+}
 
 export function organisationPage(pathname: string): OrganisationPage | undefined {
   pathname = normalisePathname(pathname);
@@ -20,6 +25,9 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
     if (pathname === page.href) {
       return page.id;
     }
+  }
+  if (pathname === '/org/people' || peopleGroupId(pathname) !== undefined) {
+    return 'people';
   }
   if (pathname === '/org/integrations/new') {
     return 'integrations';

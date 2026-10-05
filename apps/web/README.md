@@ -19,11 +19,12 @@ flowchart LR
 - Shows sign-in and the first-owner claim page.
 - Lets people start conversations, send messages and stop a reply.
 - Shows tool approval requests, uploaded files and the assistant's desktop.
-- Gives admins pages for integrations, models, spending and change history.
+- Gives admins pages for People & groups at `/org/people` and
+  `/org/people/groups/<id>`, integrations, models, spending and change history.
 - Clears private information when the server refuses access.
 - Adapts the workspace and menus for phones and desktop screens.
 - Supports keyboard use in menus, dialogs and the chat workspace.
-- Not built yet: the organisation overview, People & groups and Routines pages.
+- Not built yet: the organisation overview and Routines pages.
 - Not built yet: several personal settings pages, which show an unavailable message.
 
 ## Processes it handles
@@ -35,6 +36,8 @@ flowchart LR
 4. **An admin reviews a tool.** The website shows the tools found on a tool server (MCP server) that an admin has added. The admin can allow, ask before use or block each tool.
 5. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation.
 6. **An admin checks a change.** The website shows organisation history to people with access.
+7. **An Owner or Admin opens People & groups.** The website checks group reads,
+   shows members and grants, and creates groups through the server.
 
 ## How to run or test it
 

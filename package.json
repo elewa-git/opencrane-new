@@ -33,7 +33,8 @@
     "visual:f2-drawers": "npm run ng -w apps/web -- build --browser test/overlays-main.ts --ts-config test/tsconfig.live-view.json --output-path dist/overlays --base-href /overlay-fixture/ && node scripts/check-f2-drawers.mjs",
     "visual:f3-org-shell": "node scripts/check-f3-org-shell.mjs",
     "visual:f4-settings": "node scripts/check-f4-settings.mjs",
-    "visual:f5-workspace": "npm run build -w apps/web && node scripts/check-f5-workspace.mjs"
+    "visual:f5-workspace": "npm run build -w apps/web && node scripts/check-f5-workspace.mjs",
+    "visual:p4-1-people": "node scripts/check-p4-1-people.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

@@ -11,9 +11,12 @@ import { SignIn } from './sign-in/sign-in';
 import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
-import { normalisePathname, organisationPage, organisationPageLabel } from './organisation/pages';
+import { normalisePathname, organisationPage, organisationPageLabel, peopleGroupId }
+  from './organisation/pages';
 import { AccountScreen } from './settings/account-screen';
 import { PersonalSettingsShell } from './settings/personal-settings-shell';
+import { PeopleScreen } from './people/people-screen';
+import { GroupDetailScreen } from './people/group-detail-screen';
 import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
 
 @Component({
@@ -21,7 +24,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
   imports: [
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, OrganisationShell,
-    AccountScreen, PersonalSettingsShell,
+    AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -40,6 +43,7 @@ export class App {
   protected readonly accountPath = this.pathname === '/account'
     || this.pathname.startsWith('/account/');
   protected readonly activePage = organisationPage(this.pathname);
+  protected readonly peopleGroupId = peopleGroupId(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
   protected readonly auditConversation = /^\/history\/([\w-]+)$/u.exec(this.pathname)?.[1];

@@ -6,6 +6,8 @@ This Angular app provides the organisation settings shell and MCP register.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+People & groups reads flat group rows from `/api/groups`, validates them through
+the shared protocol package and creates groups through the same-origin API.
 
 ## Entrypoint and usage
 
@@ -18,8 +20,9 @@ npm run dev -w apps/web
 
 Open `http://localhost:4200/org/integrations`; `/org` also opens this implemented page.
 Organisation navigation is Overview, People & groups, Models & providers, Spending,
-Integrations, Routines and Change history. Overview, People & groups and Routines
-show explicit availability states until their screens are built. Desktop uses a
+Integrations, Routines and Change history. People & groups reads the flat group list,
+shows read-only group details and lets Owners and Admins create groups. Overview and
+Routines show explicit availability states until their screens are built. Desktop uses a
 220px sidebar; phones use the shared modal menu. Back to workspace opens `/workspace`.
 `/org/states` renders the shared state vocabulary for development and visual checks,
 but is not a navigation destination. [F3 source receipt](../../docs/process/f3-org-shell/README.md).
