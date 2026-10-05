@@ -33,7 +33,14 @@
 </div>
 <section class="paper-card members-section">
   <h2>Members</h2>
-  @if (group().members.length === 0) {
+  @if (pendingMemberId() !== undefined) {
+    <p>A removal is in progress. Check its status before starting another one.</p>
+  }
+  @if (membersUnavailable()) {
+    <oc-shared-state kind="failed" message="Couldn't refresh this group"
+      detail="The removal was confirmed. Try reading the group again."
+      [safeToRetry]="true" actionLabel="Try again" (action)="refreshRequested.emit()" />
+  } @else if (group().members.length === 0) {
     <p>No members yet</p>
   } @else {
     <ul aria-label="Members of {{ group().name }}" class="members">
@@ -43,11 +50,17 @@
             <span><span class="lock" aria-hidden="true"></span>
               From your identity provider</span>
           }
+          @if (canManage() && member.membershipSource === 'local') {
+            <button type="button" class="button remove-button"
+              [attr.aria-label]="'Remove ' + member.displayName + ' from ' + group().name"
+              [disabled]="pendingMemberId() !== undefined"
+              (click)="requestRemove(member, $event)">Remove</button>
+          }
         </li>
       }
     </ul>
   }
-  <footer>{{ memberCountLabel(group().members.length) }}</footer>
+  @if (!membersUnavailable()) { <footer>{{ memberCountLabel(group().members.length) }}</footer> }
 </section>
 @if (group().membershipSource === 'local') {
   <section class="add-members"><oc-shared-state kind="not_configured"

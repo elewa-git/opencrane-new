@@ -1,6 +1,6 @@
 import {
   createGroupCommandSchema, groupChangeSchema, groupReceiptSchema, groupsResponseSchema,
-  type GroupRow,
+  removeMemberCommandSchema, type GroupRow,
 } from '@opencrane/protocol';
 
 export type FailureKind = 'access_changed' | 'refused' | 'invalid' | 'conflict'
@@ -61,6 +61,15 @@ export async function sendCreateGroup(
   const command = createGroupCommandSchema.safeParse(body);
   if (!command.success) return { kind: 'invalid' };
   return sendPost('/api/groups', command.data, signal);
+}
+
+export async function sendRemoveMember(
+  groupId: string, body: unknown, signal: AbortSignal,
+): Promise<Outcome<ReturnType<typeof groupReceiptSchema.parse>>> {
+  const command = removeMemberCommandSchema.safeParse(body);
+  if (!command.success) return { kind: 'invalid' };
+  const url = `/api/groups/${encodeURIComponent(groupId)}`;
+  return sendPost(url, command.data, signal);
 }
 
 async function sendPost(

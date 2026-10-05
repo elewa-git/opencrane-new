@@ -24,6 +24,13 @@ export function grantResourceLabel(resourceType: string): string {
   return resourceType;
 }
 
+export function lossSentence(grant: Grant, displayName: string, groupName: string): string {
+  const type = grantResourceLabel(grant.resourceType);
+  if (grant.relation === 'acts_for' && grant.resourceType === 'assistant') {
+    return `${displayName} can no longer select assistant ${grant.resourceId}.`;
+  }
+  return `${displayName} loses use of ${type} ${grant.resourceId}, granted through ${groupName}.`;
+}
 export function sharedAssistantIds(grants: Grant[]): string[] {
   const assistants = grants.filter(isSharedAssistant);
   const assistantIds = assistants.map(resourceId);

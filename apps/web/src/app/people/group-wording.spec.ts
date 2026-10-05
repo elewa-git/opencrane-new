@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { grantResourceLabel, isDuplicateName, newGroupId, useGrants } from './group-wording';
+import { grantResourceLabel, isDuplicateName, lossSentence, newGroupId, useGrants }
+  from './group-wording';
 import type { GroupRow } from '@opencrane/protocol';
 
 const row = {
@@ -25,4 +26,17 @@ it('uses clear wording and omits acts-for grants from the Grants list', () => {
   expect(grantResourceLabel(row.access.grants[0]!.resourceType)).toBe('model');
   expect(grantResourceLabel(row.access.grants[1]!.resourceType)).toBe('assistant');
   expect(useGrants(row.access.grants)).toHaveLength(1);
+});
+
+it('says what a person loses through a group in a full sentence', () => {
+  const useGrant = row.access.grants[0]!;
+  const assistantGrant = row.access.grants[1]!;
+  expect(lossSentence(useGrant, 'Alex Kim', 'Sales team'))
+    .toBe('Alex Kim loses use of model gpt, granted through Sales team.');
+  expect(lossSentence(assistantGrant, 'Alex Kim', 'Sales team'))
+    .toBe('Alex Kim can no longer select assistant helper.');
+});
+
+it('shows only the resource id in monospace in the grants card', () => {
+  expect(grantResourceLabel(row.access.grants[0]!.resourceType)).toBe('model');
 });

@@ -62,4 +62,5 @@ browser rendering. See the [HTTP contract](../../apps/server/README.robot.md#per
 
 The People & groups screen uses `groupRowSchema`, `groupsResponseSchema`,
 `groupReceiptSchema`, `groupChangeSchema` and `createGroupCommandSchema` for its
-flat group reads and create command.
+flat group reads and create command. `removeMemberCommandSchema` checks the
+strict member-removal request.

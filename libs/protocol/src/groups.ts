@@ -44,4 +44,9 @@ export const createGroupCommandSchema = z.object({
   groupId: id,
   name: z.string().trim().min(1).max(200).refine(hasNoNul),
 }).strict();
+export const removeMemberCommandSchema = z.object({
+  action: z.literal('remove'),
+  commandId: id,
+  memberId: id,
+}).strict();
 export type GroupRow = z.infer<typeof groupRowSchema>;
