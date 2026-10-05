@@ -1,105 +1,94 @@
-# Handlers
+# libs/handlers
 
-`@opencrane/handlers` is the Phase 1 dispatcher and SQL handler runtime.
-Its public entrypoint is `src/index.ts`. Commands still append only to the
-[event store](../event-store/README.md); business rules remain TypeScript.
-The host owns PostgreSQL/NATS connections, TLS, credentials and telemetry.
+## What this is
 
-```ts
-import { HandlerRuntime, registerHandler, dispatch } from '@opencrane/handlers';
-import { members } from '@opencrane/projections';
+Queue and run background reactions to events.
+A [reaction](../../GLOSSARY.md#reaction-handler) is work that follows a saved
+event, such as creating an assistant after a member joins. This package sends
+each reaction to a job queue in PostgreSQL and runs the jobs. `apps/ops` starts
+the [dispatcher](../../GLOSSARY.md#dispatcher), the background program that
+sends events to registered reactions, and the workers that run them.
 
-// db is pgDb(pool); connection is this silo's NATS connection.
-await members.create(db);
-const runtime = new HandlerRuntime({ db, logger, silo: 'acme', handlers: [
-  registerHandler('update-members', (event, tx) => members.apply(tx, event)),
-] });
-await runtime.start();
-await runtime.work(4);
-await dispatch(connection, runtime, abortController.signal);
-await runtime.stop();
+## Where it fits
+
+OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
+that is never changed. Everything else, such as read tables and permissions, is
+built from that log and can be rebuilt from it. This package runs the background
+work that follows each event.
+This package belongs to the event core. `apps/ops` runs it. The dispatcher reads
+new events straight from NATS JetStream, the service that holds the event log,
+using the connection and decoding helpers in `libs/event-store`. `libs/events`
+names each reaction's event types;
+`libs/projections` supplies the database helpers reactions can use. The queue
+uses pg-boss, a job queue stored in PostgreSQL.
+The reactions themselves live elsewhere. `libs/authz` updates permissions.
+`libs/models` handles budgets, model access and ownership. `apps/ops` creates
+assistants and claims computers.
+
+```mermaid
+flowchart LR
+  ops["apps/ops<br/>workers"] -->|starts work| handlers["libs/handlers<br/>reaction jobs"]
+  nats["NATS JetStream<br/>event log"] -->|new events| handlers
+  reactions["libs/models and libs/authz<br/>registered reactions"] -.->|registers reactions| handlers
+  handlers -.->|decodes events| store["libs/event-store<br/>saved events"]
+  handlers -.-> events["libs/events<br/>reaction list"]
+  handlers -.-> projections["libs/projections<br/>database helpers"]
+  handlers -->|stores queued jobs| pg["PostgreSQL<br/>job queue"]
 ```
 
-Use a dedicated silo database and its `pgboss` schema; jobs and handler SQL
-writes must share the supplied database. The role needs schema/table creation
-and DML rights. Run `npm run provision` with command credentials first (R3 by
-default; `NATS_REPLICAS=1` for local tests). Start
-telemetry in the host for real trace ids; every valid handler attempt uses
-observability's `runHandler` (name, event id, stream, attempt). Queue errors
-are logged; dispatcher errors reject its promise and require host restart.
+## What it is responsible for
 
-The durable `handler-dispatcher` consumer reads `ev.>` from the beginning,
-with explicit acknowledgements and one unacknowledged message. All subscribed
-jobs and a global SQL checkpoint commit together before acknowledgement.
-The checkpoint row serialises overlapping dispatchers and rejects gaps,
-silo mismatches and subscription changes. Registration takes a catalogue
-name and handle function; subscriptions come from `libs/events`, checked
-against the [catalogue](../../docs/architecture/events.md) by `check:events`.
-OpenFGA's mapping is reserved; its implementation is not included.
+- Read new events and queue the reactions that subscribe to them.
+- Run jobs about the same thing, such as one member, one after another, while
+  jobs about different things run side by side.
+- Retry failed jobs and keep failed jobs from being skipped silently.
+- Save a note that the job is done in the same database step as the reaction's
+  changes, so its database changes are never applied twice.
+- Let an operator retry a failed job after fixing its cause.
 
-One `key_strict_fifo` queue per handler keys jobs by stream id. Defaults:
-four worker slots, five retries, exponential backoff starting at one second,
-and a 60-second attempt timeout. Different streams can progress together.
-The worker locks the fetched queue attempt through its SQL transaction;
-handler writes and the event-id receipt commit together. Abort rolls back even
-when a callback never settles; SQL calls are serialised and each statement
-uses the remaining attempt time. Late callback queries are refused after
-the transaction closes. Any SQL error fails the attempt even if caught. Handlers must write
-only through `tx`. Receipts survive queue-job deletion. External services
-need an event-id idempotency protocol of their own; this API cannot make an
-external call atomic with SQL. Do not run the projection runner and this
-runtime against the same projection tables concurrently.
+## Processes it handles
 
-Failed heads remain in place and block their stream. Monitor
-`runtime.deadLetters(name)` and pg-boss queue errors in the host. Each failure
-also has a diagnostic copy in `<handler>-dead` (14-day queued retention).
-Repair with `runtime.replay(name, originalJobId)`: it retries the original
-head once, preserving order. Never redrive the diagnostic copy, cancel a
-head or delete it to unblock a stream. There is no automatic skip.
-The pinned pg-boss adapter sets queued event jobs' `keep_until` to infinity
-inside enqueue's transaction and disables finished-job deletion. This uses
-pg-boss 12.35's schema; upgrades must rerun retention/replay tests. Queue rows
-and receipts currently grow without pruning. Monitor database capacity.
+1. **A member joins.** The dispatcher reads the "member joined" event and
+   queues three jobs: give the member their permissions (`update-openfga`),
+   create their assistant (`create-assistant`) and allow the default AI models
+   (`seed-model-grants`).
+2. **A reaction fails.** Later jobs about the same thing wait, while jobs about
+   other things carry on. An operator can repair the cause and retry the failed
+   job.
 
-## Recovery and subscription changes
+## How to run or test it
 
-Stop dispatchers/workers before recovery. PostgreSQL is disposable execution
-state and content: rebuild it together with the consumer from EVENTS, with
-external reactions disabled. Keep receipts while preserving external state.
-Changing the enabled handler set requires a controlled rebuild/backfill;
-do not reset just the checkpoint or switch subscriptions on a live consumer.
+Run the type check and focused tests with these commands. The tests need the
+local NATS test server. Set `PG_TEST_URL` to a PostgreSQL admin connection whose
+role can create databases to include the PostgreSQL tests:
 
-For a subscription change, stop writers and decision services as well. Drain
-in-flight jobs before replacing execution state. Rebuild the content projections
-and OpenFGA from EVENTS using the [operator replay commands](../../apps/ops/README.md),
-with reactions disabled. Re-provision the dispatcher consumer and its disposable
-queue/checkpoint database together against the new manifest, replaying EVENTS
-from the beginning; do not replace only the stored manifest or checkpoint.
-Preserve event-id receipts for any retained external state so replay cannot repeat
-external effects. Enable reactions and writers only after content/IAM catch up.
-This is the existing subscription rebuild requirement, not a change to job keys:
-member jobs keep their original `member-<id>` key and ownership jobs use
-`ownership-<silo>`. Live upgrade qualification is NOT RUN.
+```sh
+npm run typecheck -w libs/handlers
+sh scripts/fetch-nats.sh
+npx vitest run libs/handlers/test
+```
 
-Run `PG_TEST_URL=<PostgreSQL admin URL> npm test -- libs/handlers/test`.
-The selected database is only a control database and the role needs `CREATEDB`:
-each test creates and drops an isolated, randomly named database, so test files
-can run in parallel. `pretest` fetches real NATS; PostgreSQL tests skip without
-the URL and are then NOT RUN. See [evidence](evidence.md) for results and limits.
-Fresh Kubernetes/R3 failover, PostgreSQL failover, external effects, OpenFGA,
-operator UI/alert routing and durable log export remain NOT RUN.
+Each reaction receives the saved event and a database transaction. This example
+registers a reaction that only runs a harmless query. A real reaction changes
+its own tables through the same transaction. The name must come from the reaction
+list in `libs/events`:
 
-Runtime licences checked: pg-boss 12.35.0, cron-parser 5.10.1, luxon 3.7.2,
-non-error 0.1.0, pg 8.23.1, rrule-temporal 2.2.7, serialize-error 13.0.2 and
-tagged-tag 1.0.0 are MIT; temporal-spec 1.0.1 is Apache-2.0; type-fest 5.10.0
-uses its MIT option. Existing NATS, events, projections and observability
-libraries retain their licences. Runtime image inventory is NOT RUN.
-See [ADR 0004](../../docs/adr/0004-handler-runtime.md) for the spike limits.
+```ts
+import type { EventEnvelope } from '@opencrane/events';
+import { registerHandler } from '@opencrane/handlers';
+import type { Query } from '@opencrane/projections';
 
-Use the `dispatcher` NKey seed, TLS files and `connectNats()` from the event-store
-package (or `connectEventStore()` for a projection source). Required file paths
-and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.md).
-Never supply the command identity to a reader process.
+async function checkEvent(event: EventEnvelope, transaction: Query): Promise<void> {
+  await transaction.query('SELECT $1::text', [event.id]);
+}
 
-Consumer creation/reset belongs to the authorised provisioning job, following
-[ADR 0005](../../docs/adr/0005-nats-access.md); dispatchers bind the existing durable consumer; projections read exact sequences.
+const handler = registerHandler('claim-computer', checkEvent);
+```
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): queue rules, settings, recovery and tests.
+- [Events](../events/README.md): the list of reaction names and event types.
+- [Projections](../projections/README.md): database helpers used by reactions.
+- [Why handlers run as queued jobs](../../docs/adr/0004-handler-runtime.md).
+- [Glossary](../../GLOSSARY.md): plain meanings of shared terms.

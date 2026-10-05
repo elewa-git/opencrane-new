@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "Queue and run background reactions to events.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

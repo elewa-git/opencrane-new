@@ -64,7 +64,7 @@ unapplied authority is unavailable. Errors disclose no foreign member details.
 Deploy the registry, projections and handlers together. IAM job keys remain each
 event's subject, so queued member jobs retain their accepted key. The changed
 handler subscription manifest still requires the existing
-[controlled dispatcher rebuild](../../libs/handlers/README.md#recovery-and-subscription-changes).
+[controlled dispatcher rebuild](../../libs/handlers/README.robot.md#recovery-and-subscription-changes).
 This is separate from ownership seeding; no ordering-key migration is needed.
 
 Startup seeding makes at most five attempts, each with a fresh global fence and a

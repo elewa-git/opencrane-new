@@ -1,47 +1,73 @@
-# Events
+# libs/events
 
-This package is the typed event catalogue used by server validation and the future
-event core. It defines envelopes, per-type data schemas and examples; it does not
-append, project, dispatch or replay events.
+## What this is
 
-## Public contract
+The list of every kind of event OpenCrane records, and the exact data each one carries.
+An [event](../../GLOSSARY.md#event) is a saved record of one thing that happened.
+This package says which event types exist and what information each one carries.
+It checks event data, but it does not save events or decide whether a person may act.
 
-Import `@opencrane/events` through [src/index.ts](src/index.ts).
-From the repository root, validate unknown input without trusting its declared type:
+## Where it fits
 
-```sh
-node --experimental-strip-types --input-type=module -e "import { parseEventByType } from '@opencrane/events'; console.log(parseEventByType({type: 'not.registered'}))"
+OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
+that is never changed. Everything else, such as read tables and permissions, is
+built from that log and can be rebuilt from it. This package defines what each
+event looks like.
+This is shared code in the event core. The event store, background reactions,
+read-table builders and `apps/server` use its event definitions and checks.
+`libs/models` and `libs/authz` also use these definitions for AI rules and
+permissions. `apps/ops` uses them in its background workers. The event registry
+also uses Zod, a library that checks data shapes.
+
+```mermaid
+flowchart LR
+  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event definitions"]
+  store["libs/event-store<br/>saved event log"] -.-> events
+  projections["libs/projections<br/>read tables"] -.-> events
+  handlers["libs/handlers<br/>background reactions"] -.-> events
+  others["libs/models and libs/authz<br/>AI rules and permissions"] -.-> events
+  ops["apps/ops<br/>background workers"] -.-> events
+  events -.-> zod["Zod<br/>data checks"]
 ```
 
-The result has `success: false` and `reason: 'unknown_event_type'`.
-For a registered type, invalid envelope/data produces `invalid_event` and a Zod error;
-success returns the validated event. Treat external values as `unknown` until parsed.
-Callers still enforce authority, stream ownership and conditional append concurrency.
-Schema acceptance alone is not authorisation or evidence that an event was stored.
+## What it is responsible for
 
-The [event catalogue](../../docs/architecture/events.md) owns event semantics and
-which projection or reaction follows each event. Change that catalogue and this registry
-together. Money is safe integer EUR cents; sensitive payloads use ciphertext/key ids,
-and credentials appear only as secret references.
+- Define the wrapper every event shares (its id, its type, what it is about,
+  who caused it and when), and the data each event type carries.
+- Check unknown values against the right event shape.
+- List which named background reactions subscribe to each event type.
+- Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
 
-## Verification and dependencies
+## Processes it handles
+
+1. **The event store checks an event before saving it.** It passes the event to
+   `parseEventByType`. A badly formed event or an unknown type is refused and
+   never saved.
+2. **A developer adds an event type.** The registry and event catalogue are
+   updated together. `npm run check:events` checks that this list and the event
+   catalogue match.
+
+## How to run or test it
+
+Run the type check and focused tests with these commands. A small real call is:
 
 ```sh
-npm test -- libs/events
 npm run typecheck -w libs/events
+npx vitest run libs/events/test
 npm run check:events
 ```
 
-Tests validate every registry example and reject malformed envelopes, invalid money,
-plaintext content, raw credentials and undeclared fields. The catalogue check compares
-event names in both directions. The registry is split into definitions and identity
-entries to keep hand-written production modules under the size limit.
-Runtime dependency: Zod only. No app or product-domain dependency belongs here.
+```ts
+import { parseEventByType } from '@opencrane/events';
 
-Live append, ordered replay, failover and backup/restore remain separate event-store
-qualification work. This package alone cannot prove those guarantees.
-See the [architecture and plan](../../plan.md) and the [server](../../apps/server/README.md).
+const result = parseEventByType({ type: 'not.registered' });
+// result.success is false and result.reason is 'unknown_event_type'.
+```
 
-New event-store commands require a non-empty `commandId` and `principal`.
-The envelope keeps `commandId` optional so older stored events still parse;
-its scope is the principal and entity subject, as [principle 7](../../docs/architecture/events.md#principles) specifies.
+## Where to read more
+
+- [README.robot.md](README.robot.md): full contracts, examples and test details.
+- [Event catalogue](../../docs/architecture/events.md): what each saved event means.
+- [Event store](../event-store/README.md): where events are saved.
+- [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+- [Glossary](../../GLOSSARY.md): plain meanings of shared terms.

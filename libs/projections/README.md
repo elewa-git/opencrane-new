@@ -1,125 +1,97 @@
-# Projections
+# libs/projections
 
-`@opencrane/projections` turns ordered events into disposable PostgreSQL
-content. It owns the query/transaction port, node-postgres and PGlite
-adapters, the checkpoint runner, the members read model and the MCP catalogue.
-Authorisation and reactions belong elsewhere; replay never sends mail,
-changes OpenFGA or performs other external effects.
+## What this is
 
-The public entrypoint is `src/index.ts`:
+Build and read rebuildable PostgreSQL tables from events.
+A [read table](../../GLOSSARY.md#read-table-projection) is a copy arranged so
+screens can load data quickly. The package keeps tables for members, groups,
+model providers, conversations, files, computers, tool servers and a history of
+who did what. The saved event log
+remains the record of what happened, so these tables can be rebuilt.
 
-```ts
-import { createLogger } from '@opencrane/observability';
-import { ProjectionRunner, pgliteDb, members } from '@opencrane/projections';
-import { PGlite } from '@electric-sql/pglite';
+## Where it fits
 
-const engine = new PGlite();
-// reader is an initialised EventStore using the projection NATS identity.
-const runner = new ProjectionRunner(pgliteDb(engine), reader, createLogger('members'));
-await runner.initialise(members);
-await runner.run(members);
-await runner.rebuild(members);
-await engine.close();
+OpenCrane saves every change as an [event](../../GLOSSARY.md#event) in a log
+that is never changed. Everything else, such as read tables and permissions, is
+built from that log and can be rebuilt from it. This package builds the read
+tables.
+This package belongs to the event core. `apps/ops` runs the workers that fill its
+tables, and `apps/server` reads those tables. It reads events from
+`libs/event-store`, checks their shapes with `libs/events`, and writes to
+PostgreSQL, the database for the read tables.
+
+```mermaid
+flowchart LR
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables"]
+  server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
+  projections -->|writes tables| pg
+  store["libs/event-store<br/>saved events"] -->|events in order| projections
+  projections -.-> events["libs/events<br/>event definitions"]
 ```
 
-For PostgreSQL, pass an owned node-postgres `Pool` to `pgDb(pool)`. The caller
-configures TLS, handles pool errors and closes the pool after stopping the
-runner. Each transaction checks out one client; failed work rolls back.
+## What it is responsible for
 
-There must be one active runner per projection and database. A handler
-writes only through its supplied transaction and must not make external
-calls. Each event's handler writes, processed-event id and checkpoint commit
-together. Errors propagate and stop the drain; callers may retry with
-`run(projection, { attempt: 2 })`. There is no automatic poison-event skip.
-`run` drains to the head captured on entry, from the stored global checkpoint.
-The source must provide every event in global order; filtering is a handler
-concern in this slice. Poll or call again for later events. An abort stops
-between transactions; an already running transaction may finish.
+- Turn ordered events into tables that the server can read.
+- Save table changes and each worker's position together in one database step.
+- Rebuild tables from the event log. The replay command rebuilds members,
+  groups, model providers, budgets, the tool catalogue, computers and the
+  history table while the system runs.
+- Store the per-conversation encryption keys used on the dev stack, so chat text
+  is only saved in encrypted form.
+- Send member-change notices after the table update commits.
+- Keep private conversation content out of the event-history table.
+- Avoid outside actions while rebuilding tables.
 
-Every handler attempt uses observability's `runHandler`, including the
-transaction commit. Start telemetry in the host to obtain real `trace_id`
-values; the helper deliberately omits that field with a no-op tracer.
+Not built yet: storing those keys safely for real customers.
 
-The low-level `rebuild` method is destructive and remains for tests and offline
-maintenance: stop readers and runners before calling it. Operators use
-`npm run replay -- members` or `npm run replay -- mcp-catalogue`, which takes the
-same cross-process advisory lock as the normal PostgreSQL runner, builds shadow
-tables and replaces the live contents plus the checkpoint under one ordered table
-lock. The live tables keep their grants.
-Changed history bumps a generation used to reset realtime cursors. See the
-[operator runbook](../../apps/ops/README.md). `initialise` must precede `run` or
-`rebuild`.
+## Processes it handles
 
-The members table uses `(silo, member_id)` as its key. Invitations are
-`invited`, acceptance replaces details and marks `joined`, removal marks
-`removed`; role changes update the role. Pending and removed rows grant
-no rights. `member_changes` stores each resulting row with its event-log position;
-`member_identities` binds invitations to OIDC issuer/subject for realtime reads.
-These tables, member rows and checkpoints share the same transaction. `pg_notify`
-is called in that transaction and delivered after commit, with no SQL business rules.
-`connectMemberFeed` owns a read pool and a dedicated LISTEN connection; callers
-close the feed on shutdown. See the [server contract](../../apps/server/README.robot.md#members-realtime-and-shutdown).
-An existing projection needs an offline rebuild to fill these new tables.
-This invitation view accompanies the catalogue's invitations
-projection; invitation delivery is outside this package.
+1. **A member joins.** The worker reads the saved event and updates the member
+   table. It saves its position with the table change, then sends a notice after
+   the change commits.
+2. **An operator rebuilds a table.** They run `npm run replay -- members`. The
+   command reads the whole event log again, builds fresh tables on the side and
+   swaps them in. It does not run reactions or make outside calls.
 
-`mcpCatalogue` projects registration, discovery, rejection, publication, removal,
-tool modes and tool drift into `mcp_catalogue` and `mcp_tool_modes`. Tool drift leaves
-the server quarantined for review. `connectMcpCatalogue` maps those stored facts into
-typed register rows; it does not guess missing catalogue metadata. Both tables can be
-rebuilt online with `npm run replay -- mcp-catalogue --verify`; the destructive
-`ProjectionRunner.rebuild(mcpCatalogue)` remains available for offline maintenance.
+## How to run or test it
 
-Run `sh scripts/fetch-nats.sh`, then `npx vitest run libs/projections/test`.
-PGlite tests use a real on-disk PostgreSQL engine, real NATS, a failed
-transaction after handler writes, reopen/resume, duplicate ids and rebuild
-equality. Set `PG_TEST_URL` to a PostgreSQL admin URL whose role has `CREATEDB`
-to run the same suite through node-postgres; CI supplies one. The selected
-database is only a control database: each test creates and drops its own
-randomly named database, so test files can run in parallel. Without that
-variable PostgreSQL integration is NOT RUN. This suite does not simulate a
-SIGKILL during commit. Fresh-install live qualification remains outstanding.
+Run the type check and focused tests with these commands. The tests need the
+local NATS test server fetched first:
 
-Licences checked at introduction: PGlite 0.5.8 Apache-2.0, node-postgres
-8.16.3 MIT, and its development types MIT. Other dependencies are the event
-contracts, event store and observability. See the
-[event catalogue](../../docs/architecture/events.md) and
-[engineering standard](../../docs/process/standards.md).
+```sh
+npm run typecheck -w libs/projections
+sh scripts/fetch-nats.sh
+npx vitest run libs/projections/test
+```
 
-Use the `projection` NKey seed, TLS files and `connectNats()` from the event-store
-package (or `connectEventStore()` for a projection source). Required file paths
-and NATS permissions are defined in [ADR 0005](../../docs/adr/0005-nats-access.md).
-Never supply the command identity to a reader process.
+This example connects the event store and the database, then fills the member
+tables. Before you run it, set `DATABASE_URL`, set the NATS settings described
+in [the event-store details](../event-store/README.robot.md), and create the
+event log once with `npm run provision`.
 
-Projection readers do not create, reset or bind consumers. They read exact
-sequences from their SQL checkpoints as defined in
-[ADR 0005](../../docs/adr/0005-nats-access.md).
+```ts
+import { connectEventStore } from '@opencrane/event-store';
+import { createLogger } from '@opencrane/observability';
+import { connectProjectionDb, ProjectionRunner, members } from '@opencrane/projections';
 
-The MCP catalogue also stores the reviewed connection/tool revision policy. Its
-TypeScript fold is shared with decision reads; SQL only stores the result.
-Legacy name-only modes never grant execution. Both ordinary and online catalogue
-rebuilds retain this policy; replay does not dispatch tools.
+const logger = createLogger('members');
+function logDatabaseError(error: Error): void {
+  logger.error({ err: error }, 'Projection database connection failed');
+}
 
-`auditTrail` stores a metadata allowlist in `audit_entries`, indexed by silo,
-request, permit, approval, conversation, requester and turn. `readAudit` reads
-50 indexed anchors then their relevant request/permit/approval and conversation/turn streams; it never
-reads the event store. Decisions and observed outcomes remain separate, including
-unknown outcomes. Private text, approval details, connection material, raw
-arguments, destinations and gateway timestamps are excluded at projection time.
+const eventStore = await connectEventStore();
+const database = connectProjectionDb(process.env['DATABASE_URL']!, logDatabaseError);
+const runner = new ProjectionRunner(database.db, eventStore.store, logger);
+await runner.initialise(members);
+await runner.run(members);
+await database.close();
+await eventStore.close();
+```
 
-Run `node --experimental-strip-types apps/ops/src/worker.ts audit` with the usual
-projection settings. `npm run replay -- audit --verify` replays metadata under the
-runner's lock in one transaction, preserving table grants and rolling back on
-failure. Ordinary `ProjectionRunner.rebuild(auditTrail)` also supports drop/rebuild
-with readers stopped. Neither path runs reactions. Test:
-`PG_TEST_URL=… npx vitest run libs/projections/test/audit.test.ts`.
+## Where to read more
 
-`conversationKeys(directory)` is the existing dev encrypted-content adapter shared
-by the chat server and approval decision process. It stores per-conversation keys
-with private filesystem permissions, exposes only key references in events, and
-refuses decryption with a different silo/conversation binding. Production secret
-custody remains a deployment qualification responsibility.
-
-The members worker also maintains the flat-group view (`groups`, `group_members`,
-`group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
-without reactions. See the [group contract](../../docs/api/groups.md).
+- [README.robot.md](README.robot.md): table details, settings, recovery and tests.
+- [Event store](../event-store/README.md): the saved events used to build tables.
+- [Handlers](../handlers/README.md): background reactions to saved events.
+- [Why NATS JetStream holds the event log](../../docs/adr/0001-event-store-nats-jetstream.md).
+- [Glossary](../../GLOSSARY.md): plain meanings of shared terms.

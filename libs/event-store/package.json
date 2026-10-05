@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "Store events in NATS JetStream and read them in order.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
