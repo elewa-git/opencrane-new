@@ -43,5 +43,6 @@ export { legacyMemberRole, siloOwnerBootstrappedDataSchema } from './identity-ev
 
 export { ownershipSeededSchema, ownershipTransferredSchema,
   ownershipSteppedDownSchema } from './ownership-events.ts';
-export { providerKeySchema, providerModelsSchema, providerRequestedSchema,
+export { providerIdSchema, providerModelIdSchema, providerKeySchema,
+  providerModelsSchema, providerRequestedSchema,
   providerDispatchedSchema, providerResultSchema } from './provider-events.ts';

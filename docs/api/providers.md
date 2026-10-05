@@ -52,13 +52,23 @@ Rotation clears all current-key verification evidence. Original history remains
 available by its command reference, with `verificationValid: false` after rotation.
 Model selection advances the configuration revision without changing key custody.
 
-Statuses are `needs_key`, `saved_unverified`, `connected_not_tested` and `ready`.
+Statuses are `needs_key`, `saved_unverified`, `connected_not_tested` and `ready`,
+plus `model_test_fail`, `model_test_unknown`, `model_test_budget_refused` and
+`model_test_outcome_unknown` when reachability passed and a model test has failed,
+is uncertain, was budget-refused or is still pending. An explicit Skip retains
+`connected_not_tested`. The separate facts remain available with each status.
 Ready needs both reachability and model-answer PASS for the saved key. Skip never
 creates PASS. Pending requests and consumed attempts without a result remain
 `outcome_unknown`; retries only reconcile them. Failures retain the saved fact.
-A priced test requires the exact current quote and explicit consent. Unknown
-usage or transport results keep the existing budget hold; there is no timeout
-refund or automatic retry. Budget refusal is recorded before any provider call.
+A priced test requires the exact current quote and explicit consent. When no
+`provider.verification_dispatched` event exists, the provider was never
+sent the check: the outcome is `unknown` and a priced reservation is released at
+zero cents. After dispatch, unknown usage or transport results keep the budget
+hold; there is no timeout refund or automatic retry. Invalid JSON is recorded as
+unknown immediately. A configuration or role change during the call cannot block
+recording its result at the original revision. A late result only updates the same
+attempt's current-key fact; it cannot replace evidence after rotation or a newer
+attempt. Budget refusal is recorded before any provider call.
 Verification uses the installation's default paying group and existing ceilings.
 
 ## Authority, replay and remaining bindings
@@ -66,15 +76,30 @@ Verification uses the installation's default paying group and existing ceilings.
 Each configuration, request, dispatch and result command makes one conditional
 append to one provider stream. The HTTP adapter saves an immutable secret reference
 before the key event, following the existing connection custody rule. The dev
-secret-store adapter uses exclusive private files in `PROVIDER_SECRETS_DIR`, shared
-by the server and models process; it is separate from projections and gateway
-configuration. An interrupted save can leave an orphan reference, never an active
-connection without a recorded key event. Configure both processes explicitly;
-missing custody or verification infrastructure fails closed.
+secret-store adapter writes private temporary files and publishes complete keys
+with an exclusive link in `PROVIDER_SECRETS_DIR`, shared by the server and models
+process; it is separate from projections and gateway
+configuration. Repeated exclusive writes keep the first key without reading it
+to compare. Save reconciliation deletes retired references and obsolete candidates
+only after reading the recorded configuration. A candidate remains while its
+revision can still accept an in-flight retry. Once configuration advances, a
+rejected save or its original retry can safely delete that obsolete reference.
+A lost append acknowledgement preserves an accepted key. If history is unavailable,
+cleanup waits for a later retry. A process crash can leave private temporary files
+requiring secret-store
+cleanup, or a published reference that is reconciled by its original command.
+Configure both processes explicitly; missing custody or verification
+infrastructure fails closed.
 
 Gateway admission rechecks the signed exact command, live Owner/Admin membership,
 IAM receipts, configuration revision, fixed test body and reservation. It consumes
-one attempt before forwarding. Keys are injected after admission; internal tokens
+one attempt before forwarding. Its token has the separate `provider-verification`
+type and audience, bound to the command digest; budget tokens cannot admit it.
+The key is read after request, attempt, reservation and freshness checks.
+Provider reservations use a `provider-` conversation id, and internal dispatch/result
+command ids contain `:` so they cannot collide with validated user command ids.
+Provider routes use their own attempt events rather than unrelated native gateway
+observations. Keys are injected after admission; internal tokens
 and command headers never reach the provider. Authority reads use exact subjects
 and the shared two-second fence/deadline. Changes during reads fail closed.
 
@@ -84,8 +109,8 @@ reserves money or calls a provider. OpenFGA derives provider `manage`/`read` fro
 current silo Admin (including Owner); this creates no model `use` grant.
 
 401 means no session; 400 invalid input; 403 insufficient authority or unpriced
-model (`reason: "unknown_price"`); 409 stale revision, changed quote or command conflict; 503 unavailable
-infrastructure. Status reads use 404 for an absent command. Accepted asynchronous
+model (`reason: "unknown_price"`); 409 stale revision, changed quote or command
+conflict; 503 unavailable infrastructure. Status reads use 404 for an absent command. Accepted asynchronous
 work can still have a refused, failed or unknown recorded outcome.
 
 `access.grantsAvailable` is false with `reason: "p4_22_required"`. Access grants,
@@ -93,3 +118,16 @@ requester/assistant intersection explanations, ordinary model route replacement
 and retirement/dependency review belong to P4-22. Do not show invented users,
 assistant counts, retirement consequences or access completion. The Claude Design
 screens and fresh-install qualification remain pending on the UI foundation.
+
+## Known design and dev-stack gaps
+
+- MOD-04 needs non-admin read-only provider state. Current event-backed authority
+  and OpenFGA `read: manage` restrict all reads to Owner/Admin; that state is not
+  implemented yet.
+- Provider verification shares `MODEL_UPSTREAM` with ordinary model traffic.
+  The dev-stack model stub does not implement `GET /v1/models`; its 404 produces
+  failed reachability after dispatch. This stack cannot qualify real provider
+  reachability until the upstream binding is separated or the fixture implements it.
+- `PROVIDER_SECRETS_DIR` is not wired into the dev stack. Both the server and models
+  process need the same private secret directory before a fresh-install provider
+  journey can run. Missing wiring denies verification rather than proving it works.

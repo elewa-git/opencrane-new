@@ -1,3 +1,5 @@
+import { activeMember, MemberAccessRefused } from './member-authority.ts';
+import { providerIdSchema, providerModelIdSchema } from '@opencrane/events';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
@@ -7,8 +9,10 @@ import { authorityFence } from './authority.ts';
 import { history } from './actor.ts';
 import { models } from './state.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
-const modelId = z.string().regex(/^[\w.-]{1,200}$/u);
+const id = providerIdSchema;
+const modelId = providerModelIdSchema;
+const providerReceiptData = z.object({ providerId: id, revision: z.int().positive() });
+const providerIdentity = z.object({ providerId: id });
 function noNul(value: string) {
   return !value.includes('\0');
 }
@@ -27,38 +31,19 @@ export class ProviderConflict extends Error {}
 
 export async function providerAuthority(store: EventStore, binding: Binding, memberId: string) {
   const fresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
-  const rows = await history(store, `member-${memberId}`, binding.silo, fresh.deadline);
-  function isState(row: StoredEvent) {
-    return ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed',
-      'member.removed'].includes(row.event.type);
-  }
-  const latest = rows.findLast(isState);
-  if (!latest || latest.event.type === 'member.removed') {
-    throw new ProviderRefused();
-  }
-  const role = z.object({ role: z.string().optional(), newRole: z.string().optional() });
-  const data = role.parse(latest.event.data);
-  if (!['owner', 'admin'].includes(data.newRole ?? data.role ?? '')) {
-    throw new ProviderRefused();
-  }
-  const auth = memberAuthorisation(binding);
-  const permission = await auth.check(memberId, 'admin');
-  if (permission.status === 'unavailable') {
-    throw new Error('IAM unavailable');
-  }
-  if (!permission.allowed) {
-    throw new ProviderRefused();
-  }
-  for (const row of rows) {
-    if (isState(row) && !await auth.applied(row.event.id)) {
-      throw new ProviderRefused();
+  try {
+    await activeMember(store, binding, memberId, true, fresh);
+  } catch (error) {
+    if (error instanceof MemberAccessRefused) {
+      throw new ProviderRefused(error.message);
     }
+    throw error;
   }
   await fresh();
   return fresh;
 }
 export function providerReceipt(row: StoredEvent) {
-  const data = z.object({ providerId: id, revision: z.int().positive() }).parse(row.event.data);
+  const data = providerReceiptData.parse(row.event.data);
   return { status: 'appended' as const, ...data, operation: row.event.type,
     sequence: row.sequence, changeId: row.event.id };
 }
@@ -84,7 +69,7 @@ export async function providerPermission(binding: Binding, memberId: string,
   if (!created) {
     throw new ProviderRefused();
   }
-  const data = z.object({ providerId: id }).parse(created.event.data);
+  const data = providerIdentity.parse(created.event.data);
   const auth = memberAuthorisation(binding);
   if (!await auth.applied(created.event.id)) {
     throw new ProviderRefused('Provider is applying');

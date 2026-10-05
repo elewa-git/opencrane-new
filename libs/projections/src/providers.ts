@@ -8,6 +8,7 @@ interface ProviderFact {
   time: string;
   revision: number;
   outcome: string;
+  attemptId?: string | undefined;
   model?: string | undefined;
   reservationId?: string | undefined;
   reservedCents?: number | undefined;
@@ -74,11 +75,19 @@ export function applyProvider(state: ProviderState | undefined,
   state.position = position;
   return state;
 }
-function applyVerification(state: ProviderState, data: Record<string, unknown>, fact: ProviderFact) {
-  if (fact.revision !== state.revision) {
-    throw new Error('Stale verification revision');
-  }
+function applyVerification(state: ProviderState, data: Record<string, unknown>,
+  fact: ProviderFact) {
+  fact.attemptId = z.string().optional().parse(data['attemptId']);
   const kind = z.enum(['reachability', 'model']).parse(data['kind']);
+  const current = kind === 'reachability' ? state.reachable : state.modelAnswer;
+  // A late result can complete the same attempt after model selection.
+  // Rotation or a newer attempt prevents old evidence from replacing current-key facts.
+  if (fact.revision < state.revision && current?.attemptId !== fact.attemptId) {
+    return;
+  }
+  if (fact.revision > state.revision) {
+    throw new Error('Future verification revision');
+  }
   fact.model = z.string().optional().parse(data['model']);
   fact.reservationId = z.string().optional().parse(data['reservationId']);
   fact.reservedCents = z.int().optional().parse(data['reservedCents']);

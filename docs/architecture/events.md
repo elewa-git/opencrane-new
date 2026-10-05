@@ -430,7 +430,7 @@ Cognee is deferred until after the MVP; it may become another projection fed by 
 | `provider.models_selected` | Owner/Admin command | provider metadata | Registry selection only; grants belong to P4-22. |
 | `provider.verification_requested` | Owner/Admin command | provider metadata | Explicit live check only; no replay dispatch. |
 | `provider.verification_dispatched` | authenticated gateway admission | provider metadata | Consume one check, with existing budget reservation for paid tests. |
-| `provider.verification_recorded` | live verification reaction or explicit skip | provider metadata | Dated revision-bound outcome, never raw responses or credentials. |
+| `provider.verification_recorded` | live verification reaction or explicit skip | provider metadata | Dated original-attempt outcome, including late results. No dispatch means unknown and zero-cost release; never raw responses or credentials. |
 
 ## Named handler subscriptions
 

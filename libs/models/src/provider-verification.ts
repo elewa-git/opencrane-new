@@ -1,10 +1,11 @@
+import { providerIdSchema, providerModelIdSchema,
+  providerDispatchedSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
-import { providerRequestedSchema } from '@opencrane/events';
 import type { ProviderState } from '@opencrane/projections';
-import { tokenVerifier } from '@opencrane/auth';
+import { verifyCommand } from './budget-config.ts';
 import type { JSONWebKeySet } from 'jose';
 import { BudgetActor, BudgetRefused, envelope, history } from './actor.ts';
 import { appendProvider, providerAuthority, providerHistory, providerReceipt,
@@ -12,8 +13,33 @@ import { appendProvider, providerAuthority, providerHistory, providerReceipt,
 import { requestReservationCents, costCents, models, priceTableId } from './state.ts';
 import type { ProviderSecrets } from './provider-secrets.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
-const modelId = z.string().regex(/^[\w.-]{1,200}$/u);
+const providerContentSchema = z.object({
+  type: z.string(),
+  text: z.string().optional(),
+});
+const providerOutputSchema = z.object({
+  type: z.string(),
+  content: z.array(providerContentSchema).optional(),
+});
+const providerTokenDetailsSchema = z.object({
+  cached_tokens: z.int().nonnegative().optional(),
+  cache_write_tokens: z.int().nonnegative().optional(),
+});
+const providerUsageSchema = z.object({
+  input_tokens: z.int().nonnegative(),
+  output_tokens: z.int().nonnegative(),
+  input_tokens_details: providerTokenDetailsSchema.optional(),
+});
+const providerResponseSchema = z.object({
+  status: z.string(),
+  output: z.array(providerOutputSchema),
+  usage: providerUsageSchema,
+});
+const providerModelListSchema = z.object({
+  data: z.array(z.object({ id: z.string().min(1) })),
+});
+const id = providerIdSchema;
+const modelId = providerModelIdSchema;
 const common = { providerId: id, commandId: id, expectedRevision: z.int().positive() };
 export const providerVerificationSchema = z.discriminatedUnion('action', [
   z.object({ ...common, action: z.enum(['reachability', 'skip']) }).strict(),
@@ -96,18 +122,9 @@ export async function requestProviderVerification(store: EventStore, binding: Bi
 }
 export async function verifyProviderCapability(identity: { jwks: JSONWebKeySet; issuer: string },
   silo: string, raw: unknown, authorization?: string) {
-  const claims = z.object({ typ: z.literal('budget-admin'), silo: id, memberId: id,
-    commandDigest: z.string() });
   try {
-    const verifier = tokenVerifier(identity.jwks, identity.issuer);
-    const token = authorization?.replace(/^Bearer /u, '') ?? '';
-    const checked = claims.parse(await verifier.verify(token, 'budget-admin'));
-    const hash = createHash('sha256');
-    hash.update(JSON.stringify(raw));
-    const digest = hash.digest('hex');
-    if (checked.silo !== silo || checked.commandDigest !== digest) {
-      throw new ProviderRefused();
-    }
+    const checked = await verifyCommand(identity, raw, silo, authorization,
+      'provider-verification');
     return checked.memberId;
   } catch {
     throw new ProviderRefused('Invalid provider capability');
@@ -123,7 +140,6 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
   }
   const current = await checkRevision(actor.store, binding, memberId, input);
   checkGatewayRequest(input, current.state.provider, path, body);
-  const key = await options.secrets.read(current.state.secretRef!);
   const data = requestedData(input, memberId);
   function matches(row: (typeof current.rows)[number]) {
     return row.event.commandId === input.commandId;
@@ -135,14 +151,16 @@ export async function admitProviderVerification(actor: BudgetActor, binding: Bin
   }
   for (const row of current.rows) {
     if (row.event.type === 'provider.verification_dispatched' &&
-      providerRequestedSchema.passthrough().parse(row.event.data).attemptId === input.commandId) {
+      providerDispatchedSchema.parse(row.event.data).attemptId === input.commandId) {
       throw new ProviderRefused('Attempt already consumed');
     }
   }
   checkReservation(actor, input, requested.event.id, memberId, reservationId);
+  await current.fresh();
+  const key = await options.secrets.read(current.state.secretRef!);
   const payload = { ...data, ...(reservationId ? { reservationId } : {}) };
   await appendProvider(actor.store, binding.silo, input.providerId, memberId,
-    `${input.commandId}-dispatch`, 'provider.verification_dispatched', payload,
+    `internal:provider:${input.commandId}:dispatch`, 'provider.verification_dispatched', payload,
     current.rows.at(-1)?.sequence ?? 0, current.fresh);
   return key;
 }
@@ -181,13 +199,27 @@ function checkReservation(actor: BudgetActor, input: Verification, requestedEven
 async function recordResult(actor: BudgetActor, binding: Binding, memberId: string,
   input: Verification, outcome: 'pass' | 'fail' | 'unknown' | 'budget_refused',
   reservationId?: string, settledCents?: number) {
-  const current = await checkRevision(actor.store, binding, memberId, input);
+  // A result records an admitted attempt, even after its member or configuration changes.
+  // It grants no new authority and must keep the original attempt's revision.
   const payload = { ...requestedData(input, memberId), outcome,
     ...(reservationId ? { reservationId } : {}),
     ...(settledCents === undefined ? {} : { settledCents }) };
-  return appendProvider(actor.store, binding.silo, input.providerId, memberId,
-    `${input.commandId}-result`, 'provider.verification_recorded', payload,
-    current.rows.at(-1)?.sequence ?? 0, current.fresh);
+  function completedAuthority() {
+    return Promise.resolve();
+  }
+  for (let retry = 0; retry < 3; retry++) {
+    const rows = await history(actor.store, `provider-${input.providerId}`, binding.silo);
+    try {
+      return await appendProvider(actor.store, binding.silo, input.providerId, memberId,
+        `internal:provider:${input.commandId}:result`, 'provider.verification_recorded',
+        payload, rows.at(-1)?.sequence ?? 0, completedAuthority);
+    } catch (error) {
+      if (!(error instanceof ProviderConflict)) {
+        throw error;
+      }
+    }
+  }
+  throw new ProviderConflict('Result append conflicted');
 }
 export async function runProviderVerification(actor: BudgetActor, binding: Binding,
   memberId: string, raw: unknown, authorization: string,
@@ -209,7 +241,8 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
     const contextDigest = hash.digest('hex');
     const call = { requestId: receipt.changeId, model: input.model, priceTableId,
       computerId: `provider-${input.providerId}`, assistantId: 'provider-verification',
-      requesterId: memberId, conversationId: input.providerId, turnId: input.commandId,
+      requesterId: memberId, conversationId: `provider-${input.providerId}`,
+      turnId: input.commandId,
       threadId: input.commandId, payingGroupId, contextDigest };
     try {
       reservationId = await actor.reserve(call, input.reservedCents, current.fresh);
@@ -236,54 +269,69 @@ export async function runProviderVerification(actor: BudgetActor, binding: Bindi
 }
 async function callProviderGateway(actor: BudgetActor, binding: Binding, memberId: string,
   input: Verification, authorization: string, options: ProviderVerificationOptions,
-  reservationId?: string): Promise<{ outcome: 'pass' | 'fail' | 'unknown'; settledCents?: number }> {
-  const current = await checkRevision(actor.store, binding, memberId, input);
-  await current.fresh();
-  const action = input.action === 'reachability' ? 'reachability' : 'test';
-  const headers = { 'x-provider-token': authorization,
-    'x-provider-command': Buffer.from(JSON.stringify(input)).toString('base64url'),
-    'content-type': 'application/json',
-    ...(reservationId ? { 'x-provider-reservation': reservationId } : {}) };
-  const request = { method: input.action === 'test' ? 'POST' : 'GET', headers,
-    ...(input.action === 'test' ? { body: JSON.stringify(testBody(input.model)) } : {}),
-    signal: AbortSignal.timeout(15_000) };
+  reservationId?: string
+): Promise<{ outcome: 'pass' | 'fail' | 'unknown'; settledCents?: number }> {
   let response: Response;
+  let body: unknown;
   try {
-    response = await fetch(`${options.gatewayUrl}/providers/${current.state.provider}/${action}`, request);
+    const current = await checkRevision(actor.store, binding, memberId, input);
+    await current.fresh();
+    const action = input.action === 'reachability' ? 'reachability' : 'test';
+    const headers = { 'x-provider-token': authorization,
+      'x-provider-command': Buffer.from(JSON.stringify(input)).toString('base64url'),
+      'content-type': 'application/json',
+      ...(reservationId ? { 'x-provider-reservation': reservationId } : {}) };
+    const request = { method: input.action === 'test' ? 'POST' : 'GET', headers,
+      ...(input.action === 'test' ? { body: JSON.stringify(testBody(input.model)) } : {}),
+      signal: AbortSignal.timeout(15_000) };
+    const url = `${options.gatewayUrl}/providers/${current.state.provider}/${action}`;
+    response = await fetch(url, request);
+    if (!response.ok) {
+      return gatewayFailure(actor, binding.silo, input, reservationId, true);
+    }
+    body = await response.json();
   } catch {
-    if (reservationId) {
-      await actor.uncertain(reservationId, 'transport_failure');
-    }
-    return { outcome: 'unknown' };
+    return gatewayFailure(actor, binding.silo, input, reservationId);
   }
-  if (!response.ok) {
-    if (reservationId) {
-      await actor.uncertain(reservationId, 'transport_failure');
-    }
-    return { outcome: reservationId ? 'unknown' : 'fail' };
-  }
-  const body: unknown = await response.json();
   if (input.action === 'reachability') {
-    const modelList = z.object({ data: z.array(z.object({ id: z.string().min(1) })) });
-    return { outcome: modelList.safeParse(body).success ? 'pass' : 'fail' };
+    return { outcome: providerModelListSchema.safeParse(body).success ? 'pass' : 'fail' };
   }
   if (!reservationId || input.action !== 'test') {
     throw new ProviderRefused();
   }
   return settleProviderResponse(actor, binding.silo, input.model, reservationId, body);
 }
+async function gatewayFailure(actor: BudgetActor, silo: string, input: Verification,
+  reservationId?: string, rejected = false
+): Promise<{ outcome: 'fail' | 'unknown'; settledCents?: number }> {
+  const rows = await history(actor.store, `provider-${input.providerId}`, silo);
+  function dispatchedAttempt(row: (typeof rows)[number]) {
+    if (row.event.type !== 'provider.verification_dispatched') {
+      return false;
+    }
+    return providerDispatchedSchema.parse(row.event.data).attemptId ===
+      input.commandId;
+  }
+  const dispatched = rows.some(dispatchedAttempt);
+  if (reservationId) {
+    if (dispatched) {
+      await actor.uncertain(reservationId, 'transport_failure');
+    } else {
+      // The gateway never released the key, so no provider cost can exist.
+      await actor.releaseUndispatched(reservationId);
+      return { outcome: 'unknown', settledCents: 0 };
+    }
+  }
+  if (dispatched && rejected && input.action === 'reachability') {
+    return { outcome: 'fail' };
+  }
+  return { outcome: 'unknown' };
+}
 async function settleProviderResponse(actor: BudgetActor, silo: string, model: string,
   reservationId: string, body: unknown): Promise<{
     outcome: 'pass' | 'fail' | 'unknown'; settledCents?: number;
   }> {
-  const responseBody = z.object({ status: z.string(), output: z.array(z.object({
-    type: z.string(), content: z.array(z.object({ type: z.string(),
-      text: z.string().optional() })).optional(),
-  })), usage: z.object({ input_tokens: z.int().nonnegative(),
-    output_tokens: z.int().nonnegative(), input_tokens_details: z.object({
-      cached_tokens: z.int().nonnegative().optional(),
-      cache_write_tokens: z.int().nonnegative().optional(),
-    }).optional() }) }).safeParse(body);
+  const responseBody = providerResponseSchema.safeParse(body);
   if (!responseBody.success) {
     await actor.uncertain(reservationId, 'missing_usage');
     return { outcome: 'unknown' };

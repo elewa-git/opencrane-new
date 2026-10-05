@@ -107,6 +107,12 @@ export async function ingestUsage(actor: BudgetActor, file: string) {
   }
 }
 export function gatewayUsage(line: string) {
+  // Provider attempts already record dispatch and result on their own stream.
+  // They have no native usage reservation, so the ordinary refusal fallback would invent rows.
+  const providerRoute = /\broute=default\/provider-(?:openai|anthropic)-(?:reachability|test)(?=\s|$)/u;
+  if (providerRoute.test(line)) {
+    return undefined;
+  }
   const id = /\breservation="([a-f0-9-]{36})"/u.exec(line)?.[1];
   const status = logNumber(line, 'http\\.status');
   if (!id) {

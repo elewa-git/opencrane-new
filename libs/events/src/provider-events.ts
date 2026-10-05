@@ -2,8 +2,10 @@ import { centsSchema, connectionCreatedDataSchema } from './data.ts';
 import { z } from 'zod';
 import { event } from './definition.ts';
 
-const id = z.string().regex(/^[\w-]{1,200}$/u);
-const modelId = z.string().regex(/^[\w.-]{1,200}$/u);
+export const providerIdSchema = z.string().regex(/^[\w-]{1,200}$/u);
+export const providerModelIdSchema = z.string().regex(/^[\w.-]{1,200}$/u);
+const id = providerIdSchema;
+const modelId = providerModelIdSchema;
 const revision = z.int().positive();
 const providerCreatedSchema = z.object({
   providerId: id, provider: z.enum(['openai', 'anthropic']),
@@ -13,7 +15,8 @@ const base = { providerId: id, revision, changedBy: id };
 export const providerKeySchema = z.object({ ...base,
   secretRef: connectionCreatedDataSchema.shape.secretRef,
 }).strict();
-export const providerModelsSchema = z.object({ ...base, models: z.array(modelId).max(11) }).strict();
+export const providerModelsSchema = z.object({ ...base,
+  models: z.array(modelId).max(11) }).strict();
 const verification = { ...base, attemptId: id, kind: z.enum(['reachability', 'model']),
   model: modelId.optional(), reservedCents: centsSchema.optional() };
 export const providerRequestedSchema = z.object(verification).strict();

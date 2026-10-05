@@ -1,3 +1,4 @@
+import { providerIdSchema, providerModelIdSchema, providerKeySchema } from '@opencrane/events';
 import { memberAuthorisation } from '@opencrane/authz';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
@@ -14,48 +15,57 @@ import { sessionFor } from '../members/routes.ts';
 export interface ProviderOptions extends GroupOptions {
   secrets?: ProviderSecrets;
   verification?: { decisionUrl: string;
-    tokens: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'budget'> };
+    tokens: Pick<Awaited<ReturnType<typeof tokenIssuer>>, 'providerVerification'> };
 }
-const id = z.string().regex(/^[\w-]{1,200}$/u);
-const parameters = z.object({ providerId: id.optional(), commandId: id.optional() }).strict();
+const id = providerIdSchema;
+const parameters = z.object({ providerId: id.optional() }).strict();
+const providerParameters = z.object({ providerId: id }).strict();
+const changeParameters = z.object({ providerId: id, commandId: id }).strict();
+const quoteQuery = z.object({ model: providerModelIdSchema }).strict();
+const commandBody = z.record(z.string(), z.unknown());
+const keyInput = z.object({ commandId: id, expectedRevision: z.int().positive(),
+  key: z.string().min(1).max(4096).regex(/^[\x21-\x7e]+$/u) }).strict();
 
 export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
   options?: ProviderOptions) {
-  app.route({ method: ['GET', 'POST'], url: '/api/org/providers', bodyLimit: 8192, handler });
-  app.get('/api/org/providers/:providerId', handler);
-  app.get('/api/org/providers/:providerId/changes/:commandId', handler);
-  app.post('/api/org/providers/:providerId/key', { bodyLimit: 8192 }, handler);
-  app.route({ method: ['GET', 'POST'], url: '/api/org/providers/:providerId/verify',
-    bodyLimit: 8192, handler });
-  async function handler(request: FastifyRequest, reply: FastifyReply) {
-    reply.header('cache-control', 'no-store');
-    const session = sessionFor(request, config, new Date());
-    if (!session) {
-      return reply.code(401).send({ status: 'refused' });
-    }
-    if (!options) {
-      return reply.code(503).send({ status: 'unavailable' });
-    }
-    if (!trustedRequest(request, config, options, session.orgId)) {
-      return reply.code(403).send({ status: 'refused' });
-    }
-    try {
-      const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-      if (!memberId) {
-        throw new ProviderRefused();
+  app.get('/api/org/providers', handlerFor(read));
+  app.post('/api/org/providers', { bodyLimit: 8192 }, handlerFor(write));
+  app.get('/api/org/providers/:providerId', handlerFor(read));
+  app.get('/api/org/providers/:providerId/changes/:commandId', handlerFor(readStatus));
+  app.post('/api/org/providers/:providerId/key', { bodyLimit: 8192 }, handlerFor(writeKey));
+  app.get('/api/org/providers/:providerId/verify', handlerFor(readQuote));
+  app.post('/api/org/providers/:providerId/verify', { bodyLimit: 8192 }, handlerFor(verify));
+  function handlerFor(action: ProviderHandler) {
+    return handler;
+    async function handler(request: FastifyRequest, reply: FastifyReply) {
+      reply.header('cache-control', 'no-store');
+      const session = sessionFor(request, config, new Date());
+      if (!session) {
+        return reply.code(401).send({ status: 'refused' });
       }
-      if (request.method === 'POST') {
-        return await write(request, reply, options, memberId);
+      if (!options) {
+        return reply.code(503).send({ status: 'unavailable' });
       }
-      return await read(request, reply, options, memberId);
-    } catch (error) {
-      const code = errorCode(error);
-      const result = { status: code === 503 ? 'unavailable' : 'refused',
-        ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
-      return reply.code(code).send(result);
+      if (!trustedRequest(request, config, options, session.orgId)) {
+        return reply.code(403).send({ status: 'refused' });
+      }
+      try {
+        const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+        if (!memberId) {
+          throw new ProviderRefused();
+        }
+        return await action(request, reply, options, memberId);
+      } catch (error) {
+        const code = errorCode(error);
+        const result = { status: code === 503 ? 'unavailable' : 'refused',
+          ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
+        return reply.code(code).send(result);
+      }
     }
   }
 }
+type ProviderHandler = (request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) => Promise<unknown>;
 function trustedRequest(request: FastifyRequest, config: AuthConfig,
   options: ProviderOptions, orgId: string | undefined) {
   if (!config.expectedOrgId || orgId !== config.expectedOrgId) {
@@ -83,13 +93,7 @@ function errorCode(error: unknown) {
 }
 async function write(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
-  if (request.url.endsWith('/key')) {
-    return reply.send(await saveKey(options, memberId, request.params, request.body));
-  }
-  if (request.url.endsWith('/verify')) {
-    return verify(request, reply, options, memberId);
-  }
-  const body = z.record(z.string(), z.unknown()).parse(request.body);
+  const body = commandBody.parse(request.body);
   if (body['action'] !== 'create' && body['action'] !== 'models') {
     throw new z.ZodError([]);
   }
@@ -98,12 +102,13 @@ async function write(request: FastifyRequest, reply: FastifyReply,
 }
 async function verify(request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) {
-  const { providerId } = z.object({ providerId: id }).parse(request.params);
-  const body = z.record(z.string(), z.unknown()).parse(request.body);
+  const { providerId } = providerParameters.parse(request.params);
+  const body = commandBody.parse(request.body);
   if ('providerId' in body) {
     throw new z.ZodError([]);
   }
-  const raw = providerVerificationSchema.parse({ ...body, providerId });
+  const commandInput = { ...body, providerId };
+  const raw = providerVerificationSchema.parse(commandInput);
   if (raw.action === 'skip') {
     const result = await requestProviderVerification(options.store, options.binding, memberId, raw);
     return reply.send(result.receipt);
@@ -115,8 +120,8 @@ async function verify(request: FastifyRequest, reply: FastifyReply,
   const hash = createHash('sha256');
   hash.update(JSON.stringify(raw));
   const commandDigest = hash.digest('hex');
-  const token = await options.verification.tokens.budget({ silo: options.silo,
-    memberId, commandDigest });
+  const capability = { silo: options.silo, memberId, commandDigest };
+  const token = await options.verification.tokens.providerVerification(capability);
   const headers = { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' };
   const command = { method: 'POST', headers, body: JSON.stringify(raw),
     signal: AbortSignal.timeout(20_000) };
@@ -131,27 +136,39 @@ async function read(request: FastifyRequest, reply: FastifyReply,
   if (input.providerId) {
     fresh.include(`provider-${input.providerId}`);
   }
-  if (input.providerId && input.commandId) {
-    const result = await readChange(options, input.providerId, input.commandId, fresh.deadline);
-    await fresh();
-    return reply.code(result.status === 'not_found' ? 404 : 200).send(result);
-  }
-  if (request.url.includes('/verify')) {
-    const { model } = z.object({ model: z.string() }).strict().parse(request.query);
-    const current = await providerHistory(options.store, options.silo,
-      input.providerId!, fresh.deadline);
-    if (!current.state) {
-      throw new ProviderConflict();
-    }
-    const quote = providerTestQuote(current.state, model);
-    await fresh();
-    return reply.send(quote);
-  }
   const rows = await readProviders(options.db, options.silo, input.providerId);
   const publicRows = rows.map(providerRow);
   await fresh();
   return reply.send({ rows: publicRows, loadedAt: new Date().toISOString(),
     access: { grantsAvailable: false, reason: 'p4_22_required' } });
+}
+async function writeKey(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const receipt = await saveKey(options, memberId, request.params, request.body);
+  return reply.send(receipt);
+}
+async function readStatus(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const fresh = await providerAuthority(options.store, options.binding, memberId);
+  const input = changeParameters.parse(request.params);
+  fresh.include(`provider-${input.providerId}`);
+  const result = await readChange(options, input.providerId, input.commandId, fresh.deadline);
+  await fresh();
+  return reply.code(result.status === 'not_found' ? 404 : 200).send(result);
+}
+async function readQuote(request: FastifyRequest, reply: FastifyReply,
+  options: ProviderOptions, memberId: string) {
+  const fresh = await providerAuthority(options.store, options.binding, memberId);
+  const { providerId } = providerParameters.parse(request.params);
+  const { model } = quoteQuery.parse(request.query);
+  fresh.include(`provider-${providerId}`);
+  const current = await providerHistory(options.store, options.silo, providerId, fresh.deadline);
+  if (!current.state) {
+    throw new ProviderConflict();
+  }
+  const quote = providerTestQuote(current.state, model);
+  await fresh();
+  return reply.send(quote);
 }
 async function readChange(options: ProviderOptions, providerId: string,
   commandId: string, deadline: number) {
@@ -165,10 +182,11 @@ async function readChange(options: ProviderOptions, providerId: string,
   }
   const checkpoint = await options.db.query<{ sequence: string }>(
     'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['providers']);
-  const content = Number(checkpoint.rows[0]?.sequence ?? 0) >= row.sequence ? 'current' : 'applying';
+  const appliedSequence = Number(checkpoint.rows[0]?.sequence ?? 0);
+  const content = appliedSequence >= row.sequence ? 'current' : 'applying';
   let outcome: unknown;
   for (const item of current.rows) {
-    const fact = z.record(z.string(), z.unknown()).parse(item.event.data);
+    const fact = commandBody.parse(item.event.data);
     if (fact['attemptId'] === commandId) {
       outcome = fact['outcome'] ?? 'outcome_unknown';
     }
@@ -187,9 +205,8 @@ async function readChange(options: ProviderOptions, providerId: string,
     currentRevision: current.state?.revision, verificationValid: valid, outcome };
 }
 async function saveKey(options: ProviderOptions, memberId: string, params: unknown, raw: unknown) {
-  const { providerId } = z.object({ providerId: id }).parse(params);
-  const input = z.object({ commandId: id, expectedRevision: z.int().positive(),
-    key: z.string().min(1).max(4096).regex(/^[\x21-\x7e]+$/u) }).strict().parse(raw);
+  const { providerId } = providerParameters.parse(params);
+  const input = keyInput.parse(raw);
   const fresh = await providerAuthority(options.store, options.binding, memberId);
   fresh.include(`provider-${providerId}`);
   const { rows, state } = await providerHistory(options.store, options.silo,
@@ -204,6 +221,7 @@ async function saveKey(options: ProviderOptions, memberId: string, params: unkno
   await providerPermission(options.binding, memberId, rows);
   if (!previous) {
     if (!state || state.revision !== input.expectedRevision) {
+      await cleanProviderSecrets(options, providerId, secretRef, input.expectedRevision);
       throw new ProviderConflict();
     }
     if (!options.secrets) {
@@ -212,8 +230,41 @@ async function saveKey(options: ProviderOptions, memberId: string, params: unkno
     await fresh();
     await options.secrets.save(secretRef, input.key);
   }
-  const result = await providerCommand(options.store, options.binding, memberId, command, fresh);
-  return { ...result, clearKey: true };
+  try {
+    const result = await providerCommand(options.store, options.binding, memberId, command, fresh);
+    await cleanProviderSecrets(options, providerId, secretRef, input.expectedRevision);
+    return { ...result, clearKey: true };
+  } catch (error) {
+    // Read events after a lost append reply before deciding whether the candidate is an orphan.
+    // An unavailable history keeps the secret for later reconciliation rather than deleting it.
+    await cleanProviderSecrets(options, providerId, secretRef, input.expectedRevision);
+    throw error;
+  }
+}
+async function cleanProviderSecrets(options: ProviderOptions, providerId: string,
+  candidate: string, expectedRevision: number) {
+  if (!options.secrets) {
+    return;
+  }
+  const current = await providerHistory(options.store, options.silo, providerId);
+  const references = new Set([candidate]);
+  for (const row of current.rows) {
+    if (row.event.type === 'provider.key_saved') {
+      references.add(providerKeySchema.parse(row.event.data).secretRef);
+    }
+  }
+  const revision = current.state?.revision;
+  const candidateIsPending = revision !== undefined && revision <= expectedRevision;
+  for (const reference of references) {
+    if (reference === current.state?.secretRef) {
+      continue;
+    }
+    // Another retry can still append at this revision, even after this caller is refused.
+    if (reference === candidate && candidateIsPending) {
+      continue;
+    }
+    await options.secrets.remove(reference);
+  }
 }
 function providerRow(state: Awaited<ReturnType<typeof readProviders>>[number]) {
   let status = 'needs_key';
@@ -223,8 +274,13 @@ function providerRow(state: Awaited<ReturnType<typeof readProviders>>[number]) {
   if (state.reachable?.outcome === 'pass') {
     status = 'connected_not_tested';
   }
-  if (state.modelAnswer?.outcome === 'pass' && state.reachable?.outcome === 'pass') {
-    status = 'ready';
+  if (state.reachable?.outcome === 'pass' && state.modelAnswer) {
+    const outcome = state.modelAnswer.outcome;
+    if (outcome === 'pass') {
+      status = 'ready';
+    } else if (outcome !== 'skipped') {
+      status = `model_test_${outcome}`;
+    }
   }
   return { ...state, status };
 }

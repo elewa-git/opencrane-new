@@ -30,3 +30,24 @@ it('signs short-lived computer and turn tokens and refuses rotated ids', async (
   now += 601;
   await expect(issuer.verify(rotated.value, computerTokenAudience, rotated.id)).rejects.toThrow();
 });
+
+async function separatesVerificationAudience() {
+  directory = await mkdtemp(join(tmpdir(), 'provider-token-'));
+  const keyOptions = { namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8' as const, format: 'pem' as const },
+    publicKeyEncoding: { type: 'spki' as const, format: 'pem' as const } };
+  const key = generateKeyPairSync('ec', keyOptions);
+  const path = join(directory, 'signing.pem');
+  await writeFile(path, key.privateKey, { mode: 0o600 });
+  const issuerOptions = { privateKeyPath: path, issuer: 'https://provider-token.invalid/' };
+  const issuer = await tokenIssuer(issuerOptions);
+  const command = { silo: 'test', memberId: 'owner', commandDigest: 'fixture-digest' };
+  const provider = await issuer.providerVerification(command);
+  const budget = await issuer.budget(command);
+  expect(await issuer.verify(provider.value, 'provider-verification')).toMatchObject({
+    typ: 'provider-verification', silo: 'test', memberId: 'owner' });
+  await expect(issuer.verify(provider.value, 'budget-admin')).rejects.toThrow();
+  await expect(issuer.verify(budget.value, 'provider-verification')).rejects.toThrow();
+}
+it('provider verification and budget configuration tokens cannot share an audience',
+  separatesVerificationAudience);

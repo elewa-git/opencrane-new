@@ -1,3 +1,4 @@
+import { parseEventByType } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
@@ -6,15 +7,16 @@ import { exportPKCS8, generateKeyPair } from 'jose';
 import { tokenIssuer } from '@opencrane/auth';
 import { BudgetActor, startDecision, startGateway } from '@opencrane/models';
 import { createLogger } from '@opencrane/observability';
-import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { providerSecrets, providerSecretRef } from '@opencrane/models';
+import { providerSecrets, providerSecretRef, ingestUsage } from '@opencrane/models';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
-import { pgDb, providers, readProviders, ProjectionRunner, rebuildProviderProjection } from '@opencrane/projections';
+import { pgDb, providers, readProviders, ProjectionRunner,
+  rebuildProviderProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -34,6 +36,8 @@ let upstreamCount = 0;
 let upstreamHeaders: string[] = [];
 let upstreamAuthHash = '';
 let upstreamFailure = 0;
+let upstreamInvalidJson = false;
+let upstreamNoAnswer = false;
 let auth: ReturnType<typeof memberAuthorisation>;
 async function initialise() {
   nats = await natsFixture();
@@ -45,7 +49,9 @@ async function initialise() {
   const binding = await createStore(fga.apiUrl, 'acme');
   auth = memberAuthorisation(binding);
   const joined = {
-    ...event('provider-owner', 'member-owner', 'member.joined'), silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' },
+    ...event('provider-owner', 'member-owner', 'member.joined'),
+    silo: 'acme', correlation: {},
+    principal: { kind: 'human' as const, id: 'owner' },
     data: { memberId: 'owner', email: 'owner@example.test', displayName: 'Owner',
       role: 'owner', invitationId: 'invite-owner' },
   };
@@ -56,7 +62,9 @@ async function initialise() {
     return Promise.resolve('bob');
   }
   const bob = { ...event('provider-bob', 'member-bob', 'member.joined'),
-    silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' }, data: { memberId: 'bob', email: 'bob@example.test',
+    silo: 'acme', correlation: {},
+    principal: { kind: 'human' as const, id: 'owner' },
+    data: { memberId: 'bob', email: 'bob@example.test',
       displayName: 'Bob', role: 'member', invitationId: 'invite-bob' } };
   await nats.store.append({ event: bob, expectedSequence: 0 });
   await auth.handler.handle(bob, pgDb(dbs.queue));
@@ -110,8 +118,10 @@ function request(method: 'GET' | 'POST', url: string, payload?: unknown,
   const session = { sub, orgId, roles: ['owner'],
     authTime: 1, exp: 2000000000 };
   const headers = { origin,
-    'content-type': 'application/json', cookie: `${config.cookieName}=${encodeSession(config, session)}` };
-  const options = { method, url, ...(payload ? { payload: JSON.stringify(payload) } : {}), headers };
+    'content-type': 'application/json',
+    cookie: `${config.cookieName}=${encodeSession(config, session)}` };
+  const options = { method, url,
+    ...(payload ? { payload: JSON.stringify(payload) } : {}), headers };
   return app.inject(options);
 }
 async function createsConnection() {
@@ -143,19 +153,22 @@ async function savesKeyOnce() {
   for await (const row of nats.store.readStream('provider-primary')) rows.push(row);
   expect(JSON.stringify(rows)).not.toContain(key);
 }
-it('saves the key once and clears transient input on acceptance without event disclosure', savesKeyOnce);
+it('saves the key once and clears transient input on acceptance without event disclosure',
+  savesKeyOnce);
 async function readsAndReplaysMetadata() {
   await runner.run(providers);
   const response = await request('GET', '/api/org/providers/primary');
   expect(response.statusCode).toBe(200);
   expect(response.json()).toMatchObject({ rows: [{ providerId: 'primary', revision: 2,
-    saved: { revision: 2, outcome: 'recorded' }, enabledModels: [], status: 'saved_unverified' }] });
+    saved: { revision: 2, outcome: 'recorded' }, enabledModels: [],
+    status: 'saved_unverified' }] });
   await runner.run(providers);
   const before = await readProviders(pgDb(dbs.queue), 'acme', 'primary');
   await runner.rebuild(providers);
   expect(await readProviders(pgDb(dbs.queue), 'acme', 'primary')).toEqual(before);
 }
-it('reads separate safe facts and replays metadata without reading secrets', readsAndReplaysMetadata);
+it('reads separate safe facts and replays metadata without reading secrets',
+  readsAndReplaysMetadata);
 async function skipsWithoutClaimingReady() {
   const input = { commandId: 'skip-primary', expectedRevision: 2, action: 'skip' };
   const skipped = await request('POST', '/api/org/providers/primary/verify', input);
@@ -165,7 +178,8 @@ async function skipsWithoutClaimingReady() {
   expect(detail.json()).toMatchObject({ rows: [{ status: 'saved_unverified',
     modelAnswer: { revision: 2, outcome: 'skipped' } }] });
 }
-it('records an explicit skipped test separately without ready or model-answer PASS', skipsWithoutClaimingReady);
+it('records an explicit skipped test separately without ready or model-answer PASS',
+  skipsWithoutClaimingReady);
 async function checksThroughRealGateway() {
   const checked = await request('POST', '/api/org/providers/primary/verify',
     { commandId: 'reach-primary', expectedRevision: 2, action: 'reachability' });
@@ -176,33 +190,52 @@ async function checksThroughRealGateway() {
   expect(detail.json()).toMatchObject({ rows: [{ status: 'connected_not_tested',
     reachable: { revision: 2, outcome: 'pass' }, modelAnswer: { outcome: 'skipped' } }] });
 }
-it('checks reachability through the real gateway separately from a model answer', checksThroughRealGateway);
+it('checks reachability through the real gateway separately from a model answer',
+  checksThroughRealGateway);
 
-function closeUpstream(resolve: () => void) { upstream.close(resolve); }
+function closeUpstream(resolve: () => void) {
+  upstream.close(resolve);
+}
 async function freePort() {
   const server = createServer();
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing port');
-  function closeServer(resolve: () => void) { server.close(resolve); }
+  function closeServer(resolve: () => void) {
+    server.close(resolve);
+  }
   await new Promise<void>(closeServer);
   return address.port;
 }
 function recordUpstream(req: import('node:http').IncomingMessage,
   res: import('node:http').ServerResponse) {
   upstreamCount++;
+  if (upstreamInvalidJson) {
+    res.end('not json');
+    return;
+  }
   upstreamHeaders = Object.keys(req.headers);
   const hash = createHash('sha256');
   hash.update(req.headers.authorization ?? '');
   upstreamAuthHash = hash.digest('hex');
   req.resume();
-  if (upstreamFailure) { res.writeHead(upstreamFailure); res.end('{}'); return; }
+  if (upstreamFailure) {
+    res.writeHead(upstreamFailure);
+    res.end('{}');
+    return;
+  }
   res.setHeader('content-type', 'application/json');
-  if (req.url === '/v1/models') { res.end('{"data":[{"id":"gpt-6-luna"}]}'); return; }
+  if (req.url === '/v1/models') {
+    res.end('{"data":[{"id":"gpt-6-luna"}]}');
+    return;
+  }
   const response = { status: 'completed', output: [{ type: 'message',
     content: [{ type: 'output_text', text: 'OK' }] }],
     usage: { input_tokens: 10, output_tokens: 2 } };
+  if (upstreamNoAnswer) {
+    response.output = [];
+  }
   res.end(JSON.stringify(response));
 }
 async function runsPricedTestOnce() {
@@ -220,13 +253,15 @@ async function runsPricedTestOnce() {
       model: 'gpt-6-luna', reservedCents: 1, settledCents: 1 } }] });
   expect(actor.state.reservations).toHaveLength(1);
   expect(actor.state.reservations[0]?.settledCents).toBe(1);
+  expect(actor.state.reservations[0]?.call.conversationId).toBe('provider-primary');
   await request('POST', '/api/org/providers/primary/verify', input);
   expect(upstreamCount - before).toBe(1);
   expect(upstreamHeaders).not.toContain('x-provider-token');
   expect(upstreamHeaders).not.toContain('x-provider-command');
   expect(upstreamHeaders).not.toContain('x-provider-key');
 }
-it('warns with an integer-cent quote, reserves and settles a real gateway test exactly once', runsPricedTestOnce);
+it('warns with an integer-cent quote, reserves and settles a real gateway test exactly once',
+  runsPricedTestOnce);
 function keyHash(key: string) {
   const hash = createHash('sha256');
   hash.update(`Bearer ${key}`);
@@ -249,9 +284,11 @@ it('refuses unknown tariffs, missing consent and a stale quote before reservatio
   rejectsUnknownPriceAndMissingConsent);
 async function rotatesAndInvalidatesEvidence() {
   const key = 'fixture-rotated-key';
+  const oldReference = providerSecretRef('acme', 'primary', 'save-primary');
   const rotated = await request('POST', '/api/org/providers/primary/key',
     { commandId: 'rotate-primary', expectedRevision: 2, key });
   expect(rotated.statusCode).toBe(200);
+  await expect(secrets.read(oldReference)).rejects.toMatchObject({ code: 'ENOENT' });
   await runner.run(providers);
   expect((await request('GET', '/api/org/providers/primary')).json()).toMatchObject({
     rows: [{ revision: 3, status: 'saved_unverified', saved: { revision: 3 } }] });
@@ -260,14 +297,16 @@ async function rotatesAndInvalidatesEvidence() {
   expect(state[0]?.modelAnswer).toBeUndefined();
   const before = upstreamCount;
   expect((await request('POST', '/api/org/providers/primary/verify',
-    { commandId: 'stale-check', action: 'reachability', expectedRevision: 2 })).statusCode).toBe(409);
+    { commandId: 'stale-check', action: 'reachability', expectedRevision: 2 })).statusCode)
+    .toBe(409);
   expect(upstreamCount).toBe(before);
   expect((await request('POST', '/api/org/providers/primary/verify',
     { commandId: 'fresh-rotated-check', expectedRevision: 3, action: 'reachability' })).statusCode)
     .toBe(200);
   expect(upstreamAuthHash).toBe(keyHash('fixture-rotated-key'));
 }
-it('rotation invalidates old check evidence and refuses stale verification', rotatesAndInvalidatesEvidence);
+it('rotation invalidates old check evidence and refuses stale verification',
+  rotatesAndInvalidatesEvidence);
 async function holdsUnknownCostWithoutRetry() {
   upstreamFailure = 504;
   const input = { commandId: 'unknown-test', expectedRevision: 3, action: 'test',
@@ -282,7 +321,8 @@ async function holdsUnknownCostWithoutRetry() {
   expect(actor.state.reservations[1]?.settledCents).toBeUndefined();
   upstreamFailure = 0;
 }
-it('holds an uncertain priced call and Check status never dispatches it again', holdsUnknownCostWithoutRetry);
+it('holds an uncertain priced call and Check status never dispatches it again',
+  holdsUnknownCostWithoutRetry);
 async function refusesBudgetBeforeGateway() {
   await actor.configure({ scope: 'global', ceilingCents: 2, dailyCeilingCents: 2,
     setBy: 'owner' });
@@ -295,6 +335,9 @@ async function refusesBudgetBeforeGateway() {
     .toMatchObject({ outcome: 'budget_refused' });
   expect(upstreamCount).toBe(before);
   expect(actor.state.reservations).toHaveLength(2);
+  await runner.run(providers);
+  const detail = await request('GET', '/api/org/providers/primary');
+  expect(detail.json()).toMatchObject({ rows: [{ status: 'model_test_budget_refused' }] });
 }
 it('budget refusal keeps the saved key and makes no model call', refusesBudgetBeforeGateway);
 async function selectsRegistryModelsWithoutGrants() {
@@ -309,7 +352,8 @@ async function selectsRegistryModelsWithoutGrants() {
   expect((await request('POST', '/api/org/providers', { ...body,
     commandId: 'unknown-model', expectedRevision: 4, models: ['made-up'] })).statusCode).toBe(403);
 }
-it('selects only registry models and never turns setup into a model grant', selectsRegistryModelsWithoutGrants);
+it('selects only registry models and never turns setup into a model grant',
+  selectsRegistryModelsWithoutGrants);
 async function rejectsReferenceWithoutCustody() {
   const providerId = 'forged-reference';
   const created = { action: 'create', providerId, commandId: 'create-forged-reference',
@@ -413,9 +457,304 @@ async function reconstructsWithoutExternalCalls() {
 }
 it('rebuilds the same metadata and OpenFGA relations with zero verification calls',
   reconstructsWithoutExternalCalls);
+function fetchUrl(resource: Parameters<typeof fetch>[0]) {
+  if (typeof resource === 'string') {
+    return resource;
+  }
+  if (resource instanceof URL) {
+    return resource.href;
+  }
+  return resource.url;
+}
+const undispatchedCases = [
+  { action: 'reachability', gatewayStatus: 403 },
+  { action: 'reachability', gatewayStatus: 503 },
+  { action: 'test', gatewayStatus: 403 },
+  { action: 'test', gatewayStatus: 503 },
+] as const;
+async function recordsUndispatchedCheck(
+  scenario: (typeof undispatchedCases)[number],
+) {
+  await actor.configure({ scope: 'global', ceilingCents: 100, dailyCeilingCents: 100,
+    setBy: 'owner' });
+  const commandId = `undispatched-${scenario.action}-${scenario.gatewayStatus}`;
+  const input = { commandId, expectedRevision: 5, action: scenario.action,
+    ...(scenario.action === 'test' ? { model: 'gpt-6-luna',
+      priceTableId: 'openai-2026-10-02-all-eur95', reservedCents: 1, consent: true } : {}) };
+  const originalFetch = globalThis.fetch;
+  async function refusedGateway(resource: Parameters<typeof fetch>[0],
+    options?: Parameters<typeof fetch>[1]) {
+    if (fetchUrl(resource).includes('/providers/openai/')) {
+      return new Response('{}', { status: scenario.gatewayStatus });
+    }
+    return originalFetch(resource, options);
+  }
+  const gatewayRequest = vi.spyOn(globalThis, 'fetch').mockImplementation(refusedGateway);
+  const before = upstreamCount;
+  try {
+    const response = await request('POST', '/api/org/providers/primary/verify', input);
+    expect(response.statusCode).toBe(200);
+    const status = await request('GET', `/api/org/providers/primary/changes/${commandId}`);
+    expect(status.json()).toMatchObject({ outcome: 'unknown' });
+    if (scenario.action === 'test') {
+      expect(actor.state.reservations.at(-1)?.settledCents).toBe(0);
+    }
+    expect(upstreamCount).toBe(before);
+  } finally {
+    gatewayRequest.mockRestore();
+  }
+}
+it.each(undispatchedCases)(
+  'an undispatched $action check with gateway $gatewayStatus records unknown and releases money',
+  recordsUndispatchedCheck,
+);
+async function rejectsInternalCommandLookalikes() {
+  const status = await request('GET', '/api/org/providers/primary/changes/reach-primary-result');
+  expect(status.statusCode).toBe(404);
+}
+it('a status read cannot mistake an internal result for a user command',
+  rejectsInternalCommandLookalikes);
+async function ignoresQueryStringsWhenRouting() {
+  const input = { commandId: 'query-reachability', expectedRevision: 5, action: 'reachability' };
+  const response = await request('POST', '/api/org/providers/primary/verify?x=/key', input);
+  expect(response.statusCode).toBe(200);
+  const status = await request('GET', '/api/org/providers/primary?x=/verify');
+  expect(status.statusCode).toBe(200);
+}
+it('query strings cannot select a different provider handler', ignoresQueryStringsWhenRouting);
+async function recordsMalformedResponse() {
+  upstreamInvalidJson = true;
+  const input = { commandId: 'malformed-test', expectedRevision: 5, action: 'test',
+    model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+    reservedCents: 1, consent: true };
+  try {
+    const response = await request('POST', '/api/org/providers/primary/verify', input);
+    expect(response.statusCode).toBe(200);
+    const status = await request('GET', '/api/org/providers/primary/changes/malformed-test');
+    expect(status.json()).toMatchObject({ outcome: 'unknown' });
+    expect(actor.state.reservations.at(-1)?.settledCents).toBeUndefined();
+    await runner.run(providers);
+    const detail = await request('GET', '/api/org/providers/primary');
+    expect(detail.json()).toMatchObject({ rows: [{ status: 'model_test_unknown' }] });
+  } finally {
+    upstreamInvalidJson = false;
+  }
+}
+it('a non-JSON provider reply records unknown immediately and retains uncertain spend',
+  recordsMalformedResponse);
+async function reportsFailedModelTest() {
+  upstreamNoAnswer = true;
+  const input = { commandId: 'failed-model-test', expectedRevision: 5, action: 'test',
+    model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+    reservedCents: 1, consent: true };
+  try {
+    const response = await request('POST', '/api/org/providers/primary/verify', input);
+    expect(response.statusCode).toBe(200);
+    await runner.run(providers);
+    const detail = await request('GET', '/api/org/providers/primary');
+    expect(detail.json()).toMatchObject({ rows: [{ status: 'model_test_fail',
+      modelAnswer: { outcome: 'fail', settledCents: 1 } }] });
+  } finally {
+    upstreamNoAnswer = false;
+  }
+}
+it('a settled test without a model answer reports failed rather than not tested',
+  reportsFailedModelTest);
+const gatewayStepCases = [
+  { action: 'reachability', failure: 'refused' },
+  { action: 'test', failure: 'refused' },
+  { action: 'reachability', failure: 'unavailable' },
+  { action: 'test', failure: 'unavailable' },
+] as const;
+async function recordsRealGatewayStepFailure(scenario: (typeof gatewayStepCases)[number]) {
+  const commandId = `real-gateway-${scenario.action}-${scenario.failure}`;
+  const input = { commandId, expectedRevision: 5, action: scenario.action,
+    ...(scenario.action === 'test' ? { model: 'gpt-6-luna',
+      priceTableId: 'openai-2026-10-02-all-eur95', reservedCents: 1, consent: true } : {}) };
+  const originalFetch = globalThis.fetch;
+  let gatewayStatus: number | undefined;
+  async function changeGatewayCommand(resource: Parameters<typeof fetch>[0],
+    options?: Parameters<typeof fetch>[1]) {
+    if (scenario.failure === 'refused' && fetchUrl(resource).includes('/providers/openai/')) {
+      let changedUrl = fetchUrl(resource);
+      let changedOptions = options;
+      if (scenario.action === 'reachability') {
+        changedUrl = changedUrl.replace('/providers/openai/', '/providers/anthropic/');
+      } else {
+        const changedBody = { model: 'gpt-6-luna', input: 'Changed fixture prompt.' };
+        changedOptions = { ...options, body: JSON.stringify(changedBody) };
+      }
+      const response = await originalFetch(changedUrl, changedOptions);
+      gatewayStatus = response.status;
+      return response;
+    }
+    return originalFetch(resource, options);
+  }
+  const gatewayRequest = vi.spyOn(globalThis, 'fetch').mockImplementation(changeGatewayCommand);
+  const secretRead = vi.spyOn(secrets, 'read');
+  if (scenario.failure === 'unavailable') {
+    secretRead.mockRejectedValue(new Error('fixture-unreadable-secret-store'));
+  }
+  const before = upstreamCount;
+  try {
+    const response = await request('POST', '/api/org/providers/primary/verify', input);
+    expect(response.statusCode).toBe(200);
+    const status = await request('GET', `/api/org/providers/primary/changes/${commandId}`);
+    expect(status.json()).toMatchObject({ outcome: 'unknown' });
+    expect(upstreamCount).toBe(before);
+    if (scenario.action === 'test') {
+      expect(actor.state.reservations.at(-1)?.settledCents).toBe(0);
+    }
+    if (scenario.failure === 'refused') {
+      expect(gatewayStatus).toBe(403);
+      expect(secretRead).not.toHaveBeenCalled();
+    }
+  } finally {
+    secretRead.mockRestore();
+    gatewayRequest.mockRestore();
+  }
+}
+it.each(gatewayStepCases)(
+  'the real gateway records unknown for an undispatched $action check when $failure',
+  recordsRealGatewayStepFailure,
+);
+async function recordsResultAfterRevisionChanges() {
+  const providerId = 'changing';
+  const create = { action: 'create', providerId, commandId: 'create-changing',
+    expectedRevision: 0, provider: 'openai', name: 'Changing' };
+  expect((await request('POST', '/api/org/providers', create)).statusCode).toBe(200);
+  for await (const row of nats.store.readStream('provider-changing')) {
+    await auth.handler.handle(row.event, pgDb(dbs.queue));
+  }
+  const key = { commandId: 'key-changing', expectedRevision: 1, key: 'fixture-changing' };
+  expect((await request('POST', '/api/org/providers/changing/key', key)).statusCode).toBe(200);
+  const originalFetch = globalThis.fetch;
+  async function changeWhileCalling(resource: Parameters<typeof fetch>[0],
+    options?: Parameters<typeof fetch>[1]) {
+    const response = await originalFetch(resource, options);
+    if (fetchUrl(resource).endsWith('/providers/openai/test')) {
+      const selection = { action: 'models', commandId: 'models-changing', providerId,
+        expectedRevision: 2, models: ['gpt-6-luna'] };
+      expect((await request('POST', '/api/org/providers', selection)).statusCode).toBe(200);
+    }
+    return response;
+  }
+  const gatewayRequest = vi.spyOn(globalThis, 'fetch').mockImplementation(changeWhileCalling);
+  try {
+    const input = { commandId: 'test-changing', expectedRevision: 2, action: 'test',
+      model: 'gpt-6-luna', priceTableId: 'openai-2026-10-02-all-eur95',
+      reservedCents: 1, consent: true };
+    const response = await request('POST', '/api/org/providers/changing/verify', input);
+    expect(response.statusCode).toBe(200);
+    const status = await request('GET', '/api/org/providers/changing/changes/test-changing');
+    expect(status.json()).toMatchObject({ outcome: 'pass', revision: 2, currentRevision: 3 });
+    expect(actor.state.reservations.at(-1)?.settledCents).toBe(1);
+    await runner.rebuild(providers);
+    const detail = await request('GET', '/api/org/providers/changing');
+    expect(detail.json()).toMatchObject({ rows: [{ revision: 3, status: 'saved_unverified' }] });
+  } finally {
+    gatewayRequest.mockRestore();
+  }
+}
+it('a revision change during a model call cannot prevent recording its settled result',
+  recordsResultAfterRevisionChanges);
+async function cleansRejectedSecret() {
+  const originalAppend = nats.store.append.bind(nats.store);
+  async function refuseKeyAppend(command: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) {
+      throw new Error('Invalid fixture event');
+    }
+    if (parsed.event.commandId === 'orphan-key') {
+      const selection = { action: 'models', commandId: 'orphan-key-config',
+        providerId: 'primary', expectedRevision: 5, models: ['gpt-6-luna'] };
+      expect((await request('POST', '/api/org/providers', selection)).statusCode).toBe(200);
+    }
+    return originalAppend(command);
+  }
+  const writer = vi.spyOn(nats.store, 'append').mockImplementation(refuseKeyAppend);
+  try {
+    const input = { commandId: 'orphan-key', expectedRevision: 5, key: 'fixture-orphan' };
+    expect((await request('POST', '/api/org/providers/primary/key', input)).statusCode).toBe(409);
+    const reference = providerSecretRef('acme', 'primary', 'orphan-key');
+    await expect(secrets.read(reference)).rejects.toMatchObject({ code: 'ENOENT' });
+  } finally {
+    writer.mockRestore();
+  }
+}
+it('a rejected key append deletes its orphan secret without deleting an accepted key',
+  cleansRejectedSecret);
+async function retainsSecretForInflightRetry() {
+  const input = { commandId: 'concurrent-key-cleanup', expectedRevision: 6,
+    key: 'fixture-concurrent-key' };
+  const originalAppend = nats.store.append.bind(nats.store);
+  const firstStarted = Promise.withResolvers<void>();
+  const secondStarted = Promise.withResolvers<void>();
+  const finishFirst = Promise.withResolvers<void>();
+  const finishSecond = Promise.withResolvers<void>();
+  let appendCount = 0;
+  async function pauseKeyAppend(command: Parameters<typeof originalAppend>[0]) {
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) {
+      throw new Error('Invalid fixture event');
+    }
+    if (parsed.event.commandId === input.commandId) {
+      appendCount += 1;
+      if (appendCount === 1) {
+        firstStarted.resolve();
+        await finishFirst.promise;
+      } else if (appendCount === 2) {
+        secondStarted.resolve();
+        await finishSecond.promise;
+      }
+    }
+    return originalAppend(command);
+  }
+  const writer = vi.spyOn(nats.store, 'append').mockImplementation(pauseKeyAppend);
+  const first = request('POST', '/api/org/providers/primary/key', input);
+  let second: ReturnType<typeof request> | undefined;
+  try {
+    await firstStarted.promise;
+    const skip = { commandId: 'concurrent-key-skip', expectedRevision: 6, action: 'skip' };
+    expect((await request('POST', '/api/org/providers/primary/verify', skip)).statusCode).toBe(200);
+    second = request('POST', '/api/org/providers/primary/key', input);
+    await secondStarted.promise;
+    finishFirst.resolve();
+    expect((await first).statusCode).toBe(409);
+    finishSecond.resolve();
+    expect((await second).statusCode).toBe(200);
+    const reference = providerSecretRef('acme', 'primary', input.commandId);
+    await expect(secrets.read(reference)).resolves.toBe(input.key);
+  } finally {
+    finishFirst.resolve();
+    finishSecond.resolve();
+    await first;
+    if (second) {
+      await second;
+    }
+    writer.mockRestore();
+  }
+}
+it('a refused save cannot delete the secret of an in-flight retry', retainsSecretForInflightRetry);
+async function recordsNoFakeGatewayObservations() {
+  let usage = '';
+  try {
+    usage = await readFile(`${secretDirectory}/usage.jsonl`, 'utf8');
+  } catch (error) {
+    expect(error).toMatchObject({ code: 'ENOENT' });
+  }
+  expect(usage).toBe('');
+  await ingestUsage(actor, `${secretDirectory}/usage.jsonl`);
+  const files = await readdir(secretDirectory);
+  expect(files).not.toContain(providerSecretRef('acme', 'primary', 'save-primary').slice(16));
+}
+it('provider checks do not invent unrelated gateway observation rows',
+  recordsNoFakeGatewayObservations);
 async function deniesRevokedRoleBeforeIamCatchesUp() {
   const row = { ...event('provider-revoked-owner', 'member-owner', 'member.role_changed'),
-    silo: 'acme', correlation: {}, principal: { kind: 'human' as const, id: 'owner' }, data: { memberId: 'owner', previousRole: 'owner',
+    silo: 'acme', correlation: {},
+    principal: { kind: 'human' as const, id: 'owner' },
+    data: { memberId: 'owner', previousRole: 'owner',
       newRole: 'member', changedBy: 'owner' } };
   await nats.store.append({ event: row, expectedSequence: await nats.store.head('member-owner') });
   const before = upstreamCount;

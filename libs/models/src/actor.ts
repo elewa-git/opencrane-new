@@ -123,7 +123,7 @@ export class BudgetActor {
       const r = this.state.reservations.find(r => r.id === id);
       if (!r) throw new Error('Unmatched reservation');
       if (r.settledCents !== undefined) throw new Error('Reservation already settled');
-      // Call only before the permit has left this process for dispatch.
+      // Call only with proof that the permit was not used for provider dispatch.
       await this.append('budget.settled', { reservationId: id, permitId: id, settledCents: 0, outcome: 'not_dispatched' });
     });
   }

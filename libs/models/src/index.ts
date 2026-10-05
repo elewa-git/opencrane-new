@@ -22,3 +22,5 @@ export { providerCommand, providerCommandSchema, providerAuthority, providerRece
 export { providerSecrets, type ProviderSecrets } from './provider-secrets.ts';
 export { providerVerificationSchema, requestProviderVerification, providerTestQuote,
   type ProviderVerificationOptions } from './provider-verification.ts';
+
+export { activeMember, MemberAccessRefused } from './member-authority.ts';

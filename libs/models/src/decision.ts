@@ -235,22 +235,37 @@ async function internalRoutes(req: IncomingMessage, res: ServerResponse, actor: 
 }
 
 function isProviderPath(path: string | undefined) {
-  return path === '/providers/verify' || Boolean(path?.startsWith('/authorize/providers/'));
+  if (!path) {
+    return false;
+  }
+  const url = new URL(path, 'http://decision');
+  return url.pathname === '/providers/verify' ||
+    url.pathname.startsWith('/authorize/providers/');
 }
+
+const providerCommandHeader = z.string().max(8192);
+const providerReservationHeader = z.uuid().optional();
 
 async function providerRoutes(req: IncomingMessage, res: ServerResponse, actor: BudgetActor,
   identity: { jwks: JSONWebKeySet; issuer: string }, binding: Binding,
   providers?: ProviderVerificationOptions) {
   try {
-    const path = z.string().parse(req.url);
-    if (!providers) throw new Error('Provider verification unavailable');
-    if (path === '/providers/verify' && req.method !== 'POST') throw new ProviderRefused();
+    const url = new URL(z.string().parse(req.url), 'http://decision');
+    const path = url.pathname;
+    if (!providers) {
+      throw new Error('Provider verification unavailable');
+    }
+    if (path === '/providers/verify' && req.method !== 'POST') {
+      throw new ProviderRefused();
+    }
     const body = await readBody(req, path !== '/providers/verify');
     let raw: unknown;
-    const authorization = req.headers.authorization ?? String(req.headers['x-provider-token'] ?? '');
-    if (path === '/providers/verify') raw = JSON.parse(body);
-    else {
-      const encoded = z.string().max(8192).parse(req.headers['x-provider-command']);
+    const providerToken = String(req.headers['x-provider-token'] ?? '');
+    const authorization = req.headers.authorization ?? providerToken;
+    if (path === '/providers/verify') {
+      raw = JSON.parse(body);
+    } else {
+      const encoded = providerCommandHeader.parse(req.headers['x-provider-command']);
       raw = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
     }
     const memberId = await verifyProviderCapability(identity, actor.silo, raw, authorization);
@@ -259,7 +274,7 @@ async function providerRoutes(req: IncomingMessage, res: ServerResponse, actor: 
         authorization, providers);
       res.end(JSON.stringify(receipt));
     } else {
-      const reservationId = z.string().optional().parse(req.headers['x-provider-reservation']);
+      const reservationId = providerReservationHeader.parse(req.headers['x-provider-reservation']);
       const key = await admitProviderVerification(actor, binding, memberId, raw, providers,
         path, body, reservationId);
       res.setHeader('x-provider-key', key);
@@ -267,9 +282,15 @@ async function providerRoutes(req: IncomingMessage, res: ServerResponse, actor: 
     }
   } catch (error) {
     let code = 503;
-    if (error instanceof ProviderRefused) code = 403;
-    if (error instanceof ProviderConflict) code = 409;
-    if (error instanceof z.ZodError) code = 400;
+    if (error instanceof ProviderRefused) {
+      code = 403;
+    }
+    if (error instanceof ProviderConflict) {
+      code = 409;
+    }
+    if (error instanceof z.ZodError) {
+      code = 400;
+    }
     res.writeHead(code);
     const result = { status: 'refused',
       ...(error instanceof ProviderUnpriced ? { reason: 'unknown_price' } : {}) };
