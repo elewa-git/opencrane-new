@@ -5,7 +5,7 @@ import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { auditFilterSchema } from '@opencrane/protocol';
 import { readAudit, type Query, type connectMemberFeed } from '@opencrane/projections';
-import { history } from '@opencrane/models';
+import { authorityFence, currentMembership, history } from '@opencrane/models';
 import { sessionFor } from '../members/routes.ts';
 
 export interface AuditOptions {
@@ -38,29 +38,35 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
   });
 }
 async function access(options: AuditOptions, memberId: string, conversationId?: string) {
-  const started = performance.now(), auth = memberAuthorisation(options.binding);
-  const subjects = [`member-${memberId}`, ...(conversationId ? [`conversation-${conversationId}`] : [])];
-  const heads = await Promise.all(subjects.map(subject => options.store.head(subject)));
-  const members = await history(options.store, subjects[0]!, options.silo);
-  let role: string | undefined;
-  for (const row of members) {
-    const d = z.record(z.string(), z.unknown()).parse(row.event.data);
-    if ((row.event.type === 'member.joined' || row.event.type === 'silo.owner_bootstrapped')) role = z.string().parse(d['role']);
-    if (row.event.type === 'member.role_changed') role = z.string().parse(d['newRole']);
-    if (row.event.type === 'member.removed') role = undefined;
+  const auth = memberAuthorisation(options.binding);
+  const fresh = await authorityFence(options.store, performance.now());
+  const membership = await currentMembership(options.store, options.silo, memberId, fresh);
+  if (!membership.role || (!conversationId && !['owner', 'admin'].includes(membership.role))) {
+    return undefined;
   }
-  if (!role || (!conversationId && !['owner', 'admin'].includes(role))) return undefined;
-  const facts = members.filter(row => ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(row.event.type));
+  const facts = membership.facts;
   if (conversationId) {
-    const conversation = await history(options.store, subjects[1]!, options.silo);
-    facts.push(...conversation.filter(row => ['conversation.created', 'participant.added', 'participant.removed'].includes(row.event.type)));
+    const subject = `conversation-${conversationId}`;
+    fresh.include(subject);
+    const conversation = await history(options.store, subject, options.silo, fresh.deadline);
+    function isParticipation(row: (typeof conversation)[number]) {
+      return ['conversation.created', 'participant.added', 'participant.removed'].includes(row.event.type);
+    }
+    const participation = conversation.filter(isParticipation);
+    facts.push(...participation);
   }
-  if (!(await Promise.all(facts.map(row => auth.applied(row.event.id)))).every(Boolean)) throw new Error('IAM behind');
-  const permission = conversationId ? await auth.conversation(memberId, conversationId, 'read') : await auth.check(memberId, 'admin');
+  for (const row of facts) {
+    if (!await auth.applied(row.event.id)) {
+      throw new Error('IAM behind');
+    }
+  }
+  const permission = conversationId ? await auth.conversation(memberId, conversationId, 'read') :
+    await auth.check(memberId, 'admin');
   if (permission.status === 'unavailable') throw new Error('IAM unavailable');
   if (!permission.allowed) return undefined;
-  return async () => {
-    const current = await Promise.all(subjects.map(subject => options.store.head(subject)));
-    return performance.now() - started <= 2000 && current.every((head, index) => head === heads[index]);
-  };
+  async function stillAllowed() {
+    await fresh();
+    return true;
+  }
+  return stillAllowed;
 }

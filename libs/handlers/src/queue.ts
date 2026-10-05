@@ -3,7 +3,7 @@ import { parseEventByType } from "@opencrane/events";
 import { runHandler, type Logger } from "@opencrane/observability";
 import type { Db, Query } from "@opencrane/projections";
 import { withinAttempt } from "./attempt.ts";
-import { checkHandlers, type Handler } from "./registration.ts";
+import { checkHandlers, handlerOrderingKey, type Handler } from "./registration.ts";
 
 export function transactionAdapter(tx: Query) {
   return {
@@ -114,7 +114,7 @@ export class HandlerRuntime {
       !parsed.success ||
       parsed.event.silo !== this.options.silo ||
       !handler.eventTypes.includes(parsed.event.type) ||
-      parsed.event.subject !== job.singletonKey
+      handlerOrderingKey(handler.name, parsed.event) !== job.singletonKey
     ) {
       throw new Error("Invalid handler job");
     }

@@ -15,3 +15,5 @@ export { authorityFence, currentAuthority } from './authority.ts';
 export { losslessJson } from './lossless-json.ts';
 
 export { readEffect, listEffects, resolveEffect, resolutionCommandSchema } from './reconciliation.ts';
+
+export { seedOwnership, ownershipSeedHandler, ownershipSubject, ownershipState, currentMembership } from './ownership.ts';

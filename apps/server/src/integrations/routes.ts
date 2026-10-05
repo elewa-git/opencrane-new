@@ -1,3 +1,4 @@
+import { activeMember, GroupRefused } from '../members/groups.ts';
 import { installWorker } from './install-worker.ts';
 import type { RemoteNetwork } from './remote.ts';
 import { registerRemote, discoveryStatus, remoteReference } from './registration.ts';
@@ -48,6 +49,9 @@ export function registerIntegrationRoutes(app: FastifyInstance, config: AuthConf
       if (!permission.allowed) {
         return reply.code(403).send({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' });
       }
+      if (options.store) {
+        await activeMember(options.store, options.binding, memberId, true);
+      }
       return await authorisedRequest(path, request, reply, config, options, memberId, now());
     } catch (error) {
       return routeError(request, reply, error);
@@ -92,6 +96,9 @@ async function tools(request: FastifyRequest, reply: FastifyReply, config: AuthC
 }
 
 function routeError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  if (error instanceof GroupRefused) {
+    return reply.code(403).send({ status: 'refused' });
+  }
       if (error instanceof z.ZodError || error instanceof Error && error.message === 'invalid_endpoint') return reply.code(400).send({ status: 'invalid_request' });
       if (error instanceof Error && error.message === 'Access changed') return reply.code(403).send({ status: 'refused' });
       request.log.error({ operation: 'mcp-catalogue.read' }, 'MCP catalogue unavailable');

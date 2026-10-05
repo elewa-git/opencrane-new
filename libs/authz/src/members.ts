@@ -1,4 +1,5 @@
-import { parseEventByType, type EventEnvelope } from "@opencrane/events";
+import { ownershipSeededSchema, ownershipTransferredSchema, ownershipSteppedDownSchema,
+  handlerSubscriptions, parseEventByType, type EventEnvelope } from "@opencrane/events";
 import { registerHandler } from "@opencrane/handlers";
 import { objectId, TupleClient, type Binding, type Tuple } from "./client.ts";
 
@@ -11,6 +12,13 @@ function field(data: unknown, name: string): string {
     throw new Error("Missing member field");
   }
   return value;
+}
+
+function memberRoleField(type: string) {
+  if (type === 'member.joined' || type === 'silo.owner_bootstrapped') {
+    return 'role';
+  }
+  return 'newRole';
 }
 
 function roleTuples(user: string, object: string, role: string): Tuple[] {
@@ -82,13 +90,82 @@ export function memberAuthorisation(binding: Binding) {
       object: objectId('assistant', binding.silo, assistantId) }, receipt], []);
   }
 
+
+  async function applyOwnership(event: EventEnvelope, receipt: Tuple) {
+    if (event.subject !== `ownership-${binding.silo}`) {
+      throw new Error('Ownership subject mismatch');
+    }
+    if (event.type === 'ownership.seeded') {
+      const seed = ownershipSeededSchema.parse(event.data);
+      for (const memberId of seed.ownerIds) {
+        const user = objectId('person', binding.silo, memberId);
+        const tuple = { user, object, relation: 'owner_role' };
+        const projectedOwner = await client.read(tuple);
+        if (!projectedOwner.length) {
+          throw new Error('Seed owner is not projected');
+        }
+      }
+      await client.write([receipt], []);
+      return;
+    }
+    const memberId = field(event.data, 'memberId');
+    const user = objectId('person', binding.silo, memberId);
+    const current = await client.read({ user, object });
+    function hasMembership(tuple: Tuple) {
+      return tuple.relation === 'member';
+    }
+    if (!current.some(hasMembership)) {
+      throw new Error('Ownership requires active membership');
+    }
+    const owner = { user, object, relation: 'owner_role' };
+    const admin = { user, object, relation: 'admin_role' };
+    if (event.type === 'ownership.transferred') {
+      const transfer = ownershipTransferredSchema.parse(event.data);
+      const actor = objectId('person', binding.silo, transfer.transferredBy);
+      const actorTuple = { user: actor, object, relation: 'owner_role' };
+      const actorOwners = await client.read(actorTuple);
+      if (!actorOwners.length) {
+        throw new Error('Transfer requires an owner');
+      }
+      const existingOwners = await client.read(owner);
+      const exists = existingOwners.length > 0;
+      await client.write(exists ? [receipt] : [owner, receipt], []);
+      return;
+    }
+    ownershipSteppedDownSchema.parse(event.data);
+    const owners = await client.read({ object, relation: 'owner_role' });
+    const currentOwner = await client.read(owner);
+    if (owners.length < 2 || !currentOwner.length) {
+      throw new Error('At least one owner must remain');
+    }
+    const existingAdmins = await client.read(admin);
+    const hasAdmin = existingAdmins.length > 0;
+    await client.write(hasAdmin ? [receipt] : [admin, receipt], [owner]);
+  }
+
+  async function refuseMemberOwnerEdit(event: EventEnvelope, current: Tuple[]) {
+    const seeded = await client.read({ user: object, relation: 'applied',
+      object: objectId('projection_event', binding.silo, `ownership-seed-${binding.silo}`) });
+    function isOwner(tuple: Tuple) {
+      return tuple.relation === 'owner_role';
+    }
+    let nextRole = '';
+    if (event.type !== 'member.removed') {
+      nextRole = field(event.data, event.type === 'member.role_changed' ? 'newRole' : 'role');
+    }
+    if (seeded.length && (current.some(isOwner) || nextRole === 'owner')) {
+      throw new Error('Owner changes require the ownership stream');
+    }
+  }
+
   async function apply(input: EventEnvelope): Promise<void> {
     const parsed = parseEventByType(input);
     if (!parsed.success || parsed.event.silo !== binding.silo) {
       throw new Error("Invalid authorisation event or silo");
     }
     const event = parsed.event;
-    if (!["member.joined", "silo.owner_bootstrapped", "member.role_changed", "member.removed", "assistant.created", "conversation.created", "participant.added", "participant.removed", "grant.given", "grant.revoked", "team.created", "team.member_added", "team.member_removed"].includes(event.type)) {
+    const supported: readonly string[] = handlerSubscriptions['update-openfga'];
+    if (!supported.includes(event.type)) {
       throw new Error(`OpenFGA event not implemented: ${event.type}`);
     }
     const receipt = {
@@ -97,6 +174,9 @@ export function memberAuthorisation(binding: Binding) {
       object: objectId("projection_event", binding.silo, event.id),
     };
     if ((await client.read(receipt)).length) return;
+    if (event.type.startsWith('ownership.')) {
+      return applyOwnership(event, receipt);
+    }
     if (event.type.startsWith('team.')) return applyTeam(event, receipt);
     if (event.type.startsWith('grant.')) return applyGrant(event, receipt);
     if (['conversation.created', 'participant.added', 'participant.removed'].includes(event.type)) {
@@ -112,6 +192,7 @@ export function memberAuthorisation(binding: Binding) {
     }
     const user = objectId("person", binding.silo, memberId);
     const current = await client.read({ user, object });
+    await refuseMemberOwnerEdit(event, current);
     if (
       event.type === "member.role_changed" &&
       !current.some((t) => t.relation === "member")
@@ -126,7 +207,7 @@ export function memberAuthorisation(binding: Binding) {
             object,
             field(
               event.data,
-              (event.type === "member.joined" || event.type === "silo.owner_bootstrapped") ? "role" : "newRole",
+              memberRoleField(event.type),
             ),
           );
     // A lost reply is safe: the receipt and changes either all commit or all fail.

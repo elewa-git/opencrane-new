@@ -58,6 +58,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | --- | --- | --- |
 | `org-<silo>` | silo | settings |
 | `member-<user>` | person | invited, joined, role changed, removed |
+| `ownership-<silo>` | ownership | current owners; appointment and separate step-down |
 | `team-<team>` | team | created, members |
 | `assistant-<id>` | personal or team assistant | created, settings |
 | `computer-<assistant>` | assistant's computer | claimed, ready, suspended, lost, takeover |
@@ -113,11 +114,25 @@ the personal default.
 | --- | --- | --- | --- |
 | `org.created` | install | org | create the budget stream with defaults; generate gateway config |
 | `member.invited` | admin command | invitations, members (pending) | send the invitation |
-| `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; emit `assistant.created` (personal); seed model `grant.given` |
+| `silo.owner_bootstrapped` | authenticated installation-token claim | members, identities | OpenFGA owner/member; seed ownership; emit `assistant.created` (personal); seed model `grant.given` |
 | `member.joined` | invitation accepted | members | OpenFGA `member`; emit `assistant.created` (personal); seed model `grant.given` |
-| `member.role_changed` | admin command | members | OpenFGA role tuples |
-| `member.removed` | admin command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
+| `member.role_changed` | non-owner role command | members | OpenFGA role tuples |
+| `member.removed` | non-owner removal command | members | OpenFGA delete; emit `connection.revoked` for each connection; suspend the person's computer; audit |
+| `ownership.seeded` | fenced installation migration or bootstrap reaction | current owner set | OpenFGA seed receipt after existing owner tuples converge |
+| `ownership.transferred` | Owner command | successor role and owner set; payload-free change evidence | OpenFGA owner tuple and atomic receipt; previous owner remains |
+| `ownership.stepped_down` | current Owner command | actor becomes Admin; owner set retains at least one owner | OpenFGA delete owner role, retain member/add Admin and atomic receipt |
 | `team.created` / `team.member_added` / `team.member_removed` | Owner/Admin command, or supplied identity-provider membership | flat group names, membership and grant-source views | OpenFGA `team#member` tuples and atomic receipts |
+
+Ownership edits use only `ownership-<silo>`. Migration seeds the current active
+owners from legacy member events once; the seed append also conditionally checks
+the captured global sequence. New writes cannot use a stale seed. Fresh claims
+seed through the durable `seed-ownership` reaction. No owner edit is enabled until
+seeding succeeds. Owner-role invitations and rejoining active members are refused;
+member-stream events cannot change seeded owners or introduce an owner. Member
+and IAM projections reject these legacy bypasses. Non-owner member commands remain
+P4-3 work. Ownership adds no conversation, memory, group or resource grant.
+The [ownership interface](../api/ownership.md) exposes the original event receipt,
+recorded actor/target/time and both projection statuses, without a second ledger.
 
 `member.invited` pre-allocates `memberId`; invitation and acceptance share
 `member-<memberId>` so one conditional append settles concurrent acceptance.
@@ -415,8 +430,9 @@ events. Desktop admission additionally requires an explicit member
 | Handler | Subscribed events |
 | --- | --- |
 | `settle-budget` | `effect.observed`, `effect.resolved`, `computer.lost` |
-| `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed` |
-| `update-openfga` | `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `update-members` | `member.invited`, `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down` |
+| `update-openfga` | `member.joined`, `silo.owner_bootstrapped`, `member.role_changed`, `member.removed`, `ownership.seeded`, `ownership.transferred`, `ownership.stepped_down`, `team.created`, `team.member_added`, `team.member_removed`, `assistant.created`, `conversation.created`, `participant.added`, `participant.removed`, `grant.given`, `grant.revoked` |
+| `seed-ownership` | `silo.owner_bootstrapped` |
 | `seed-model-grants` | `member.joined`, `silo.owner_bootstrapped`, `assistant.created` |
 | `create-assistant` | `member.joined`, `silo.owner_bootstrapped` |
 | `claim-computer` | `assistant.created`, `computer.lost` |

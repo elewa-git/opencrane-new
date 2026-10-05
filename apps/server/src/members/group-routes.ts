@@ -77,7 +77,7 @@ function trustedRequest(request: FastifyRequest, config: AuthConfig,
 async function read(reply: FastifyReply, options: GroupOptions, memberId: string,
   groupId?: string, commandId?: string) {
   const fresh = await authorityFence(options.store, performance.now(), [`member-${memberId}`]);
-  await activeMember(options.store, options.binding, memberId, true);
+  await activeMember(options.store, options.binding, memberId, true, fresh);
   let result;
   if (groupId && commandId) {
     result = await readChange(options, groupId, commandId);

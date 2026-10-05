@@ -10,8 +10,8 @@ it('admits a model decision using only its exact authority streams', async () =>
     const response = await fetch(`${f.options.decisionUrl}/authorize`, { method: 'POST', headers: f.headers,
       body: JSON.stringify({ model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128, stream: true }) });
     expect(response.status).toBe(200);
-    const relevant = new Set(['member-alice', 'assistant-assistant', 'computer-assistant',
-      'conversation-conversation', grantStream('model', 'gpt-6-luna'), 'budget-test',
+    const relevant = new Set(['ownership-test', 'member-alice', 'assistant-assistant',
+      'computer-assistant', 'conversation-conversation', grantStream('model', 'gpt-6-luna'), 'budget-test',
       `decision-${response.headers.get('x-request-id')}`]);
     expect(read.mock.calls.length).toBeGreaterThan(0);
     expect(read.mock.calls.map(([subject]) => subject).filter(subject => !relevant.has(subject))).toEqual([]);

@@ -8,7 +8,7 @@ import { isAuditEventType } from '../src/audit.ts';
 import { database } from './database.ts';
 
 const canary = 'private-approval-bearer-arguments-canary';
-function auditAllowListMatchesPreviousRule(): void {
+function auditAllowListIncludesOwnership(): void {
   const previousPattern = [
     '^(silo\\.owner_bootstrapped|decision\\.|budget\\.(reserved|settled|ceiling_set|exhausted)|',
     'effect\\.|approval\\.|tool\\.approval_requested|credential\\.released|mcp\\.|connection\\.|',
@@ -19,11 +19,20 @@ function auditAllowListMatchesPreviousRule(): void {
   ].join('');
   const previousAllowList = new RegExp(previousPattern, 'u');
 
+  const ownershipTypes = [
+    'ownership.seeded',
+    'ownership.transferred',
+    'ownership.stepped_down',
+  ];
   for (const event of eventRegistry) {
-    expect(isAuditEventType(event.type)).toBe(previousAllowList.test(event.type));
+    const previouslyAllowed = previousAllowList.test(event.type);
+    const ownershipEvidence = ownershipTypes.includes(event.type);
+    const expected = previouslyAllowed || ownershipEvidence;
+    expect(isAuditEventType(event.type), event.type).toBe(expected);
   }
 }
-it('keeps the audit allow-list equivalent for every registered event type', auditAllowListMatchesPreviousRule);
+it('preserves the existing audit allow-list and includes ownership evidence',
+  auditAllowListIncludesOwnership);
 
 function fixture(type: string, id: string, data: Record<string, unknown> = {}, correlated = true): EventEnvelope {
   const definition = getEventDefinition(type);

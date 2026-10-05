@@ -13,6 +13,8 @@ export interface AppendCommand {
   expectedSequence: number;
   /** Check the whole event category (for example member-*) instead of only this entity. */
   expectedSubject?: string;
+  /** Only ownership migration may fence the complete captured event history. */
+  expectedGlobalSequence?: number;
 }
 export type AppendResult =
   | { status: "appended"; sequence: number }
@@ -50,6 +52,9 @@ export function validateCommand(
     return undefined;
   }
   const event = parsed.event;
+  if (!validMigrationFence(command, event)) {
+    return undefined;
+  }
   if (command.expectedSubject !== undefined && command.expectedSubject !== event.subject
     && command.expectedSubject !== `${getEventDefinition(event.type)?.stream}-*`) {
     return undefined;
@@ -64,6 +69,14 @@ export function validateCommand(
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
+}
+
+function validMigrationFence(command: AppendCommand, event: EventEnvelope) {
+  const sequence = command.expectedGlobalSequence;
+  if (sequence === undefined) {
+    return true;
+  }
+  return event.type === 'ownership.seeded' && Number.isSafeInteger(sequence) && sequence >= 0;
 }
 
 export function sameCommand(a: EventEnvelope, b: EventEnvelope): boolean {

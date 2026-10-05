@@ -1,3 +1,4 @@
+import { registerOwnershipRoutes } from './members/ownership-routes.ts';
 import { registerScreenshots } from './computers/screenshots.ts';
 import { registerEffectRoutes } from './effects/routes.ts';
 import { registerGroupRoutes, type GroupOptions } from './members/group-routes.ts';
@@ -24,6 +25,7 @@ export interface BuildServerOptions {
   logDestination?: LogDestination;
   membership?: MembershipOptions;
   groups?: GroupOptions;
+  ownership?: GroupOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
   files?: FileOptions;
@@ -61,6 +63,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerAuthRoutes(app, authConfig);
   registerMemberRoutes(app, authConfig, options.membership);
   registerGroupRoutes(app, authConfig, options.groups);
+  registerOwnershipRoutes(app, authConfig, options.ownership);
   registerBootstrapRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);
   registerEffectRoutes(app, authConfig, options.integrations);

@@ -1,10 +1,11 @@
+import { currentMembership } from './ownership.ts';
 import { z } from 'zod';
 import { effectResolvedDataSchema, effectObservedDataSchema, effectUncertainDataSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { envelope, history } from './actor.ts';
 import { losslessJson, type JsonValue } from './lossless-json.ts';
 import { authorityFence } from './authority.ts';
-import { applyBudget, data, emptyBudget, type BudgetState } from './state.ts';
+import { applyBudget, emptyBudget, type BudgetState } from './state.ts';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
 export const resolutionCommandSchema = z.object({ commandId: id, expectedSequence: z.int().nonnegative(),
@@ -80,10 +81,10 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
   id.parse(permitId);
   const command = resolutionCommandSchema.parse(resolutionInput(raw));
   const memberFresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
-  const membership = await history(store, `member-${memberId}`, silo);
-  const latest = membership.filter(r => ['member.joined', 'member.role_changed', 'member.removed'].includes(r.event.type)).at(-1);
-  const member = latest ? data(latest.event) : {};
-  if (latest?.event.type === 'member.removed' || !['owner', 'admin'].includes(String(member['newRole'] ?? member['role']))) throw new Error('Access changed');
+  const membership = await currentMembership(store, silo, memberId, memberFresh);
+  if (!['owner', 'admin'].includes(membership.role)) {
+    throw new Error('Access changed');
+  }
   const current = await readEffect(store, silo, permitId);
   if (!current) return { status: 'not_found' } as const;
   const { commandId, expectedSequence, ...fields } = command;

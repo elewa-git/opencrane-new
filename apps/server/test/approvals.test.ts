@@ -327,7 +327,7 @@ it('decides an approval using only its bound authority streams', async () => {
       const response = await f.app.inject({ method: 'POST', url: '/api/conversations/conversation/approvals',
         headers: { ...session, 'x-csrf-token': csrf }, payload: { approvalId, decision: 'approved' } });
       expect(response.statusCode).toBe(200);
-      const relevant = new Set(['member-alice', 'assistant-assistant', 'computer-assistant', 'conversation-conversation',
+      const relevant = new Set(['ownership-test', 'member-alice', 'assistant-assistant', 'computer-assistant', 'conversation-conversation',
         'mcp-fixture', grantStream('mcp_server', 'fixture'), `approval-${approvalId}`]);
       expect(read.mock.calls.map(([subject]) => subject).filter(subject => !relevant.has(subject))).toEqual([]);
       expect(head.mock.calls.flatMap(([subject]) => subject === undefined || relevant.has(subject) ? [] : [subject])).toEqual([]);

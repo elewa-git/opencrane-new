@@ -1,3 +1,4 @@
+import { seedOwnership } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
 import { storageClient } from './files/storage.ts';
@@ -68,12 +69,16 @@ const budget = budgetDecisionUrl && process.env['TOKEN_SIGNING_KEY_FILE'] && pro
   decisionUrl: budgetDecisionUrl,
   tokens: await tokenIssuer({ privateKeyPath: process.env['TOKEN_SIGNING_KEY_FILE'], issuer: process.env['TOKEN_ISSUER'] }),
 } : undefined;
+if (events && silo) {
+  await seedOwnership(events.store, silo);
+}
 const app = buildServer(authConfig, {
   processOwnsTelemetry: true,
   ...(chat ? { chat, liveView: { ...chat, open: desktopConnection(process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!) } } : {}),
   ...(realtime && events && modelDb ? { audit: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(files ? { files } : {}),
   ...(realtime && events && modelDb ? { groups: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
+  ...(realtime && events && modelDb ? { ownership: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
   ...(events && silo ? { membership: { silo, store: events.store } } : {}),
   ...(realtime && catalogue ? { integrations: { silo: realtime.binding.silo, feed: realtime.feed,
     catalogue, discovery: {}, ...(budget ? { budget } : {}), ...(events ? { store: events.store } : {}), ...(modelDb ? { modelDb: modelDb.db } : {}), binding: realtime.binding } } : {}),

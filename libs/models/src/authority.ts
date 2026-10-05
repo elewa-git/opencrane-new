@@ -12,7 +12,7 @@ export async function currentAuthority(store: EventStore, binding: Binding, requ
   const auth = memberAuthorisation(binding);
   const facts = [], receipts: string[] = [];
   let active = true;
-  const subjects = [`member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, grantStream(resourceType, resourceId)];
+  const subjects = [`ownership-${binding.silo}`, `member-${requester}`, `assistant-${assistant}`, `conversation-${conversation}`, grantStream(resourceType, resourceId)];
   fresh.include(...subjects, ...(resourceType === 'mcp_server' ? [`mcp-${resourceId}`] : []));
   const snapshotHead = fresh.head;
   const deadline = fresh.deadline;
@@ -67,7 +67,8 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
 
 function relevant(e: EventEnvelope, requester: string, assistant: string, conversation: string, resourceType: string, resourceId: string) {
   const d = data(e);
-  return (e.subject === `member-${requester}` && ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(e.type)) ||
+  return (e.subject === `ownership-${e.silo}` && (e.type === 'ownership.seeded' || d['memberId'] === requester)) ||
+      (e.subject === `member-${requester}` && ['member.joined', 'silo.owner_bootstrapped', 'member.role_changed', 'member.removed'].includes(e.type)) ||
       (e.subject === `assistant-${assistant}` && e.type === 'assistant.created') ||
       (e.type.startsWith('team.') && (d['memberId'] === requester || e.type === 'team.created')) ||
       (d['conversationId'] === conversation && ['conversation.created', 'participant.added', 'participant.removed'].includes(e.type)) ||

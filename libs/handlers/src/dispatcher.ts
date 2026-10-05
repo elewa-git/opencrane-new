@@ -6,7 +6,7 @@ import {
 } from "@nats-io/jetstream";
 import type { NatsConnection } from "@nats-io/transport-node";
 import { decodeEvent } from "@opencrane/event-store";
-import { checkHandlers } from "./registration.ts";
+import { checkHandlers, handlerOrderingKey } from "./registration.ts";
 import { HandlerRuntime, retainJob, transactionAdapter } from "./queue.ts";
 
 const configuration = {
@@ -91,7 +91,7 @@ export async function dispatch(
       for (const handler of handlers) {
         if (handler.eventTypes.includes(event.type)) {
           const id = await runtime.boss.send(handler.name, event, {
-            singletonKey: event.subject,
+            singletonKey: handlerOrderingKey(handler.name, event),
             db: transactionAdapter(tx),
           });
           if (!id) {

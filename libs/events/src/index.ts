@@ -40,3 +40,6 @@ export { fileUploadedDataSchema, fileRejectedDataSchema, fileDeliveredDataSchema
 
 export { effectResolvedDataSchema, effectUncertainDataSchema } from './data.ts';
 export { siloOwnerBootstrappedDataSchema } from './identity-events.ts';
+
+export { ownershipSeededSchema, ownershipTransferredSchema,
+  ownershipSteppedDownSchema } from './ownership-events.ts';
