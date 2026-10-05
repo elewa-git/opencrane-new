@@ -49,6 +49,26 @@ complete.
 All CPU-heavy checks used `nice -n 10`. Test commands used
 `PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres` and two workers.
 
+Commands run:
+
+```sh
+nice -n 10 npm run lint
+nice -n 10 npm run typecheck
+nice -n 10 npm run check:events
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- --maxWorkers=2 \
+  apps/server/test/approvals.test.ts apps/server/test/shared-assistant.test.ts \
+  apps/server/test/shared-runtime.test.ts apps/server/test/live-view.test.ts \
+  libs/event-store/test/append.test.ts libs/models/test/shared-assistant.test.ts \
+  libs/models/test/gateway.test.ts
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- \
+  --maxWorkers=2 apps/server/test/approvals.test.ts -t \
+  'refuses hidden or ambiguous arguments and does not use an approval for changed number text'
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- \
+  --maxWorkers=2 libs/models/test/gateway.test.ts
+PG_TEST_URL=postgres://postgres:test@127.0.0.1:55432/postgres nice -n 10 npm test -- --maxWorkers=2
+nice -n 10 npx markdownlint-cli2 docs/process/p4-7-backend-evidence.md
+```
+
 | Check | Result | Evidence |
 | --- | --- | --- |
 | `npm run lint` | PASS | All lint stages passed; six max-lines warnings, no errors |
