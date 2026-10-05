@@ -5,6 +5,8 @@ h1, h2, p { margin: 0; }
 h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
 h2 { font: var(--oc-type-card); }
 p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; }
+/* The phone Status label matches the Account and Tools labels; the state itself keeps its own style. */
+.status > .column-label { color: var(--oc-ink-admin-muted); font-size: 12px; }
 .page-heading p { margin-top: 4px; }
 .page-actions { display: flex; gap: 10px; }
 .button {
