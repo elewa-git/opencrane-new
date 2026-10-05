@@ -1,9 +1,9 @@
-<p>{{ memberCountLabel(group().members.length) }} · {{ group().membershipSource === 'local' ?
-  'local group' : 'identity-provider group' }} · {{ useGrants(group().access.grants).length }} grants</p>
+<p>{{ memberCountLabel(group().members.length) }} ·
+  {{ group().membershipSource === 'local' ? 'local group' : 'identity-provider group' }} ·
+  {{ grantCountLabel(useGrants(group().access.grants).length) }}</p>
 @if (group().membershipSource === 'identity_provider') {
-  <aside class="supplied"><strong><svg class="lock" viewBox="0 0 16 16" aria-hidden="true">
-    <path d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z" />
-  </svg> Membership comes from your identity provider</strong>
+  <aside class="supplied"><strong><span class="lock" aria-hidden="true"></span>
+    Membership comes from your identity provider</strong>
     <p>You can't add or remove people here. Change the group in your identity provider.</p></aside>
 }
 <div class="detail-cards">
@@ -12,20 +12,8 @@
       {{ sourceLabel(group().membershipSource) }}</p>
     @if (group().members.length === 0) {
       <oc-shared-state kind="not_configured" message="No members yet" [showAction]="false" />
-    } @else {
-      <ul aria-label="Members of {{ group().name }}" class="members">
-        @for (member of sortedMembers(); track member.memberId) {
-          <li><strong>{{ member.displayName }}</strong><small>{{ member.memberId }}</small>
-            @if (member.membershipSource === 'identity_provider') {
-              <span><svg class="lock" viewBox="0 0 16 16" aria-hidden="true">
-                <path d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z" />
-              </svg> From your identity provider</span>
-            }
-          </li>
-        }
-      </ul>
     }
-    <footer>{{ memberCountLabel(group().members.length) }}</footer>
+    <p>{{ sourceLabel(group().membershipSource) }}</p>
   </section>
   <section class="paper-card" [ocDogEar]="true"><h2>Shared assistant</h2>
     @if (sharedAssistantIds(group().access.grants).length) {
@@ -42,7 +30,27 @@
     }</ul>
   </section>
 </div>
-<section class="add-members"><oc-shared-state kind="not_configured"
-  message="Adding members isn't available yet"
-  detail="Choosing people needs a list of organisation members, which isn't available yet."
-  [showAction]="false" /></section>
+<section class="paper-card members-section">
+  <h2>Members</h2>
+  @if (group().members.length === 0) {
+    <p>No members yet</p>
+  } @else {
+    <ul aria-label="Members of {{ group().name }}" class="members">
+      @for (member of sortedMembers(); track member.memberId) {
+        <li><strong>{{ member.displayName }}</strong><small>{{ member.memberId }}</small>
+          @if (member.membershipSource === 'identity_provider') {
+            <span><span class="lock" aria-hidden="true"></span>
+              From your identity provider</span>
+          }
+        </li>
+      }
+    </ul>
+  }
+  <footer>{{ memberCountLabel(group().members.length) }}</footer>
+</section>
+@if (group().membershipSource === 'local') {
+  <section class="add-members"><oc-shared-state kind="not_configured"
+    message="Adding members isn't available yet"
+    detail="Choosing people needs a list of organisation members, which isn't available yet."
+    [showAction]="false" /></section>
+}

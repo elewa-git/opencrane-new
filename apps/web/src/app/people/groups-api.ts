@@ -12,6 +12,7 @@ export type ChangeCheck = { kind: 'current'; checkedAt: string }
   | { kind: 'access_changed'; status?: number };
 
 export function classifyStatus(status: number, method: 'GET' | 'POST'): FailureKind {
+  // A refused read clears protected data; a refused command can have a group-level cause.
   if (status === 401 || (status === 403 && method === 'GET')) return 'access_changed';
   if (status === 403) return 'refused';
   if (status === 400) return 'invalid';
@@ -31,13 +32,17 @@ export async function fetchGroup(
 }
 
 function readRows(url: string, signal: AbortSignal, single: false): Promise<Outcome<GroupRow[]>>;
-function readRows(url: string, signal: AbortSignal, single: true): Promise<Outcome<GroupRow | undefined>>;
+function readRows(
+  url: string, signal: AbortSignal, single: true,
+): Promise<Outcome<GroupRow | undefined>>;
 async function readRows(
   url: string, signal: AbortSignal, single: boolean,
 ): Promise<Outcome<GroupRow[] | GroupRow | undefined>> {
   try {
     const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
-    if (!response.ok) return { kind: classifyStatus(response.status, 'GET'), status: response.status };
+    if (!response.ok) {
+      return { kind: classifyStatus(response.status, 'GET'), status: response.status };
+    }
     const raw: unknown = await response.json();
     const result = groupsResponseSchema.safeParse(raw);
     if (!result.success || (single && result.data.rows.length > 1)) {
@@ -46,7 +51,6 @@ async function readRows(
     if (single) return { kind: 'ok', value: result.data.rows[0] };
     return { kind: 'ok', value: result.data.rows };
   } catch {
-    if (signal.aborted) return { kind: 'unavailable' };
     return { kind: 'unavailable' };
   }
 }
@@ -67,7 +71,9 @@ async function sendPost(
       method: 'POST', headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body), signal,
     });
-    if (!response.ok) return { kind: classifyStatus(response.status, 'POST'), status: response.status };
+    if (!response.ok) {
+      return { kind: classifyStatus(response.status, 'POST'), status: response.status };
+    }
     const raw: unknown = await response.json();
     const result = groupReceiptSchema.safeParse(raw);
     if (!result.success) return { kind: 'unavailable' };
@@ -81,9 +87,13 @@ export async function fetchChange(
   groupId: string, commandId: string, signal: AbortSignal,
 ): Promise<Outcome<ReturnType<typeof groupChangeSchema.parse>>> {
   try {
-    const url = `/api/groups/${encodeURIComponent(groupId)}/changes/${encodeURIComponent(commandId)}`;
+    const encodedGroupId = encodeURIComponent(groupId);
+    const encodedCommandId = encodeURIComponent(commandId);
+    const url = `/api/groups/${encodedGroupId}/changes/${encodedCommandId}`;
     const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
-    if (!response.ok) return { kind: classifyStatus(response.status, 'GET'), status: response.status };
+    if (!response.ok) {
+      return { kind: classifyStatus(response.status, 'GET'), status: response.status };
+    }
     const raw: unknown = await response.json();
     const result = groupChangeSchema.safeParse(raw);
     if (!result.success) return { kind: 'unavailable' };

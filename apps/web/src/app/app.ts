@@ -11,7 +11,8 @@ import { SignIn } from './sign-in/sign-in';
 import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
 import { OrganisationShell } from './organisation/organisation-shell';
-import { normalisePathname, organisationPage, organisationPageLabel } from './organisation/pages';
+import { normalisePathname, organisationPage, organisationPageLabel, peopleGroupId }
+  from './organisation/pages';
 import { AccountScreen } from './settings/account-screen';
 import { PersonalSettingsShell } from './settings/personal-settings-shell';
 import { PeopleScreen } from './people/people-screen';
@@ -42,7 +43,7 @@ export class App {
   protected readonly accountPath = this.pathname === '/account'
     || this.pathname.startsWith('/account/');
   protected readonly activePage = organisationPage(this.pathname);
-  protected readonly peopleGroupId = /^\/org\/people\/groups\/([\w-]{1,200})$/u.exec(this.pathname)?.[1];
+  protected readonly peopleGroupId = peopleGroupId(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];
   protected readonly auditConversation = /^\/history\/([\w-]+)$/u.exec(this.pathname)?.[1];

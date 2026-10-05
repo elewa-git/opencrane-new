@@ -1,5 +1,6 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
+import { createGroupCommandSchema } from '@opencrane/protocol';
 import { PeopleScreen } from './people-screen';
 
 const sampleGroup = {
@@ -8,8 +9,21 @@ const sampleGroup = {
     membershipSource: 'local' }], access: { source: 'group_membership', conversationAccess: false,
     personalMemoryAccess: false, grants: [] },
 };
+Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
+  configurable: true,
+  writable: true,
+  value: function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); },
+});
+Object.defineProperty(HTMLDialogElement.prototype, 'close', {
+  configurable: true,
+  writable: true,
+  value: function close(this: HTMLDialogElement): void { this.removeAttribute('open'); },
+});
 function reply(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'content-type': 'application/json' },
+  });
 }
 async function mount(body: unknown): Promise<HTMLElement> {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply(body)));
@@ -30,6 +44,58 @@ function rootElement(fixture: ComponentFixture<PeopleScreen>): HTMLElement {
   if (!(element instanceof HTMLElement)) throw new Error('Expected a screen element');
   return element;
 }
+type SeenRequest = { url: string; method: string; body: string | undefined };
+type RequestHandler = (request: SeenRequest) => Response | Promise<Response>;
+function makeResponse(body: unknown, status = 200): Response {
+  return reply(body, status);
+}
+async function mountWithFetch(
+  handler: RequestHandler,
+): Promise<ComponentFixture<PeopleScreen>> {
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, options?: RequestInit) => {
+    const request: SeenRequest = {
+      url: requestUrl(input),
+      method: options?.method ?? 'GET',
+      body: typeof options?.body === 'string' ? options.body : undefined,
+    };
+    return Promise.resolve(handler(request));
+  });
+  TestBed.configureTestingModule({ imports: [PeopleScreen] });
+  const fixture = TestBed.createComponent(PeopleScreen);
+  fixture.componentRef.setInput('organisationName', 'Example organisation');
+  fixture.detectChanges();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(rootElement(fixture).textContent).not.toContain('Loading groups…');
+  });
+  return fixture;
+}
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof Request) return input.url;
+  return input.toString();
+}
+function parseCreateCommand(body: string | undefined): {
+  commandId: string; groupId: string; name: string;
+} {
+  const raw: unknown = JSON.parse(body ?? '{}');
+  const result = createGroupCommandSchema.safeParse(raw);
+  if (!result.success) throw new Error('Expected a valid create request');
+  return result.data;
+}
+function button(root: HTMLElement, label: string): HTMLButtonElement {
+  const found = [...root.querySelectorAll('button')].find((item) =>
+    item.textContent?.trim() === label);
+  if (!found) throw new Error(`Expected the ${label} button`);
+  return found;
+}
+async function settle(fixture: ComponentFixture<PeopleScreen>): Promise<void> {
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    fixture.detectChanges();
+    await fixture.whenStable();
+  }
+}
+afterEach(() => vi.unstubAllGlobals());
 
 it('shows typed rows with one link per group and one status region', async () => {
   const root = await mount({ rows: [sampleGroup] });
@@ -47,6 +113,7 @@ it('rejects a group that claims access to private conversations', async () => {
   const root = await mount({ rows: [unsafe] });
   expect(root.textContent).toContain('Groups are unavailable right now');
   expect(root.querySelector('[aria-label="Groups"]')).toBeNull();
+  expect(button(root, 'Refresh list').disabled).toBe(false);
   vi.unstubAllGlobals();
 });
 
@@ -55,4 +122,160 @@ it('shows the empty list and keeps New group available', async () => {
   expect(root.textContent).toContain('No groups yet');
   expect(root.querySelector('.page-actions .button.primary')?.textContent).toContain('New group');
   vi.unstubAllGlobals();
+});
+
+it('blocks a duplicate group name after trimming and ignoring case', async () => {
+  const fixture = await mountWithFetch(() => makeResponse({ rows: [sampleGroup] }));
+  const root = rootElement(fixture);
+  button(root, 'New group').click();
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = ' sales TEAM ';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  fixture.detectChanges();
+  expect(button(root, 'Create group').disabled).toBe(true);
+  expect(field.getAttribute('aria-invalid')).toBe('true');
+  expect(root.textContent).toContain('already exists');
+});
+
+it('disables the page actions and clears names after access is refused', async () => {
+  const fixture = await mountWithFetch(() => makeResponse({ status: 'refused' }, 403));
+  const root = rootElement(fixture);
+  expect(root.textContent).toContain('Your access changed');
+  expect(button(root, 'Refresh list').disabled).toBe(true);
+  expect(button(root, 'New group').disabled).toBe(true);
+  expect(root.textContent).not.toContain('Alex Kim');
+  expect(root.querySelector('[aria-label="Groups"]')).toBeNull();
+});
+
+it('submits with Enter, trims the name and keeps the same command id through the current check',
+  async () => {
+  const requests: SeenRequest[] = [];
+  const fixture = await mountWithFetch((request) => {
+    requests.push(request);
+    if (request.method === 'POST') {
+      return makeResponse({ status: 'appended', groupId: 'finance-id', sequence: 1,
+        changeId: 'create-command' });
+    }
+    if (request.url.includes('/changes/')) {
+      return makeResponse({ status: 'appended', groupId: 'finance-id', sequence: 1,
+        changeId: 'create-command', projection: { content: 'current', iam: 'current' } });
+    }
+    return makeResponse({ rows: [sampleGroup] });
+  });
+  const root = rootElement(fixture);
+  button(root, 'New group').click();
+  await settle(fixture);
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = ' Finance ';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  expect(button(root, 'Create group').disabled).toBe(false);
+  field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Group “Finance” created');
+  });
+  const post = requests.find((request) => request.method === 'POST');
+  expect(post?.body).toBeTruthy();
+  const command = parseCreateCommand(post?.body);
+  expect(command.name).toBe('Finance');
+  const statusRequest = requests.find(isStatusRequest);
+  expect(statusRequest?.url.endsWith(`/changes/${command.commandId}`)).toBe(true);
+  expect(root.textContent).toContain('Group “Finance” created');
+});
+
+function isStatusRequest(request: SeenRequest): boolean {
+  return request.url.includes('/changes/');
+}
+
+it('keeps an unknown create available after opening and cancelling the drawer', async () => {
+  const requests: SeenRequest[] = [];
+  const createBodies: string[] = [];
+  const fixture = await mountWithFetch((request) => {
+    requests.push(request);
+    if (request.method === 'POST') {
+      createBodies.push(request.body ?? '');
+      if (createBodies.length === 1) return makeResponse({ status: 'unavailable' }, 503);
+      const command = parseCreateCommand(request.body);
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId });
+    }
+    if (request.url.includes('/changes/')) {
+      if (createBodies.length === 1) return makeResponse({ status: 'not_found' }, 404);
+      const command = parseCreateCommand(createBodies[0]);
+      return makeResponse({ status: 'appended', groupId: command.groupId, sequence: 1,
+        changeId: command.commandId, projection: { content: 'current', iam: 'current' } });
+    }
+    return makeResponse({ rows: [sampleGroup] });
+  });
+  const root = rootElement(fixture);
+  button(root, 'New group').click();
+  await settle(fixture);
+  const field = root.querySelector<HTMLInputElement>('#group-name');
+  if (!field) throw new Error('Expected the group name field');
+  field.value = 'Finance';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  await settle(fixture);
+  expect(button(root, 'Create group').disabled).toBe(false);
+  button(root, 'Create group').click();
+  await settle(fixture);
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain("We couldn't tell whether the server recorded it");
+  });
+  const createRequest = requests.find((request) => request.method === 'POST');
+  const commandId = parseCreateCommand(createRequest?.body).commandId;
+  button(root, 'New group').click();
+  await settle(fixture);
+  button(root, 'Cancel').click();
+  await settle(fixture);
+  button(root, 'Check status').click();
+  await settle(fixture);
+  expect(requests.some((request) => request.url.endsWith(`/changes/${commandId}`))).toBe(true);
+  expect(root.textContent).toContain('No record of this change yet. It may still arrive.');
+  button(root, 'Send the same request again').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Group “Finance” created');
+  });
+  expect(createBodies[1]).toBe(createBodies[0]);
+});
+
+it('keeps the current status while refreshing a healthy list', async () => {
+  const requests: SeenRequest[] = [];
+  let releaseRefresh: ((response: Response) => void) | undefined;
+  const fixture = await mountWithFetch((request) => {
+    requests.push(request);
+    if (requests.length === 1) return Promise.resolve(makeResponse({ rows: [sampleGroup] }));
+    return new Promise((resolve) => { releaseRefresh = resolve; });
+  });
+  const root = rootElement(fixture);
+  button(root, 'Refresh list').click();
+  fixture.detectChanges();
+  expect(button(root, 'Refreshing…').disabled).toBe(true);
+  expect(root.textContent).not.toContain("We couldn't refresh groups");
+  expect(root.querySelector('#people-panel')?.getAttribute('aria-busy')).toBe('true');
+  releaseRefresh?.(makeResponse({ rows: [sampleGroup] }));
+  await settle(fixture);
+  expect(root.textContent).not.toContain("We couldn't refresh groups");
+  expect(root.textContent).toContain('Sales team');
+});
+
+it('shows neutral status after a failed list read succeeds on retry', async () => {
+  let reads = 0;
+  const fixture = await mountWithFetch(() => {
+    reads += 1;
+    if (reads === 1) return makeResponse({ status: 'unavailable' }, 503);
+    return makeResponse({ rows: [sampleGroup] });
+  });
+  const root = rootElement(fixture);
+  expect(root.textContent).toContain('Groups are unavailable right now');
+  button(root, 'Try again').click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(root.textContent).toContain('Groups loaded');
+  });
+  expect(root.textContent).not.toContain('Groups are unavailable right now');
 });

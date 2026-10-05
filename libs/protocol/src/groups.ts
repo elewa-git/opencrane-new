@@ -23,6 +23,7 @@ export const groupRowSchema = z.object({
   members: z.array(memberSchema),
   access: z.object({
     source: z.literal('group_membership'),
+    // Refuse rows that claim group membership can reveal private conversations or memory.
     conversationAccess: z.literal(false),
     personalMemoryAccess: z.literal(false),
     grants: z.array(grantSchema),

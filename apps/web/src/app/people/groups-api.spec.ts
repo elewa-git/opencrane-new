@@ -44,6 +44,45 @@ it('waits until both projections are current and records the check time', async 
   }
 });
 
+it('stops after twenty reads and uses the same command id each time', async () => {
+  vi.useFakeTimers();
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', (input: RequestInfo | URL) => {
+    requests.push(requestUrl(input));
+    return Promise.resolve(new Response(JSON.stringify({ status: 'appended', groupId: 'group',
+      sequence: 1, changeId: 'change',
+      projection: { content: 'applying', iam: 'applying' } })));
+  });
+  const pending = followChange('group', 'command', new AbortController().signal);
+  await vi.advanceTimersByTimeAsync(9500);
+  const result = await pending;
+  expect(result).toEqual({ kind: 'still_applying' });
+  expect(requests).toHaveLength(20);
+  expect(requests.every(hasCommandId)).toBe(true);
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+it('keeps not-found and unavailable status reads distinct', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 404 })));
+  await expect(followChange('group', 'command', new AbortController().signal))
+    .resolves.toEqual({ kind: 'not_found' });
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
+  await expect(followChange('group', 'command', new AbortController().signal))
+    .resolves.toEqual({ kind: 'unavailable' });
+  vi.unstubAllGlobals();
+});
+
+function hasCommandId(url: string): boolean {
+  return url.endsWith('/changes/command');
+}
+
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof Request) return input.url;
+  return input.toString();
+}
+
 function isReadMethod(method: string | undefined): boolean {
   return method !== 'POST';
 }

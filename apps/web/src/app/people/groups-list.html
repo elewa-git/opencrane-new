@@ -12,9 +12,7 @@
           @if (!group.members.length) {
             <oc-shared-state kind="not_configured" message="No members yet" [showAction]="false" />
           } @else if (group.membershipSource === 'identity_provider') {
-            <svg class="lock" viewBox="0 0 16 16" aria-hidden="true">
-              <path d="M4 7V5a4 4 0 0 1 8 0v2M3 7h10v7H3z" />
-            </svg> Read-only here
+            <span class="lock" aria-hidden="true"></span> Read-only here
           } @else { Editable here }
         </span>
         <span class="chevron" aria-hidden="true">›</span>

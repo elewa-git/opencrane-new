@@ -22,7 +22,7 @@ it('checks duplicate names without case or surrounding spaces', () => {
 });
 
 it('uses clear wording and omits acts-for grants from the Grants list', () => {
-  expect(grantSentence(row.access.grants[0]!)).toBe('Can use model `gpt`');
-  expect(grantSentence(row.access.grants[1]!)).toBe('Assistant `helper` works for this group');
+  expect(grantSentence(row.access.grants[0]!)).toBe('Can use model gpt');
+  expect(grantSentence(row.access.grants[1]!)).toBe('Assistant helper works for this group');
   expect(useGrants(row.access.grants)).toHaveLength(1);
 });

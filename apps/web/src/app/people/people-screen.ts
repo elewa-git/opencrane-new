@@ -11,10 +11,14 @@ import { GroupsList } from './groups-list';
 
 type LoadState = 'loading' | 'ready' | 'failed' | 'retrying' | 'access';
 type Tab = 'members' | 'groups' | 'invitations';
+type PendingCreate = { commandId: string; groupId: string; name: string; receiptSeen: boolean };
 
-@Component({ selector: 'oc-people-screen', imports: [SharedState, HingeDrawer, GroupsList, GrainLoader],
+@Component({
+  selector: 'oc-people-screen',
+  imports: [SharedState, HingeDrawer, GroupsList, GrainLoader],
   templateUrl: './people-screen.html', styleUrls: ['./people.css'],
-  changeDetection: ChangeDetectionStrategy.OnPush })
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
 export class PeopleScreen implements OnInit, OnDestroy {
   readonly organisationName = input.required<string>();
   protected readonly rows = signal<GroupRow[]>([]);
@@ -41,7 +45,8 @@ export class PeopleScreen implements OnInit, OnDestroy {
   private readonly request = new AbortController();
   private readInFlight = false;
   private opener?: HTMLButtonElement;
-  private command: { commandId: string; groupId: string; name: string } | undefined;
+  private pendingCreate: PendingCreate | undefined;
+  protected readonly retryAfterNotFound = signal(false);
 
   ngOnInit(): void { void this.load(); }
   ngOnDestroy(): void { this.request.abort(); }
@@ -52,12 +57,16 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.drawerOpen.set(true);
     this.draftName.set('');
     this.draftError.set('');
-    this.command = undefined;
   }
   protected closeDrawer(): void { this.drawerOpen.set(false); }
   protected nameChanged(event: Event): void {
     this.draftName.set(inputValue(event));
     this.draftError.set('');
+  }
+  protected createFromEnter(event: Event): Promise<void> | undefined {
+    if (!(event instanceof KeyboardEvent) || event.key !== 'Enter') return undefined;
+    event.preventDefault();
+    return this.create();
   }
   protected duplicate(): boolean { return isDuplicateName(this.draftName(), this.rows()); }
   protected invalidName(): boolean {
@@ -65,25 +74,45 @@ export class PeopleScreen implements OnInit, OnDestroy {
     return name.length < 1 || name.length > 200;
   }
   protected createDisabled(): boolean {
-    return this.state() !== 'ready' || this.invalidName() || this.duplicate() || this.sending();
+    const unresolvedCreate = this.hasUnresolvedCreate();
+    return this.state() !== 'ready' || this.invalidName() || this.duplicate() || this.sending() ||
+      unresolvedCreate;
+  }
+  protected hasUnresolvedCreate(): boolean {
+    return this.pendingCreate !== undefined &&
+      (this.operationKind() === 'unknown' || this.operationKind() === 'applying');
   }
   protected async create(): Promise<void> {
     if (this.createDisabled()) return;
     const name = this.draftName().trim();
-    if (!this.command) {
+    if (!this.pendingCreate) {
       // Keep these ids in memory so a status check or safe retry refers to this command.
-      this.command = { commandId: crypto.randomUUID(), groupId: newGroupId(name), name };
+      this.pendingCreate = { commandId: crypto.randomUUID(), groupId: newGroupId(name), name,
+        receiptSeen: false };
     }
+    const pendingCreate = this.pendingCreate;
+    if (!pendingCreate) return;
+    await this.sendPendingCreate(pendingCreate);
+  }
+
+  private async sendPendingCreate(pendingCreate: PendingCreate): Promise<void> {
+    this.retryAfterNotFound.set(false);
     this.sending.set(true);
-    const result = await sendCreateGroup(this.command, this.request.signal);
+    const command = {
+      commandId: pendingCreate.commandId,
+      groupId: pendingCreate.groupId,
+      name: pendingCreate.name,
+    };
+    const result = await sendCreateGroup(command, this.request.signal);
     if (this.request.signal.aborted) return;
     this.sending.set(false);
     if (result.kind === 'ok') {
+      pendingCreate.receiptSeen = true;
       this.drawerOpen.set(false);
-      this.changeReference.set(this.command.commandId);
-      this.operation.set(`Creating “${name}”…`);
+      this.changeReference.set(pendingCreate.commandId);
+      this.operation.set(`Creating “${pendingCreate.name}”…`);
       this.operationKind.set('applying');
-      await this.completeCreate(name, this.command.groupId, this.command.commandId);
+      await this.completeCreate(pendingCreate);
       return;
     }
     await this.handleCreateFailure(result);
@@ -101,7 +130,10 @@ export class PeopleScreen implements OnInit, OnDestroy {
       this.rows.set(result.value);
       this.loadedAt.set(new Date().toISOString());
       this.state.set('ready');
-      if (this.operationKind() === 'checking') this.operation.set('Groups loaded');
+      if (this.operationKind() === 'checking' || this.operationKind() === 'failed') {
+        this.operation.set('Groups loaded');
+        this.operationKind.set('checking');
+      }
       return;
     }
     if (result.kind === 'access_changed') {
@@ -109,18 +141,16 @@ export class PeopleScreen implements OnInit, OnDestroy {
       return;
     }
     this.state.set('failed');
-    this.operation.set('Groups are unavailable right now');
-    this.operationKind.set('failed');
+    if (this.operationKind() === 'checking' || this.operationKind() === 'failed') {
+      this.operation.set('Groups are unavailable right now');
+      this.operationKind.set('failed');
+    }
   }
 
-  protected async refresh(): Promise<void> { await this.load(); }
   protected loadedTime(): string {
     const value = this.loadedAt();
     if (!value) return '';
-    const options: Intl.DateTimeFormatOptions = {
-      hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: 'UTC',
-    };
-    return new Date(value).toLocaleTimeString('en-GB', options) + ' UTC';
+    return `${checkTimeLabel(value)} UTC`;
   }
   protected setQuery(event: Event): void {
     this.query.set(inputValue(event));
@@ -144,12 +174,14 @@ export class PeopleScreen implements OnInit, OnDestroy {
     document.getElementById(`people-tab-${tab.id}`)?.focus();
   }
   protected async checkStatus(): Promise<void> {
-    if (!this.command) return;
-    await this.completeCreate(this.command.name, this.command.groupId, this.command.commandId);
+    const pendingCreate = this.pendingCreate;
+    if (!pendingCreate) return;
+    await this.completeCreate(pendingCreate);
   }
   protected async resend(): Promise<void> {
-    if (!this.command) return;
-    await this.create();
+    const pendingCreate = this.pendingCreate;
+    if (!pendingCreate || this.sending()) return;
+    await this.sendPendingCreate(pendingCreate);
   }
 
   private filteredRows(): GroupRow[] {
@@ -161,36 +193,51 @@ export class PeopleScreen implements OnInit, OnDestroy {
     }
     return visibleRows;
   }
-  private async completeCreate(name: string, groupId: string, commandId: string): Promise<void> {
-    const checked = await followChange(groupId, commandId, this.request.signal);
+  private async completeCreate(pendingCreate: PendingCreate): Promise<void> {
+    const checked = await followChange(pendingCreate.groupId, pendingCreate.commandId,
+      this.request.signal);
     if (this.request.signal.aborted) return;
     if (checked.kind === 'access_changed') {
       this.clearForAccessChange(checked.status);
       return;
     }
     if (checked.kind !== 'current') {
-      this.operationKind.set(checked.kind === 'not_found' ? 'unknown' : 'unknown');
-      this.operation.set(checked.kind === 'not_found'
-        ? 'No record of this change yet. It may still arrive.'
-        : `Still applying “${name}”`);
+      this.changeReference.set(pendingCreate.commandId);
+      if (checked.kind === 'not_found') {
+        this.retryAfterNotFound.set(true);
+        this.operationKind.set('unknown');
+        this.operation.set('No record of this change yet. It may still arrive.');
+        return;
+      }
+      if (pendingCreate.receiptSeen) {
+        this.operationKind.set('applying');
+        this.operation.set(`Still applying “${pendingCreate.name}”`);
+        return;
+      }
+      this.operationKind.set('unknown');
+      this.operation.set(`Couldn't confirm “${pendingCreate.name}” was created. ` +
+        "We couldn't tell whether the server recorded it. Check its status before sending again.");
       return;
     }
     // Describe when both reads were current, not when the group was created.
     this.checkTime.set(checkTimeLabel(checked.checkedAt));
-    this.operation.set(`Group “${name}” created`);
+    this.operation.set(`Group “${pendingCreate.name}” created`);
     this.operationKind.set('confirmed');
-    this.highlightedGroupId.set(groupId);
-    await this.loadAfterChange();
-  }
-  private async loadAfterChange(): Promise<void> {
+    this.highlightedGroupId.set(pendingCreate.groupId);
     await this.load();
   }
   private async handleCreateFailure(result: Exclude<Awaited<ReturnType<typeof sendCreateGroup>>,
     { kind: 'ok' }>): Promise<void> {
     const kind = result.kind;
-    if (kind === 'invalid') { this.draftError.set('The server refused this name. Use 1 to 200 characters.'); return; }
+    if (kind === 'invalid') {
+      this.pendingCreate = undefined;
+      this.draftError.set('The server refused this name. Use 1 to 200 characters.');
+      return;
+    }
     if (kind === 'conflict') {
-      this.draftError.set('This group changed or already exists. Nothing was created. Cancel, refresh the list and try again.');
+      this.pendingCreate = undefined;
+      this.draftError.set('This group changed or already exists. Nothing was created. ' +
+        'Cancel, refresh the list and try again.');
       return;
     }
     if (kind === 'access_changed') {
@@ -198,6 +245,7 @@ export class PeopleScreen implements OnInit, OnDestroy {
       return;
     }
     if (kind === 'refused') {
+      this.pendingCreate = undefined;
       await this.load();
       if (!this.request.signal.aborted && this.state() !== 'access') {
         this.draftError.set('The server refused this change. Nothing was created.');
@@ -205,7 +253,11 @@ export class PeopleScreen implements OnInit, OnDestroy {
       return;
     }
     this.drawerOpen.set(false);
-    this.operation.set(`Couldn't confirm “${this.draftName().trim()}” was created`);
+    this.changeReference.set(this.pendingCreate?.commandId);
+    const groupName = this.pendingCreate?.name ?? this.draftName().trim();
+    this.operation.set(`Couldn't confirm “${groupName}” ` +
+      'was created. We couldn\'t tell whether the server recorded it. Check its status before ' +
+      'sending again.');
     this.operationKind.set('unknown');
   }
   private clearForAccessChange(status?: number): void {
@@ -215,7 +267,7 @@ export class PeopleScreen implements OnInit, OnDestroy {
     this.loadedAt.set(undefined);
     this.draftName.set('');
     this.drawerOpen.set(false);
-    this.command = undefined;
+    this.pendingCreate = undefined;
     this.changeReference.set(undefined);
     this.state.set('access');
     this.operationKind.set('access_changed');

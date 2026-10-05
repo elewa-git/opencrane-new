@@ -61,6 +61,11 @@
       "motion": "no-preference"
     },
     {
+      "name": "detail-not-found",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
       "name": "access-changed",
       "width": 1280,
       "motion": "no-preference"
@@ -77,6 +82,11 @@
     },
     {
       "name": "unknown-not-found",
+      "width": 1280,
+      "motion": "no-preference"
+    },
+    {
+      "name": "unknown-unavailable",
       "width": 1280,
       "motion": "no-preference"
     },
@@ -131,6 +141,11 @@
       "motion": "reduce"
     },
     {
+      "name": "detail-not-found",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
       "name": "access-changed",
       "width": 1280,
       "motion": "reduce"
@@ -147,6 +162,11 @@
     },
     {
       "name": "unknown-not-found",
+      "width": 1280,
+      "motion": "reduce"
+    },
+    {
+      "name": "unknown-unavailable",
       "width": 1280,
       "motion": "reduce"
     },
@@ -206,6 +226,11 @@
       "motion": "no-preference"
     },
     {
+      "name": "detail-not-found",
+      "width": 390,
+      "motion": "no-preference"
+    },
+    {
       "name": "loading",
       "width": 390,
       "motion": "reduce"
@@ -261,6 +286,11 @@
       "motion": "reduce"
     },
     {
+      "name": "detail-not-found",
+      "width": 390,
+      "motion": "reduce"
+    },
+    {
       "name": "loading",
       "width": 320,
       "motion": "no-preference"
@@ -311,6 +341,11 @@
       "motion": "no-preference"
     },
     {
+      "name": "detail-not-found",
+      "width": 320,
+      "motion": "no-preference"
+    },
+    {
       "name": "loading",
       "width": 320,
       "motion": "reduce"
@@ -357,10 +392,29 @@
     },
     {
       "name": "detail-empty",
+      "width": 320,
+      "motion": "reduce"
+    },
+    {
+      "name": "detail-not-found",
       "width": 320,
       "motion": "reduce"
     }
   ],
-  "comparedFrames": [],
+  "comparedFrames": [
+    "PPL-02",
+    "PPL-03",
+    "PPL-04",
+    "PPL-05",
+    "PPL-06",
+    "PPL-07",
+    "PPL-08",
+    "PPL-10",
+    "PPL-12",
+    "PPL-13",
+    "PPL-14",
+    "PPL-15",
+    "PPL-16"
+  ],
   "environment": "Built Angular assets; Chromium; in-memory sample API; no stack"
 }

@@ -38,7 +38,7 @@ it('shows separate shared-assistant and use-grant cards without a Remove button'
   const root = await mount(response({ rows: [group] }));
   expect(root.textContent).toContain('assistant-a');
   expect(root.textContent).toContain('Works for this group');
-  expect(root.textContent).toContain('Can use model `model-a`');
+  expect(root.textContent).toContain('Can use model model-a');
   expect(root.querySelectorAll('button[aria-label^="Remove "]')).toHaveLength(0);
   expect(root.textContent?.indexOf('Alex Kim')).toBeLessThan(root.textContent?.indexOf('Marieke Vos'));
   vi.unstubAllGlobals();
@@ -51,4 +51,18 @@ it('clears a protected group after access is refused', async () => {
   expect(root.textContent).not.toContain('Sales team');
   expect(root.textContent).not.toContain('Alex Kim');
   vi.unstubAllGlobals();
+});
+
+it('shows an explicit empty state when a group has no members', async () => {
+  const emptyGroup = { ...group, members: [], access: { ...group.access, grants: [] } };
+  const root = await mount(response({ rows: [emptyGroup] }));
+  expect(root.textContent).toContain('No members yet');
+  expect(root.querySelector('ul.members')).toBeNull();
+});
+
+it('shows a safe retry action when the group read is unavailable', async () => {
+  const root = await mount(response({ status: 'unavailable' }, 503));
+  expect(root.textContent).toContain('Groups are unavailable right now');
+  expect(root.textContent).toContain('Nothing changed. Reading again is safe.');
+  expect(root.querySelector('[aria-label^="Remove "]')).toBeNull();
 });

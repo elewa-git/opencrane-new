@@ -3,12 +3,13 @@ import {
 } from '@angular/core';
 import type { GroupRow } from '@opencrane/protocol';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
+import { GrainLoader } from '../ui/grain-loader';
 import { fetchGroup, type Outcome } from './groups-api';
 import { GroupDetail } from './group-detail';
 
 type ScreenState = 'loading' | 'ready' | 'missing' | 'failed' | 'access';
 
-@Component({ selector: 'oc-group-detail-screen', imports: [SharedState, GroupDetail],
+@Component({ selector: 'oc-group-detail-screen', imports: [SharedState, GroupDetail, GrainLoader],
   templateUrl: './group-detail-screen.html', styleUrls: ['./people.css'],
   changeDetection: ChangeDetectionStrategy.OnPush })
 export class GroupDetailScreen implements OnInit, OnDestroy {

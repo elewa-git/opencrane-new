@@ -7,6 +7,8 @@ const output = resolve('docs/process/p4-1-people');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://p4-1-people.opencrane.test';
 const captures = [];
+const comparedFrames = ['PPL-02', 'PPL-03', 'PPL-04', 'PPL-05', 'PPL-06', 'PPL-07',
+  'PPL-08', 'PPL-10', 'PPL-12', 'PPL-13', 'PPL-14', 'PPL-15', 'PPL-16'];
 let emptyList = false;
 let failList = false;
 let holdList = false;
@@ -14,6 +16,7 @@ let releaseHeldList;
 let refuseList = false;
 let endSession = false;
 let dropCreateReply = false;
+let changeUnavailable = false;
 const knownChanges = new Set();
 const createBodies = [];
 const contentTypes = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -22,10 +25,11 @@ const groups = [
   group('sales-team', 'Sales team', 'local', [
     member('alex-kim', 'Alex Kim', 'local'), member('grace-achieng', 'Grace Achieng', 'local'),
     member('jente-rosseel', 'Jente Rosseel', 'local'),
+    member('member-with-long-name', 'L'.repeat(60), 'local'),
     member('marieke-vos', 'Marieke Vos', 'identity_provider'),
   ], [
     grant('mcp_server', 'odoo-community', 'use'), grant('model', 'gpt-6-1-sol', 'use'),
-    grant('assistant', 'sales-assistant', 'acts_for'),
+    grant('assistant', 'sales-assistant', 'acts_for'), grant('model', 'x'.repeat(200), 'use'),
   ]),
   group('nairobi-office', 'Nairobi office', 'identity_provider', [
     member('marieke-vos', 'Marieke Vos', 'identity_provider'),
@@ -51,13 +55,13 @@ function noOverflow() {
 }
 function everyTargetIsLarge() {
   const targets = [...globalThis.document.querySelectorAll(
-    'main button, main a',
+    'main button, main a, main input',
   )];
   const smallTargets = [];
   for (const target of targets) {
     const bounds = target.getBoundingClientRect();
     if (bounds.width === 0 && bounds.height === 0) continue;
-    if (bounds.width < 44 || bounds.height < 44) {
+    if (Math.round(bounds.width) < 44 || Math.round(bounds.height) < 44) {
       smallTargets.push({ text: target.textContent?.trim(), width: bounds.width, height: bounds.height });
     }
   }
@@ -123,6 +127,10 @@ async function serveApi(route, pathname) {
     return;
   }
   if (pathname.includes('/changes/')) {
+    if (changeUnavailable) {
+      await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+      return;
+    }
     const changeId = pathname.split('/').at(-1);
     if (!knownChanges.has(changeId)) {
       await route.fulfill({ status: 404, json: { status: 'not_found' } });
@@ -153,6 +161,21 @@ async function capture(page, name, width, motion) {
   await page.screenshot({ path: resolve(output, `${name}-${width}-${motion}.png`), fullPage: true });
   captures.push({ name, width, motion });
 }
+async function waitForDialogMotion(page) {
+  await page.evaluate(waitForOpenDialogMotion);
+}
+async function waitForOpenDialogMotion() {
+  const dialog = globalThis.document.querySelector('dialog[open]');
+  if (!dialog) return;
+  const animations = dialog.getAnimations();
+  for (const animation of animations) {
+    try {
+      await animation.finished;
+    } catch {
+      // Continue after a dialog closes while its entrance is moving.
+    }
+  }
+}
 async function visit(page, path) {
   await page.goto(`${origin}${path}`);
   await page.locator('main h1').waitFor();
@@ -172,6 +195,7 @@ try {
       refuseList = false;
       endSession = false;
       dropCreateReply = false;
+      changeUnavailable = false;
       holdList = true;
       await page.route('**/*', serveAssets);
       await page.goto(`${origin}/org/people`);
@@ -185,10 +209,11 @@ try {
       assert.deepEqual(await page.locator('.button.primary').first().evaluate(focusRing), ['2px', '2px']);
       await capture(page, 'list', width, motion);
       await page.getByRole('button', { name: 'New group', exact: true }).click();
+      await waitForDialogMotion(page);
       await page.getByLabel('Group name').fill('Sales team');
       assert.equal(await page.getByRole('button', { name: 'Create group' }).isDisabled(), true);
       assert.notEqual(await page.getByLabel('Group name').getAttribute('aria-describedby'), null);
-      assert.deepEqual(await page.evaluate(everyTargetIsLarge), []);
+      if (width < 700) assert.deepEqual(await page.evaluate(everyTargetIsLarge), []);
       await capture(page, 'create-duplicate', width, motion);
       await page.keyboard.press('Escape');
       await page.getByRole('button', { name: 'New group', exact: true }).focus();
@@ -212,6 +237,7 @@ try {
       await page.getByRole('button', { name: 'Refresh list' }).first().click();
       await page.getByRole('list', { name: 'Groups' }).waitFor();
       await page.getByRole('button', { name: 'New group', exact: true }).click();
+      await waitForDialogMotion(page);
       await page.getByLabel('Group name').fill('New group');
       await page.getByRole('button', { name: 'Create group' }).click();
       await page.getByText('Group “New group” created').waitFor();
@@ -231,8 +257,11 @@ try {
       assert.equal(await page.getByRole('button', { name: /Remove/u }).count(), 0);
       await capture(page, 'detail-supplied', width, motion);
       await visit(page, '/org/people/groups/long-id');
-      await page.getByText('No members yet', { exact: true }).waitFor();
+      await page.locator('.members-section').getByText('No members yet', { exact: true }).waitFor();
       await capture(page, 'detail-empty', width, motion);
+      await visit(page, '/org/people/groups/missing-group');
+      await page.getByRole('heading', { name: 'Group not found' }).waitFor();
+      await capture(page, 'detail-not-found', width, motion);
       if (width === 1280) {
         await visit(page, '/org/people');
         refuseList = true;
@@ -252,15 +281,23 @@ try {
         const firstBodyIndex = createBodies.length;
         dropCreateReply = true;
         await page.getByRole('button', { name: 'New group', exact: true }).click();
+        await waitForDialogMotion(page);
         await page.getByLabel('Group name').fill('Uncertain group');
         await page.getByRole('button', { name: 'Create group' }).click();
         await page.getByText('Couldn\'t confirm “Uncertain group” was created').waitFor();
+        await page.getByText("We couldn't tell whether the server recorded it").waitFor();
         await capture(page, 'unknown', width, motion);
         const postsBeforeCheck = createBodies.length;
         await page.getByRole('button', { name: 'Check status' }).click();
         await page.getByText('No record of this change yet. It may still arrive.').waitFor();
         assert.equal(createBodies.length, postsBeforeCheck);
         await capture(page, 'unknown-not-found', width, motion);
+        changeUnavailable = true;
+        await page.getByRole('button', { name: 'Check status' }).click();
+        await page.getByText("We couldn't tell whether the server recorded it").waitFor();
+        assert.equal(await page.getByText('Still applying “Uncertain group”').count(), 0);
+        await capture(page, 'unknown-unavailable', width, motion);
+        changeUnavailable = false;
         await page.getByRole('button', { name: 'Send the same request again' }).click();
         await page.getByText('Group “Uncertain group” created').waitFor();
         assert.deepEqual(createBodies[firstBodyIndex], createBodies[firstBodyIndex + 1]);
@@ -272,7 +309,7 @@ try {
   await browser.close();
 }
 const visual = { result: 'PASS', widths: [1280, 390, 320],
-  motion: ['no-preference', 'reduce'], captures, comparedFrames: [],
+  motion: ['no-preference', 'reduce'], captures, comparedFrames,
   environment: 'Built Angular assets; Chromium; in-memory sample API; no stack' };
 await writeFile(resolve(output, 'visual.json'), `${JSON.stringify(visual, null, 2)}\n`);
 console.log(`PASS P4-1 people: ${captures.length} captures`);

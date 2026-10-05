@@ -12,6 +12,11 @@ export function memberCountLabel(count: number): string {
   return `${count} members`;
 }
 
+export function grantCountLabel(count: number): string {
+  if (count === 1) return '1 grant';
+  return `${count} grants`;
+}
+
 function grantTypeLabel(resourceType: string): string {
   if (resourceType === 'mcp_server') return 'integration';
   if (resourceType === 'model') return 'model';
@@ -22,9 +27,9 @@ function grantTypeLabel(resourceType: string): string {
 export function grantSentence(grant: Grant): string {
   const type = grantTypeLabel(grant.resourceType);
   if (grant.relation === 'acts_for') {
-    return `Assistant \`${grant.resourceId}\` works for this group`;
+    return `Assistant ${grant.resourceId} works for this group`;
   }
-  return `Can use ${type} \`${grant.resourceId}\``;
+  return `Can use ${type} ${grant.resourceId}`;
 }
 
 export function sharedAssistantIds(grants: Grant[]): string[] {

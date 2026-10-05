@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 import type { GroupRow } from '@opencrane/protocol';
 import { SharedState } from '../shared-state/shared-state';
 import { memberCountLabel, sharedAssistantIds, sourceLabel } from './group-wording';
@@ -7,12 +7,7 @@ import { memberCountLabel, sharedAssistantIds, sourceLabel } from './group-wordi
   styleUrls: ['./people.css'], changeDetection: ChangeDetectionStrategy.OnPush })
 export class GroupsList {
   readonly rows = input.required<GroupRow[]>();
-  readonly loadState = input.required<string>();
-  readonly loadedAt = input<string>();
-  readonly query = input('');
   readonly highlightedGroupId = input<string>();
-  readonly searchCleared = output<void>();
-  readonly createRequested = output<HTMLButtonElement>();
   protected readonly memberCountLabel = memberCountLabel;
   protected readonly sharedAssistantIds = sharedAssistantIds;
   protected readonly sourceLabel = sourceLabel;
