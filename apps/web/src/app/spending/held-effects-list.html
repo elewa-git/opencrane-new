@@ -1,0 +1,54 @@
+<section aria-labelledby="held-effects-heading">
+  <header>
+    <div>
+      <h2 id="held-effects-heading">Held for review</h2>
+      <p>Work title, requester and assistant aren't shown here yet.</p>
+      @if (waitingCount() > 0) {
+        <p>{{ waitingLabel() }}</p>
+      }
+    </div>
+  </header>
+  @if (loadState() === 'loading' && !hasLoaded()) {
+    <p>Loading held spend…</p>
+    <div class="skeletons" aria-hidden="true">
+      <oc-grain-loader height="64px" /><oc-grain-loader height="64px" />
+    </div>
+  } @else if (loadState() === 'unavailable' && !hasLoaded()) {
+  } @else if (loadState() === 'failed' && effects().length === 0) {
+    <oc-shared-state kind="failed" message="Spend evidence could not be loaded."
+      [showAction]="false" />
+    <button class="secondary" type="button" (click)="retry.emit()">Try again</button>
+  } @else if (effects().length === 0) {
+    <oc-shared-state kind="confirmed"
+      message="No uncertain effects. Nothing is waiting for final usage."
+      [showAction]="false" />
+  } @else {
+    <table>
+      <thead><tr><th scope="col">Reference</th><th scope="col">Held</th>
+        <th scope="col">State</th><th scope="col"><span class="sr-only">Action</span></th></tr></thead>
+      <tbody>
+        @for (effect of effects(); track effect.permitId) {
+          <tr>
+            <td data-label="Reference">
+              <div class="reference-values">
+                <strong class="mono" [id]="'permit-' + effect.permitId">{{ effect.permitId }}</strong>
+                <span class="model">{{ effect.model }}</span>
+                <time [attr.datetime]="effect.reservedAt">{{ utcDateTime(effect.reservedAt) }}</time>
+              </div>
+            </td>
+            <td data-label="Held">{{ money(effect.reservedCents) }}
+              ({{ effect.reservedCents }} cents)</td>
+            <td data-label="State">
+              @if (recorded(effect)) { <span>◷ Recorded, waiting to apply</span> }
+              @for (reason of reasons(effect); track reason) { <span>{{ reason }}</span> }
+            </td>
+            <td class="action">
+              <button type="button" class="primary" [attr.aria-describedby]="'permit-' + effect.permitId"
+                (click)="check(effect.permitId, $event)">Check status</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

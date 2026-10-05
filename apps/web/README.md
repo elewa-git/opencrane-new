@@ -38,6 +38,7 @@ flowchart LR
 6. **An admin checks a change.** The website shows organisation history to people with access.
 7. **An Owner or Admin opens People & groups.** The website checks group reads,
    shows members and grants, creates groups and removes a member after review.
+8. **An admin reviews held spend.** The website shows settled spend separately from held spend. An Owner or Admin can read a hold's evidence and record a settlement or release. The existing budget editor remains available.
 
 ## How to run or test it
 

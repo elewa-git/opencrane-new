@@ -1,7 +1,4 @@
 import './csp';
-import { bootstrapApplication } from '@angular/platform-browser';
-import { appConfig } from './app/app.config';
-import { App } from './app/app';
 
-bootstrapApplication(App, appConfig)
-  .catch((err) => console.error(err));
+// Load app code after Zod is set to avoid generated functions under the browser CSP.
+import('./startup').catch((error) => console.error(error));

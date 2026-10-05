@@ -1,0 +1,276 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390,
+    320
+  ],
+  "reducedMotion": true,
+  "captures": [
+    "SPD-01-1280-normal.png",
+    "SPD-03-1280-normal.png",
+    "SPD-06-1280-normal.png",
+    "SPD-07-1280-normal.png",
+    "SPD-08-1280-normal.png",
+    "SPD-09-1280-normal.png",
+    "SPD-20-1280-normal.png",
+    "SPD-21-1280-normal.png",
+    "SPD-22-1280-normal.png",
+    "SPD-23-1280-normal.png",
+    "SPD-24-1280-normal.png",
+    "SPD-25-1280-normal.png",
+    "SPD-26-1280-normal.png",
+    "SPD-27-1280-normal.png",
+    "SPD-28-1280-normal.png",
+    "SPD-30-1280-normal.png",
+    "SPD-31-1280-normal.png",
+    "SPD-32-1280-normal.png",
+    "SPD-33-1280-normal.png",
+    "SPD-34-1280-normal.png",
+    "SPD-35-1280-normal.png",
+    "SPD-01-1280-reduce.png",
+    "SPD-03-1280-reduce.png",
+    "SPD-06-1280-reduce.png",
+    "SPD-07-1280-reduce.png",
+    "SPD-08-1280-reduce.png",
+    "SPD-09-1280-reduce.png",
+    "SPD-20-1280-reduce.png",
+    "SPD-21-1280-reduce.png",
+    "SPD-22-1280-reduce.png",
+    "SPD-23-1280-reduce.png",
+    "SPD-24-1280-reduce.png",
+    "SPD-25-1280-reduce.png",
+    "SPD-26-1280-reduce.png",
+    "SPD-27-1280-reduce.png",
+    "SPD-28-1280-reduce.png",
+    "SPD-30-1280-reduce.png",
+    "SPD-31-1280-reduce.png",
+    "SPD-32-1280-reduce.png",
+    "SPD-33-1280-reduce.png",
+    "SPD-34-1280-reduce.png",
+    "SPD-35-1280-reduce.png",
+    "SPD-01-390-normal.png",
+    "SPD-03-390-normal.png",
+    "SPD-06-390-normal.png",
+    "SPD-07-390-normal.png",
+    "SPD-08-390-normal.png",
+    "SPD-09-390-normal.png",
+    "SPD-20-390-normal.png",
+    "SPD-21-390-normal.png",
+    "SPD-22-390-normal.png",
+    "SPD-23-390-normal.png",
+    "SPD-24-390-normal.png",
+    "SPD-25-390-normal.png",
+    "SPD-26-390-normal.png",
+    "SPD-27-390-normal.png",
+    "SPD-28-390-normal.png",
+    "SPD-30-390-normal.png",
+    "SPD-31-390-normal.png",
+    "SPD-32-390-normal.png",
+    "SPD-33-390-normal.png",
+    "SPD-34-390-normal.png",
+    "SPD-35-390-normal.png",
+    "SPD-01-390-reduce.png",
+    "SPD-03-390-reduce.png",
+    "SPD-06-390-reduce.png",
+    "SPD-07-390-reduce.png",
+    "SPD-08-390-reduce.png",
+    "SPD-09-390-reduce.png",
+    "SPD-20-390-reduce.png",
+    "SPD-21-390-reduce.png",
+    "SPD-22-390-reduce.png",
+    "SPD-23-390-reduce.png",
+    "SPD-24-390-reduce.png",
+    "SPD-25-390-reduce.png",
+    "SPD-26-390-reduce.png",
+    "SPD-27-390-reduce.png",
+    "SPD-28-390-reduce.png",
+    "SPD-30-390-reduce.png",
+    "SPD-31-390-reduce.png",
+    "SPD-32-390-reduce.png",
+    "SPD-33-390-reduce.png",
+    "SPD-34-390-reduce.png",
+    "SPD-35-390-reduce.png"
+  ],
+  "screenshotWidths": [
+    1280,
+    390
+  ],
+  "environment": "Built Angular assets, Chromium and mocked HTTP routes; no dev stack",
+  "frames": [
+    {
+      "id": "SPD-01",
+      "result": "adapted",
+      "differences": [
+        "No held rows are present.",
+        "Monthly usage and reservations are zero."
+      ]
+    },
+    {
+      "id": "SPD-03",
+      "result": "adapted",
+      "differences": [
+        "Held spend and budget replies are still loading.",
+        "No budget fields or held rows are shown yet."
+      ]
+    },
+    {
+      "id": "SPD-06",
+      "result": "adapted",
+      "differences": [
+        "A refresh failed.",
+        "The last successful spend and budget values remain visible."
+      ]
+    },
+    {
+      "id": "SPD-07",
+      "result": "adapted",
+      "differences": [
+        "The spend and budget services did not answer.",
+        "No saved amounts are shown."
+      ]
+    },
+    {
+      "id": "SPD-08",
+      "result": "adapted",
+      "differences": [
+        "The Owner or Admin role is missing.",
+        "Protected amounts and hold references are cleared."
+      ]
+    },
+    {
+      "id": "SPD-09",
+      "result": "adapted",
+      "differences": [
+        "Organisation navigation is open.",
+        "The spending list remains behind the menu."
+      ]
+    },
+    {
+      "id": "SPD-20",
+      "result": "adapted",
+      "differences": [
+        "The held row is shown without its detail drawer.",
+        "No search or column filters are present."
+      ]
+    },
+    {
+      "id": "SPD-21",
+      "result": "adapted",
+      "differences": [
+        "Recorded evidence is still loading.",
+        "The drawer has no evidence or resolution form yet."
+      ]
+    },
+    {
+      "id": "SPD-22",
+      "result": "adapted",
+      "differences": [
+        "One hold reason is present.",
+        "No usage observation has been recorded."
+      ]
+    },
+    {
+      "id": "SPD-23",
+      "result": "adapted",
+      "differences": [
+        "Several hold reasons and conflicting evidence are present.",
+        "Resolution is blocked."
+      ]
+    },
+    {
+      "id": "SPD-24",
+      "result": "adapted",
+      "differences": [
+        "One recorded usage amount is shown.",
+        "The amount must match before settlement."
+      ]
+    },
+    {
+      "id": "SPD-25",
+      "result": "adapted",
+      "differences": [
+        "The release choice is selected.",
+        "A checked non-dispatch record is required."
+      ]
+    },
+    {
+      "id": "SPD-26",
+      "result": "adapted",
+      "differences": [
+        "Recorded usage amounts disagree.",
+        "Resolution is blocked."
+      ]
+    },
+    {
+      "id": "SPD-27",
+      "result": "adapted",
+      "differences": [
+        "Invalid fields are shown after submit and Enter.",
+        "The first invalid field receives focus."
+      ]
+    },
+    {
+      "id": "SPD-28",
+      "result": "adapted",
+      "differences": [
+        "The entered amount is higher than the hold.",
+        "The full settled amount will be recorded."
+      ]
+    },
+    {
+      "id": "SPD-30",
+      "result": "adapted",
+      "differences": [
+        "The resolution POST is still in flight.",
+        "The drawer offers no second command."
+      ]
+    },
+    {
+      "id": "SPD-31",
+      "result": "adapted",
+      "differences": [
+        "The hold has been settled.",
+        "The evidence remains available for review."
+      ]
+    },
+    {
+      "id": "SPD-32",
+      "result": "adapted",
+      "differences": [
+        "The POST reply could not be confirmed.",
+        "The command reference remains available for a GET check."
+      ]
+    },
+    {
+      "id": "SPD-33",
+      "result": "adapted",
+      "differences": [
+        "A different resolution is already recorded.",
+        "The new resolution was not applied."
+      ]
+    },
+    {
+      "id": "SPD-34",
+      "result": "adapted",
+      "differences": [
+        "The hold sequence changed during review.",
+        "The evidence must be refreshed."
+      ]
+    },
+    {
+      "id": "SPD-35",
+      "result": "adapted",
+      "differences": [
+        "Access was refused on a narrow screen.",
+        "Protected amounts and hold references are cleared."
+      ]
+    }
+  ],
+  "checks": [
+    "No horizontal scroll at 320px and 390px",
+    "Visible controls are at least 44px",
+    "Escape returns focus to the row opener",
+    "Reduced motion captures are included"
+  ]
+}

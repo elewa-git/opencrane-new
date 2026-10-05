@@ -43,7 +43,11 @@
     } @else if (activePage === 'models') {
       <oc-models />
     } @else if (activePage === 'spending') {
-      <oc-spending />
+      @defer (when activePage === 'spending') {
+        <oc-spending />
+      } @placeholder {
+        <p>Loading spending…</p>
+      }
     } @else if (activePage === 'history') {
       <oc-audit />
     } @else if (activePage === 'people') {

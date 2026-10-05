@@ -45,9 +45,10 @@ function configureAppTestBed(): void {
   TestBed.configureTestingModule(testModule);
 }
 
-function create(reply: Response = response(loaded)): ComponentFixture<App> {
+async function create(reply: Response = response(loaded)): Promise<ComponentFixture<App>> {
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(reply);
   configureAppTestBed();
+  await TestBed.compileComponents();
   const fixture = TestBed.createComponent(App);
   fixture.detectChanges();
   return fixture;
@@ -71,7 +72,7 @@ describe('MCP register', () => {
   afterEach(() => { fetchSpy?.mockRestore(); globalThis.history.replaceState({}, '', '/'); });
 
   it('loads typed rows and filters the counted tabs', async () => {
-    const fixture = create();
+    const fixture = await create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
     expect(root(fixture).textContent).toContain('All · 3');
@@ -84,7 +85,7 @@ describe('MCP register', () => {
   });
 
   it('shows the specified empty state', async () => {
-    const fixture = create(response({ rows: [], loadedAt: loaded.loadedAt } satisfies IntegrationsResponse));
+    const fixture = await create(response({ rows: [], loadedAt: loaded.loadedAt } satisfies IntegrationsResponse));
     await vi.waitFor(() => expect(root(fixture).querySelector('.empty')).not.toBeNull());
     expect(root(fixture).querySelector('.empty')?.textContent).toContain('Not configured');
     expect(root(fixture).querySelector('.empty')?.textContent).toContain('Nothing set up yet');
@@ -95,7 +96,7 @@ describe('MCP register', () => {
   });
 
   it('distinguishes an empty filter from an empty register', async () => {
-    const fixture = create(response({ rows: [row('odoo', 'ready', 'Published')], loadedAt: loaded.loadedAt } satisfies IntegrationsResponse));
+    const fixture = await create(response({ rows: [row('odoo', 'ready', 'Published')], loadedAt: loaded.loadedAt } satisfies IntegrationsResponse));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1));
     button(root(fixture), 'Pending review · 0').click();
     await fixture.whenStable();
@@ -104,14 +105,14 @@ describe('MCP register', () => {
   });
 
   it('shows a failure, not an empty-organisation claim, when the first read is unavailable', async () => {
-    const fixture = create(response({ status: 'unavailable' }, 503));
+    const fixture = await create(response({ status: 'unavailable' }, 503));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
     expect(root(fixture).textContent).toContain('The organisation register is unavailable');
     expect(root(fixture).textContent).not.toContain('Nothing set up yet');
   });
 
   it('keeps old rows after a read failure and names when they were loaded', async () => {
-    const fixture = create();
+    const fixture = await create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     fetchSpy.mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
     button(root(fixture), 'Refresh list').click();
@@ -125,7 +126,7 @@ describe('MCP register', () => {
   });
 
   it('replaces failure with readable announced retry progress', async () => {
-    const fixture = create(response({ status: 'unavailable' }, 503));
+    const fixture = await create(response({ status: 'unavailable' }, 503));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
     let finish!: (value: Response) => void;
     fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => { finish = resolve; }));
@@ -142,7 +143,7 @@ describe('MCP register', () => {
   });
 
   it('labels unsupported actions instead of rendering inert row controls', async () => {
-    const fixture = create();
+    const fixture = await create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     expect(root(fixture).querySelector<HTMLAnchorElement>('a[aria-label="Manage tools for Odoo"]')?.getAttribute('href')).toBe('/org/integrations/odoo/tools');
     expect(root(fixture).textContent).not.toContain('Set up again');
@@ -150,7 +151,7 @@ describe('MCP register', () => {
   });
 
   it('names the role needed when the server refuses a non-admin', async () => {
-    const fixture = create(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
+    const fixture = await create(response({ status: 'refused', reason: 'admin_required', requiredRole: 'Owner or Admin' }, 403));
     await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
     expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Owner or Admin role');
     expect(root(fixture).querySelector('.access-state')?.textContent).toContain('Ask an Owner or Admin');
@@ -160,7 +161,7 @@ describe('MCP register', () => {
   });
 
   it('clears protected rows after an authority refusal and does not restore them during an outage', async () => {
-    const fixture = create();
+    const fixture = await create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     // A refused response can have no JSON body; authority still clears the previous read.
     const refusedWithoutBody = new Response(null, { status: 403 });
@@ -180,7 +181,7 @@ describe('MCP register', () => {
     const failedRow = row('safe-failure', 'failed', 'Validation stopped');
     failedRow.status.safeToRetry = true;
     const reply = { rows: [failedRow], loadedAt: loaded.loadedAt };
-    const fixture = create(response(reply));
+    const fixture = await create(response(reply));
     function safeFailureIsVisible(): void {
       expect(root(fixture).querySelector('.register-row .message')?.textContent)
         .toBe('Failed — nothing changed');
@@ -188,9 +189,9 @@ describe('MCP register', () => {
     await vi.waitFor(safeFailureIsVisible);
   });
 
-  function checkUnavailablePage(pathname: string): void {
+  async function checkUnavailablePage(pathname: string): Promise<void> {
     globalThis.history.replaceState({}, '', pathname);
-    const fixture = create();
+    const fixture = await create();
     const element = root(fixture);
     if (pathname === '/org/missing') {
       expect(element.textContent).toContain('Page not found');
@@ -217,7 +218,7 @@ describe('MCP register', () => {
   it.each(['/org/people', '/org/people/groups/sales-team'])(
     'mounts People & groups at %s', async (pathname) => {
       globalThis.history.replaceState({}, '', pathname);
-      const fixture = create(response({ rows: [] }));
+      const fixture = await create(response({ rows: [] }));
       await fixture.whenStable();
       const element = root(fixture);
       expect(element.querySelector('.sidebar [aria-current="page"]')?.getAttribute('href'))
@@ -226,9 +227,9 @@ describe('MCP register', () => {
       fixture.destroy();
     });
 
-  it('keeps the existing sign-in shell outside /org routes', () => {
+  it('keeps the existing sign-in shell outside /org routes', async () => {
     globalThis.history.replaceState({}, '', '/');
-    const fixture = create();
+    const fixture = await create();
     expect(root(fixture).textContent).toContain('OpenCrane');
     expect(button(root(fixture), 'Continue with single sign-on')).toBeTruthy();
     expect(fetchSpy).toHaveBeenCalledExactlyOnceWith('/auth/me');
@@ -243,7 +244,7 @@ describe('personal settings shell', () => {
   });
 
   it('loads only the identity name and marks unavailable profile fields', async () => {
-    const fixture = create(response({ authenticated: true, user: { name: 'Taylor Example' } }));
+    const fixture = await create(response({ authenticated: true, user: { name: 'Taylor Example' } }));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain('Taylor Example'));
     expect(root(fixture).querySelectorAll('.sidebar nav a')).toHaveLength(4);
     expect(root(fixture).querySelector('[aria-current="page"]')?.getAttribute('href')).toBe('/account');
@@ -264,14 +265,14 @@ describe('personal settings shell', () => {
   });
 
   it('shows no invented identity name when the provider omitted it', async () => {
-    const fixture = create(response({ authenticated: true, user: { name: '  ' } }));
+    const fixture = await create(response({ authenticated: true, user: { name: '  ' } }));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain('Name not provided'));
     expect(root(fixture).textContent).not.toContain('Taylor Example');
   });
 
-  it('keeps the unavailable destinations in the settings shell without making reads', () => {
+  it('keeps the unavailable destinations in the settings shell without making reads', async () => {
     globalThis.history.replaceState({}, '', '/account/tools');
-    const fixture = create(response({}));
+    const fixture = await create(response({}));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe('My tools');
     expect(element.textContent).toContain('Your personal tool connections are not available yet.');
@@ -281,9 +282,9 @@ describe('personal settings shell', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  function checkSettingsDestination(pathname: string, expectedHeading: string): void {
+  async function checkSettingsDestination(pathname: string, expectedHeading: string): Promise<void> {
     globalThis.history.replaceState({}, '', pathname);
-    const fixture = create(response({}));
+    const fixture = await create(response({}));
     const element = root(fixture);
     expect(element.querySelector('h1')?.textContent).toBe(expectedHeading);
     expect(element.querySelectorAll('.sidebar nav a')).toHaveLength(4);
@@ -300,9 +301,9 @@ describe('personal settings shell', () => {
     ['/account/tools', 'My tools'],
   ])('opens settings destination %s', checkSettingsDestination);
 
-  function checkUnknownAccountRoute(pathname: string): void {
+  async function checkUnknownAccountRoute(pathname: string): Promise<void> {
     globalThis.history.replaceState({}, '', pathname);
-    const fixture = create(response({}));
+    const fixture = await create(response({}));
     const element = root(fixture);
     expect(element.textContent).toContain('Page not found');
     expect(element.textContent)
@@ -318,7 +319,7 @@ describe('personal settings shell', () => {
   );
 
   async function checkSignedOutIdentity(): Promise<void> {
-    const fixture = create(response({ authenticated: false, user: null }));
+    const fixture = await create(response({ authenticated: false, user: null }));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain('Your session expired'));
     const state = root(fixture).querySelector('oc-shared-state .state');
     expect(state?.getAttribute('data-state')).toBe('access_changed');
@@ -333,7 +334,7 @@ describe('personal settings shell', () => {
     checkSignedOutIdentity);
 
   async function checkServerErrorCanBeRetried(): Promise<void> {
-    const fixture = create(response({ error: 'unavailable' }, 500));
+    const fixture = await create(response({ error: 'unavailable' }, 500));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load your identity"));
     expect(root(fixture).querySelector('oc-shared-state .state')?.getAttribute('data-state'))
       .toBe('failed');
@@ -354,7 +355,7 @@ describe('personal settings shell', () => {
 
   async function checkInvalidJsonUsesFailedState(): Promise<void> {
     const invalidJson = new Response('{not json', { status: 200 });
-    const fixture = create(invalidJson);
+    const fixture = await create(invalidJson);
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load your identity"));
     expect(button(root(fixture), 'Try again')).toBeTruthy();
     expect(root(fixture).textContent).not.toContain('Sign in again');

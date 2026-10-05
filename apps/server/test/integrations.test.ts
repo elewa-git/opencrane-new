@@ -17,7 +17,10 @@ import { natsFixture } from '@opencrane/event-store/testing';
 import { getEventDefinition, parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
 import { auditTrail, computers, connectComputers, connectMcpCatalogue, connectMemberFeed, mcpCatalogue, members, pgDb, ProjectionRunner } from '@opencrane/projections';
-import { computersResponseSchema, integrationsResponseSchema } from '@opencrane/protocol';
+import {
+  computersResponseSchema, effectDetailResponseSchema, effectListResponseSchema,
+  integrationsResponseSchema,
+} from '@opencrane/protocol';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
@@ -726,7 +729,8 @@ it('lists 50 held and settled reservations and reads their details within the au
   expect(response.statusCode).toBe(200);
   expect(listMs).toBeLessThan(2000);
   expect(response.headers['cache-control']).toBe('no-store');
-  const { effects } = response.json<{ effects: { permitId: string; state: string; settledCents: number | null; reasons: string[] }[] }>();
+  const parsedList = effectListResponseSchema.parse(response.json());
+  const effects = parsedList.effects;
   expect(effects).toHaveLength(50);
   expect(effects.map(effect => effect.permitId)).toEqual(permits);
   for (const effect of effects.slice(0, 25)) {
@@ -742,7 +746,8 @@ it('lists 50 held and settled reservations and reads their details within the au
     detailMs.push(performance.now() - detailStarted);
     expect(detail.statusCode).toBe(200);
     expect(detailMs.at(-1)).toBeLessThan(2000);
-    expect(detail.json()).toMatchObject(effects[index]!);
+    const parsedDetail = effectDetailResponseSchema.parse(detail.json());
+    expect(parsedDetail).toMatchObject(effects[index]!);
   }
   expect(await nats.store.head()).toBe(head);
   console.info('Effect HTTP timings (ms)', { listMs, detailMs });

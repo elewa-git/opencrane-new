@@ -34,6 +34,9 @@
 - Two active silo members can create and use private direct chats through the backend, reload and reconnect to recorded messages, and check original command outcomes. Human messages start no assistant work; designed screens and fresh-install qualification remain pending.
 
 - Group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. Fresh-install qualification remains pending.
+- Owners and admins can see held model spend on Spending, check its recorded evidence, and settle or release it with a receipt or non-dispatch reference. Requester and work details, and Odoo readback, are not shown yet.
+
+- Owners and admins can create flat groups and manage membership; group-derived spending and desktop access respect revocation, and removed members cannot read private approval cards. The designed screen and fresh-install qualification remain pending.
 - File previews and computer/session panels now share accessible drawers and sheets; the mobile workspace menu traps focus, supports arrow keys and respects reduced motion.
 - Reuse the v2 paper tokens, state vocabulary and reduced-motion loaders across the organisation and workspace screens.
 - Members with desktop access can take a screenshot from a conversation's viewer, open it from chat or the session panel, and find it again after reload.

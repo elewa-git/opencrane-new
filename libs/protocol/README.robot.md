@@ -64,3 +64,7 @@ The People & groups screen uses `groupRowSchema`, `groupsResponseSchema`,
 `groupReceiptSchema`, `groupChangeSchema` and `createGroupCommandSchema` for its
 flat group reads and create command. `removeMemberCommandSchema` checks the
 strict member-removal request.
+Spending reads use `effectListResponseSchema` and
+`effectDetailResponseSchema`. Price table names can include version punctuation.
+The browser sends one checked evidence entry when it settles or releases a hold;
+the server contract still accepts one to ten entries.

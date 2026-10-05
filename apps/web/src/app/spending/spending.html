@@ -1,65 +1,79 @@
 <h1>Spending</h1>
-<p>One charge counts towards the global, paying-group and optional assistant ceilings.
-  Monthly budgets reset at 00:00 UTC on the first. Unconfirmed usage stays reserved.</p>
-<div role="status" aria-live="polite">
-  <oc-shared-state [kind]="statusKind()" [message]="message()"
-    [evidenceAt]="evidenceAt()" [changeReference]="changeReference()" [showAction]="false" />
-</div>
-<div [attr.aria-busy]="state() === 'loading' || state() === 'pending'">
-  @if (state() !== 'access') {
-    <button class="refresh" type="button" (click)="load()"
-      [disabled]="state() === 'loading' || state() === 'pending'">Check status</button>
+<p class="intro">One charge counts towards the global, paying-group and optional assistant ceilings.</p>
+  @if (!accessLost()) {
+    <div role="status" aria-live="polite" class="page-status">{{ pageStatus() }}</div>
   }
-  @if (budget(); as currentBudget) {
-    <p>Personal work pays through
-      <strong>{{ currentBudget.defaultPayingGroupId || 'Default group not configured' }}</strong>.
-      Shared work needs an explicit paying group.</p>
-    <section aria-label="Current budgets">
-      <article [ocDogEar]="true">
-        <h2>Global</h2>
-        <p>{{ money(currentBudget.monthCents) }} spent ·
-          {{ money(currentBudget.reservedCents) }} reserved ·
-          {{ money(currentBudget.ceilingCents) }} monthly ceiling</p>
-        <p>{{ money(currentBudget.todayCents) }} spent today ·
-          {{ money(currentBudget.dailyCeilingCents) }} daily safety cap</p>
-      </article>
-      @for (ceiling of currentBudget.ceilings; track ceiling.scope + ':' + ceiling.scopeId) {
-        <article [ocDogEar]="true">
-          <h2>{{ ceiling.scope === 'paying_group' ? 'Paying group' : 'Assistant' }} ·
-            {{ ceiling.scopeId }}</h2>
-          <p>{{ money(ceiling.monthCents) }} spent · {{ money(ceiling.reservedCents) }} reserved ·
-            {{ money(ceiling.ceilingCents) }} monthly ceiling</p>
-        </article>
+@if (accessLost()) {
+  <section class="access-state">
+    <oc-shared-state kind="access_changed" message="Spending needs the Owner or Admin role."
+      [showAction]="false" />
+    <a href="/workspace">Back to workspace</a>
+  </section>
+} @else {
+  @for (notice of pendingNotices(); track notice.permitId) {
+    <aside class="notice">
+      <p>{{ notice.noticeMessage }}</p>
+      <button type="button" (click)="checkPageStatus(notice.permitId)">Check status</button>
+    </aside>
+  }
+  <div class="refresh-actions">
+    <button type="button" class="secondary refresh" (click)="refreshReads()">Refresh</button>
+  </div>
+  @if (((effectsState() === 'failed' || effectsState() === 'unavailable') && effectsLoadedAt())
+    || ((budgetState() === 'failed' || budgetState() === 'unavailable') && budgetLoadedAt())) {
+    <div class="stale"><p>Showing the last spending details we could load.</p></div>
+  }
+  <section aria-label="Spend evidence">
+    @if ((effectsState() === 'unavailable' || effectsState() === 'failed') && !effectsLoadedAt()) {
+      <oc-shared-state kind="failed" message="Spend evidence unavailable" [showAction]="false" />
+    }
+    <oc-held-effects-list [effects]="heldEffects(effects())"
+      [waitingCount]="waitingCount(effects())"
+      [loadState]="effectsState()" [hasLoaded]="!!effectsLoadedAt()"
+      (checkStatus)="openEffect($event)" (retry)="loadEffects()" />
+  </section>
+  <section aria-label="Budget service">
+    @if ((budgetState() === 'unavailable' || budgetState() === 'failed') && !budget()) {
+      <oc-shared-state kind="failed" message="Budget service unavailable" [showAction]="false" />
+    } @else if (budgetState() === 'loading' && !budget()) {
+      <p>Loading budget…</p>
+      <div class="money-cards skeletons" aria-hidden="true">
+        <oc-grain-loader height="180px" /><oc-grain-loader height="180px" />
+      </div>
+    } @else if (budgetState() === 'failed' && !budget()) {
+      <oc-shared-state kind="failed" message="Could not load budgets. Check status before editing."
+        [safeToRetry]="true" actionLabel="Try again" (action)="loadBudget()" />
+    }
+    @if (budget(); as currentBudget) {
+      <p class="period-line">@if (period()) { {{ period() }} · }
+        Amounts are in EUR, stored as whole euro cents.</p>
+      <section class="money-cards" aria-label="Current budgets">
+        <oc-money-card label="Global" [settledCents]="currentBudget.monthCents"
+          [reservedCents]="currentBudget.reservedCents" [ceilingCents]="currentBudget.ceilingCents"
+          [period]="period()" />
+        @for (ceiling of currentBudget.ceilings; track ceiling.scope + ':' + ceiling.scopeId) {
+          <oc-money-card [label]="(ceiling.scope === 'paying_group' ? 'Paying group · ' : 'Assistant · ') + ceiling.scopeId"
+            [settledCents]="ceiling.monthCents" [reservedCents]="ceiling.reservedCents"
+            [ceilingCents]="ceiling.ceilingCents" [period]="period()" />
+        }
+      </section>
+      <p>Personal work pays through <strong>{{ currentBudget.defaultPayingGroupId
+        || 'Default group not configured' }}</strong>. Shared work needs an explicit paying group.</p>
+      @if (currentBudget.monthCents === 0 && currentBudget.reservedCents === 0) {
+        <oc-shared-state kind="not_configured" message="No usage this month."
+          [showAction]="false" />
       }
-    </section>
-    <form (submit)="save($event)">
-      <fieldset [disabled]="state() !== 'ready'">
-        <legend>Set a hard ceiling</legend>
-        <label for="budget-scope">Budget scope</label>
-        <select id="budget-scope" #scopeInput (change)="select(scopeInput.value)">
-          <option value="global">Global</option>
-          <option value="paying_group">Paying group</option>
-          <option value="assistant">Assistant</option>
-        </select>
-        @if (scope !== 'global') {
-          <label for="budget-id">
-            {{ scope === 'paying_group' ? 'Paying group id' : 'Assistant id' }}</label>
-          <input id="budget-id" required [value]="scopeId" #idInput
-            (input)="scopeId = idInput.value" />
-        }
-        <label for="monthly-ceiling">Monthly ceiling (euro cents)</label>
-        <input id="monthly-ceiling" type="number" min="0" step="1" required [value]="monthly"
-          #monthlyInput (input)="monthly = monthlyInput.value" />
-        @if (scope === 'global') {
-          <label for="daily-ceiling">Daily safety cap (euro cents)</label>
-          <input id="daily-ceiling" type="number" min="0" step="1" required [value]="daily"
-            #dailyInput (input)="daily = dailyInput.value" />
-          <label for="default-group">Default paying group for new personal work</label>
-          <input id="default-group" required [value]="defaultGroup" #defaultInput
-            (input)="defaultGroup = defaultInput.value" />
-        }
-        <button type="submit">Save budget</button>
-      </fieldset>
-    </form>
+      <oc-budget-limit-editor [budget]="currentBudget" [loadState]="budgetState()"
+        [saveState]="budgetSaveState()" [evidenceAt]="budgetLoadedAt()"
+        [changeReference]="changeReference()" (saveRequested)="saveBudget($event)"
+        (checkStatus)="loadBudget()" />
+    }
+  </section>
+  @if (activePermitId()) {
+    <oc-effect-resolution-drawer [permitId]="activePermitId()!" [listEffect]="drawerListEffect()"
+      [effect]="drawerEffect()" [readState]="drawerReadState()" [message]="drawerMessage()"
+      [submitState]="drawerSubmitState()" [opener]="returnFocusTo()"
+      (refresh)="readDetail(activePermitId()!, true)" (resolve)="sendResolution($event)"
+      (dismissed)="closeDrawer()" />
   }
-</div>
+}

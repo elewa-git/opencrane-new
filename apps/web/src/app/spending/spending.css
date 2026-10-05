@@ -1,34 +1,38 @@
-:host { display: block; min-width: 0; max-width: 900px; }
-h1 { font-size: 24px; } h2 { font-size: 16px; }
-p { line-height: 1.5; overflow-wrap: anywhere; color: var(--oc-ink-secondary); }
-article, fieldset {
-  min-width: 0;
-  border: 1px solid var(--oc-border-default);
-  border-radius: 8px;
-  padding: 16px;
-  margin: 16px 0;
-  background: white;
-}
-fieldset { display: grid; gap: 8px; } legend { font-weight: 600; }
-input, select, button {
+:host { display: block; min-width: 0; max-width: 1060px; }
+h1 { font-size: 24px; }
+.intro, p { line-height: 1.5; overflow-wrap: anywhere; color: #4f575a; }
+.page-status { min-height: 24px; }
+.money-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.period-line { margin: 8px 0 14px; }
+.refresh-actions { display: flex; justify-content: flex-end; margin: 8px 0; }
+button, .access-state a {
   box-sizing: border-box;
   min-width: 0;
   min-height: 44px;
   padding: 8px 12px;
-  border: 1px solid var(--oc-border-input);
+  border: 1px solid #aeb8ba;
   border-radius: 6px;
   font: inherit;
 }
-label {
-  margin-top: 8px;
+button { cursor: pointer; }
+.notice, .unavailable, .stale, .access-state {
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid #cdd4d5;
+  border-radius: 8px;
+  background: white;
 }
-button {
-  background: var(--oc-accent);
-  color: var(--oc-ink-strong);
-  cursor: pointer;
+.notice, .unavailable, .stale { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.notice p, .stale p { margin: 0; }
+.money-cards.skeletons { margin: 16px 0; }
+section[aria-label="Spend evidence"] { min-width: 0; }
+.access-state a { display: inline-flex; align-items: center; text-decoration: none; }
+:focus-visible { outline: 2px solid #0a8497; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .money-cards { grid-template-columns: minmax(0, 1fr); }
+  .unavailable button, .notice button, .refresh-actions button {
+    width: 100%;
+  }
+  .unavailable, .stale, .notice { align-items: stretch; flex-direction: column; }
+  .access-state a { justify-content: center; }
 }
-button:disabled, fieldset:disabled {
-  opacity: .65;
-}
-:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
-@media (max-width: 600px) { input, select, button { width: 100%; } }

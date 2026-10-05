@@ -228,6 +228,26 @@ button {
 	color: inherit;
 }
 
+button.primary,
+button.secondary {
+	min-height: 44px;
+	padding: 8px 12px;
+	border: 1px solid;
+	border-radius: 6px;
+}
+
+button.primary {
+	border-color: var(--oc-primary-500);
+	background: var(--oc-primary-500);
+	color: var(--oc-primary-contrast);
+}
+
+button.secondary {
+	border-color: var(--oc-primary-700);
+	background: white;
+	color: var(--oc-primary-700);
+}
+
 input,
 textarea,
 select {
