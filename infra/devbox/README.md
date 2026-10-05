@@ -1,64 +1,64 @@
-# OpenCrane developer box
+# infra/devbox
 
-`setup.sh` prepares the Ubuntu developer box for the local `ocn` test silo. It
-creates an 8 GB swap file with swappiness 10, installs gVisor and the Kubernetes
-tools, builds a k3s node image containing `runsc`, and creates a one-node k3d
-cluster with the `gvisor` RuntimeClass. It also installs Agent Sandbox, a local
-registry on `127.0.0.1:5001`, and a persistent MinIO deployment.
+## What this is
 
-MinIO credentials are generated once in `~/.config/opencrane/minio.env` with
-mode `0600`. The script does not print them. MinIO uses the Alpine community
-image built from the AGPL-3.0 upstream source because MinIO no longer publishes
-the final community release as an official image.
+A setup script that prepares an Ubuntu machine for local OpenCrane development.
+It installs the tools and local Kubernetes cluster used to run sandboxed computers.
+It also starts a local image registry (a store for container images) and a MinIO file store
+inside the cluster. The dev stack keeps uploads in its own MinIO, so nothing uses this one yet.
 
-The runtime components have OSI-approved licences: k3d is MIT; Kubernetes,
-Helm, k3s, gVisor, Agent Sandbox and the Registry are Apache-2.0; BusyBox is
-GPL-2.0; and MinIO is AGPL-3.0.
+## Where it fits
 
-## Prerequisites
+This is part of the infrastructure layer. It prepares a developer's machine before
+[`infra/dev-stack`](../dev-stack/README.md) starts the rest of OpenCrane.
+[Kubernetes](../../GLOSSARY.md#kubernetes) runs the sandboxed computers.
+[gVisor](../../GLOSSARY.md#gvisor) adds a security layer around the programs inside them.
 
-- An x86-64 Ubuntu host
-- Docker Engine running and usable by the current user without `sudo`
-- Passwordless `sudo`
-- `curl`, `sha256sum`, `stat`, `fallocate`, `blkid`, `mkswap`, `swapon`,
-  `swapoff`, `grep`, `sed`, `tar` and `openssl`
+```mermaid
+flowchart LR
+  infra["infra<br/>infrastructure"] --> devbox["infra/devbox<br/>machine setup"]
+  devbox -->|creates cluster| cluster["k3d cluster<br/>local Kubernetes"]
+  devbox -->|starts registry| registry["Local registry<br/>image store"]
+  devbox -->|installs file store| minio["MinIO<br/>file storage"]
+  stack["infra/dev-stack<br/>local OpenCrane"] -->|uses cluster| cluster
+  cluster -->|runs computers| computers["apps/computer<br/>sandboxed work"]
+```
 
-Run or safely rerun the setup from the repository root:
+## What it is responsible for
+
+- Install tools that run a local Kubernetes cluster, with gVisor as an extra security layer.
+- Create a local Kubernetes cluster named `ocn` with gVisor for sandboxed computers.
+- Install Agent Sandbox, which manages sandboxed computers in the cluster.
+- Start a local image registry and a MinIO file store inside the cluster.
+  The dev stack keeps uploads in a separate MinIO, so nothing uses this one yet.
+- Add an 8 GB swap file to give the machine extra memory when needed.
+- Check that the Kubernetes API is bound only to the local machine.
+
+## Processes it handles
+
+1. **A developer prepares a machine.** `setup.sh` downloads pinned tools and checks their
+   checksums. It creates the cluster and proves that the registry and gVisor work.
+2. **A developer runs setup again.** The script reuses installed tools and the existing
+   cluster. It stops if the cluster or the registry can be reached from outside this machine.
+3. **A developer removes the local cluster.** The developer deletes the cluster and
+   registry with k3d. The setup script itself never deletes them.
+
+## How to run or test it
+
+The setup command runs from the repository root on an x86-64 Ubuntu machine with Docker
+and passwordless `sudo`. k3d creates the local cluster and registry.
 
 ```sh
 ./infra/devbox/setup.sh
-```
-
-When an `ocn` cluster already exists, the script checks every IPv4 and IPv6
-host binding for its Kubernetes API. It continues only when the sole binding is
-`127.0.0.1:6550`. If inspection fails or any binding differs, setup stops and
-explains how to delete the cluster manually. The script never deletes a cluster;
-manual deletion also removes its MinIO data.
-
-The script proves the registry and gVisor paths with temporary Pods, then removes
-them. It also waits for the four Agent Sandbox CRDs, its controller, and MinIO.
-`tailscale serve` is now configured by [the dev stack](../dev-stack/README.md):
-HTTPS on the tailnet proxies to a loopback-only web server. It never enables
-Funnel. Tailnet access rules still determine which owner devices can reach it.
-
-## Pinned versions
-
-- k3d 5.9.0, kubectl 1.37.1, Helm 3.19.1 and k3s 1.37.0+k3s1
-- gVisor `release-20260928.0`
-- Agent Sandbox 1.0.4
-- Docker Registry 2.8.3 and BusyBox 1.37.0 for the pull proof
-- MinIO `RELEASE.2025-10-15T17-29-55Z`
-
-## Tear down
-
-Remove the disposable cluster and registry with:
-
-```sh
 k3d cluster delete ocn
 k3d registry delete ocn-registry
 ```
 
-This also removes the MinIO volume in the cluster. It deliberately keeps the
-host tools, swap file, download cache, custom node image and credential file so
-a later setup can reuse them. Remove those separately only when they are no
-longer needed.
+Deleting the cluster also deletes the files kept in its MinIO.
+
+## Where to read more
+
+- [README.robot.md](README.robot.md): pinned versions, image digests and network checks.
+- [infra/dev-stack](../dev-stack/README.md): the local OpenCrane stack that uses this box.
+- [apps/computer](../../apps/computer/README.md): the sandboxed computers this cluster runs.
+- [Glossary](../../GLOSSARY.md): plain meanings of Kubernetes, containers and other terms.

@@ -22,7 +22,7 @@
     "lint:deps": "depcruise apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs",
     "lint:unused": "knip",
     "lint:docs": "markdownlint-cli2",
-    "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'spikes/README.md' 'spikes/*/README.md' 'apps/*/README*.md' 'libs/*/README*.md' 'infra/*/README*.md'",
+    "lint:links": "sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'spikes/README.md' 'spikes/*/README.md' 'apps/*/README*.md' 'libs/*/README*.md' 'infra/*/README*.md' 'tools/*/README*.md'",
     "provision": "node --experimental-strip-types libs/handlers/src/provision.ts",
     "visual:fold-loader": "node scripts/check-fold-loader.mjs --capture",
     "visual:signin": "node scripts/capture-signin.mjs",

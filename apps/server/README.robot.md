@@ -29,6 +29,28 @@ client-secret indirection, scopes, cookie settings and provider claim names.
 `OTEL_EXPORTER_OTLP_ENDPOINT` enables optional trace export when set.
 Disabling secure cookies or allowing insecure OIDC HTTP is only for local testing.
 
+## File upload runtime licences
+
+These packages support file inspection and upload handling in `apps/server`.
+Their pinned versions and package metadata are recorded in the root lockfile.
+
+| Component | Licence | Source or use |
+| --- | --- | --- |
+| ClamAV 1.5.2 | GPL-2.0 (OSI-approved) | [ClamAV COPYING](https://github.com/Cisco-Talos/clamav/blob/clamav-1.5.2/COPYING); virus scanner service |
+| Copied OpenCrane 1 scanner | AGPL-3.0-or-later (OSI-approved) | `infra/clamav/upstream/LICENCE`; unmodified scanner source |
+| MinIO JS client 8.0.7 | Apache-2.0 | installed package `LICENSE`; object storage client |
+| file-type 21.3.4 | MIT | installed package `license`; checks file content signatures |
+| yauzl 3.4.0 | MIT | installed package `LICENSE`; bounded Office ZIP inspection |
+| cfb 1.2.2 | Apache-2.0 | installed package `LICENSE`; legacy Office stream inspection |
+| fast-xml-parser 5.11.2 | MIT | installed package `LICENSE`; decoded Office metadata inspection |
+
+MinIO's pinned server is AGPL-3.0. Uploads add no licence exceptions, provider SDK,
+runtime data package or new computer-image package. MarkItDown is already in the
+reviewed computer image.
+
+The ClamAV service image and copied scanner have their own reviewed notices in
+[`infra/clamav/LICENCES.md`](../../infra/clamav/LICENCES.md).
+
 ## Settings
 
 The server, models and one-time bootstrap command read these environment variables.
@@ -541,7 +563,7 @@ A later submission consults event history and cannot create a second owner.
 All claim replies use `Cache-Control: no-store`.
 
 The existing dev stack retains its explicit invitation/join owner bootstrap
-for `jente@elewa.ke`; see its [instructions](../../infra/dev-stack/README.md#zitadel-sign-in).
+for `jente@elewa.ke`; see its [instructions](../../infra/dev-stack/README.robot.md#zitadel-sign-in).
 This production token path never uses the dev external-identity exception.
 Ownership transfer remains #24. The production install uses the token method alone.
 
