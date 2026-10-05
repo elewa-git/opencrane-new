@@ -11,7 +11,7 @@ Codex release. This is Linux x86-64 only.
 | Codex bundled native voice libraries | The native package above | Checked its `codex-resources/voice/NOTICE.md`: LGPL-2.1 GStreamer/GLib; MIT/BSD-style libffi, PCRE2, Opus; zlib. Notices and source archive hashes accompany the image. Windows-only Microsoft runtime is not installed in this Linux image. |
 | agentgateway | `v1.5.0@sha256:bf2f339ef326d32def2aaeb44b1b4549801293c19b89e764a4228667d97d9896` | Apache-2.0, upstream GitHub licence API and image label `org.opencontainers.image.licenses`; source revision `fe6732474a96a0363dfb9822859af4e9bab360fa`. Existing S0.2 selection, Chainguard glibc base. |
 | Tool launcher | Source `tool-user.c`, host GCC static build | Own code using Linux syscall headers and glibc (LGPL-2.1-or-later); source is retained so it can be rebuilt/relinked. No libseccomp dependency or compiler is added to the image. |
-| Existing k3s, gVisor, Agent Sandbox, registry | Developer box pins | Apache-2.0; see [developer-box inventory](../../infra/devbox/README.md#pinned-versions). |
+| Existing k3s, gVisor, Agent Sandbox, registry | Developer box pins | Apache-2.0; see [developer-box inventory](../../infra/devbox/README.robot.md#pinned-versions). |
 
 Only the two applicable Codex npm packages are installed. npm, Corepack and Yarn
 are removed from the finished image, including their build-tool data packages.

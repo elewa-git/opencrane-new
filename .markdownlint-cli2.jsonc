@@ -1,7 +1,7 @@
 {
   // Keep long design records intact while checking the short guides for people.
   "ignores": ["docs/design/chat/README.robot.md", "docs/design/handoff-v2/[0-9]*/README.robot.md"],
-  "globs": ["*.md", "docs/**/*.md", "spikes/README.md", "spikes/*/README.md", "apps/*/README*.md", "libs/*/README*.md", "infra/*/README*.md"],
+  "globs": ["*.md", "docs/**/*.md", "spikes/README.md", "spikes/*/README.md", "apps/*/README*.md", "libs/*/README*.md", "infra/*/README*.md", "tools/*/README*.md"],
   "config": {
     "default": true,
     "MD013": false,

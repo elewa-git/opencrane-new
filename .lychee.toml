@@ -1,4 +1,4 @@
-# Check root docs, docs/**/*.md, spike guides and README*.md under apps, libs and infra.
+# Check root docs, docs/**/*.md, spike guides and README*.md under apps, libs, infra and tools.
 # Leave out dependency trees, Angular caches and generated build output.
 offline = true
 include_fragments = true
