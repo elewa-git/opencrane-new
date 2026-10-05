@@ -112,8 +112,11 @@ async function setBudget(request: FastifyRequest, reply: FastifyReply, config: A
   if (!options.budget) return reply.code(503).send({ status: 'unavailable' });
   const body = JSON.stringify(command);
   const token = await options.budget.tokens.budget({ silo: options.silo, memberId, commandDigest: createHash('sha256').update(body).digest('hex') });
-  const response = await fetch(`${options.budget.decisionUrl}/budgets`, { method: 'POST',
-    headers: { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' }, body, signal: AbortSignal.timeout(5000) });
+  const headers = { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' };
+  // Never follow a redirect: it would send the budget token and the change to another server.
+  const budgetRequest: RequestInit = { method: 'POST', headers, body, redirect: 'manual',
+    signal: AbortSignal.timeout(5000) };
+  const response = await fetch(`${options.budget.decisionUrl}/budgets`, budgetRequest);
   const raw: unknown = await response.json();
   return reply.code(response.status).send(raw);
 }

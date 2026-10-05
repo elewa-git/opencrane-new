@@ -123,8 +123,9 @@ async function verify(request: FastifyRequest, reply: FastifyReply,
   const capability = { silo: options.silo, memberId, commandDigest };
   const token = await options.verification.tokens.providerVerification(capability);
   const headers = { authorization: `Bearer ${token.value}`, 'content-type': 'application/json' };
-  const command = { method: 'POST', headers, body: JSON.stringify(raw),
-    signal: AbortSignal.timeout(20_000) };
+  // Never follow a redirect: it would send the check token and the command to another server.
+  const command: RequestInit = { method: 'POST', headers, body: JSON.stringify(raw),
+    redirect: 'manual', signal: AbortSignal.timeout(20_000) };
   const response = await fetch(`${options.verification.decisionUrl}/providers/verify`, command);
   const result: unknown = await response.json();
   return reply.code(response.status).send(result);
