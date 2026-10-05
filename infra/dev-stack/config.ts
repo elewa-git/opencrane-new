@@ -28,7 +28,7 @@ export async function writeEnv(name: string, env: Record<string, string>) {
   for (const value of Object.values(env)) if (/[\r\n]/u.test(value)) throw new Error('Multiline setting refused');
   await save(`${name}.env`, Object.entries(env).map(([key, value]) => `${key}=${value}\n`).join(''));
 }
-export async function prepareDirectory() {
+export async function prepareDirectory(ownerRecord?: string, reclaimStale = false) {
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const actual = await realpath(directory);
   if (secondary && actual !== directory) throw new Error('Secondary stack directory must not be a symlink');
@@ -36,10 +36,17 @@ export async function prepareDirectory() {
     throw new Error('DEV_STACK_DIR must be a dedicated directory outside the repository');
   }
   if (await exists(`${directory}/stack-owner`)) {
-    if (await readFile(`${directory}/stack-owner`, 'utf8') !== root) throw new Error('Directory belongs to another stack');
+    const owner = await readFile(`${directory}/stack-owner`, 'utf8');
+    const ownerRoot = owner.startsWith('worktree=')
+      ? owner.split('\n')[0]!.slice('worktree='.length)
+      : owner;
+    if (ownerRoot !== root && !reclaimStale) throw new Error('Directory belongs to another stack');
+    if (reclaimStale && ownerRecord) await save('stack-owner', ownerRecord);
   } else {
-    if ((await readdir(directory)).length) throw new Error('Refusing an unowned non-empty directory');
-    await save('stack-owner', root);
+    if ((await readdir(directory)).length && !reclaimStale) {
+      throw new Error('Refusing an unowned non-empty directory');
+    }
+    await save('stack-owner', ownerRecord ?? root);
   }
   await chmod(directory, 0o700);
 }

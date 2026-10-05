@@ -44,6 +44,14 @@ flowchart LR
    Its services use separate data and ports, and `down.sh --id` removes that stack and
    releases its id.
 
+## Secondary stack slots
+
+`claim.sh` gives this worktree one of the two spare slots. Its private owner file records
+the worktree, the claiming process id and the start time. A later claim reuses the same
+slot for this worktree. It can reclaim a slot after that process has ended and no stack
+processes or containers are running. `status.sh` reports `free` for an unused slot and
+does not create its owner file. `down.sh` also leaves an unused slot alone.
+
 ## How to run or test it
 
 The local machine needs Docker and Node 22. The owner's main stack is reached over Tailscale,
