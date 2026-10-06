@@ -1,4 +1,4 @@
-// Reuse S0.1b's real gateway/provider/probe and S0.3's disposable lab helpers.
+// Reuse the gateway, provider and probe from the proxy setup, plus its disposable lab helpers.
 import { resume } from './pvc.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';

@@ -1,5 +1,5 @@
-# Rebuild the upload test's S0.5 prerequisites without the developer's registry.
-# Uses the existing Codex lockfile and KasmVNC checksum; never published to a silo.
+# Rebuild the upload test's base image without the developer's private registry.
+# Use the pinned Codex package and KasmVNC checksum; never publish this test image to a silo.
 FROM node:22.23.1-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3
 ADD --checksum=sha256:770fd3df51510beecc89666879d82faf411276e68c6e11df612f736b891b5f71 https://github.com/kasmtech/KasmVNC/releases/download/v1.5.0/kasmvncserver_bookworm_1.5.0_amd64.deb /tmp/kasm.deb
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261002T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261002T000000Z|' /etc/apt/sources.list.d/debian.sources && \

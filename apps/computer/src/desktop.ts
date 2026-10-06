@@ -1,4 +1,4 @@
-// S0.5's desktop, with ephemeral passwords and the same trusted UID boundary.
+// Run the desktop with temporary passwords under its own trusted user ID.
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';

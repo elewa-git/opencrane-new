@@ -7,7 +7,7 @@ import { getEventDefinition, memberInvitedDataSchema, memberJoinedDataSchema, pa
 import { memberAuthorisation } from '@opencrane/authz';
 import { readEnv, root } from './config.ts';
 
-// Dev-only bootstrap. #12 replaces this with the one-time bootstrap token.
+// Create the development owner when a fresh local stack has no owner yet.
 const memberId = 'jente-rosseel';
 const email = 'jente@elewa.ke';
 const invitationId = 'invite-jente-rosseel';
