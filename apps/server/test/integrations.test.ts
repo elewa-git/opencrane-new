@@ -965,3 +965,110 @@ async function resolvesAfterBudgetRead(removeDuringRead: boolean) {
 it.each([false, true])(
   'resolves after history uses more than the access limit, checking removal (removed: %s)',
   resolvesAfterBudgetRead);
+
+
+async function refusesHoldReleasedDuringBudgetRead() {
+  const call = {
+    model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+    computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
+    conversationId: 'private-conversation', turnId: 'turn', threadId: 'thread',
+    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+  };
+  const permitId = await actor.reserve(call, 1000);
+  const url = `/api/org/effects/${permitId}`;
+  const sessionHeaders = headers('oidc-amina');
+  const detailRequest = { url, headers: sessionHeaders };
+  const detail = await app.inject(detailRequest);
+  expect(detail.statusCode).toBe(200);
+  const body = detail.json<{ sequence: number; csrf: string }>();
+  const payload = {
+    commandId: 'resolve-released-during-history', expectedSequence: body.sequence,
+    outcome: 'settled', settledCents: 300,
+    evidence: [{ kind: 'provider_receipt', reference: 'receipt',
+      digest: 'a'.repeat(64), amountCents: 300 }],
+  };
+  const read = nats.store.readStream.bind(nats.store);
+  const realNow = performance.now.bind(performance);
+  let offset = 0;
+  let released = false;
+  function now() {
+    return realNow() + offset;
+  }
+  async function* releaseDuringHistory(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'budget-test' && !released) {
+      released = true;
+      await actor.releaseUndispatched(permitId);
+      // Advance only the first history read so later events fit within the access limit.
+      offset += 2500;
+    }
+  }
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockImplementation(now);
+  const reads = vi.spyOn(nats.store, 'readStream');
+  reads.mockImplementation(releaseDuringHistory);
+  try {
+    const requestHeaders = {
+      ...sessionHeaders, origin: new URL(config.redirectUri).origin, 'x-csrf-token': body.csrf,
+    };
+    const request = { method: 'POST' as const, url: `${url}/resolve`,
+      headers: requestHeaders, payload };
+    const result = await app.inject(request);
+    const rows = await history(nats.store, `effect-${permitId}`, 'test');
+    function isResolution(row: (typeof rows)[number]) {
+      return row.event.type === 'effect.resolved';
+    }
+    expect.soft(result.statusCode).toBe(409);
+    expect(rows.filter(isResolution)).toHaveLength(0);
+  } finally {
+    reads.mockRestore();
+    clock.mockRestore();
+  }
+}
+it('refuses a resolution when the hold is released during the first budget read',
+  refusesHoldReleasedDuringBudgetRead);
+
+
+async function refusesResolutionWithoutOpenFgaAdminPermission() {
+  const call = {
+    model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+    computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
+    conversationId: 'private-conversation', turnId: 'turn', threadId: 'thread',
+    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+  };
+  const permitId = await actor.reserve(call, 1000);
+  const url = `/api/org/effects/${permitId}`;
+  const sessionHeaders = headers('oidc-amina');
+  const detailRequest = { url, headers: sessionHeaders };
+  const detail = await app.inject(detailRequest);
+  expect(detail.statusCode).toBe(200);
+  const body = detail.json<{ sequence: number; csrf: string }>();
+  const payload = {
+    commandId: 'resolve-without-admin-permission', expectedSequence: body.sequence,
+    outcome: 'settled', settledCents: 300,
+    evidence: [{ kind: 'provider_receipt', reference: 'receipt',
+      digest: 'a'.repeat(64), amountCents: 300 }],
+  };
+  // Remove only OpenFGA's admin permission; leave the saved membership as admin.
+  const changedRole = {
+    memberId: 'amina', previousRole: 'admin', newRole: 'member', changedBy: 'alice',
+  };
+  const permissionChange = fixture('member.role_changed', 'member-amina', changedRole);
+  await authorisation.handler.handle(permissionChange, pgDb(dbs.queue));
+  expect(await authorisation.check('amina', 'admin'))
+    .toMatchObject({ allowed: false, status: 'ok' });
+  const requestHeaders = {
+    ...sessionHeaders, origin: new URL(config.redirectUri).origin, 'x-csrf-token': body.csrf,
+  };
+  const request = { method: 'POST' as const, url: `${url}/resolve`,
+    headers: requestHeaders, payload };
+  const result = await app.inject(request);
+  const rows = await history(nats.store, `effect-${permitId}`, 'test');
+  function isResolution(row: (typeof rows)[number]) {
+    return row.event.type === 'effect.resolved';
+  }
+  expect.soft(result.statusCode).toBe(403);
+  expect(rows.filter(isResolution)).toHaveLength(0);
+}
+it('refuses a resolution when the saved admin role has no OpenFGA admin permission',
+  refusesResolutionWithoutOpenFgaAdminPermission);

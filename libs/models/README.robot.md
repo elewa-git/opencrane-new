@@ -432,10 +432,28 @@ Private turn admission keeps its existing small access streams.
 `resolveEffect` reads the reservation and effect events with one ten-second history
 limit before starting its two-second member access check. The HTTP access callback
 starts after history too, and is checked again immediately before the append.
-Member removal during history or between the checks refuses the write. Resolution
-still makes one conditional append to `effect-<permitId>` with the caller's expected
-sequence; a concurrent resolution still conflicts. It never writes budget state.
+Member removal during history or between the checks refuses the write. After the
+member check starts, the command compares the budget stream's latest position with
+the last position applied during history. If it changed, the command reads only
+new events within the member check's deadline. It checks their silo, applies them
+to the budget state and rebuilds the hold's status before making its decision.
+A hold released during the first budget read returns `conflict` without saving a
+resolution. An unchanged budget needs no second read.
+Resolution still makes one conditional append to `effect-<permitId>` with the
+caller's expected sequence; a concurrent resolution still conflicts. It never writes budget state.
 
 `test/reconcile.test.ts` covers history ordering, removal immediately before saving,
 access-check expiry and a concurrent effect write. `test/actor.test.ts` covers a
 lost reservation reply followed by a successful reservation at the next position.
+
+Known follow-up for a later #210 PR (M1): `readEffect`, `listEffects` and
+`resolveEffect` still read the whole budget stream once. The ten-second history
+limit can refuse these requests as the stream grows. A budget summary or an index
+for each hold should replace that full read. This PR only catches up new events
+after the initial read. A budget change between that catch-up and the append can
+still race the decision within the two-second access limit, as before. Closing
+that gap needs an append condition that also covers the budget stream.
+
+`apps/server/test/integrations.test.ts` covers a hold released during the first
+budget read and a saved admin role whose OpenFGA admin permission is denied. Both
+refusals leave the effect stream without `effect.resolved`.

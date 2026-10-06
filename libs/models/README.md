@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks calls and reads spending| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks calls and spending holds| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -29,6 +29,7 @@ flowchart LR
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.
 - Read a spending hold before starting the access check for its resolution.
+  Read any new budget events before deciding whether it can be resolved.
   Check current access again before saving the resolution.
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.

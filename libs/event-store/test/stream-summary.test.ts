@@ -86,9 +86,13 @@ async function dropsLeastRecentlyUsed() {
   fixture = await natsFixture();
   await fixture.seed([event('alice'), event('bob', 'member-bob'), event('carol', 'member-carol')]);
   const reads = countReads(fixture.store);
-  for (const member of ['alice', 'bob', 'alice', 'carol', 'alice']) {
+  for (const member of ['alice', 'bob', 'alice', 'carol']) {
     await readStreamSummary(fixture.store, 'test', `member-${member}`, kind, Infinity, take);
   }
+  reads.clear();
+  expect(await readStreamSummary(fixture.store, 'test', 'member-alice', kind, Infinity, take))
+    .toEqual({ ids: ['alice'], sequence: 1 });
+  expect(reads.calls).toEqual([{ subject: 'member-alice', fromSequence: 2, rows: 0 }]);
   reads.clear();
   expect(await readStreamSummary(fixture.store, 'test', 'member-bob', kind, Infinity, take))
     .toEqual({ ids: ['bob'], sequence: 2 });

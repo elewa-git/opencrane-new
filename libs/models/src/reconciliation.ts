@@ -14,8 +14,26 @@ export const resolutionCommandSchema = z.object({ commandId: id, expectedSequenc
 
 async function reservation(store: EventStore, silo: string, permitId: string, deadline: number) {
   const state = emptyBudget();
-  for (const row of await history(store, `budget-${silo}`, silo, deadline)) applyBudget(state, row.event, row.sequence);
-  return state.reservations.find(r => r.id === permitId);
+  const rows = await history(store, `budget-${silo}`, silo, deadline);
+  for (const row of rows) {
+    applyBudget(state, row.event, row.sequence);
+  }
+  function matchesPermit(held: BudgetState['reservations'][number]) {
+    return held.id === permitId;
+  }
+  const held = state.reservations.find(matchesPermit);
+  return { held, state, sequence: state.sequence };
+}
+
+async function applyNewBudgetEvents(store: EventStore, silo: string, state: BudgetState,
+  seen: number, deadline: number) {
+  const rows = store.readStream(`budget-${silo}`, seen + 1, deadline);
+  for await (const row of rows) {
+    if (row.event.silo !== silo) {
+      throw new Error('Wrong silo');
+    }
+    applyBudget(state, row.event, row.sequence);
+  }
 }
 
 /** Reads recorded evidence only. No provider call or external-action retry belongs here. */
@@ -27,11 +45,11 @@ export async function readEffect(store: EventStore, silo: string, permitId: stri
 }
 
 async function effectRecords(store: EventStore, silo: string, permitId: string, deadline: number) {
-  const held = await reservation(store, silo, permitId, deadline);
+  const { held, state, sequence } = await reservation(store, silo, permitId, deadline);
   if (!held) return undefined;
   const rows = await history(store, `effect-${permitId}`, silo, deadline);
   if (performance.now() >= deadline) throw new Error('Effect read expired');
-  return { current: effectStatus(held, rows), rows };
+  return { current: effectStatus(held, rows), rows, held, budget: state, budgetSequence: sequence };
 }
 
 function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[]) {
@@ -89,7 +107,14 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
     throw new Error('Access changed');
   }
   if (!records) return { status: 'not_found' } as const;
-  const { current, rows } = records;
+  const { rows, held, budget, budgetSequence } = records;
+  let current = records.current;
+  // Check for releases saved during history before deciding whether the hold can be resolved.
+  const budgetHead = await store.head(`budget-${silo}`, memberFresh.deadline);
+  if (budgetHead !== budgetSequence) {
+    await applyNewBudgetEvents(store, silo, budget, budgetSequence, memberFresh.deadline);
+    current = effectStatus(held, rows);
+  }
   const { commandId, expectedSequence, ...fields } = command;
   const payload = effectResolvedDataSchema.parse({ ...fields, permitId, reservationId: current.reservationId, resolvedBy: memberId });
   const prior = rows.find(r => r.event.commandId === commandId);

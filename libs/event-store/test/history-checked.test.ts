@@ -116,7 +116,8 @@ async function retriesAfterLosingAPublishReply() {
   const reads = countReads(store);
   const command = { event: event('lost-reply'), expectedSequence: 1, historyChecked: true as const };
   expect(await store.append(command)).toEqual({ status: 'appended', sequence: 2 });
-  // Use the pinned NATS order: it checks the expected position before message-id deduplication.
+  // Accept either NATS order: a refusal then the short search, or a duplicate
+  // acknowledgement checked by sameCommand.
   expect(replies).toBeGreaterThanOrEqual(1);
   expect(attempts.length).toBeGreaterThanOrEqual(2);
   for (const options of attempts) {
