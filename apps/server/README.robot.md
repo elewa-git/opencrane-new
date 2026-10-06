@@ -613,8 +613,32 @@ Tests use disposable NATS, PostgreSQL and OpenFGA plus Chromium at 1280/390px.
 The chat watcher checks the global event position every 250 ms. It skips conversation
 and computer history when that position is unchanged and the last pass found no
 pending message or file. The conversation table must have processed that event
-position before idle skipping starts. A failed read or pending work keeps retries enabled. The
-first pass after restart always runs. Failed event-position or table reads are logged
+position before idle skipping starts. A failed read or pending work keeps retries enabled.
+
+During a pass, sessions share their assistant's computer history. The watcher checks
+that stream's latest position first and reuses the saved history when it has not
+changed. The assistant's kind is saved after its first successful read because it
+cannot change. A failed creation read is logged once for that assistant and never
+allows delivery with an unknown kind. Only a waiting message keeps that chat pending.
+An assistant without a computer waits for its computer stream to change before its
+unchanged chats are read again.
+
+The watcher remembers each chat's last stream position. It skips
+unchanged chats unless delivery is waiting for the computer to accept a turn,
+uploads remain, the computer changes, or the connection closes. A failed read does
+not save that chat's position, so retries still read it. Closed or unlisted chats are
+removed from the cache. The cache stores connection numbers and releases closed sockets.
+Each connection remembers the last turn sent for each chat and when it was sent.
+An unaccepted turn is sent again at most once per second on that connection. Resends
+stop when `computer.turn_started` records acceptance. New Stop requests still reach
+an accepted turn. A new
+connection sends pending turns again, including turns already accepted before the
+connection closed. These are delivery checks; turn admission keeps its separate
+access checks on the small streams that grant permission.
+When a final report appears before its turn close, recovery checks the computer
+history again before issuing another close command.
+
+The first pass after restart always runs. Failed event-position or table reads are logged
 and retried after 250 ms. An unexpected watcher failure logs a fatal error and exits
 the server with status 1 so its supervisor can restart chat delivery.
 
