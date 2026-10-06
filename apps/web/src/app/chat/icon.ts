@@ -10,6 +10,9 @@ import { ChangeDetectionStrategy, Component, input } from '@angular/core';
       @case ('failed') { <path d="m4 4 8 8m0-8-8 8"/> }
       @case ('close') { <path d="m4 4 8 8m0-8-8 8"/> }
       @case ('closed') { <rect x="3" y="7" width="10" height="7" rx="2"/><path d="M5 7V5a3 3 0 0 1 6 0v2"/> }
+      @case ('clock') { <circle cx="8" cy="8" r="5.5"/><path d="M8 4.5V8l2.5 1.5"/> }
+      @case ('block') { <circle cx="8" cy="8" r="5.5"/><path d="m4 4 8 8"/> }
+      @case ('dash') { <path d="M3 8h10"/> }
       @case ('stop') { <rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" stroke="none"/> }
       @case ('stopped') { <rect x="4" y="4" width="8" height="8" rx="1.5"/> }
       @case ('plus') { <path d="M8 2v12M2 8h12"/> }

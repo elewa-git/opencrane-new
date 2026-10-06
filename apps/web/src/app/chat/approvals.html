@@ -1,25 +1,122 @@
-@if (error()) { <p role="alert">{{ error() }} <button type="button" (click)="refresh()">Check status</button></p> }
-@for (card of cards(); track card.approvalId) {
-  <section class="approval" [class.terminal]="card.state !== 'requested'" [attr.aria-label]="label(card)" [attr.data-approval]="card.approvalId" tabindex="-1">
-    <header aria-live="polite">{{ label(card) }}@if (card.state !== 'requested') { · {{ card.review.action }} }</header>
-    @if (card.state === 'outcome_unknown') { <button type="button" (click)="refresh()">Check status</button> }
-    @if (card.state === 'requested') {
-      <h2>{{ card.review.action }}</h2>
-      <dl class="approval-ledger">
-        <dt>Action</dt><dd>{{ card.review.tool }}</dd><dt>Target</dt><dd>{{ card.review.target }}</dd>
-        <dt>Data sent</dt><dd>{{ card.review.data }}</dd><dt>System</dt><dd>{{ card.review.destination }}</dd>
-        <dt>Account / profile</dt><dd>{{ card.review.account }}</dd><dt>If approved</dt><dd>{{ card.review.consequence }}</dd>
-      </dl>
-      @if (card.stepUp && card.canDecide) { <p class="step-up">This tool’s policy requires a recent sign-in for this approval. <a [href]="signIn(card)">Sign in again</a></p> }
-      <p class="submission" role="status" aria-live="polite">{{ status()[card.approvalId] }}</p>
-      @if (card.canDecide) {
-        <div class="actions">
-          <button class="approve" type="button" [disabled]="blocked(card)" (click)="decide(card, 'approved')">Approve</button>
-          <button type="button" [disabled]="blocked(card)" (click)="decide(card, 'rejected')">Deny</button>
-          @if (status()[card.approvalId] && status()[card.approvalId] !== 'Submitting…') { <button type="button" (click)="check(card)">Check status</button> }
-          <small>Expires {{ expiry(card) }}</small>
-        </div>
-      } @else { <p>Only the requester can decide.</p> }
+@if (loaded()) {
+  <p class="approval-announcement" role="status" aria-live="polite">{{ announced() }}</p>
+  @if (checkingAccess()) {
+    <oc-shared-state kind="checking" message="Checking access"
+      detail="Approvals are hidden until your access is confirmed." [showAction]="false" />
+  } @else {
+    @if (readFailed()) {
+      <oc-shared-state kind="unknown" message="Approval status unavailable"
+        detail="Decisions are paused until the status loads."
+        [actionBusy]="checkingReadFailure()" (action)="checkReadFailure()" />
     }
-  </section>
+    @for (card of orderedCards(); track card.approvalId) {
+      @if (card.state === 'requested') {
+        <article class="approval pending" role="region" [attr.data-approval]="card.approvalId"
+          aria-label="Approval needed">
+          <header>
+            <span class="approval-dot" aria-hidden="true"></span>
+            <strong>{{ presentation.headerMessage(card) }}</strong>
+          </header>
+          <h2>{{ card.review.action }}</h2>
+          @if (card.canDecide) {
+            <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
+            <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
+            @if (card.stepUp) {
+              <p class="step-up">This action needs a recent sign-in. If yours is too old, you’ll be asked to sign in again.</p>
+            }
+            <oc-approval-decision-status
+              [message]="presentation.statusMessage(card)"
+              [showCheck]="(localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict') && !readFailed()"
+              [showReference]="localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict'"
+              [reference]="presentation.reference(card)"
+              [busy]="checkBusy(card)" (checkRequested)="checkDecisionStatus(card)" />
+            <div class="actions">
+              @if (localState(card)?.kind === 'step_up') {
+                <a class="approve sign-in" [href]="presentation.signIn(card)">Sign in again to approve</a>
+              } @else {
+                <button class="approve" type="button" [attr.aria-disabled]="isBlocked(card)"
+                  [attr.aria-label]="'Approve: ' + card.review.action"
+                  (click)="decide(card, 'approved')">
+                  @if (isSubmitting(card) && localState(card)?.decision === 'approved') {
+                    <span class="spinner" aria-hidden="true"></span> Approving…
+                  } @else { Approve }
+                </button>
+              }
+              <button type="button" [attr.aria-disabled]="isBlocked(card)"
+                [attr.aria-label]="'Deny: ' + card.review.action"
+                (click)="decide(card, 'rejected')">
+                @if (isSubmitting(card) && localState(card)?.decision === 'rejected') {
+                  <span class="spinner" aria-hidden="true"></span> Denying…
+                } @else { Deny }
+              </button>
+              <button class="details" type="button" (click)="openDrawerFromEvent(card, $event)">Details</button>
+            </div>
+          } @else {
+            <p class="only-requester">Only the requester can decide.</p>
+          }
+        </article>
+      } @else {
+        <div class="terminal-wrap" [attr.data-approval]="card.approvalId">
+          <oc-approval-terminal-line [card]="card"
+            [words]="presentation.stateWords(card)"
+            [detail]="presentation.terminalDetail(card)"
+            (opened)="openDrawer(card, $event)" />
+          @if (presentation.outcomeUnknown(card) && !readFailed()) {
+            <oc-shared-state class="unknown-notice" [ocDogEar]="true" kind="unknown"
+              message="Result not confirmed"
+              detail="The approved call was allowed to go ahead once. OpenCrane has no confirmed result for it yet. Confirmation from the tool server is not available yet."
+              [actionBusy]="checkBusy(card)" (action)="checkDecisionStatus(card)" />
+          }
+          @if (presentation.lastExpired(card)) {
+            <oc-shared-state kind="expired" message="Ask again to start new checked work"
+              detail="An expired approval can’t be revived." [showAction]="false" />
+          }
+        </div>
+      }
+    }
+  }
+}
+@if (drawer(); as openDrawerState) {
+  @if (drawerCard(); as card) {
+    <oc-hinge-drawer [open]="openDrawerState.open" [title]="card.review.action"
+      [description]="presentation.drawerDescription(card)" backLabel="Back"
+      [returnFocusTo]="openDrawerState.returnFocusTo ?? openDrawerState.opener"
+      (closed)="drawerClosed()">
+      <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
+      @if (card.state === 'requested') {
+        <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
+        @if (card.canDecide) {
+          <oc-approval-decision-status
+            [message]="presentation.statusMessage(card)"
+            [showCheck]="(localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict') && !readFailed()"
+            [showReference]="localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict'"
+            [reference]="presentation.reference(card)"
+            [busy]="checkBusy(card)" (checkRequested)="checkDecisionStatus(card)" />
+        }
+      } @else {
+        <p class="drawer-state">{{ presentation.stateWords(card) }} · {{ presentation.terminalDetail(card) }}</p>
+      }
+      @if (card.state === 'cancelled') {
+        <p class="gap-note">An approval is cancelled when its turn ends or stops, a new message or turn starts, the conversation closes, or the tool’s policy, publication or connection changes. Exact reason: Not available yet.</p>
+      }
+      @if (card.state === 'outcome_unknown') {
+        <p class="gap-note">Confirmation from the tool server is not available yet.</p>
+      }
+      <div class="reference-row"><span>Reference</span><code>{{ presentation.reference(card) }}</code></div>
+      @if (card.state === 'requested' && card.canDecide) {
+        <div overlayFooter class="drawer-actions">
+          @if (localState(card)?.kind === 'step_up') {
+            <a class="approve sign-in" [href]="presentation.signIn(card)">Sign in again to approve</a>
+          } @else {
+            <button class="approve" type="button" [attr.aria-disabled]="isBlocked(card)"
+              [attr.aria-label]="'Approve: ' + card.review.action"
+              (click)="decideFromDrawer(card, 'approved')">Approve</button>
+          }
+          <button type="button" [attr.aria-disabled]="isBlocked(card)"
+            [attr.aria-label]="'Deny: ' + card.review.action"
+            (click)="decideFromDrawer(card, 'rejected')">Deny</button>
+        </div>
+      }
+    </oc-hinge-drawer>
+  }
 }

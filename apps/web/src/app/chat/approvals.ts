@@ -1,72 +1,524 @@
-import { Component, ChangeDetectionStrategy, ElementRef, afterEveryRender, effect, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject,
+  input, output, signal, type OnDestroy,
+} from '@angular/core';
 import { z } from 'zod';
 import { approvalCardsSchema, type ApprovalCard } from '@opencrane/protocol';
+import { HingeDrawer } from '../ui/hinge-drawer';
+import { DogEar } from '../ui/paper';
+import { SharedState } from '../shared-state/shared-state';
+import { ApprovalLedger } from './approval-ledger';
+import { ApprovalTerminalLine } from './approval-terminal-line';
+import { ApprovalPresentation } from './approval-presentation';
+import { ApprovalDecisionStatus } from './approval-decision-status';
+import { ApprovalFocus, type ApprovalDrawerState } from './approval-focus';
+import { approvalReadSignal, type ApprovalReadPurpose } from './approval-read-signal';
 
-@Component({ selector: 'oc-approval-cards', templateUrl: './approvals.html', styleUrl: './approvals.css', changeDetection: ChangeDetectionStrategy.OnPush })
-export class ApprovalCards {
+import {
+  checkedState, conflictStateAfterRead, isCurrentConversation, isCurrentRead,
+  isRequested, isTerminal, keepStateAfterRead, statesDuringAccessCheck,
+  type Decision, type LocalState,
+} from './approval-state';
+
+const responseSchema = z.object({ cards: approvalCardsSchema, csrf: z.string() });
+
+@Component({
+  selector: 'oc-approval-cards',
+  imports: [
+    HingeDrawer, DogEar, SharedState, ApprovalLedger, ApprovalTerminalLine,
+    ApprovalDecisionStatus,
+  ],
+  templateUrl: './approvals.html',
+  styleUrl: './approvals.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  host: { '[attr.aria-busy]': 'loading()' },
+})
+export class ApprovalCards implements OnDestroy {
   readonly conversationId = input.required<string>();
+  readonly viewerId = input.required<string>();
+  readonly waitingOnViewer = output<boolean>();
   protected readonly cards = signal<ApprovalCard[]>([]);
-  protected readonly status = signal<Record<string, string>>({});
-  protected readonly error = signal('');
+  protected readonly loading = signal(true);
+  protected readonly loaded = signal(false);
+  protected readonly readFailed = signal(false);
+  protected readonly checkingAccess = signal(false);
+  protected readonly hadCards = signal(false);
+  protected readonly busyChecks = signal<Record<string, boolean>>({});
+  protected readonly checkingReadFailure = signal(false);
+  protected readonly states = signal<Record<string, LocalState>>({});
+  protected readonly announced = signal('');
+  protected readonly drawer = signal<ApprovalDrawerState | undefined>(undefined);
+  protected readonly orderedCards = computed(() => {
+    const all = this.cards();
+    const terminal = all.filter(isTerminal);
+    const pending = all.filter(isRequested);
+    return [...terminal, ...pending];
+  });
   private csrf = '';
   private readVersion = 0;
-  private readonly root = inject<ElementRef<HTMLElement>>(ElementRef);
-  private focus = '';
+  private conversationVersion = 0;
+  private readonly focus = new ApprovalFocus(
+    inject<ElementRef<HTMLElement>>(ElementRef).nativeElement,
+  );
+  protected readonly presentation = new ApprovalPresentation(
+    () => this.viewerId(),
+    () => this.conversationId(),
+    card => this.localState(card),
+    () => this.orderedCards(),
+  );
+  private lastWaitingOnViewer = false;
+  private readonly activeReads = new Set<string>();
+  private readonly activeReadCounts = new Map<string, number>();
+  private readonly announcedApprovalIds = new Set<string>();
+
   constructor() {
     effect(onCleanup => {
-      const id = this.conversationId(); this.cards.set([]); this.status.set({}); this.csrf = '';
-      if (!id) return;
+      const conversationId = this.conversationId();
+      this.conversationVersion += 1;
+      this.readVersion += 1;
+      this.clearWaitingOnViewer();
+      this.announcedApprovalIds.clear();
+      this.cards.set([]);
+      this.states.set({});
+      this.busyChecks.set({});
+      this.csrf = '';
+      this.loaded.set(false);
+      this.loading.set(true);
+      this.readFailed.set(false);
+      this.checkingAccess.set(false);
+      this.hadCards.set(false);
+      this.drawer.set(undefined);
+      this.announced.set('');
+      if (!conversationId) return;
       const abort = new AbortController();
-      void this.refresh(id, abort.signal);
-      const timer = setInterval(() => { void this.refresh(id, abort.signal); }, 3000);
-      onCleanup(() => { abort.abort(); clearInterval(timer); });
+      void this.read(conversationId, abort.signal, 'poll');
+      const timer = setInterval(() => {
+        void this.read(conversationId, abort.signal, 'poll');
+      }, 3000);
+      onCleanup(() => {
+        abort.abort();
+        clearInterval(timer);
+      });
     });
-    afterEveryRender(() => {
-      if (!this.focus) return;
-      const element = this.root.nativeElement.querySelector<HTMLElement>(`[data-approval="${this.focus}"]`);
-      element?.focus(); this.focus = '';
-    });
+    effect(() => this.emitWaitingOnViewer());
+    afterEveryRender(() => this.focus.restoreFocus(this.drawer(), this.drawer));
   }
-  protected async refresh(id = this.conversationId(), signal?: AbortSignal): Promise<void> {
+
+  ngOnDestroy(): void {
+    this.clearWaitingOnViewer();
+  }
+
+  protected localState(card: ApprovalCard): LocalState | undefined {
+    return this.states()[card.approvalId];
+  }
+
+  protected isSubmitting(card: ApprovalCard): boolean {
+    return this.localState(card)?.kind === 'submitting';
+  }
+
+  protected isBlocked(card: ApprovalCard): boolean {
+    const state = this.localState(card);
+    return this.readFailed() || this.checkingAccess() || state?.kind === 'submitting'
+      || state?.kind === 'recorded' || state?.kind === 'unknown'
+      || state?.kind === 'conflict';
+  }
+
+  protected async decide(card: ApprovalCard, decision: Decision, fromDrawer = false): Promise<void> {
+    if (!this.canStartDecision(card, decision)) return;
+    const conversationId = this.conversationId();
+    this.setState(card.approvalId, { kind: 'submitting', decision });
+    this.announced.set(decision === 'approved' ? 'Sending your approval…' : 'Sending your denial…');
+    const version = this.conversationVersion;
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}/approvals`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(15000),
+        headers: { 'content-type': 'application/json', 'x-csrf-token': this.csrf },
+        body: JSON.stringify({ approvalId: card.approvalId, decision }),
+      });
+      if (!isCurrentConversation(conversationId, this.conversationId(), version,
+        this.conversationVersion)) return;
+      await this.applyDecisionResponse(response, card, decision, fromDrawer, conversationId);
+    } catch {
+      this.applyUnknownDecisionReply(card, decision, conversationId, version);
+    }
+  }
+
+  private canStartDecision(card: ApprovalCard, decision: Decision): boolean {
+    const state = this.localState(card);
+    if (this.isBlocked(card)) return false;
+    if (!state) return true;
+    if (state.kind === 'step_up') return decision === 'rejected';
+    return state.kind === 'not_recorded' || state.kind === 'conflict'
+      || state.kind === 'still_open' || state.kind === 'conflict_still_open';
+  }
+
+  private async applyDecisionResponse(
+    response: Response,
+    card: ApprovalCard,
+    decision: Decision,
+    fromDrawer: boolean,
+    conversationId: string,
+  ): Promise<void> {
+    if (response.status === 428) return this.applyStepUp(card, decision);
+    if (response.status === 409) {
+      await this.applyConflict(card, decision, fromDrawer, conversationId);
+      return;
+    }
+    if (response.status === 400 || response.status === 403) {
+      await this.applyKnownRefusal(card, decision, conversationId);
+      return;
+    }
+    if (!response.ok) {
+      this.applyUnknownDecision(card, decision);
+      return;
+    }
+    this.setState(card.approvalId, { kind: 'recorded', decision });
+    // Keep the accepted decision visible if the status read fails or still shows an old view.
+    this.announced.set(this.presentation.statusMessage(card));
+    await this.read(conversationId, undefined, 'decision');
+    this.announceDecision(this.findCard(card.approvalId));
+    this.focus.focusIfTerminal(card.approvalId, fromDrawer, this.drawer(), this.drawer);
+  }
+
+  private applyStepUp(card: ApprovalCard, decision: Decision): void {
+    this.setState(card.approvalId, { kind: 'step_up', decision });
+    this.announced.set('Your sign-in is older than this approval allows.');
+  }
+
+  private async applyConflict(
+    card: ApprovalCard,
+    decision: Decision,
+    fromDrawer: boolean,
+    conversationId: string,
+  ): Promise<void> {
+    this.setState(card.approvalId, { kind: 'conflict', decision });
+    await this.read(conversationId, undefined, 'decision');
+    const current = this.findCard(card.approvalId);
+    if (current?.state === 'requested' && current.canDecide) {
+      this.setState(card.approvalId, { kind: 'conflict_still_open', decision });
+    }
+    this.announceDecision(current);
+    this.focus.focusIfTerminal(card.approvalId, fromDrawer, this.drawer(), this.drawer);
+  }
+
+  private async applyKnownRefusal(
+    card: ApprovalCard,
+    decision: Decision,
+    conversationId: string,
+  ): Promise<void> {
+    this.setState(card.approvalId, { kind: 'not_recorded', decision });
+    await this.read(conversationId, undefined, 'decision');
+    const current = this.findCard(card.approvalId);
+    if (current?.state !== 'requested') return;
+    if (current.canDecide) {
+      this.setState(card.approvalId, { kind: 'not_recorded', decision });
+      this.announced.set('Your decision was not recorded. You can decide again.');
+      return;
+    }
+    this.setState(card.approvalId, { kind: 'not_decidable', decision });
+  }
+
+  private applyUnknownDecision(card: ApprovalCard, decision: Decision): void {
+    if (this.findCard(card.approvalId)?.state !== 'requested') return;
+    // Keep an uncertain decision blocked until a person checks its status.
+    this.setState(card.approvalId, { kind: 'unknown', decision });
+    this.announced.set('Decision not confirmed');
+  }
+
+  private applyUnknownDecisionReply(
+    card: ApprovalCard,
+    decision: Decision,
+    conversationId: string,
+    version: number,
+  ): void {
+    if (!isCurrentConversation(conversationId, this.conversationId(), version,
+      this.conversationVersion)) return;
+    this.applyUnknownDecision(card, decision);
+  }
+
+  protected async checkStatus(card: ApprovalCard): Promise<void> {
+    const conversationId = this.conversationId();
+    const conversationVersion = this.conversationVersion;
+    if (this.busyChecks()[card.approvalId]) return;
+    this.setCheckBusy(card.approvalId, true);
+    try {
+      await this.read(conversationId, undefined, 'check', card.approvalId);
+      if (!isCurrentConversation(conversationId, this.conversationId(), conversationVersion,
+        this.conversationVersion)) return;
+      const updatedCard = this.findCard(card.approvalId);
+      const updatedState = this.localStateById(card.approvalId);
+      if (updatedCard?.state === 'outcome_unknown') this.announced.set('Result not confirmed');
+      if (updatedCard?.state === 'approved') this.announced.set('Approved');
+      if (updatedCard?.state === 'denied') this.announced.set('Denied');
+      if (updatedState?.kind === 'still_open') {
+        this.announced.set(this.presentation.statusMessage(updatedCard ?? card));
+      }
+    } finally {
+      this.setCheckBusy(card.approvalId, false);
+    }
+  }
+
+  protected openDrawer(card: ApprovalCard, opener: HTMLElement): void {
+    this.drawer.set({ approvalId: card.approvalId, opener, open: true });
+  }
+
+  protected openDrawerFromEvent(card: ApprovalCard, event: MouseEvent): void {
+    if (!(event.currentTarget instanceof HTMLElement)) return;
+    this.openDrawer(card, event.currentTarget);
+  }
+
+  protected drawerCard(): ApprovalCard | undefined {
+    const drawer = this.drawer();
+    if (!drawer) return undefined;
+    return this.findCard(drawer.approvalId);
+  }
+
+  protected drawerClosed(): void {
+    const drawer = this.drawer();
+    this.drawer.set(undefined);
+    if (drawer?.returnFocusTo) {
+      drawer.returnFocusTo.focus();
+      this.focus.clearApprovalFocus();
+      return;
+    }
+    if (drawer?.opener.isConnected) {
+      drawer.opener.focus();
+      return;
+    }
+    if (drawer && this.focus.terminalButton(drawer.approvalId)) {
+      this.focus.terminalButton(drawer.approvalId)?.focus();
+      return;
+    }
+    this.focus.requestTranscriptFocus();
+  }
+
+  protected checkDecisionStatus(card: ApprovalCard): void {
+    void this.checkStatus(card);
+  }
+
+  protected checkBusy(card: ApprovalCard): boolean {
+    return this.busyChecks()[card.approvalId] ?? false;
+  }
+
+  protected async checkReadFailure(): Promise<void> {
+    if (this.checkingReadFailure()) return;
+    this.checkingReadFailure.set(true);
+    try {
+      await this.read(this.conversationId(), undefined, 'check');
+    } finally {
+      this.checkingReadFailure.set(false);
+    }
+  }
+
+  protected async decideFromDrawer(card: ApprovalCard, decision: Decision): Promise<void> {
+    await this.decide(card, decision, true);
+  }
+
+  private async read(
+    conversationId: string,
+    abortSignal?: AbortSignal,
+    purpose: ApprovalReadPurpose = 'poll',
+    checkingApprovalId?: string,
+  ): Promise<void> {
+    const activeCount = this.activeReadCounts.get(conversationId) ?? 0;
+    if (this.shouldSkipPoll(purpose, activeCount)) return;
     const version = ++this.readVersion;
+    if (checkingApprovalId && this.activeReads.has(checkingApprovalId)) return;
+    if (checkingApprovalId) this.activeReads.add(checkingApprovalId);
+    this.activeReadCounts.set(conversationId, activeCount + 1);
     try {
-      const response = await fetch(`/api/conversations/${id}/approvals`, { signal: signal ?? AbortSignal.timeout(15000) });
-      if (!response.ok) throw new Error('Read unavailable');
-      const result = z.object({ cards: approvalCardsSchema, csrf: z.string() }).parse(await response.json());
-      if (version !== this.readVersion || id !== this.conversationId() || signal?.aborted) return;
-      this.csrf = result.csrf; this.cards.set(result.cards); this.error.set('');
-    } catch { if (!signal?.aborted && id === this.conversationId()) this.error.set('Approval status unavailable. Check status before deciding.'); }
+      const response = await fetch(`/api/conversations/${conversationId}/approvals`, {
+        signal: approvalReadSignal(abortSignal, purpose),
+      });
+      await this.applyReadResponse(
+        response, conversationId, version, abortSignal, purpose, checkingApprovalId,
+      );
+    } catch {
+      if (!this.readIsCurrent(conversationId, version, abortSignal)) return;
+      this.loading.set(false);
+      this.loaded.set(true);
+      this.readFailed.set(true);
+    } finally {
+      if (checkingApprovalId) this.activeReads.delete(checkingApprovalId);
+      const remainingCount = (this.activeReadCounts.get(conversationId) ?? 1) - 1;
+      if (remainingCount === 0) this.activeReadCounts.delete(conversationId);
+      else this.activeReadCounts.set(conversationId, remainingCount);
+    }
   }
-  protected async decide(card: ApprovalCard, decision: 'approved' | 'rejected'): Promise<void> {
-    if (this.status()[card.approvalId] === 'Submitting…') return;
-    this.setStatus(card.approvalId, 'Submitting…');
-    const id = this.conversationId();
-    try {
-      const response = await fetch(`/api/conversations/${id}/approvals`, { method: 'POST', signal: AbortSignal.timeout(15000),
-        headers: { 'content-type': 'application/json', 'x-csrf-token': this.csrf }, body: JSON.stringify({ approvalId: card.approvalId, decision }) });
-      if (id !== this.conversationId()) return;
-      if (response.status === 428) this.setStatus(card.approvalId, 'Sign in again to approve this action.');
-      else if (response.ok) this.setStatus(card.approvalId, '');
-      else if ([400, 403, 409].includes(response.status)) this.setStatus(card.approvalId, 'Failed — check status to retry safely.');
-      else throw new Error('Decision outcome unknown');
-      await this.refresh(id);
-    } catch { if (id === this.conversationId()) this.setStatus(card.approvalId, 'Outcome unknown — check status.'); }
-    this.focus = card.approvalId;
+
+  private shouldSkipPoll(purpose: ApprovalReadPurpose, activeCount: number): boolean {
+    return purpose === 'poll' && activeCount > 0;
   }
-  protected async check(card: ApprovalCard): Promise<void> {
-    await this.refresh();
-    if (!this.error()) this.setStatus(card.approvalId, 'Failed — safe to retry');
+
+  private async applyReadResponse(
+    response: Response,
+    conversationId: string,
+    version: number,
+    abortSignal: AbortSignal | undefined,
+    purpose: ApprovalReadPurpose,
+    checkingApprovalId: string | undefined,
+  ): Promise<void> {
+    if (!this.readIsCurrent(conversationId, version, abortSignal)) return;
+    if (response.status === 401 || response.status === 403) {
+      this.applyAccessChange();
+      return;
+    }
+    if (!response.ok) throw new Error('Approval read failed');
+    const result = responseSchema.parse(await response.json());
+    if (!this.readIsCurrent(conversationId, version, abortSignal)) return;
+    this.applyReadResult(result, purpose, checkingApprovalId);
   }
-  protected blocked(card: ApprovalCard): boolean {
-    const status = this.status()[card.approvalId];
-    return !!this.error() || (!!status && status !== 'Failed — safe to retry');
+
+  private applyReadResult(
+    result: z.infer<typeof responseSchema>,
+    purpose: ApprovalReadPurpose,
+    checkingApprovalId: string | undefined,
+  ): void {
+    const firstRead = !this.loaded();
+    const oldCards = this.cards();
+    this.focus.focusFoldedFocusedCard(oldCards, result.cards);
+    this.cards.set(result.cards);
+    this.csrf = result.csrf;
+    this.loaded.set(true);
+    this.loading.set(false);
+    this.readFailed.set(false);
+    this.checkingAccess.set(false);
+    if (result.cards.length > 0) this.hadCards.set(true);
+    this.updateLocalStates(result.cards);
+    this.announceNewRequests(oldCards, result.cards, firstRead);
+    this.followDrawer(result.cards);
+    if (checkingApprovalId) this.finishCheckStatus(checkingApprovalId);
   }
-  protected signIn(card: ApprovalCard): string {
-    return `/auth/login?approval=${card.approvalId}&returnTo=${encodeURIComponent('/workspace?conversation=' + this.conversationId())}`;
+
+  private finishCheckStatus(approvalId: string): void {
+    const current = this.localStateById(approvalId);
+    const checked = checkedState(current, this.findCard(approvalId));
+    if (checked) this.setState(approvalId, checked);
   }
-  protected label(card: ApprovalCard): string {
-    return { requested: 'Approval needed', approved: '✓ Approved', denied: 'Denied', expired: 'Expired', cancelled: 'Cancelled', outcome_unknown: 'Outcome unknown · approval used' }[card.state];
+
+  private updateLocalStates(cards: ApprovalCard[]): void {
+    const currentStates = this.states();
+    const nextStates: Record<string, LocalState> = {};
+    for (const card of cards) {
+      const state = currentStates[card.approvalId];
+      if (card.state !== 'requested' || !state) continue;
+      if (state.kind === 'conflict') {
+        nextStates[card.approvalId] = conflictStateAfterRead(
+          card.canDecide,
+          state.decision,
+        );
+        continue;
+      }
+      if (keepStateAfterRead(state)) nextStates[card.approvalId] = state;
+    }
+    this.states.set(nextStates);
   }
-  protected expiry(card: ApprovalCard): string { return new Date(card.expiresAt).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }); }
-  private setStatus(id: string, value: string): void { this.status.update(states => ({ ...states, [id]: value })); }
+
+  private announceNewRequests(oldCards: ApprovalCard[], cards: ApprovalCard[], firstRead: boolean): void {
+    for (const card of oldCards) this.announcedApprovalIds.add(card.approvalId);
+    if (firstRead) {
+      for (const card of cards) this.announcedApprovalIds.add(card.approvalId);
+      return;
+    }
+    let added: ApprovalCard | undefined;
+    for (const card of cards) {
+      if (card.state !== 'requested' || !card.canDecide) continue;
+      if (this.announcedApprovalIds.has(card.approvalId)) continue;
+      added = card;
+      break;
+    }
+    if (!added) return;
+    this.announcedApprovalIds.add(added.approvalId);
+    this.announced.set(`Approval needed: ${added.review.action}`);
+  }
+
+  private applyAccessChange(): void {
+    const showNotice = this.hadCards();
+    const focusedPendingCard = this.focus.focusedPendingCard();
+    this.cards.set([]);
+    this.csrf = '';
+    this.states.set(statesDuringAccessCheck(this.states()));
+    this.readFailed.set(false);
+    this.checkingAccess.set(showNotice);
+    this.loading.set(false);
+    const drawer = this.drawer();
+    this.drawer.set(undefined);
+    if (drawer || focusedPendingCard) this.focus.requestTranscriptFocus();
+    this.readVersion += 1;
+  }
+
+  private followDrawer(cards: ApprovalCard[]): void {
+    const drawer = this.drawer();
+    if (!drawer) return;
+    if (this.findCardIn(cards, drawer.approvalId)) return;
+    this.drawer.set(undefined);
+    this.focus.requestTranscriptFocus();
+  }
+
+  private setCheckBusy(approvalId: string, busy: boolean): void {
+    const nextChecks = { ...this.busyChecks(), [approvalId]: busy };
+    this.busyChecks.set(nextChecks);
+  }
+
+  private emitWaitingOnViewer(): void {
+    let waiting = false;
+    for (const card of this.cards()) {
+      if (this.shouldShowWaitingOnViewer(card)) {
+        waiting = true;
+        break;
+      }
+    }
+    if (waiting === this.lastWaitingOnViewer) return;
+    this.lastWaitingOnViewer = waiting;
+    this.waitingOnViewer.emit(waiting);
+  }
+
+  private shouldShowWaitingOnViewer(card: ApprovalCard): boolean {
+    if (card.state !== 'requested' || !card.canDecide) return false;
+    const state = this.localState(card);
+    return state?.kind !== 'submitting' && state?.kind !== 'recorded'
+      && state?.kind !== 'unknown' && state?.kind !== 'conflict';
+  }
+
+  private clearWaitingOnViewer(): void {
+    if (!this.lastWaitingOnViewer) return;
+    this.lastWaitingOnViewer = false;
+    this.waitingOnViewer.emit(false);
+  }
+
+  private findCard(approvalId: string): ApprovalCard | undefined {
+    return this.findCardIn(this.cards(), approvalId);
+  }
+
+  private findCardIn(cards: ApprovalCard[], approvalId: string): ApprovalCard | undefined {
+    for (const card of cards) {
+      if (card.approvalId === approvalId) return card;
+    }
+    return undefined;
+  }
+
+  private localStateById(approvalId: string): LocalState | undefined {
+    return this.states()[approvalId];
+  }
+
+  private setState(approvalId: string, state: LocalState): void {
+    const nextStates = { ...this.states(), [approvalId]: state };
+    this.states.set(nextStates);
+  }
+
+  private announceDecision(card: ApprovalCard | undefined): void {
+    const message = this.presentation.decisionAnnouncement(card);
+    if (message) this.announced.set(message);
+  }
+
+  private readIsCurrent(
+    conversationId: string,
+    version: number,
+    abortSignal?: AbortSignal,
+  ): boolean {
+    return isCurrentRead(conversationId, this.conversationId(), version,
+      this.readVersion, abortSignal);
+  }
+
 }

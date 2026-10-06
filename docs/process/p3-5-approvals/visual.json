@@ -1,0 +1,981 @@
+{
+  "result": "PASS",
+  "widths": [
+    1280,
+    390,
+    320
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "captures": 64,
+  "files": [
+    "approval-requested-1280-no-preference.png",
+    "approval-requested-1280-reduce.png",
+    "approval-requested-390-no-preference.png",
+    "approval-requested-390-reduce.png",
+    "approval-requested-320-no-preference.png",
+    "approval-requested-320-reduce.png",
+    "approval-details-1280-no-preference.png",
+    "approval-details-1280-reduce.png",
+    "approval-details-390-no-preference.png",
+    "approval-details-390-reduce.png",
+    "approval-details-320-no-preference.png",
+    "approval-details-320-reduce.png",
+    "approval-submitting-1280-no-preference.png",
+    "approval-submitting-1280-reduce.png",
+    "approval-submitting-390-no-preference.png",
+    "approval-submitting-390-reduce.png",
+    "approval-submitting-320-no-preference.png",
+    "approval-submitting-320-reduce.png",
+    "approval-step-up-1280-no-preference.png",
+    "approval-step-up-1280-reduce.png",
+    "approval-step-up-390-no-preference.png",
+    "approval-step-up-390-reduce.png",
+    "approval-step-up-320-no-preference.png",
+    "approval-step-up-320-reduce.png",
+    "approval-terminal-1280-no-preference.png",
+    "approval-terminal-1280-reduce.png",
+    "approval-terminal-approved-390-no-preference.png",
+    "approval-terminal-outcome_unknown-390-no-preference.png",
+    "approval-terminal-denied-390-no-preference.png",
+    "approval-terminal-expired-390-no-preference.png",
+    "approval-terminal-cancelled-390-no-preference.png",
+    "approval-terminal-approved-390-reduce.png",
+    "approval-terminal-outcome_unknown-390-reduce.png",
+    "approval-terminal-denied-390-reduce.png",
+    "approval-terminal-expired-390-reduce.png",
+    "approval-terminal-cancelled-390-reduce.png",
+    "approval-terminal-approved-320-no-preference.png",
+    "approval-terminal-outcome_unknown-320-no-preference.png",
+    "approval-terminal-denied-320-no-preference.png",
+    "approval-terminal-expired-320-no-preference.png",
+    "approval-terminal-cancelled-320-no-preference.png",
+    "approval-terminal-approved-320-reduce.png",
+    "approval-terminal-outcome_unknown-320-reduce.png",
+    "approval-terminal-denied-320-reduce.png",
+    "approval-terminal-expired-320-reduce.png",
+    "approval-terminal-cancelled-320-reduce.png",
+    "tool-details-1280-no-preference.png",
+    "tool-details-1280-reduce.png",
+    "tool-details-390-no-preference.png",
+    "tool-details-390-reduce.png",
+    "tool-details-320-no-preference.png",
+    "tool-details-320-reduce.png",
+    "activity-jump-1280-no-preference.png",
+    "activity-jump-1280-reduce.png",
+    "activity-jump-390-no-preference.png",
+    "activity-jump-390-reduce.png",
+    "activity-jump-320-no-preference.png",
+    "activity-jump-320-reduce.png",
+    "reconnected-1280-no-preference.png",
+    "reconnected-1280-reduce.png",
+    "reconnected-390-no-preference.png",
+    "reconnected-390-reduce.png",
+    "reconnected-320-no-preference.png",
+    "reconnected-320-reduce.png"
+  ],
+  "captureChecks": [
+    {
+      "file": "approval-requested-1280-no-preference.png",
+      "frames": [
+        "WRK-10-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-requested-1280-reduce.png",
+      "frames": [
+        "WRK-10-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-requested-390-no-preference.png",
+      "frames": [
+        "WRK-10-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-requested-390-reduce.png",
+      "frames": [
+        "WRK-10-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-requested-320-no-preference.png",
+      "frames": [
+        "WRK-10-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-requested-320-reduce.png",
+      "frames": [
+        "WRK-10-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-details-1280-no-preference.png",
+      "frames": [
+        "WRK-11-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture"
+      ]
+    },
+    {
+      "file": "approval-details-1280-reduce.png",
+      "frames": [
+        "WRK-11-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture"
+      ]
+    },
+    {
+      "file": "approval-details-390-no-preference.png",
+      "frames": [
+        "WRK-11-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back, Approve and Deny controls"
+      ]
+    },
+    {
+      "file": "approval-details-390-reduce.png",
+      "frames": [
+        "WRK-11-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back, Approve and Deny controls"
+      ]
+    },
+    {
+      "file": "approval-details-320-no-preference.png",
+      "frames": [
+        "WRK-11-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back, Approve and Deny controls"
+      ]
+    },
+    {
+      "file": "approval-details-320-reduce.png",
+      "frames": [
+        "WRK-11-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back, Approve and Deny controls"
+      ]
+    },
+    {
+      "file": "approval-submitting-1280-no-preference.png",
+      "frames": [
+        "WRK-14-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-submitting-1280-reduce.png",
+      "frames": [
+        "WRK-14-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-submitting-390-no-preference.png",
+      "frames": [
+        "WRK-14-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-submitting-390-reduce.png",
+      "frames": [
+        "WRK-14-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-submitting-320-no-preference.png",
+      "frames": [
+        "WRK-14-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-submitting-320-reduce.png",
+      "frames": [
+        "WRK-14-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-step-up-1280-no-preference.png",
+      "frames": [
+        "WRK-21-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-step-up-1280-reduce.png",
+      "frames": [
+        "WRK-21-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-step-up-390-no-preference.png",
+      "frames": [
+        "WRK-21-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-step-up-390-reduce.png",
+      "frames": [
+        "WRK-21-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-step-up-320-no-preference.png",
+      "frames": [
+        "WRK-21-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-step-up-320-reduce.png",
+      "frames": [
+        "WRK-21-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-terminal-1280-no-preference.png",
+      "frames": [
+        "WRK-16-1280",
+        "WRK-17-1280",
+        "WRK-18-1280",
+        "WRK-19-1280",
+        "WRK-20-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-terminal-1280-reduce.png",
+      "frames": [
+        "WRK-16-1280",
+        "WRK-17-1280",
+        "WRK-18-1280",
+        "WRK-19-1280",
+        "WRK-20-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "approval-terminal-approved-390-no-preference.png",
+      "frames": [
+        "WRK-16-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-outcome_unknown-390-no-preference.png",
+      "frames": [
+        "WRK-16-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-denied-390-no-preference.png",
+      "frames": [
+        "WRK-17-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-expired-390-no-preference.png",
+      "frames": [
+        "WRK-18-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-cancelled-390-no-preference.png",
+      "frames": [
+        "WRK-19-390",
+        "WRK-20-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-approved-390-reduce.png",
+      "frames": [
+        "WRK-16-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-outcome_unknown-390-reduce.png",
+      "frames": [
+        "WRK-16-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-denied-390-reduce.png",
+      "frames": [
+        "WRK-17-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-expired-390-reduce.png",
+      "frames": [
+        "WRK-18-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-cancelled-390-reduce.png",
+      "frames": [
+        "WRK-19-390",
+        "WRK-20-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-approved-320-no-preference.png",
+      "frames": [
+        "WRK-16-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-outcome_unknown-320-no-preference.png",
+      "frames": [
+        "WRK-16-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-denied-320-no-preference.png",
+      "frames": [
+        "WRK-17-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-expired-320-no-preference.png",
+      "frames": [
+        "WRK-18-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-cancelled-320-no-preference.png",
+      "frames": [
+        "WRK-19-320",
+        "WRK-20-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-approved-320-reduce.png",
+      "frames": [
+        "WRK-16-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-outcome_unknown-320-reduce.png",
+      "frames": [
+        "WRK-16-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-denied-320-reduce.png",
+      "frames": [
+        "WRK-17-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-expired-320-reduce.png",
+      "frames": [
+        "WRK-18-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "approval-terminal-cancelled-320-reduce.png",
+      "frames": [
+        "WRK-19-320",
+        "WRK-20-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Shows one folded state with the viewer as requester",
+        "Measured the folded card and any status action"
+      ]
+    },
+    {
+      "file": "tool-details-1280-no-preference.png",
+      "frames": [
+        "WRK-03-1280",
+        "WRK-04-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture"
+      ]
+    },
+    {
+      "file": "tool-details-1280-reduce.png",
+      "frames": [
+        "WRK-03-1280",
+        "WRK-04-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture"
+      ]
+    },
+    {
+      "file": "tool-details-390-no-preference.png",
+      "frames": [
+        "WRK-03-390",
+        "WRK-04-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back control"
+      ]
+    },
+    {
+      "file": "tool-details-390-reduce.png",
+      "frames": [
+        "WRK-03-390",
+        "WRK-04-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back control"
+      ]
+    },
+    {
+      "file": "tool-details-320-no-preference.png",
+      "frames": [
+        "WRK-03-320",
+        "WRK-04-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back control"
+      ]
+    },
+    {
+      "file": "tool-details-320-reduce.png",
+      "frames": [
+        "WRK-03-320",
+        "WRK-04-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting",
+        "Drawer animation ended before the capture",
+        "Measured the drawer Back control"
+      ]
+    },
+    {
+      "file": "activity-jump-1280-no-preference.png",
+      "frames": [
+        "WRK-07-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "activity-jump-1280-reduce.png",
+      "frames": [
+        "WRK-07-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "activity-jump-390-no-preference.png",
+      "frames": [
+        "WRK-07-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "activity-jump-390-reduce.png",
+      "frames": [
+        "WRK-07-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "activity-jump-320-no-preference.png",
+      "frames": [
+        "WRK-07-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "activity-jump-320-reduce.png",
+      "frames": [
+        "WRK-07-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "reconnected-1280-no-preference.png",
+      "frames": [
+        "WRK-22-1280"
+      ],
+      "width": 1280,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "reconnected-1280-reduce.png",
+      "frames": [
+        "WRK-22-1280"
+      ],
+      "width": 1280,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "reconnected-390-no-preference.png",
+      "frames": [
+        "WRK-22-390"
+      ],
+      "width": 390,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "reconnected-390-reduce.png",
+      "frames": [
+        "WRK-22-390"
+      ],
+      "width": 390,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "reconnected-320-no-preference.png",
+      "frames": [
+        "WRK-22-320"
+      ],
+      "width": 320,
+      "motion": "no-preference",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    },
+    {
+      "file": "reconnected-320-reduce.png",
+      "frames": [
+        "WRK-22-320"
+      ],
+      "width": 320,
+      "motion": "reduce",
+      "checks": [
+        "No horizontal overflow",
+        "Captured at the listed width and motion setting"
+      ]
+    }
+  ],
+  "environment": "Built Angular assets; Chromium; intercepted fixtures; no live governed turn",
+  "frames": [
+    "WRK-10-1280",
+    "WRK-10-390",
+    "WRK-10-320",
+    "WRK-11-1280",
+    "WRK-11-390",
+    "WRK-11-320",
+    "WRK-14-1280",
+    "WRK-14-390",
+    "WRK-14-320",
+    "WRK-21-1280",
+    "WRK-21-390",
+    "WRK-21-320",
+    "WRK-16-1280",
+    "WRK-17-1280",
+    "WRK-18-1280",
+    "WRK-19-1280",
+    "WRK-20-1280",
+    "WRK-16-390",
+    "WRK-17-390",
+    "WRK-18-390",
+    "WRK-19-390",
+    "WRK-20-390",
+    "WRK-16-320",
+    "WRK-17-320",
+    "WRK-18-320",
+    "WRK-19-320",
+    "WRK-20-320",
+    "WRK-03-1280",
+    "WRK-04-1280",
+    "WRK-03-390",
+    "WRK-04-390",
+    "WRK-03-320",
+    "WRK-04-320",
+    "WRK-07-1280",
+    "WRK-07-390",
+    "WRK-07-320",
+    "WRK-22-1280",
+    "WRK-22-390",
+    "WRK-22-320"
+  ],
+  "checks": [
+    "8 scenes captured at 1280, 390 and 320 pixels with both motion settings",
+    "No horizontal overflow in any capture",
+    "Phone card actions, drawer buttons and drawer Back controls were measured",
+    "Approval, tool and terminal buttons show the teal focus ring",
+    "Approval POST sends one decision with the fixture CSRF token and page origin",
+    "Unknown outcome Check status makes a GET and no POST",
+    "Access checks keep polling and restore the cards after a later 200",
+    "Tool and approval drawers open by keyboard and return focus after Escape",
+    "No approval or tool details button offers retry wording",
+    "The existing empty conversation still shows No messages yet"
+  ]
+}

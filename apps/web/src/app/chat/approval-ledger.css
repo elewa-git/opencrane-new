@@ -1,0 +1,49 @@
+.approval-ledger {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 0 12px;
+  margin: 0;
+}
+
+.approval-ledger dt,
+.approval-ledger dd {
+  min-width: 0;
+  margin: 0;
+  padding: 9px 0;
+  border-bottom: 1px solid #e1e6e7;
+  line-height: 1.5;
+}
+
+.approval-ledger dt {
+  color: #4f575a;
+  font-size: 12px;
+}
+
+.approval-ledger dd {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.approval-ledger .ledger-target {
+  font-weight: 600;
+}
+
+.approval-ledger .ledger-mono {
+  font-family: var(--oc-font-mono);
+  white-space: pre-wrap;
+}
+
+@media (max-width: 700px) {
+  .approval-ledger {
+    display: block;
+  }
+
+  .approval-ledger dt {
+    padding-bottom: 1px;
+    border: 0;
+  }
+
+  .approval-ledger dd {
+    padding-top: 0;
+  }
+}

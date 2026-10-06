@@ -44,7 +44,10 @@ import {
   ],
   providers: [ChatSession, WebSocketService, ScreenshotCapture],
   templateUrl: './workspace.html',
-  styleUrls: ['./workspace.css', './transcript.css', './panel.css', './tool-details.css'],
+  styleUrls: [
+    './workspace.css', './transcript.css', './panel.css', './tool-details.css',
+    './approval-header.css',
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown)': 'shortcut($event)',
@@ -61,6 +64,7 @@ export class Workspace implements OnInit {
   protected readonly initials = computed(() => this.chat.displayName().split(/\s+/).map(word => word[0]).slice(0, 2).join('').toUpperCase());
   protected readonly rail = signal(false);
   protected readonly panelTab = signal<'files' | 'activity'>('files');
+  protected readonly approvalWaiting = signal(false);
   protected readonly activity = computed(() => this.chat.turns().flatMap(turn => turn.tools));
   protected readonly desktop = signal(globalThis.innerWidth >= 1100);
   protected readonly panel = signal(this.desktop());
