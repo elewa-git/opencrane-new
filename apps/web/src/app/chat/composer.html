@@ -1,17 +1,17 @@
-<!-- Copied from OpenCrane 1; commit 10abd0ef6. -->
+<!-- Adapted from OpenCrane 1 10abd0ef6. Layout follows Workspace Live and the compact frame. -->
 <form class="composer" [class.disabled]="!!reason()" (submit)="$event.preventDefault(); submit()">
   <input #upload type="file" hidden aria-label="Choose a file" (change)="choose($event)">
   @if (reason()) {
     <div id="composer-reason" class="disabled-field"><oc-icon name="closed" /><span>{{ reason() }}</span></div>
   }
-  <label class="sr-only" for="message">Message your agent</label>
+  <label class="sr-only" for="message">{{ directMode() ? 'Message' : 'Message your agent' }}</label>
   <textarea id="message" rows="1" maxlength="32000" [placeholder]="placeholder()"
     [value]="draft()" [disabled]="!!reason()" [readOnly]="busy() || queued()"
     [attr.aria-describedby]="reason() ? 'composer-reason' : null"
     (input)="change($event)" (keydown)="keydown($event)"></textarea>
   @if (!reason()) {
     <div class="toolbar">
-      @if (!teamSession()) {
+      @if (!teamSession() && !directMode()) {
         <button id="attach-toggle" type="button" aria-label="Attach" aria-controls="attach-menu" [class.selected]="attachOpen()" [attr.aria-expanded]="attachOpen()" (click)="attachOpen.set(!attachOpen())"><oc-icon name="plus" /></button>
       }
       @if (teamSession()) {
@@ -27,18 +27,18 @@
             <span class="mobile-mode-label">Memory-free</span>
           </button>
         </div>
-      } @else {
+      } @else if (!directMode()) {
         <span class="mode"><oc-icon name="agent" /> Agent session</span>
       }
       <span class="spacer"></span><span class="hint"><kbd>↵</kbd> send · <kbd>⇧↵</kbd> newline @if (working()) { · <kbd>esc</kbd> stop reply }</span>
-      @if (working()) {
+      @if (!directMode() && working()) {
         <button type="button" class="stop" [disabled]="busy()" (click)="stopped.emit()"><oc-icon name="stop" /> Stop</button>
       } @else {
         <button type="submit" class="send" [disabled]="!draft().trim() || busy()" [attr.aria-label]="queued() ? 'Retry queued message' : 'Send message'"><oc-icon name="send" /><span class="sr-only">{{ queued() ? 'Retry' : 'Send' }}</span></button>
       }
     </div>
   }
-  @if (attachOpen() && !reason() && !teamSession()) {
+  @if (attachOpen() && !reason() && !teamSession() && !directMode()) {
     <div id="attach-menu" class="attach-menu" aria-label="Attach menu" (keydown.escape)="closeAttach()">
       <button type="button" [disabled]="busy() || queued()" (click)="upload.click()"><oc-icon name="upload" /> Upload from computer</button>
       <button type="button" (click)="notice.set('Workspace file attachments are not available yet.')"><oc-icon name="folder" /> Workspace files <small>Coming soon</small></button>

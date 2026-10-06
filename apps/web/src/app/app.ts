@@ -27,26 +27,25 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
 @Component({
   selector: 'app-root',
   imports: [
-    Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen,
+    Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
-    AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, DirectChat,
-    SharedAssistantAdmin,
-    SharedAssistantPicker,
+<<<<<<< HEAD
+    AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
+    SharedAssistantAdmin, SharedAssistantPicker,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
-    '[class.workspace-root]': 'workspacePage',
+    '[class.workspace-root]': 'workspacePage || directChatPage',
     '[class.settings-root]': 'accountPath',
   },
 })
 export class App {
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
-  protected readonly workspacePage = this.pathname === '/workspace'
-    || this.pathname === '/workspace/direct';
+  protected readonly workspacePage = this.pathname === '/workspace';
   protected readonly directChatPage = this.pathname === '/workspace/direct';
   protected readonly sharedAssistantPickerPage = this.pathname === '/workspace/shared';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');

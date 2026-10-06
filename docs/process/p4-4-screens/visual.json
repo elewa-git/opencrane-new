@@ -1,0 +1,157 @@
+{
+  "date": "2026-10-06T20:42:15.185Z",
+  "result": "PASS",
+  "note": "Sample browser data only; this does not qualify a fresh installation.",
+  "captures": [
+    {
+      "frame": "THR-05",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-05-1280-normal.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-10-1280-normal.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-11-1280-normal.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-16-1280-normal.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-05-1280-reduced.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-10-1280-reduced.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-11-1280-reduced.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-16-1280-reduced.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-05-390-normal.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-10-390-normal.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-11-390-normal.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-16-390-normal.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-05-390-reduced.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-10-390-reduced.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-11-390-reduced.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-16-390-reduced.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-05-320-normal.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-10-320-normal.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-11-320-normal.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-16-320-normal.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-05-320-reduced.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-10-320-reduced.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-11-320-reduced.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-16-320-reduced.png"
+    }
+  ],
+  "requestCounts": {
+    "turns": 0,
+    "models": 0,
+    "directCreates": 0,
+    "directMessages": 6
+  }
+}

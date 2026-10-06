@@ -55,6 +55,19 @@ including `/auth/callback`. Local HTTP development requires local-only cookie se
 as described in the [server README](../server/README.md).
 The browser uses same-origin auth and WebSocket URLs; no credentials are built into assets.
 
+`/workspace/direct` is the direct-chat screen. It reads `/api/chat` only for the
+current member id, `/api/chat/colleagues` for joined-colleague search, and
+`/api/conversations` for direct conversation rows. It creates a direct conversation
+with `{ id, conversationId, mode: "direct", colleagueId }`, then sends text with
+`{ id, text }` to `/api/conversations/:id/messages`. The server encrypts the text
+and records it as a human message. The screen never sends a turn, stop, assistant,
+memory or model request. A lost reply keeps its command id and uses
+`/api/conversations/:id/changes/:commandId` for a status read. Unknown status never
+causes an automatic resend. A 401 or refused history read clears names, the draft
+and transcript, then focuses the access message. The screen subscribes to the
+conversation feed after loading history and resumes from its event position after
+the existing WebSocket service reconnects. Repeated positions are ignored.
+
 ## Contract and verification
 
 The client validates the register response and incoming messages with
@@ -214,6 +227,11 @@ tokens or full tool output. A stored review that fails the review schema makes t
 GET return 400. The browser shows the read-failed state and pauses decisions.
 Chromium captures use intercepted fixtures and do not prove a live governed turn.
 
+Run `nice -n 10 npm run visual:p4-4-screens` to capture direct-chat states at
+1280px, 390px and 320px, with normal and reduced motion. The sample checks count
+turn and model requests and do not qualify a fresh installation. See the
+[direct-chat screen receipt](../../docs/process/p4-4-screens/README.md).
+
 ## Desktop view
 
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
@@ -287,17 +305,3 @@ personal posts, Enter, healthy refresh and two sends during one visit.
 The visual script captures both the choice and selected memory-free states at three
 widths with both motion settings, after finite animations finish. It checks 44px phone
 buttons, overlap and overflow. Fresh-install live qualification remains NOT RUN.
-
-## Direct conversation recipient screen
-
-`/workspace/direct` searches `GET /api/chat/colleagues?q=&limit=20`. The screen shows
-only colleagues returned by that route. A selected person stays in the To line until
-Change is used. Selection is held in the browser and does not create a conversation.
-
-The complete chat view is in the next part of this stacked change. The present screen
-only chooses the person; it does not send a message or create a conversation.
-
-Colleague searches have visible loading, failure and successful empty states.
-A newer search cancels the older request and ignores any late reply. Failed searches
-remove stale choices. The list shows at most 20 people; a narrower search finds others.
-The [recipient checks](../../docs/process/p4-4-start-evidence.md) record validation.

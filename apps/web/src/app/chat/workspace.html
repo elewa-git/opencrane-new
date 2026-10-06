@@ -1,4 +1,4 @@
-<!-- Copied from OpenCrane 1; commit 10abd0ef6. -->
+<!-- Message and workspace structure adapted from OpenCrane 1 10abd0ef6; visual values from the chat handoff. -->
 <div class="workspace" [class.panel-open]="panel()">
   <nav class="rail" aria-label="Sessions">
     <div class="brand"><oc-brand-mark /><strong>Open<span>Crane</span></strong><button type="button" aria-label="Find a session" (click)="searchDialog.showModal()"><kbd>⌘K</kbd></button></div>
@@ -240,7 +240,7 @@
       <button type="button" class="ask" (click)="newSession()">
         <oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd>
       </button>
-      <a class="ask direct-chat-link" href="/workspace/direct">New direct chat</a>
+      <a class="new-direct" href="/workspace/direct">New direct chat</a>
       <h2>Projects</h2>
       <p class="empty-rail">No project sessions</p>
       @if (teamConversations().length) {

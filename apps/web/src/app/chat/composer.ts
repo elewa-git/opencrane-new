@@ -1,5 +1,5 @@
-// Follows OpenCrane 1's conversation-composer.component.ts; commit 10abd0ef6 (AGPL-3.0-or-later).
-// The parent owns the draft and outputs. Native controls handle Enter and Stop instead of PrimeNG.
+// Adapted from OpenCrane 1, 10abd0ef6, conversation-composer.component.ts (AGPL-3.0-or-later).
+// Retains parent-owned draft and outputs; native controls and the handoff's Enter/Stop behaviour replace PrimeNG.
 import { ChatIcon } from './icon';
 import { ChangeDetectionStrategy, Component, input, output, signal } from '@angular/core';
 
@@ -12,6 +12,7 @@ export class ChatComposer {
   readonly reason = input('');
   readonly queued = input(false);
   readonly teamSession = input(false);
+  readonly directMode = input(false);
   readonly memoryFree = input(false);
   readonly draftChange = output<string>();
   readonly submitted = output<string>();

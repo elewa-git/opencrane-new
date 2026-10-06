@@ -1,11 +1,9 @@
 @if (claimPage) {
   <oc-claim />
+} @else if (directChatPage) {
+  <oc-direct-chat />
 } @else if (workspacePage) {
-  @if (directChatPage) {
-    <oc-direct-chat />
-  } @else {
-    <oc-workspace />
-  }
+  <oc-workspace />
 } @else if (sharedAssistantPickerPage) {
   <oc-shared-assistant-picker />
 } @else if (accountPath) {
