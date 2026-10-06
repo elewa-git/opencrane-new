@@ -400,8 +400,11 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       await firstRead.goto(`${base}/org/integrations`);
       expect((await firstFailure).status()).toBe(503);
       await firstRead.getByRole('status').getByText(
-        "Couldn't load the integrations list.",
+        'The organisation register is unavailable.',
       ).waitFor();
+      await firstRead.getByText("Couldn't load the integrations list.", {
+        exact: true,
+      }).waitFor();
       const retryFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.getByRole('button', { name: 'Refresh list' }).click();
       await firstRead.getByText('Refreshing the integrations list…').waitFor();
@@ -440,8 +443,11 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       await unavailablePage.goto(`${base}/org/integrations`);
       expect((await unavailableRead).status()).toBe(503);
       await unavailablePage.getByRole('status').getByText(
-        "Couldn't load the integrations list.",
+        'The organisation register is unavailable.',
       ).waitFor();
+      await unavailablePage.getByText("Couldn't load the integrations list.", {
+        exact: true,
+      }).waitFor();
       expect(await unavailablePage.locator('.register-row').count()).toBe(0);
       expect(await unavailablePage.getByText(/Showing what we loaded/).count()).toBe(0);
     } finally {

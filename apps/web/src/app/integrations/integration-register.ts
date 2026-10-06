@@ -79,6 +79,16 @@ export class IntegrationRegister implements OnInit, OnDestroy {
 
   private announcementText(): string {
     if (this.loadState() === 'loading') return 'Loading integrations…';
+    if (this.loadState() === 'retrying') {
+      if (this.loadedAt()) return 'Refreshing the integrations list…';
+      return 'Waiting for the list to load.';
+    }
+    if (this.loadState() === 'failed' && !this.loadedAt()) {
+      return 'The organisation register is unavailable.';
+    }
+    if (this.loadState() === 'failed') {
+      return "We couldn't refresh the list. Showing the last successful read.";
+    }
     if (!this.loadedAt()) return '';
     const count = this.visibleRows().length;
     if (this.selectedTab() === 'attention') {
@@ -134,6 +144,7 @@ export class IntegrationRegister implements OnInit, OnDestroy {
 
   protected clearSearch(): void {
     this.search.set('');
+    globalThis.document.getElementById('integration-search')?.focus();
   }
 
   protected tools(row: IntegrationRow): string {

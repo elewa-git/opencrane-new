@@ -1,7 +1,7 @@
 import type { IntegrationRow, ToolPolicy } from '@opencrane/protocol';
 import type { PresentationState } from '../shared-state/shared-state';
 
-export type ToolsReadState = 'loading' | 'loaded' | 'failed';
+export type ToolsReadState = 'loading' | 'loaded' | 'failed' | 'list-failed';
 
 export interface IntegrationFact {
   label: string;
@@ -59,6 +59,14 @@ export function buildAvailabilityFact(
   policy: ToolPolicy | undefined,
   toolsReadState: ToolsReadState,
 ): IntegrationFact {
+  if (toolsReadState === 'list-failed') {
+    return {
+      label: 'Available to the assistant',
+      kind: 'failed',
+      value: 'Not checked',
+      evidence: "Not checked: the integration list couldn't be loaded.",
+    };
+  }
   if (toolsReadState === 'failed') {
     return {
       label: 'Available to the assistant',

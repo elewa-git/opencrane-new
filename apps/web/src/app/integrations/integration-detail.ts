@@ -52,15 +52,19 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (this.refreshing() || this.state() === 'loading' || this.accessLost) return;
     this.refreshing.set(true);
     this.toolsReadState.set('loading');
-    this.policy.set(undefined);
     void this.load();
   }
 
   protected announcementText(): string {
     if (this.refreshing()) return 'Refreshing integration…';
     if (this.state() === 'loading') return 'Loading integration…';
+    if (this.state() === 'failed' && this.row()) {
+      return "Couldn't load this integration. The details below are from the last successful read.";
+    }
     if (this.state() === 'failed') return "Couldn't load this integration.";
-    if (this.toolsReadState() === 'failed') return "Couldn't check the tool policy.";
+    if (this.toolsReadState() === 'failed' || this.toolsReadState() === 'list-failed') {
+      return "Couldn't check the tool policy.";
+    }
     if (this.state() === 'access') return 'You no longer have access to Integrations.';
     if (this.state() === 'not-found') return 'Integration not found.';
     if (this.toolsReadState() === 'loaded') return 'Integration details loaded.';
@@ -122,6 +126,9 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       }
       this.row.set(row);
       this.loadedAt.set(integrations.loadedAt);
+      this.state.set('ready');
+      this.hasRenderedProtectedContent.set(true);
+      this.focusHeaderRefreshAfterMessageRetry();
       try {
         const toolsResponse = await fetch(this.toolsUrl(), {
           headers: { accept: 'application/json' }, signal: this.request.signal,
@@ -147,7 +154,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     } catch {
       if (this.shouldIgnoreResult()) return;
       this.state.set('failed');
-      this.toolsReadState.set('failed');
+      this.toolsReadState.set(this.row() ? 'list-failed' : 'failed');
       this.refreshing.set(false);
       this.showRefresh.set(true);
     }
@@ -169,6 +176,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     return this.accessLost || this.request.signal.aborted;
   }
 
+  // Keep this public so the test can check a reply after access has ended.
   isAccessRefusal(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.accessLost = true;
@@ -187,10 +195,19 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     if (!this.hasRenderedProtectedContent()) return;
     requestAnimationFrame(focusAccessHeading);
   }
+
+  private focusHeaderRefreshAfterMessageRetry(): void {
+    if (!this.refreshing()) return;
+    requestAnimationFrame(focusHeaderRefresh);
+  }
 }
 
 function focusAccessHeading(): void {
   globalThis.document.getElementById('integration-access-heading')?.focus();
+}
+
+function focusHeaderRefresh(): void {
+  globalThis.document.getElementById('integration-refresh')?.focus();
 }
 
 function findIntegrationRow(

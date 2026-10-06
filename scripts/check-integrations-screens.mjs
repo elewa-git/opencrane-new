@@ -11,9 +11,18 @@ const motionOptions = ['no-preference', 'reduce'];
 const captures = [];
 const adaptations = {
   'register-empty': 'No catalogue or package rows exist in the current API.',
+  'register-loading': 'The first register read is held to show its loading state.',
   'register-all': 'Tools use the honest Allow or Ask wording supplied by the API.',
+  'register-attention': 'Rows keep the status labels sent by the server.',
+  'register-stale': 'The refresh message sits above the rows so they remain usable.',
+  'register-retrying': 'The first read failed. Skeleton rows stay visible while Refresh tries again.',
   'detail-draft': 'Unavailable connection and grant facts say Not available yet.',
-  'access-lost': 'Back to workspace replaces the unavailable Overview destination.',
+  'detail-loading': 'The screen waits for the first register read before showing server facts.',
+  'detail-retrying': 'The first read failed. The message-state Refresh button stays busy while it retries.',
+  'detail-stale': 'The row and facts stay visible after the latest register read fails.',
+  'detail-published': 'The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read.',
+  'access-lost': 'Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time.',
+  'detail-access-lost': 'Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time.',
 };
 const contentTypes = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -26,14 +35,14 @@ const integrations = {
     makeRow('orders', 'Orders server', 'ready', 'Published 5 Oct 2026, 09:14'),
     makeRow('legacy', 'Legacy server', 'disabled', 'Unpublished 5 Oct 2026, 09:14'),
     makeRow('pricing', 'Pricing server', 'needs_input', 'Pending review'),
-    makeRow('metrics', 'Metrics server', 'checking', 'Validating server…'),
+    makeRow('metrics', 'Metrics server', 'checking', 'Validating server…', null),
     makeRow('broken', 'Broken server', 'failed', 'Validation failed; review before trying again'),
     makeRow('protected', 'Protected server', 'needs_input',
       'A scoped validation connection is required. Protected discovery is not available yet.'),
   ],
 };
 
-function makeRow(serverId, name, kind, detail) {
+function makeRow(serverId, name, kind, detail, toolsTotal = 2) {
   const labels = {
     ready: 'Ready', disabled: 'Disabled', needs_input: 'Needs input',
     checking: 'Applying / checking', failed: 'Failed',
@@ -41,20 +50,23 @@ function makeRow(serverId, name, kind, detail) {
   return {
     serverId, name, version: 'Version not provided',
     source: { kind: 'remote_url', label: 'Remote URL', detail: `${serverId}.example.test` },
-    accountModel: 'Not provided', toolsAllowed: 1, toolsTotal: 2,
+    accountModel: 'Not provided', toolsAllowed: toolsTotal === null ? 0 : 1, toolsTotal,
     status: { kind, label: labels[kind], detail },
   };
 }
 
-const policy = {
-  connectionId: null, accountMode: null, published: false, sequence: 3,
-  tools: [
-    { name: 'read_order', revision: 'rev-1', reviewed: true, readOnly: true,
-      mode: 'ask', suggestion: 'allow' },
-    { name: 'change_order', revision: 'rev-2', reviewed: false, readOnly: false,
-      mode: 'block', suggestion: 'ask' },
-  ],
-};
+function makePolicy(serverId, scenario) {
+  const published = serverId === 'orders' && scenario === 'published';
+  return {
+    connectionId: `${serverId}-connection`, accountMode: null, published, sequence: 3,
+    tools: [
+      { name: `${serverId}_read`, revision: 'rev-1', reviewed: true, readOnly: true,
+        mode: 'ask', suggestion: 'allow' },
+      { name: `${serverId}_change`, revision: 'rev-2', reviewed: false, readOnly: false,
+        mode: 'block', suggestion: 'ask' },
+    ],
+  };
+}
 
 async function serveAssets(route) {
   const url = new URL(route.request().url());
@@ -83,9 +95,23 @@ function makeFixtures(scenario) {
     const pathname = url.pathname;
     if (pathname === '/api/org/integrations') {
       registerReads += 1;
-      if (scenario === 'loading' && registerReads === 1) {
+      if ((scenario === 'loading' || scenario === 'detail-loading') && registerReads === 1) {
         await state.loadingFinished;
         await route.fulfill({ json: integrations });
+        return;
+      }
+      if (scenario === 'register-retrying' && registerReads === 1) {
+        await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+        return;
+      }
+      if ((scenario === 'register-retrying' && registerReads === 2)
+        || (scenario === 'detail-retrying' && registerReads === 2)) {
+        await state.loadingFinished;
+        await route.fulfill({ json: integrations });
+        return;
+      }
+      if (scenario === 'detail-stale' && registerReads === 2) {
+        await route.fulfill({ status: 503, json: { status: 'unavailable' } });
         return;
       }
       if (scenario === 'stale' && registerReads === 2) {
@@ -97,7 +123,8 @@ function makeFixtures(scenario) {
         return;
       }
       if (scenario.startsWith('detail-') && scenario !== 'detail-tools-failed'
-        && scenario !== 'detail-not-found' && registerReads === 1) {
+        && scenario !== 'detail-not-found' && scenario !== 'detail-stale'
+        && registerReads === 1) {
         const status = scenario === 'detail-access-lost' ? 403 : 503;
         await route.fulfill({ status, body: '' });
         return;
@@ -115,12 +142,12 @@ function makeFixtures(scenario) {
       return;
     }
     if (pathname.endsWith('/tools')) {
-      if (scenario === 'detail-tools-failed') {
+      if (scenario === 'detail-tools-failed' || scenario === 'detail-stale') {
         await route.fulfill({ status: 503, json: { status: 'unavailable' } });
         return;
       }
-      const toolsPolicy = { ...policy, published: scenario === 'published' };
-      await route.fulfill({ json: toolsPolicy });
+      const serverId = pathname.split('/')[4];
+      await route.fulfill({ json: makePolicy(serverId, scenario) });
       return;
     }
     await route.fulfill({ status: 404, json: { status: 'missing' } });
@@ -141,6 +168,19 @@ function pageFitsViewport() {
 
 function focused(node) {
   return node === globalThis.document.activeElement;
+}
+
+function readComputedColour(node) {
+  return globalThis.getComputedStyle(node).color;
+}
+
+function readTokenColour(root) {
+  const probe = root.ownerDocument.createElement('span');
+  probe.style.color = 'var(--oc-ink-strong)';
+  root.append(probe);
+  const colour = globalThis.getComputedStyle(probe).color;
+  probe.remove();
+  return colour;
 }
 
 function focusRing(node) {
@@ -194,12 +234,32 @@ async function captureRegister(browser, name, width, motion, scenario, prepare) 
   try {
     await page.goto(`${origin}/org/integrations`);
     await waitForRegisterState(page, scenario);
+    if (scenario === 'register-failed') await checkFailedFirstRead(page);
+    if (scenario === 'all') await checkNotReadYetRow(page);
     if (prepare) await prepare(page, opened.fixtures.state);
     await waitForFonts(page);
     await capture(page, name, width, motion);
+    if (scenario === 'register-retrying') opened.fixtures.state.finishLoading();
   } finally {
     await opened.context.close();
   }
+}
+
+async function checkFailedFirstRead(page) {
+  assert.equal(await page.getByText("Couldn't load the integrations list.", {
+    exact: true,
+  }).count(), 1, 'A failed first read shows one failure message on the page');
+  const tabText = await page.locator('.tabs').innerText();
+  assert.equal(tabText.includes('· 0'), false, 'Failed reads do not show zero tab counts');
+  assert.equal(await page.locator('.register').getAttribute('tabindex'), null,
+    'An empty failed panel is not a keyboard stop');
+}
+
+async function checkNotReadYetRow(page) {
+  const metricsRow = page.locator('.register-row').filter({ hasText: 'Metrics server' });
+  const toolsCell = metricsRow.locator('.tools');
+  const toolsText = await toolsCell.innerText();
+  assert.match(toolsText, /Not read yet/u, 'The checking row has not read its tool count');
 }
 
 async function waitForRegisterState(page, scenario) {
@@ -213,7 +273,18 @@ async function waitForRegisterState(page, scenario) {
     await page.getByText("Couldn't load the integrations list.", { exact: true }).waitFor();
     return;
   }
+  if (scenario === 'register-retrying') {
+    await page.getByText("Couldn't load the integrations list.", { exact: true }).waitFor();
+    return;
+  }
   await page.locator('.register-row').first().waitFor();
+}
+
+async function checkAccessLinkColour(page) {
+  const backLink = page.getByRole('link', { name: 'Back to workspace', exact: true });
+  const linkColour = await backLink.evaluate(readComputedColour);
+  const expectedColour = await page.locator('html').evaluate(readTokenColour);
+  assert.equal(linkColour, expectedColour, 'The access link uses the dark text colour');
 }
 
 async function prepareAttention(page) {
@@ -231,6 +302,13 @@ async function prepareStale(page) {
   await page.getByRole('button', { name: 'Refresh list' }).click();
   await page.getByText('Showing what we loaded at 09:14 UTC').waitFor();
   assert.equal(await page.locator('.register-row').count(), 6);
+}
+
+async function prepareRegisterRetrying(page) {
+  await page.getByRole('button', { name: 'Refresh list' }).click();
+  await page.locator('.refresh-notice').waitFor();
+  const noticeText = await page.locator('.refresh-notice').innerText();
+  assert.match(noticeText, /Waiting for the list to load/u);
 }
 
 async function prepareNoMatch(page) {
@@ -252,6 +330,25 @@ async function checkRegisterColumns(page) {
   for (const row of positions) {
     assert.deepEqual(row.cells, row.headings.slice(0, 4), 'Columns line up with their headings');
   }
+}
+
+async function checkWholeRowLink(page) {
+  const clickedRow = page.locator('.register-row').first();
+  const statusCell = clickedRow.locator('.status');
+  const link = clickedRow.locator('a.row-link');
+  const statusBox = await statusCell.boundingBox();
+  assert(statusBox, 'The first row has a visible Status cell');
+  const statusPoint = {
+    x: statusBox.x + statusBox.width / 2,
+    y: statusBox.y + statusBox.height / 2,
+  };
+  const isRowLink = await page.evaluate((point) => {
+    const row = globalThis.document.querySelector('.register-row');
+    const element = globalThis.document.elementFromPoint(point.x, point.y);
+    return element?.closest('a.row-link') === row?.querySelector('a.row-link');
+  }, statusPoint);
+  assert(isRowLink, 'Clicking a row Status cell lands on that row link');
+  assert.equal(await link.count(), 1);
 }
 
 async function prepareAccessLost(page) {
@@ -323,19 +420,44 @@ async function captureDetail(browser, name, width, motion, scenario, serverId) {
   const { page } = opened;
   try {
     await page.goto(`${origin}/org/integrations/${serverId}`);
-    if (scenario === 'detail-not-found') {
+    if (scenario === 'detail-loading') {
+      await page.locator('section.loading').waitFor();
+      await page.locator('section.loading').getByText('Loading integration…', {
+        exact: true,
+      }).waitFor();
+      await waitForFonts(page);
+      await capture(page, name, width, motion);
+      opened.fixtures.state.finishLoading();
+      return;
+    }
+    if (scenario === 'detail-retrying') {
+      await page.locator('.message-state').getByText("Couldn't load this integration.", {
+        exact: true,
+      }).waitFor();
+      await page.getByRole('button', { name: 'Refresh' }).click();
+      await page.getByRole('button', { name: 'Refreshing…' }).waitFor();
+      await page.getByText('Refreshing integration…', { exact: true }).waitFor();
+    } else if (scenario === 'detail-stale') {
+      await page.locator('.fact').nth(3).waitFor();
+      await page.getByRole('button', { name: 'Refresh' }).click();
+      await page.locator('.detail-failure').getByText("Couldn't load this integration.", {
+        exact: true,
+      }).waitFor();
+    } else if (scenario === 'detail-not-found') {
       await page.getByRole('heading', { name: 'Integration not found' }).waitFor();
     } else if (scenario === 'detail-failed') {
       await page.locator('.message-state .message').waitFor();
     } else if (scenario === 'detail-access-lost') {
       await page.getByRole('heading', { name: 'You no longer have access to Integrations' }).waitFor();
+      await checkAccessLinkColour(page);
     } else if (scenario === 'detail-tools-failed') {
       await page.locator('.fact').nth(3).getByText("Couldn't check", { exact: true }).waitFor();
     } else {
       await page.locator('.fact').nth(3).waitFor();
     }
     const messageState = scenario === 'detail-not-found' || scenario === 'detail-failed'
-      || scenario === 'detail-tools-failed' || scenario === 'detail-access-lost';
+      || scenario === 'detail-tools-failed' || scenario === 'detail-access-lost'
+      || scenario === 'detail-retrying';
     if (messageState) {
       await waitForFonts(page);
       await capture(page, name, width, motion);
@@ -378,6 +500,7 @@ try {
           await aligned.page.goto(`${origin}/org/integrations`);
           await aligned.page.locator('.register-row').first().waitFor();
           await checkRegisterColumns(aligned.page);
+          await checkWholeRowLink(aligned.page);
         } finally {
           await aligned.context.close();
         }
@@ -386,9 +509,15 @@ try {
       await captureRegister(browser, 'register-review', width, motion, 'all', prepareReview);
       await captureRegister(browser, 'register-stale', width, motion, 'stale', prepareStale);
       await captureRegister(browser, 'register-failed', width, motion, 'register-failed');
+      await captureRegister(browser, 'register-retrying', width, motion, 'register-retrying',
+        prepareRegisterRetrying);
       await captureRegister(browser, 'register-no-match', width, motion, 'all', prepareNoMatch);
       await captureRegister(browser, 'access-lost', width, motion, 'access-lost', prepareAccessLost);
       await captureDetail(browser, 'detail-draft', width, motion, 'draft', 'pricing');
+      await captureDetail(browser, 'detail-loading', width, motion, 'detail-loading', 'orders');
+      await captureDetail(browser, 'detail-retrying', width, motion,
+        'detail-retrying', 'orders');
+      await captureDetail(browser, 'detail-stale', width, motion, 'detail-stale', 'orders');
       await captureDetail(browser, 'detail-published', width, motion, 'published', 'orders');
       await captureDetail(browser, 'detail-not-found', width, motion, 'detail-not-found', 'missing');
       await captureDetail(browser, 'detail-failed', width, motion, 'detail-failed', 'orders');

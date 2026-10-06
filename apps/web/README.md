@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website and screenshot screens"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
 ```
@@ -35,13 +35,13 @@ flowchart LR
    it brings them back to the start page, where they can open the workspace.
 2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
 3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
-4. **An admin reviews a tool.** The website shows the tools found on a tool server (MCP server) that an admin has added. The admin can allow, ask before use or block each tool.
+4. **An admin sets a tool's mode.** The website lists tools found on a tool server, which gives assistants tools through the Model Context Protocol (MCP). The admin chooses Allow automatically, Ask or Block for each tool.
 5. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection and grant details wait for their server support.
 6. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
 7. **An admin checks a change.** The website shows organisation history to people with access.
 8. **An Owner or Admin opens People & groups.** The website checks group reads,
    shows members and grants, creates groups and removes a member after review.
-8. **An admin reviews held spend.** The website shows settled spend separately from held spend. An Owner or Admin can read a hold's evidence and record a settlement or release. The existing budget editor remains available.
+9. **An admin reviews held spend.** The website shows settled spend separately from held spend. An Owner or Admin can read a hold's evidence and record a settlement or release. The existing budget editor remains available.
 
 ## How to run or test it
 

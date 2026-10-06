@@ -40,6 +40,7 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   background: var(--oc-warning-notice);
 }
 .loading { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.loading > .loading-message { grid-column: 1 / -1; }
 .skeleton-card {
   display: grid;
   gap: 12px;
@@ -49,8 +50,8 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   border-radius: 12px;
   background: white;
 }
-.message-state { display: grid; justify-items: start; gap: 14px; padding: 24px; }
-.status-region:empty { display: none; }
+.message-state { display: grid; justify-items: start; gap: 14px; }
+.status-region { position: absolute; }
 .sr-only {
   position: absolute;
   width: 1px;
@@ -71,6 +72,6 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   .actions .button, .message-state .button { width: 100%; min-height: 44px; }
   .draft-notice { padding: 14px; }
   .loading { grid-template-columns: minmax(0, 1fr); }
-  .message-state { justify-items: stretch; padding: 18px; }
+  .message-state { justify-items: stretch; }
   .message-state button { min-height: 44px; }
 }

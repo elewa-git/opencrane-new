@@ -121,14 +121,35 @@ describe('MCP register', () => {
     expect(root(fixture).textContent).toContain('No integrations match “missing”.');
   });
 
+  it('returns focus to Search integrations after Clear search', async () => {
+    const fixture = await create(response({
+      rows: [row('odoo', 'ready', 'Published')], loadedAt: loaded.loadedAt,
+    } satisfies IntegrationsResponse));
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1));
+    const search = root(fixture).querySelector<HTMLInputElement>('#integration-search');
+    if (!search) throw new Error('Missing integration search');
+    search.value = 'missing';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    const clear = button(root(fixture), 'Clear search');
+    clear.focus();
+    clear.click();
+    fixture.detectChanges();
+    expect(globalThis.document.activeElement).toBe(search);
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1);
+    fixture.destroy();
+  });
+
   it('shows a failure, not an empty-organisation claim, when the first read is unavailable', async () => {
     const fixture = await create(response({ status: 'unavailable' }, 503));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
     expect(root(fixture).textContent).toContain('The organisation register is unavailable');
     expect(root(fixture).textContent).not.toContain('No integrations yet');
     expect(root(fixture).textContent).not.toContain('0 integrations');
-    expect(root(fixture).querySelectorAll('[role="status"] .message'))
+    expect(root(fixture).textContent).not.toContain('· 0');
+    expect(root(fixture).textContent?.match(/Couldn't load the integrations list\./gu))
       .toHaveLength(1);
+    expect(root(fixture).querySelector('.register')?.getAttribute('tabindex')).toBeNull();
   });
 
   it('keeps old rows after a read failure and names when they were loaded', async () => {
@@ -140,7 +161,9 @@ describe('MCP register', () => {
     const notice = root(fixture).querySelector('.refresh-notice');
     expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
     expect(notice?.querySelector('.notice-glyph')).not.toBeNull();
-    expect(notice?.parentElement?.getAttribute('role')).toBe('status');
+    expect(notice?.getAttribute('aria-hidden')).toBe('true');
+    expect(root(fixture).querySelector('[role="status"]')?.textContent)
+      .toContain("We couldn't refresh the list.");
     expect(notice?.textContent).toContain('Showing what we loaded at 09:40');
     expect(button(root(fixture), 'Refresh list')).toBeTruthy();
   });
@@ -154,7 +177,9 @@ describe('MCP register', () => {
     await fixture.whenStable();
     const notice = root(fixture).querySelector('.refresh-notice');
     const retry = button(root(fixture), 'Refreshing list…');
-    expect(notice?.parentElement?.getAttribute('aria-live')).toBe('polite');
+    expect(notice?.getAttribute('aria-hidden')).toBe('true');
+    expect(root(fixture).querySelector('[role="status"]')?.textContent)
+      .toContain('Waiting for the list to load.');
     expect(notice?.textContent).toContain('Refreshing the integrations list…');
     expect(root(fixture).textContent).not.toContain('No integrations yet');
     expect(retry.getAttribute('aria-disabled')).toBe('true');
@@ -225,7 +250,7 @@ describe('MCP register', () => {
     expect(root(fixture).querySelector('#refresh-integrations')).toBeNull();
   });
 
-  it('clears protected rows after an authority refusal and does not restore them during an outage', async () => {
+  it('clears protected rows after an authority refusal and offers no way to reload them', async () => {
     const fixture = await create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
     // A refused response can have no JSON body; authority still clears the previous read.

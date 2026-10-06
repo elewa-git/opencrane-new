@@ -17,7 +17,7 @@ h2 { margin: 0; font: var(--oc-type-card); }
   border: 1px solid var(--oc-accent);
   border-radius: 8px;
   background: var(--oc-accent);
-  color: white;
+  color: var(--oc-ink-strong);
   font-size: 13px;
   text-decoration: none;
 }

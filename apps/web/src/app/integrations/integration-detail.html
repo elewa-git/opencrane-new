@@ -1,32 +1,33 @@
-<nav aria-label="Breadcrumb" class="breadcrumb">
-  <a href="/org/integrations">Integrations</a>
-  <span aria-hidden="true">›</span>
-  @if (row(); as integration) {
-    <span aria-current="page">{{ integration.name }}</span>
-  } @else if (state() === 'not-found') {
-    <span aria-current="page">Integration not found</span>
-  } @else {
-    <span aria-current="page">Integration details</span>
-  }
-</nav>
+@if (state() !== 'access') {
+  <nav aria-label="Breadcrumb" class="breadcrumb">
+    <a href="/org/integrations">Integrations</a>
+    <span aria-hidden="true">›</span>
+    @if (row(); as integration) {
+      <span aria-current="page">{{ integration.name }}</span>
+    } @else if (state() === 'not-found') {
+      <span aria-current="page">Integration not found</span>
+    } @else {
+      <span aria-current="page">Integration details</span>
+    }
+  </nav>
+}
 <div class="status-region" role="status" aria-live="polite" aria-atomic="true">
   <span class="sr-only">{{ announcementText() }}</span>
-  @if (state() === 'failed' && row()) {
+</div>
+@if (state() === 'failed' && row() && !refreshing()) {
+  <div class="detail-failure" aria-hidden="true">
     <oc-shared-state kind="failed" message="Couldn't load this integration."
       detail="The details below are from the last successful read." [showAction]="false" />
-  }
-  @if (refreshing()) {
-    <oc-shared-state kind="checking" message="Refreshing integration…"
-      [showAction]="false" />
-  }
-</div>
+  </div>
+}
 @if (state() === 'access') {
   <h1>Integrations</h1>
   <oc-integrations-access-lost />
 } @else if (state() === 'loading') {
   <h1>Integration details</h1>
   <section class="loading" aria-busy="true">
-    <oc-shared-state kind="checking" message="Loading integration…" [showAction]="false" />
+    <oc-shared-state class="loading-message" kind="checking" message="Loading integration…"
+      [showAction]="false" />
     @for (width of skeletonWidths; track $index) {
       <article class="skeleton-card" aria-hidden="true">
         <oc-grain-loader [width]="width" />
@@ -47,7 +48,8 @@
     <h1>Integration details</h1>
     <oc-shared-state kind="failed" message="Couldn't load this integration."
       detail="Nothing changed on the server because of this." [showAction]="false" />
-    <button class="button secondary" type="button" (click)="refresh()"
+    <button id="integration-message-refresh" class="button secondary" type="button"
+      (click)="refresh()"
       [attr.aria-disabled]="refreshing()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
   </section>
 } @else if (row(); as integration) {
@@ -66,7 +68,8 @@
         Check discovery status
       </a>
       @if (showRefresh() || state() === 'failed' || refreshing()) {
-        <button class="button secondary" type="button" (click)="refresh()"
+        <button id="integration-refresh" class="button secondary" type="button"
+          (click)="refresh()"
           [attr.aria-disabled]="refreshing()">
           {{ refreshing() ? 'Refreshing…' : 'Refresh' }}
         </button>

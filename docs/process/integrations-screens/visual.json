@@ -16,7 +16,7 @@
     },
     {
       "name": "register-loading-1280-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The first register read is held to show its loading state."
     },
     {
       "name": "register-all-1280-no-preference.png",
@@ -24,7 +24,7 @@
     },
     {
       "name": "register-attention-1280-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Rows keep the status labels sent by the server."
     },
     {
       "name": "register-review-1280-no-preference.png",
@@ -32,11 +32,15 @@
     },
     {
       "name": "register-stale-1280-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The refresh message sits above the rows so they remain usable."
     },
     {
       "name": "register-failed-1280-no-preference.png",
       "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-retrying-1280-no-preference.png",
+      "adaptations": "The first read failed. Skeleton rows stay visible while Refresh tries again."
     },
     {
       "name": "register-no-match-1280-no-preference.png",
@@ -44,15 +48,27 @@
     },
     {
       "name": "access-lost-1280-no-preference.png",
-      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "detail-draft-1280-no-preference.png",
       "adaptations": "Unavailable connection and grant facts say Not available yet."
     },
     {
+      "name": "detail-loading-1280-no-preference.png",
+      "adaptations": "The screen waits for the first register read before showing server facts."
+    },
+    {
+      "name": "detail-retrying-1280-no-preference.png",
+      "adaptations": "The first read failed. The message-state Refresh button stays busy while it retries."
+    },
+    {
+      "name": "detail-stale-1280-no-preference.png",
+      "adaptations": "The row and facts stay visible after the latest register read fails."
+    },
+    {
       "name": "detail-published-1280-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read."
     },
     {
       "name": "detail-not-found-1280-no-preference.png",
@@ -68,7 +84,7 @@
     },
     {
       "name": "detail-access-lost-1280-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "register-empty-1280-reduce.png",
@@ -76,7 +92,7 @@
     },
     {
       "name": "register-loading-1280-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The first register read is held to show its loading state."
     },
     {
       "name": "register-all-1280-reduce.png",
@@ -84,7 +100,7 @@
     },
     {
       "name": "register-attention-1280-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Rows keep the status labels sent by the server."
     },
     {
       "name": "register-review-1280-reduce.png",
@@ -92,11 +108,15 @@
     },
     {
       "name": "register-stale-1280-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The refresh message sits above the rows so they remain usable."
     },
     {
       "name": "register-failed-1280-reduce.png",
       "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-retrying-1280-reduce.png",
+      "adaptations": "The first read failed. Skeleton rows stay visible while Refresh tries again."
     },
     {
       "name": "register-no-match-1280-reduce.png",
@@ -104,15 +124,27 @@
     },
     {
       "name": "access-lost-1280-reduce.png",
-      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "detail-draft-1280-reduce.png",
       "adaptations": "Unavailable connection and grant facts say Not available yet."
     },
     {
+      "name": "detail-loading-1280-reduce.png",
+      "adaptations": "The screen waits for the first register read before showing server facts."
+    },
+    {
+      "name": "detail-retrying-1280-reduce.png",
+      "adaptations": "The first read failed. The message-state Refresh button stays busy while it retries."
+    },
+    {
+      "name": "detail-stale-1280-reduce.png",
+      "adaptations": "The row and facts stay visible after the latest register read fails."
+    },
+    {
       "name": "detail-published-1280-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read."
     },
     {
       "name": "detail-not-found-1280-reduce.png",
@@ -128,7 +160,7 @@
     },
     {
       "name": "detail-access-lost-1280-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "register-empty-390-no-preference.png",
@@ -136,7 +168,7 @@
     },
     {
       "name": "register-loading-390-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The first register read is held to show its loading state."
     },
     {
       "name": "register-all-390-no-preference.png",
@@ -144,7 +176,7 @@
     },
     {
       "name": "register-attention-390-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Rows keep the status labels sent by the server."
     },
     {
       "name": "register-review-390-no-preference.png",
@@ -152,11 +184,15 @@
     },
     {
       "name": "register-stale-390-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The refresh message sits above the rows so they remain usable."
     },
     {
       "name": "register-failed-390-no-preference.png",
       "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-retrying-390-no-preference.png",
+      "adaptations": "The first read failed. Skeleton rows stay visible while Refresh tries again."
     },
     {
       "name": "register-no-match-390-no-preference.png",
@@ -164,15 +200,27 @@
     },
     {
       "name": "access-lost-390-no-preference.png",
-      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "detail-draft-390-no-preference.png",
       "adaptations": "Unavailable connection and grant facts say Not available yet."
     },
     {
+      "name": "detail-loading-390-no-preference.png",
+      "adaptations": "The screen waits for the first register read before showing server facts."
+    },
+    {
+      "name": "detail-retrying-390-no-preference.png",
+      "adaptations": "The first read failed. The message-state Refresh button stays busy while it retries."
+    },
+    {
+      "name": "detail-stale-390-no-preference.png",
+      "adaptations": "The row and facts stay visible after the latest register read fails."
+    },
+    {
       "name": "detail-published-390-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read."
     },
     {
       "name": "detail-not-found-390-no-preference.png",
@@ -188,7 +236,7 @@
     },
     {
       "name": "detail-access-lost-390-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "register-empty-390-reduce.png",
@@ -196,7 +244,7 @@
     },
     {
       "name": "register-loading-390-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The first register read is held to show its loading state."
     },
     {
       "name": "register-all-390-reduce.png",
@@ -204,7 +252,7 @@
     },
     {
       "name": "register-attention-390-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Rows keep the status labels sent by the server."
     },
     {
       "name": "register-review-390-reduce.png",
@@ -212,11 +260,15 @@
     },
     {
       "name": "register-stale-390-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The refresh message sits above the rows so they remain usable."
     },
     {
       "name": "register-failed-390-reduce.png",
       "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-retrying-390-reduce.png",
+      "adaptations": "The first read failed. Skeleton rows stay visible while Refresh tries again."
     },
     {
       "name": "register-no-match-390-reduce.png",
@@ -224,15 +276,27 @@
     },
     {
       "name": "access-lost-390-reduce.png",
-      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "detail-draft-390-reduce.png",
       "adaptations": "Unavailable connection and grant facts say Not available yet."
     },
     {
+      "name": "detail-loading-390-reduce.png",
+      "adaptations": "The screen waits for the first register read before showing server facts."
+    },
+    {
+      "name": "detail-retrying-390-reduce.png",
+      "adaptations": "The first read failed. The message-state Refresh button stays busy while it retries."
+    },
+    {
+      "name": "detail-stale-390-reduce.png",
+      "adaptations": "The row and facts stay visible after the latest register read fails."
+    },
+    {
       "name": "detail-published-390-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read."
     },
     {
       "name": "detail-not-found-390-reduce.png",
@@ -248,7 +312,7 @@
     },
     {
       "name": "detail-access-lost-390-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "menu-390-no-preference.png",
@@ -264,7 +328,7 @@
     },
     {
       "name": "register-loading-320-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The first register read is held to show its loading state."
     },
     {
       "name": "register-all-320-no-preference.png",
@@ -272,7 +336,7 @@
     },
     {
       "name": "register-attention-320-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Rows keep the status labels sent by the server."
     },
     {
       "name": "register-review-320-no-preference.png",
@@ -280,11 +344,15 @@
     },
     {
       "name": "register-stale-320-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The refresh message sits above the rows so they remain usable."
     },
     {
       "name": "register-failed-320-no-preference.png",
       "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-retrying-320-no-preference.png",
+      "adaptations": "The first read failed. Skeleton rows stay visible while Refresh tries again."
     },
     {
       "name": "register-no-match-320-no-preference.png",
@@ -292,15 +360,27 @@
     },
     {
       "name": "access-lost-320-no-preference.png",
-      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "detail-draft-320-no-preference.png",
       "adaptations": "Unavailable connection and grant facts say Not available yet."
     },
     {
+      "name": "detail-loading-320-no-preference.png",
+      "adaptations": "The screen waits for the first register read before showing server facts."
+    },
+    {
+      "name": "detail-retrying-320-no-preference.png",
+      "adaptations": "The first read failed. The message-state Refresh button stays busy while it retries."
+    },
+    {
+      "name": "detail-stale-320-no-preference.png",
+      "adaptations": "The row and facts stay visible after the latest register read fails."
+    },
+    {
       "name": "detail-published-320-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read."
     },
     {
       "name": "detail-not-found-320-no-preference.png",
@@ -316,7 +396,7 @@
     },
     {
       "name": "detail-access-lost-320-no-preference.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "register-empty-320-reduce.png",
@@ -324,7 +404,7 @@
     },
     {
       "name": "register-loading-320-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The first register read is held to show its loading state."
     },
     {
       "name": "register-all-320-reduce.png",
@@ -332,7 +412,7 @@
     },
     {
       "name": "register-attention-320-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Rows keep the status labels sent by the server."
     },
     {
       "name": "register-review-320-reduce.png",
@@ -340,11 +420,15 @@
     },
     {
       "name": "register-stale-320-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The refresh message sits above the rows so they remain usable."
     },
     {
       "name": "register-failed-320-reduce.png",
       "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-retrying-320-reduce.png",
+      "adaptations": "The first read failed. Skeleton rows stay visible while Refresh tries again."
     },
     {
       "name": "register-no-match-320-reduce.png",
@@ -352,15 +436,27 @@
     },
     {
       "name": "access-lost-320-reduce.png",
-      "adaptations": "Back to workspace replaces the unavailable Overview destination."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "detail-draft-320-reduce.png",
       "adaptations": "Unavailable connection and grant facts say Not available yet."
     },
     {
+      "name": "detail-loading-320-reduce.png",
+      "adaptations": "The screen waits for the first register read before showing server facts."
+    },
+    {
+      "name": "detail-retrying-320-reduce.png",
+      "adaptations": "The first read failed. The message-state Refresh button stays busy while it retries."
+    },
+    {
+      "name": "detail-stale-320-reduce.png",
+      "adaptations": "The row and facts stay visible after the latest register read fails."
+    },
+    {
       "name": "detail-published-320-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read."
     },
     {
       "name": "detail-not-found-320-reduce.png",
@@ -376,7 +472,7 @@
     },
     {
       "name": "detail-access-lost-320-reduce.png",
-      "adaptations": "Current API data shown as supplied."
+      "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
       "name": "menu-320-no-preference.png",

@@ -127,6 +127,7 @@ describe('integration detail', () => {
       response({ status: 'unavailable' }, 503));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.fact')).toHaveLength(4));
     expect(root(fixture).querySelectorAll('.fact')[3]?.textContent).toContain("Couldn't check");
+    expect(root(fixture).querySelectorAll('.fact')[3]?.textContent).not.toContain('Checking');
     expect(root(fixture).querySelectorAll('.fact')[1]?.textContent).toContain('Not available yet');
     expect(root(fixture).querySelectorAll('.fact')[2]?.textContent).toContain('Not available yet');
     expect(root(fixture).textContent).toContain('Refresh');
@@ -149,7 +150,70 @@ describe('integration detail', () => {
       .toContain("Couldn't load this integration."));
     expect(root(fixture).textContent).not.toContain('Published, but access grants');
     expect(root(fixture).textContent).toContain('Unpublished 5 Oct 2026, 09:14');
+    expect(root(fixture).querySelectorAll('.fact')[3]?.textContent)
+      .toContain("Not checked: the integration list couldn't be loaded.");
+    expect(root(fixture).querySelectorAll('.fact')[3]?.textContent).not.toContain('Checking');
     expect(root(fixture).querySelector('button')?.textContent).toContain('Refresh');
+    fixture.destroy();
+  });
+
+  it('hides an old failure after the list refresh succeeds while tools are still loading', async () => {
+    let finishList!: (reply: Response) => void;
+    let finishPolicy!: (reply: Response) => void;
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response({ status: 'unavailable' }, 503))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishList = resolve;
+      }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishPolicy = resolve;
+      }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain("Couldn't load this integration."));
+    root(fixture).querySelector<HTMLButtonElement>('#integration-message-refresh')?.click();
+    finishList(response(listResponse(row('ready', 'Published 5 Oct 2026, 09:14'))));
+    await vi.waitFor(() => expect(finishPolicy).toBeTypeOf('function'));
+    expect(root(fixture).textContent).not.toContain("Couldn't load this integration.");
+    expect(root(fixture).querySelector('.status-region')?.textContent)
+      .toContain('Refreshing integration…');
+    finishPolicy(response(policy(true)));
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.fact')).toHaveLength(4));
+    fixture.destroy();
+  });
+
+  it('moves focus from the first-load Refresh button when the row appears', async () => {
+    let finishList!: (reply: Response) => void;
+    let finishPolicy!: (reply: Response) => void;
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response({ status: 'unavailable' }, 503))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishList = resolve;
+      }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        finishPolicy = resolve;
+      }));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain("Couldn't load this integration."));
+    const messageRefresh = root(fixture)
+      .querySelector<HTMLButtonElement>('#integration-message-refresh');
+    if (!messageRefresh) throw new Error('Expected the message-state Refresh button');
+    messageRefresh.focus();
+    messageRefresh.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter', bubbles: true,
+    }));
+    messageRefresh.click();
+    finishList(response(listResponse(row('ready', 'Published 5 Oct 2026, 09:14'))));
+    await vi.waitFor(() => expect(finishPolicy).toBeTypeOf('function'));
+    await vi.waitFor(() => expect(globalThis.document.activeElement?.id)
+      .toBe('integration-refresh'));
+    expect(globalThis.document.activeElement).not.toBe(globalThis.document.body);
+    finishPolicy(response(policy(true)));
     fixture.destroy();
   });
 
@@ -198,7 +262,7 @@ describe('integration detail', () => {
     expect(root(fixture).querySelectorAll('.fact')).toHaveLength(0);
     expect(root(fixture).textContent).not.toContain('Fixture server');
     expect(root(fixture).querySelector('.access-state h2'))
-      .not.toBe(globalThis.document.activeElement);
+      .toBe(globalThis.document.activeElement);
     fixture.destroy();
   });
 
@@ -272,7 +336,8 @@ describe('integration detail', () => {
     expect(toolsSignal?.aborted).toBe(true);
     finishTools?.(response(policy(false)));
     await Promise.resolve();
-    expect(root(fixture).querySelectorAll('.fact')).toHaveLength(0);
+    expect(root(fixture).querySelectorAll('.fact')).toHaveLength(4);
+    expect(root(fixture).querySelectorAll('.fact')[3]?.textContent).toContain('Checking');
   });
 });
 
