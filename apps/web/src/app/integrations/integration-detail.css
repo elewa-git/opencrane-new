@@ -10,6 +10,7 @@ h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
   font-size: 13px;
 }
 .breadcrumb a { color: var(--oc-accent-dark); }
+.breadcrumb-step { display: inline-flex; align-items: center; gap: 8px; }
 .detail-heading {
   display: flex;
   align-items: flex-start;

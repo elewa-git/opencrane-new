@@ -1,4 +1,4 @@
-<nav class="add-flow" aria-label="Add an integration progress">
+<div class="add-flow">
   <p class="phone-step">Step {{ current() }} of 5 · {{ currentLabel() }}</p>
   <div class="phone-bars" aria-hidden="true">
     @for (step of steps; track step.number) {
@@ -15,4 +15,4 @@
       </li>
     }
   </ol>
-</nav>
+</div>

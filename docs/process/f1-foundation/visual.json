@@ -1,7 +1,7 @@
 {
   "result": "PASS",
-  "date": "2026-10-06T01:20:00.000Z",
-  "source": "581852944faa42b898ab5be9599f2630ea5da917",
+  "date": "2026-10-06T09:22:09.254Z",
+  "source": "6f0911cadc87b7b0f48112f4423b880f8d3a5994",
   "screenComparison": "PARTIAL: shared treatments match; existing screens retain their fields and shells",
   "freshInstall": false,
   "liveQualification": "NOT RUN: intercepted fixtures only",

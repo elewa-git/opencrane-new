@@ -1,52 +1,75 @@
 @if (state() === 'access') {
+  <h1>Integrations</h1>
   <oc-integrations-access-lost />
 } @else {
   <section class="tool-policy">
     <nav aria-label="Breadcrumb" class="breadcrumbs">
       <a href="/org/integrations">Integrations</a>
-      <span aria-hidden="true">›</span>
-      <a [href]="'/org/integrations/' + serverId()">Integration details</a>
-      <span aria-hidden="true">›</span>
-      <span>Tools &amp; access</span>
+      <span class="breadcrumb-step">
+        <span aria-hidden="true">›</span>
+        <a [href]="'/org/integrations/' + serverId()">Integration details</a>
+      </span>
+      <span class="breadcrumb-step">
+        <span aria-hidden="true">›</span>
+        <span aria-current="page">Tools &amp; access</span>
+      </span>
     </nav>
     <h1>Tools &amp; access</h1>
     <p class="intro">Set access for each tool. Reads are included.</p>
     <oc-add-flow-steps [current]="4" />
 
-    <div class="status-region" role="status" aria-live="polite">
+    <div id="tool-status" class="status-region" [class.status-failed]="statusKind() === 'failed'"
+      [class.status-unknown]="statusKind() === 'unknown'"
+      [class.status-conflict]="state() === 'conflict'" role="status" aria-live="polite"
+      aria-atomic="true" tabindex="-1">
       @if (message()) {
         <oc-shared-state [kind]="statusKind()" [message]="message()" [detail]="detail()"
-          [changeReference]="changeReference()" [actionLabel]="actionLabel()"
-          [showAction]="state() === 'unknown'" (action)="statusAction()" />
-      }
-      @if (state() === 'conflict') {
-        <div class="notice-actions">
-          <button type="button" (click)="reviewCurrentModes()">Review the current modes</button>
-          <button type="button" class="secondary" (click)="discardEdits()">
-            Discard my edits
-          </button>
-        </div>
-      }
-      @if (state() === 'failed' || (state() === 'unknown' && showReload())) {
-        <button type="button" (click)="reloadTools()">Reload tools</button>
+          [changeReference]="changeReference()"
+          [showAction]="false" />
       }
     </div>
+    @if (state() === 'unknown' && pendingCommand()) {
+      <div class="notice-actions">
+        <button type="button" class="state-action" (click)="statusAction()">
+          Check status
+        </button>
+        @if (showReload()) {
+          <button type="button" class="secondary" (click)="reloadTools()">
+            Reload tools
+          </button>
+        }
+      </div>
+    }
+    @if (state() === 'conflict') {
+      <div class="notice-actions">
+        <button type="button" (click)="reviewCurrentModes()">Review the current modes</button>
+        <button type="button" class="secondary" (click)="discardEdits()">
+          Discard my edits
+        </button>
+      </div>
+    }
+    @if (state() === 'failed' || (showReload() && state() !== 'unknown')) {
+      <div class="notice-actions">
+        <button type="button" class="secondary" (click)="reloadTools()">Reload tools</button>
+      </div>
+    }
 
     @if (policy(); as policy) {
-      <p class="editing-summary" aria-live="polite">{{ summary() }}</p>
+      <p class="editing-summary">{{ summary() }}</p>
       @if (policy.connectionId === null && policy.tools.length > 0) {
-        <p class="connection-note">
+        <p id="connection-note" class="connection-note">
           Modes can't be saved yet: this server has no validation connection.
         </p>
       }
       @if (policy.tools.length === 0) {
         <p>No tool list has been read yet. Discovery fills it in.</p>
       } @else {
-        <section class="tools-card" aria-label="Tool modes" [attr.aria-busy]="state() !== 'ready'">
+        <section class="tools-card" aria-label="Tool modes" [attr.aria-busy]="toolsBusy()">
           <h2>{{ policy.tools.length }} {{ policy.tools.length === 1 ? 'tool' : 'tools' }}</h2>
           @for (tool of policy.tools; track tool.name) {
             <fieldset [disabled]="state() !== 'ready' || !tool.reviewed
-              || policy.connectionId === null">
+              || policy.connectionId === null"
+              [attr.aria-describedby]="policy.connectionId === null ? 'connection-note' : null">
               <legend>{{ tool.name }}</legend>
               <span class="data-chip">{{ tool.readOnly ? 'Reads data' : 'May change data' }}</span>
               @if (!tool.reviewed) {
@@ -60,7 +83,7 @@
               } @else {
                 <p class="saved-mode">Saved mode: {{ modeWords(tool.mode) }}</p>
               }
-              @if (choices().has(tool.name)) {
+              @if (hasUnsavedChoice(tool)) {
                 <p class="unsaved-choice">Your unsaved choice</p>
               }
               <p class="suggestion">{{ suggestion(tool) }}</p>
@@ -87,8 +110,6 @@
           detail="People and assistant access can't be set here yet. Both the person asking and
             the assistant will need a current grant." [showAction]="false" />
       </section>
-    } @else if (state() === 'loading') {
-      <p aria-busy="true">Loading tools…</p>
     }
   </section>
 }

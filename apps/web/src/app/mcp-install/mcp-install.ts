@@ -127,6 +127,7 @@ export class McpInstall implements OnInit {
         this.phase.set('draft');
         this.message.set('No registration was found. You can submit this source.');
         sessionStorage.removeItem('mcp-registration');
+        globalThis.setTimeout(this.focusAddress, 0);
         return;
       }
       if (!response.ok) {
@@ -168,6 +169,7 @@ export class McpInstall implements OnInit {
     this.changeRef.set('');
     this.discoveredServerId.set('');
     this.message.set('Enter the server address to discover its tools.');
+    globalThis.setTimeout(this.focusAddress, 0);
   }
 
   private applyDiscoveryStatus(status: DiscoveryStatus): void {
@@ -242,8 +244,13 @@ export class McpInstall implements OnInit {
   };
 
   private focusMcpStatus = (): void => {
-    const status = this.document.querySelector<HTMLElement>('#mcp-status');
-    status?.focus();
+    const heading = this.document.querySelector<HTMLElement>('#add-heading');
+    heading?.focus();
+  };
+
+  private focusAddress = (): void => {
+    const address = this.document.querySelector<HTMLInputElement>('#remote-url');
+    address?.focus();
   };
 
   private focusAccessHeading = (): void => {

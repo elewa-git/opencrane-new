@@ -1,6 +1,12 @@
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import { IntegrationsAccessLost } from '../integrations/integrations-access-lost';
 import { AddFlowSteps } from '../integrations/add-flow-steps';
+import {
+  choicesDifferentFromSaved,
+  choicesForCurrentTools,
+  choicesWithout,
+  type ToolChoice,
+} from './tool-policy-choices';
 import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
@@ -18,9 +24,9 @@ type Tool = ToolPolicy['tools'][number];
 type ToolMode = Tool['mode'];
 type ScreenState = 'loading' | 'ready' | 'saving' | 'checking' | 'conflict'
   | 'unknown' | 'failed' | 'access';
-type Choice = { mode: ToolMode; revision: string };
 type PendingCommand = {
   commandId: string;
+  connectionId: string | null;
   toolName: string;
   toolRevision: string;
   mode: ToolMode;
@@ -52,10 +58,9 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   protected readonly message = signal('Loading tools…');
   protected readonly detail = signal('');
   protected readonly statusKind = signal<PresentationState>('checking');
-  protected readonly actionLabel = signal('');
   protected readonly changeReference = signal('');
   protected readonly showReload = signal(false);
-  protected readonly choices = signal(new Map<string, Choice>());
+  protected readonly choices = signal(new Map<string, ToolChoice>());
   protected readonly pendingCommand = signal<PendingCommand | undefined>(undefined);
   protected readonly modeOptions = MODE_OPTIONS;
   protected readonly summary = computed(this.buildSummary.bind(this));
@@ -65,6 +70,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // Ignore replies from requests that outlive this page.
     this.requestVersion += 1;
     this.abortController?.abort();
   }
@@ -119,34 +125,34 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
 
   protected reviewCurrentModes(): void {
     void this.loadPolicy(true, 'Loading current tool modes…');
+    this.focusStatusRegion();
   }
 
   protected discardEdits(): void {
     this.pendingCommand.set(undefined);
     this.changeReference.set('');
     void this.loadPolicy(false, 'Reloading tools…');
+    this.focusStatusRegion();
   }
 
   protected reloadTools(): void {
     const earlierChangeMayAppear = this.pendingCommand() !== undefined;
+    this.changeReference.set('');
     const successMessage = earlierChangeMayAppear
       ? 'Your earlier change may still appear. Check the modes before saving again.'
       : '';
-    void this.loadPolicy(false, 'Reloading tools…', successMessage);
+    void this.loadPolicy(true, 'Reloading tools…', successMessage);
+    this.focusStatusRegion();
   }
 
-  protected toolState(tool: Tool): PresentationState {
-    if (!tool.reviewed) return 'blocked';
-    if (tool.mode === 'block' && this.selected(tool) === 'block') return 'draft';
-    return 'ready';
+  protected hasUnsavedChoice(tool: Tool): boolean {
+    const choice = this.choices().get(tool.name);
+    return choice?.revision === tool.revision && choice.mode !== tool.mode;
   }
 
-  protected toolStateMessage(tool: Tool): string {
-    if (!tool.reviewed) return 'Unreviewed — blocked until reviewed';
-    if (tool.mode === 'block' && this.selected(tool) === 'block') {
-      return 'Blocked — nobody can use it';
-    }
-    return this.modeWords(tool.mode);
+  protected toolsBusy(): boolean {
+    return this.state() === 'loading' || this.state() === 'saving'
+      || this.state() === 'checking';
   }
 
   protected suggestion(tool: Tool): string {
@@ -171,7 +177,6 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('applying');
     this.message.set(`Saving ${tool.name}…`);
     this.detail.set('');
-    this.actionLabel.set('');
 
     const version = this.beginRequest();
     try {
@@ -185,12 +190,15 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
         return;
       }
       if (response.status === 400) {
+        this.choices.set(choicesWithout(this.choices(), command.toolName));
         this.pendingCommand.set(undefined);
-        this.state.set('failed');
+        this.changeReference.set('');
+        this.state.set('ready');
+        this.showReload.set(true);
         this.statusKind.set('failed');
         this.message.set('Failed — nothing changed');
         this.detail.set('The server refused this change as invalid. Nothing was saved.');
-        this.actionLabel.set('');
+        this.focusStatusRegion();
         return;
       }
       if (!response.ok) {
@@ -200,6 +208,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       const reply = await this.readSavedPolicy(response);
       if (!this.isCurrent(version)) return;
       this.applySavedPolicy(reply, command);
+      this.focusStatusRegion();
     } catch {
       if (this.isCurrent(version)) this.showUnknown(command);
     } finally {
@@ -220,7 +229,6 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('checking');
     this.message.set(loadingMessage);
     this.detail.set('');
-    this.actionLabel.set('');
 
     const version = this.beginRequest();
     try {
@@ -228,6 +236,10 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       if (!this.isCurrent(version)) return;
       if (this.clearOnAccessLoss(response)) return;
       if (!response.ok) {
+        if (response.status === 400 && !this.pendingCommand()) {
+          this.showNotReadyFailure();
+          return;
+        }
         this.showPolicyReadFailure();
         return;
       }
@@ -236,15 +248,17 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
       if (!this.isCurrent(version)) return;
       this.policy.set(policy);
       if (policy.tools.length > 0) this.hadRenderedTools = true;
-      this.choices.set(preserveUnchangedChoices
-        ? this.choicesForCurrentTools(previousPolicy, previousChoices, policy)
-        : new Map<string, Choice>());
+      const keptChoices = preserveUnchangedChoices
+        ? choicesForCurrentTools(previousPolicy, previousChoices, policy)
+        : new Map<string, ToolChoice>();
+      this.choices.set(choicesDifferentFromSaved(keptChoices, policy));
       this.pendingCommand.set(undefined);
-      this.changeReference.set('');
+      if (!successMessage) this.changeReference.set('');
       this.state.set('ready');
       this.statusKind.set(successMessage ? 'needs_input' : 'ready');
       this.message.set(successMessage);
       this.detail.set('');
+      this.focusStatusRegion();
     } catch {
       if (this.isCurrent(version)) this.showPolicyReadFailure();
     } finally {
@@ -258,7 +272,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('checking');
     this.message.set(`Checking change ${command.commandId}…`);
     this.detail.set("Reads the saved policy. Doesn't send the change again.");
-    this.actionLabel.set('');
+    this.focusStatusRegion();
     const version = this.beginRequest();
     try {
       const response = await fetch(this.toolsUrl(), this.getOptions());
@@ -282,32 +296,36 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   private comparePendingCommand(policy: ToolPolicy, command: PendingCommand): void {
     const savedTool = policy.tools.find(hasName(command.toolName));
     if (policy.sequence === command.expectedSequence) {
+      this.policy.set(policy);
+      this.choices.set(choicesDifferentFromSaved(this.choices(), policy));
       this.state.set('unknown');
       this.showReload.set(true);
       this.statusKind.set('unknown');
       this.message.set('Still unknown');
       this.detail.set(`No change recorded yet at ${this.currentTime()}. Check again in a moment.`);
-      this.actionLabel.set('Check status');
-      this.policy.set(policy);
+      this.focusStatusAction();
       return;
     }
     if (policy.sequence > command.expectedSequence
       && savedTool?.revision === command.toolRevision && savedTool.mode === command.mode) {
       this.policy.set(policy);
-      this.choices.set(this.choicesWithout(command.toolName));
+      const otherChoices = choicesWithout(this.choices(), command.toolName);
+      this.choices.set(choicesDifferentFromSaved(otherChoices, policy));
       this.pendingCommand.set(undefined);
-      this.changeReference.set('');
       this.state.set('ready');
       this.statusKind.set('confirmed');
       this.message.set('Saved policy matches your change');
       this.detail.set(`The saved policy shows ${command.toolName} as `
         + `${this.modeWords(command.mode)}. Checked at ${this.currentTime()}.`);
-      this.actionLabel.set('');
+      this.focusStatusRegion();
       return;
     }
     if (policy.sequence > command.expectedSequence) {
       this.pendingCommand.set(undefined);
-      this.showConflict('The tools changed before your save',
+      this.policy.set(policy);
+      this.choices.set(choicesDifferentFromSaved(this.choices(), policy));
+      this.changeReference.set(command.commandId);
+      this.showConflict('The saved modes don’t match your change',
         'The tools changed after your save. We can’t tell whether your change applied first. '
         + 'Review the current modes.');
       return;
@@ -320,29 +338,27 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('needs_input');
     this.message.set(message);
     this.detail.set(detail);
-    this.actionLabel.set('');
     this.pendingCommand.set(undefined);
-    this.changeReference.set('');
   }
 
   private showUnknown(command: PendingCommand): void {
     this.pendingCommand.set(command);
     this.state.set('unknown');
-    this.showReload.set(true);
+    this.showReload.set(false);
     this.statusKind.set('unknown');
     this.message.set('Outcome unknown');
     this.detail.set('The reply was lost while saving. The change may or may not have applied. '
       + 'Check status before doing anything else.');
-    this.actionLabel.set('Check status');
     this.changeReference.set(command.commandId);
   }
 
   private showCheckFailure(): void {
     this.state.set('unknown');
+    this.showReload.set(true);
     this.statusKind.set('unknown');
     this.message.set("Couldn't check. The change is still unknown.");
     this.detail.set('Reload tools to read the current saved modes.');
-    this.actionLabel.set('Check status');
+    this.focusStatusRegion();
   }
 
   private showReadFailure(): void {
@@ -351,7 +367,14 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
     this.statusKind.set('failed');
     this.message.set("Couldn't load tools.");
     this.detail.set('Reload tools to try the read again.');
-    this.actionLabel.set('');
+  }
+
+  private showNotReadyFailure(): void {
+    this.state.set('failed');
+    this.showReload.set(true);
+    this.statusKind.set('needs_input');
+    this.message.set('Not ready yet: discovery is still being recorded.');
+    this.detail.set('Reload tools to check again.');
   }
 
   private showPolicyReadFailure(): void {
@@ -364,19 +387,20 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
 
   private applySavedPolicy(policy: ToolPolicy, command: PendingCommand): void {
     this.policy.set(policy);
-    this.choices.set(this.choicesWithout(command.toolName));
+    const otherChoices = choicesWithout(this.choices(), command.toolName);
+    this.choices.set(choicesDifferentFromSaved(otherChoices, policy));
     this.pendingCommand.set(undefined);
     this.changeReference.set(command.commandId);
     this.state.set('ready');
     this.statusKind.set('confirmed');
     this.message.set(`Saved ${command.toolName}: ${this.modeWords(command.mode)}`);
     this.detail.set('');
-    this.actionLabel.set('');
   }
 
   private createCommand(tool: Tool, policy: ToolPolicy): PendingCommand {
     return {
       commandId: crypto.randomUUID(),
+      connectionId: policy.connectionId,
       toolName: tool.name,
       toolRevision: tool.revision,
       mode: this.selected(tool),
@@ -390,16 +414,10 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   private postOptions(command: PendingCommand): RequestInit {
-    const policy = this.policy();
-    const body = {
-      ...command,
-      connectionId: policy?.connectionId,
-      expectedSequence: command.expectedSequence,
-    };
     return {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(command),
       signal: this.abortController?.signal ?? null,
     };
   }
@@ -409,35 +427,35 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   private async readSavedPolicy(response: Response): Promise<ToolPolicy> {
+    if (response.status !== 200) throw new Error('The save was not confirmed');
     const rawReply: unknown = await response.json();
-    if (typeof rawReply !== 'object' || rawReply === null || !('policy' in rawReply)) {
+    if (typeof rawReply !== 'object' || rawReply === null || !('policy' in rawReply)
+      || !('status' in rawReply) || rawReply.status !== 'appended') {
       throw new Error('The save reply did not include a policy');
     }
     return toolPolicySchema.parse(rawReply.policy);
   }
 
-  private choicesForCurrentTools(
-    previousPolicy: ToolPolicy | undefined,
-    previousChoices: Map<string, Choice>,
-    currentPolicy: ToolPolicy,
-  ): Map<string, Choice> {
-    if (!previousPolicy) return new Map();
-    const keptChoices = new Map<string, Choice>();
-    for (const previousTool of previousPolicy.tools) {
-      const choice = previousChoices.get(previousTool.name);
-      if (!choice) continue;
-      const currentTool = currentPolicy.tools.find(hasName(previousTool.name));
-      if (!currentTool || !currentTool.reviewed || currentTool.revision !== choice.revision) continue;
-      keptChoices.set(currentTool.name, choice);
-    }
-    return keptChoices;
+  private focusStatusRegion(): void {
+    // Let Angular remove the pressed button before moving focus to the status message.
+    globalThis.setTimeout(this.focusToolStatusRegion, 0);
   }
 
-  private choicesWithout(toolName: string): Map<string, Choice> {
-    const nextChoices = new Map(this.choices());
-    nextChoices.delete(toolName);
-    return nextChoices;
+  private focusStatusAction(): void {
+    globalThis.setTimeout(this.focusCheckStatusAction, 0);
   }
+
+  private focusToolStatusRegion = (): void => {
+    const statusRegion = this.document.querySelector<HTMLElement>('#tool-status');
+    statusRegion?.focus();
+  };
+
+  private focusCheckStatusAction = (): void => {
+    const action = this.document.querySelector<HTMLButtonElement>(
+      '.tool-policy > .notice-actions .state-action',
+    );
+    action?.focus();
+  };
 
   private buildSummary(): string {
     const policy = this.policy();
@@ -487,10 +505,11 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   private isCurrent(version: number): boolean {
+    // Ignore a reply when a newer request or an access refusal replaced it.
     return this.requestVersion === version && this.state() !== 'access';
   }
 
-  clearOnAccessLoss(response: Response): boolean {
+  private clearOnAccessLoss(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.requestVersion += 1;
     this.abortController?.abort();

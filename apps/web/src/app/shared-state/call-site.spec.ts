@@ -72,7 +72,7 @@ it.each(['button', 'form'])('submits an edited refused address through the %s',
     expect(element.querySelector('[data-state]')?.getAttribute('data-state')).toBe('draft');
     expect(element.textContent).not.toContain('This address was refused');
     const discover = element.querySelector<HTMLButtonElement>('button[type=submit]');
-    if (!discover) throw new Error('Missing Discover tools button');
+    if (!discover) throw new Error('Missing Continue button');
     expect(discover.textContent).toContain('Continue');
     if (submission === 'button') {
       discover.click();

@@ -1,14 +1,16 @@
 @if (state() !== 'access') {
   <nav aria-label="Breadcrumb" class="breadcrumb">
     <a href="/org/integrations">Integrations</a>
-    <span aria-hidden="true">›</span>
-    @if (row(); as integration) {
-      <span aria-current="page">{{ integration.name }}</span>
-    } @else if (state() === 'not-found') {
-      <span aria-current="page">Integration not found</span>
-    } @else {
-      <span aria-current="page">Integration details</span>
-    }
+    <span class="breadcrumb-step">
+      <span aria-hidden="true">›</span>
+      @if (row(); as integration) {
+        <span aria-current="page">{{ integration.name }}</span>
+      } @else if (state() === 'not-found') {
+        <span aria-current="page">Integration not found</span>
+      } @else {
+        <span aria-current="page">Integration details</span>
+      }
+    </span>
   </nav>
 }
 <div class="status-region" role="status" aria-live="polite" aria-atomic="true">

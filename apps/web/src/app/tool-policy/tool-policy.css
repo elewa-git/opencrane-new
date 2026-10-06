@@ -4,9 +4,29 @@ h1 { margin: 16px 0 8px; font-size: 24px; }
 h2 { font-size: 16px; }
 p { color: var(--oc-ink-secondary); font-size: 14px; line-height: 1.5; }
 .intro { margin-bottom: 0; }
-.breadcrumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.breadcrumbs a { display: inline-flex; align-items: center; min-height: 44px; }
-.status-region:empty { display: none; }
+.breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.breadcrumbs a { color: var(--oc-accent-dark); }
+.breadcrumb-step { display: inline-flex; align-items: center; gap: 8px; }
+a { min-height: 0; }
+.status-region { min-height: 1px; }
+.status-region:empty { min-height: 1px; }
+.status-region.status-failed,
+.status-region.status-conflict,
+.status-region.status-unknown {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 8px;
+}
+.status-region.status-failed { background: var(--oc-danger-soft); }
+.status-region.status-conflict { background: var(--oc-warning-soft); }
+.status-region.status-unknown { background: var(--oc-neutral-soft); }
 .editing-summary { padding: 14px 16px; border-left: 3px solid var(--oc-accent); }
 .connection-note { padding: 12px 14px; border-radius: 7px; background: var(--oc-neutral-soft); }
 .tools-card, .audience {
@@ -26,22 +46,41 @@ fieldset {
   border-radius: 8px;
   background: white;
 }
-legend { max-width: 100%; overflow-wrap: anywhere; font-weight: 600; }
+legend {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family: var(--oc-font-mono);
+  font-weight: 600;
+}
 .data-chip { display: inline-flex; padding: 5px 9px; border-radius: 20px; background: var(--oc-neutral-soft); font-size: 12px; }
 .saved-mode, .suggestion, .unsaved-choice { margin: 10px 0; }
 .unsaved-choice { font-weight: 600; }
-.modes { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+.modes { display: inline-flex; flex-wrap: wrap; gap: 0; margin: 12px 0; }
 .modes label {
+  position: relative;
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 10px;
   border: 1px solid var(--oc-border-input);
-  border-radius: 6px;
+  border-radius: 0;
   font-size: 14px;
+  text-align: center;
+}
+.modes label:first-of-type { border-radius: 6px 0 0 6px; }
+.modes label + label { margin-left: -1px; }
+.modes label:last-of-type { border-radius: 0 6px 6px 0; }
+.modes input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .modes label:has(input:checked) { border-color: var(--oc-accent-dark); background: var(--oc-accent-tint); }
+.modes label:has(input:focus-visible) { outline: 2px solid var(--oc-focus-ring); }
 button {
   min-height: 44px;
   padding: 8px 16px;
@@ -53,16 +92,27 @@ button {
   cursor: pointer;
 }
 button.secondary { background: white; }
-button:disabled, fieldset:disabled { opacity: .65; }
+button:disabled, fieldset:disabled .modes label, fieldset:disabled > button { opacity: .65; }
+fieldset:disabled .saved-mode,
+fieldset:disabled .suggestion,
+fieldset:disabled .unsaved-choice,
+fieldset:disabled .data-chip,
+fieldset:disabled .state { opacity: 1; }
 .notice-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
 .audience h2 { margin-top: 0; }
 :focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 3px; }
 @media (max-width: 700px) {
+  a { min-height: 44px; }
   .tools-card, .audience { padding: 14px; }
   fieldset { padding: 12px; }
-  .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .modes label { justify-content: center; min-width: 0; padding: 6px; text-align: center; }
-  .modes label span { overflow-wrap: anywhere; }
+  .modes { display: inline-flex; max-width: 100%; }
+  .modes label { min-width: 0; padding: 6px 8px; }
+  .modes label span { overflow-wrap: normal; }
+  .modes label:has(input:focus-visible) { outline: 2px solid var(--oc-focus-ring); }
   fieldset > button, .notice-actions button { width: 100%; }
   .notice-actions { display: grid; }
+}
+@media (max-width: 360px) {
+  .modes { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .modes label { justify-content: flex-start; }
 }

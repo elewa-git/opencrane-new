@@ -255,6 +255,7 @@ describe('integration detail', () => {
     fixture.destroy();
   });
 
+
   it('clears the page after access is refused', async () => {
     const fixture = create(row('ready', 'Published 5 Oct 2026, 09:14'),
       new Response(null, { status: 403 }));

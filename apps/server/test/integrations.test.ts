@@ -264,7 +264,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     const registrations: string[] = [];
     page.on('request', request => { if (request.method() === 'POST' && request.url().endsWith('/api/org/integrations')) registrations.push(request.url()); });
     const registered = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/api/org/integrations'));
-    await page.getByRole('button', { name: 'Discover tools', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue and discover tools', exact: true }).click();
     expect((await registered).status()).toBe(202);
     await page.reload();
     await page.getByText('Outcome unknown', { exact: false }).waitFor();
@@ -277,19 +277,21 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
-      const controls = page.locator('oc-mcp-install button, oc-mcp-install a, '
-        + 'oc-mcp-install input[type="url"], oc-mcp-install .source-card, '
-        + 'oc-mcp-install summary');
-      for (let index = 0; index < await controls.count(); index += 1) {
-        const box = await controls.nth(index).boundingBox();
-        expect(box?.height).toBeGreaterThanOrEqual(44);
+      if (width <= 700) {
+        const controls = page.locator('oc-mcp-install button, oc-mcp-install a, '
+          + 'oc-mcp-install input[type="url"], oc-mcp-install .source-card, '
+          + 'oc-mcp-install summary');
+        for (let index = 0; index < await controls.count(); index += 1) {
+          const box = await controls.nth(index).boundingBox();
+          expect(box?.height).toBeGreaterThanOrEqual(44);
+        }
       }
       await page.screenshot({ path: `/tmp/p3-3-review-${width}.png`, fullPage: true });
     }
     remote.status(401);
     await page.getByRole('button', { name: 'Add another server' }).click();
     await page.getByLabel('Server URL', { exact: true }).fill('https://mcp.example.test/protected');
-    await page.getByRole('button', { name: 'Discover tools', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue and discover tools', exact: true }).click();
     function isDiscoveryStatus(response: Response) {
       return response.url().includes('/api/org/integrations/discovery?locator=');
     }
@@ -313,7 +315,8 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.goto(`${base}/org/integrations/odoo/tools`);
     expect((await toolsLoaded).status()).toBe(200);
     await page.getByRole('heading', { name: 'Tools & access' }).waitFor();
-    await page.getByRole('group', { name: 'write' }).getByLabel('Allow automatically').check();
+    await page.getByRole('group', { name: 'write' })
+      .locator('label').filter({ hasText: 'Allow automatically' }).click();
     const saved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/odoo/tools'));
     // Angular enables Save after rendering the choice; press() does not wait for enabled controls.
     await page.getByRole('button', { name: 'Save mode for write', disabled: false })

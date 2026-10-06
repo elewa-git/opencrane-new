@@ -95,6 +95,38 @@
       "adaptations": "The discovery request is accepted and its result is still being checked."
     },
     {
+      "name": "add-ready-1280-no-preference.png",
+      "adaptations": "The discovered inventory stays visible before tool review."
+    },
+    {
+      "name": "add-connection-required-1280-no-preference.png",
+      "adaptations": "Protected discovery needs a validation connection."
+    },
+    {
+      "name": "add-refused-1280-no-preference.png",
+      "adaptations": "The server refused the remote address before it was registered."
+    },
+    {
+      "name": "tools-loading-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-read-failed-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-empty-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-no-connection-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-unreviewed-1280-no-preference.png",
+      "adaptations": "An unreviewed tool stays blocked until an admin reviews it."
+    },
+    {
       "name": "tools-blocked-1280-no-preference.png",
       "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
     },
@@ -108,15 +140,23 @@
     },
     {
       "name": "tools-unknown-1280-no-preference.png",
-      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+      "adaptations": "The save reply was lost. Check status reads the saved modes and does not send the change again."
     },
     {
       "name": "tools-check-still-unknown-1280-no-preference.png",
-      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+      "adaptations": "The check has not confirmed the change. Reload tools reads the saved modes again."
+    },
+    {
+      "name": "tools-after-reload-1280-no-preference.png",
+      "adaptations": "The earlier change may still appear, and saved modes have been read again."
     },
     {
       "name": "tools-check-matches-1280-no-preference.png",
-      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+      "adaptations": "The saved modes match the request. The page cannot tell which change made them match."
+    },
+    {
+      "name": "tools-checking-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
     },
     {
       "name": "tools-failed-1280-no-preference.png",
@@ -124,7 +164,7 @@
     },
     {
       "name": "tools-access-lost-1280-no-preference.png",
-      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+      "adaptations": "The page clears tool details and puts keyboard focus on its heading."
     },
     {
       "name": "register-empty-1280-reduce.png",
@@ -211,6 +251,38 @@
       "adaptations": "The discovery request is accepted and its result is still being checked."
     },
     {
+      "name": "add-ready-1280-reduce.png",
+      "adaptations": "The discovered inventory stays visible before tool review."
+    },
+    {
+      "name": "add-connection-required-1280-reduce.png",
+      "adaptations": "Protected discovery needs a validation connection."
+    },
+    {
+      "name": "add-refused-1280-reduce.png",
+      "adaptations": "The server refused the remote address before it was registered."
+    },
+    {
+      "name": "tools-loading-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-read-failed-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-empty-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-no-connection-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-unreviewed-1280-reduce.png",
+      "adaptations": "An unreviewed tool stays blocked until an admin reviews it."
+    },
+    {
       "name": "tools-blocked-1280-reduce.png",
       "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
     },
@@ -224,15 +296,23 @@
     },
     {
       "name": "tools-unknown-1280-reduce.png",
-      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+      "adaptations": "The save reply was lost. Check status reads the saved modes and does not send the change again."
     },
     {
       "name": "tools-check-still-unknown-1280-reduce.png",
-      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+      "adaptations": "The check has not confirmed the change. Reload tools reads the saved modes again."
+    },
+    {
+      "name": "tools-after-reload-1280-reduce.png",
+      "adaptations": "The earlier change may still appear, and saved modes have been read again."
     },
     {
       "name": "tools-check-matches-1280-reduce.png",
-      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+      "adaptations": "The saved modes match the request. The page cannot tell which change made them match."
+    },
+    {
+      "name": "tools-checking-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
     },
     {
       "name": "tools-failed-1280-reduce.png",
@@ -240,7 +320,7 @@
     },
     {
       "name": "tools-access-lost-1280-reduce.png",
-      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+      "adaptations": "The page clears tool details and puts keyboard focus on its heading."
     },
     {
       "name": "register-empty-390-no-preference.png",
@@ -327,6 +407,38 @@
       "adaptations": "The discovery request is accepted and its result is still being checked."
     },
     {
+      "name": "add-ready-390-no-preference.png",
+      "adaptations": "The discovered inventory stays visible before tool review."
+    },
+    {
+      "name": "add-connection-required-390-no-preference.png",
+      "adaptations": "Protected discovery needs a validation connection."
+    },
+    {
+      "name": "add-refused-390-no-preference.png",
+      "adaptations": "The server refused the remote address before it was registered."
+    },
+    {
+      "name": "tools-loading-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-read-failed-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-empty-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-no-connection-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-unreviewed-390-no-preference.png",
+      "adaptations": "An unreviewed tool stays blocked until an admin reviews it."
+    },
+    {
       "name": "tools-blocked-390-no-preference.png",
       "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
     },
@@ -340,15 +452,23 @@
     },
     {
       "name": "tools-unknown-390-no-preference.png",
-      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+      "adaptations": "The save reply was lost. Check status reads the saved modes and does not send the change again."
     },
     {
       "name": "tools-check-still-unknown-390-no-preference.png",
-      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+      "adaptations": "The check has not confirmed the change. Reload tools reads the saved modes again."
+    },
+    {
+      "name": "tools-after-reload-390-no-preference.png",
+      "adaptations": "The earlier change may still appear, and saved modes have been read again."
     },
     {
       "name": "tools-check-matches-390-no-preference.png",
-      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+      "adaptations": "The saved modes match the request. The page cannot tell which change made them match."
+    },
+    {
+      "name": "tools-checking-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
     },
     {
       "name": "tools-failed-390-no-preference.png",
@@ -356,7 +476,7 @@
     },
     {
       "name": "tools-access-lost-390-no-preference.png",
-      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+      "adaptations": "The page clears tool details and puts keyboard focus on its heading."
     },
     {
       "name": "register-empty-390-reduce.png",
@@ -443,6 +563,38 @@
       "adaptations": "The discovery request is accepted and its result is still being checked."
     },
     {
+      "name": "add-ready-390-reduce.png",
+      "adaptations": "The discovered inventory stays visible before tool review."
+    },
+    {
+      "name": "add-connection-required-390-reduce.png",
+      "adaptations": "Protected discovery needs a validation connection."
+    },
+    {
+      "name": "add-refused-390-reduce.png",
+      "adaptations": "The server refused the remote address before it was registered."
+    },
+    {
+      "name": "tools-loading-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-read-failed-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-empty-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-no-connection-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-unreviewed-390-reduce.png",
+      "adaptations": "An unreviewed tool stays blocked until an admin reviews it."
+    },
+    {
       "name": "tools-blocked-390-reduce.png",
       "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
     },
@@ -456,15 +608,23 @@
     },
     {
       "name": "tools-unknown-390-reduce.png",
-      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+      "adaptations": "The save reply was lost. Check status reads the saved modes and does not send the change again."
     },
     {
       "name": "tools-check-still-unknown-390-reduce.png",
-      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+      "adaptations": "The check has not confirmed the change. Reload tools reads the saved modes again."
+    },
+    {
+      "name": "tools-after-reload-390-reduce.png",
+      "adaptations": "The earlier change may still appear, and saved modes have been read again."
     },
     {
       "name": "tools-check-matches-390-reduce.png",
-      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+      "adaptations": "The saved modes match the request. The page cannot tell which change made them match."
+    },
+    {
+      "name": "tools-checking-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
     },
     {
       "name": "tools-failed-390-reduce.png",
@@ -472,7 +632,7 @@
     },
     {
       "name": "tools-access-lost-390-reduce.png",
-      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+      "adaptations": "The page clears tool details and puts keyboard focus on its heading."
     },
     {
       "name": "menu-390-no-preference.png",
@@ -567,6 +727,38 @@
       "adaptations": "The discovery request is accepted and its result is still being checked."
     },
     {
+      "name": "add-ready-320-no-preference.png",
+      "adaptations": "The discovered inventory stays visible before tool review."
+    },
+    {
+      "name": "add-connection-required-320-no-preference.png",
+      "adaptations": "Protected discovery needs a validation connection."
+    },
+    {
+      "name": "add-refused-320-no-preference.png",
+      "adaptations": "The server refused the remote address before it was registered."
+    },
+    {
+      "name": "tools-loading-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-read-failed-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-empty-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-no-connection-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-unreviewed-320-no-preference.png",
+      "adaptations": "An unreviewed tool stays blocked until an admin reviews it."
+    },
+    {
       "name": "tools-blocked-320-no-preference.png",
       "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
     },
@@ -580,15 +772,23 @@
     },
     {
       "name": "tools-unknown-320-no-preference.png",
-      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+      "adaptations": "The save reply was lost. Check status reads the saved modes and does not send the change again."
     },
     {
       "name": "tools-check-still-unknown-320-no-preference.png",
-      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+      "adaptations": "The check has not confirmed the change. Reload tools reads the saved modes again."
+    },
+    {
+      "name": "tools-after-reload-320-no-preference.png",
+      "adaptations": "The earlier change may still appear, and saved modes have been read again."
     },
     {
       "name": "tools-check-matches-320-no-preference.png",
-      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+      "adaptations": "The saved modes match the request. The page cannot tell which change made them match."
+    },
+    {
+      "name": "tools-checking-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
     },
     {
       "name": "tools-failed-320-no-preference.png",
@@ -596,7 +796,7 @@
     },
     {
       "name": "tools-access-lost-320-no-preference.png",
-      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+      "adaptations": "The page clears tool details and puts keyboard focus on its heading."
     },
     {
       "name": "register-empty-320-reduce.png",
@@ -683,6 +883,38 @@
       "adaptations": "The discovery request is accepted and its result is still being checked."
     },
     {
+      "name": "add-ready-320-reduce.png",
+      "adaptations": "The discovered inventory stays visible before tool review."
+    },
+    {
+      "name": "add-connection-required-320-reduce.png",
+      "adaptations": "Protected discovery needs a validation connection."
+    },
+    {
+      "name": "add-refused-320-reduce.png",
+      "adaptations": "The server refused the remote address before it was registered."
+    },
+    {
+      "name": "tools-loading-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-read-failed-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-empty-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-no-connection-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "tools-unreviewed-320-reduce.png",
+      "adaptations": "An unreviewed tool stays blocked until an admin reviews it."
+    },
+    {
       "name": "tools-blocked-320-reduce.png",
       "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
     },
@@ -696,15 +928,23 @@
     },
     {
       "name": "tools-unknown-320-reduce.png",
-      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+      "adaptations": "The save reply was lost. Check status reads the saved modes and does not send the change again."
     },
     {
       "name": "tools-check-still-unknown-320-reduce.png",
-      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+      "adaptations": "The check has not confirmed the change. Reload tools reads the saved modes again."
+    },
+    {
+      "name": "tools-after-reload-320-reduce.png",
+      "adaptations": "The earlier change may still appear, and saved modes have been read again."
     },
     {
       "name": "tools-check-matches-320-reduce.png",
-      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+      "adaptations": "The saved modes match the request. The page cannot tell which change made them match."
+    },
+    {
+      "name": "tools-checking-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
     },
     {
       "name": "tools-failed-320-reduce.png",
@@ -712,7 +952,7 @@
     },
     {
       "name": "tools-access-lost-320-reduce.png",
-      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+      "adaptations": "The page clears tool details and puts keyboard focus on its heading."
     },
     {
       "name": "menu-320-no-preference.png",
@@ -737,6 +977,7 @@
     "INT-30",
     "INT-31",
     "INT-37",
+    "INT-90",
     "INT-93",
     "INT-94",
     "INT-95",

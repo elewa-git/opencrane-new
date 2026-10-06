@@ -1,13 +1,20 @@
 @if (phase() === 'access') {
+  <h1>Integrations</h1>
   <oc-integrations-access-lost />
 } @else {
   <nav aria-label="Breadcrumb" class="breadcrumbs">
     <a href="/org/integrations">Integrations</a>
-    <span aria-hidden="true">›</span>
-    <span>{{ serverId ? 'Review MCP server' : 'Add an integration' }}</span>
+    <span class="breadcrumb-step">
+      <span aria-hidden="true">›</span>
+      <span aria-current="page">{{ serverId ? 'Review MCP server' : 'Add an integration' }}</span>
+    </span>
   </nav>
-  <h1>{{ serverId ? 'Review MCP server' : 'Add an integration' }}</h1>
-  <p>Choose where the MCP server comes from. Protocol details are under Advanced.</p>
+  <h1 id="add-heading" tabindex="-1">
+    {{ serverId ? 'Review MCP server' : 'Add an integration' }}
+  </h1>
+  @if (!serverId) {
+    <p>Choose where the MCP server comes from. Protocol details are under Advanced.</p>
+  }
   <oc-add-flow-steps [current]="phase() === 'draft' || phase() === 'refused' ? 1 : 2" />
 
   @if (!serverId) {
@@ -44,24 +51,31 @@
         (input)="editAddress($any($event.target).value)"
         [disabled]="phase() !== 'draft' && phase() !== 'refused'" />
       <p>Use an HTTPS address without passwords or access tokens.</p>
-      @if (phase() === 'draft') {
-        <button type="submit" aria-label="Discover tools" [disabled]="busy()">Continue</button>
-      }
+      <div class="form-actions">
+        @if (phase() === 'draft') {
+          <button type="submit" aria-label="Continue and discover tools" [disabled]="busy()">
+            Continue
+          </button>
+        }
+        <a class="button secondary cancel" href="/org/integrations">Cancel</a>
+      </div>
     </form>
-    <a class="button secondary cancel" href="/org/integrations">Cancel</a>
   }
 
-  <div id="mcp-status" class="status-region" role="status" aria-live="polite" tabindex="-1">
+  <div id="mcp-status" class="status-region" role="status" aria-live="polite"
+    aria-atomic="true" tabindex="-1">
     <oc-shared-state [kind]="presentationState()" [message]="message()"
       [detail]="refusalDetail()" [changeReference]="changeRef()" [showAction]="false" />
   </div>
   @if (phase() !== 'draft' && phase() !== 'access' && phase() !== 'refused') {
-    <button type="button" [disabled]="busy()" (click)="check()">
-      {{ busy() ? 'Checking status…' : 'Check status' }}
-    </button>
-  }
-  @if (phase() === 'needs_input' && inventory() && discoveredServerId()) {
-    <a class="button continue-tools" [href]="toolsUrl()">Continue to tools &amp; access</a>
+    <div class="discovery-actions">
+      <button type="button" [disabled]="busy()" (click)="check()">
+        {{ busy() ? 'Checking status…' : 'Check status' }}
+      </button>
+      @if (phase() === 'needs_input' && inventory() && discoveredServerId()) {
+        <a class="button continue-tools" [href]="toolsUrl()">Continue to tools &amp; access</a>
+      }
+    </div>
   }
   @if (inventory(); as inventory) {
     <section aria-label="Tool inventory" [attr.aria-busy]="busy()">
@@ -85,7 +99,7 @@
       }
       <details>
         <summary>Advanced</summary>
-        <p>MCP 2026-07-28 · Inventory digest</p>
+        <p>Model Context Protocol · Inventory digest</p>
         <code>{{ inventory.schemaDigest }}</code>
       </details>
       <p>No computer can call these tools. Publication and access come after review.</p>

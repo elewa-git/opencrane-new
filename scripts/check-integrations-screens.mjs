@@ -25,14 +25,19 @@ const adaptations = {
   'detail-access-lost': 'Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time.',
   'add-source': 'The source cards show the remote URL route because catalogue and hosted package admission are not available yet.',
   'add-checking': 'The discovery request is accepted and its result is still being checked.',
+  'add-ready': 'The discovered inventory stays visible before tool review.',
+  'add-connection-required': 'Protected discovery needs a validation connection.',
+  'add-refused': 'The server refused the remote address before it was registered.',
   'tools-blocked': 'Every reviewed tool starts on Block, so no tool can be called.',
+  'tools-unreviewed': 'An unreviewed tool stays blocked until an admin reviews it.',
   'tools-editing': 'The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants.',
   'tools-conflict': 'Neutral wording replaces an actor and time because the API supplies neither.',
-  'tools-unknown': 'The save reply was lost. The page offers a status read and does not resend the change.',
-  'tools-check-still-unknown': 'The read has not found a later sequence. Reload tools is a separate GET.',
-  'tools-check-matches': 'The saved policy matches the requested mode, but the page does not claim which command made it match.',
+  'tools-unknown': 'The save reply was lost. Check status reads the saved modes and does not send the change again.',
+  'tools-check-still-unknown': 'The check has not confirmed the change. Reload tools reads the saved modes again.',
+  'tools-check-matches': 'The saved modes match the request. The page cannot tell which change made them match.',
   'tools-failed': 'Reload tools replaces Try again because the same invalid input would fail again.',
-  'tools-access-lost': 'The access-lost block clears the tools page and returns focus to its heading.',
+  'tools-access-lost': 'The page clears tool details and puts keyboard focus on its heading.',
+  'tools-after-reload': 'The earlier change may still appear, and saved modes have been read again.',
 };
 const contentTypes = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -102,14 +107,27 @@ function makeFixtures(scenario) {
   const state = { loadingFinished, finishLoading };
   let toolsPostCount = 0;
   const toolsRequestMethods = [];
+  let finishToolsLoad;
+  const toolsLoadFinished = new Promise((resolveToolsLoad) => {
+    finishToolsLoad = resolveToolsLoad;
+  });
+  let finishToolsCheck;
+  const toolsCheckFinished = new Promise((resolveToolsCheck) => {
+    finishToolsCheck = resolveToolsCheck;
+  });
 
   async function serveApi(route) {
     const request = route.request();
     const url = new URL(request.url());
     const pathname = url.pathname;
     if (pathname === '/api/org/integrations') {
-      if (request.method() === 'POST' && scenario === 'add-checking') {
+      if (request.method() === 'POST'
+        && ['add-checking', 'add-ready', 'add-connection-required'].includes(scenario)) {
         await route.fulfill({ status: 202, json: { serverId: 'checking-id', changeRef: 'change-1' } });
+        return;
+      }
+      if (request.method() === 'POST' && scenario === 'add-refused') {
+        await route.fulfill({ status: 400, json: { status: 'invalid_request' } });
         return;
       }
       registerReads += 1;
@@ -160,17 +178,41 @@ function makeFixtures(scenario) {
       return;
     }
     if (pathname.endsWith('/discovery')) {
+      if (scenario === 'add-ready' || scenario === 'add-connection-required') {
+        const status = {
+          serverId: 'remote-id', changeRef: 'change-1', state: 'needs_input',
+          reason: scenario === 'add-connection-required' ? 'connection_required' : undefined,
+          inventory: scenario === 'add-ready' ? {
+            schemaDigest: 'digest-1', serverInfo: { name: 'Remote server', version: '1.0' },
+            tools: [{ name: 'read_item', revision: 'revision-1' }],
+          } : undefined,
+        };
+        await route.fulfill({ json: status });
+        return;
+      }
       await route.fulfill({ status: 503, json: { status: 'unavailable' } });
       return;
     }
     if (pathname.endsWith('/tools')) {
       toolsRequestMethods.push(request.method());
+      if (scenario === 'tools-loading' && request.method() === 'GET'
+        && toolsRequestMethods.filter(isReadMethod).length === 1) {
+        await toolsLoadFinished;
+      }
+      if (scenario === 'tools-checking' && request.method() === 'GET' && toolsPostCount > 0) {
+        await toolsCheckFinished;
+      }
+      if (scenario === 'tools-read-failed' && request.method() === 'GET') {
+        await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+        return;
+      }
       if (request.method() === 'POST') toolsPostCount += 1;
       if (scenario === 'tools-conflict' && request.method() === 'POST') {
         await route.fulfill({ status: 409, json: { status: 'conflict' } });
         return;
       }
-      if ((scenario === 'tools-unknown' || scenario.startsWith('tools-check-'))
+      if ((scenario === 'tools-unknown' || scenario === 'tools-checking'
+        || scenario.startsWith('tools-check-'))
         && request.method() === 'POST') {
         await route.fulfill({ status: 503, json: { status: 'unavailable' } });
         return;
@@ -189,6 +231,9 @@ function makeFixtures(scenario) {
       }
       const serverId = pathname.split('/')[4];
       const policy = makePolicy(serverId, scenario);
+      if (scenario === 'tools-no-connection') policy.connectionId = null;
+      if (scenario === 'tools-empty') policy.tools = [];
+      if (scenario === 'tools-unreviewed') policy.tools[0].reviewed = false;
       if (scenario === 'tools-check-matches' && request.method() === 'GET'
         && toolsPostCount > 0) {
         policy.sequence = 4;
@@ -202,6 +247,8 @@ function makeFixtures(scenario) {
   return {
     serveApi,
     state,
+    finishToolsLoad,
+    finishToolsCheck,
     toolsPostCount: () => toolsPostCount,
     requestMethods: () => toolsRequestMethods,
   };
@@ -263,9 +310,23 @@ async function checkMobileTargets(page, width) {
 async function capture(page, name, width, motion) {
   assert(await page.evaluate(pageFitsViewport), 'The page has no horizontal overflow');
   await checkMobileTargets(page, width);
+  if (name.startsWith('tools-')) await checkModeLabelLines(page);
   const filename = `${name}-${width}-${motion}.png`;
   await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
   captures.push({ name: filename, adaptations: adaptations[name] ?? 'Current API data shown as supplied.' });
+}
+
+async function checkModeLabelLines(page) {
+  const labelHeights = await page.locator('.modes label span').evaluateAll((labels) =>
+    labels.map((label) => label.getBoundingClientRect().height),
+  );
+  assert(labelHeights.every((height) => height <= 36), 'Mode labels fit within two lines');
+}
+
+async function chooseMode(page, toolName, mode) {
+  const selector = `.modes label:has(input[name="mode-${toolName}"][value="${mode}"])`;
+  const label = page.locator(selector);
+  await label.click();
 }
 
 async function openPage(browser, width, motion, scenario) {
@@ -532,11 +593,21 @@ async function captureAdd(browser, name, width, motion, scenario) {
   const { page } = opened;
   try {
     await page.goto(`${origin}/org/integrations/new`);
-    if (scenario === 'add-checking') {
+    if (scenario === 'add-checking' || scenario === 'add-ready'
+      || scenario === 'add-connection-required' || scenario === 'add-refused') {
       await page.getByLabel('Server URL').fill('https://remote.example.test/mcp');
-      await page.getByRole('button', { name: 'Discover tools' }).click();
-      await page.getByText('Validating the server and discovering tools…').waitFor();
-      await page.locator('.status-region').waitFor();
+      await page.getByRole('button', { name: 'Continue and discover tools' }).click();
+      if (scenario === 'add-refused') {
+        await page.getByText('This address was refused.').waitFor();
+      } else {
+        await page.getByText('Validating the server and discovering tools…').waitFor();
+        await page.getByRole('button', { name: 'Check status' }).click();
+        if (scenario === 'add-ready') {
+          await page.getByRole('link', { name: 'Continue to tools & access' }).waitFor();
+        } else if (scenario === 'add-connection-required') {
+          await page.getByText('A scoped validation connection is required.').waitFor();
+        }
+      }
     } else {
       await page.getByRole('heading', { name: 'Add an integration' }).waitFor();
       await checkSourceCardHitTarget(page);
@@ -565,9 +636,21 @@ async function captureTools(browser, name, width, motion, scenario) {
   const { page } = opened;
   try {
     await page.goto(`${origin}/org/integrations/orders/tools`);
-    if (scenario === 'tools-access-lost') {
+    if (scenario === 'tools-loading') {
+      await page.locator('#tool-status').waitFor();
+      await capture(page, name, width, motion);
+      opened.fixtures.finishToolsLoad();
+      return;
+    }
+    if (scenario === 'tools-read-failed') {
+      await page.getByText("Couldn't load tools.").waitFor();
+    } else if (scenario === 'tools-empty') {
+      await page.getByText('No tool list has been read yet. Discovery fills it in.').waitFor();
+    } else if (scenario === 'tools-no-connection') {
+      await page.locator('.connection-note').waitFor();
+    } else if (scenario === 'tools-access-lost') {
       await page.locator('fieldset').first().waitFor();
-      await page.locator('input[name="mode-orders_read"][value="allow"]').click();
+      await chooseMode(page, 'orders_read', 'allow');
       await page.getByRole('button', { name: 'Save mode for orders_read' }).click();
       const heading = page.getByRole('heading', {
         name: 'You no longer have access to Integrations', exact: true,
@@ -577,6 +660,16 @@ async function captureTools(browser, name, width, motion, scenario) {
       await checkAccessLinkColour(page);
     } else {
       await page.locator('fieldset').first().waitFor();
+      if (scenario === 'tools-unreviewed') {
+        await page.getByText('Unreviewed — blocked until reviewed').waitFor();
+        assert(await page.locator('input[name="mode-orders_read"]').first().isDisabled(),
+          'Unreviewed tools cannot be changed');
+        assert(await page.getByRole('button', { name: 'Save mode for orders_read' }).isDisabled(),
+          'Unreviewed tools cannot be saved');
+        await waitForFonts(page);
+        await capture(page, name, width, motion);
+        return;
+      }
       const firstRadio = page.locator('input[name="mode-orders_read"]').first();
       await firstRadio.focus();
       assert.deepEqual(await firstRadio.evaluate(focusRing),
@@ -588,15 +681,16 @@ async function captureTools(browser, name, width, motion, scenario) {
       await page.keyboard.press('ArrowDown');
       assert(await page.locator('input[name="mode-orders_read"][value="ask"]').isChecked(),
         'ArrowDown moves to the next native mode radio');
-      await page.locator('input[name="mode-orders_read"][value="block"]').click();
+      await chooseMode(page, 'orders_read', 'block');
       if (scenario === 'tools-editing') {
-        await page.locator('input[name="mode-orders_read"][value="allow"]').click();
+        await chooseMode(page, 'orders_read', 'allow');
         await page.getByText(/1 Allow automatically · 0 Ask · 1 Block/u).waitFor();
       }
       const needsSave = scenario === 'tools-conflict' || scenario === 'tools-failed'
-        || scenario === 'tools-unknown' || scenario.startsWith('tools-check-');
+        || scenario === 'tools-unknown' || scenario === 'tools-checking'
+        || scenario.startsWith('tools-check-');
       if (needsSave) {
-        await page.locator('input[name="mode-orders_read"][value="allow"]').click();
+        await chooseMode(page, 'orders_read', 'allow');
         await page.getByRole('button', { name: 'Save mode for orders_read' }).click();
       }
       if (scenario === 'tools-conflict') {
@@ -611,6 +705,7 @@ async function captureTools(browser, name, width, motion, scenario) {
       if (scenario === 'tools-unknown') {
         await page.getByText('Outcome unknown').waitFor();
         assert.equal(await page.getByRole('button', { name: 'Check status' }).count(), 1);
+        assert.equal(await page.getByRole('button', { name: 'Reload tools' }).count(), 0);
         assert(await page.locator('fieldset').evaluateAll(allDisabled));
       }
       if (scenario === 'tools-check-still-unknown') {
@@ -622,11 +717,21 @@ async function captureTools(browser, name, width, motion, scenario) {
         await page.getByText('Still unknown').waitFor();
         await page.getByRole('button', { name: 'Reload tools' }).click();
         await page.locator('fieldset').first().waitFor();
+        await page.getByText('Your earlier change may still appear.').waitFor();
+        await capture(page, 'tools-after-reload', width, motion);
         await page.waitForFunction(noStateActionButtons);
         assert.equal(opened.fixtures.toolsPostCount(), 1,
           'One POST is sent across unknown, both checks and reload');
         const laterMethods = opened.fixtures.requestMethods().slice(2);
         assert(laterMethods.every(isReadMethod), 'Every request after save is a GET');
+        return;
+      }
+      if (scenario === 'tools-checking') {
+        await page.getByText('Outcome unknown').waitFor();
+        await page.getByRole('button', { name: 'Check status' }).click();
+        await page.getByText(/Checking change/u).waitFor();
+        await capture(page, name, width, motion);
+        opened.fixtures.finishToolsCheck();
         return;
       }
       if (scenario === 'tools-check-matches') {
@@ -712,6 +817,15 @@ try {
         'detail-access-lost', 'orders');
       await captureAdd(browser, 'add-source', width, motion, 'add-source');
       await captureAdd(browser, 'add-checking', width, motion, 'add-checking');
+      await captureAdd(browser, 'add-ready', width, motion, 'add-ready');
+      await captureAdd(browser, 'add-connection-required', width, motion,
+        'add-connection-required');
+      await captureAdd(browser, 'add-refused', width, motion, 'add-refused');
+      await captureTools(browser, 'tools-loading', width, motion, 'tools-loading');
+      await captureTools(browser, 'tools-read-failed', width, motion, 'tools-read-failed');
+      await captureTools(browser, 'tools-empty', width, motion, 'tools-empty');
+      await captureTools(browser, 'tools-no-connection', width, motion, 'tools-no-connection');
+      await captureTools(browser, 'tools-unreviewed', width, motion, 'tools-unreviewed');
       await captureTools(browser, 'tools-blocked', width, motion, 'tools-blocked');
       await captureTools(browser, 'tools-editing', width, motion, 'tools-editing');
       await captureTools(browser, 'tools-conflict', width, motion, 'tools-conflict');
@@ -719,6 +833,7 @@ try {
       await captureTools(browser, 'tools-check-still-unknown', width, motion,
         'tools-check-still-unknown');
       await captureTools(browser, 'tools-check-matches', width, motion, 'tools-check-matches');
+      await captureTools(browser, 'tools-checking', width, motion, 'tools-checking');
       await captureTools(browser, 'tools-failed', width, motion, 'tools-failed');
       await captureTools(browser, 'tools-access-lost', width, motion, 'tools-access-lost');
       await checkRegisterInteraction(browser, width, motion);
@@ -732,7 +847,8 @@ try {
     environment: 'Built Angular assets; Chromium; disposable API fixtures; no stack',
     comparedFrames: [
       'INT-01', 'INT-02', 'INT-03', 'INT-04', 'INT-05', 'INT-06', 'INT-07', 'INT-08',
-      'INT-10', 'INT-30', 'INT-31', 'INT-37', 'INT-93', 'INT-94', 'INT-95', 'INT-96',
+      'INT-10', 'INT-30', 'INT-31', 'INT-37', 'INT-90', 'INT-93', 'INT-94', 'INT-95',
+      'INT-96',
     ],
     scope: 'Register, detail, add and tool modes supported by the current integrations API.',
   };
