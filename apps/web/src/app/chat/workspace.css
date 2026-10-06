@@ -21,13 +21,12 @@ kbd {
   background: white;
 }
 .rail-content { padding: 10px 8px; overflow: auto; flex: 1; }
-.rail-content>button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 7px 10px; text-align: left; border-radius: 6px; font-size: 13px; }
+.rail-content>button,.new-direct { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 7px 10px; text-align: left; border-radius: 6px; font-size: 13px; }
 .rail-content button:hover { background: #e5eaeb; }
 .rail-content kbd { margin-left: auto; font-size: 9px; }
 .new-session { color: var(--oc-warning-text); }
 .rail-content .ask { border: 1px dashed #9fdde8; background: #eefafc; margin: 2px 0 4px; }
-.rail-content>a { display: flex; align-items: center; min-height: 44px;
-  text-decoration: none; }
+.new-direct { min-height: 44px; color: inherit; text-decoration: none; }
 .ask>span,.hash { color: var(--oc-accent-dark); }
 h2 { margin: 0; }
 .rail h2 {

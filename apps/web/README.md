@@ -50,7 +50,9 @@ flowchart LR
    A reply whose output was lost stays incomplete.
 4. **Two colleagues start a direct chat.** One person searches the joined colleagues,
    chooses one person and sends text. The server records a two-person conversation and
-   human messages. The website checks an uncertain reply using the original command id.
+   human messages. The website keeps the typed message while permissions are being
+   applied. It checks an uncertain reply using the original request reference, a unique
+   value that lets the server recognise the same change if it is sent again.
    No assistant, computer, memory or model work starts.
 5. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 6. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.

@@ -11,6 +11,7 @@ export type Colleague = { memberId: string; displayName: string | null };
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RecipientPicker {
+  readonly searchState = input<'idle' | 'loading' | 'ready' | 'failed'>('ready');
   readonly colleagues = input.required<Colleague[]>();
   readonly query = input.required<string>();
   readonly selected = input<Colleague | undefined>();

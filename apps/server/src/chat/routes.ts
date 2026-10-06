@@ -16,6 +16,7 @@ import {
   recordedChatMode,
   isChatRefused,
   ChatRefused,
+  ChatAccessApplying,
   type ChatOptions,
 } from './access.ts';
 import { sessionFor } from '../members/routes.ts';
@@ -322,6 +323,9 @@ async function assistantCreationDetails(options: ChatOptions, memberId: string,
 }
 
 function chatRefusal(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  if (error instanceof ChatAccessApplying) {
+    return reply.code(425).send({ status: 'access_applying' });
+  }
   if (error instanceof PayingGroupRefused) {
     return reply.code(403).send({ status: 'refused', error: error.message });
   }

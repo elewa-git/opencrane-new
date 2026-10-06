@@ -1,8 +1,7 @@
 # Direct person-to-person chats
 
 Backend API for [private direct chats / #86](https://github.com/elewa-git/opencrane-new/issues/86).
-The planned chat screens will use these routes. This change supplies the backend
-only. Conversation mode and its two participants are
+The direct chat screen uses these routes. Conversation mode and its two participants are
 recorded together in `conversation.created`; they cannot be edited. Messages are
 encrypted at rest with the conversation key; the server decrypts authorised reads.
 
@@ -80,7 +79,12 @@ waking computers or starting work. Older creations without a mode still read as
 `agent_session` with their recorded assistant.
 
 HTTP failures are 400 invalid shape, 401 unauthenticated, 403 non-disclosing
-access refusal, 409 changed retry/closed/concurrent state, and 503 unavailable.
+access refusal, 409 changed retry/closed/concurrent state, 425 `access_applying`,
+and 503 unavailable. The 425 response means a recorded direct participant is waiting
+for creation permissions in OpenFGA. It grants no access and carries no content.
+The caller must still be an active member. Missing chats, nonparticipants, removals
+and denied applied permissions retain their 403 refusal. Clients can retry 425 with
+bounded waits while keeping the original message and command ids.
 Unknown, foreign and nonparticipant conversation reads share the 403 refusal.
 Unsupported mode edits, assistant binding, participant changes and Stop commands
 cannot mutate a direct conversation. Closed conversations remain readable while

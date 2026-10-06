@@ -305,3 +305,35 @@ personal posts, Enter, healthy refresh and two sends during one visit.
 The visual script captures both the choice and selected memory-free states at three
 widths with both motion settings, after finite animations finish. It checks 44px phone
 buttons, overlap and overflow. Fresh-install live qualification remains NOT RUN.
+
+## Direct conversations
+
+`/workspace/direct` reads the context, authorised conversation list and colleague
+search. Search states distinguish loading, failure and successful empty results.
+A newer request cancels the previous search and ignores its late reply. Refresh
+uses the typed query. Search returns at most 20 people; the screen asks for a narrower
+query. Names already read are kept separately from the current search choices.
+
+`direct-chat-sending.ts` owns one pending record for create, permission checks and
+sending. The record keeps the conversation, colleague, original text and stable
+create/message references. The composer and chat changes stay locked until a receipt
+confirms the message. Only that submitted text clears; a later edit stays in the box.
+The screen keeps separate in-memory drafts for each conversation or new recipient.
+Reload discards them. No message is called recorded without a 200 receipt.
+
+HTTP 425 `access_applying` means a recorded participant is waiting for the creation
+permissions. First reads and sends retry with waits of 100, 200, 400, 800, 1600 and
+1600 ms. A 403 read remains a refusal and clears protected information. A creation
+status GET with 403 says that no creation record is available, keeps the message and
+offers Try again with the same ids. A message status GET with 404 says no record yet
+and offers Send again with the original id and text. Neither status check sends a POST.
+
+History loads before socket subscription. Replies from a former conversation or
+access state cannot replace the current view. New rows follow the bottom unless the
+person has scrolled up. One live status line announces received messages and recorded
+sends. A visible recorded notice stays until the transcript contains that message.
+Send errors have their own text; refresh does not change it. Editing clears it.
+
+The [screen checks](../../docs/process/p4-4-screens/README.robot.md) record API details,
+captures, intentional design differences, guard removals and remaining live checks.
+The [recipient checks](../../docs/process/p4-4-start-evidence.md) cover the first draft PR.

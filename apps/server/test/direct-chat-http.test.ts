@@ -766,3 +766,60 @@ async function unknownAssistant() {
     await fixture.close();
   }
 }
+
+async function reportsDirectAccessApplying() {
+  const fixture = await directFixture();
+  try {
+    const input = { id: 'create', conversationId: 'direct', mode: 'direct', colleagueId: 'bob' };
+    const creation = {
+      method: 'POST' as const, url: '/api/conversations', headers: fixture.headers(), payload: input,
+    };
+    expect((await fixture.app.inject(creation)).statusCode).toBe(200);
+    const read = { url: '/api/conversations/direct/messages', headers: fixture.headers() };
+    const send = { ...read, method: 'POST' as const, payload: { id: 'first', text: 'Hello' } };
+    for (const request of [read, send]) {
+      const result = await fixture.app.inject(request);
+      expect(result.statusCode).toBe(425);
+      expect(result.json()).toEqual({ status: 'access_applying' });
+    }
+    const outsider = { ...read, headers: fixture.headers('carol') };
+    const unknown = { ...read, url: '/api/conversations/unknown/messages' };
+    for (const request of [outsider, unknown]) {
+      const result = await fixture.app.inject(request);
+      expect(result.statusCode).toBe(403);
+      expect(result.json()).toEqual({ status: 'refused' });
+    }
+    const rows = await history(fixture.nats.store, 'conversation-direct', 'test');
+    await fixture.auth.handler.handle(rows[0]!.event, fixture.db);
+    expect((await fixture.app.inject(read)).statusCode).toBe(200);
+    expect((await fixture.app.inject(send)).statusCode).toBe(200);
+  } finally {
+    await fixture.close();
+  }
+}
+
+it('reports direct access still applying separately from a real refusal',
+  reportsDirectAccessApplying, 120_000);
+
+async function refusesRemovedMemberBeforeCreationPermissions() {
+  const fixture = await directFixture();
+  try {
+    const creation = {
+      method: 'POST' as const, url: '/api/conversations', headers: fixture.headers(),
+      payload: { id: 'create', conversationId: 'direct', mode: 'direct', colleagueId: 'bob' },
+    };
+    expect((await fixture.app.inject(creation)).statusCode).toBe(200);
+    await fixture.append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'carol',
+    }, false);
+    const read = { url: '/api/conversations/direct/messages', headers: fixture.headers() };
+    const result = await fixture.app.inject(read);
+    expect(result.statusCode).toBe(403);
+    expect(result.json()).toEqual({ status: 'refused' });
+  } finally {
+    await fixture.close();
+  }
+}
+
+it('still refuses a removed member while creation permissions are applying',
+  refusesRemovedMemberBeforeCreationPermissions, 120_000);

@@ -6,7 +6,7 @@ import type { ChatRow } from '@opencrane/protocol';
 import { z } from 'zod';
 
 export type DirectFailure = 'access_changed' | 'refused' | 'invalid' | 'conflict'
-  | 'unavailable';
+  | 'unavailable' | 'access_applying' | 'not_found';
 export type DirectOutcome<T> = { kind: 'ok'; value: T }
   | { kind: DirectFailure; status?: number };
 
@@ -133,6 +133,8 @@ async function write<T>(
 }
 
 function failure(status: number, method: 'GET' | 'POST'): DirectOutcome<never> {
+  if (status === 425) return { kind: 'access_applying', status };
+  if (status === 404) return { kind: 'not_found', status };
   if (status === 401 || (method === 'GET' && status === 403)) {
     return { kind: 'access_changed', status };
   }

@@ -331,5 +331,3 @@ select {
 
 /* Keep the page behind an open dialog from scrolling while the dialog is active. */
 html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }
-.direct-chat-link { display: flex; align-items: center; min-height: 44px; padding: 8px 10px;
-  color: #2b3133; text-decoration: none; }
