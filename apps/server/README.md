@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads tables| postgres
-  server -->|sends work and retries delivery| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends work and reads the desktop| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -61,6 +61,9 @@ not yet proven on a live computer; memory features stay off until it is.
 7. **An assistant asks an AI model for help.** The request goes through agentgateway, the
    AI gateway. The gateway asks the models process whether the budget allows it, and only
    then sends it on to the model provider.
+8. **A person watches the assistant's desktop.** The server checks their conversation
+   access and desktop grant. A confirmed member removal or conversation permission denial
+   ends the view straight away, even if another access read is slow.
 
 ## How to run or test it
 

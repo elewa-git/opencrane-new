@@ -16,6 +16,11 @@ import { viewFixture } from './support/view-fixture.ts';
 type MixedFailure = 'conversation denied' | 'desktop denied';
 type Failure = 'none' | 'deadline' | 'denied' | MixedFailure;
 type AuthorityRead = 'conversation' | 'desktop';
+interface MixedFailureCase {
+  failure: MixedFailure;
+  delayedRead: AuthorityRead;
+  delayMs?: number;
+}
 const mixedFailures = [
   { failure: 'conversation denied', delayedRead: 'desktop' },
   { failure: 'conversation denied', delayedRead: 'conversation' },
@@ -79,7 +84,7 @@ async function startViewer(fixture: Awaited<ReturnType<typeof viewFixture>>) {
   return socket;
 }
 
-async function batchFailureProxy(apiUrl: string, delayedRead?: AuthorityRead) {
+async function batchFailureProxy(apiUrl: string, delayedRead?: AuthorityRead, delayMs = 100) {
   let failure: Failure = 'none';
   let failures = 0;
 
@@ -88,7 +93,7 @@ async function batchFailureProxy(apiUrl: string, delayedRead?: AuthorityRead) {
     const mixed = failure === 'conversation denied' || failure === 'desktop denied';
     const authorityRead = batch ? 'desktop' : 'conversation';
     if (mixed && authorityRead === delayedRead) {
-      await delay(100);
+      await delay(delayMs);
     }
     if (!batch) {
       if (failure === 'conversation denied') {
@@ -266,9 +271,10 @@ async function refusesDeniedBatch() {
 it('closes a viewer on explicit OpenFGA denial beside a batch-item deadline error',
   refusesDeniedBatch, 30_000);
 
-async function refusesMixedAuthorityRead(testCase: (typeof mixedFailures)[number]) {
+async function refusesMixedAuthorityRead(testCase: MixedFailureCase) {
   const fixture = await viewFixture(openDesktop);
-  const proxy = await batchFailureProxy(fixture.fga.apiUrl, testCase.delayedRead);
+  const proxy = await batchFailureProxy(
+    fixture.fga.apiUrl, testCase.delayedRead, testCase.delayMs);
   fixture.binding.apiUrl = proxy.apiUrl;
   let socket: WebSocket | undefined;
   try {
@@ -291,6 +297,15 @@ async function refusesMixedAuthorityRead(testCase: (typeof mixedFailures)[number
 it.each(mixedFailures)(
   'closes a viewer with $failure and an unavailable read when $delayedRead replies last',
   refusesMixedAuthorityRead, 30_000);
+
+async function refusesConversationBesideSlowUnavailableRead() {
+  const testCase: MixedFailureCase = {
+    failure: 'conversation denied', delayedRead: 'desktop', delayMs: 1400,
+  };
+  await refusesMixedAuthorityRead(testCase);
+}
+it('closes on conversation-read denial before a slow unavailable desktop read answers',
+  refusesConversationBesideSlowUnavailableRead, 30_000);
 
 async function keepsLeaseAfterLateFence(millisecondsAfterDeadline: number) {
   const logs: string[] = [];

@@ -125,21 +125,30 @@ async function checkViewAccess(options: ViewAccessOptions, memberId: string, con
   const { store, silo } = options;
   if (options.binding.silo !== silo) throw new Error('Wrong silo');
   const auth = memberAuthorisation(options.binding);
-  const authorityReads = [
-    history(store, `member-${memberId}`, silo, options.deadline),
-    conversationDesktop(options, memberId, conversationId, auth),
-    auth.conversation(memberId, conversationId, 'read'),
-  ] as const;
-  // Wait for every authority source: an outage must not hide an explicit denial.
-  const results = await Promise.allSettled(authorityReads);
-  const [memberResult, computerResult, permissionResult] = results;
-  const memberRemoved = memberResult.status === 'fulfilled' &&
-    memberResult.value.at(-1)?.event.type === 'member.removed';
-  const conversationDenied = permissionResult.status === 'fulfilled' &&
-    permissionResult.value.status === 'ok' && !permissionResult.value.allowed;
-  if (memberRemoved || conversationDenied) {
-    throw new Error('Access changed');
+  const denied = Promise.withResolvers<never>();
+  function refuseRemovedMember(rows: StoredEvent[]) {
+    if (rows.at(-1)?.event.type === 'member.removed') {
+      denied.reject(new Error('Access changed'));
+    }
+    return rows;
   }
+  function refuseConversationRead(permission: Awaited<ReturnType<typeof auth.conversation>>) {
+    if (permission.status === 'ok' && !permission.allowed) {
+      denied.reject(new Error('Access changed'));
+    }
+    return permission;
+  }
+  const memberRead = history(store, `member-${memberId}`, silo, options.deadline);
+  const permissionRead = auth.conversation(memberId, conversationId, 'read');
+  const authorityReads = [
+    memberRead.then(refuseRemovedMember),
+    conversationDesktop(options, memberId, conversationId, auth),
+    permissionRead.then(refuseConversationRead),
+  ] as const;
+  // Stop on a known denial without waiting for slower reads. Keep their error handlers attached.
+  const settledReads = Promise.allSettled(authorityReads);
+  const results = await Promise.race([denied.promise, settledReads]);
+  const [memberResult, computerResult, permissionResult] = results;
   for (const result of results) {
     if (result.status !== 'rejected') {
       continue;
