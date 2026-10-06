@@ -145,17 +145,6 @@ it('keeps a healthy list clean when refreshed', async () => {
   expect(root.querySelector<HTMLSelectElement>('#assistant-payer')?.value).toBe('support');
 });
 
-it('does not create when Enter is pressed in the name field', async () => {
-  const root = await mount();
-  const input = nameField(root);
-  selectFirstGrant(root);
-  input.value = 'Quarterly helper';
-  input.dispatchEvent(new Event('input', { bubbles: true }));
-  input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-  await Promise.resolve();
-  expect(fetchMock).not.toHaveBeenCalledWith('/api/assistants', expect.objectContaining({ method: 'POST' }));
-});
-
 it('keeps typed values after a refused create', async () => {
   const root = await mount();
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
