@@ -17,6 +17,7 @@
     "test": "vitest run",
     "replay": "npm run start -w apps/ops --",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
+    "check:docker-volume-cleanup": "node --experimental-strip-types scripts/check-docker-volume-cleanup.mjs",
     "visual:org-admin": "node scripts/capture-org-admin.mjs",
     "lint:code": "eslint .",
     "lint:deps": "depcruise apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs",

@@ -58,7 +58,7 @@ it("removes its OpenFGA container when the fixture process is interrupted", asyn
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     const remaining = await containers();
-    if (remaining) await exec("docker", ["rm", "-f", ...remaining.split("\n")]);
+    if (remaining) await exec("docker", ["rm", "-f", "-v", ...remaining.split("\n")]);
   }
 }, 45_000);
 
@@ -85,7 +85,7 @@ it("removes a renamed fixture by id without removing a container that took its o
   } finally {
     if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     const remaining = await fixtures();
-    if (remaining) await exec("docker", ["rm", "-f", ...remaining.split("\n")]);
-    if (replacement) await exec("docker", ["rm", "-f", replacement]);
+    if (remaining) await exec("docker", ["rm", "-f", "-v", ...remaining.split("\n")]);
+    if (replacement) await exec("docker", ["rm", "-f", "-v", replacement]);
   }
 }, 45_000);

@@ -4,6 +4,7 @@
 
 ## Unreleased
 
+- Docker test fixtures remove their anonymous volumes when they remove containers.
 - A waiting assistant reply no longer makes the server reread finished chats. A turn the computer has not yet started is sent again until it starts.
 - Open chat pages repeat permission checks only when access records change. Idle pages no longer call the permissions service every 100 ms, and member removal still closes their connection within two seconds.
 

@@ -29,5 +29,5 @@ try {
   assert.match(result.toString(), /PASS private turn with template capabilities/u);
   process.stdout.write(result);
 } finally {
-  execFileSync('docker', ['rm', '-f', containerName], { stdio: 'ignore' });
+  execFileSync('docker', ['rm', '-f', '-v', containerName], { stdio: 'ignore' });
 }

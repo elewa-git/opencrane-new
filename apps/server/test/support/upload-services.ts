@@ -14,7 +14,7 @@ const exec = promisify(execFile);
 export async function uploadServices() {
   const containers: string[] = [], directory = await mkdtemp(`${tmpdir()}/upload-lease-`);
   const docker = async (...args: string[]) => (await exec('docker', args, { timeout: 120_000 })).stdout.trim();
-  const close = async () => { for (const id of containers) await docker('rm', '-f', id); await rm(directory, { recursive: true, force: true }); };
+  const close = async () => { for (const id of containers) await docker('rm', '-f', '-v', id); await rm(directory, { recursive: true, force: true }); };
   try {
     const minio = await docker('run', '-d', '--user', '0:0', '--name', `upload-minio-${randomUUID()}`, '-p', '127.0.0.1::9000',
       '-e', 'MINIO_ROOT_USER=upload-test', '-e', 'MINIO_ROOT_PASSWORD=disposable-upload-test',

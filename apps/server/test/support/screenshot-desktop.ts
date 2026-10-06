@@ -12,7 +12,7 @@ export async function screenshotDesktop() {
   await docker('run', '-d', '--name', name, '--cap-drop=ALL', '--cap-add=SETUID', '--cap-add=SETGID', '--cap-add=CHOWN', '--cap-add=DAC_OVERRIDE',
     '-e', 'POD_UID=screenshot-fixture', '-v', `${resolve('apps/computer/src/desktop.ts')}:/app/src/desktop.ts:ro`,
     '--entrypoint', '/bin/sh', 'ocn-upload-computer:test', '-c', 'chown 1002:1002 /home/desktop; exec node --experimental-strip-types /app/src/desktop.ts');
-  const close = () => docker('rm', '-f', name).then(() => undefined);
+  const close = () => docker('rm', '-f', '-v', name).then(() => undefined);
   try {
     await until(async () => { try { await docker('exec', name, 'node', '-e', "fetch('http://127.0.0.1:6901').then(()=>{},()=>process.exit(1))"); return true; } catch { return false; } }, 30_000);
     await docker('exec', name, 'sh', '-c', 'DISPLAY=:1 xmessage -geometry 600x250+80+100 "OpenCrane screenshot proof" >/dev/null 2>&1 &');

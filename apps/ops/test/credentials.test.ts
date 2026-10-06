@@ -149,7 +149,7 @@ routes:
     currentTurnId = beforeLoss.turn.id;
     expect((await request(replacement.computer.value, beforeLoss.turn.value)).status).toBe(403);
   } finally {
-    await execFile('docker', ['rm', '-f', container]).catch(() => undefined);
+    await execFile('docker', ['rm', '-f', '-v', container]).catch(() => undefined);
     await Promise.all(servers.map(close));
     await fixture.close();
     await rm(directory, { recursive: true, force: true });
