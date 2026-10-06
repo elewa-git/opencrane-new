@@ -52,8 +52,8 @@ export async function remoteFixture() {
   let trust = true;
   const network: RemoteNetwork = {
     resolve: async host => (await resolver.resolve4(host)).map(address => ({ address, family: 4 })),
-    // A test-only network mapping: the guarded public destination maps to our local TLS server.
-    // All production lookup, hostname verification, headers and response reading still run.
+    // Map the checked public address to this local TLS server for the test.
+    // Keep the production lookup, hostname checks, headers and response reading.
     request: (url, options, callback) => request(url, {
       ...options, port: address.port, ...(trust ? { ca: cert } : {}),
       lookup: (host, opts, done) => {

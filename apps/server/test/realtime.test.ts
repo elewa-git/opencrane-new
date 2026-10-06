@@ -123,7 +123,7 @@ it('replays, streams committed changes, and reconnects without gaps or duplicate
   await append('carol');
   const resumed = await connect();
   resumed.subscribe(3);
-  // A commit racing with the initial read must appear exactly once.
+  // Include an event saved during the initial read exactly once.
   await append('dan');
   await until(() => resumed.messages.some((message) => message.position === 5));
   expect(resumed.messages.filter((message) => message.type === 'member').map((message) => message.position)).toEqual([4, 5]);
@@ -234,7 +234,7 @@ it('fails closed when OpenFGA is unavailable, and closes an existing socket on r
 }, 15_000);
 it('limits each connection to 20 messages per second', async () => {
   const client = await connect();
-  // Malformed application messages consume the same rate budget.
+  // Count malformed messages against the same rate limit.
   client.ws.removeAllListeners('message');
   const closed = once(client.ws, 'close');
   for (let i = 0; i < 21; i++) client.ws.send('{');
@@ -247,8 +247,8 @@ it('drops live deltas for a paused consumer and replays every missing position o
   await until(() => client.messages.some((message) => message.type === 'ready'));
   client.ws.pause();
   const backpressured = () => server.stdout().includes('member subscriber needs resync');
-  // TCP buffers vary by host. Fill in batches until the real server drops a delta.
-  // Cap the fixture at 16 MB so a broken backpressure guard fails this test.
+  // TCP buffer sizes vary by host. Send batches until the server drops an update.
+  // Stop at 16 MB so a broken backpressure check fails without unbounded memory use.
   while (!backpressured() && changeCount < 256) {
     for (let i = 0; i < 32; i++) {
       await append(`slow-${changeCount++}`, 'member.joined', { displayName: 'x'.repeat(64_000) }, false);
@@ -268,8 +268,8 @@ it('drops live deltas for a paused consumer and replays every missing position o
   await until(() => resumed.messages.some((message) => message.type === 'ready'), 15_000);
   const replayed = resumed.messages.filter((message) => message.type === 'member').map((message) => message.position);
   expect([...received, ...replayed]).toEqual(Array.from({ length: changeCount }, (_, i) => i + 3));
-// The reconnect wait above remains 15 seconds; this limit also covers filling
-// the real TCP buffers and projecting large rows on a busy machine.
+// Allow 15 seconds for reconnecting, plus time to fill TCP buffers and save
+// large rows on a busy machine.
 }, 60_000);
 it('terminates a peer that does not answer heartbeats', async () => {
   const client = await connect('oidc-alice', 'org-acme', false);

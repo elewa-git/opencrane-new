@@ -9,7 +9,8 @@ const inputSchema = z.object({ token: z.string().min(1).max(128), displayName: z
   email: z.email().max(254) }).strict();
 
 async function bootstrapRefusal(options: MembershipOptions, sub: string) {
-  // ponytail: scan membership history only during installation; index if this grows beyond bootstrap.
+  // Read membership history only while installing. Add an index if this read
+  // becomes too large for installation.
   let hasMembers = false;
   for await (const { event } of options.store.readStream('member-*', 1, performance.now() + 10_000)) {
     if (event.silo !== options.silo) throw new Error('Bootstrap silo mismatch');
@@ -35,7 +36,8 @@ async function claimSilo(options: MembershipOptions, issuer: string, sub: string
   const digest = createHash('sha256').update(input.token).digest();
   if (!timingSafeEqual(digest, Buffer.from(stored.hash, 'hex'))) return { status: 'refused', reason: 'wrong_token' };
   const id = randomUUID();
-  // Identity bindings live on member streams; fence all of them to keep the silo fresh.
+  // Check every member history because each sign-in identity is stored there.
+  // The append succeeds only while all of those histories are still empty.
   const result = await options.store.append({ expectedSequence: 0, expectedSubject: 'member-*', event: {
     id, commandId: id, type: 'silo.owner_bootstrapped', subject: 'member-bootstrap-owner',
     silo: options.silo, source: 'opencrane-server', time: now().toISOString(), principal: { kind: 'human', id: sub },

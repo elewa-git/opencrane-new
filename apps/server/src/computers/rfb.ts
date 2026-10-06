@@ -1,4 +1,5 @@
-// S0.5's byte-stream allowlist. WebSocket messages are not RFB message boundaries.
+// Let the read-only viewer send only display messages. WebSocket messages can
+// split or combine RFB messages, so this code checks the byte stream instead.
 export function viewerStream(forward: (bytes: Buffer) => void, refuse: () => void) {
   let pending: Buffer = Buffer.alloc(0), stage = 0, refused = false;
   return (bytes: Buffer) => {

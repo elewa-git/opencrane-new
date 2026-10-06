@@ -11,7 +11,7 @@ import { buildServer } from '../src/server.ts';
 import { viewFixture } from './support/view-fixture.ts';
 import { uploadServices } from './support/upload-services.ts';
 
-// A recording desktop at the authenticated transport seam, with known red pixels.
+// Record desktop traffic through the authenticated connection and use known red pixels.
 function desktop(width = 2, height = 2) {
   const readable = new PassThrough(), writable = new PassThrough();
   let stage = 0;
@@ -134,7 +134,7 @@ it('refuses stale authority, arbitrary capture input, failed scans and oversized
   } finally { await app.close(); await fixture.close(); await services.close(); }
 }, 180_000);
 
-// Reuse the screenshot probe to refuse a shared session before opening its desktop.
+// Use the screenshot probe to refuse a shared session before opening its desktop.
 async function refusesTeamScreenshotBeforeCapture() {
   let captures = 0;
   function open() {

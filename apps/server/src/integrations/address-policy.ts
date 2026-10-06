@@ -1,4 +1,4 @@
-// Adapted from OC1 mcp-remote-client-address-policy.ts, commit 10abd0ef6182f36bec13d8f1358e43b15ead7cd5.
+// Adapted from OpenCrane 1 commit 10abd0ef6182f36bec13d8f1358e43b15ead7cd5.
 import { isIP } from "node:net";
 
 type McpRemoteDnsAddress = { address: string; family: number };

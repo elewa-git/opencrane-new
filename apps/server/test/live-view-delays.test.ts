@@ -31,7 +31,7 @@ it.each(['authority read', 'NATS replies', 'NATS outage'])('respects the existin
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws/conversations/chat/view`, ['binary', admission.json<{ ticket: string }>().ticket], { headers });
     socket.on('error', () => undefined); await once(socket, 'open');
-    // #70's exact-subject probe, with latency injected at the real store boundary.
+    // Check one exact subject while adding delay at the real event-store boundary.
     const read = nats.store.readStream.bind(nats.store);
     let checks = 0;
     const timings: { subject: string; rows: number; ms: number; error?: string }[] = [];

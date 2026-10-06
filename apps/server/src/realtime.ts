@@ -13,7 +13,8 @@ export interface RealtimeOptions {
   binding: Binding;
 }
 
-// ponytail: one topic per socket. Add multiplexing when a second topic exists.
+// Each socket listens to one topic. Add support for several topics if the server
+// needs them.
 export function memberSubscription(socket: WebSocket, session: SessionData, config: AuthConfig, logger: FastifyBaseLogger, options?: RealtimeOptions) {
   let position = 0, generation = 0;
   let active = false, running = false, dirty = false, subscribed = false, ready = false;

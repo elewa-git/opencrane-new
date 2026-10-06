@@ -208,8 +208,8 @@ async function startViewer(current: Fixture) {
   return observed;
 }
 
-// Append after head() reads the starting event number, or before the last conversation read.
-// Keep the real store reads so the next check can find the injected event.
+// Add an event after head() reads the starting position or before the final history read.
+// Keep the real store reads so the next permission check can find that event.
 function armInjection(current: Fixture, point: InjectionPoint, injection: Injection,
   skipFences = 0, persistent = false) {
   const state = { armed: true, injectedAt: 0, skipped: 0, count: 0 };
@@ -237,8 +237,8 @@ function armInjection(current: Fixture, point: InjectionPoint, injection: Inject
     if (point === 'last conversation read' && !persistent) {
       const siblingHead = subject !== undefined && subject !== 'conversation-chat';
       if (siblingHead && state.injectedAt === 0) {
-        // Wait for the append before reading the other streams' latest event numbers.
-        // These reads run in parallel, so one could otherwise miss the event.
+        // Wait for the append before reading the other streams. Those reads run
+        // together, so they could otherwise miss the new event.
         await injected.promise;
       }
     }

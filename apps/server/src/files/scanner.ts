@@ -1,4 +1,4 @@
-// Verdict handling adapted from OpenCrane 1's clamscan.ts at 10abd0ef6 (AGPL-3.0-or-later).
+// Adapted from OpenCrane 1 commit 10abd0ef6 (AGPL-3.0-or-later).
 // See infra/clamav/upstream for the unchanged scanner and licence.
 import { connect, type Socket } from 'node:net';
 import { FileUnavailable, isDependencyOutage } from './refusals.ts';
