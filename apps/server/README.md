@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads tables| postgres
+  server -->|checks chat position and reads changed rows| postgres
   server -->|sends turns and reads the desktop| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -57,7 +57,9 @@ not yet proven on a live computer; memory features stay off until it is.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
    within two seconds. If OpenFGA takes too long to apply another change, the page
-   reconnects after five seconds and resumes receiving messages.
+   reconnects after five seconds and resumes receiving messages. The server checks
+   each open chat's feed position every 100 ms and reads chat content only after it
+   changes. Computer state also updates when the computer record changes.
 4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and thread, while everyone shares one disk and
    browser profile. A member who loses spending access can still read and stop their work.

@@ -13,6 +13,8 @@ interface Subscription {
   conversationId: string;
   position: number;
   generation: number;
+  computerPosition?: number;
+  mode?: Mode;
   running: boolean;
   ready: boolean;
   accessPassed: boolean;
@@ -108,14 +110,43 @@ async function drain(state: Subscription) {
   if (!mode || state.running || state.socket.readyState !== state.socket.OPEN) return;
   state.running = true;
   try {
+    const position = await conversationPosition(state.options, state.conversationId, mode);
+    if (state.ready && state.mode === mode && state.position === position.position &&
+        state.generation === position.generation &&
+        state.computerPosition === position.computerPosition) {
+      return;
+    }
     const result = await chatRows(state.options, state.conversationId, mode, state.position);
     if (state.socket.readyState !== state.socket.OPEN) return;
+    state.mode = mode;
+    state.computerPosition = position.computerPosition;
     sendRows(state, result);
   } catch {
     state.socket.close(1013);
   } finally {
     state.running = false;
   }
+}
+
+async function conversationPosition(options: ChatOptions, conversationId: string, mode: Mode) {
+  const result = await options.db.query<{
+    position: string | null; generation: string | null; computer_position: string | null;
+  }>(
+    `SELECT (SELECT max(position) FROM conversation_feed
+        WHERE silo = $1 AND conversation_id = $2) AS position,
+      (SELECT generation FROM projection_generations WHERE name = 'conversations') AS generation,
+      (SELECT c.position FROM computers c JOIN conversation_feed f
+        ON f.silo = c.silo AND f.data->>'assistantId' = c.assistant_id
+        WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created')
+        AS computer_position`,
+    [options.silo, conversationId]);
+  return {
+    position: Number(result.rows[0]?.position ?? 0),
+    generation: Number(result.rows[0]?.generation ?? 0),
+    computerPosition: mode === 'agent_session'
+      ? Number(result.rows[0]?.computer_position ?? 0)
+      : 0,
+  };
 }
 
 function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRows>>) {
