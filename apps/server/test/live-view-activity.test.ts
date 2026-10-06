@@ -70,10 +70,10 @@ function writeLog(line: string) {
   const entry = { line, at: performance.now() };
   logs.push(entry);
 }
-async function createFixture() {
+async function createFixture(open = openDesktop) {
   vi.stubEnv('LOG_LEVEL', 'info');
   const destination = { write: writeLog };
-  const current = await viewFixture(openDesktop, undefined, destination);
+  const current = await viewFixture(open, undefined, destination);
   fixture = current;
   return current;
 }
@@ -574,6 +574,77 @@ function revocationTests() {
     refusesRevokedUpgrade, 30_000);
 }
 describe('real revocations during an access check still close the viewer', revocationTests);
+
+async function closesRemovedMemberBeforeSlowDesktopRead() {
+  const readable = new PassThrough();
+  function openStreamingDesktop() {
+    const writable = new PassThrough();
+    writable.resume();
+    const streams = { readable, writable };
+    return Promise.resolve(Duplex.from(streams));
+  }
+  const current = await createFixture(openStreamingDesktop);
+  await grantDirectly(current);
+  const observed = await startViewer(current);
+  const frame = Buffer.alloc(20);
+  frame.writeUInt16BE(1, 2);
+  frame.writeUInt16BE(1, 8);
+  frame.writeUInt16BE(1, 10);
+  const frameTimes: number[] = [];
+  function recordFrame(bytes: Buffer, binary: boolean) {
+    if (binary && bytes.equals(frame)) {
+      frameTimes.push(performance.now());
+    }
+  }
+  function sendFrame() {
+    if (!readable.destroyed) {
+      readable.write(frame);
+    }
+  }
+  function hasFrame() {
+    return frameTimes.length > 0;
+  }
+  observed.viewer.on('message', recordFrame);
+  const init = Buffer.alloc(24);
+  init.writeUInt16BE(1);
+  init.writeUInt16BE(1, 2);
+  init[4] = 32;
+  const setup = Buffer.concat([
+    Buffer.from('RFB 003.008\n'), Buffer.from([1, 1]), Buffer.alloc(4), init,
+  ]);
+  readable.write(setup);
+  const frames = setInterval(sendFrame, 25);
+  const releaseDesktopRead = Promise.withResolvers<void>();
+  const desktopReadStarted = Promise.withResolvers<void>();
+  const readStream = current.nats.store.readStream.bind(current.nats.store);
+  async function* slowDesktopRead(...args: Parameters<typeof readStream>) {
+    if (args[0] === 'computer-assistant') {
+      desktopReadStarted.resolve();
+      await releaseDesktopRead.promise;
+      throw new Error('Slow desktop read ended');
+    }
+    yield* readStream(...args);
+  }
+  try {
+    await until(hasFrame);
+    vi.spyOn(current.nats.store, 'readStream').mockImplementation(slowDesktopRead);
+    await desktopReadStarted.promise;
+    const removed = revocation('member.removed');
+    await appendInjection(current, removed);
+    const revokedAt = performance.now();
+    await observed.closed;
+    const remaining = Math.max(0, revokedAt + 1700 - performance.now());
+    await delay(remaining);
+    // Keep sending frames so the test proves the server stops desktop bytes after removal.
+    expect(frameTimes.at(-1)).toBeLessThan(revokedAt + 1500);
+    await expectRevoked(current, observed, revokedAt, 'member.removed / slow desktop read');
+  } finally {
+    clearInterval(frames);
+    releaseDesktopRead.resolve();
+  }
+}
+it('closes a removed member within 2,000 ms despite a slow desktop read and stops bytes by 1,500 ms',
+  closesRemovedMemberBeforeSlowDesktopRead, 30_000);
 
 async function logsUnconfirmedActivity() {
   const injection = conversationEvent('agent.turn_completed');
