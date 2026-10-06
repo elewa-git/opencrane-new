@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import type { MockInstance } from 'vitest';
+import { z } from 'zod';
 import { SharedAssistantAdmin } from './shared-assistant-admin';
 
 const group = {
@@ -8,8 +10,11 @@ const group = {
     personalMemoryAccess: false,
     grants: [{ resourceType: 'model', resourceId: 'gpt-6-luna', relation: 'use' }] },
 };
+const otherGroup = {
+  ...group, groupId: 'support', name: 'Support team', payingGroupId: 'support',
+};
 
-let fetchMock: ReturnType<typeof vi.spyOn>;
+let fetchMock: MockInstance<typeof fetch>;
 
 function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
 function closeDialog(this: HTMLDialogElement): void {
@@ -23,6 +28,18 @@ function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status, headers: { 'content-type': 'application/json' },
   });
+}
+
+function fixtureRoot(value: unknown): HTMLElement {
+  if (!(value instanceof HTMLElement)) throw new Error('Expected a component root element');
+  return value;
+}
+
+const createBodySchema = z.object({ assistantId: z.string(), commandId: z.string() });
+
+function readCreateBody(init: RequestInit | undefined): z.infer<typeof createBodySchema> {
+  if (typeof init?.body !== 'string') throw new Error('Expected a JSON create body');
+  return createBodySchema.parse(JSON.parse(init.body));
 }
 
 function rows() {
@@ -45,7 +62,7 @@ async function mount(): Promise<HTMLElement> {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  const root = fixture.nativeElement as HTMLElement;
+  const root = fixtureRoot(fixture.nativeElement);
   await vi.waitFor(() => {
     const input = root.querySelector('#assistant-name');
     if (input) return;
@@ -54,22 +71,22 @@ async function mount(): Promise<HTMLElement> {
   return root;
 }
 
-async function fetchAdminRequest(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+function fetchAdminRequest(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-  if (url === '/api/groups/sales') return response({ rows: [group] });
-  if (url === '/api/groups') return response({ rows: [group] });
-  if (url === '/api/assistants' && init?.method !== 'POST') return rows();
-  if (url === '/api/org/models') return models();
+  if (url === '/api/groups/sales') return Promise.resolve(response({ rows: [group] }));
+  if (url === '/api/groups') return Promise.resolve(response({ rows: [group, otherGroup] }));
+  if (url === '/api/assistants' && init?.method !== 'POST') return Promise.resolve(rows());
+  if (url === '/api/org/models') return Promise.resolve(models());
   if (url.includes('/changes/')) {
     const parts = url.split('/');
     const commandId = parts.at(-1) ?? '';
     const assistantId = parts.at(-3) ?? '';
-    return currentChange(assistantId, commandId);
+    return Promise.resolve(currentChange(assistantId, commandId));
   }
   if (url === '/api/assistants' && init?.method === 'POST') {
-    const body = JSON.parse(String(init.body)) as { assistantId: string; commandId: string };
-    return response({ status: 'appended', assistantId: body.assistantId,
-      sequence: 1, changeId: body.commandId });
+    const body = readCreateBody(init);
+    return Promise.resolve(response({ status: 'appended', assistantId: body.assistantId,
+      sequence: 1, changeId: body.commandId }));
   }
   throw new Error(`Unexpected request: ${url}`);
 }
@@ -83,10 +100,14 @@ function nameField(root: HTMLElement): HTMLInputElement {
 }
 
 function buttonNamed(root: HTMLElement, label: string): HTMLButtonElement {
-  const button = [...root.querySelectorAll('button')]
-    .find(candidate => candidate.textContent?.trim() === label);
+  const buttons = [...root.querySelectorAll('button')];
+  const button = buttons.find(buttonHasLabel.bind(null, label));
   if (!button) throw new Error(`Expected button named ${label}`);
   return button;
+}
+
+function buttonHasLabel(label: string, button: HTMLButtonElement): boolean {
+  return button.textContent?.trim() === label;
 }
 
 function selectFirstGrant(root: HTMLElement): void {
@@ -100,10 +121,21 @@ beforeEach(() => { vi.restoreAllMocks(); });
 
 it('keeps a healthy list clean when refreshed', async () => {
   const root = await mount();
+  const name = nameField(root);
+  name.value = 'Typed before refresh';
+  name.dispatchEvent(new Event('input', { bubbles: true }));
+  selectFirstGrant(root);
+  const payer = root.querySelector<HTMLSelectElement>('#assistant-payer');
+  if (!payer) throw new Error('Expected the paying group field');
+  payer.value = 'support';
+  payer.dispatchEvent(new Event('change', { bubbles: true }));
   buttonNamed(root, 'Refresh').click();
   await vi.waitFor(() => expect(rootText(root)).toContain('Create a shared assistant'));
   expect(rootText(root)).not.toContain('Could not load');
   expect(rootText(root)).not.toContain('Nothing changed by this read');
+  expect(nameField(root).value).toBe('Typed before refresh');
+  expect(root.querySelector<HTMLInputElement>('.grant-choice input')?.checked).toBe(true);
+  expect(root.querySelector<HTMLSelectElement>('#assistant-payer')?.value).toBe('support');
 });
 
 it('does not create when Enter is pressed in the name field', async () => {
@@ -119,10 +151,10 @@ it('does not create when Enter is pressed in the name field', async () => {
 
 it('keeps typed values after a refused create', async () => {
   const root = await mount();
-  fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url === '/api/assistants' && init?.method === 'POST') {
-      return response({ status: 'refused' }, 400);
+      return Promise.resolve(response({ status: 'refused' }, 400));
     }
     return fetchAdminRequest(input, init);
   });
@@ -143,7 +175,7 @@ it('keeps typed values and the command reference when the create reply is lost',
   selectFirstGrant(root);
   input.value = 'Typed assistant name';
   input.dispatchEvent(new Event('input', { bubbles: true }));
-  fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+  fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url === '/api/assistants' && init?.method === 'POST') {
       return Promise.reject(new Error('reply lost'));
@@ -174,7 +206,7 @@ it('blocks another create while the first reply is still pending', async () => {
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
-  const root = fixture.nativeElement as HTMLElement;
+  const root = fixtureRoot(fixture.nativeElement);
   await vi.waitFor(() => {
     if (root.querySelector('#assistant-name')) return;
     throw new Error(`Assistant choices did not load: ${root.textContent}`);
@@ -202,10 +234,10 @@ it('clears a confirmed create so the next create gets a new command id', async (
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     if (url === '/api/assistants' && init?.method === 'POST') {
-      const body = JSON.parse(String(init.body)) as { assistantId: string; commandId: string };
+      const body = readCreateBody(init);
       commandIds.push(body.commandId);
-      return response({ status: 'appended', assistantId: body.assistantId,
-        sequence: 1, changeId: body.commandId });
+      return Promise.resolve(response({ status: 'appended', assistantId: body.assistantId,
+        sequence: 1, changeId: body.commandId }));
     }
     return fetchAdminRequest(input, init);
   });

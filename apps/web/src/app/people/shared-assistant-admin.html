@@ -6,7 +6,7 @@
   <div><h1 #heading tabindex="-1">Create a shared assistant</h1>
     <p>Choose what the assistant can use and which group pays for its work.</p></div>
   <button class="button secondary" type="button" (click)="refresh()"
-    [disabled]="loading() || sending() || statusReading()">Refresh</button>
+    [disabled]="loading() || sending() || statusReading() || accessChanged()">Refresh</button>
 </header>
 <div class="status-line" role="status" aria-live="polite">
   @if (loading()) { <oc-shared-state kind="checking" message="Loading assistant choices…" /> }
@@ -30,7 +30,7 @@
 @if (!loading() && !failed() && !accessChanged() && group()) {
   <section class="paper-card assistant-form">
     <label for="assistant-name">Name <strong>Required</strong></label>
-    <input id="assistant-name" maxlength="200" required [value]="name()"
+    <input #nameField id="assistant-name" maxlength="200" required [value]="name()"
       aria-describedby="assistant-error" (input)="setName($event)" [disabled]="isBlocked()" />
     <dl class="facts">
       <div><dt>Owner group</dt><dd>{{ group()!.name }}</dd></div>
@@ -61,7 +61,7 @@
         </label>
       }
       @if (models().length > 0) {
-        <p class="field-note">Model choices come from the current model list and this group’s grants.</p>
+        <p class="field-note">Choices use the current model list and this group’s grants.</p>
       }
     </fieldset>
     <aside class="rule-note"><strong>Before you create it</strong>
@@ -84,6 +84,7 @@
           <div><h3>{{ assistant.name ?? assistant.assistantId }}</h3>
             <p>{{ stateLabel(assistant) }} · {{ assistant.busy ? 'Busy' : 'Not busy' }}</p>
             <small>Paying group: {{ payerName(assistant.payingGroupId) }}</small>
+            @if (stateDetail(assistant)) { <p>{{ stateDetail(assistant) }}</p> }
           </div>
           <span>{{ assistant.status }}</span>
         </article>
@@ -98,7 +99,8 @@
     <dl class="facts">
       <div><dt>Owner group</dt><dd>{{ group()!.name }}</dd></div>
       <div><dt>Paying group</dt><dd>{{ payerName(selectedPayer()) }}</dd></div>
-      <div><dt>Fixed payer</dt><dd>New work in each private session stays with this paying group.</dd></div>
+      <div><dt>Fixed payer</dt><dd>New work in each private session stays with
+        this paying group.</dd></div>
     </dl>
     <h3>Selected access</h3>
     <ul>@for (grant of selectedGrants(); track grant.resourceType + grant.resourceId) {

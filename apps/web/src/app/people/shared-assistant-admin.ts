@@ -51,18 +51,23 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
   protected readonly pending = signal<PendingCreate | undefined>(undefined);
   protected readonly reference = signal('');
   protected readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
+  protected readonly nameField = viewChild<ElementRef<HTMLInputElement>>('nameField');
   protected readonly statusButton = viewChild<ElementRef<HTMLButtonElement>>('statusButton');
   protected readonly reviewButton = viewChild<ElementRef<HTMLButtonElement>>('reviewButton');
   private readonly request = new AbortController();
   protected readonly grantChoices = signal<Grant[]>([]);
 
-  async ngOnInit(): Promise<void> { await this.load(); }
+  ngOnInit(): void { void this.load(); }
 
   ngOnDestroy(): void { this.request.abort(); }
 
   protected async load(): Promise<void> {
     this.loading.set(true);
     this.failed.set(false);
+    const previousGroup = this.group();
+    const currentPayer = this.selectedPayer();
+    const userChangedPayer = previousGroup !== undefined &&
+      currentPayer !== previousGroup.payingGroupId;
     const urls = [
       `/api/groups/${encodeURIComponent(this.groupId())}`,
       '/api/groups', '/api/assistants', '/api/org/models',
@@ -92,9 +97,13 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
       const activeModels = modelList['models'].filter(modelIsActive);
       const activeModelIds = activeModels.map(modelId);
       this.models.set(activeModelIds);
-      this.selectedPayer.set(currentGroup.payingGroupId);
+      const groupChanged = previousGroup?.groupId !== currentGroup.groupId;
+      const storedPayerChanged = previousGroup?.payingGroupId !== currentGroup.payingGroupId;
+      if (groupChanged || (storedPayerChanged && !userChangedPayer)) {
+        this.selectedPayer.set(currentGroup.payingGroupId);
+      }
       this.loading.set(false);
-      this.syncGrantChoices(currentGroup, activeModelIds);
+      this.syncGrantChoices(currentGroup, activeModelIds, previousGroup !== undefined);
     } catch {
       if (this.request.signal.aborted) return;
       this.failed.set(true);
@@ -121,6 +130,8 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
     if (!(checkbox instanceof HTMLInputElement)) return;
     const current = this.selectedGrants();
     if (checkbox.checked) {
+      const alreadySelected = current.some(hasGrant.bind(null, grant));
+      if (alreadySelected) return;
       this.selectedGrants.set([...current, grant]);
       return;
     }
@@ -158,20 +169,12 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
         body: JSON.stringify({ ...pendingCreate, grants }), signal: this.request.signal,
       });
       if (this.request.signal.aborted) return;
-      if (response.status === 401 || response.status === 403) {
+      if (this.isAccessStatus(response.status)) {
         this.clearForAccess();
         return;
       }
       if (!response.ok) {
-        if (response.status === 400 || response.status === 409) {
-          this.pending.set(undefined);
-          this.reference.set('');
-          this.error.set(response.status === 400
-            ? 'The server refused these details. Check the name and grants.'
-            : 'The assistant could not be created because its details changed. Refresh and review.');
-        } else {
-          this.notice.set('We could not tell whether this was recorded. Check its status before sending again.');
-        }
+        this.handleCreateFailure(response.status);
         return;
       }
       const receipt = receiptSchema.parse(await response.json());
@@ -185,7 +188,8 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
       await this.checkStatus();
     } catch {
       if (!this.request.signal.aborted) {
-        this.notice.set('We could not tell whether this was recorded. Check its status before sending again.');
+        this.notice.set('We could not tell whether this was recorded. ' +
+          'Check its status before sending again.');
       }
     } finally {
       this.sending.set(false);
@@ -208,7 +212,8 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
         return;
       }
       if (!response.ok) {
-        this.notice.set('We could not tell whether this was recorded. Check its status before sending again.');
+        this.notice.set('We could not tell whether this was recorded. ' +
+          'Check its status before sending again.');
         return;
       }
       const change = changeSchema.parse(await response.json());
@@ -225,7 +230,8 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
       await this.load();
     } catch {
       if (!this.request.signal.aborted) {
-        this.notice.set('We could not tell whether this was recorded. Check its status before sending again.');
+        this.notice.set('We could not tell whether this was recorded. ' +
+          'Check its status before sending again.');
       }
     } finally { this.statusReading.set(false); }
   }
@@ -242,6 +248,15 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
     return 'Paused';
   }
 
+  protected stateDetail(row: AssistantRow): string {
+    if (row.status === 'lost') {
+      return 'The computer was lost. This route does not report a failed setup or offer a retry.';
+    }
+    if (row.status === 'retired') return 'The assistant was removed. Its history is kept.';
+    if (row.busy) return 'One computer serves one run at a time.';
+    return '';
+  }
+
   protected rowForGroup(row: AssistantRow): boolean { return row.ownerId === this.groupId(); }
   protected hasAssistants(): boolean { return this.assistants().some(this.rowForGroup.bind(this)); }
 
@@ -255,10 +270,41 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
     return this.selectedGrants().some(hasGrant.bind(null, grant));
   }
 
-  private syncGrantChoices(group: GroupRow, modelIds: string[]): void {
+  private syncGrantChoices(group: GroupRow, modelIds: string[], keepSelections: boolean): void {
     const choices = mapGroupGrants(group.access.grants, modelIds);
+    const currentSelections = this.selectedGrants();
     this.grantChoices.set(choices);
-    this.selectedGrants.set([]);
+    if (!keepSelections) {
+      this.selectedGrants.set([]);
+      return;
+    }
+    const availableSelections = currentSelections.filter(isGrantAvailable.bind(null, choices));
+    this.selectedGrants.set(availableSelections);
+  }
+
+  private isAccessStatus(status: number): boolean {
+    return status === 401 || status === 403;
+  }
+
+  private handleCreateFailure(status: number): void {
+    if (status === 400 || status === 409) {
+      this.pending.set(undefined);
+      this.reference.set('');
+      this.reviewOpen.set(false);
+      this.setCreateRefusal(status);
+      globalThis.requestAnimationFrame(this.focusNameField.bind(this));
+      return;
+    }
+    this.notice.set('We could not tell whether this was recorded. ' +
+      'Check its status before sending again.');
+  }
+
+  private setCreateRefusal(status: number): void {
+    if (status === 400) {
+      this.error.set('The server refused these details. Check the name and grants.');
+      return;
+    }
+    this.error.set('The assistant details changed. Refresh and review before trying again.');
   }
 
   private clearForAccess(): void {
@@ -279,6 +325,10 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
   }
 
   private focusPendingStatus(): void {
+    if (this.error()) {
+      this.focusNameField();
+      return;
+    }
     const button = this.statusButton()?.nativeElement;
     if (button) {
       button.focus();
@@ -289,6 +339,10 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
 
   private focusHeading(): void {
     this.heading()?.nativeElement.focus();
+  }
+
+  private focusNameField(): void {
+    this.nameField()?.nativeElement.focus();
   }
 }
 
@@ -357,3 +411,7 @@ function hasGrant(grant: Grant, candidate: Grant): boolean {
 }
 
 function findGroup(groupId: string, group: GroupRow): boolean { return group.groupId === groupId; }
+
+function isGrantAvailable(choices: Grant[], selected: Grant): boolean {
+  return choices.some(hasGrant.bind(null, selected));
+}
