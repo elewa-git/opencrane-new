@@ -7,16 +7,15 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models/routing';
-import { assistantSnapshot, processConversation, type ConversationProgress,
-  type WatchOptions, type AgentSession } from './bridge-conversation.ts';
+import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
+import { assistantProcessor } from './bridge-poll.ts';
 import { listConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
-import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
+import { resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, TurnAdmissionRejected } from './turns.ts';
 import { privateContext } from './private-context.ts';
-import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
 import { recordReport, reportPosition, ReportRejected } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
@@ -25,7 +24,6 @@ type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding'>>;
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number };
-const assistantKindData = z.object({ kind: z.string() });
 const receiptData = z.object({ type: z.literal('file_received') });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
@@ -230,7 +228,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return work;
   }
   // Remember delivery only for this socket; reconnecting must send pending turns again.
-  const sentTurns = new Map<string, string>();
+  const sentTurns = new Map<string, { turnId: string; sentAt: number }>();
   return {
     socket, deliver, delivered, sentTurns,
     get rejection() { return rejection; },
@@ -245,7 +243,10 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   let previousHead: number | undefined;
   let pending = true;
   const refused = new Set<string>();
-  const links = new Map<string, Awaited<ReturnType<typeof connectBridge>>>();
+  type Link = Awaited<ReturnType<typeof connectBridge>> & { connectionId: number };
+  const links = new Map<string, Link>();
+  const connectionIds = new Map<string, number>();
+  let lastConnectionId = 0;
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
   async function connection(computerId: string, assistantId: string) {
     let link = links.get(computerId);
@@ -260,12 +261,31 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         connecting = opened.finally(finishOpening);
         opening.set(computerId, connecting);
       }
-      link = await connecting;
-      links.set(computerId, link);
+      const connected = await connecting;
+      const existing = links.get(computerId);
+      if (existing?.socket === connected.socket) return existing;
+      lastConnectionId++;
+      const identity = { connectionId: lastConnectionId };
+      const remembered = Object.assign(connected, identity);
+      link = remembered;
+      links.set(computerId, remembered);
+      connectionIds.set(assistantId, remembered.connectionId);
+      function forgetConnection() {
+        if (links.get(computerId) !== remembered) return;
+        links.delete(computerId);
+        if (connectionIds.get(assistantId) === remembered.connectionId) {
+          connectionIds.delete(assistantId);
+        }
+      }
+      remembered.socket.once('close', forgetConnection);
+      if (remembered.socket.readyState === remembered.socket.CLOSED) forgetConnection();
     }
     return link;
   }
-  const processAssistant = assistantProcessor(options, tokens, refused, connection);
+  function connectionId(assistantId: string) {
+    return connectionIds.get(assistantId);
+  }
+  const processor = assistantProcessor(options, tokens, refused, connection, connectionId, logger);
   try {
     while (!signal.aborted) {
       try {
@@ -277,8 +297,11 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         const tableBehind = await conversationTableBehind(options.db, head);
         const conversations = await listConversations(options.db, options.silo);
         const sessions = conversations.filter(isAgentSession);
-        const groups = groupSessions(sessions);
-        const processing = groups.map(processAssistant);
+        const active = await openSessions(options, sessions);
+        processor.forgetMissing(active);
+        forgetMissingTurns(links, active);
+        const groups = groupSessions(active);
+        const processing = groups.map(processor.processAssistant);
         const pendingResults = await Promise.all(processing);
         pending = tableBehind || pendingResults.includes(true);
         // Keep the position from before the pass so events arriving during it are read next time.
@@ -301,57 +324,6 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     const pending = active.map(settledBridge);
     await Promise.all(pending);
   }
-}
-
-function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
-  connection: Parameters<typeof processConversation>[5]) {
-  const seen = new Map<string, ConversationProgress & {
-    head: number; computerEventId: string | undefined;
-  }>();
-  async function process(conversation: AgentSession,
-    assistant: Parameters<typeof processConversation>[3]) {
-    try {
-      const conversationId = conversation.conversationId;
-      const head = await options.store.head(`conversation-${conversationId}`);
-      const previous = seen.get(conversationId);
-      const linkClosed = previous?.link &&
-        previous.link.socket.readyState !== previous.link.socket.OPEN;
-      const computerEventId = assistant.current?.id;
-      const sameComputer = previous?.computerEventId === computerEventId;
-      if (previous?.head === head && sameComputer && !previous.retry && !linkClosed) {
-        return previous.pending;
-      }
-      const result = await processConversation(options, tokens, conversation,
-        assistant, refused, connection);
-      // Save the earlier position so a message arriving during the read gets another pass.
-      const progress = { ...result, head, computerEventId };
-      seen.set(conversationId, progress);
-      return result.pending;
-    } catch {
-      // Retry after a failed read even when no new event arrives.
-      return true;
-    }
-  }
-  async function processAssistant(sessions: AgentSession[]) {
-    try {
-      const assistantId = sessions[0]!.assistantId;
-      const lifecycle = await history(options.store, `computer-${assistantId}`);
-      const created = await creationEvent(options.store, options.silo,
-        `assistant-${assistantId}`, 'assistant.created');
-      const assistantDetails = assistantKindData.parse(created.data);
-      const kind = assistantDetails.kind;
-      const assistant = assistantSnapshot(lifecycle, kind, options.silo);
-      function processSession(conversation: AgentSession) {
-        return process(conversation, assistant);
-      }
-      const processing = sessions.map(processSession);
-      const results = await Promise.all(processing);
-      return results.includes(true);
-    } catch {
-      return true;
-    }
-  }
-  return processAssistant;
 }
 
 function isAgentSession(conversation: Conversation): conversation is AgentSession {
@@ -381,6 +353,17 @@ function settledBridge(link: Awaited<ReturnType<typeof connectBridge>>) {
   return link.settled();
 }
 
+function forgetMissingTurns(links: Map<string, Awaited<ReturnType<typeof connectBridge>>>,
+  sessions: AgentSession[]) {
+  const conversationIds = new Set<string>();
+  for (const session of sessions) conversationIds.add(session.conversationId);
+  for (const link of links.values()) {
+    for (const conversationId of link.sentTurns.keys()) {
+      if (!conversationIds.has(conversationId)) link.sentTurns.delete(conversationId);
+    }
+  }
+}
+
 function groupSessions(sessions: AgentSession[]) {
   const groups = new Map<string, AgentSession[]>();
   for (const session of sessions) {
@@ -392,6 +375,18 @@ function groupSessions(sessions: AgentSession[]) {
     group.push(session);
   }
   return [...groups.values()];
+}
+
+async function openSessions(options: WatchOptions, sessions: AgentSession[]) {
+  const rows = await options.db.query<{ conversation_id: string }>(
+    'SELECT conversation_id FROM conversation_feed WHERE silo = $1 AND type = $2',
+    [options.silo, 'conversation.closed']);
+  const closed = new Set<string>();
+  for (const row of rows.rows) closed.add(row.conversation_id);
+  function isOpen(session: AgentSession) {
+    return !closed.has(session.conversationId);
+  }
+  return sessions.filter(isOpen);
 }
 
 async function conversationTableBehind(db: ChatOptions['db'], head: number) {

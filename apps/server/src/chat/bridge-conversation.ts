@@ -3,7 +3,7 @@ import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/even
 import type { WebSocket } from 'ws';
 import type { listConversations } from '@opencrane/projections';
 import { z } from 'zod';
-import { resumeComputer } from '../../../ops/src/lifecycle.ts';
+import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, requiredExecutionMode, type ExecutionMode } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { agentSession } from './reports.ts';
@@ -17,9 +17,10 @@ export type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
 type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
 export type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;
 type BridgeLink = {
+  connectionId: number;
   socket: WebSocket;
   delivered: Set<string>;
-  sentTurns: Map<string, string>;
+  sentTurns: Map<string, { turnId: string; sentAt: number }>;
   deliver: (file: Upload, bytes: Buffer) => Promise<void>;
 };
 type Connection = (computerId: string, assistantId: string) => Promise<BridgeLink>;
@@ -27,7 +28,7 @@ export type ConversationProgress = {
   pending: boolean;
   // Recheck an unchanged chat while delivery or recovery still needs work.
   retry: boolean;
-  link?: BridgeLink;
+  connectionId?: number;
 };
 const turnIdData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
@@ -104,7 +105,7 @@ async function deliverUploads(objects: Client | undefined,
   }
 }
 
-export function assistantSnapshot(lifecycle: ChatRows, kind: string, silo: string) {
+export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined, silo: string) {
   let current: ChatRows[number]['event'] | undefined;
   const closed = new Set<string>();
   const started = new Set<string>();
@@ -132,7 +133,8 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   }
   if (rows.some(isConversationClosed)) return { pending: false, retry: false };
   const current = assistant.current;
-  if (!current) return { pending: false, retry: true };
+  if (!current) return { pending: message !== undefined, retry: false };
+  if (!assistant.kind) return { pending: message !== undefined, retry: message !== undefined };
   const computer = computerData.parse(current.data);
   await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
     conversation.conversationId, rows, assistant.closed);
@@ -149,18 +151,28 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   const link = await connection(computer.computerId, conversation.assistantId);
   await deliverUploads(options.objects, link, uploads);
   if (message) {
-    const requested = z.object({ executionMode: z.literal('memory_free').optional() })
-      .parse(message.event.data);
-    const mode = requiredExecutionMode(assistant.kind, requested.executionMode);
-    if (link.sentTurns.get(conversation.conversationId) !== message.event.id) {
-      sendTurn(options, link.socket, conversation, rows, allUploads, message, mode);
-      link.sentTurns.set(conversation.conversationId, message.event.id);
-    }
+    sendWaitingTurn(options, link, conversation, rows, allUploads, message,
+      assistant.kind, assistant.started);
     sendStop(link.socket, rows, message.event.id, conversation.conversationId);
   }
   const unacceptedMessage = message !== undefined && !assistant.started.has(message.event.id);
   const retry = uploads.length > 0 || unacceptedMessage;
-  return { pending: true, retry, link };
+  return { pending: true, retry, connectionId: link.connectionId };
+}
+
+function sendWaitingTurn(options: WatchOptions, link: BridgeLink, conversation: AgentSession,
+  rows: ChatRows, uploads: Upload[], message: ChatRows[number], kind: string, started: Set<string>) {
+  const requested = z.object({ executionMode: z.literal('memory_free').optional() })
+    .parse(message.event.data);
+  const mode = requiredExecutionMode(kind, requested.executionMode);
+  const previousDelivery = link.sentTurns.get(conversation.conversationId);
+  const accepted = started.has(message.event.id);
+  // Retry busy computers until they accept the turn, without flooding the connection.
+  const resendDue = !accepted && Date.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
+  if (previousDelivery?.turnId === message.event.id && !resendDue) return;
+  sendTurn(options, link.socket, conversation, rows, uploads, message, mode);
+  const delivery = { turnId: message.event.id, sentAt: Date.now() };
+  link.sentTurns.set(conversation.conversationId, delivery);
 }
 
 function conversationUploads(rows: ChatRows, assistantKind: string) {
@@ -206,11 +218,23 @@ async function recoverTerminalTurns(options: Pick<ChatOptions, 'silo' | 'store'>
   computerId: string, assistantId: string, conversationId: string, rows: ChatRows,
   closed: Set<string>) {
   // Recover a server crash between a terminal report and its separate lifecycle command.
+  let refreshed = false;
   for (const row of rows) {
     if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) continue;
     const terminal = turnIdData.parse(row.event.data);
     if (closed.has(terminal.turnId)) continue;
-    await turnCommand(options.store, { silo: options.silo, computerId, assistantId },
-      { ...terminal, conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
+    if (!refreshed) {
+      // Check for a close saved after this pass read the computer's history.
+      const lifecycle = await history(options.store, `computer-${assistantId}`);
+      const latest = assistantSnapshot(lifecycle, undefined, options.silo);
+      for (const turnId of latest.closed) closed.add(turnId);
+      refreshed = true;
+    }
+    if (closed.has(terminal.turnId)) continue;
+    const context = { silo: options.silo, computerId, assistantId };
+    const status = row.event.type === 'agent.turn_completed' ? 'completed' : 'failed';
+    const closeTurn = { ...terminal, conversationId, status } as const;
+    await turnCommand(options.store, context, closeTurn);
+    closed.add(terminal.turnId);
   }
 }
