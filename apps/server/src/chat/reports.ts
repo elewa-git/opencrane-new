@@ -1,9 +1,9 @@
 import { conversationCreatedDataSchema } from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { readEventAt, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
-import { chatHistory } from './commands.ts';
+import { readChatFacts } from './chat-summary.ts';
 import type { conversationKeys } from './keys.ts';
 
 // Permanent refusals need operator attention; reconnecting cannot repair them.
@@ -28,34 +28,55 @@ export async function reportPosition(store: EventStore, silo: string, computerId
 export async function recordReport(store: EventStore, keys: ReturnType<typeof conversationKeys>, context: { silo: string; computerId: string; assistantId: string }, value: unknown) {
   const report = reportSchema.parse(value);
   if (report.assistantId !== context.assistantId) throw new ReportRejected('Assistant mismatch');
-  const digest = createHash('sha256').update(JSON.stringify(report)).digest('hex');
-  const rows = await chatHistory(store, context.silo, report.conversationId);
-  const created = agentSession(rows);
-  if (created.assistantId !== context.assistantId || !rows.some(r => r.event.type === 'message.posted' && r.event.id === report.turnId)) throw new ReportRejected('Unrequested report');
+  const digestHash = createHash('sha256');
+  digestHash.update(JSON.stringify(report));
+  const digest = digestHash.digest('hex');
+  const facts = await readChatFacts(store, context.silo, report.conversationId,
+    report.turnId, context.computerId, report.sequence);
+  const created = agentSessionData(facts.created);
+  if (created.assistantId !== context.assistantId || !facts.message) {
+    throw new ReportRejected('Unrequested report');
+  }
   if (report.requesterId) {
-    const message = rows.find(row => row.event.id === report.turnId);
-    const author = z.object({ authorId: z.string() }).parse(message?.event.data);
+    const author = z.object({ authorId: z.string() }).parse(facts.message);
     if (author.authorId !== report.requesterId) throw new ReportRejected('Requester mismatch');
   }
-  const previous = rows.find(r => r.event.report?.computerId === context.computerId && r.event.report.sequence === report.sequence);
-  if (previous) {
-    verifyReportReplay(previous, report, digest);
+  const subject = `conversation-${report.conversationId}`;
+  if (facts.reportPosition !== undefined) {
+    const previous = await readEventAt(store, subject, facts.reportPosition,
+      performance.now() + 10_000);
+    if (previous) {
+      verifyReportReplay(previous, report, digest);
+    } else {
+      verifyDigest(undefined, digest);
+    }
     return 'duplicate' as const;
   }
-  if (report.previousSequence === undefined
-    ? report.sequence - 1 !== await reportPosition(store, context.silo, context.computerId)
-    : report.previousSequence !== lastReportSequence(rows, context.computerId)) throw new ReportRejected('Report sequence gap');
+  let previousSequence = facts.lastReportSequence;
+  let expectedPrevious = report.previousSequence;
+  if (expectedPrevious === undefined) {
+    previousSequence = await reportPosition(store, context.silo, context.computerId);
+    expectedPrevious = report.sequence - 1;
+  }
+  if (expectedPrevious !== previousSequence) throw new ReportRejected('Report sequence gap');
   const data = reportData(report, context.silo, context.assistantId, keys);
-  const id = `bridge-${createHash('sha256').update(`${context.computerId}:${report.sequence}`).digest('hex')}`;
-  const result = await store.append({ expectedSequence: rows.at(-1)?.sequence ?? 0, event: {
-    id, commandId: id, type: report.type, silo: context.silo, subject: `conversation-${report.conversationId}`,
-    source: 'computer-bridge', principal: { kind: 'agent', id: context.assistantId }, time: new Date().toISOString(),
+  const commandHash = createHash('sha256');
+  commandHash.update(`${context.computerId}:${report.sequence}`);
+  const id = `bridge-${commandHash.digest('hex')}`;
+  const event = {
+    id, commandId: id, type: report.type, silo: context.silo, subject,
+    source: 'computer-bridge', principal: { kind: 'agent' as const, id: context.assistantId },
+    time: new Date().toISOString(),
     report: { computerId: context.computerId, sequence: report.sequence, digest }, data,
-  } });
+  };
+  const command: AppendCommand = { expectedSequence: facts.sequence, historyChecked: true, event };
+  const result = await store.append(command);
   if (result.status === 'rejected') throw new ReportRejected('Report append rejected');
   if (result.status !== 'appended') throw new Error('Report append unavailable');
-  const committed = (await chatHistory(store, context.silo, report.conversationId)).find(row => row.event.id === id);
-  verifyDigest(committed, digest);
+  const committed = await readEventAt(store, subject, result.sequence, performance.now() + 10_000);
+  let saved: StoredEvent | undefined;
+  if (committed?.event.id === id) saved = committed;
+  verifyDigest(saved, digest);
   return 'recorded' as const;
 }
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
@@ -91,15 +112,15 @@ function isLostOutputReplay(previous: StoredEvent, report: z.infer<typeof report
 function verifyDigest(row: StoredEvent | undefined, digest: string) {
   if (row?.event.report?.digest !== digest) throw new ReportRejected('Report sequence reused');
 }
-function lastReportSequence(rows: StoredEvent[], computerId: string) {
-  return rows.findLast(r => r.event.report?.computerId === computerId)?.event.report?.sequence ?? 0;
-}
-
 export function agentSession(rows: StoredEvent[]) {
   function isCreated(row: StoredEvent) {
     return row.event.type === 'conversation.created';
   }
-  const created = conversationCreatedDataSchema.parse(rows.find(isCreated)?.event.data);
+  return agentSessionData(rows.find(isCreated)?.event.data);
+}
+
+export function agentSessionData(data: unknown) {
+  const created = conversationCreatedDataSchema.parse(data);
   if (created.mode !== 'agent_session') throw new ReportRejected('Human conversation');
   return created;
 }

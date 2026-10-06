@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Streamed replies no longer slow down as a chat gets longer. Repeated turn starts are handled without saving them again.
+
 - Starting a turn on a personal assistant no longer slows down as the silo's spending history grows. Resolving a spending hold reads history before starting its access check.
 
 - Docker test fixtures remove their anonymous volumes when they remove containers.
