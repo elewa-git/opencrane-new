@@ -30,3 +30,6 @@ export {
 
 export { tokenVerifier } from './tokens.ts';
 export { computerCredentials } from './credentials.ts';
+
+export { computerSummary, type ComputerSummary, type TurnSummary,
+  type ThreadSummary } from './computer-summary.ts';

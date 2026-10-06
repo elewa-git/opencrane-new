@@ -14,7 +14,7 @@ flowchart LR
   ops["apps/ops<br/>background workers"] -.-> auth
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
-  auth -->|reads computer events| events["Event log<br/>saved events"]
+  auth -->|reads new computer events| events["Event log<br/>saved events"]
 ```
 
 ## What it is responsible for
@@ -24,7 +24,9 @@ flowchart LR
 - Check that a person belongs to this [silo](../../GLOSSARY.md#silo)'s organisation and that a sensitive action follows a recent sign-in.
 - Keep return links on the same website and end the Zitadel browser session at sign-out.
 - Sign and check short-lived passes for computers and individual chat turns.
-- Check computer and turn passes against the computer's recorded state.
+- Check computer and turn passes against the computer's recorded state. It keeps a
+  [stream summary](../../GLOSSARY.md#stream-summary) and reads new events before every check.
+- Share the computer summary with the server so starting a turn reads only new events.
 
 ## Processes it handles
 

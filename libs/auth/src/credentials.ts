@@ -1,5 +1,6 @@
 import type { IncomingHttpHeaders } from 'node:http';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { readStreamSummary, WrongSiloError, type EventStore } from '@opencrane/event-store';
+import { computerSummary, type ComputerSummary } from './computer-summary.ts';
 import { z } from 'zod';
 import { computerTokenAudience, turnTokenAudience, type tokenIssuer, type tokenVerifier } from './tokens.ts';
 
@@ -10,15 +11,23 @@ const grant = state.extend({ generation: z.int().positive().optional(), tokenId:
 /** Current event-backed computer grant; shared by lifecycle issuance and model admission. */
 export function computerCredentials(store: Pick<EventStore, 'readStream'>, tokens: Verifier, silo: string) {
   async function active(assistantId: string, deadline = Infinity) {
-    const events: StoredEvent[] = [];
-    for await (const item of store.readStream(`computer-${assistantId}`, 1, deadline)) {
-      if (item.event.silo !== silo) throw new Error('Computer silo mismatch');
-      events.push(item);
+    function take(summary: ComputerSummary) {
+      return { lifecycle: summary.lifecycle, claim: summary.claim, grant: summary.grant };
     }
-    const latest = events.findLast(r => !r.event.type.startsWith('computer.turn_'));
+    let facts: ReturnType<typeof take>;
+    try {
+      facts = await readStreamSummary(store, silo, `computer-${assistantId}`,
+        computerSummary, deadline, take);
+    } catch (error) {
+      if (error instanceof WrongSiloError) {
+        throw new Error('Computer silo mismatch', { cause: error });
+      }
+      throw error;
+    }
+    const latest = facts.lifecycle;
     if (latest?.event.type !== 'computer.ready') throw new Error('Computer is not ready');
-    const claim = state.parse(events.findLast(({ event }) => event.type === 'computer.claimed')?.event.data);
-    const recorded = grant.parse(events.findLast(({ event }) => ['computer.claimed', 'computer.resumed'].includes(event.type))?.event.data);
+    const claim = state.parse(facts.claim?.event.data);
+    const recorded = grant.parse(facts.grant?.event.data);
     // Older resume grants inherit their claim's generation; Ready must still state it explicitly.
     const current = { ...recorded, generation: recorded.generation ?? claim.generation };
     const ready = state.parse(latest.event.data);

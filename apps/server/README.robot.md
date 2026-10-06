@@ -705,8 +705,8 @@ removal during that read, through the real HTTP route and disposable services.
 
 ## Chat summary and report writes
 
-Reports and turn commands share the event-store `chat` summary. The server keeps
-up to 64 conversations per store connection and rebuilds a dropped summary from
+Reports and turn commands share the server's `chat` summary, built on the event
+store's stream summary. The server keeps up to 64 conversations per store connection and rebuilds a dropped summary from
 the first event. Each call reads through the latest saved event before copying
 its facts. History reads have their own ten-second limit and finish before turn
 admission starts its access check.
@@ -725,12 +725,19 @@ repeat returns `duplicate` without calling `append`. A new report passes
 append. It checks the digest of the event at the returned position, including its
 id, and keeps the existing refusal messages.
 
-`turnCommand` uses the copied creation, requested message and closed status. It
-still reads the computer's complete history. Before opting into `historyChecked`,
-it checks for the same start command id, principal and subject in that history.
-A repeat verifies the saved binding and returns without an append. A closed turn
-already skips its append. A start from another computer still writes its own start.
-Computer summaries, credentials and model decisions are outside this change.
+`turnCommand` uses the copied creation, requested message and closed status.
+It also uses the shared auth `computer` summary for readiness, turn bindings,
+start command keys and thread checks. It copies these facts and the position
+in one `take`, before any access check. The conditional append names that position.
+A repeat returns the first start binding without an append. A closed turn skips
+its append. A start from another computer still writes its own start. A new write
+checks the binding and id of the one event at the returned position; a missing or
+different event gives `Turn binding conflict`.
+
+PR #238 already shipped the start-repeat skip and turnCommand's `historyChecked`
+opt-in from spec section 2.9. PR 4 moves that check from the full computer history
+onto `startCommandKeys`; it does not introduce a second skip. The model decision's
+activity and conversation reads remain work for PR 5.
 
 `test/chat-summary.test.ts` uses real NATS to check warmed 500-event chats,
 report and turn repeats, old journals, changed payloads, user posts between reports,
@@ -753,3 +760,24 @@ query. `test/chat-http.test.ts` checks the response fields, cold resume and lost
 The recovered marker describes the computer. The browser shows the lost-request notice
 only if this chat's last agent turn is lost or failed and ended at or after the last
 computer loss. A later completed turn removes that notice.
+
+Known follow-up: report positions grow with every stored reply. The 64-chat limit
+caps the number of chats, not each chat's report count. The measured mix above
+uses about 70 bytes per event; much longer chats can consume several MiB each.
+A follow-up should reduce per-report storage or cap total retained entries.
+
+## Turn admission read growth
+
+`test/turn-admission-cost.test.ts` measures `recordReport` for the start,
+`turnCommand`, `credentials.turn` and `BudgetActor.reserve` together. It uses real
+NATS, one personal assistant, and 10, 100 and 500 earlier turns. It checks both
+new chats and a chat seeded with 500 events. Fixture events use conditional
+appends with `historyChecked`; warm-up and fixture reads are outside measurement.
+Reports send `previousSequence`, so the old-journal whole-log read is excluded.
+Each measured admission rejects whole-stream reads and checks that rows at 500
+are no more than rows at 10 plus two. Times are logged, with no timing assertion.
+
+`test/computer-turns.test.ts` covers warm starts, closes and repeats after 500
+turns, unchanged refusal messages, first bindings, newest execution modes and
+missing or different read-back events. It also injects suspension during admission
+to prove the append still uses the position read with the facts.
