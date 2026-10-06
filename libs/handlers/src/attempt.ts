@@ -1,6 +1,6 @@
 import type { Query } from "@opencrane/projections";
 
-/** End the transaction on abort, even if the handler ignores cancellation. */
+/** Roll back on abort even when the handler ignores cancellation. */
 export async function withinAttempt<T>(
   transaction: Query,
   signal: AbortSignal,
@@ -22,8 +22,8 @@ export async function withinAttempt<T>(
       sql: string,
       values?: unknown[],
     ) {
-      // Serialise the whole operation, including its timeout calculation.
-      // Concurrent callers must not queue SQL with stale timeout settings.
+      // Run each operation in turn, including its timeout calculation.
+      // Otherwise a waiting call could use an old timeout.
       const operation = tail.then(async () => {
         check();
         await transaction.query(
@@ -35,8 +35,8 @@ export async function withinAttempt<T>(
         check();
         return transaction.query<Row>(sql, values);
       });
-      // Release the serial slot on either outcome; the caller still receives
-      // its rejection. A swallowed SQL error must never turn rollback into success.
+      // Release the slot after success or failure, while still passing failures
+      // back to the caller. A caught SQL error must not make rollback succeed.
       tail = operation.then(
         () => undefined,
         () => {
@@ -63,8 +63,8 @@ export async function withinAttempt<T>(
     }
     return result;
   } finally {
-    // The callback may resume later. It must never issue SQL on the pooled
-    // connection after rollback/commit has returned that connection to others.
+    // The callback may resume later. Block SQL after commit or rollback has
+    // returned the pooled connection for another caller to use.
     open = false;
     signal.removeEventListener("abort", abort);
   }

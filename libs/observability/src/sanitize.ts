@@ -1,22 +1,14 @@
-// Copied from OpenCrane 1 (10abd0ef6) libs/backend/observability/src/sanitize.ts;
-// changed: (1) sensitive names are matched by the words in them (names.ts), not
-// an exact list; (2) entire URL queries are dropped from every string
-// (redact.ts), so a URL inside a message or an error text is covered;
-// (3) this runs on the finished JSON line (sanitizeLogLine), not as pino's `log`
-// and `bindings` formatters. Those run before serializers and are reset on every
-// `logger.child()`, so they never saw an Error's own properties or child
-// bindings. The finished line has everything as plain JSON, so the OpenCrane 1
-// cycle and class-instance checks are gone.
+// Copied from OpenCrane 1 (10abd0ef6).
 import { isSensitiveFieldName } from './names.ts';
 import { REDACTED_VALUE, redactUrl } from './redact.ts';
 
-/** Value written in place of a value nested deeper than MAX_DEPTH. */
+/** Write this marker when data is nested deeper than MAX_DEPTH. */
 const TRUNCATED = '[Truncated]';
 
-/** Maximum depth walked before the rest is dropped, so a huge or hostile record cannot exhaust the stack. */
+/** Stop at this depth so a large or hostile record cannot exhaust the stack. */
 const MAX_DEPTH = 12;
 
-/** Copy `value` with the value of every sensitive field replaced by `[Redacted]` and every string scrubbed, at any depth. */
+/** Copy `value`, hide sensitive fields, and remove URL details from every string. */
 function sanitizeValue(value: unknown, depth: number): unknown {
   if (typeof value === 'string') {
     return redactUrl(value);
@@ -38,11 +30,8 @@ function sanitizeValue(value: unknown, depth: number): unknown {
 }
 
 /**
- * Copy an object with sensitive fields (headers, secrets, tokens, passwords,
- * API keys: see names.ts) replaced by `[Redacted]` and entire URL queries
- * removed from strings too, at any depth. Meant for plain data such
- * as parsed JSON. Fails closed: if walking throws, the result is one redacted
- * marker.
+ * Copy plain data such as parsed JSON, hiding sensitive fields and URL queries
+ * at any depth. If walking fails, return one redaction marker so data stays hidden.
  */
 export function sanitizeLogFields(fields: Record<string, unknown>): Record<string, unknown> {
   try {
@@ -57,14 +46,12 @@ export function sanitizeLogFields(fields: Record<string, unknown>): Record<strin
 }
 
 /**
- * Sanitise one finished pino log line (JSON ending in a newline) and return the
- * line to write. The logger runs every record through this just before it
- * reaches the destination (pino's `hooks.streamWrite`), so no call site, child
- * logger, serializer or error property can skip it.
+ * Clean one finished pino log line (JSON ending in a newline) before writing it.
+ * Run every record here so no call, child logger, serializer or error field skips it.
  *
- * Fails closed: a line that is not valid JSON, or cannot be walked, is replaced
- * by a fixed error line and its text is never written. The line is parsed and
- * written again, so a number above 2^53 would be rounded; log those as strings.
+ * Replace invalid JSON or a line that cannot be walked with a fixed error line,
+ * so its text is never written. Parsing and writing the line again rounds
+ * numbers above 2^53, so log those as strings.
  */
 export function sanitizeLogLine(line: string): string {
   try {

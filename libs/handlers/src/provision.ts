@@ -1,7 +1,7 @@
 import { connectNats, createEventStore } from "@opencrane/event-store";
 import { provisionDispatcher } from "./dispatcher.ts";
 
-// Installation job: command credentials are required; reader pods never run this.
+// Run this setup job with command credentials; reader services must not run it.
 const connection = await connectNats();
 try {
   const store = await createEventStore(connection);

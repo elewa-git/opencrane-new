@@ -29,16 +29,16 @@ function same(a: Tuple, b: Tuple): boolean {
   );
 }
 
-/** All grantees of one resource share the worker's ordering key. */
+/** Keep all grants for a resource on one worker key so they stay in order. */
 export function grantStream(resourceType: string, resourceId: string): string {
   return `grant-${Buffer.from(JSON.stringify([resourceType, resourceId])).toString('base64url')}`;
 }
 
-// Only use start-up or provisioning bindings here so request data cannot grow this map.
+// Cache only startup or setup bindings so request data cannot grow this map.
 const authorisations = new Map<string, ReturnType<typeof createMemberAuthorisation>>();
 
 export function memberAuthorisation(binding: Binding) {
-  // Keep the cached client tied to these values if a caller later changes its binding.
+  // Keep the client tied to these values if a caller later changes the binding.
   const cachedBinding = Object.freeze({
     apiUrl: binding.apiUrl,
     storeId: binding.storeId,
@@ -124,7 +124,7 @@ function createMemberAuthorisation(binding: Binding) {
     function matchesGrantee(tuple: Tuple) {
       return users.has(tuple.user);
     }
-    // A grant for an assistant must not replace its owning group's grant with the same id.
+    // Keep an assistant grant separate from its owner's group grant, even if ids match.
     const current = await client.read({ object: target, relation: 'use' });
     const existing = current.filter(matchesGrantee);
     const desired: Tuple[] = [];
@@ -269,8 +269,8 @@ function createMemberAuthorisation(binding: Binding) {
             object,
             legacyMemberRole(event) ?? '',
           );
-    // A lost reply is safe: the receipt and changes either all commit or all fail.
-    // Repeating an old event after removal cannot restore its previous permissions.
+    // The receipt and changes commit together, so a lost reply is safe to retry.
+    // An old event after removal cannot restore the removed permissions.
     await client.write(
       [...desired.filter((t) => !current.some((c) => same(t, c))), receipt],
       current.filter((t) => !desired.some((d) => same(t, d))),

@@ -10,7 +10,7 @@ async function snapshot(binding: Binding): Promise<string[]> {
     .sort();
 }
 
-/** Stop decisions and the OpenFGA worker before switching to the returned binding. */
+/** Stop access checks and the OpenFGA worker before using the returned binding. */
 export async function rebuildMembers(
   apiUrl: string,
   silo: string,
@@ -23,7 +23,7 @@ export async function rebuildMembers(
   try {
     const projection = memberAuthorisation(binding);
     let sequence = 0;
-    // The handler does not write SQL. Refuse any future implementation that does.
+    // Keep the handler free of SQL writes, so rebuilding cannot change stored state.
     const noSql = {
       query: () => Promise.reject(new Error("Rebuild cannot write SQL")),
     };
