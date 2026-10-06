@@ -9,6 +9,7 @@
 - Model budget writes no longer slow down as the silo's spending history grows.
 
 - A waiting assistant reply no longer makes the server reread finished chats. A turn the computer has not yet started is sent again until it starts.
+- A message waits quietly when its assistant has no computer, and each chat poll reads created and closed chats together.
 - Open chat pages repeat permission checks only when access records change. Idle pages no longer call the permissions service every 100 ms, and member removal still closes their connection within two seconds.
 
 - Group members' private chats with a shared assistant now use a temporary Codex process with tools off and files in a memory volume. Swap can still write private text to disk. Isolation is not yet proven on a live computer; memory features stay off until it is. The chat screens, including the choice of a memory-free turn with tools, come next (#96).

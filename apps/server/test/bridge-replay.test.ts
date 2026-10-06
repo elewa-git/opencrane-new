@@ -338,6 +338,41 @@ async function deliversNewMessagesAfterIdle() {
 
 it('leaves idle chat history unread and picks up a new message on the next poll', deliversNewMessagesAfterIdle);
 
+async function waitsQuietlyForAnUnclaimedComputer() {
+  const fixture = await replayFixture(['alice']);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-unclaimed'));
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const queries = vi.spyOn(db, 'query');
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  function conversationQueryCount() {
+    function isConversationQuery(call: typeof queries.mock.calls[number]) {
+      return typeof call[0] === 'string' &&
+        call[0].includes("type IN ('conversation.created'");
+    }
+    return queries.mock.calls.filter(isConversationQuery).length;
+  }
+  try {
+    await until(() => conversationQueryCount() === 1);
+    await delay(800);
+    expect(conversationQueryCount()).toBe(1);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+it('does not keep polling while a waiting message has no computer', waitsQuietlyForAnUnclaimedComputer);
+
 async function deliversAfterTableCatchesUp() {
   const fixture = await replayFixture(['alice']);
   const dbs = await databases();
@@ -361,7 +396,7 @@ async function deliversAfterTableCatchesUp() {
   const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
   function queriedConversations(call: typeof queries.mock.calls[number]) {
-    return typeof call[0] === 'string' && call[0].includes("type = 'conversation.created'");
+    return typeof call[0] === 'string' && call[0].includes("type IN ('conversation.created'");
   }
   function twoPollsFinished() {
     const conversationQueries = queries.mock.calls.filter(queriedConversations);
@@ -585,7 +620,7 @@ async function avoidsRepeatedPendingReads() {
   let pass = 0;
   const query = db.query.bind(db);
   async function countPass(...args: Parameters<typeof db.query>) {
-    if (typeof args[0] === 'string' && args[0].includes("type = 'conversation.created'")) {
+    if (typeof args[0] === 'string' && args[0].includes("type IN ('conversation.created'")) {
       pass++;
       if (pass === 5) {
         stop.abort();
@@ -633,7 +668,7 @@ async function avoidsRepeatedPendingReads() {
   }
 }
 
-it('keeps 30 finished chats unread with no resend after the turn is accepted',
+it('keeps 30 finished chats unread after the turn is accepted',
   avoidsRepeatedPendingReads, 120_000);
 
 async function routesAndCachesAssistants() {
@@ -686,7 +721,7 @@ async function routesAndCachesAssistants() {
   let pass = 0;
   const query = db.query.bind(db);
   async function countPass(...args: Parameters<typeof db.query>) {
-    if (typeof args[0] === 'string' && args[0].includes("type = 'conversation.created'")) {
+    if (typeof args[0] === 'string' && args[0].includes("type IN ('conversation.created'")) {
       pass++;
       if (pass === 5) {
         stop.abort();
@@ -796,7 +831,7 @@ async function waitsSafelyForAssistantHistory(source: string, waiting: boolean) 
     return heads.mock.calls.filter(isGlobalHead).length >= 6;
   }
   function isPass(call: typeof queries.mock.calls[number]) {
-    return typeof call[0] === 'string' && call[0].includes("type = 'conversation.created'");
+    return typeof call[0] === 'string' && call[0].includes("type IN ('conversation.created'");
   }
   const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
   const work = watchBridges(options, tokens, kube, fixture.url, stop.signal, logger);
@@ -956,7 +991,7 @@ async function sendsPromptlyWithFinishedChats() {
   }
 }
 
-it('sends a posted turn without rereading 90 finished chats or unchanged computer history',
+it('sends a posted turn without rereading 90 finished chats',
   sendsPromptlyWithFinishedChats, 180_000);
 
 async function stopsAndReconnectsAcceptedTurn() {
@@ -975,7 +1010,7 @@ async function stopsAndReconnectsAcceptedTurn() {
   const queries = vi.spyOn(db, 'query');
   let acceptedDeliveries = 0;
   function isPass(call: typeof queries.mock.calls[number]) {
-    return typeof call[0] === 'string' && call[0].includes("type = 'conversation.created'");
+    return typeof call[0] === 'string' && call[0].includes("type IN ('conversation.created'");
   }
   function passCount() {
     return queries.mock.calls.filter(isPass).length;

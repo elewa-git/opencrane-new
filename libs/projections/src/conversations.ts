@@ -9,6 +9,8 @@ export const conversations: Projection = {
       silo TEXT NOT NULL, conversation_id TEXT NOT NULL, position BIGINT NOT NULL,
       event_id TEXT NOT NULL, type TEXT NOT NULL, data JSONB NOT NULL, time TEXT NOT NULL,
       PRIMARY KEY (silo, conversation_id, position))`);
+    await db.query(`CREATE INDEX IF NOT EXISTS conversation_feed_silo_type
+      ON conversation_feed (silo, type)`);
   },
   async drop(db) { await db.query('DROP TABLE IF EXISTS conversation_feed'); },
   async apply(db, event, position) {
@@ -45,6 +47,30 @@ export async function listConversations(db: Query, silo: string) {
     return { ...data, conversationId: row.conversation_id, createdAt: row.time };
   }
   return rows.rows.map(conversationRow);
+}
+
+export async function listOpenConversations(db: Query, silo: string) {
+  const rows = await db.query<{
+    conversation_id: string; type: string; data: unknown; time: string;
+  }>(
+    `SELECT conversation_id, type, data, time FROM conversation_feed
+      WHERE silo = $1 AND type IN ('conversation.created', 'conversation.closed')`, [silo]);
+  const closed = new Set<string>();
+  const created = new Map<string, { data: unknown; time: string }>();
+  for (const row of rows.rows) {
+    if (row.type === 'conversation.closed') {
+      closed.add(row.conversation_id);
+      continue;
+    }
+    created.set(row.conversation_id, { data: row.data, time: row.time });
+  }
+  const sessions = [];
+  for (const [conversationId, row] of created) {
+    if (closed.has(conversationId)) continue;
+    const data = conversationCreatedDataSchema.parse(row.data);
+    sessions.push({ ...data, conversationId, createdAt: row.time });
+  }
+  return sessions;
 }
 
 async function validateMode(db: Query, event: EventEnvelope, conversationId: string) {

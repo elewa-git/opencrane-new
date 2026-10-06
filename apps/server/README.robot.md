@@ -634,7 +634,9 @@ changed. The assistant's kind is saved after its first successful read because i
 cannot change. A failed creation read is logged once for that assistant and never
 allows delivery with an unknown kind. Only a waiting message keeps that chat pending.
 An assistant without a computer waits for its computer stream to change before its
-unchanged chats are read again.
+unchanged chats are read again. This does not keep the 250 ms polling loop busy.
+Created and closed chats are read together through an index on the organisation and
+event type, so each pass does not scan every reply row twice.
 
 The watcher remembers each chat's last stream position. It skips
 unchanged chats unless delivery is waiting for the computer to accept a turn,
