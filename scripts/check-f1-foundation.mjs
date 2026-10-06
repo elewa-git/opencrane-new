@@ -364,8 +364,8 @@ async function checkEditors(page, width, motion) {
   await capture(page, 'spending', width, motion);
   await page.route('**/api/org/integrations/installed/tools', policyReply);
   await page.goto(`${origin}/org/integrations/installed/tools`);
-  await page.getByText('Choose a mode, then save the tool.', { exact: true }).waitFor();
-  assert.equal(await page.locator('oc-tool-policy [data-state]').getAttribute('data-state'), 'ready');
+  await page.getByRole('heading', { name: '1 tool', exact: true }).waitFor();
+  assert.equal(await page.getByRole('group', { name: 'read' }).count(), 1);
   await checkStatusRegions(page);
   await capture(page, 'tool-policy', width, motion);
   await page.route('**/api/org/integrations', refuseInstall);

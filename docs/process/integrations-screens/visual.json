@@ -87,6 +87,46 @@
       "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
+      "name": "add-source-1280-no-preference.png",
+      "adaptations": "The source cards show the remote URL route because catalogue and hosted package admission are not available yet."
+    },
+    {
+      "name": "add-checking-1280-no-preference.png",
+      "adaptations": "The discovery request is accepted and its result is still being checked."
+    },
+    {
+      "name": "tools-blocked-1280-no-preference.png",
+      "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
+    },
+    {
+      "name": "tools-editing-1280-no-preference.png",
+      "adaptations": "The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants."
+    },
+    {
+      "name": "tools-conflict-1280-no-preference.png",
+      "adaptations": "Neutral wording replaces an actor and time because the API supplies neither."
+    },
+    {
+      "name": "tools-unknown-1280-no-preference.png",
+      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+    },
+    {
+      "name": "tools-check-still-unknown-1280-no-preference.png",
+      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+    },
+    {
+      "name": "tools-check-matches-1280-no-preference.png",
+      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+    },
+    {
+      "name": "tools-failed-1280-no-preference.png",
+      "adaptations": "Reload tools replaces Try again because the same invalid input would fail again."
+    },
+    {
+      "name": "tools-access-lost-1280-no-preference.png",
+      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+    },
+    {
       "name": "register-empty-1280-reduce.png",
       "adaptations": "No catalogue or package rows exist in the current API."
     },
@@ -161,6 +201,46 @@
     {
       "name": "detail-access-lost-1280-reduce.png",
       "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
+    },
+    {
+      "name": "add-source-1280-reduce.png",
+      "adaptations": "The source cards show the remote URL route because catalogue and hosted package admission are not available yet."
+    },
+    {
+      "name": "add-checking-1280-reduce.png",
+      "adaptations": "The discovery request is accepted and its result is still being checked."
+    },
+    {
+      "name": "tools-blocked-1280-reduce.png",
+      "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
+    },
+    {
+      "name": "tools-editing-1280-reduce.png",
+      "adaptations": "The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants."
+    },
+    {
+      "name": "tools-conflict-1280-reduce.png",
+      "adaptations": "Neutral wording replaces an actor and time because the API supplies neither."
+    },
+    {
+      "name": "tools-unknown-1280-reduce.png",
+      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+    },
+    {
+      "name": "tools-check-still-unknown-1280-reduce.png",
+      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+    },
+    {
+      "name": "tools-check-matches-1280-reduce.png",
+      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+    },
+    {
+      "name": "tools-failed-1280-reduce.png",
+      "adaptations": "Reload tools replaces Try again because the same invalid input would fail again."
+    },
+    {
+      "name": "tools-access-lost-1280-reduce.png",
+      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
     },
     {
       "name": "register-empty-390-no-preference.png",
@@ -239,6 +319,46 @@
       "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
+      "name": "add-source-390-no-preference.png",
+      "adaptations": "The source cards show the remote URL route because catalogue and hosted package admission are not available yet."
+    },
+    {
+      "name": "add-checking-390-no-preference.png",
+      "adaptations": "The discovery request is accepted and its result is still being checked."
+    },
+    {
+      "name": "tools-blocked-390-no-preference.png",
+      "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
+    },
+    {
+      "name": "tools-editing-390-no-preference.png",
+      "adaptations": "The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants."
+    },
+    {
+      "name": "tools-conflict-390-no-preference.png",
+      "adaptations": "Neutral wording replaces an actor and time because the API supplies neither."
+    },
+    {
+      "name": "tools-unknown-390-no-preference.png",
+      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+    },
+    {
+      "name": "tools-check-still-unknown-390-no-preference.png",
+      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+    },
+    {
+      "name": "tools-check-matches-390-no-preference.png",
+      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+    },
+    {
+      "name": "tools-failed-390-no-preference.png",
+      "adaptations": "Reload tools replaces Try again because the same invalid input would fail again."
+    },
+    {
+      "name": "tools-access-lost-390-no-preference.png",
+      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+    },
+    {
       "name": "register-empty-390-reduce.png",
       "adaptations": "No catalogue or package rows exist in the current API."
     },
@@ -313,6 +433,46 @@
     {
       "name": "detail-access-lost-390-reduce.png",
       "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
+    },
+    {
+      "name": "add-source-390-reduce.png",
+      "adaptations": "The source cards show the remote URL route because catalogue and hosted package admission are not available yet."
+    },
+    {
+      "name": "add-checking-390-reduce.png",
+      "adaptations": "The discovery request is accepted and its result is still being checked."
+    },
+    {
+      "name": "tools-blocked-390-reduce.png",
+      "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
+    },
+    {
+      "name": "tools-editing-390-reduce.png",
+      "adaptations": "The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants."
+    },
+    {
+      "name": "tools-conflict-390-reduce.png",
+      "adaptations": "Neutral wording replaces an actor and time because the API supplies neither."
+    },
+    {
+      "name": "tools-unknown-390-reduce.png",
+      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+    },
+    {
+      "name": "tools-check-still-unknown-390-reduce.png",
+      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+    },
+    {
+      "name": "tools-check-matches-390-reduce.png",
+      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+    },
+    {
+      "name": "tools-failed-390-reduce.png",
+      "adaptations": "Reload tools replaces Try again because the same invalid input would fail again."
+    },
+    {
+      "name": "tools-access-lost-390-reduce.png",
+      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
     },
     {
       "name": "menu-390-no-preference.png",
@@ -399,6 +559,46 @@
       "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
+      "name": "add-source-320-no-preference.png",
+      "adaptations": "The source cards show the remote URL route because catalogue and hosted package admission are not available yet."
+    },
+    {
+      "name": "add-checking-320-no-preference.png",
+      "adaptations": "The discovery request is accepted and its result is still being checked."
+    },
+    {
+      "name": "tools-blocked-320-no-preference.png",
+      "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
+    },
+    {
+      "name": "tools-editing-320-no-preference.png",
+      "adaptations": "The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants."
+    },
+    {
+      "name": "tools-conflict-320-no-preference.png",
+      "adaptations": "Neutral wording replaces an actor and time because the API supplies neither."
+    },
+    {
+      "name": "tools-unknown-320-no-preference.png",
+      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+    },
+    {
+      "name": "tools-check-still-unknown-320-no-preference.png",
+      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+    },
+    {
+      "name": "tools-check-matches-320-no-preference.png",
+      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+    },
+    {
+      "name": "tools-failed-320-no-preference.png",
+      "adaptations": "Reload tools replaces Try again because the same invalid input would fail again."
+    },
+    {
+      "name": "tools-access-lost-320-no-preference.png",
+      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+    },
+    {
       "name": "register-empty-320-reduce.png",
       "adaptations": "No catalogue or package rows exist in the current API."
     },
@@ -475,6 +675,46 @@
       "adaptations": "Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time."
     },
     {
+      "name": "add-source-320-reduce.png",
+      "adaptations": "The source cards show the remote URL route because catalogue and hosted package admission are not available yet."
+    },
+    {
+      "name": "add-checking-320-reduce.png",
+      "adaptations": "The discovery request is accepted and its result is still being checked."
+    },
+    {
+      "name": "tools-blocked-320-reduce.png",
+      "adaptations": "Every reviewed tool starts on Block, so no tool can be called."
+    },
+    {
+      "name": "tools-editing-320-reduce.png",
+      "adaptations": "The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants."
+    },
+    {
+      "name": "tools-conflict-320-reduce.png",
+      "adaptations": "Neutral wording replaces an actor and time because the API supplies neither."
+    },
+    {
+      "name": "tools-unknown-320-reduce.png",
+      "adaptations": "The save reply was lost. The page offers a status read and does not resend the change."
+    },
+    {
+      "name": "tools-check-still-unknown-320-reduce.png",
+      "adaptations": "The read has not found a later sequence. Reload tools is a separate GET."
+    },
+    {
+      "name": "tools-check-matches-320-reduce.png",
+      "adaptations": "The saved policy matches the requested mode, but the page does not claim which command made it match."
+    },
+    {
+      "name": "tools-failed-320-reduce.png",
+      "adaptations": "Reload tools replaces Try again because the same invalid input would fail again."
+    },
+    {
+      "name": "tools-access-lost-320-reduce.png",
+      "adaptations": "The access-lost block clears the tools page and returns focus to its heading."
+    },
+    {
       "name": "menu-320-no-preference.png",
       "adaptations": "Current API data shown as supplied."
     },
@@ -493,8 +733,14 @@
     "INT-06",
     "INT-07",
     "INT-08",
+    "INT-10",
+    "INT-30",
+    "INT-31",
     "INT-37",
-    "INT-94"
+    "INT-93",
+    "INT-94",
+    "INT-95",
+    "INT-96"
   ],
-  "scope": "Register and detail screens supported by the current integrations API."
+  "scope": "Register, detail, add and tool modes supported by the current integrations API."
 }

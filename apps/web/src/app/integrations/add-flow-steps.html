@@ -1,0 +1,18 @@
+<nav class="add-flow" aria-label="Add an integration progress">
+  <p class="phone-step">Step {{ current() }} of 5 · {{ currentLabel() }}</p>
+  <div class="phone-bars" aria-hidden="true">
+    @for (step of steps; track step.number) {
+      <span [class.current]="step.number === current()"></span>
+    }
+  </div>
+  <ol aria-label="Add an integration steps">
+    @for (step of steps; track step.number) {
+      <li [attr.aria-current]="step.number === current() ? 'step' : null">
+        <span>{{ step.number }} · {{ step.label }}</span>
+        @if (step.unavailable) {
+          <span class="unavailable">Not available yet</span>
+        }
+      </li>
+    }
+  </ol>
+</nav>

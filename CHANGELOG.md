@@ -13,6 +13,7 @@
 - Model and tool calls keep working when another chat, a file upload or someone else's access changes during the access check. Revocations, turn stops and approval invalidation still refuse calls, and unsent spending holds release at zero cents.
 
 - Owners and admins can search the integration register and open a detail page with separate installed, connected, access and assistant-availability facts.
+- Owners and admins can add a remote MCP server, follow discovery and set a mode for each reviewed tool. Saves are checked with reads and are never sent again after an uncertain reply.
 - Rewrote the access, AI and shared-library READMEs for new engineers, and kept their detailed contracts in README.robot.md.
 
 - The four app READMEs now explain their place in the system and what people can do with them.

@@ -254,7 +254,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     expect(await page.locator('.register-row').count()).toBe(6);
 
     await page.getByRole('link', { name: 'Add an integration', exact: true }).click();
-    await page.getByRole('heading', { name: 'Add an MCP server' }).waitFor();
+    await page.getByRole('heading', { name: 'Add an integration' }).waitFor();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
@@ -277,8 +277,13 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
-      const controls = page.locator('oc-mcp-install button, oc-mcp-install input, oc-mcp-install summary');
-      for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
+      const controls = page.locator('oc-mcp-install button, oc-mcp-install a, '
+        + 'oc-mcp-install input[type="url"], oc-mcp-install .source-card, '
+        + 'oc-mcp-install summary');
+      for (let index = 0; index < await controls.count(); index += 1) {
+        const box = await controls.nth(index).boundingBox();
+        expect(box?.height).toBeGreaterThanOrEqual(44);
+      }
       await page.screenshot({ path: `/tmp/p3-3-review-${width}.png`, fullPage: true });
     }
     remote.status(401);
@@ -301,7 +306,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     // Wait for Angular to apply the response before checking the message on screen.
     await page.getByText('A scoped validation connection is required.', { exact: false }).waitFor();
     expect(await page.getByRole('region', { name: 'Tool inventory' }).count()).toBe(0);
-    await page.getByRole('link', { name: 'Back to integrations' }).click();
+    await page.getByRole('link', { name: 'Integrations', exact: true }).click();
     await page.locator('.register-row').first().waitFor();
 
     const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
@@ -311,9 +316,10 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.getByRole('group', { name: 'write' }).getByLabel('Allow automatically').check();
     const saved = page.waitForResponse(r => r.request().method() === 'POST' && r.url().endsWith('/odoo/tools'));
     // Angular enables Save after rendering the choice; press() does not wait for enabled controls.
-    await page.getByRole('button', { name: 'Save write', disabled: false }).press('Enter');
+    await page.getByRole('button', { name: 'Save mode for write', disabled: false })
+      .press('Enter');
     expect((await saved).status()).toBe(200);
-    await page.getByText('Tool policy saved').waitFor();
+    await page.getByText('Saved write: Allow automatically').waitFor();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       expect(await page.evaluate('document.documentElement.scrollWidth <= innerWidth')).toBe(true);
@@ -321,7 +327,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       for (let i = 0; i < await controls.count(); i++) expect((await controls.nth(i).boundingBox())?.height).toBeGreaterThanOrEqual(44);
       await page.screenshot({ path: `/tmp/p3-1-tools-${width}.png`, fullPage: true });
     }
-    await page.getByRole('link', { name: 'Back to integrations' }).click();
+    await page.getByRole('link', { name: 'Integrations', exact: true }).click();
     await page.locator('.register-row').first().waitFor();
 
     await page.setViewportSize({ width: 1280, height: 900 });

@@ -23,6 +23,16 @@ const adaptations = {
   'detail-published': 'The page uses Manage tools and Check discovery status. Connection and grant sections are not available from the API. Available says Not available yet because grants cannot be read.',
   'access-lost': 'Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time.',
   'detail-access-lost': 'Back to workspace replaces the unfinished Overview page. The frame time is omitted because the API supplies no role-change time.',
+  'add-source': 'The source cards show the remote URL route because catalogue and hosted package admission are not available yet.',
+  'add-checking': 'The discovery request is accepted and its result is still being checked.',
+  'tools-blocked': 'Every reviewed tool starts on Block, so no tool can be called.',
+  'tools-editing': 'The Allow choice is unsaved. The summary says that nobody can use tools before publication and grants.',
+  'tools-conflict': 'Neutral wording replaces an actor and time because the API supplies neither.',
+  'tools-unknown': 'The save reply was lost. The page offers a status read and does not resend the change.',
+  'tools-check-still-unknown': 'The read has not found a later sequence. Reload tools is a separate GET.',
+  'tools-check-matches': 'The saved policy matches the requested mode, but the page does not claim which command made it match.',
+  'tools-failed': 'Reload tools replaces Try again because the same invalid input would fail again.',
+  'tools-access-lost': 'The access-lost block clears the tools page and returns focus to its heading.',
 };
 const contentTypes = {
   '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
@@ -57,12 +67,14 @@ function makeRow(serverId, name, kind, detail, toolsTotal = 2) {
 
 function makePolicy(serverId, scenario) {
   const published = serverId === 'orders' && scenario === 'published';
+  const toolScreen = scenario.startsWith('tools-');
+  const initialReadMode = toolScreen ? 'block' : 'ask';
   return {
     connectionId: `${serverId}-connection`, accountMode: null, published, sequence: 3,
     tools: [
       { name: `${serverId}_read`, revision: 'rev-1', reviewed: true, readOnly: true,
-        mode: 'ask', suggestion: 'allow' },
-      { name: `${serverId}_change`, revision: 'rev-2', reviewed: false, readOnly: false,
+        mode: initialReadMode, suggestion: 'allow' },
+      { name: `${serverId}_change`, revision: 'rev-2', reviewed: toolScreen, readOnly: false,
         mode: 'block', suggestion: 'ask' },
     ],
   };
@@ -88,12 +100,18 @@ function makeFixtures(scenario) {
     finishLoading = resolveLoading;
   });
   const state = { loadingFinished, finishLoading };
+  let toolsPostCount = 0;
+  const toolsRequestMethods = [];
 
   async function serveApi(route) {
     const request = route.request();
     const url = new URL(request.url());
     const pathname = url.pathname;
     if (pathname === '/api/org/integrations') {
+      if (request.method() === 'POST' && scenario === 'add-checking') {
+        await route.fulfill({ status: 202, json: { serverId: 'checking-id', changeRef: 'change-1' } });
+        return;
+      }
       registerReads += 1;
       if ((scenario === 'loading' || scenario === 'detail-loading') && registerReads === 1) {
         await state.loadingFinished;
@@ -141,18 +159,52 @@ function makeFixtures(scenario) {
       await route.fulfill({ json: fixture });
       return;
     }
+    if (pathname.endsWith('/discovery')) {
+      await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+      return;
+    }
     if (pathname.endsWith('/tools')) {
+      toolsRequestMethods.push(request.method());
+      if (request.method() === 'POST') toolsPostCount += 1;
+      if (scenario === 'tools-conflict' && request.method() === 'POST') {
+        await route.fulfill({ status: 409, json: { status: 'conflict' } });
+        return;
+      }
+      if ((scenario === 'tools-unknown' || scenario.startsWith('tools-check-'))
+        && request.method() === 'POST') {
+        await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+        return;
+      }
+      if (scenario === 'tools-failed' && request.method() === 'POST') {
+        await route.fulfill({ status: 400, json: { status: 'invalid_request' } });
+        return;
+      }
+      if (scenario === 'tools-access-lost' && request.method() === 'POST') {
+        await route.fulfill({ status: 403, body: '' });
+        return;
+      }
       if (scenario === 'detail-tools-failed' || scenario === 'detail-stale') {
         await route.fulfill({ status: 503, json: { status: 'unavailable' } });
         return;
       }
       const serverId = pathname.split('/')[4];
-      await route.fulfill({ json: makePolicy(serverId, scenario) });
+      const policy = makePolicy(serverId, scenario);
+      if (scenario === 'tools-check-matches' && request.method() === 'GET'
+        && toolsPostCount > 0) {
+        policy.sequence = 4;
+        policy.tools[0].mode = 'allow';
+      }
+      await route.fulfill({ json: policy });
       return;
     }
     await route.fulfill({ status: 404, json: { status: 'missing' } });
   }
-  return { serveApi, state };
+  return {
+    serveApi,
+    state,
+    toolsPostCount: () => toolsPostCount,
+    requestMethods: () => toolsRequestMethods,
+  };
 }
 
 async function serveIdentity(route) {
@@ -198,7 +250,7 @@ async function waitForFonts(page) {
 
 async function checkMobileTargets(page, width) {
   if (width > 390) return;
-  const controls = page.locator('main button, main a');
+  const controls = page.locator('main button, main a, main .source-card, main .modes label');
   const count = await controls.count();
   for (let index = 0; index < count; index += 1) {
     const item = controls.nth(index);
@@ -475,6 +527,139 @@ async function captureDetail(browser, name, width, motion, scenario, serverId) {
   }
 }
 
+async function captureAdd(browser, name, width, motion, scenario) {
+  const opened = await openPage(browser, width, motion, scenario);
+  const { page } = opened;
+  try {
+    await page.goto(`${origin}/org/integrations/new`);
+    if (scenario === 'add-checking') {
+      await page.getByLabel('Server URL').fill('https://remote.example.test/mcp');
+      await page.getByRole('button', { name: 'Discover tools' }).click();
+      await page.getByText('Validating the server and discovering tools…').waitFor();
+      await page.locator('.status-region').waitFor();
+    } else {
+      await page.getByRole('heading', { name: 'Add an integration' }).waitFor();
+      await checkSourceCardHitTarget(page);
+    }
+    await waitForFonts(page);
+    await capture(page, name, width, motion);
+  } finally {
+    await opened.context.close();
+  }
+}
+
+async function checkSourceCardHitTarget(page) {
+  const card = page.locator('.source-card.selected');
+  const box = await card.boundingBox();
+  assert(box, 'The selected source card has a visible hit area');
+  const point = { x: box.x + box.width - 12, y: box.y + box.height - 12 };
+  const cardOwnsPoint = await page.evaluate(sourceCardOwnsPoint, point);
+  assert(cardOwnsPoint, 'The whole selected source card is clickable');
+  await page.mouse.click(point.x, point.y);
+  assert(await page.locator('input[name="source"]:checked').count() === 1,
+    'Clicking the source card keeps the remote radio selected');
+}
+
+async function captureTools(browser, name, width, motion, scenario) {
+  const opened = await openPage(browser, width, motion, scenario);
+  const { page } = opened;
+  try {
+    await page.goto(`${origin}/org/integrations/orders/tools`);
+    if (scenario === 'tools-access-lost') {
+      await page.locator('fieldset').first().waitFor();
+      await page.locator('input[name="mode-orders_read"][value="allow"]').click();
+      await page.getByRole('button', { name: 'Save mode for orders_read' }).click();
+      const heading = page.getByRole('heading', {
+        name: 'You no longer have access to Integrations', exact: true,
+      });
+      await heading.waitFor();
+      assert(await heading.evaluate(focused), 'The access-lost heading receives focus');
+      await checkAccessLinkColour(page);
+    } else {
+      await page.locator('fieldset').first().waitFor();
+      const firstRadio = page.locator('input[name="mode-orders_read"]').first();
+      await firstRadio.focus();
+      assert.deepEqual(await firstRadio.evaluate(focusRing),
+        ['2px', 'rgb(10, 132, 151)', '3px']);
+      await page.keyboard.press('ArrowRight');
+      assert(await page.locator('input[name="mode-orders_read"][value="ask"]').isChecked(),
+        'ArrowRight moves to the next native mode radio');
+      await firstRadio.focus();
+      await page.keyboard.press('ArrowDown');
+      assert(await page.locator('input[name="mode-orders_read"][value="ask"]').isChecked(),
+        'ArrowDown moves to the next native mode radio');
+      await page.locator('input[name="mode-orders_read"][value="block"]').click();
+      if (scenario === 'tools-editing') {
+        await page.locator('input[name="mode-orders_read"][value="allow"]').click();
+        await page.getByText(/1 Allow automatically · 0 Ask · 1 Block/u).waitFor();
+      }
+      const needsSave = scenario === 'tools-conflict' || scenario === 'tools-failed'
+        || scenario === 'tools-unknown' || scenario.startsWith('tools-check-');
+      if (needsSave) {
+        await page.locator('input[name="mode-orders_read"][value="allow"]').click();
+        await page.getByRole('button', { name: 'Save mode for orders_read' }).click();
+      }
+      if (scenario === 'tools-conflict') {
+        await page.getByText('The tools changed before your save').waitFor();
+        assert.equal(await page.getByRole('button', { name: 'Review the current modes' }).count(), 1);
+        assert.equal(await page.getByRole('button', { name: 'Discard my edits' }).count(), 1);
+      }
+      if (scenario === 'tools-failed') {
+        await page.getByText('Failed — nothing changed').waitFor();
+        assert.equal(await page.getByText('Try again', { exact: true }).count(), 0);
+      }
+      if (scenario === 'tools-unknown') {
+        await page.getByText('Outcome unknown').waitFor();
+        assert.equal(await page.getByRole('button', { name: 'Check status' }).count(), 1);
+        assert(await page.locator('fieldset').evaluateAll(allDisabled));
+      }
+      if (scenario === 'tools-check-still-unknown') {
+        await page.getByText('Outcome unknown').waitFor();
+        await page.getByRole('button', { name: 'Check status' }).click();
+        await page.getByText('Still unknown').waitFor();
+        await capture(page, name, width, motion);
+        await page.getByRole('button', { name: 'Check status' }).click();
+        await page.getByText('Still unknown').waitFor();
+        await page.getByRole('button', { name: 'Reload tools' }).click();
+        await page.locator('fieldset').first().waitFor();
+        await page.waitForFunction(noStateActionButtons);
+        assert.equal(opened.fixtures.toolsPostCount(), 1,
+          'One POST is sent across unknown, both checks and reload');
+        const laterMethods = opened.fixtures.requestMethods().slice(2);
+        assert(laterMethods.every(isReadMethod), 'Every request after save is a GET');
+        return;
+      }
+      if (scenario === 'tools-check-matches') {
+        await page.getByText('Outcome unknown').waitFor();
+        await page.getByRole('button', { name: 'Check status' }).click();
+        await page.getByText('Saved policy matches your change').waitFor();
+      }
+    }
+    await waitForFonts(page);
+    await capture(page, name, width, motion);
+  } finally {
+    await opened.context.close();
+  }
+}
+
+function allDisabled(fieldsets) {
+  return fieldsets.every((fieldset) => fieldset.disabled);
+}
+
+function isReadMethod(method) {
+  return method === 'GET' || method === undefined;
+}
+
+function sourceCardOwnsPoint(position) {
+  const element = globalThis.document.elementFromPoint(position.x, position.y);
+  const card = globalThis.document.querySelector('.source-card.selected');
+  return element?.closest('label.source-card') === card;
+}
+
+function noStateActionButtons() {
+  return globalThis.document.querySelectorAll('.state-action').length === 0;
+}
+
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch();
 try {
@@ -525,6 +710,17 @@ try {
         'detail-tools-failed', 'orders');
       await captureDetail(browser, 'detail-access-lost', width, motion,
         'detail-access-lost', 'orders');
+      await captureAdd(browser, 'add-source', width, motion, 'add-source');
+      await captureAdd(browser, 'add-checking', width, motion, 'add-checking');
+      await captureTools(browser, 'tools-blocked', width, motion, 'tools-blocked');
+      await captureTools(browser, 'tools-editing', width, motion, 'tools-editing');
+      await captureTools(browser, 'tools-conflict', width, motion, 'tools-conflict');
+      await captureTools(browser, 'tools-unknown', width, motion, 'tools-unknown');
+      await captureTools(browser, 'tools-check-still-unknown', width, motion,
+        'tools-check-still-unknown');
+      await captureTools(browser, 'tools-check-matches', width, motion, 'tools-check-matches');
+      await captureTools(browser, 'tools-failed', width, motion, 'tools-failed');
+      await captureTools(browser, 'tools-access-lost', width, motion, 'tools-access-lost');
       await checkRegisterInteraction(browser, width, motion);
     }
     if (width <= 390) {
@@ -536,9 +732,9 @@ try {
     environment: 'Built Angular assets; Chromium; disposable API fixtures; no stack',
     comparedFrames: [
       'INT-01', 'INT-02', 'INT-03', 'INT-04', 'INT-05', 'INT-06', 'INT-07', 'INT-08',
-      'INT-37', 'INT-94',
+      'INT-10', 'INT-30', 'INT-31', 'INT-37', 'INT-93', 'INT-94', 'INT-95', 'INT-96',
     ],
-    scope: 'Register and detail screens supported by the current integrations API.',
+    scope: 'Register, detail, add and tool modes supported by the current integrations API.',
   };
   await writeFile(`${output}/visual.json`, `${JSON.stringify(result, null, 2)}\n`);
   console.log(`PASS integrations screens: ${captures.length} captures`);
