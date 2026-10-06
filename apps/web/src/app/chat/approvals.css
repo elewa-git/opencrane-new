@@ -26,6 +26,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #0a8497; outline-offs
 .unknown-notice { display: block; margin-top: 8px; background: #f2fbfc; }
 .reference-row { display: flex; justify-content: space-between; gap: 16px; padding-top: 12px; border-top: 1px solid #e1e6e7; }
 .reference-row code { font-family: 'DM Mono', monospace; overflow-wrap: anywhere; }
+.reference-row span { flex-shrink: 0; }
 .drawer-actions { width: 100%; }
 .drawer-actions > * { flex: 1 1 0; }
 .gap-note { background: #f2fbfc; }
