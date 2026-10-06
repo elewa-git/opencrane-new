@@ -95,6 +95,7 @@ Dates are UTC qualification dates, which may precede the PR merge date. Every ci
 | 2026-10-03 | #69 | Two isolated secondary stacks | Concurrent isolated dev-stack journeys and owner preservation | PASS | Two secondary stack limit | [parallel-stacks-evidence.md](parallel-stacks-evidence.md) |
 | 2026-10-04 | #78 | MCP complete startup check on secondary stack | Fresh/repeat complete startup journeys including live-view | FAIL | Fresh live-view timeout; repeat decoded-pixels timeout | [p3-3-mcp-discover.md](p3-3-mcp-discover.md) |
 | 2026-10-04 | Pending (#136) | Event-store read resilience | Real NATS stall, outage, deadline and abort regressions; required source checks and full root suite | PARTIAL | Final root 1,488 passed / 15 skipped; earlier focused and root failures plus passing reruns retained; fresh install NOT RUN | [Read-retry receipt](i136-read-retry.md) |
+| 2026-10-06 | #32 | Daily fresh dev-stack timer | User timer installed for 03:17 UTC with no catch-up after a missed run; receipts saved outside git | PARTIAL | Main commit `8bb9b814ef70444255a5b032ab4cdc91364005d1`; receipts: `~/.opencrane/daily-fresh/ledger.md`; timer active; full hand run FAIL at mobile approval | [Timer listing and hand-run result](p2-7-timer.md) |
 
 ## Work awaiting qualification
 
