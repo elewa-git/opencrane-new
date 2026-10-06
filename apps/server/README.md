@@ -28,6 +28,9 @@ flowchart LR
 - Handles conversations, approvals, file uploads, computer access and organisation history.
 - Returns spending records to current owners and admins. It reads the records first,
   then checks access, so a longer read does not use up the write access time limit.
+  Resolving a hold also reads its history first and rechecks access before saving.
+- Starts personal turns using the latest default paying group. It keeps a small
+  summary and reads only new spending events after the first use.
 - Lets two silo members exchange private messages without starting assistant work.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
   and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that

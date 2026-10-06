@@ -157,7 +157,7 @@ async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Inf
   throw cause;
 }
 
-async function readBeforeDeadline<Value>(read: () => Promise<Value>, deadline: number,
+export async function readBeforeDeadline<Value>(read: () => Promise<Value>, deadline: number,
   signal?: AbortSignal) {
   const expired = Promise.withResolvers<never>();
   function timeout() {

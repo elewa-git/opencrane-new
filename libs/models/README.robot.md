@@ -426,3 +426,16 @@ and remembers the existing uncertainty. Later usage still records its observatio
 Lost-output reports grant no authority. The existing output-report allowlist
 accepts `agent.output_lost` so it cannot refuse an in-flight call or a reader.
 Private turn admission keeps its existing small access streams.
+
+## Resolution history and access
+
+`resolveEffect` reads the reservation and effect events with one ten-second history
+limit before starting its two-second member access check. The HTTP access callback
+starts after history too, and is checked again immediately before the append.
+Member removal during history or between the checks refuses the write. Resolution
+still makes one conditional append to `effect-<permitId>` with the caller's expected
+sequence; a concurrent resolution still conflicts. It never writes budget state.
+
+`test/reconcile.test.ts` covers history ordering, removal immediately before saving,
+access-check expiry and a concurrent effect write. `test/actor.test.ts` covers a
+lost reservation reply followed by a successful reservation at the next position.

@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- Starting a turn on a personal assistant no longer slows down as the silo's spending history grows. Resolving a spending hold reads history before starting its access check.
+
 - Docker test fixtures remove their anonymous volumes when they remove containers.
 - Spending reads only budget and call records, so long chats no longer make it fail. Unknown holds stay listed. Browser budget checks restore their test limits after a failed step.
 - Model budget writes no longer slow down as the silo's spending history grows.

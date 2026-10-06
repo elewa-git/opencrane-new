@@ -22,11 +22,16 @@ async function reservation(store: EventStore, silo: string, permitId: string, de
 export async function readEffect(store: EventStore, silo: string, permitId: string) {
   id.parse(permitId);
   const deadline = performance.now() + 10_000;
-  const r = await reservation(store, silo, permitId, deadline);
-  if (!r) return undefined;
+  const records = await effectRecords(store, silo, permitId, deadline);
+  return records?.current;
+}
+
+async function effectRecords(store: EventStore, silo: string, permitId: string, deadline: number) {
+  const held = await reservation(store, silo, permitId, deadline);
+  if (!held) return undefined;
   const rows = await history(store, `effect-${permitId}`, silo, deadline);
   if (performance.now() >= deadline) throw new Error('Effect read expired');
-  return effectStatus(r, rows);
+  return { current: effectStatus(held, rows), rows };
 }
 
 function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[]) {
@@ -74,16 +79,19 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
   fresh?: () => Promise<void>) {
   id.parse(permitId);
   const command = resolutionCommandSchema.parse(resolutionInput(raw));
+  const deadline = performance.now() + 10_000;
+  const records = await effectRecords(store, silo, permitId, deadline);
+  // Start HTTP access checks after history; call them again immediately before saving.
+  await fresh?.();
   const memberFresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
   const membership = await currentMembership(store, silo, memberId, memberFresh);
   if (!['owner', 'admin'].includes(membership.role)) {
     throw new Error('Access changed');
   }
-  const current = await readEffect(store, silo, permitId);
-  if (!current) return { status: 'not_found' } as const;
+  if (!records) return { status: 'not_found' } as const;
+  const { current, rows } = records;
   const { commandId, expectedSequence, ...fields } = command;
   const payload = effectResolvedDataSchema.parse({ ...fields, permitId, reservationId: current.reservationId, resolvedBy: memberId });
-  const rows = await history(store, `effect-${permitId}`, silo);
   const prior = rows.find(r => r.event.commandId === commandId);
   if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' } as const;
   if (current.sequence !== expectedSequence || current.resolution || current.state !== 'outcome_unknown') return { status: 'conflict' } as const;

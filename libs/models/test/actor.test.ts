@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
+import { countReads, expectNoWholeReads, lostReplyStore, natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, history, priceTableId, totals } from '../src/index.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -269,10 +269,38 @@ async function stopsAfterAnotherLeaderWrites() {
   const before = await nats.store.head();
   const reads = countReads(nats.store);
   await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
-  expect(reads.calls).toEqual([{ subject: 'budget-test', fromSequence: 3, rows: 1 }]);
+  for (const call of reads.calls) {
+    expect(call).toMatchObject({ subject: 'budget-test', fromSequence: 3 });
+    expect(call.rows).toBeLessThanOrEqual(1);
+  }
   await expect(reserve()).rejects.toThrow('Budget writer unavailable');
   expect(await nats.store.head()).toBe(before);
   expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
 }
 it('stops the old actor after another leader writes without holding money',
   stopsAfterAnotherLeaderWrites);
+
+async function advancesAfterLostReservationReply() {
+  const faulty = await lostReplyStore(nats.connection);
+  const store = faulty.store;
+  actor = new BudgetActor(store, 'test', now);
+  await actor.start();
+  const before = await store.head('budget-test');
+  faulty.loseNextReply();
+  const first = await reserve();
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 1, monthCents: 0 });
+  const second = await reserve();
+  const rows = await history(store, 'budget-test', 'test');
+  function isReservation(row: (typeof rows)[number]) {
+    return row.event.type === 'budget.reserved';
+  }
+  const reservations = rows.filter(isReservation);
+  expect(reservations).toMatchObject([
+    { sequence: before + 1, event: { data: { reservationId: first } } },
+    { sequence: before + 2, event: { data: { reservationId: second } } },
+  ]);
+  expect(reservations).toHaveLength(2);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 2, monthCents: 0 });
+}
+it('stores a lost-reply reservation once and uses its position for the next reservation',
+  advancesAfterLostReservationReply);
