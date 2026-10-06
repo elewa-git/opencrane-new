@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { chatRowSchema, chatMessageSchema } from '../src/index.ts';
+import { eventRegistry } from '@opencrane/events';
+import { chatRowSchema, chatMessageSchema, chatFeedSchema } from '../src/index.ts';
 
 it('validates mode-correct creation in HTTP rows and realtime envelopes', () => {
   const row = {
@@ -33,7 +34,7 @@ function validatesToolAndDecisionFields() {
   expect(chatRowSchema.safeParse(row).success).toBe(true);
   const invalidFields = [
     { callId: 1 }, { serverId: [] }, { toolName: null }, { status: 'inProgress' },
-    { durationMs: -1 }, { durationMs: 1.5 }, { outcome: 'maybe' },
+    { durationMs: -1 }, { durationMs: 1.5 },
     { requestId: 1 }, { approvalId: false },
   ];
   for (const fields of invalidFields) {
@@ -42,3 +43,35 @@ function validatesToolAndDecisionFields() {
   }
 }
 it('validates optional tool progress and decision fields in chat rows', validatesToolAndDecisionFields);
+
+function acceptsExistingConversationRows(outcome: string) {
+  const rows: unknown[] = [];
+  for (const definition of Object.values(eventRegistry)) {
+    if (definition.stream !== 'conversation') continue;
+    if (definition.type.startsWith('agent.tool_call_')) continue;
+    const row = { id: definition.type, position: rows.length + 1, type: definition.type,
+      time: '2026-10-06T12:00:00Z', data: definition.example };
+    rows.push(row);
+  }
+  const delivered = { id: 'delivered', position: rows.length + 1, type: 'file.delivered',
+    time: '2026-10-06T12:00:00Z', data: { fileId: 'file', outcome } };
+  rows.push(delivered);
+  const feed = { rows, position: rows.length, generation: 1, computerState: 'ready' };
+  expect(chatFeedSchema.safeParse(feed).success).toBe(true);
+  const message = { version: 1, topic: 'conversation', conversationId: 'chat', type: 'event',
+    position: delivered.position, generation: 1, row: delivered };
+  expect(chatMessageSchema.safeParse(message).success).toBe(true);
+}
+it.each(['saved', 'kept_existing'])(
+  'loads existing conversation rows and an upload with outcome %s', acceptsExistingConversationRows);
+
+function validatesDecisionOutcome() {
+  const row = { id: 'decision', position: 1, type: 'decision.recorded',
+    time: '2026-10-06T12:00:00Z', data: { turnId: 'turn', outcome: 'maybe' } };
+  expect(chatRowSchema.safeParse(row).success).toBe(false);
+  for (const outcome of ['allow', 'ask', 'deny']) {
+    const decision = { ...row, data: { ...row.data, outcome } };
+    expect(chatRowSchema.safeParse(decision).success).toBe(true);
+  }
+}
+it('checks decision outcomes only on decision rows', validatesDecisionOutcome);

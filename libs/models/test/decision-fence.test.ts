@@ -528,7 +528,7 @@ async function allowsOtherGrantBeforeSnapshot() {
 it('allows a call while another member grant is waiting to reach the permissions service',
   allowsOtherGrantBeforeSnapshot, 40_000);
 
-async function allowsApprovedToolDuringOtherActivity() {
+async function allowsApprovedToolDuringActivity(injection: Injection) {
   const setup = await fixture();
   try {
     await setUpMcp(setup, 'ask');
@@ -541,7 +541,7 @@ async function allowsApprovedToolDuringOtherActivity() {
     const approved = await decideApproval(setup.nats.store, 'test', parsed.approvalId,
       'alice', 'approved', true, currentAccess, setup.actor.now());
     expect(approved.status).toBe('appended');
-    const race = injectDuringDecision(setup, otherTurnStarted);
+    const race = injectDuringDecision(setup, injection);
     try {
       const response = await decide(setup, 'mcp');
       expect(response.status, response.body).toBe(200);
@@ -555,8 +555,13 @@ async function allowsApprovedToolDuringOtherActivity() {
     await setup.close();
   }
 }
-it('uses an approved tool once while another conversation starts a turn',
-  allowsApprovedToolDuringOtherActivity, 40_000);
+function isToolActivity(injection: Injection) {
+  return injection.type === 'agent.tool_call_started' || injection.type === 'agent.tool_call_finished';
+}
+const toolActivity = harmless.filter(isToolActivity);
+const approvedToolActivity = [otherTurnStarted, ...toolActivity];
+it.each(approvedToolActivity)('uses an approved tool once during $label',
+  allowsApprovedToolDuringActivity, 40_000);
 
 const otherGroupMemberRemoved: Injection = {
   label: 'another team member is removed', subject: 'team-sales', type: 'team.member_removed',

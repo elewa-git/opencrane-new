@@ -80,8 +80,11 @@ separate server field. Suspended and resumed computers use the starting state.
 ## Tool fields in chat rows
 
 `chatRowSchema.data` allows optional strings `callId`, `serverId`, `toolName`,
-`requestId` and `approvalId`; `status` is completed/failed, `durationMs` is a
-non-negative integer and `outcome` is allow/ask/deny. Old chat rows remain valid.
+`requestId` and `approvalId`. Tool rows check `status` as completed/failed;
+decision rows check `outcome` as allow/ask/deny. Other rows keep their own string
+values, including saved/kept_existing for delivered uploads. `durationMs` is a
+non-negative integer. Tests parse all older conversation examples, HTTP feeds
+and live delivery messages.
 The browser receives these fields through the existing feed and live messages.
 Running tool lines and attempt lists are not rendered yet. Tests are in
 `test/chat-mode.test.ts`.

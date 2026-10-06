@@ -1,3 +1,4 @@
+import { isToolCallText } from './tool-call.ts';
 // Data schemas for every event type in the registry except the four
 // examples in examples.ts. Each is built from what docs/architecture/events.md
 // and plan.md say the event means: which ids it needs, who did it, and what a
@@ -332,9 +333,9 @@ export const agentCommandRanDataSchema = z
 const toolCallFields = {
   conversationId: z.string().regex(/^[\w-]{1,200}$/u),
   turnId: z.string().regex(/^[\w-]{1,200}$/u),
-  callId: z.string().regex(/^[\w-]{1,200}$/u),
+  callId: z.string().refine(isToolCallText),
   serverId: z.string().regex(/^[\w-]{1,200}$/u),
-  toolName: z.string().min(1).max(200),
+  toolName: z.string().refine(isToolCallText),
 };
 export const agentToolCallStartedDataSchema = z.object(toolCallFields).strict();
 export const agentToolCallFinishedDataSchema = z.object({

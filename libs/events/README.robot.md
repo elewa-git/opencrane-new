@@ -61,3 +61,10 @@ streams. Both carry `conversationId`, `turnId`, `callId`, `serverId` and
 non-negative integer `durationMs`. Their strict schemas exclude arguments,
 results and error text. Registry examples drive the generated schema tests.
 Both names are listed in the event catalogue.
+
+Call ids and tool names share `isToolCallText`, exported at
+`@opencrane/events/tool-call`. It accepts 1–200 UTF-16 code units, including
+provider punctuation, and excludes Unicode control, format, surrogate,
+private-use and unassigned characters. This entrypoint has no dependencies.
+The computer checks it before saving a report; server event validation uses
+the same check.

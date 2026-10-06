@@ -97,3 +97,55 @@ async function refusesPrivateTools() {
   } finally { test.close(); }
 }
 it('still refuses tool calls in private turns', refusesPrivateTools);
+
+async function ignoresInvalidToolReport(fields: Record<string, unknown>) {
+  const test = await fixture();
+  try {
+    const item = { type: 'mcpToolCall', id: 'call_1', server: 'oc_0123456789', tool: 'write',
+      ...fields };
+    test.notify('item/started', item);
+    test.notify('item/completed', item);
+    const valid = { ...item, id: 'functions.write:0', tool: 'write', status: 'completed' };
+    test.notify('item/started', valid);
+    test.notify('item/completed', valid);
+    test.finish();
+    expect(test.reports).toMatchObject([
+      { sequence: 1, type: 'agent.turn_started' },
+      { sequence: 2, previousSequence: 1, type: 'agent.tool_call_started',
+        callId: 'functions.write:0' },
+      { sequence: 3, previousSequence: 2, type: 'agent.tool_call_finished' },
+      { sequence: 4, previousSequence: 3, type: 'agent.turn_completed' },
+    ]);
+    expect(test.reload()).toHaveLength(2);
+  } finally {
+    test.close();
+  }
+}
+const invalidToolFields = [
+  { id: '' }, { id: 'x'.repeat(201) }, { id: 'call\n1' },
+  { tool: '' }, { tool: 'x'.repeat(201) }, { tool: 'write\n' },
+];
+it.each(invalidToolFields)(
+  'skips invalid tool fields %j and continues reporting without sequence gaps',
+  ignoresInvalidToolReport);
+
+async function ignoresToolNotificationsAfterTurnCompletion() {
+  const test = await fixture();
+  try {
+    test.finish();
+    const item = { type: 'mcpToolCall', id: 'late_call', server: 'oc_0123456789', tool: 'write',
+      status: 'completed' };
+    test.notify('item/started', item);
+    test.notify('item/completed', item);
+    expect(test.reports).toMatchObject([
+      { sequence: 1, type: 'agent.turn_started' },
+      { sequence: 2, previousSequence: 1, type: 'agent.turn_completed' },
+    ]);
+    expect(test.reports.filter(isToolReport)).toEqual([]);
+    expect(test.reload()).toEqual([]);
+  } finally {
+    test.close();
+  }
+}
+it('ignores tool starts and finishes received after the turn completes',
+  ignoresToolNotificationsAfterTurnCompletion);

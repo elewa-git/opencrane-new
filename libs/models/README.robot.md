@@ -464,6 +464,8 @@ refusals leave the effect stream without `effect.resolved`.
 `agent.tool_call_finished`. Neither changes access. The decision activity check
 ignores them while still refusing turn closure, Stop and revoked access. The
 regressions inject each type during both model and MCP decisions. Omitting
-either type makes those decisions return 403. Chat readers remain open while
-these reports arrive. Full conversation reads still precede the short access
-check; only new activity is read during it.
+either type makes those decisions return 403. Approved Ask retries also accept
+both types and use the approval once. The server's approvals GET regression
+adds each type during its access check and expects 200. Removing the matching
+entry from `outputReportTypes` makes that read return 503. Full conversation
+reads still precede the short access check; only new activity is read during it.

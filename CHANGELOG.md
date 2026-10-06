@@ -4,7 +4,7 @@
 
 ## Unreleased
 
-- Conversation feeds now carry tool start and finish records and tool access decisions, without tool arguments or results. Tool activity keeps readers and concurrent access checks working.
+- Conversation feeds now carry tool start and finish records and tool access decisions, without tool arguments or results. Tool activity keeps approval reads and concurrent access checks working. Delivered uploads still load with their saved outcomes. Invalid tool names and call ids are skipped without stopping later reports.
 
 - Team chats are marked private. A lost computer pauses sending and explains recovery. Replies with lost output never show Done. A memory-free turn is a visible, separate choice that resets after sending.
 - Operators: after updating an existing installation, stop the services and run `npm run replay -- computers` once before serving chat again. The new computer state is not filled from older events otherwise. Fresh installations need nothing.

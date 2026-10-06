@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, tool records and computer state"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, uploads, tool records and computer state"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -20,7 +20,8 @@ flowchart LR
 
 - Define the messages exchanged over the live browser connection.
 - Define the data returned for chat, computers, integrations, budgets, held spend and the history of changes.
-- Type tool call identity, completion status and tool access decisions in chat rows.
+- Check tool call names and completion status in chat rows. Check access outcomes
+  on decision rows, so delivered uploads keep their own outcome values.
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
 - Check flat group rows and create or remove commands for the People & groups screen.

@@ -1,3 +1,4 @@
+import { isToolCallText } from '@opencrane/events/tool-call';
 import { createHash } from 'node:crypto';
 import { record } from './http.ts';
 import type { BridgeReport } from './report-journal.ts';
@@ -11,7 +12,9 @@ function toolReport(input: Turn, item: Record<string, unknown>, finished: boolea
   const server = input.tools?.find(hasServerKey);
   const callId = item['id'];
   const toolName = item['tool'];
-  if (!server || typeof callId !== 'string' || typeof toolName !== 'string') return;
+  if (!server || !isToolCallText(callId) || !isToolCallText(toolName)) {
+    return;
+  }
   // Keep arguments, results and Codex error text out of the saved report.
   const report: Partial<BridgeReport> = { callId, serverId: server.serverId, toolName };
   if (finished) {

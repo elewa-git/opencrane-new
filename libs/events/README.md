@@ -24,9 +24,9 @@ flowchart LR
   server["apps/server<br/>back end"] -.-> events["libs/events<br/>event and tool report definitions"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
-  handlers["libs/handlers<br/>background reactions"] -.-> events
+  workers["libs/handlers and apps/ops<br/>background workers"] -.-> events
   others["libs/models and libs/authz<br/>AI rules and permissions"] -.-> events
-  ops["apps/ops<br/>background workers"] -.-> events
+  computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
 ```
 
@@ -39,6 +39,7 @@ flowchart LR
 - Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
 
 It defines tool start and finish records that exclude arguments, results and error text.
+The computer and server share its check for call ids and tool names.
 It also records when part of a private reply was lost before the server could save it.
 
 ## Processes it handles

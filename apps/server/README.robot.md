@@ -781,6 +781,7 @@ are no more than rows at 10 plus two. Times are logged, with no timing assertion
 turns, unchanged refusal messages, first bindings, newest execution modes and
 missing or different read-back events. It also injects suspension during admission
 to prove the append still uses the position read with the facts.
+
 ## Tool call feed records
 
 The strict report parser accepts `agent.tool_call_started` and
@@ -791,5 +792,10 @@ report uses the existing conditional append and computer sequence digest; an
 identical replay is a duplicate and changed bytes are refused. Reports grant
 no access and carry no arguments, results or error text.
 
-Tests: `test/tool-reports.test.ts` and the open-reader regression in
-`test/chat-access-regression.test.ts`.
+Tests: `test/tool-reports.test.ts` checks valid provider punctuation, repeated
+reports, invalid fields and forged assistant/conversation/turn references. A
+refused report leaves the event log unchanged. The approvals GET regression in
+`test/chat-access-regression.test.ts` adds each tool event during its access
+check. It expects 200 and returns 503 if that type leaves `outputReportTypes`.
+`test/bridge-channel.test.ts` checks that the computer skips invalid tool fields
+and keeps sending later reports through its open socket.
