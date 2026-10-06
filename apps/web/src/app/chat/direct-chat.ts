@@ -8,6 +8,7 @@ import {
 import { SharedState } from '../shared-state/shared-state';
 import { PaperSurface } from '../ui/paper';
 import { NavigationMenu } from '../ui/navigation-menu';
+import { RecipientPicker, type Colleague } from './recipient-picker';
 import { WebSocketService } from '../core/websocket.service';
 import { ChatComposer } from './composer';
 import {
@@ -22,7 +23,6 @@ import {
   fetchDirectHistory, searchColleagues, sendDirectMessage, type DirectFailure,
 } from './direct-chat-api';
 
-type Colleague = { memberId: string; displayName: string | null };
 type PageState = 'loading' | 'ready' | 'failed' | 'access_changed';
 type SendState = 'idle' | 'applying' | 'unknown' | 'failed';
 type PendingChange = {
@@ -35,7 +35,7 @@ type PendingChange = {
 
 @Component({
   selector: 'oc-direct-chat',
-  imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu],
+  imports: [SharedState, ChatComposer, PaperSurface, NavigationMenu, RecipientPicker],
   templateUrl: './direct-chat.html',
   styleUrl: './direct-chat.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -72,8 +72,6 @@ export class DirectChat implements OnInit, OnDestroy {
   private socketConversationId = '';
   private hasLoadedData = false;
   private focusComposerAfterCreate = false;
-  private focusSearchAfterClear = false;
-  private readonly searchElement = viewChild<ElementRef<HTMLInputElement>>('searchField');
   private readonly composerElement = viewChild<ElementRef<HTMLElement>>('composer');
   private readonly accessHeading = viewChild<ElementRef<HTMLElement>>('accessHeading');
   private focusAccessHeading = false;
@@ -136,10 +134,7 @@ export class DirectChat implements OnInit, OnDestroy {
     }
   }
 
-  protected queryChanged(event: Event): void {
-    const target = event.target;
-    if (!(target instanceof HTMLInputElement)) return;
-    const query = target.value;
+  protected colleagueQueryChanged(query: string): void {
     this.colleagueQuery.set(query);
     void this.loadColleagues(query);
   }
@@ -174,7 +169,6 @@ export class DirectChat implements OnInit, OnDestroy {
     this.generation = 0;
     this.socketConversationId = '';
     this.socket.disconnect();
-    this.focusSearchAfterClear = true;
   }
 
   protected async selectConversation(conversationId: string): Promise<void> {
@@ -531,14 +525,6 @@ export class DirectChat implements OnInit, OnDestroy {
       requestAnimationFrame(this.focusAccessTitle.bind(this));
       return;
     }
-    if (this.focusSearchAfterClear) {
-      this.focusSearchAfterClear = false;
-      requestAnimationFrame(this.focusSearch.bind(this));
-    }
-  }
-
-  private focusSearch(): void {
-    this.searchElement()?.nativeElement.focus();
   }
 
   private focusAccessTitle(): void {

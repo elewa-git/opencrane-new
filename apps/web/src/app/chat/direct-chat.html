@@ -60,41 +60,13 @@
           <oc-shared-state kind="failed" message="Direct conversations are unavailable right now"
             detail="Reading again is safe." [showAction]="false" />
           <button class="button secondary" type="button" (click)="load()">Try again</button>
-        } @else if (!colleague()) {
-          <section class="draft" aria-label="Direct conversation recipients">
-            <div class="to-label">To</div>
-            <p class="draft-note">One colleague → direct conversation between two people.</p>
-            <label class="sr-only" for="colleague-search">Search colleagues</label>
-            <input #searchField id="colleague-search" type="search" autocomplete="off"
-              [value]="colleagueQuery()" [disabled]="composerBusy()"
-              (input)="queryChanged($event)" />
-            @if (colleagues().length) {
-              <div class="colleague-options" aria-label="Colleagues">
-                @for (candidate of colleagues(); track candidate.memberId) {
-                  <button type="button" class="colleague-option"
-                    (click)="selectColleague(candidate)">
-                    <span>{{ candidate.displayName || candidate.memberId }}</span>
-                    <small>Direct conversation</small>
-                  </button>
-                }
-              </div>
-            } @else if (colleagueQuery().trim()) {
-              <p class="empty-search">No colleagues match this search.</p>
-            }
-            <p class="draft-note">Draft — nothing is sent or created until your first message.</p>
-          </section>
         } @else {
-          <section class="recipient-card" aria-label="Conversation recipient">
-            <span class="to-label">To</span>
-            <span class="recipient-name">{{ recipientName() }}</span>
-            @if (!selectedConversationId()) {
-              <span class="draft-note">Draft — nothing is sent or created until your first message.</span>
-            }
-            @if (selectedConversationId()) {
-              <button type="button" class="change-recipient" [disabled]="composerBusy()"
-                (click)="clearColleague()">Change</button>
-            }
-          </section>
+          <oc-recipient-picker [colleagues]="colleagues()" [query]="colleagueQuery()"
+            [selected]="colleague()" [draft]="!selectedConversationId()"
+            [disabled]="composerBusy()" (queryEdited)="colleagueQueryChanged($event)"
+            (recipientSelected)="selectColleague($event)"
+            (recipientChanged)="clearColleague()" />
+          @if (colleague()) {
           @if (sendState() === 'applying') {
             <oc-shared-state kind="applying" [message]="sendButtonLabel()"
               [showAction]="false" />
@@ -130,6 +102,7 @@
                 </div>
               </article>
             }
+          }
           }
         }
       </div>

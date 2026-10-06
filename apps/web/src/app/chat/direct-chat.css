@@ -35,29 +35,10 @@
 .refresh-button { min-width: 44px; min-height: 44px; color: #2b3133; }
 .transcript { min-height: 0; overflow: auto; padding: 24px 28px 8px; }
 .transcript-inner { width: 100%; max-width: 780px; margin: 0 auto; }
-.draft,.recipient-card { margin-bottom: 24px; padding: 12px; border: 1px solid #9fdde8;
-  border-radius: 9px; background: #fbfdfd; }
-.to-label { display: block; color: #16191a; font-size: 12px; font-weight: 600; }
-.draft-note { display: block; margin: 5px 0 10px; color: #4f575a; font-size: 12px; }
-.draft input { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid #9fdde8;
-  border-radius: 6px; background: white; font: inherit; }
-.draft input:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
-.colleague-options { display: grid; gap: 4px; margin-top: 8px; }
-.colleague-option { display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
-  min-height: 48px; padding: 7px 10px; border: 1px solid #dee3e4; border-radius: 6px;
-  background: white; color: #2b3133; text-align: left; cursor: pointer; }
-.colleague-option:hover { background: #eefafc; }
-.colleague-option small,.empty-search { color: #4f575a; font-size: 11px; }
-.empty-search { margin: 10px 0; }
 .refresh-error { display: flex; align-items: center; justify-content: space-between; gap: 12px;
   flex-wrap: wrap;
   margin-bottom: 14px; padding: 10px; border: 1px solid #e6d4b2; border-radius: 7px;
   background: #fffaf0; color: #4f575a; font-size: 12px; }
-.recipient-card { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
-.recipient-card .draft-note { flex-basis: 100%; margin: 0; }
-.recipient-name { padding: 7px 10px; border: 1px solid #9fdde8; border-radius: 6px;
-  background: #eefafc; }
-.change-recipient { min-width: 44px; min-height: 44px; margin-left: auto; color: #086c7b; }
 .empty-transcript { margin: 32px 0; color: #4f575a; font-size: 13px; }
 .message { display: flex; align-items: flex-start; gap: 10px; margin: 14px 0 18px; }
 .message.own { justify-content: flex-end; }
@@ -83,7 +64,6 @@ button:focus-visible,a:focus-visible { outline: 2px solid var(--oc-focus-ring); 
   .navigation-toggle { display: inline-flex; align-items: center; justify-content: center; }
   .transcript { padding: 16px 16px 12px; }
   .composer-dock { padding: 10px 12px max(12px, env(safe-area-inset-bottom)); }
-  .recipient-card { align-items: flex-start; }
   .message-content { max-width: 86%; }
 }
 @media (prefers-reduced-motion: reduce) {
