@@ -1,0 +1,135 @@
+[
+  {
+    "time": 1791268529920,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 238.06622300000163
+  },
+  {
+    "time": 1791268531189,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 507.51071499998216
+  },
+  {
+    "time": 1791268532185,
+    "method": "GET",
+    "path": "/api/org/effects",
+    "status": 200,
+    "responseTimeMs": 1345.4431469999836
+  },
+  {
+    "time": 1791268533784,
+    "method": "POST",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 1099.3207030000049
+  },
+  {
+    "time": 1791268534428,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 459.93145400000503
+  },
+  {
+    "time": 1791268535947,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 652.316995000001
+  },
+  {
+    "time": 1791268536750,
+    "method": "GET",
+    "path": "/api/org/effects",
+    "status": 200,
+    "responseTimeMs": 1645.4084250000305
+  },
+  {
+    "time": 1791268538480,
+    "method": "POST",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 897.8552449999843
+  },
+  {
+    "time": 1791268538932,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 272.78894199995557
+  },
+  {
+    "time": 1791268540413,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 788.7624959999812
+  },
+  {
+    "time": 1791268541449,
+    "method": "GET",
+    "path": "/api/org/effects",
+    "status": 200,
+    "responseTimeMs": 1802.4278850000119
+  },
+  {
+    "time": 1791268542994,
+    "method": "POST",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 815.1152360000415
+  },
+  {
+    "time": 1791268543436,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 261.00244100001873
+  },
+  {
+    "time": 1791268556880,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 152.50709600001574
+  },
+  {
+    "time": 1791268557998,
+    "method": "GET",
+    "path": "/api/org/effects",
+    "status": 200,
+    "responseTimeMs": 1252.9979929999681
+  },
+  {
+    "time": 1791268559388,
+    "method": "POST",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 692.7773760000127
+  },
+  {
+    "time": 1791268559852,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 253.4546140000457
+  },
+  {
+    "time": 1791268561441,
+    "method": "GET",
+    "path": "/api/org/models",
+    "status": 200,
+    "responseTimeMs": 694.6288279999862
+  },
+  {
+    "time": 1791268563428,
+    "method": "GET",
+    "path": "/api/org/effects",
+    "status": 503,
+    "responseTimeMs": 2663.113361000025
+  }
+]

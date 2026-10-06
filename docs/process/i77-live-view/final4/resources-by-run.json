@@ -1,0 +1,262 @@
+[
+  {
+    "run": 1,
+    "date": "2026-10-06T06:07:51.133493+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 243396,
+        "fds": 40
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 168512,
+        "fds": 33
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 153152,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 67812,
+        "fds": 70
+      }
+    }
+  },
+  {
+    "run": 2,
+    "date": "2026-10-06T06:08:31.042358+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 243040,
+        "fds": 41
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 168820,
+        "fds": 32
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 146304,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 56916,
+        "fds": 69
+      }
+    }
+  },
+  {
+    "run": 3,
+    "date": "2026-10-06T06:09:21.010285+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 243256,
+        "fds": 43
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 171180,
+        "fds": 33
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 146364,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 56932,
+        "fds": 68
+      }
+    }
+  },
+  {
+    "run": 4,
+    "date": "2026-10-06T06:10:11.390675+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 246384,
+        "fds": 42
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 171484,
+        "fds": 37
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 146400,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 56336,
+        "fds": 65
+      }
+    }
+  },
+  {
+    "run": 5,
+    "date": "2026-10-06T06:11:36.085986+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 244736,
+        "fds": 41
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 171636,
+        "fds": 34
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 147560,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 56260,
+        "fds": 63
+      }
+    }
+  },
+  {
+    "run": 6,
+    "date": "2026-10-06T06:12:16.139589+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 246724,
+        "fds": 43
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 172040,
+        "fds": 37
+      },
+      "models": {
+        "pid": 3744834,
+        "rssKiB": 237124,
+        "fds": 30
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 55404,
+        "fds": 56
+      }
+    }
+  },
+  {
+    "run": 7,
+    "date": "2026-10-06T06:12:41.032145+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 246312,
+        "fds": 42
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 172100,
+        "fds": 40
+      },
+      "models": {
+        "pid": 3744834,
+        "rssKiB": 145012,
+        "fds": 37
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 55288,
+        "fds": 68
+      }
+    }
+  },
+  {
+    "run": 8,
+    "date": "2026-10-06T06:13:16.221946+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 275044,
+        "fds": 46
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 172396,
+        "fds": 41
+      },
+      "models": {
+        "pid": 3744834,
+        "rssKiB": 150540,
+        "fds": 41
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 55324,
+        "fds": 68
+      }
+    }
+  },
+  {
+    "run": 9,
+    "date": "2026-10-06T06:13:56.249673+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 277520,
+        "fds": 46
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 172424,
+        "fds": 40
+      },
+      "models": {
+        "pid": 3744834,
+        "rssKiB": 151360,
+        "fds": 41
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 55432,
+        "fds": 68
+      }
+    }
+  },
+  {
+    "run": 10,
+    "date": "2026-10-06T06:14:41.294137+00:00",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 246828,
+        "fds": 46
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 173400,
+        "fds": 39
+      },
+      "models": {
+        "pid": 3744834,
+        "rssKiB": 144324,
+        "fds": 41
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 55500,
+        "fds": 69
+      }
+    }
+  }
+]

@@ -1,0 +1,13 @@
+Read issue 77 with gh issue view 77 --comments. The default command failed on GitHub's removed Projects (classic) field; used gh issue view 77 --comments --json number,title,body,comments.
+Read the Final qualification 3 section from /home/jente/dev/wt/i77-batch3/docs/process/i77-live-view.md because PR #205 had not reached main.
+Read /home/jente/.fleet/reviews/turn-stall-diagnosis.md.
+Run nice -n 10 npm ci first.
+Run nice -n 10 npx tsc -p infra/dev-stack/tsconfig.json --noEmit before the measurement commit.
+Smoke-check the sampler on claimed id 1 with timeout --signal=TERM 6 python3 infra/dev-stack/live-view-resources.py /tmp/i77-batch4-sampler-corrected.jsonl.
+Restore the ordinary paying-group and assistant fixture ceilings through budget.ceiling_set events; amounts and times are in fixture-budget-restoration.json.
+Run docker restart opencrane-dev-1-models-1 at 06:12:00 UTC to replay those fixture events. The server stayed running.
+Restore ordinary repeat-fixture headroom through POST /api/org/models using a dev-only signed owner session; retain only commands and budget summaries, not credentials. See core-fresh/repeat-fixture-restoration.json.
+Run nice -n 10 npm run lint > docs/process/i77-live-view/final4/lint-final.log 2>&1 after correcting the receipt's Markdown formatting.
+Run nice -n 10 npm run lint:docs after recording the final source check results.
+Run nice -n 10 npm run lint:links after recording the final source check results.
+Trim only trailing whitespace and final blank lines from saved CLI logs before committing; retain messages, results and timestamps.

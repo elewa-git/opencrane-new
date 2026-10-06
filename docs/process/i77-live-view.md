@@ -1,7 +1,7 @@
 # Live-view lease delays — issue 77
 
-**Status: PARTIAL.** Deterministic lease regressions pass, but live qualification
-failed in both ten-run batches. #77 remains open.
+**Status: PARTIAL.** The latest live qualification failed: batch 4 passed 4/10
+counted runs. Six runs had budget refusals left by a failed core journey. #77 remains open.
 
 Work started from `65364a03b59babb3cacddd24978732edca831e5f` on
 `work/i77-liveview`, 4 October 2026. This receipt separates deterministic source
@@ -481,3 +481,219 @@ refresh assertion. Isolated retries of both files then **PASS**ed: gateway,
 passed on the rebased revision with the temporary harness adjustment. Logs,
 commands and timings are retained in [the final batch directory](i77-live-view/final/).
 The live qualification remains **FAIL**.
+
+## Final qualification 4 — 6 October 2026
+
+**FAIL: 4/10 counted runs passed.** All ten starts were below the unchanged 20% CPU
+pressure gate. There were no LOADED attempts and no retries. All four complete
+journeys cleared pixels in less than 2,000 ms. Six counted runs failed before
+the second viewer opened because the model call was refused by a zero-cent test
+budget. This batch does not close #77 or qualify ten successful live journeys.
+
+The product source was `a4508ae7a03021af48edb7bb3081787cb371b1ca`. The exact
+revision and preceding commits are in [the source record](i77-live-view/final4/source.txt).
+It includes #214 (`a4508ae`), #218 (`8cba6e2`) and #213 (`d1c9d43`).
+It also includes #215 (`6c67ef1`) and #198 (`1eaa646`).
+The measurement-only commit was `2199282`.
+Product code, deadlines, Docker daemon settings and the owner stack were not changed.
+
+`nice -n 10 npm ci` ran first and passed. Secondary id **1** was claimed on the
+first attempt. The shell retained an EXIT trap to run `down.sh --id 1`.
+The initial `up.sh --fresh` created new data and used real Zitadel sign-in and
+the local model stub. The [first host reading](i77-live-view/final4/host-first-reading.txt)
+was load **5.10 / 4.78 / 5.50**, **8 CPUs**, and CPU pressure `some avg10=10.52%`.
+The [reading before the claim](i77-live-view/final4/host-before.txt) was load
+**5.55 / 5.06 / 5.49** and pressure **7.43%**.
+
+The initial gateway briefly waited for Kubernetes to clear its disk-pressure
+scheduling block. It recovered without intervention; [the reading](i77-live-view/final4/startup-disk-pressure.json)
+records the condition and available space. The running server retained its
+**256 MiB heap cap**, and the browser retained its **30-second reply wait**;
+see [the limits](i77-live-view/final4/limits.json). The command was
+`node --experimental-strip-types infra/dev-stack/live-view-repeat.ts docs/process/i77-live-view/final4`,
+without `--quiet`. The two member chat pages stayed open between runs in
+separate browser contexts. Each width returned to its latest conversation.
+
+The batch 3 receipt was still in [PR #205](https://github.com/elewa-git/opencrane-new/pull/205),
+so its “Final qualification 3” section was read from the batch 3 worktree.
+It was not present in this main revision.
+
+### Why the six runs failed
+
+The initial broad journey passed uploads and both live viewers, then timed out
+waiting for **Spending loaded** while running the budget checks. It left the
+assistant ceiling at zero. The focused batch started before that leftover test
+state was diagnosed. Runs 1–6 all stored a `budget_exhausted` model denial and
+`agent.turn_failed` with reason `bridge_interrupted`. They produced no reply
+delta, so their first-delta time is **NOT PRODUCED**, rather than a late reply.
+The [initial failure](i77-live-view/final4/initial-journey/last-error.txt),
+[budget events](i77-live-view/final4/fixture-budget-restoration.json) and
+[turn and decision times](i77-live-view/final4/turn-events.json) show this sequence.
+
+The two test ceilings were restored to 20,000 cents through events at 06:09:38 UTC.
+That alone did not update the running budget writer, which keeps its state and
+append sequence in memory. Only the secondary models container was restarted
+at 06:12:00 UTC to replay those events. Run 6 had already received its budget
+denial at 06:11:49 UTC. Runs 7–10 then passed. The server, dispatcher and OpenFGA
+were not restarted during the batch, and no data was reset. The [restart record](i77-live-view/final4/models-fixture-restart.json)
+makes this interruption explicit. The six failures remain counted.
+
+These failures demonstrate a failed test setup, not a repeat of batch 3’s late
+reply diagnosis. The four later first-delta readings are encouraging but do
+not establish a ten-run pass or rule out delays with more history. The reason
+the initial Spending page did not load was not captured. Both later core
+journeys reproduced an unavailable effects read, described below. CPU pressure
+rose during the journeys even though each batch start met the gate.
+
+### Counted runs
+
+Each viewer cell gives the stop reason and close code, check counts by boundary
+and outcome, denied checks before revocation, and pause count and lengths.
+`none:ok` means access was confirmed. The first viewer was closed with Escape;
+only the viewer opened during the turn was revoked. Close codes are derived
+from the server stop reason, rather than captured separately from the wire.
+Failed journeys did not save their pause measurements; **NOT CAPTURED** does
+not mean zero. The second viewer and revocation were **NOT RUN** for those failures.
+All fourteen admitted viewer sessions had zero denied checks before revocation
+or failure. The denials after revocation are included in the check totals.
+
+First-delta time runs from the browser’s message POST to its first received
+`agent.message_delta` frame. Server run delay is the increase in
+`/proc/<server-pid>/schedstat`, converted from nanoseconds to milliseconds.
+The CPU column is the host’s `some avg10` reading at the start.
+
+| Run | Width | Result | First viewer: stop / code; checks; denied; pauses | During turn: stop / code; checks; denied; pauses | Revoke-to-clear | First delta | CPU pressure | Server run delay |
+| --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: |
+| [1](i77-live-view/final4/run-1-browser.json) | 390px | FAIL | `disconnected` / 1000; `none:ok` 5; denied 0; pauses NOT CAPTURED | NOT RUN: no reply delta | NOT REACHED | NOT PRODUCED | 18.54% | 2,211.3 ms |
+| [2](i77-live-view/final4/run-2-browser.json) | 1280px | FAIL | `disconnected` / 1000; `none:ok` 5; denied 0; pauses NOT CAPTURED | NOT RUN: no reply delta | NOT REACHED | NOT PRODUCED | 16.90% | 4,080.9 ms |
+| [3](i77-live-view/final4/run-3-browser.json) | 390px | FAIL | `disconnected` / 1000; `none:ok` 7; denied 0; pauses NOT CAPTURED | NOT RUN: no reply delta | NOT REACHED | NOT PRODUCED | 19.87% | 3,347.9 ms |
+| [4](i77-live-view/final4/run-4-browser.json) | 1280px | FAIL | `disconnected` / 1000; `none:ok` 8; denied 0; pauses NOT CAPTURED | NOT RUN: no reply delta | NOT REACHED | NOT PRODUCED | 19.75% | 5,067.1 ms |
+| [5](i77-live-view/final4/run-5-browser.json) | 390px | FAIL | `disconnected` / 1000; `none:ok` 4; denied 0; pauses NOT CAPTURED | NOT RUN: no reply delta | NOT REACHED | NOT PRODUCED | 19.27% | 3,383.0 ms |
+| [6](i77-live-view/final4/run-6-browser.json) | 1280px | FAIL | `disconnected` / 1000; `none:ok` 4; denied 0; pauses NOT CAPTURED | NOT RUN: no reply delta | NOT REACHED | NOT PRODUCED | 18.29% | 3,937.0 ms |
+| [7](i77-live-view/final4/run-7-browser.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 7; denied 0; pauses 0, [] ms | `access_changed` / 4003; `none:denied` 2; `none:ok` 5; denied 0; pauses 0, [] ms | 803 ms | 4060 ms | 18.97% | 2,348.9 ms |
+| [8](i77-live-view/final4/run-8-browser.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 9; denied 0; pauses 0, [] ms | `access_changed` / 4003; `authority_changed:unavailable` 1; `none:denied` 4; `none:ok` 5; denied 0; pauses 0, [] ms | 772 ms | 5083 ms | 19.36% | 3,653.5 ms |
+| [9](i77-live-view/final4/run-9-browser.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 8; denied 0; pauses 0, [] ms | `access_changed` / 4003; `authority_changed:unavailable` 1; `none:denied` 4; `none:ok` 6; denied 0; pauses 0, [] ms | 923 ms | 4898 ms | 19.10% | 2,621.7 ms |
+| [10](i77-live-view/final4/run-10-browser.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 9; denied 0; pauses 0, [] ms | `access_changed` / 4003; `authority_changed:unavailable` 1; `none:denied` 3; `none:ok` 5; denied 0; pauses 0, [] ms | 777 ms | 5546 ms | 19.80% | 3,146.7 ms |
+
+Each failed run has a saved screenshot: [run 1](i77-live-view/final4/run-1-failure.png),
+[run 2](i77-live-view/final4/run-2-failure.png), [run 3](i77-live-view/final4/run-3-failure.png),
+[run 4](i77-live-view/final4/run-4-failure.png), [run 5](i77-live-view/final4/run-5-failure.png)
+and [run 6](i77-live-view/final4/run-6-failure.png). Their stored turn and model
+decision times are in [the event record](i77-live-view/final4/turn-events.json).
+The [complete run records](i77-live-view/final4/runs.jsonl) retain every outcome.
+
+### Memory and open files
+
+The sampler recorded **111 readings**, every five seconds, from 06:06:20 to
+06:15:31 UTC, including sign-in and final logout checks. RSS is the process’s
+physical memory. File descriptors are its open files and sockets. The server
+has no endpoint for V8 heap used, so heap is **NOT AVAILABLE**, not zero.
+Values below are MiB of RSS / descriptor count; the middle is sample 56.
+
+| Process | Start | Middle | End | V8 heap used |
+| --- | ---: | ---: | ---: | --- |
+| server | 234.1 MiB / 40 | 240.7 MiB / 42 | 246.0 MiB / 39 | NOT AVAILABLE |
+| dispatcher | 150.2 MiB / 35 | 167.5 MiB / 35 | 169.3 MiB / 37 | NOT AVAILABLE |
+| models | 149.5 MiB / 36 | 143.0 MiB / 36 | 142.0 MiB / 36 | NOT AVAILABLE |
+| openfga | 66.2 MiB / 52 | 55.0 MiB / 65 | 54.2 MiB / 69 | NOT AVAILABLE |
+
+The dispatcher’s RSS grew gradually: 164.6 MiB after run 1 to 169.3 MiB after
+run 10. Server RSS fluctuated, including 268.6 and 271.0 MiB after runs 8 and 9,
+then 241.0 MiB after run 10; it ended above its starting reading. OpenFGA RSS
+fell. Server and dispatcher descriptors fluctuated rather than growing every
+run. OpenFGA descriptors rose from 52 before sign-in to 70 after run 1, then
+varied from 56 to 69 at run ends and finished at 69. This is growth from the
+pre-login baseline, but not repeated growth at every run. The models restart
+prevents an uninterrupted memory or descriptor comparison for that process.
+No server heap exhaustion was observed during this batch. These short readings
+do not prove that every possible leak is fixed.
+
+Every sample captured all four process readings. The
+[five-second readings](i77-live-view/final4/resources.jsonl),
+[start/middle/end readings](i77-live-view/final4/resource-summary.json) and
+[readings nearest each run’s end](i77-live-view/final4/resources-by-run.json)
+include process ids and host CPU pressure.
+
+### Core journeys after the batch
+
+**FAIL for both broad journeys.** The post-batch `up.sh --fresh` reset the same
+claimed id and ran the broad core check. Plain `up.sh` then ran it again on the
+same data. Both reached the budget checks after uploads, live views, approvals,
+computer replacement and audit checks. Both timed out after 30 seconds waiting
+for **Spending loaded**. The final replay and overall completion steps were
+**NOT RUN**, because the budget step stopped the journey.
+
+| Journey | Overall | Upload 390px / 1280px | Live view 390px / 1280px | Failed step |
+| --- | --- | --- | --- | --- |
+| Fresh after batch | FAIL | PASS / PASS | PASS: 178 ms / PASS: 138 ms | Spending loaded; effects read 503 after 2,606 ms |
+| Repeat on the same data | FAIL | PASS / PASS | PASS: 377 ms / PASS: 401 ms | Spending loaded; effects read 503 after 2,663 ms |
+
+The [fresh error](i77-live-view/final4/core-fresh/last-error.txt) and
+[repeat error](i77-live-view/final4/core-repeat/last-error.txt) record the two
+browser timeouts. The live-view receipts retain the completed turn and cleared
+pixels: [fresh 390px](i77-live-view/final4/core-fresh/live-view-390.json),
+[fresh 1280px](i77-live-view/final4/core-fresh/live-view-1280.json),
+[repeat 390px](i77-live-view/final4/core-repeat/live-view-390.json) and
+[repeat 1280px](i77-live-view/final4/core-repeat/live-view-1280.json).
+Upload and preview pictures are saved beside each receipt. Upload checks run
+before the live-view check at each width; reaching its completed receipt proves
+those earlier upload assertions passed.
+
+The Spending page needs both its budget and effects reads to succeed. The fresh
+journey’s [budget requests](i77-live-view/final4/core-fresh/models-api-statuses.json)
+returned 200 around the failure, but its
+[effects request](i77-live-view/final4/core-fresh/effects-api-statuses.json) returned
+503 after 2,606 ms. The [repeat requests](i77-live-view/final4/core-repeat/spending-api-statuses.json)
+show the same effects failure after 2,663 ms. The
+[effects route](../../apps/server/src/effects/routes.ts) starts a two-second
+`authorityFence` access check, reads the list, then checks that same limit again.
+A list read that crosses two seconds therefore makes a valid read unavailable.
+This is the likely cause under load; the receipt does not capture the thrown
+exception itself. Reads retaining this write-time limit also conflict with the
+repository rule that reads check access once. No product fix or deadline change
+was made in this qualification.
+
+Before the repeat, the ordinary 20,000-cent monthly test ceilings and 5,000-cent
+daily safety cap were restored through the running budget API. An initial update
+using the projection sequence returned 409; updates using the current stream
+sequence all returned 200. The
+[fixture record](i77-live-view/final4/core-fresh/repeat-fixture-restoration.json)
+retains those changes without credentials. There was no further models-only
+restart between these core journeys.
+
+**PASS for the repeated member fixture.** The repeated journey reached the
+budget checks, which follow the already joined member’s audit check. Its stream
+still has only `member.invited` and `member.joined`, with the same times as before
+the repeat. It neither re-invited nor re-joined that member, and did not fail with
+`invitation_not_pending`. The
+[member record](i77-live-view/final4/core-repeat/member-repeat-check.json) proves
+this narrower result. It does not make the whole repeated journey a pass.
+
+### Other checks
+
+Only this task’s checks are listed here. Lint, typechecks, the root suite, the web
+build and web unit tests used `nice -n 10`. The full root suite used two workers
+and its normal disposable NATS, PostgreSQL, OpenFGA, gateway and Docker fixtures.
+Its additional PostgreSQL fixture used a random loopback port, supplied through
+`PG_TEST_URL`, and was removed afterwards. All live journeys and secondary
+teardown finished before the root suite began.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Dependency install | PASS: 926 packages added, 940 audited | [Install record](i77-live-view/final4/dependency-install.txt) |
+| Full lint | PASS after correcting one Markdown issue reference | [Final log](i77-live-view/final4/lint-final.log); [initial failure](i77-live-view/final4/lint.log) retained |
+| Workspace typecheck | PASS | [Log](i77-live-view/final4/typecheck.log) |
+| Harness TypeScript check | PASS | [Log](i77-live-view/final4/infra-typecheck.log) |
+| Event catalogue | PASS: 96 event types agree | [Log](i77-live-view/final4/check-events.log) |
+| Full root suite | PASS: 2,004 passed, 15 skipped; 126 files passed, 4 skipped | [Log](i77-live-view/final4/test.log) |
+| Web production build | PASS, with existing bundle/style and CommonJS warnings | [Log](i77-live-view/final4/web-build.log) |
+| Web unit tests | PASS: 315 tests, 32 files | [Log](i77-live-view/final4/web-test.log) |
+| Secondary teardown | PASS: claim directory, containers and namespaces removed | [Check](i77-live-view/final4/teardown-check.json), [log](i77-live-view/final4/teardown.log) |
+| PostgreSQL test fixture teardown | PASS | [Log](i77-live-view/final4/test-fixture-teardown.log) |
+
+The fifteen skipped root tests and four skipped files are **NOT RUN**, not passing
+conditions. Green source checks do not change the failed live qualification or
+the two failed broad journeys. The [live command script](i77-live-view/final4/commands.sh),
+[check commands](i77-live-view/final4/check-commands.sh),
+[additional commands](i77-live-view/final4/commands-extra.txt) and
+[exit codes](i77-live-view/final4/check-exits.txt) retain the commands and outcomes.

@@ -1,0 +1,92 @@
+npm notice run @opencrane/web@0.1.0 test
+npm notice run ng test --watch=false
+❯ Building...
+✔ Building...
+Initial chunk files                            | Names                                       |  Raw size
+chunk-2ZJ6GMVC.js                              | -                                           | 195.81 kB |
+spec-app-app.js                                | spec-app-app                                | 178.04 kB |
+chunk-46YHVRUN.js                              | -                                           | 144.49 kB |
+chunk-4WYR2AKI.js                              | -                                           |  95.76 kB |
+chunk-JNV2BLD6.js                              | -                                           |  91.84 kB |
+chunk-DQWZKCMR.js                              | -                                           |  39.31 kB |
+spec-app-spending-spending.js                  | spec-app-spending-spending                  |  34.87 kB |
+chunk-RBDYZ3GD.js                              | -                                           |  33.32 kB |
+spec-app-chat-workspace.js                     | spec-app-chat-workspace                     |  29.95 kB |
+chunk-ETIAMCVU.js                              | -                                           |  27.46 kB |
+chunk-Y6QW6YV3.js                              | -                                           |  26.83 kB |
+chunk-ZL4GYHZ5.js                              | -                                           |  25.70 kB |
+chunk-GVN6TUCA.js                              | -                                           |  24.01 kB |
+chunk-ANBFQ3RV.js                              | -                                           |  23.92 kB |
+chunk-FS52LSL5.js                              | -                                           |  23.91 kB |
+chunk-5CO6DGGJ.js                              | -                                           |  23.46 kB |
+spec-app-people-group-detail-screen.js         | spec-app-people-group-detail-screen         |  21.69 kB |
+spec-app-people-people-screen.js               | spec-app-people-people-screen               |  21.52 kB |
+chunk-KMK2Q5IR.js                              | -                                           |  21.07 kB |
+chunk-I7UJGPZ2.js                              | -                                           |  19.30 kB |
+spec-app-integrations-integration-detail.js    | spec-app-integrations-integration-detail    |  16.34 kB |
+styles.css                                     | styles                                      |  16.27 kB |
+chunk-LRGZDUP4.js                              | -                                           |  14.85 kB |
+spec-app-live-view-live-view.js                | spec-app-live-view-live-view                |  13.89 kB |
+chunk-AN7F7PI5.js                              | -                                           |  13.47 kB |
+spec-app-chat-screenshot-capture.js            | spec-app-chat-screenshot-capture            |   9.57 kB |
+chunk-QJUB5UJ4.js                              | -                                           |   9.19 kB |
+chunk-YLVBNM6M.js                              | -                                           |   8.37 kB |
+spec-app-core-websocket.service.js             | spec-app-core-websocket.service             |   8.30 kB |
+chunk-SLHF4JZM.js                              | -                                           |   8.04 kB |
+chunk-HVD454LQ.js                              | -                                           |   7.82 kB |
+chunk-77D3WPXJ.js                              | -                                           |   7.26 kB |
+spec-app-ui-overlay.js                         | spec-app-ui-overlay                         |   6.67 kB |
+spec-app-chat-navigation.js                    | spec-app-chat-navigation                    |   6.57 kB |
+chunk-RIRRWDMO.js                              | -                                           |   6.54 kB |
+chunk-37GGZCYX.js                              | -                                           |   6.16 kB |
+spec-app-shared-state-call-site.js             | spec-app-shared-state-call-site             |   6.11 kB |
+spec-app-chat-conversation-file-card.js        | spec-app-chat-conversation-file-card        |   6.03 kB |
+spec-app-chat-file-preview.js                  | spec-app-chat-file-preview                  |   5.55 kB |
+spec-app-shared-state-shared-state.js          | spec-app-shared-state-shared-state          |   5.44 kB |
+spec-app-spending-effect-rules.js              | spec-app-spending-effect-rules              |   5.18 kB |
+spec-app-live-view-novnc-pause.js              | spec-app-live-view-novnc-pause              |   5.06 kB |
+chunk-LXQMT7CE.js                              | -                                           |   4.79 kB |
+chunk-RSTWSNOR.js                              | -                                           |   4.75 kB |
+chunk-IYD5B3RP.js                              | -                                           |   4.75 kB |
+chunk-WGO724JB.js                              | -                                           |   4.75 kB |
+spec-app-live-view-lease-channel.js            | spec-app-live-view-lease-channel            |   4.62 kB |
+spec-app-people-groups-api.js                  | spec-app-people-groups-api                  |   4.58 kB |
+spec-app-chat-upload-refusal.js                | spec-app-chat-upload-refusal                |   4.55 kB |
+spec-app-sign-in-sign-in.js                    | spec-app-sign-in-sign-in                    |   4.12 kB |
+spec-app-audit-audit.js                        | spec-app-audit-audit                        |   3.92 kB |
+chunk-7UZKYHZR.js                              | -                                           |   3.74 kB |
+spec-app-integrations-integration-facts-map.js | spec-app-integrations-integration-facts-map |   3.57 kB |
+spec-app-chat-approvals.js                     | spec-app-chat-approvals                     |   3.42 kB |
+spec-app-chat-chat-state.js                    | spec-app-chat-chat-state                    |   3.00 kB |
+spec-app-tool-policy-tool-policy.js            | spec-app-tool-policy-tool-policy            |   2.94 kB |
+chunk-EZGAGENS.js                              | -                                           |   2.82 kB |
+spec-app-chat-composer.js                      | spec-app-chat-composer                      |   2.66 kB |
+chunk-XAUPTBSQ.js                              | -                                           |   2.65 kB |
+chunk-TUVRFWTW.js                              | -                                           |   2.61 kB |
+chunk-755EWIMB.js                              | -                                           |   2.46 kB |
+spec-app-ui-paper.js                           | spec-app-ui-paper                           |   2.12 kB |
+chunk-H2VSOFRM.js                              | -                                           |   1.92 kB |
+chunk-726XSGCI.js                              | -                                           |   1.74 kB |
+spec-app-chat-tool-activity-line.js            | spec-app-chat-tool-activity-line            |   1.61 kB |
+spec-app-organisation-pages.js                 | spec-app-organisation-pages                 |   1.50 kB |
+spec-app-people-group-wording.js               | spec-app-people-group-wording               |   1.47 kB |
+init-testbed.js                                | init-testbed                                |   1.21 kB |
+vitest-mock-patch.js                           | vitest-mock-patch                           | 974 bytes |
+spec-app-chat-budget-stop-notice.js            | spec-app-chat-budget-stop-notice            | 833 bytes |
+
+                                               | Initial total                               |   1.38 MB
+
+Lazy chunk files                               | Names                                       |  Raw size
+chunk-PUWEAUKT.js                              | spending                                    | 338 bytes |
+chunk-7ONZXKUC.js                              | viewer                                      | 202 bytes |
+
+Application bundle generation complete. [15.867 seconds] - 2026-10-06T07:12:53.989Z
+
+
+ RUN  v4.1.11 /home/jente/dev/wt/i77-batch4/apps/web
+
+
+ Test Files  32 passed (32)
+      Tests  315 passed (315)
+   Start at  07:12:54
+   Duration  12.23s (transform 6.30s, setup 6.22s, import 11.36s, tests 47.34s, environment 61.34s)

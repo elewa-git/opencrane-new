@@ -1,0 +1,143 @@
+{
+  "reason": "The fresh core journey failed while waiting for Spending loaded. Restore its ordinary test headroom through the running budget API before repeat.",
+  "initialAttempt": "The initial updates used the projection sequence. The paying-group update succeeded, then the assistant update returned 409. Retried all three using the current stream sequence.",
+  "method": "Dev-only signed owner session against the claimed secondary; no credentials retained.",
+  "changes": [
+    {
+      "date": "2026-10-06T06:28:18.959Z",
+      "attempt": 1,
+      "command": {
+        "scope": "paying_group",
+        "scopeId": "installation-default",
+        "ceilingCents": 20000,
+        "commandId": "f82f1262-5612-483c-ab7b-5272b8457dc4",
+        "expectedSequence": 369
+      },
+      "status": 200,
+      "budget": {
+        "todayCents": 10,
+        "monthCents": 10,
+        "reservedCents": 32,
+        "dailyCeilingCents": 100000,
+        "ceilingCents": 100000,
+        "sequence": 370,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "ceilings": [
+          {
+            "scope": "assistant",
+            "scopeId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+            "ceilingCents": 20000,
+            "todayCents": 10,
+            "monthCents": 10,
+            "reservedCents": 32,
+            "dailyCeilingCents": 100000
+          },
+          {
+            "scope": "paying_group",
+            "scopeId": "installation-default",
+            "ceilingCents": 20000,
+            "todayCents": 10,
+            "monthCents": 10,
+            "reservedCents": 32,
+            "dailyCeilingCents": 100000
+          }
+        ]
+      }
+    },
+    {
+      "date": "2026-10-06T06:28:19.343Z",
+      "attempt": 1,
+      "command": {
+        "scope": "assistant",
+        "scopeId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+        "ceilingCents": 20000,
+        "commandId": "11830b56-5c74-40de-a277-1f5a3b42f786",
+        "expectedSequence": 370
+      },
+      "status": 200,
+      "budget": {
+        "todayCents": 10,
+        "monthCents": 10,
+        "reservedCents": 32,
+        "dailyCeilingCents": 100000,
+        "ceilingCents": 100000,
+        "sequence": 371,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "ceilings": [
+          {
+            "scope": "paying_group",
+            "scopeId": "installation-default",
+            "ceilingCents": 20000,
+            "todayCents": 10,
+            "monthCents": 10,
+            "reservedCents": 32,
+            "dailyCeilingCents": 100000
+          },
+          {
+            "scope": "assistant",
+            "scopeId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+            "ceilingCents": 20000,
+            "todayCents": 10,
+            "monthCents": 10,
+            "reservedCents": 32,
+            "dailyCeilingCents": 100000
+          }
+        ]
+      }
+    },
+    {
+      "date": "2026-10-06T06:28:19.718Z",
+      "attempt": 1,
+      "command": {
+        "scope": "global",
+        "ceilingCents": 20000,
+        "dailyCeilingCents": 5000,
+        "commandId": "661b3d74-9b95-40ce-92e0-07bd741b6f61",
+        "expectedSequence": 371
+      },
+      "status": 200,
+      "budget": {
+        "todayCents": 10,
+        "monthCents": 10,
+        "reservedCents": 32,
+        "dailyCeilingCents": 5000,
+        "ceilingCents": 20000,
+        "sequence": 372,
+        "defaultPayingGroupId": "installation-default",
+        "periodStart": "2026-10-01T00:00:00.000Z",
+        "ceilings": [
+          {
+            "scope": "paying_group",
+            "scopeId": "installation-default",
+            "ceilingCents": 20000,
+            "todayCents": 10,
+            "monthCents": 10,
+            "reservedCents": 32,
+            "dailyCeilingCents": 5000
+          },
+          {
+            "scope": "assistant",
+            "scopeId": "personal-73d770dde01f8ce0aee9d9309ea3167d",
+            "ceilingCents": 20000,
+            "todayCents": 10,
+            "monthCents": 10,
+            "reservedCents": 32,
+            "dailyCeilingCents": 5000
+          }
+        ]
+      }
+    }
+  ],
+  "memberEvents": [
+    {
+      "type": "member.invited",
+      "time": "2026-10-06T06:24:12.959Z"
+    },
+    {
+      "type": "member.joined",
+      "time": "2026-10-06T06:24:13.027Z"
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "observedBlock": "Gateway pending with node.kubernetes.io/disk-pressure NoSchedule taint. DiskPressure was True since 05:00:43 UTC.",
+  "fs": {
+    "time": "2026-10-06T05:57:47Z",
+    "availableBytes": 189992173568,
+    "capacityBytes": 331712798720,
+    "usedBytes": 141703847936,
+    "inodesFree": 36677625,
+    "inodes": 41811968,
+    "inodesUsed": 5134343
+  },
+  "runtime": {
+    "imageFs": {
+      "time": "2026-10-06T05:57:43Z",
+      "availableBytes": 189992173568,
+      "capacityBytes": 331712798720,
+      "usedBytes": 223383552,
+      "inodesFree": 36677625,
+      "inodes": 41811968,
+      "inodesUsed": 3002
+    },
+    "containerFs": {
+      "time": "2026-10-06T05:57:43Z",
+      "availableBytes": 189992173568,
+      "capacityBytes": 331712798720,
+      "usedBytes": 223383552,
+      "inodesFree": 36677625,
+      "inodes": 41811968,
+      "inodesUsed": 3002
+    }
+  },
+  "evictionHard": {
+    "imagefs.available": "5%",
+    "nodefs.available": "5%"
+  },
+  "evictionPressureTransitionPeriod": "5m0s",
+  "resolution": "Gateway became Running without changing the node, stack limits or settings."
+}

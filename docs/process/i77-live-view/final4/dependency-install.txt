@@ -1,0 +1,5 @@
+PASS: nice -n 10 npm ci ran first.
+926 packages added; 940 audited; 28 seconds.
+npm reported 16 vulnerabilities (3 low, 5 moderate, 6 high, 2 critical).
+Five dependency install scripts were blocked by the repository allowScripts settings.
+No packages or settings were changed.

@@ -15,6 +15,7 @@ import { secondary, stackId } from './identity.ts';
 import { browserSessions } from './browser-signin.ts';
 import { browserViewTimings, collectViewTimings } from './live-view-timings.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
+import { measureFirstReplyDelta } from './live-view-reply-timing.ts';
 
 assert(secondary, 'Repeated qualification requires a claimed secondary stack');
 const argumentsList = process.argv.slice(2);
@@ -90,7 +91,9 @@ function sessionSummary(label: string, sessionId: string,
   const deniedBeforeRevoke = leaseChecks.filter(check => {
     if (check['outcome'] !== 'denied') return false;
     if (!Number.isFinite(revokedAt)) return true;
-    return typeof check['time'] === 'string' && Date.parse(check['time']) < revokedAt;
+    const checkedAt = typeof check['time'] === 'number'
+      ? check['time'] : Date.parse(String(check['time']));
+    return checkedAt < revokedAt;
   }).length;
   const closeCode = stop ? closeCodeForStopReason(stopReason) : null;
   let upgradeStatus: number | undefined;
@@ -160,6 +163,7 @@ try {
     let revokedAtTime = '';
     const conversationId = randomUUID();
     const stopTimings = browserViewTimings(page, conversationId);
+    const stopReplyTiming = measureFirstReplyDelta(page, conversationId);
     try {
       assert(cpuPressureSomeAvg10 < cpuPressureLimit,
         `CPU pressure remained at or above ${cpuPressureLimit}%`);
@@ -190,6 +194,7 @@ try {
     }
     const serverRunDelayAfter = await serverRunDelay();
     const browserTimings = stopTimings();
+    const replyTiming = stopReplyTiming();
     await writeFile(`${output}/run-${run}-browser.json`, JSON.stringify(browserTimings, null, 2) + '\n');
     const sessions: ReturnType<typeof sessionSummary>[] = [];
     let admittedSessionCount = 0;
@@ -209,7 +214,7 @@ try {
       }
     }
     const receipt = {
-      conversationId, sessions, date: new Date().toISOString(), run, width, stackId,
+      conversationId, sessions, replyTiming, date: new Date().toISOString(), run, width, stackId,
       result, beforeLoad,
       cpuPressureSomeAvg10, serverRunDelayDelta: String(serverRunDelayAfter - serverRunDelayBefore),
       afterLoad: loadavg(),
