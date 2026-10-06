@@ -8,8 +8,8 @@ import type { Query } from "@opencrane/projections";
 export interface Handler {
   readonly name: HandlerName;
   readonly eventTypes: readonly string[];
-  // SQL effects must use this transaction. External effects need their own
-  // event-id idempotency protocol; a local receipt cannot make them atomic.
+  // Write SQL through this transaction. External calls need their own safe
+  // retry rule because a local receipt cannot make them part of this commit.
   handle(event: EventEnvelope, transaction: Query): Promise<void>;
 }
 export function registerHandler(

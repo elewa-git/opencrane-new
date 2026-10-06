@@ -1,11 +1,4 @@
-// Copied from OpenCrane 1 (10abd0ef6) libs/backend/observability/src/logger.ts;
-// changed: dropped the pretty-print transport and the fd-based destination
-// option (no interactive CLI yet), so it always writes JSON, to any pino
-// destination (a test passes an in-memory one). Dropped OpenCrane 1's
-// `redact: [...REDACT_PATHS]` option and the `log`/`bindings` formatters:
-// redaction now happens once, on the finished line, through pino's
-// `hooks.streamWrite` (see sanitize.ts for why). One rule set in one place
-// replaces a path list that had to be kept in step with a name list.
+// Copied from OpenCrane 1 (10abd0ef6).
 import pino, { type Logger } from 'pino';
 
 import { contextMixin } from './context.ts';
@@ -15,24 +8,22 @@ import { sanitizeLogLine } from './sanitize.ts';
 export type LogDestination = pino.DestinationStream;
 
 export interface CreateLoggerOptions {
-  /** Minimum level to emit; defaults to the `LOG_LEVEL` environment variable, then `"info"`. */
+  /** Set the minimum level; default to `LOG_LEVEL`, then `"info"`. */
   level?: string;
-  /** Where records are written; defaults to stdout. Tests pass an in-memory stream here. */
+  /** Write records here; use stdout by default. Tests can pass an in-memory stream. */
   destination?: LogDestination;
-  /** Extra pino serializers (for example a `req` serializer). pino's own `err` serializer is always on, and a caller's `err` replaces it. */
+  /** Add pino serializers such as `req`; a supplied `err` serializer replaces pino's. */
   serializers?: Record<string, pino.SerializerFn>;
 }
 
 /**
  * Create a pino logger that writes one JSON line per record to stdout (or
  * `opts.destination`), with:
- * - every line carrying the active request id and OpenTelemetry trace/span
- *   id, via {@link contextMixin};
- * - sensitive fields replaced by `[Redacted]` and entire URL queries removed
- *   at any depth, on every line and for every child logger, so a
- *   call site cannot forget to redact (see {@link sanitizeLogLine}).
+ * - Add the active request id and OpenTelemetry trace/span id to each line.
+ * - Hide sensitive fields and remove URL queries at every depth, including
+ *   child loggers, so each call cannot forget to clean its data.
  *
- * @param name Service/component name stamped on every record (pino's `name` option).
+ * @param name Add this service name to every record.
  */
 export function createLogger(name: string, opts: CreateLoggerOptions = {}): Logger {
   return pino(

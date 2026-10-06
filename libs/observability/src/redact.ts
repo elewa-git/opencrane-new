@@ -1,10 +1,10 @@
-/** Value written in place of a redacted value. */
+/** Write this value where logged data has been hidden. */
 export const REDACTED_VALUE = '[Redacted]';
 
 /**
- * Drop the entire query and fragment from logged URLs and messages, without
- * parsing parameters. Keep Fastify's fixed fallback suffix and mask private
- * conversation ids in history paths. Other text after a query is dropped too.
+ * Remove the whole query and fragment without parsing parameters. Keep
+ * Fastify's fixed fallback text and hide conversation ids in history paths.
+ * Remove other text after a query as well.
  */
 export function redactUrl(text: string): string {
   const path = text.split(/[?#]/u, 1)[0] ?? '';

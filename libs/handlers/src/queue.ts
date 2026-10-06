@@ -11,8 +11,8 @@ export function transactionAdapter(tx: Query) {
   };
 }
 
-// pg-boss 12.35 has no infinite queued-job retention option. This pinned
-// adapter sets infinity before commit; failed heads also disable deletion.
+// Set queued events to infinity before commit because pg-boss has no such setting.
+// Keep failed stream heads too, so later events cannot pass them.
 export async function retainJob(
   tx: Query,
   name: string,
@@ -34,7 +34,7 @@ export interface RuntimeOptions {
   expireInSeconds?: number;
 }
 
-/** Owns a dedicated pg-boss schema in the supplied silo database. */
+/** Use a dedicated pg-boss schema in the supplied silo database. */
 export class HandlerRuntime {
   readonly boss: PgBoss;
   readonly options: RuntimeOptions;
@@ -135,8 +135,8 @@ export class HandlerRuntime {
             job.signal,
             job.expireInSeconds,
             async (tx) => {
-              // Hold the fetched attempt through commit. Expiry/replay cannot start a
-              // second SQL writer while this transaction is still running.
+              // Hold this attempt until commit, so expiry or replay cannot start
+              // another SQL writer while the transaction is running.
               const claim = await tx.query<{
                 state: string;
                 retry_count: number;
@@ -164,14 +164,14 @@ export class HandlerRuntime {
     );
   }
 
-  /** Failed originals remain the durable dead-letter index, even after diagnostic copies expire. */
+  /** Keep failed originals as the lasting failure list after diagnostic copies expire. */
   async deadLetters(name: Handler["name"]) {
     return (await this.boss.findJobs<unknown>(name)).filter(
       (job) => job.state === "failed",
     );
   }
 
-  /** Repair the original FIFO head; never redrive the diagnostic copy behind successors. */
+  /** Retry the original first job; never retry its copy after later jobs. */
   async replay(name: Handler["name"], id: string): Promise<void> {
     await this.options.db.transaction(async (tx) => {
       const result = await tx.query<{ state: string }>(

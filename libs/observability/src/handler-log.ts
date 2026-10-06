@@ -1,12 +1,4 @@
-// Copied from OpenCrane 1 (10abd0ef6) libs/backend/observability/src/operation.ts;
-// changed: that file's doWithTrace() took a free-form name and fields for
-// any operation. This is narrowed to plan.md's "logs and traces per handler"
-// shape - a projection or reaction handler run - so the log and span fields
-// are fixed (handler, event_id, event_type, stream, attempt, trace_id)
-// instead of left to each call site to decide and possibly get wrong. Also:
-// trace_id is left out when no real span is running (a no-op tracer hands out
-// an all-zero id), and the handler's fields are merged into any context
-// already active instead of replacing it.
+// Copied from OpenCrane 1 (10abd0ef6).
 import { SpanStatusCode, isSpanContextValid, trace } from '@opentelemetry/api';
 import type { Attributes } from '@opentelemetry/api';
 import type { Logger } from 'pino';
@@ -15,17 +7,17 @@ import { getContext, runWithContext } from './context.ts';
 
 const tracer = trace.getTracer('@opencrane/observability');
 
-/** Identifies one run of one projection or reaction handler, for the event catalogue at docs/architecture/events.md. */
+/** Describe one run of a projection or reaction handler. */
 export interface HandlerRun {
-  /** The handler's name, e.g. "settle-budget" or "wake-computer" - matches its pg-boss queue name. */
+  /** Name the handler, for example "settle-budget"; this matches its queue name. */
   handler: string;
-  /** Id of the event this run is handling. */
+  /** Identify the event being handled. */
   eventId: string;
-  /** The event's type, e.g. "effect.observed". */
+  /** Name the event type, for example "effect.observed". */
   eventType: string;
-  /** The stream the event came from, e.g. "budget-acme". */
+  /** Name the event stream, for example "budget-acme". */
   stream: string;
-  /** Which attempt this is, starting at 1. pg-boss retries failed jobs, so a handler can run more than once for the same event. */
+  /** Count this attempt from 1; failed jobs retry and may handle the event again. */
   attempt: number;
 }
 
@@ -45,15 +37,11 @@ function runFields(run: HandlerRun, traceId: string | undefined): Attributes {
 }
 
 /**
- * Run `fn` as one handler run: opens one OpenTelemetry span named after the
- * handler, logs `handler.started` then `handler.completed` (or
- * `handler.failed`) with the fixed fields from {@link HandlerRun} plus
- * `trace_id`, and adds those fields to the async context so any logging `fn`
- * does inherits them.
+ * Run `fn` inside a span named after the handler. Log when it starts and
+ * completes or fails, and add its fields to the async context so its logs inherit them.
  *
- * The span is always ended and any error `fn` throws is always re-thrown
- * after being recorded on the span, so wrapping a handler in this never
- * changes its control flow.
+ * End the span and re-throw errors after recording them, so wrapping a handler
+ * does not change how it handles errors.
  */
 export async function runHandler<T>(logger: Logger, run: HandlerRun, fn: () => Promise<T>): Promise<T> {
   return tracer.startActiveSpan(run.handler, async (span) => {

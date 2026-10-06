@@ -2,7 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { OpenFgaClient, ConsistencyPreference, type Store } from "@openfga/sdk";
 import model from "../model/v1.json" with { type: "json" };
 
-// Keep every field here in the cache key used by members.ts.
+// Keep this key in step with every field used by members.ts.
 export interface Binding {
   apiUrl: string;
   storeId: string;
@@ -28,13 +28,13 @@ function sdk(apiUrl: string, binding?: Binding) {
       storeId: binding.storeId,
       authorizationModelId: binding.authorizationModelId,
     }),
-    // pg-boss owns retries. Each HTTP call has a finite one-second deadline.
+    // Let pg-boss retry failures, and stop each HTTP call after one second.
     retryParams: { maxRetry: 0 },
     baseOptions: { timeout: 1000 },
   });
 }
 
-/** Provisioning writes only the model. Relationship writes belong to the handler. */
+/** Create the model during setup; let the handler write relationships. */
 export async function createStore(
   apiUrl: string,
   silo: string,
@@ -166,7 +166,7 @@ export class TupleClient {
     }
   }
 
-  /** Require every exact tuple; a missing answer or failed check refuses the batch. */
+  /** Require every requested tuple; refuse the batch if a check is missing or fails. */
   async checkAll(tuples: Tuple[]) {
     try {
       function correlatedCheck(tuple: Tuple, index: number) {
@@ -186,7 +186,7 @@ export class TupleClient {
           allowed = false;
         }
       }
-      // A failed item grants no authority, but cannot hide an explicit denial beside it.
+      // Do not grant access on failure, and keep any explicit denial in the result.
       if (allowed && failedCheck) {
         throw new Error('Authorisation batch item unavailable', { cause: failedCheck.error });
       }
@@ -196,7 +196,7 @@ export class TupleClient {
     }
   }
 
-  /** One atomic transaction, including the event receipt; duplicate receipts must fail. */
+  /** Write changes and the event receipt together; reject a duplicate receipt. */
   async write(writes: Tuple[], deletes: Tuple[]): Promise<void> {
     await this.client.write({ writes, deletes });
   }

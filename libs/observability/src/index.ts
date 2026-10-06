@@ -1,18 +1,11 @@
-// @opencrane/observability - structured logging, secret redaction and
-// tracing shared by every OpenCrane 2 service.
+// Share logging, secret removal and tracing across OpenCrane services.
 //
-// - createLogger() builds a pino logger that writes JSON to stdout, with
-//   sensitive fields redacted and entire URL queries removed on every
-//   line (children and error properties included) and the active
-//   request/trace id attached to every line.
-// - runWithContext()/getContext() carry per-request fields through async
-//   work without threading a logger or an id through every function.
-// - redactUrl() drops entire URL queries and fragments, including in messages.
-// - runHandler() is the "logs and traces per handler" helper from plan.md:
-//   wraps one projection/reaction run in a span and a fixed set of log
-//   fields (handler, event_id, event_type, stream, attempt, trace_id).
-// - startTelemetry()/shutdownTelemetry() bootstrap the OpenTelemetry SDK,
-//   off by default unless OTEL_EXPORTER_OTLP_ENDPOINT is set.
+// - Write JSON logs, hide sensitive fields and URL queries, and add request and
+//   trace ids to each line.
+// - Carry request details through async work without passing a logger or id around.
+// - Remove URL queries and fragments, including those in messages.
+// - Record each handler run in a span and log its handler, event, stream and attempt.
+// - Start and stop OpenTelemetry; keep it off unless the endpoint is configured.
 export { createLogger, type CreateLoggerOptions, type Logger, type LogDestination } from './logger.ts';
 export { runWithContext, getContext, contextMixin, type LogContext } from './context.ts';
 export { redactUrl, REDACTED_VALUE } from './redact.ts';

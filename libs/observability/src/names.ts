@@ -1,21 +1,19 @@
-// Decides whether a log field name holds something secret (sanitize.ts).
+// Decide whether a log field name may hold a secret (sanitize.ts).
 //
-// This replaces the exact-name list in OpenCrane 1's sanitize.ts (10abd0ef6
-// libs/backend/observability/src/sanitize.ts) with a rule on the words in the
-// name, so `api_key`, `x-api-key` and `accessToken` are all caught, while usage
-// counts such as `input_tokens` and references such as `secretRef` (events
-// carry secret references, never values) are not.
+// Check the words in a name so `api_key`, `x-api-key` and `accessToken` match.
+// Keep usage counts such as `input_tokens` and references such as `secretRef`:
+// events carry secret references, never secret values.
 
-/** Names that end like this are sensitive on their own: `authorization`, `x-authorization`, `proxy-authorization`, `cookie`, `set-cookie`. */
+/** Hide names ending in these words, such as `authorization` or `set-cookie`. */
 const SENSITIVE_ENDINGS = ['authorization', 'cookie', 'cookies'];
 
-/** Parts that make a name sensitive wherever they sit in it. Compared with the name lower-cased and its `-`/`_` removed, so `API_KEY`, `x-api-key` and `apiKey` all contain `apikey`. */
+/** Hide names containing these parts after lower-casing and removing `-` and `_`. */
 const SENSITIVE_PARTS = ['secret', 'password', 'passwd', 'token', 'apikey', 'masterkey', 'providerkey', 'privatekey', 'databaseurl', 'connectionstring'];
 
-/** A sensitive-looking name ending in one of these words holds a reference or a count, not the secret: `secretRef`, `secret_id`, `tokenCount`, `tokenType`. */
+/** Keep these endings because they name references or counts, not secrets. */
 const REFERENCE_WORDS = new Set(['ref', 'id', 'name', 'count', 'type']);
 
-/** Split a name into lower-case words: `accessToken`, `access_token` and `ACCESS-TOKEN` all give `access`, `token`. */
+/** Split names into lower-case words so `accessToken` and `ACCESS-TOKEN` both match. */
 function splitWords(name: string): string[] {
   return name
     .replace(/([a-z\d])([A-Z])/gu, '$1 $2')
@@ -26,9 +24,9 @@ function splitWords(name: string): string[] {
 }
 
 /**
- * Return whether a log field called `name` must have its value redacted.
+ * Check whether to hide the value of a log field called `name`.
  *
- * `value` is used for one exception: a number under a name ending in `tokens`
+ * Keep one exception: a number under a name ending in `tokens`
  * (`input_tokens: 120`) is a usage count, which the budget logs need. The same
  * name holding a string or a list of tokens is still redacted.
  */

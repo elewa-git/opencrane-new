@@ -19,7 +19,7 @@ const configuration = {
   max_deliver: -1,
 };
 
-/** Installation job only; runtime dispatchers have no consumer administration rights. */
+/** Use this only during setup; running dispatchers cannot manage consumers. */
 export async function provisionDispatcher(connection: NatsConnection) {
   const manager = await jetstreamManager(connection);
   await manager.consumers.add("EVENTS", configuration);
@@ -42,7 +42,7 @@ async function durableConsumer(connection: NatsConnection) {
   );
 }
 
-/** One durable dispatcher per silo. The SQL checkpoint fences overlapping replacements. */
+/** Keep one lasting dispatcher per silo; the SQL checkpoint blocks overlapping copies. */
 export async function dispatch(
   connection: NatsConnection,
   runtime: HandlerRuntime,
@@ -105,8 +105,8 @@ export async function dispatch(
         [message.seq],
       );
     });
-    // Includes all subscribers and the checkpoint in one durable SQL commit.
-    // An unknown/lost commit reply leaves this message unacknowledged.
+    // Save every subscriber job and the checkpoint in one database commit.
+    // Leave the message unacknowledged if the commit reply is lost or unclear.
     await message.ackAck();
   }
 }
