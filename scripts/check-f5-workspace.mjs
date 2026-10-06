@@ -223,7 +223,9 @@ try {
       await page.locator('oc-chat-composer').waitFor();
       await page.evaluate(waitForFonts);
       if (width === 390) {
-        assert(await page.getByText('No messages yet', { exact: true }).isVisible());
+        const emptyConversation = page.getByText('No messages yet', { exact: true });
+        await emptyConversation.waitFor();
+        assert(await emptyConversation.isVisible());
       }
       await capture(page, 'empty-workspace', width, motion);
       if (width === 390) {
