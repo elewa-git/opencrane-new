@@ -10,14 +10,14 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks calls and reads spending| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks calls and spending holds| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|starts gateway and checks calls within two seconds| gateway["agentgateway<br/>AI gateway"]
   gateway -->|new usage lines| models
-  models -->|saves budget changes| store["libs/event-store<br/>event log"]
+  models -->|saves changes| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -28,6 +28,9 @@ flowchart LR
 - Hold money before an AI call and settle the charge when usage is reported.
   Keep the budget state in memory after replay, so saving each change does not
   read all the old spending events again.
+- Read a spending hold before starting the access check for its resolution.
+  Read any new budget events before deciding whether it can be resolved.
+  Check current access again before saving the resolution.
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.
 - Release an expired hold at zero cents when it was never allowed or sent.

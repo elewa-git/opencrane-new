@@ -52,6 +52,13 @@ The event log is the numbered list of all events, kept in NATS JetStream, a serv
 that stores and passes on events. It is the one true record of what happened, and
 everything else is built from it.
 
+## Stream summary
+
+A stream summary is a few facts about one event stream, kept in a process's memory.
+A TypeScript function builds it by adding events in order. Each use reads the new
+events first, so decisions use the latest saved facts. It can be rebuilt from the
+first event and does not need a database table.
+
 ## Read table (projection)
 
 A read table is a PostgreSQL database table built from events, so screens can load

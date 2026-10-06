@@ -4,12 +4,12 @@ import { once } from "node:events";
 import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { connect, createServer, type Socket } from "node:net";
 import { resolve } from "node:path";
-import type { NatsConnection } from "@nats-io/transport-node";
+import { TimeoutError, type NatsConnection } from "@nats-io/transport-node";
 import { certificates } from "./certificates.ts";
-import { jetstream } from "@nats-io/jetstream";
+import { jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
-import { createEventStore, connectNats, type EventStore } from "../src/index.ts";
+import { createEventStore, connectNats, EventStore } from "../src/index.ts";
 import { afterAll, expect, onTestFinished } from "vitest";
 
 function registerChildCleanup(child: ChildProcess) {
@@ -254,4 +254,26 @@ export function expectNoWholeReads(calls: ReadCall[], largestAllowed = 20) {
       expect(call.rows, `Whole-stream read of ${call.subject}`).toBeLessThanOrEqual(largestAllowed);
     }
   }
+}
+
+/** Lose a saved publish reply without changing what NATS stores. */
+export async function lostReplyStore(connection: NatsConnection) {
+  const client = jetstream(connection);
+  const manager = await jetstreamManager(connection);
+  const store = new EventStore(client, manager);
+  const publish = client.publish.bind(client);
+  let loseReply = false;
+  function loseNextReply() {
+    loseReply = true;
+  }
+  async function dropReply(...args: Parameters<typeof publish>) {
+    const acknowledgement = await publish(...args);
+    if (loseReply) {
+      loseReply = false;
+      throw new TimeoutError();
+    }
+    return acknowledgement;
+  }
+  client.publish = dropReply;
+  return { store, loseNextReply };
 }

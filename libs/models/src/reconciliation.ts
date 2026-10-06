@@ -14,19 +14,42 @@ export const resolutionCommandSchema = z.object({ commandId: id, expectedSequenc
 
 async function reservation(store: EventStore, silo: string, permitId: string, deadline: number) {
   const state = emptyBudget();
-  for (const row of await history(store, `budget-${silo}`, silo, deadline)) applyBudget(state, row.event, row.sequence);
-  return state.reservations.find(r => r.id === permitId);
+  const rows = await history(store, `budget-${silo}`, silo, deadline);
+  for (const row of rows) {
+    applyBudget(state, row.event, row.sequence);
+  }
+  function matchesPermit(held: BudgetState['reservations'][number]) {
+    return held.id === permitId;
+  }
+  const held = state.reservations.find(matchesPermit);
+  return { held, state, sequence: state.sequence };
+}
+
+async function applyNewBudgetEvents(store: EventStore, silo: string, state: BudgetState,
+  seen: number, deadline: number) {
+  const rows = store.readStream(`budget-${silo}`, seen + 1, deadline);
+  for await (const row of rows) {
+    if (row.event.silo !== silo) {
+      throw new Error('Wrong silo');
+    }
+    applyBudget(state, row.event, row.sequence);
+  }
 }
 
 /** Reads recorded evidence only. No provider call or external-action retry belongs here. */
 export async function readEffect(store: EventStore, silo: string, permitId: string) {
   id.parse(permitId);
   const deadline = performance.now() + 10_000;
-  const r = await reservation(store, silo, permitId, deadline);
-  if (!r) return undefined;
+  const records = await effectRecords(store, silo, permitId, deadline);
+  return records?.current;
+}
+
+async function effectRecords(store: EventStore, silo: string, permitId: string, deadline: number) {
+  const { held, state, sequence } = await reservation(store, silo, permitId, deadline);
+  if (!held) return undefined;
   const rows = await history(store, `effect-${permitId}`, silo, deadline);
   if (performance.now() >= deadline) throw new Error('Effect read expired');
-  return effectStatus(r, rows);
+  return { current: effectStatus(held, rows), rows, held, budget: state, budgetSequence: sequence };
 }
 
 function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[]) {
@@ -74,16 +97,26 @@ export async function resolveEffect(store: EventStore, silo: string, permitId: s
   fresh?: () => Promise<void>) {
   id.parse(permitId);
   const command = resolutionCommandSchema.parse(resolutionInput(raw));
+  const deadline = performance.now() + 10_000;
+  const records = await effectRecords(store, silo, permitId, deadline);
+  // Start HTTP access checks after history; call them again immediately before saving.
+  await fresh?.();
   const memberFresh = await authorityFence(store, performance.now(), [`member-${memberId}`]);
   const membership = await currentMembership(store, silo, memberId, memberFresh);
   if (!['owner', 'admin'].includes(membership.role)) {
     throw new Error('Access changed');
   }
-  const current = await readEffect(store, silo, permitId);
-  if (!current) return { status: 'not_found' } as const;
+  if (!records) return { status: 'not_found' } as const;
+  const { rows, held, budget, budgetSequence } = records;
+  let current = records.current;
+  // Check for releases saved during history before deciding whether the hold can be resolved.
+  const budgetHead = await store.head(`budget-${silo}`, memberFresh.deadline);
+  if (budgetHead !== budgetSequence) {
+    await applyNewBudgetEvents(store, silo, budget, budgetSequence, memberFresh.deadline);
+    current = effectStatus(held, rows);
+  }
   const { commandId, expectedSequence, ...fields } = command;
   const payload = effectResolvedDataSchema.parse({ ...fields, permitId, reservationId: current.reservationId, resolvedBy: memberId });
-  const rows = await history(store, `effect-${permitId}`, silo);
   const prior = rows.find(r => r.event.commandId === commandId);
   if (prior) return { status: JSON.stringify(prior.event.data) === JSON.stringify(payload) ? 'appended' : 'conflict' } as const;
   if (current.sequence !== expectedSequence || current.resolution || current.state !== 'outcome_unknown') return { status: 'conflict' } as const;

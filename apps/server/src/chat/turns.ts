@@ -1,9 +1,10 @@
 import type { Binding } from '@opencrane/authz';
-import { authorityFence, history, groupMembership, PayingGroupRefused, MemberAccessRefused,
+import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefused,
   activeMember } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { readStreamSummary, type EventStore, type StoredEvent,
+  type SummaryKind } from '@opencrane/event-store';
 import { chatHistory } from './commands.ts';
 import { creationEvent } from './private-session.ts';
 import { agentSession, ReportRejected } from './reports.ts';
@@ -232,16 +233,27 @@ function sessionPayer(conversation: StoredEvent[], requesterId: string,
   }
   return group;
 }
-function isBudgetCeiling(row: StoredEvent) {
-  return row.event.type === 'budget.ceiling_set';
+type BudgetPayer = { defaultPayingGroupId?: string };
+function emptyBudgetPayer(): BudgetPayer {
+  return {};
+}
+function addBudgetPayer(summary: BudgetPayer, row: StoredEvent) {
+  if (row.event.type !== 'budget.ceiling_set') return;
+  const details = budgetDetails.parse(row.event.data);
+  if (details.scope === 'global' && details.defaultPayingGroupId) {
+    summary.defaultPayingGroupId = details.defaultPayingGroupId;
+  }
+}
+const budgetPayer: SummaryKind<BudgetPayer> = {
+  name: 'budget-payer', keep: 4, empty: emptyBudgetPayer, add: addBudgetPayer,
+};
+function takeBudgetPayer(summary: BudgetPayer) {
+  return summary.defaultPayingGroupId;
 }
 async function personalPayer(store: EventStore, silo: string, deadline: number) {
-  const budgets = await history(store, `budget-${silo}`, silo, deadline);
-  const ceilings = budgets.filter(isBudgetCeiling);
-  for (const row of ceilings.reverse()) {
-    const data = budgetDetails.parse(row.event.data);
-    if (data.scope === 'global' && data.defaultPayingGroupId) return data.defaultPayingGroupId;
-  }
+  const payer = await readStreamSummary(
+    store, silo, `budget-${silo}`, budgetPayer, deadline, takeBudgetPayer);
+  if (payer) return payer;
   throw new ReportRejected('Paying group unavailable; configure the installation default');
 }
 function newAdmission(status: string, events: StoredEvent[], turnId: string) {

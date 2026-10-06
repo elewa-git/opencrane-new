@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it } from 'vitest';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, history, priceTableId, totals } from '../src/index.ts';
 
@@ -163,3 +163,102 @@ it('refuses insufficient, conflicting, stale and non-admin resolution without re
   expect((await history(nats.store, `effect-${id}`, 'test')).map(r => r.event.type)).toEqual(['effect.uncertain']);
   expect(totals(actor.state, clock).reservedCents).toBe(1000);
 });
+
+async function readsResolutionHistoryBeforeAccessCheck() {
+  const { envelope, readEffect, resolveEffect } = await import('../src/index.ts');
+  const owner = envelope('test', 'member-owner', 'member.joined', {
+    memberId: 'owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
+  });
+  await nats.seed([owner]);
+  const permitId = await reserve();
+  await actor.effect(permitId);
+  const current = await readEffect(nats.store, 'test', permitId);
+  const input = {
+    commandId: 'history-before-access', expectedSequence: current!.sequence,
+    outcome: 'released', settledCents: 0,
+    evidence: [{ kind: 'dispatch_record', reference: 'dispatch-check',
+      digest: 'a'.repeat(64), notDispatched: true }],
+  };
+  const head = nats.store.head.bind(nats.store);
+  const read = nats.store.readStream.bind(nats.store);
+  const started = performance.now();
+  let accessStarted = false;
+  async function watchedHead(...args: Parameters<typeof head>) {
+    accessStarted = true;
+    return head(...args);
+  }
+  async function* watchedRead(...args: Parameters<typeof read>) {
+    if (args[0] === 'budget-test') {
+      expect(accessStarted).toBe(false);
+      expect(args[2]).toBeGreaterThanOrEqual(started + 10_000);
+    }
+    yield* read(...args);
+  }
+  nats.store.head = watchedHead;
+  nats.store.readStream = watchedRead;
+  expect(await resolveEffect(nats.store, 'test', permitId, 'owner', input))
+    .toMatchObject({ status: 'appended' });
+  expect(accessStarted).toBe(true);
+}
+it('reads a hold with its own history limit before starting the resolution access check',
+  readsResolutionHistoryBeforeAccessCheck);
+
+async function keepsFinalResolutionChecks(change: string) {
+  const { envelope, readEffect, resolveEffect } = await import('../src/index.ts');
+  await nats.seed([envelope('test', 'member-owner', 'member.joined', {
+    memberId: 'owner', role: 'owner', email: 'owner@example.test', displayName: 'Owner',
+  })]);
+  const permitId = await reserve();
+  await actor.effect(permitId);
+  const current = await readEffect(nats.store, 'test', permitId);
+  const input = {
+    commandId: 'final-check', expectedSequence: current!.sequence,
+    outcome: 'released', settledCents: 0,
+    evidence: [{ kind: 'dispatch_record', reference: 'dispatch-check',
+      digest: 'a'.repeat(64), notDispatched: true }],
+  };
+  const realNow = performance.now.bind(performance);
+  let offset = 0;
+  function now() {
+    return realNow() + offset;
+  }
+  const clock = vi.spyOn(performance, 'now').mockImplementation(now);
+  let checks = 0;
+  async function fresh() {
+    checks++;
+    if (checks !== 2) return;
+    if (change === 'removal') {
+      await nats.seed([envelope('test', 'member-owner', 'member.removed', {
+        memberId: 'owner', removedBy: 'admin',
+      })]);
+    } else if (change === 'expiry') {
+      offset += 2001;
+    } else {
+      await nats.seed([envelope('test', `effect-${permitId}`, 'effect.uncertain', {
+        permitId, computerId: 'computer', reason: 'missing_usage',
+      })]);
+    }
+  }
+  try {
+    const result = resolveEffect(nats.store, 'test', permitId, 'owner', input, fresh);
+    if (change === 'removal') {
+      await expect(result).rejects.toThrow('Authority changed');
+    } else if (change === 'expiry') {
+      await expect(result).rejects.toThrow('Authority snapshot expired');
+    } else {
+      expect(await result).toEqual({ status: 'conflict' });
+    }
+    const rows = await history(nats.store, `effect-${permitId}`, 'test');
+    function isResolution(row: (typeof rows)[number]) {
+      return row.event.type === 'effect.resolved';
+    }
+    expect(rows.filter(isResolution)).toHaveLength(0);
+    expect(totals(actor.state, new Date('2026-09-30T23:59:59.999Z')))
+      .toMatchObject({ reservedCents: 1000 });
+  } finally {
+    clock.mockRestore();
+  }
+}
+it.each(['removal', 'expiry', 'race'])(
+  'keeps the final resolution access check and conditional append strong (%s)',
+  keepsFinalResolutionChecks);

@@ -22,7 +22,7 @@ with `libs/events`.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -->|saves changes| store["libs/event-store<br/>event log"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves budget changes| store
+  models["libs/models<br/>AI rules and budgets"] -->|saves changes| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves and reads| nats["NATS JetStream<br/>event service"]
   store -.-> events["libs/events<br/>event definitions"]
@@ -38,6 +38,9 @@ flowchart LR
   history again. A conflict still checks for an earlier copy of the request.
 - Read the history of one thing, such as one member, or follow the whole event
   log in order.
+- Keep a [stream summary](../../GLOSSARY.md#stream-summary), a few facts built from
+  events in memory. Each use reads new events first. Older summaries are dropped
+  when the caller's memory limit is reached.
 - Check that the NATS event stream keeps its history and cannot be deleted.
 - Require encrypted NATS connections and the right credentials for each role.
 
@@ -48,6 +51,12 @@ flowchart LR
    another change came first.
 2. **A worker catches up.** It reads events after its saved position, handles them
    in order and can continue from that position after it restarts.
+3. **A reader uses a summary.** It adds new events to its saved facts before making
+   a decision. A reader that runs out of time refuses that call. The read continues
+   in the background, so the next call can use its progress.
+
+After restoring the event log from a backup, the server and models processes
+restart before serving requests. This clears their saved summaries.
 
 ## How to run or test it
 

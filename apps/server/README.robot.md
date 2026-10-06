@@ -559,7 +559,10 @@ receipt evidence with `POST /api/org/effects/:permitId/resolve`.
 Both GET routes read the saved spending records with their own ten-second limit,
 then check current membership and OpenFGA once before returning them. A removal
 during the read returns 403 even if the member table and OpenFGA are still behind.
-POST keeps its two-second access check and conditional append.
+POST reads budget and effect history with its own ten-second limit before starting
+its two-second access checks. It rechecks both HTTP and event-backed membership
+immediately before its unchanged conditional append. Removal during history refuses
+the write even when the member table and OpenFGA have not caught up.
 [The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).
@@ -681,3 +684,17 @@ history budget. It contains only the requester's earlier completed exchanges,
 up to 24 KiB, and time-only records of unfinished work. It is never stored.
 The [HTTP contract](../../docs/api/shared-assistants.md#private-turns-and-memory-free-turns)
 and [check record](../../docs/process/p4-14-private-turns-evidence.md) give the details.
+
+## Personal paying group summary
+
+Personal turn admission uses the event-store `budget-payer` summary with `keep: 4`.
+It parses each `budget.ceiling_set` with the existing `budgetDetails` schema. The
+newest global ceiling event with a default paying group supplies the payer. Scoped
+ceilings and global ceilings without a default do not replace it. No default still
+raises the existing `ReportRejected` message. Each admission catches up first,
+outside its access check. A warmed summary reads only new budget events.
+
+`test/personal-payer.test.ts` covers changed defaults, skipped scoped ceilings,
+missing defaults and at most two new budget rows after warming a 500-event stream.
+`test/integrations.test.ts` covers resolution after a long history read and member
+removal during that read, through the real HTTP route and disposable services.

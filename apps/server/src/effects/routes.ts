@@ -32,8 +32,7 @@ function registerRoutes(app: FastifyInstance, config: AuthConfig, options?: Inte
         if (request.method === 'GET') {
           return await handleEffectRead(url, request, reply, config, context, session.sub);
         }
-        const operator = await authorise(context, config.issuerUrl, session.sub);
-        return await handleEffect(request, reply, config, context, operator);
+        return await handleEffect(request, reply, config, context, session.sub);
       } catch (error) { return routeError(reply, error); }
     } });
   }
@@ -93,11 +92,22 @@ function effectCsrf(request: FastifyRequest, config: AuthConfig, permitId: strin
 
 async function handleEffect(request: FastifyRequest, reply: FastifyReply,
   config: AuthConfig, options: EffectOptions,
-  operator: Awaited<ReturnType<typeof authorise>>) {
+  sub: string) {
   const permitId = requestPermitId(request);
   const csrf = effectCsrf(request, config, permitId);
   if (request.headers.origin !== new URL(config.redirectUri).origin || request.headers['x-csrf-token'] !== csrf) return reply.code(403).send({ status: 'refused' });
-  const result = await resolveEffect(options.store, options.silo, permitId, operator.memberId, request.body, operator.fresh);
+  const memberId = await options.feed.memberId(options.silo, config.issuerUrl, sub);
+  if (!memberId) throw new Error('Access changed');
+  let operator: Awaited<ReturnType<typeof authorise>> | undefined;
+  async function fresh() {
+    if (!operator) {
+      operator = await authorise(options, config.issuerUrl, sub);
+      if (operator.memberId !== memberId) throw new Error('Access changed');
+    }
+    await operator.fresh?.();
+  }
+  const result = await resolveEffect(
+    options.store, options.silo, permitId, memberId, request.body, fresh);
   const codes = { appended: 202, not_found: 404, unavailable: 503, conflict: 409, held: 409, rejected: 409 };
   return reply.code(codes[result.status]).send({ status: result.status });
 }

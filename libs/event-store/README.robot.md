@@ -82,12 +82,6 @@ Both modes keep the same Msg-Id and conditional headers. Duplicate
 acknowledgements still check the saved event with `sameCommand`.
 No separate ledger or duplicate window determines command success.
 
-`test/testing.ts` exports `countReads` and `expectNoWholeReads` through `./testing`.
-The counter wraps a store instance's `readStream`, including append's own searches.
-It records subject, starting position and rows returned, and provides `clear()`.
-The assertion rejects reads from sequence 1 or earlier that exceed a row limit
-(20 by default). It cannot count whole-log reads through `subscribe`.
-
 `readStream(subject, fromSequence)` is a finite snapshot through the head
 observed on entry; `fromSequence` is an inclusive global position.
 `readEventAt(store, subject, sequence, deadline)` returns the first row only when
@@ -107,6 +101,40 @@ with `npm run provision`; see [ADR 0005](../../docs/adr/0005-nats-access.md).
 refuses incompatible configuration. Deletion/purge are disabled; payload
 forgetting needs a separate qualified design. Callers supply credential file paths
 and own connection shutdown; one connection serves one silo.
+
+## Stream summaries
+
+`readStreamSummary(store, silo, subject, kind, deadline, take)` keeps facts in
+memory for one store instance, kind name, silo and subject. `SummaryKind` supplies
+`name`, `keep`, `empty()` and `add(summary, row)`. Names must identify one summary
+shape; `keep` is a positive entry limit. The least recently used entry is dropped
+when that limit is exceeded. A dropped entry rebuilds from sequence 1.
+
+Each call queues its own catch-up, starting after that call began. It reads from
+the last added global position plus one to the head observed by `readStream`.
+Calls on one entry run in order, so they never add an event twice. A wrong-silo row
+throws `WrongSiloError` before `add`. `add` must check before changing facts and
+leave them unchanged if it throws. The saved position advances only after `add`
+succeeds. An interrupted read keeps the events it already added.
+
+`take` runs in the same queue slot after the catch-up reaches its head. It copies
+needed facts into a plain result; callers must never retain the mutable summary.
+A partial or failed catch-up never runs `take`. Every access check gets its own
+fresh catch-up, including when a previous call is still reading.
+
+The caller's deadline uses absolute `performance.now()`. On expiry, the caller
+receives the same NATS `TimeoutError` as a stream read. Catch-up continues with a
+deadline of at least ten seconds from its start, or the caller's later deadline.
+`Infinity` stays unlimited. Background failures have error handlers and release
+the queue so another call can continue from the saved position.
+
+### Backup and restore
+
+Summaries assume saved events only grow. A backup restore can move the event log
+backwards. The server and models processes must restart after every event-store
+restore, before serving traffic. This clears all summaries and rebuilds them from
+sequence 1. The Phase 5 restore drill must include these restarts, alongside
+rebuilding projection checkpoints. No summary is stored in a backup or in SQL.
 
 ## Stream configuration
 
@@ -153,6 +181,9 @@ or earlier that yield more than the allowed rows. This helper does not count
 whole-log reads through `subscribe`. Security tests prove command/reader/excluded roles,
 unknown and missing credentials, plaintext and wrong-CA refusals. The pinned NATS server is 2.15.0; both downloaded
 platform archives have fixed SHA-256 checksums.
+
+`test/stream-summary.test.ts` covers replay, queued freshness, store/kind/silo
+separation, eviction, caller timeouts, retained progress and background errors.
 
 Dependencies: `@opencrane/events`; NATS JavaScript packages 3.4.0 and
 nats-server 2.15.0 are Apache-2.0. Licences were checked at introduction.
