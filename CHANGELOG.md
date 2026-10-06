@@ -57,6 +57,8 @@
   while turns start and end. Team writes and new team turns check access after
   reading history with its own ten-second budget. Personal posts and turn admission
   keep their existing behaviour. Idle chat sockets reread access when it changes.
+- Idle chat sockets check only membership changes that can remove read access. A role
+  change keeps the chat open while permissions catch up. Participants are set at creation.
 - A payer or membership refusal fails only that shared turn. The bridge stays open
   for other members. Stop remains available after payer removal.
 - Team screenshots return 403 before capturing the shared desktop. Assistant lists

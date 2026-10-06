@@ -167,12 +167,27 @@ async function openChatSocket(context: Fixture, conversationId: string) {
   return { socket, received, close };
 }
 
-it('rechecks a direct-chat participant removal until OpenFGA has applied it',
-  participantRemovalWithDelayedPermissions, 120_000);
+function countStoreReads(context: Fixture) {
+  const originalReadStream = context.options.store.readStream.bind(context.options.store);
+  const originalHead = context.options.store.head.bind(context.options.store);
+  const counts = { readStream: 0, head: 0 };
+  async function* readStream(subject: string, fromSequence?: number, deadline?: number) {
+    counts.readStream++;
+    yield* originalReadStream(subject, fromSequence, deadline);
+  }
+  async function head(subject?: string, deadline?: number) {
+    counts.head++;
+    return originalHead(subject, deadline);
+  }
+  context.options.store.readStream = readStream;
+  context.options.store.head = head;
+  return counts;
+}
 
-async function participantRemovalWithDelayedPermissions() {
-  const context = await fixture(true);
-  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+it('refuses participant changes on a direct chat', directChatRejectsParticipants, 120_000);
+
+async function directChatRejectsParticipants() {
+  const context = await fixture();
   try {
     context.keys.provision('test', 'direct');
     await context.append('conversation-direct', 'conversation.created', {
@@ -180,44 +195,35 @@ async function participantRemovalWithDelayedPermissions() {
       participantIds: ['alice', 'bob'],
     });
     await context.runner.run(conversations);
-    client = await openChatSocket(context, 'direct');
-    const initialChecks = context.fgaProxy!.checkCount();
-    await delay(2000);
-    expect(client.socket.readyState).toBe(WebSocket.OPEN);
-    expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
-    const encrypted = context.keys.encrypt('test', 'direct', 'Hello from Bob');
-    await context.append('conversation-direct', 'message.posted', {
-      conversationId: 'direct', authorId: 'bob', authorKind: 'human',
-      contentType: 'text', ...encrypted,
-    }, false);
-    await context.runner.run(conversations);
-    function messageDelivered() {
-      function isMessage(message: ReturnType<typeof chatMessageSchema.parse>) {
-        return message.type === 'event' && message.row?.type === 'message.posted';
-      }
-      return client!.received.some(isMessage);
-    }
-    await until(messageDelivered);
-    await context.append('member-bob', 'member.removed', {
-      memberId: 'bob', removedBy: 'alice',
-    }, false);
-    await delay(300);
-    expect(client.socket.readyState).toBe(WebSocket.OPEN);
-    expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
-    const removed = await context.append('conversation-direct', 'participant.removed', {
+    await context.append('conversation-direct', 'participant.removed', {
       conversationId: 'direct', participantId: 'alice', removedBy: 'bob',
     }, false);
-    await delay(300);
+    await expect(context.runner.run(conversations)).rejects.toThrow(
+      'Direct conversation is immutable');
+  } finally {
+    await context.close();
+  }
+}
+
+it('does not read conversation streams while a direct chat socket is idle',
+  idleDirectChatSocket, 120_000);
+
+async function idleDirectChatSocket() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    context.keys.provision('test', 'direct-idle');
+    await context.append('conversation-direct-idle', 'conversation.created', {
+      conversationId: 'direct-idle', createdBy: 'alice', mode: 'direct',
+      participantIds: ['alice', 'bob'],
+    });
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'direct-idle');
+    const storeReads = countStoreReads(context);
+    await delay(2000);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
-    const closed = once(client.socket, 'close');
-    await context.auth.handler.handle(removed, context.db);
-    function expired(): never {
-      throw new Error('Participant removal did not close the socket');
-    }
-    const timeout = delay(2000).then(expired);
-    const closure: unknown[] = await Promise.race([closed, timeout]);
-    expect(closure[0]).toBe(1008);
-    expect(client.received.some(isRefused)).toBe(true);
+    expect(storeReads.readStream).toBe(0);
+    expect(storeReads.head).toBeLessThanOrEqual(30);
   } finally {
     await client?.close();
     await context.close();
@@ -248,9 +254,24 @@ async function teamSocketAccessChanges() {
     await context.runner.run(conversations);
     client = await openChatSocket(context, 'team-chat');
     const initialChecks = context.fgaProxy!.checkCount();
+    const storeReads = countStoreReads(context);
     await delay(2000);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
     expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
+    expect(storeReads.readStream).toBe(0);
+    expect(storeReads.head).toBeLessThanOrEqual(50);
+    const roleChange = await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    }, false);
+    await delay(300);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    await context.auth.handler.handle(roleChange, context.db);
+    function roleChangeChecked() {
+      return context.fgaProxy!.checkCount() >= initialChecks + 2;
+    }
+    await until(roleChangeChecked);
+    await delay(300);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
     const closed = once(client.socket, 'close');
     const started = performance.now();
     await context.append('team-sales', 'team.member_removed', {
@@ -301,9 +322,12 @@ async function idleSocketChecks() {
     await until(ready);
     const initialChecks = context.fgaProxy!.checkCount();
     expect(initialChecks - checksBeforeSubscription).toBe(2);
+    const storeReads = countStoreReads(context);
     await delay(2000);
     expect(socket.readyState).toBe(WebSocket.OPEN);
     expect(context.fgaProxy!.checkCount() - initialChecks).toBe(0);
+    expect(storeReads.readStream).toBe(0);
+    expect(storeReads.head).toBeLessThanOrEqual(30);
 
     await context.append('conversation-agent', 'agent.turn_started', {
       conversationId: 'agent', turnId: 'agent-turn', assistantId: 'assistant',
@@ -348,6 +372,49 @@ async function idleSocketChecks() {
     }
     await context.close();
   }
+}
+
+it('catches a member removal written after the access positions were read',
+  removalDuringAccessCheck, 120_000);
+
+async function removalDuringAccessCheck() {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    await context.agentSession('injected-removal');
+    client = await openChatSocket(context, 'injected-removal');
+    const realHead = context.options.store.head.bind(context.options.store);
+    let armed = true;
+    const injected = Promise.withResolvers<void>();
+    async function head(subject?: string, deadline?: number) {
+      const position = await realHead(subject, deadline);
+      if (armed && subject === 'member-alice') {
+        armed = false;
+        await context.append('member-alice', 'member.removed', {
+          memberId: 'alice', removedBy: 'bob',
+        }, false);
+        injected.resolve();
+      }
+      return position;
+    }
+    context.options.store.head = head;
+    const closed = once(client.socket, 'close');
+    const started = performance.now();
+    await injected.promise;
+    const closure = await Promise.race([
+      closed,
+      delay(2000).then(expireRemovalCheck),
+    ]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
+function expireRemovalCheck(): never {
+  throw new Error('Member removal during the access check did not close the socket');
 }
 
 function pauseFirstHistoryRead(fixture: Fixture) {

@@ -1,5 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
+import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows, type ChatOptions } from './routes.ts';
 
@@ -14,6 +15,7 @@ interface Subscription {
   generation: number;
   running: boolean;
   ready: boolean;
+  accessPassed: boolean;
   computerState: string;
   checking: boolean;
   access?: Awaited<ReturnType<typeof chatSubscriptionAccess>>;
@@ -34,7 +36,7 @@ export function conversationSubscription(
     const state: Subscription = {
       socket, session, config, options, conversationId, position: since,
       generation: requestedGeneration ?? 0, running: false, checking: false,
-      ready: false, computerState: '',
+      ready: false, accessPassed: false, computerState: '',
     };
     function poll() {
       void drain(state);
@@ -72,8 +74,11 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
       }
       state.access = await chatSubscriptionAccess(options, memberId, conversationId, deadline);
     }
-    return await state.access(deadline);
+    const mode = await state.access(deadline);
+    state.accessPassed = true;
+    return mode;
   } catch (error) {
+    if (state.accessPassed && error instanceof AuthorityApplying) return;
     if (isChatRefused(error)) refuse(state);
     else socket.close(1013);
     return;

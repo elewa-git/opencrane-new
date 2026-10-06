@@ -42,11 +42,10 @@ async function readChatAccessContext(options: ChatOptions, memberId: string,
   if (created.mode === 'direct' && !created.participantIds.includes(memberId)) {
     throw new ChatRefused('Conversation refused');
   }
-  const subjects = [`member-${memberId}`, `ownership-${options.silo}`];
+  const subjects = [`member-${memberId}`];
   let privateSession: Awaited<ReturnType<typeof privateSessionCreation>> | undefined;
   if (created.mode === 'agent_session') {
     privateSession = await privateSessionCreation(options, conversationId, row.event);
-    subjects.push(`assistant-${privateSession.created.assistantId}`);
     if (privateSession.assistant.kind === 'team') {
       subjects.push(`team-${privateSession.assistant.ownerId}`);
     }
@@ -61,7 +60,6 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
   const { created, subjects, privateSession } = context;
   const auth = memberAuthorisation(options.binding);
   let previousHeads: number[] | undefined;
-  let conversationHead: number | undefined;
   return check;
 
   async function check(checkDeadline: number) {
@@ -73,22 +71,7 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
     function headMoved(head: number, index: number) {
       return head !== previousHeads?.[index];
     }
-    let changed = !previousHeads || heads.some(headMoved);
-    let currentConversationHead: number | undefined;
-    let participantsApplied = true;
-    if (created.mode === 'direct') {
-      const subject = `conversation-${conversationId}`;
-      currentConversationHead = await readHead(subject);
-      if (conversationHead !== undefined && currentConversationHead !== conversationHead) {
-        const participantChanges = await chatParticipantChanges(
-          options.store, subject, conversationHead, currentConversationHead, checkDeadline);
-        changed ||= participantChanges.length > 0;
-        // Confirm these events before checking permission, so an old allowance is not saved.
-        for (const eventId of participantChanges) {
-          if (!await auth.applied(eventId)) participantsApplied = false;
-        }
-      }
-    }
+    const changed = !previousHeads || heads.some(headMoved);
     if (changed) {
       await activeChatMember(options, memberId, undefined, auth);
       const permission = await auth.conversation(memberId, conversationId, 'read');
@@ -98,22 +81,8 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
     }
     // Save positions from before the check so a change during it is checked next time.
     previousHeads = heads;
-    if (participantsApplied) conversationHead = currentConversationHead;
     return created.mode;
   }
-}
-
-async function chatParticipantChanges(store: EventStore, subject: string,
-  previousHead: number, currentHead: number, deadline: number) {
-  const eventIds: string[] = [];
-  // Read only new direct-chat events. Messages and files do not change access.
-  for await (const row of store.readStream(subject, previousHead + 1, deadline)) {
-    if (row.sequence > currentHead) break;
-    if (['participant.added', 'participant.removed'].includes(row.event.type)) {
-      eventIds.push(row.event.id);
-    }
-  }
-  return eventIds;
 }
 
 // Keep the write check short by opening it after command history has loaded.
