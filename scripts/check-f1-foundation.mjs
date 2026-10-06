@@ -216,9 +216,9 @@ async function checkRegister(page, width, motion) {
   await page.locator('.register-row').last().waitFor();
   assert.equal(await page.locator('.register').getAttribute('aria-busy'), 'false');
   assert.equal(await status.evaluate(nodeConnected), true, 'Loading status persists');
-  assert.equal(await page.locator('main [role=status]').innerText(), 'Integrations loaded');
+  assert.equal(await page.locator('main [role=status]').innerText(), '4 integrations');
   assert.equal(await page.locator('.register-row [aria-live]').count(), 0);
-  const addServer = page.getByRole('link', { name: 'Add MCP server', exact: true });
+  const addServer = page.getByRole('link', { name: 'Add an integration', exact: true });
   assert.equal(await addServer.evaluate(textColour), 'rgb(22, 25, 26)');
   const all = page.getByRole('tab', { name: 'All · 4', exact: true });
   await all.focus();
@@ -245,7 +245,7 @@ async function checkRegister(page, width, motion) {
   assert(noticeBox.y < tabsBox.y, 'Stale notice is above the tabs');
   const noticeText = await page.locator('.refresh-notice').innerText();
   assert(noticeText.includes('09:40 UTC'));
-  assert.equal(await page.locator('.refresh-notice button').count(), 1);
+  assert.equal(await page.locator('.refresh-notice button').count(), 0);
   assert.equal(await page.locator('.notice-glyph').count(), 1, 'Stale warning has a glyph');
   const appearance = await page.locator('.register-row').first().evaluate(staleAppearance);
   assert.notEqual(appearance.tileBackground, appearance.rowBackground, 'Tile stands out');

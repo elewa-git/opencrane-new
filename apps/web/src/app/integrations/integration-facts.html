@@ -1,0 +1,11 @@
+<section class="facts" aria-labelledby="facts-heading">
+  <h2 id="facts-heading" class="sr-only">Facts</h2>
+  @for (fact of facts(); track fact.label) {
+    <article class="fact" [ocDogEar]="true">
+      <h3>{{ fact.label }}</h3>
+      <oc-shared-state [kind]="fact.kind" [message]="fact.value"
+        [detail]="fact.evidence" [safeToRetry]="fact.safeToRetry ?? false"
+        [showAction]="false" [announce]="false" />
+    </article>
+  }
+</section>

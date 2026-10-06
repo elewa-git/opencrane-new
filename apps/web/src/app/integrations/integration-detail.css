@@ -1,0 +1,77 @@
+:host { display: grid; gap: 18px; min-width: 0; }
+h1, p { margin: 0; }
+h1 { font: var(--oc-type-page); letter-spacing: var(--oc-tracking-page); }
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.breadcrumb a { color: var(--oc-accent-dark); }
+.detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.heading-copy { min-width: 0; overflow-wrap: anywhere; }
+.heading-copy p { margin-top: 6px; color: var(--oc-ink-admin-muted); font-size: 13px; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid var(--oc-border-input);
+  border-radius: 8px;
+  background: white;
+  color: var(--oc-ink-strong);
+  font-size: 13px;
+  text-decoration: none;
+}
+.primary { background: var(--oc-accent); border-color: var(--oc-accent); }
+.draft-notice {
+  padding: 16px 18px;
+  border: 1px solid var(--oc-warning-border);
+  border-radius: 12px;
+  background: var(--oc-warning-notice);
+}
+.loading { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.loading > .loading-message { grid-column: 1 / -1; }
+.skeleton-card {
+  display: grid;
+  gap: 12px;
+  min-height: 130px;
+  padding: 18px;
+  border: 1px solid var(--oc-border-default);
+  border-radius: 12px;
+  background: white;
+}
+.message-state { display: grid; justify-items: start; gap: 14px; }
+.status-region { position: absolute; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+:host a:focus-visible, :host button:focus-visible {
+  outline: 2px solid #0a8497;
+  outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  :host { gap: 18px; }
+  .detail-heading { display: grid; gap: 16px; }
+  .breadcrumb a { display: inline-flex; align-items: center; min-height: 44px; }
+  .actions { display: grid; gap: 10px; }
+  .actions .button, .message-state .button { width: 100%; min-height: 44px; }
+  .draft-notice { padding: 14px; }
+  .loading { grid-template-columns: minmax(0, 1fr); }
+  .message-state { justify-items: stretch; }
+  .message-state button { min-height: 44px; }
+}

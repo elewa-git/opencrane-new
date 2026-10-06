@@ -1,0 +1,28 @@
+.access-state {
+  display: grid;
+  gap: 12px;
+  padding: 24px;
+  border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-app);
+  background: var(--oc-neutral-soft);
+}
+h2 { margin: 0; font: var(--oc-type-card); }
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: fit-content;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--oc-accent);
+  border-radius: 8px;
+  background: var(--oc-accent);
+  color: var(--oc-ink-strong);
+  font-size: 13px;
+  text-decoration: none;
+}
+.button:hover { background: var(--oc-accent-hover); }
+@media (max-width: 700px) {
+  .access-state { padding: 18px; }
+  .button { width: 100%; }
+}

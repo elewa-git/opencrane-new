@@ -6,6 +6,13 @@ This Angular app provides the organisation settings shell and MCP register.
 The [server](../server/README.md) owns sessions and register truth. The register uses
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
+The Integrations register searches and filters that read. Its detail page reads the
+register first, then reads the matching server's tool policy. It shows the row as soon as
+the register read succeeds. A failed list refresh keeps the row, says that availability
+was not checked, and hides that failure notice while another refresh is running. A saved
+tool policy stays visible until a new tools reply arrives. Connected state and access
+grants remain unavailable until the server provides those reads. A 401 or 403 clears the
+register and detail page before showing the shared access-lost message.
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
 
@@ -19,6 +26,8 @@ npm run dev -w apps/web
 ```
 
 Open `http://localhost:4200/org/integrations`; `/org` also opens this implemented page.
+`/org/integrations/<id>` shows four separate facts for a registered server. It does not
+read the tools route for an id missing from the register.
 Organisation navigation is Overview, People & groups, Models & providers, Spending,
 Integrations, Routines and Change history. People & groups reads the flat group list,
 shows read-only group details and lets Owners and Admins create groups. Overview and
@@ -38,10 +47,14 @@ The browser uses same-origin auth and WebSocket URLs; no credentials are built i
 
 The client validates the register response and incoming messages with
 [protocol](../../libs/protocol/README.md).
-Register refresh failures keep old rows and their load time visible. The always-available
-refresh button stays in place and keeps keyboard focus while retrying. Refusal clears
-protected rows before any response body is parsed. Non-admins see that the Owner or
-Admin role is required. Adding a remote MCP server uses `/org/integrations/new`;
+Register refresh failures keep old rows and their load time visible. A retry after a
+failed first read never shows the empty-register message or zero counts. The refresh
+button stays in place and keeps keyboard focus while retrying. Detail refresh keeps its
+facts and policy visible until a new tools reply arrives. It hides an old failure notice
+while retrying and moves focus from a message-state Refresh button to the header Refresh
+button when the row appears. Clear search returns focus to the search field.
+Refusal clears protected rows before any response body is parsed. Non-admins see that the
+Owner or Admin role is required. Adding a remote MCP server uses `/org/integrations/new`;
 discovery and tool review retain their existing API flows.
 Socket closure updates state and schedules reconnect with jitter;
 there is no durable outgoing message queue. Sign out uses a native form POST to

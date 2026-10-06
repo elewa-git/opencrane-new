@@ -253,7 +253,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.locator('.register-row').first().waitFor();
     expect(await page.locator('.register-row').count()).toBe(6);
 
-    await page.getByRole('link', { name: 'Add MCP server', exact: true }).click();
+    await page.getByRole('link', { name: 'Add an integration', exact: true }).click();
     await page.getByRole('heading', { name: 'Add an MCP server' }).waitFor();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
@@ -305,7 +305,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     await page.locator('.register-row').first().waitFor();
 
     const toolsLoaded = page.waitForResponse(r => r.url().endsWith('/odoo/tools'));
-    await page.getByRole('link', { name: 'Manage tools for Odoo Accounting' }).click();
+    await page.goto(`${base}/org/integrations/odoo/tools`);
     expect((await toolsLoaded).status()).toBe(200);
     await page.getByRole('heading', { name: 'Tools & access' }).waitFor();
     await page.getByRole('group', { name: 'write' }).getByLabel('Allow automatically').check();
@@ -368,9 +368,12 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       `document.getElementById('integrations-tab-all')?.getAttribute('tabindex') === '0'`,
       undefined, { timeout: 5_000 });
     await page.getByRole('tab', { name: /^All/ }).press('Tab');
+    await focused(page, 'integration-search');
+    await page.keyboard.press('Tab');
     await focused(page, 'integrations-panel');
 
-    expect(await page.getByRole('link', { name: 'Add MCP server' }).getAttribute('href')).toBe('/org/integrations/new');
+    expect(await page.getByRole('link', { name: 'Add an integration' }).getAttribute('href'))
+      .toBe('/org/integrations/new');
     expect(await page.locator('.register-row button').count()).toBe(0);
     const interactive = page.locator('button:visible, a:visible');
     const targets = await Promise.all(Array.from({ length: await interactive.count() }, async (_, index) => {
@@ -396,13 +399,20 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       const firstFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.goto(`${base}/org/integrations`);
       expect((await firstFailure).status()).toBe(503);
-      await firstRead.getByText("Couldn't load the integrations list.").waitFor();
+      await firstRead.getByRole('status').getByText(
+        'The organisation register is unavailable.',
+      ).waitFor();
+      await firstRead.getByText("Couldn't load the integrations list.", {
+        exact: true,
+      }).waitFor();
       const retryFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.getByRole('button', { name: 'Refresh list' }).click();
       await firstRead.getByText('Refreshing the integrations list…').waitFor();
-      expect(await firstRead.getByText('Nothing set up yet').count()).toBe(0);
+      expect(await firstRead.getByText('No integrations yet').count()).toBe(0);
+      expect(await firstRead.getByText('0 integrations').count()).toBe(0);
       expect((await retryFailure).status()).toBe(503);
-      expect(await firstRead.getByText('Nothing set up yet').count()).toBe(0);
+      expect(await firstRead.getByText('No integrations yet').count()).toBe(0);
+      expect(await firstRead.getByText('0 integrations').count()).toBe(0);
       await firstRead.close();
     } finally {
       await held.query('ROLLBACK');
@@ -418,21 +428,31 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
     const refused = page.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
     await page.getByRole('button', { name: 'Refresh list' }).click();
     expect((await refused).status()).toBe(403);
-    await page.getByText('You no longer have permission').waitFor();
+    await page.getByRole('heading', {
+      name: 'You no longer have access to Integrations',
+    }).waitFor();
     expect(await page.getByText('Ask an Owner or Admin').count()).toBe(1);
     expect(await page.locator('.access-state button').count()).toBe(0);
     expect(await page.locator('.register-row').count()).toBe(0);
 
+    const unavailablePage = await context.newPage();
     await fga.pause();
     try {
-      const unavailable = page.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
-      await page.getByRole('button', { name: 'Refresh list' }).click();
-      expect((await unavailable).status()).toBe(503);
-      await page.getByText("Couldn't load the integrations list.").waitFor();
-      expect(await page.locator('.register-row').count()).toBe(0);
-      expect(await page.getByText(/Showing what we loaded/).count()).toBe(0);
+      const unavailableRead = unavailablePage.waitForResponse((response) =>
+        response.url().endsWith('/api/org/integrations'));
+      await unavailablePage.goto(`${base}/org/integrations`);
+      expect((await unavailableRead).status()).toBe(503);
+      await unavailablePage.getByRole('status').getByText(
+        'The organisation register is unavailable.',
+      ).waitFor();
+      await unavailablePage.getByText("Couldn't load the integrations list.", {
+        exact: true,
+      }).waitFor();
+      expect(await unavailablePage.locator('.register-row').count()).toBe(0);
+      expect(await unavailablePage.getByText(/Showing what we loaded/).count()).toBe(0);
     } finally {
       await fga.resume();
+      await unavailablePage.close();
     }
     await context.close();
   } finally {
