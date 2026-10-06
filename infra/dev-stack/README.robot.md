@@ -440,6 +440,11 @@ The stub must record exactly one call with unchanged bytes and an allowed decisi
 a second retry and a denied call must produce no additional upstream effects.
 Requested, approved, used (outcome unknown) and denied cards survive reload at
 1280px and 390px. Screenshots go to `docs/process/p3-2-live/`.
+The approved card says **Approved by you** and **Not used yet**. The journey checks
+those words before retrying the tool. A failed approval step saves
+`approval-failure-<width>.txt` and `approval-failure-<width>.png` in the selected
+stack's private directory before cleanup closes the turn. The text includes the
+browser error and the card's accessible names, which screen readers use.
 This qualifies browser approval and gateway admission, not native Codex MCP
 continuation or an external tool's final outcome. No OpenAI call is made.
 Approval tools explicitly cost zero; the journey uses the stored installation

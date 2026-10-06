@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { errors, type Page } from 'playwright';
 import { z } from 'zod';
@@ -11,6 +11,15 @@ import { history } from '@opencrane/models';
 import { directory, readEnv } from './config.ts';
 
 type Append = (type: string, subject: string, data: Record<string, unknown>, source?: string) => Promise<void>;
+
+async function captureApprovalFailure(page: Page, width: number, error: unknown) {
+  const screenshotPath = `${directory}/approval-failure-${width}.png`;
+  await page.screenshot({ path: screenshotPath, fullPage: true });
+  const approvalCards = page.locator('oc-approval-cards');
+  const approvalSnapshot = await approvalCards.ariaSnapshot();
+  const report = `${String(error)}\n\n${approvalSnapshot}`;
+  await writeFile(`${directory}/approval-failure-${width}.txt`, report, { mode: 0o600 });
+}
 
 /** Real browser decisions and gateway admission; only the tool and its active turn are scripted. */
 export async function approvalJourney(pages: Page[], store: EventStore, auth: ReturnType<typeof memberAuthorisation>, append: Append,
@@ -108,8 +117,8 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
         }
         throw new Error(`${button} did not complete after three submissions with status checks`);
       };
-      const approveAttempts = await decide('Approve', /Approved by you.*not used yet/);
-      const approved = page.getByRole('button', { name: /Approved by you.*not used yet/ });
+      const approveAttempts = await decide('Approve', /Approved by you.*Not used yet/);
+      const approved = page.getByRole('button', { name: /Approved by you.*Not used yet/ });
       await page.reload(); await approved.waitFor();
       await page.screenshot({ path: `docs/process/p3-2-live/approved-${width}.png`, fullPage: true });
       assert.equal(await call('Approved journey note'), 200);
@@ -137,7 +146,8 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
         (row.event.data as { permitId: string }).permitId === recorded.at(-1)!.requestId).length, 1);
       console.log(`PASS approvals ${width}px: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
     } catch (error) {
-      await page.screenshot({ path: `${directory}/approval-failure-${width}.png`, fullPage: true });
+      // Capture the card before cleanup closes the turn and leaves the conversation.
+      await captureApprovalFailure(page, width, error);
       throw error;
     } finally {
       await append('agent.turn_completed', `conversation-${conversationId}`, { conversationId, turnId });

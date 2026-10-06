@@ -1,0 +1,16 @@
+TAP version 13
+# Subtest: claim skips a slot with a held port and leaves it unclaimed
+not ok 1 - claim skips a slot with a held port and leaves it unclaimed
+  ---
+  duration_ms: 81.948033
+  type: 'test'
+  location: '/home/jente/dev/wt/journey-approval/infra/dev-stack/claim.test.ts:11:1'
+  failureType: 'testCodeFailure'
+  error: 'listen EADDRINUSE: address already in use 127.0.0.1:25110'
+  code: 'EADDRINUSE'
+  stack: |-
+    Server.setupListenHandle [as _listen2] (node:net:1941:16)
+    listenInCluster (node:net:1998:12)
+    node:net:2207:7
+    process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+  ...

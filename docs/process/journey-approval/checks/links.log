@@ -1,0 +1,3 @@
+npm notice run lint:links
+npm notice run sh scripts/fetch-lychee.sh && .tools/lychee --offline --include-fragments '*.md' 'docs/**/*.md' 'spikes/README.md' 'spikes/*/README.md' 'apps/*/README*.md' 'libs/*/README*.md' 'infra/*/README*.md' 'tools/*/README*.md'
+🔍 1375 Total (in 0s) ✅ 1202 OK 🚫 0 Errors 👻 173 Excluded

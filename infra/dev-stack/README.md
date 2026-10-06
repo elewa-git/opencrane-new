@@ -18,7 +18,7 @@ flowchart LR
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|builds scanner| clamav["infra/clamav<br/>virus scanner"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks and daily timer| journeys["Journeys and timer<br/>checks and daily run"]
+  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, screenshots and daily run"]
   devbox["infra/devbox<br/>machine setup"] -->|creates cluster| cluster["k3d cluster<br/>local computers"]
   stack -->|uses cluster| cluster
 ```
@@ -42,6 +42,7 @@ flowchart LR
 2. **A developer checks a change.** A browser signs in, sends a chat message and checks
    that the reply remains after a reload. Other checks cover uploads, approvals, budgets
    and the computer screen. Budget checks restore the test limits even if a browser step fails.
+   Failed approval checks save the card's text and a screenshot before closing the test turn.
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and
    releases its id.
