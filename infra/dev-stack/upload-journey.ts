@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { uploadPdf } from '../../apps/server/test/support/upload-pdf.ts';
 
-/** The HTTP seam complements the browser upload and refusal checks. */
+/** Check uploads and refusals through HTTP as well as through the browser. */
 export async function uploadJourney(server: string, headers: { origin: string; cookie: string }, conversationId: string) {
   const url = `${server}/api/conversations/${conversationId}/files`;
   const upload = (name: string, bytes: Buffer) => fetch(url, { method: 'POST', headers: { ...headers, 'content-type': 'application/octet-stream',

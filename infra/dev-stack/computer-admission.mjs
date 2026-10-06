@@ -1,4 +1,4 @@
-// Install per-silo admission before claims. The checked image remains the source of truth.
+// Install the policy that checks each silo Pod against the reviewed image template.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 const namespace = process.argv[2];
@@ -6,7 +6,7 @@ if (!namespace || !/^[a-z0-9-]+$/.test(namespace)) throw new Error('Expected sil
 const template = JSON.parse(readFileSync(new URL('../../apps/computer/sandbox-template.json', import.meta.url)));
 const spec = template.spec.podTemplate.spec;
 const literal = JSON.stringify;
-// CEL maps need dynamic values when a JSON object mixes strings, numbers and lists.
+// Build CEL map values with their real types when JSON mixes strings, numbers and lists.
 function cel(value) {
   if (Array.isArray(value)) return `[${value.map(cel).join(',')}]`;
   if (value !== null && typeof value === 'object') {
@@ -37,7 +37,8 @@ const policies = [
   ['sandbox', 'agents.x-k8s.io', ['sandboxes'], 'object.spec.podTemplate.spec', [
     `variables.p == ${cel(spec)}`,
     `variables.labels['app'] == 'computer'`,
-    // Keep Pod settings fixed; allow mode changes and ownership by the same-name claim.
+    // Keep Pod settings fixed. Let the lifecycle service account change its mode or attach the
+    // SandboxClaim with the same name as the Pod.
     `request.userInfo.username != 'system:serviceaccount:${namespace}:computer-lifecycle' || (oldObject != null && object.spec.all(k, k == 'operatingMode' || (k in oldObject.spec && object.spec[k] == oldObject.spec[k])) && oldObject.spec.all(k, k == 'operatingMode' || k in object.spec) && object.metadata.labels == oldObject.metadata.labels && ((has(object.metadata.ownerReferences) == has(oldObject.metadata.ownerReferences) && (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences == oldObject.metadata.ownerReferences)) || (has(object.metadata.ownerReferences) && size(object.metadata.ownerReferences) == 1 && object.metadata.ownerReferences.all(o, o.apiVersion == 'extensions.agents.x-k8s.io/v1beta1' && o.kind == 'SandboxClaim' && o.name == object.metadata.name && o.controller && o.blockOwnerDeletion))) && has(object.metadata.annotations) == has(oldObject.metadata.annotations) && (!has(object.metadata.annotations) || object.metadata.annotations == oldObject.metadata.annotations) && has(object.metadata.finalizers) == has(oldObject.metadata.finalizers) && (!has(object.metadata.finalizers) || object.metadata.finalizers == oldObject.metadata.finalizers))`,
   ]],
   ['pod', '', ['pods', 'pods/ephemeralcontainers'], 'object.spec', security],

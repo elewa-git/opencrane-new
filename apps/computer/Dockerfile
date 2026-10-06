@@ -5,7 +5,7 @@ RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/a
     apt-get -o Acquire::Check-Valid-Until=false update -qq && apt-get install -y --no-install-recommends gcc libc6-dev
 COPY tool-user.c /tmp/tool-user.c
 RUN gcc -O2 -Wall -Wextra -Werror -o /tool-user /tmp/tool-user.c
-# S0.5 includes the pinned S0.1b Codex binary and native seccomp launcher.
+# The pinned base image supplies Codex and the native launcher that applies seccomp.
 FROM ${COMPUTER_BASE} AS runtime
 USER root
 RUN sed -i 's|http://deb.debian.org/debian-security|http://snapshot.debian.org/archive/debian-security/20261001T000000Z|; s|http://deb.debian.org/debian$|http://snapshot.debian.org/archive/debian/20261001T000000Z|' /etc/apt/sources.list.d/debian.sources

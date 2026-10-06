@@ -231,7 +231,8 @@ async function provisionComputers(settings: Record<string, string>) {
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/sandbox-template.json']);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'apps/computer/network-policy.json']);
   await run('kubectl', ['-n', namespace, 'apply', '-f', 'infra/dev-stack/computer-pool.json']);
-  // Service workloads stay outside the namespace fenced by computer admission.
+  // Keep service Pods, such as the model gateway, outside the namespace whose admission policy
+  // only accepts Pods that match the computer template.
   const gatewayNamespace = `${namespace}-gateway`;
   if (!(await run('kubectl', ['get', 'namespace', gatewayNamespace, '--ignore-not-found', '-o', 'name'])).trim()) {
     await run('kubectl', ['create', 'namespace', gatewayNamespace]);
@@ -283,7 +284,7 @@ async function up(fresh: boolean) {
     await stop();
     await compose('down', '--volumes', '--remove-orphans');
     await removeComputers();
-    // The ownership marker fences this directory to this worktree.
+    // Use the owner record to make sure this worktree only removes its own stack directory.
     const files = await import('node:fs/promises').then((fs) => fs.readdir(directory));
     for (const file of files) if (file !== 'stack-owner' && !file.startsWith('zitadel-') && file !== 'zitadel.json') await rm(`${directory}/${file}`, { recursive: true });
     await generate(origin);
@@ -298,7 +299,7 @@ async function up(fresh: boolean) {
   await compose('up', '-d', 'openfga');
   await wait(() => healthy(`${settings['OPENFGA_API_URL']}/healthz`), 'OpenFGA');
   await wait(() => healthy(`http://127.0.0.1:${settings['MINIO_PORT']}/minio/health/live`), 'MinIO');
-  // Repeated up runs must also keep decision services and event writers out of the migration.
+  // Keep decision services and event writers stopped during migrations, including on repeat starts.
   await stopProcesses(['server', 'dispatcher', 'models']);
   if (secondary) await compose('stop', 'models');
   const minio = await readEnv('minio');
@@ -310,7 +311,7 @@ async function up(fresh: boolean) {
   await objects.setBucketLifecycle('quarantine', { Rule: [{ ID: 'abandoned-uploads', Status: 'Enabled', Filter: { Prefix: '' }, Expiration: { Days: 1 } }] });
   await run('npm', ['run', 'provision'], { ...base, ...await readEnv('command') });
   if (secondary) {
-    // Stop keeps uncertain reservations; the stub fixture needs room for repeated journeys.
+    // Stop keeps reservations whose outcome is unknown, so leave room for each stub journey.
     const events = await connectEventStore(await readEnv('command'));
     try {
       const subject = `budget-${settings['SILO_ID']!}`;
@@ -329,7 +330,8 @@ async function up(fresh: boolean) {
   const events = await connectEventStore(await readEnv('command'));
   try {
     const silo = settings['SILO_ID']!, subject = `budget-${silo}`;
-    // Seed before the budget writer starts. Stop retains reservations; fresh and warm runs need room.
+    // Set the test budget before its writer starts. Stop keeps uncertain reservations, so leave
+    // enough room for both fresh and repeat runs.
     if (!await events.store.head(subject)) {
       const event = envelope(silo, subject, 'budget.ceiling_set', {
         scope: 'global', dailyCeilingCents: 4000, ceilingCents: 20000, setBy: 'dev-stack-stub',

@@ -1,16 +1,15 @@
-// Promoted from S0.1b: the capability authenticates Codex; grants stay per thread.
+// Give Codex one credential for this computer and a separate grant for each thread.
 import { createServer, request } from 'node:http';
 import { pipeline } from 'node:stream';
 import { chmodSync, writeFileSync } from 'node:fs';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { body, json, record } from './http.ts';
 
-// Reason unknown, see #138.
+// Let Codex use the computer for ten minutes before it needs a new turn grant.
 const CALLER_CREDENTIAL_LIFETIME_MS = 600_000;
-// This matches the 120-second turn-token cap in libs/auth/src/tokens.ts.
-// Reason unknown, see #138.
+// Match the two-minute limit on turn tokens in libs/auth/src/tokens.ts.
 const MAX_TURN_GRANT_LIFETIME_MS = 120_000;
-// Reason unknown, see #138.
+// Close a model request after two minutes without activity on its connection.
 const UPSTREAM_REQUEST_TIMEOUT_MS = 120_000;
 
 interface Grant { computer: string; token: string; expires: number }

@@ -1,4 +1,4 @@
-// ponytail: two fixed secondary slots bound resource use on the eight-core dev box.
+// Keep two secondary slots so their combined resource use fits the eight-core dev box.
 export const stackId = process.env['DEV_STACK_ID'] ?? 'owner';
 if (!['owner', '1', '2'].includes(stackId)) throw new Error('DEV_STACK_ID must be owner, 1 or 2');
 export const secondary = stackId !== 'owner';
