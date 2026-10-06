@@ -1,0 +1,386 @@
+{
+  "records": [
+    {
+      "run": 1,
+      "conversationId": "66ed095c-e6a8-4156-af2d-f7e70dca6de7",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:07:16.765Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:07:21.812Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:07:22.105Z"
+        },
+        {
+          "type": "agent.turn_failed",
+          "time": "2026-10-06T06:07:24.164Z",
+          "reason": "bridge_interrupted"
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "conversationId": "aa7c051b-a861-4469-8d64-578789225fcb",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:07:51.946Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:07:59.183Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:08:00.518Z"
+        },
+        {
+          "type": "agent.turn_failed",
+          "time": "2026-10-06T06:08:04.325Z",
+          "reason": "bridge_interrupted"
+        }
+      ]
+    },
+    {
+      "run": 3,
+      "conversationId": "772ba382-e0c5-4580-8e71-ff7ece9c1579",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:08:46.374Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:08:52.486Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:08:52.923Z"
+        },
+        {
+          "type": "agent.turn_failed",
+          "time": "2026-10-06T06:08:55.828Z",
+          "reason": "bridge_interrupted"
+        }
+      ]
+    },
+    {
+      "run": 4,
+      "conversationId": "230b0a08-9db8-4f2c-b076-0f104501fbc9",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:09:32.848Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:09:39.520Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:09:39.988Z"
+        },
+        {
+          "type": "agent.turn_failed",
+          "time": "2026-10-06T06:09:43.380Z",
+          "reason": "bridge_interrupted"
+        }
+      ]
+    },
+    {
+      "run": 5,
+      "conversationId": "48b8c631-0890-4910-8547-24a72233868b",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:10:59.972Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:11:08.866Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:11:09.237Z"
+        },
+        {
+          "type": "agent.turn_failed",
+          "time": "2026-10-06T06:11:11.938Z",
+          "reason": "bridge_interrupted"
+        }
+      ]
+    },
+    {
+      "run": 6,
+      "conversationId": "e8d02aa8-1655-4549-938c-43d3e1923d79",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:11:38.560Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:11:46.623Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:11:47.498Z"
+        },
+        {
+          "type": "agent.turn_failed",
+          "time": "2026-10-06T06:11:50.155Z",
+          "reason": "bridge_interrupted"
+        }
+      ]
+    },
+    {
+      "run": 7,
+      "conversationId": "781b55dc-49af-4846-a6b9-ae4f62389ea5",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:12:24.487Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:12:31.654Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:12:32.104Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:12:34.910Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:12:35.768Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:12:35.876Z"
+        },
+        {
+          "type": "agent.message_completed",
+          "time": "2026-10-06T06:12:36.499Z"
+        },
+        {
+          "type": "agent.turn_completed",
+          "time": "2026-10-06T06:12:36.648Z"
+        }
+      ]
+    },
+    {
+      "run": 8,
+      "conversationId": "fae2e6c6-6536-4e52-942f-9d470d7e8b35",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:12:58.425Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:13:08.238Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:13:09.769Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:13:12.928Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:13:13.041Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:13:13.491Z"
+        },
+        {
+          "type": "agent.message_completed",
+          "time": "2026-10-06T06:13:14.038Z"
+        },
+        {
+          "type": "agent.turn_completed",
+          "time": "2026-10-06T06:13:14.234Z"
+        }
+      ]
+    },
+    {
+      "run": 9,
+      "conversationId": "6e009d0e-783a-4d5f-aced-ef34fbfc79bc",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:13:40.885Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:13:48.511Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:13:48.938Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:13:52.668Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:13:52.860Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:13:53.273Z"
+        },
+        {
+          "type": "agent.message_completed",
+          "time": "2026-10-06T06:13:53.709Z"
+        },
+        {
+          "type": "agent.turn_completed",
+          "time": "2026-10-06T06:13:54.663Z"
+        }
+      ]
+    },
+    {
+      "run": 10,
+      "conversationId": "6e2e1d28-27fc-4868-831b-b98b18a31ae2",
+      "events": [
+        {
+          "type": "conversation.created",
+          "time": "2026-10-06T06:14:24.728Z"
+        },
+        {
+          "type": "message.posted",
+          "time": "2026-10-06T06:14:33.247Z"
+        },
+        {
+          "type": "agent.turn_started",
+          "time": "2026-10-06T06:14:33.575Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:14:37.890Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:14:38.124Z"
+        },
+        {
+          "type": "agent.message_delta",
+          "time": "2026-10-06T06:14:39.099Z"
+        },
+        {
+          "type": "agent.message_completed",
+          "time": "2026-10-06T06:14:39.251Z"
+        },
+        {
+          "type": "agent.turn_completed",
+          "time": "2026-10-06T06:14:39.518Z"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "time": "2026-10-06T06:07:23.732Z",
+      "reason": "budget_exhausted",
+      "outcome": "deny",
+      "requestId": "247b60a2-6b47-4297-a701-f125e0c999c6",
+      "conversationId": "66ed095c-e6a8-4156-af2d-f7e70dca6de7",
+      "turnId": "2dd2d96a-38c7-4d50-b7f4-48192e382084"
+    },
+    {
+      "time": "2026-10-06T06:08:04.230Z",
+      "reason": "budget_exhausted",
+      "outcome": "deny",
+      "requestId": "1bd641f4-135c-4ed5-8b38-c3f5d35c96d4",
+      "conversationId": "aa7c051b-a861-4469-8d64-578789225fcb",
+      "turnId": "477e9ecd-9af3-4478-afb8-c71a0d3f466c"
+    },
+    {
+      "time": "2026-10-06T06:08:55.624Z",
+      "reason": "budget_exhausted",
+      "outcome": "deny",
+      "requestId": "1aa568ac-7366-4d2d-8078-b083fa39f3f4",
+      "conversationId": "772ba382-e0c5-4580-8e71-ff7ece9c1579",
+      "turnId": "660d6929-31db-458f-b48d-6c399c0d9bbc"
+    },
+    {
+      "time": "2026-10-06T06:09:43.267Z",
+      "reason": "budget_exhausted",
+      "outcome": "deny",
+      "requestId": "b6d1802e-8861-433e-a00a-5119aae20bcf",
+      "conversationId": "230b0a08-9db8-4f2c-b076-0f104501fbc9",
+      "turnId": "8f422ae4-72a2-4f85-901d-c78bcfa7fbba"
+    },
+    {
+      "time": "2026-10-06T06:11:11.326Z",
+      "reason": "budget_exhausted",
+      "outcome": "deny",
+      "requestId": "b921d196-aded-42af-8c35-80b7ee300e08",
+      "conversationId": "48b8c631-0890-4910-8547-24a72233868b",
+      "turnId": "ab99f9eb-10c1-49c7-a52d-4f62a217296f"
+    },
+    {
+      "time": "2026-10-06T06:11:49.796Z",
+      "reason": "budget_exhausted",
+      "outcome": "deny",
+      "requestId": "cc943a17-3f1f-4062-ab7e-8e1e8224328b",
+      "conversationId": "e8d02aa8-1655-4549-938c-43d3e1923d79",
+      "turnId": "b403ca0a-6a4b-48d4-bf34-1eae7e336863"
+    },
+    {
+      "time": "2026-10-06T06:12:34.818Z",
+      "reason": "model_allowed",
+      "outcome": "allow",
+      "requestId": "7d38e140-555e-402e-bacd-d101b47178a0",
+      "conversationId": "781b55dc-49af-4846-a6b9-ae4f62389ea5",
+      "turnId": "4ec9cf1b-f8bc-4e14-b424-3bdb316ab524"
+    },
+    {
+      "time": "2026-10-06T06:13:12.415Z",
+      "reason": "model_allowed",
+      "outcome": "allow",
+      "requestId": "cb768725-11ef-4b1e-b49c-328033c2d5c3",
+      "conversationId": "fae2e6c6-6536-4e52-942f-9d470d7e8b35",
+      "turnId": "3068640a-d5f9-439f-8e20-f76be111593f"
+    },
+    {
+      "time": "2026-10-06T06:13:52.042Z",
+      "reason": "model_allowed",
+      "outcome": "allow",
+      "requestId": "a245bbcc-c57a-4ab2-9907-4e373f44a887",
+      "conversationId": "6e009d0e-783a-4d5f-aced-ef34fbfc79bc",
+      "turnId": "9cbb1cd7-7ce7-4e0b-acdc-1a9de1f0aaef"
+    },
+    {
+      "time": "2026-10-06T06:14:37.559Z",
+      "reason": "model_allowed",
+      "outcome": "allow",
+      "requestId": "28ca6dfc-da70-4108-9ba5-c04025b6c04d",
+      "conversationId": "6e2e1d28-27fc-4868-831b-b98b18a31ae2",
+      "turnId": "7bbdcf4b-bcd7-40e0-a98d-dc921339aadd"
+    }
+  ],
+  "fixtureMember": [
+    {
+      "type": "member.invited",
+      "time": "2026-10-06T06:04:18.575Z"
+    },
+    {
+      "type": "member.joined",
+      "time": "2026-10-06T06:04:18.615Z"
+    }
+  ]
+}

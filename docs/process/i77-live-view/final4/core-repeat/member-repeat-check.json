@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-06T06:37:57.056Z",
+  "memberEvents": [
+    {
+      "type": "member.invited",
+      "time": "2026-10-06T06:24:12.959Z"
+    },
+    {
+      "type": "member.joined",
+      "time": "2026-10-06T06:24:13.027Z"
+    }
+  ],
+  "expectedEvents": 2,
+  "status": "PASS",
+  "meaning": "The repeated journey reached the budget checks after audit-other-member was checked. Its member stream still has one invitation and one join; no second invitation or join was appended."
+}

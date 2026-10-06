@@ -1,0 +1,8 @@
+a4508ae7a03021af48edb7bb3081787cb371b1ca
+2199282d102ca37b25b0510a029323417cd31108
+a4508ae 🔕 Idle chat pages stop asking for permission every tenth of a second, and a role change no longer drops a team chat (#214)
+8cba6e2 🧠 Permission checks reuse one OpenFGA connection per organisation instead of opening a new one each time (#218)
+d1c9d43 ⚡ Waiting replies no longer make the server reread every finished chat, and a turn the computer drops is sent again until it starts (#213)
+f5b57a5 🔌 Owners and admins can search the integration register and open a detail page for each server (#204)
+6c67ef1 🧪 The workspace and drawer screen checks wait for the page to settle instead of failing early (#215)
+1eaa646 💸 Model and tool calls keep working during unrelated activity, and a slow decision never holds money (#198)

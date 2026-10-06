@@ -1,0 +1,16 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+/tmp/opencrane-nats.mut4Zw/archive.tar.gz: OK
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-batch4
+
+
+ Test Files  126 passed | 4 skipped (130)
+      Tests  2004 passed | 15 skipped (2019)
+   Start at  06:43:34
+   Duration  1731.03s (tests 96%, import 3%)
+
+    Isolate  130 workers spawned · ~233ms startup each (spawn + environment, per file)
+             at least ~14.92s faster with isolate: false — reuses workers across files instead of one per file

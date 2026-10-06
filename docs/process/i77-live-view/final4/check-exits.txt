@@ -1,0 +1,10 @@
+lint 1
+typecheck 0
+infra-typecheck 0
+check-events 0
+lint-final 0
+test 0
+web-build 0
+web-test 0
+receipt-docs 0
+receipt-links 0

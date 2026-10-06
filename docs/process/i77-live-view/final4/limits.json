@@ -1,0 +1,7 @@
+{
+  "serverPid": 3654093,
+  "serverNodeOptions": "NODE_OPTIONS=--max-old-space-size=256",
+  "source": "server process environment; only NODE_OPTIONS retained",
+  "replyWaitMs": 30000,
+  "cpuPressureGatePercent": 20
+}

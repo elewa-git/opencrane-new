@@ -1,0 +1,9 @@
+git log --oneline -1 origin/main
+a4508ae 🔕 Idle chat pages stop asking for permission every tenth of a second, and a role change no longer drops a team chat (#214)
+cat /proc/loadavg
+5.10 4.78 5.50 3/2652 3632682
+nproc
+8
+cat /proc/pressure/cpu
+some avg10=10.52 avg60=8.04 avg300=8.37 total=124122304186
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0

@@ -1,0 +1,89 @@
+{
+  "start": {
+    "date": "2026-10-06T06:06:20.957257+00:00",
+    "stackId": "1",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 239756,
+        "fds": 40
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 153828,
+        "fds": 35
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 153108,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 67772,
+        "fds": 52
+      }
+    },
+    "serverHeapUsedBytes": null,
+    "heapNote": "The server does not expose V8 heap used; RSS is recorded instead.",
+    "cpuPressure": "some avg10=29.13 avg60=31.28 avg300=26.55 total=124300553750\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+  },
+  "middle": {
+    "date": "2026-10-06T06:10:56.101663+00:00",
+    "stackId": "1",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 246448,
+        "fds": 42
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 171508,
+        "fds": 35
+      },
+      "models": {
+        "pid": 3653500,
+        "rssKiB": 146400,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 56364,
+        "fds": 65
+      }
+    },
+    "serverHeapUsedBytes": null,
+    "heapNote": "The server does not expose V8 heap used; RSS is recorded instead.",
+    "cpuPressure": "some avg10=21.64 avg60=26.17 avg300=26.24 total=124372656051\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+  },
+  "end": {
+    "date": "2026-10-06T06:15:31.206501+00:00",
+    "stackId": "1",
+    "processes": {
+      "server": {
+        "pid": 3654093,
+        "rssKiB": 251872,
+        "fds": 39
+      },
+      "dispatcher": {
+        "pid": 3653799,
+        "rssKiB": 173412,
+        "fds": 37
+      },
+      "models": {
+        "pid": 3744834,
+        "rssKiB": 145380,
+        "fds": 36
+      },
+      "openfga": {
+        "pid": 3652508,
+        "rssKiB": 55508,
+        "fds": 69
+      }
+    },
+    "serverHeapUsedBytes": null,
+    "heapNote": "The server does not expose V8 heap used; RSS is recorded instead.",
+    "cpuPressure": "some avg10=39.70 avg60=36.14 avg300=29.64 total=124458449695\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0"
+  }
+}

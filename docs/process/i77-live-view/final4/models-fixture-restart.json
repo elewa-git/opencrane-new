@@ -1,0 +1,8 @@
+{
+  "date": "2026-10-06T06:12:00.236431+00:00",
+  "action": "Restart only opencrane-dev-1-models-1 to replay the restored test budget events.",
+  "reason": "The running BudgetActor keeps its own state and sequence; externally appended fixture events are not applied to it until startup.",
+  "serverRestarted": false,
+  "dataReset": false,
+  "completedRunsBeforeRestart": 5
+}
