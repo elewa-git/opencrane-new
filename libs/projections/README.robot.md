@@ -142,3 +142,15 @@ chat routes. Adding the columns alone does not fill them from older events.
 The chat list joins assistant kind from this table in its existing list query.
 The server reads one computer record per changed chat feed, without lifecycle-history reads.
 `test/computers.test.ts` checks cold resume, recovery and replay with disposable PostgreSQL.
+
+## Tool decisions in conversation feeds
+
+An MCP `decision.recorded` with a `conversationId` enters that conversation's
+feed with only `turnId`, `outcome`, `reason`, `requestId` and optional
+`approvalId` from `correlation.approval`. It excludes requester id, assistant id
+and context digest. Model decisions keep the existing budget-refusal rule.
+Conversation tool reports are copied as events in order.
+
+`test/conversations.test.ts` uses real PostgreSQL and NATS. Dropping and
+replaying `conversation_feed` returns identical rows. No backfill command is
+added; the operator replay command has no conversations target.

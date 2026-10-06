@@ -11,6 +11,29 @@ function validateCreationRow(row: { type: string; data: unknown }, context: z.Re
     context.addIssue({ code: 'custom', message: 'Invalid conversation mode', path: ['data'] });
   }
 }
+const toolRowDataSchema = z.object({ status: z.enum(['completed', 'failed']).optional() });
+const decisionRowDataSchema = z.object({ outcome: z.enum(['allow', 'ask', 'deny']).optional() });
+
+function validateRowFields(row: { type: string; data: unknown }, context: z.RefinementCtx) {
+  validateCreationRow(row, context);
+  let fieldsSchema;
+  if (row.type === 'agent.tool_call_started' || row.type === 'agent.tool_call_finished') {
+    fieldsSchema = toolRowDataSchema;
+  } else if (row.type === 'decision.recorded') {
+    fieldsSchema = decisionRowDataSchema;
+  } else {
+    return;
+  }
+  const parsed = fieldsSchema.safeParse(row.data);
+  if (parsed.success) {
+    return;
+  }
+  for (const issue of parsed.error.issues) {
+    const rowIssue = { ...issue, path: ['data', ...issue.path] };
+    context.addIssue(rowIssue);
+  }
+}
+
 export const chatRowSchema = z.object({
   id: z.string(),
   position: z.int().nonnegative(),
@@ -19,6 +42,14 @@ export const chatRowSchema = z.object({
   data: z.object({
     text: z.string().optional(),
     turnId: z.string().optional(),
+    callId: z.string().optional(),
+    serverId: z.string().optional(),
+    toolName: z.string().optional(),
+    status: z.string().optional(),
+    durationMs: z.int().nonnegative().optional(),
+    outcome: z.string().optional(),
+    requestId: z.string().optional(),
+    approvalId: z.string().optional(),
     messageId: z.string().optional(),
     authorId: z.string().optional(),
     path: z.string().optional(),
@@ -27,7 +58,7 @@ export const chatRowSchema = z.object({
     reason: z.string().optional(),
     contentType: z.string().optional(),
   }).passthrough(),
-}).superRefine(validateCreationRow);
+}).superRefine(validateRowFields);
 export const chatMessageSchema = z.object({ version: z.literal(1), topic: z.literal('conversation'), conversationId: z.string(),
   type: z.enum(['event', 'ready', 'resync', 'refused']), position: z.int().nonnegative(), generation: z.int().nonnegative(),
   row: chatRowSchema.optional(),

@@ -2615,6 +2615,22 @@
         "reason": "The dependency-free routing entrypoint is OpenCrane code under the repository AGPL-3.0-or-later grant."
       },
       "bundled": []
+    },
+    "npm:@opencrane/events@0.1.0": {
+      "detected": [
+        "AGPL-3.0-or-later"
+      ],
+      "files": {
+        "/app/libs/events/LICENSE": "sha256:d2bf217acea2905d58d065b0c95e57ce0ce637a82181c72cb494e258a74d8f19"
+      },
+      "primary": {
+        "spdx": [
+          "AGPL-3.0-or-later"
+        ],
+        "source": "/app/libs/events/LICENSE",
+        "reason": "The tool report text check is OpenCrane code under the repository AGPL-3.0-or-later licence. The image copies only this file and no third-party code from the package."
+      },
+      "bundled": []
     }
   }
 }

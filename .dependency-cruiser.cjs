@@ -1,5 +1,21 @@
 // Only current packages and adapters belong here; spikes and infra qualify separately.
 const libraries = ['libs/events', 'libs/auth', 'libs/observability', 'libs/protocol', 'libs/event-store', 'libs/projections', 'libs/handlers', 'libs/authz', 'libs/models'];
+const publicEntrypoints = {
+  'libs/events': '^libs/events/src/(index|tool-call)\\.ts$',
+  'libs/models': '^libs/models/(src/(index|routing)|test/fixture)\\.ts$',
+  'libs/event-store': '^libs/event-store/(src/index|test/testing)\\.ts$',
+  'libs/authz': '^libs/authz/(src/index|test/services)\\.ts$',
+  'libs/auth': '^libs/auth/(src/index|test/testing)\\.ts$',
+};
+function libraryEntrypointRule(path) {
+  const entrypoints = publicEntrypoints[path] ?? `^${path}/src/index\\.ts$`;
+  return {
+    name: `public-entry-only-${path.replace('/', '-')}`,
+    severity: 'error',
+    from: { pathNot: `^${path}/` },
+    to: { path: `^${path}/`, pathNot: entrypoints },
+  };
+}
 module.exports = {
   forbidden: [
     { name: 'no-cycles', severity: 'error', from: {}, to: { circular: true } },
@@ -8,13 +24,7 @@ module.exports = {
     { name: 'events-are-independent', severity: 'error', from: { path: '^libs/events/' }, to: { path: '^(apps/|libs/(auth|observability|protocol|event-store|projections|handlers|authz)/)' } },
     { name: 'web-only-uses-browser-contracts', severity: 'error', from: { path: '^apps/web/' }, to: { path: '^(apps/server/|libs/(auth|events|observability|event-store|projections|handlers|authz)/)' } },
     { name: 'server-does-not-import-web', severity: 'error', from: { path: '^apps/server/' }, to: { path: '^apps/web/' } },
-    ...libraries.map((path) => ({
-      name: `public-entry-only-${path.replace('/', '-')}`,
-      severity: 'error',
-      from: { pathNot: `^${path}/` },
-      // auth/testing is an explicit package export used by server contract tests.
-      to: { path: `^${path}/`, pathNot: path === 'libs/models' ? '^libs/models/(src/(index|routing)|test/fixture)\\.ts$' : path === 'libs/event-store' ? '^libs/event-store/(src/index|test/testing)\\.ts$' : path === 'libs/authz' ? '^libs/authz/(src/index|test/services)\\.ts$' : path === 'libs/auth' ? '^libs/auth/(src/index|test/testing)\\.ts$' : `^${path}/src/index\\.ts$` },
-    })),
+    ...libraries.map(libraryEntrypointRule),
     { name: 'nats-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/(event-store/src/jetstream|handlers/src/dispatcher)\\.ts$' }, to: { path: 'node_modules/@nats-io/' } },
     { name: 'openfga-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/authz/src/client\\.ts$' }, to: { path: 'node_modules/@openfga/sdk/' } },
     { name: 'queue-sdk-in-adapter', severity: 'error', from: { path: '/src/', pathNot: '^libs/handlers/src/queue\\.ts$' }, to: { path: 'node_modules/pg-boss/' } },

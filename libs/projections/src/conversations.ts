@@ -14,21 +14,41 @@ export const conversations: Projection = {
   },
   async drop(db) { await db.query('DROP TABLE IF EXISTS conversation_feed'); },
   async apply(db, event, position) {
-    const decision = event.type === 'decision.recorded' ? decisionRecordedDataSchema.parse(event.data) : undefined;
-    const refusal = decision?.route === 'model' && decision.outcome === 'deny' && decision.reason === 'budget_exhausted';
-    const conversationId = refusal ? decision.conversationId : event.subject.startsWith('conversation-') ? event.subject.slice('conversation-'.length) : undefined;
-    if (typeof conversationId !== 'string') return;
+    const entry = conversationFeedEntry(event);
+    if (!entry) return;
+    const { conversationId, data } = entry;
     await validateMode(db, event, conversationId);
-    let data = event.data;
-    if (refusal) data = { turnId: decision.turnId, reason: 'budget_exhausted' };
-    if (event.type === 'conversation.created') {
-      data = conversationCreatedDataSchema.parse(event.data);
-    }
     await db.query('INSERT INTO conversation_feed VALUES ($1,$2,$3,$4,$5,$6,$7)',
       [event.silo, conversationId, position, event.id, event.type, JSON.stringify(data), event.time]);
     await db.query("SELECT pg_notify('conversations', $1)", [event.silo]);
   },
 };
+
+function conversationFeedEntry(event: EventEnvelope) {
+  if (event.type === 'decision.recorded') {
+    const decision = decisionRecordedDataSchema.parse(event.data);
+    const conversationId = decision.conversationId;
+    if (!conversationId) return;
+    if (decision.route === 'mcp') {
+      const data = { turnId: decision.turnId, outcome: decision.outcome,
+        reason: decision.reason, requestId: decision.requestId,
+        approvalId: event.correlation.approval };
+      return { conversationId, data };
+    }
+    if (decision.route === 'model' && decision.outcome === 'deny'
+      && decision.reason === 'budget_exhausted') {
+      return { conversationId, data: { turnId: decision.turnId, reason: decision.reason } };
+    }
+    return;
+  }
+  if (!event.subject.startsWith('conversation-')) return;
+  const conversationId = event.subject.slice('conversation-'.length);
+  let data = event.data;
+  if (event.type === 'conversation.created') {
+    data = conversationCreatedDataSchema.parse(event.data);
+  }
+  return { conversationId, data };
+}
 
 export async function readConversation(db: Query, silo: string, conversationId: string, since = 0) {
   const result = await db.query<{ position: string; event_id: string; type: string; data: unknown; time: string }>(

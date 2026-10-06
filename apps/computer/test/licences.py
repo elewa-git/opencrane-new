@@ -61,6 +61,13 @@ assert result(model_package, model_evidence) == 'PASS', 'bundled model routing h
 model_evidence['notices']['/app/libs/models/LICENSE'] = 'changed licence'
 assert result(model_package, model_evidence) == 'FAIL', 'changed routing licence requires review'
 
+tool_package = {'name': '@opencrane/events', 'version': '0.1.0', 'type': 'npm',
+                'licenses': [{'value': 'AGPL-3.0-or-later'}]}
+tool_evidence = {'notices': {'/app/libs/events/LICENSE': (root.parent.parent / 'LICENSE').read_text()}}
+assert result(tool_package, tool_evidence) == 'PASS', 'tool report check uses the repository licence'
+tool_evidence['notices']['/app/libs/events/LICENSE'] = 'changed licence'
+assert result(tool_package, tool_evidence) == 'FAIL', 'changed tool check licence requires review'
+
 # Package metadata declares MIT; a separately identified bundled part uses CC0.
 metadata = '/node_modules/probe/package.json'
 licence_file = '/node_modules/probe/LICENSE'

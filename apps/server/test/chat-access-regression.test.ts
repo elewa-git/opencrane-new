@@ -167,6 +167,36 @@ async function openChatSocket(context: Fixture, conversationId: string) {
   return { socket, received, close };
 }
 
+async function readsApprovalsDuringToolProgress(type: string) {
+  const context = await fixture();
+  const originalRead = context.options.store.readStream.bind(context.options.store);
+  let injected = false;
+  async function* appendAfterMemberRead(...args: Parameters<typeof originalRead>) {
+    yield* originalRead(...args);
+    if (args[0] !== 'member-alice' || injected) return;
+    injected = true;
+    const data: Record<string, unknown> = { conversationId: 'tool-chat',
+      turnId: 'tool-chat-turn', callId: 'call_1', serverId: 'fixture', toolName: 'write' };
+    if (type === 'agent.tool_call_finished') data['status'] = 'completed';
+    await context.append('conversation-tool-chat', type, data, false);
+  }
+  try {
+    await context.agentSession('tool-chat');
+    context.options.store.readStream = appendAfterMemberRead;
+    const request = { url: '/api/conversations/tool-chat/approvals', headers: context.headers() };
+    const response = await context.app.inject(request);
+    expect(injected).toBe(true);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({ cards: [] });
+  } finally {
+    context.options.store.readStream = originalRead;
+    await context.close();
+  }
+}
+it.each(['agent.tool_call_started', 'agent.tool_call_finished'])(
+  'keeps approval reads available when %s arrives during the access check',
+  readsApprovalsDuringToolProgress, 120_000);
+
 async function openTeamAssistantChat(context: Fixture, conversationId: string) {
   await context.append('team-sales', 'team.created', {
     teamId: 'sales', name: 'Sales', createdBy: 'alice',

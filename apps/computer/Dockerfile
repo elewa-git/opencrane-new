@@ -39,8 +39,13 @@ COPY --from=project LICENSE /app/LICENSE
 COPY --from=project libs/models/package.json /app/libs/models/package.json
 COPY --from=project LICENSE /app/libs/models/LICENSE
 COPY --from=project libs/models/src/routing.ts /app/libs/models/src/routing.ts
+# Share the report text check without adding schema libraries to the computer.
+COPY --from=project libs/events/package.json /app/libs/events/package.json
+COPY --from=project LICENSE /app/libs/events/LICENSE
+COPY --from=project libs/events/src/tool-call.ts /app/libs/events/src/tool-call.ts
 # Node 22 strips TypeScript outside node_modules; use the same link as a workspace install.
-RUN mkdir -p /app/node_modules/@opencrane && ln -s ../../libs/models /app/node_modules/@opencrane/models
+RUN mkdir -p /app/node_modules/@opencrane && ln -s ../../libs/models /app/node_modules/@opencrane/models && \
+    ln -s ../../libs/events /app/node_modules/@opencrane/events
 COPY --from=launcher-build /tool-user /usr/local/bin/tool-user
 # Codex starts a pipe connector; only the root supervisor starts the native host.
 RUN mkdir -p /usr/local/libexec && \

@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { once } from 'node:events';
-import { chatMessageSchema } from '@opencrane/protocol';
+import { chatMessageSchema, chatFeedSchema } from '@opencrane/protocol';
 import { attachWebSocketServer } from '../src/websocket.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -95,6 +95,29 @@ it('serves private chat commands and reads to joined members, refusing other org
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(messages.statusCode).toBe(200); expect(messages.body).toContain('Hello computer');
     const turnId = messages.json<{ rows: { id: string; type: string }[] }>().rows.find(row => row.type === 'message.posted')!.id;
+    for (const outcome of ['saved', 'kept_existing'] as const) {
+      const delivery = envelope('test', `conversation-${conversationId}`, 'file.delivered', {
+        conversationId, fileId: `file-${outcome}`, computerId: 'computer',
+        sha256: 'a'.repeat(64), outcome,
+      });
+      const expectedSequence = await nats.store.head(`conversation-${conversationId}`);
+      const append = { event: delivery, expectedSequence };
+      expect((await nats.store.append(append)).status).toBe('appended');
+    }
+    await runner.run(conversations);
+    const uploadReadRequest = {
+      url: `/api/conversations/${conversationId}/messages`, headers: headers(),
+    };
+    const uploadRead = await app.inject(uploadReadRequest);
+    expect(uploadRead.statusCode).toBe(200);
+    const uploadFeed = chatFeedSchema.parse(uploadRead.json());
+    function isDelivery(row: (typeof uploadFeed.rows)[number]) {
+      return row.type === 'file.delivered';
+    }
+    const deliveries = uploadFeed.rows.filter(isDelivery);
+    expect(deliveries).toMatchObject([
+      { data: { outcome: 'saved' } }, { data: { outcome: 'kept_existing' } },
+    ]);
     const stop = { id: randomUUID(), stopTurnId: turnId };
     expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: stop })).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: stop })).statusCode).toBe(200);

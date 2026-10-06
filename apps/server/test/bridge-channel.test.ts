@@ -678,3 +678,61 @@ it('retries a failed Stop after turn/start returns, retaining the active turn an
 function isFailedTurnReport(report: BridgeReportSummary) {
   return report.type === 'agent.turn_failed';
 }
+
+async function keepsBridgeOpenAfterInvalidToolNotification() {
+  const directory = await mkdtemp(`${tmpdir()}/bridge-invalid-tool-`);
+  const server = createServer();
+  let turnStarted = false;
+  function rpc(method: string) {
+    if (method === 'thread/start') {
+      return Promise.resolve({ thread: { id: 'thread' } });
+    }
+    if (method === 'turn/start') turnStarted = true;
+    return Promise.resolve({ turn: { id: 'codex-turn' } });
+  }
+  async function grant() {}
+  const driver = { rpc, grant, credential: testCredential, journal: `${directory}/reports` };
+  const channel = bridgeChannel(server, driver);
+  const socket = await openBridgeSocket(server);
+  const reports: BridgeReportSummary[] = [];
+  addReportCollector(socket, reports, acknowledgeReport);
+  try {
+    const resume = { type: 'resume', since: 0 };
+    const tool = { key: 'oc_0123456789', serverId: 'fixture', connectionId: 'installed',
+      definitions: [] };
+    const turn = { ...testTurn, tools: [tool] };
+    socket.send(JSON.stringify(resume));
+    socket.send(JSON.stringify(turn));
+    function started() { return turnStarted; }
+    await until(started);
+    const item = { type: 'mcpToolCall', id: 'call_1', server: tool.key,
+      tool: 'x'.repeat(201), status: 'completed' };
+    function notify(method: string, reportedItem: unknown) {
+      const notification = { method, params: { threadId: 'thread', item: reportedItem } };
+      channel.notification(notification);
+    }
+    notify('item/started', item);
+    notify('item/completed', item);
+    const valid = { ...item, id: 'functions.write:0', tool: 'write' };
+    notify('item/started', valid);
+    notify('item/completed', valid);
+    const completed = { method: 'turn/completed',
+      params: { threadId: 'thread', turn: { status: 'completed' } } };
+    channel.notification(completed);
+    await until(reportContainsType(reports, 'agent.turn_completed'));
+    expect(reports).toEqual([
+      { sequence: 1, type: 'agent.turn_started' },
+      { sequence: 2, type: 'agent.tool_call_started' },
+      { sequence: 3, type: 'agent.tool_call_finished' },
+      { sequence: 4, type: 'agent.turn_completed' },
+    ]);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+  } finally {
+    socket.terminate();
+    await channel.close();
+    server.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+it('keeps the bridge open and reports later work after an invalid tool notification',
+  keepsBridgeOpenAfterInvalidToolNotification);

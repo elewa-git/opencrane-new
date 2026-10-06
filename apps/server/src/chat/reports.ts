@@ -1,4 +1,6 @@
-import { conversationCreatedDataSchema } from '@opencrane/events';
+import {
+  conversationCreatedDataSchema, agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema,
+} from '@opencrane/events';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { readEventAt, type AppendCommand, type EventStore, type StoredEvent } from '@opencrane/event-store';
@@ -9,13 +11,26 @@ import type { conversationKeys } from './keys.ts';
 // Permanent refusals need operator attention; reconnecting cannot repair them.
 export class ReportRejected extends Error {}
 
-const reportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
+const existingReportSchema = z.object({ sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(), conversationId: z.string().regex(/^[\w-]{1,200}$/u),
   turnId: z.string(), assistantId: z.string(), requesterId: z.string().optional(), threadId: z.string().optional(), messageId: z.string().optional(), text: z.string().max(128_000).optional(),
   commandDigest: z.string().regex(/^[a-f0-9]{64}$/u).optional(), exitCode: z.int().optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),
   reason: z.enum(['bridge_interrupted', 'restricted_tool_refused']).optional(),
   type: z.enum(['agent.output_lost', 'agent.command_ran', 'agent.reasoning_summarised', 'agent.turn_started', 'agent.turn_completed', 'agent.turn_failed', 'agent.message_delta', 'agent.message_completed']),
 }).strict();
+const toolReportFields = {
+  sequence: z.int().positive(), previousSequence: z.int().nonnegative().optional(),
+  assistantId: z.string(), requesterId: z.string().optional(),
+};
+const toolStartedReportSchema = agentToolCallStartedDataSchema.extend({
+  ...toolReportFields, type: z.literal('agent.tool_call_started'),
+});
+const toolFinishedReportSchema = agentToolCallFinishedDataSchema.extend({
+  ...toolReportFields, type: z.literal('agent.tool_call_finished'),
+});
+const reportSchema = z.union([
+  existingReportSchema, toolStartedReportSchema, toolFinishedReportSchema,
+]);
 export async function reportPosition(store: EventStore, silo: string, computerId: string) {
   const sequences = new Set<number>();
   for await (const { event } of readEvents(store, 1, await store.head())) {
@@ -81,7 +96,13 @@ export async function recordReport(store: EventStore, keys: ReturnType<typeof co
 }
 function reportData(report: z.infer<typeof reportSchema>, silo: string, assistantId: string, keys: ReturnType<typeof conversationKeys>) {
   const common = { conversationId: report.conversationId, turnId: report.turnId };
-  if (report.type === 'agent.command_ran') {
+  if (report.type === 'agent.tool_call_started') {
+    return { ...common, callId: report.callId, serverId: report.serverId,
+      toolName: report.toolName };
+  } else if (report.type === 'agent.tool_call_finished') {
+    return { ...common, callId: report.callId, serverId: report.serverId,
+      toolName: report.toolName, status: report.status, durationMs: report.durationMs };
+  } else if (report.type === 'agent.command_ran') {
     return { ...common, commandDigest: z.string().parse(report.commandDigest),
       exitCode: z.number().parse(report.exitCode) };
   } else if (report.type === 'agent.reasoning_summarised') {

@@ -16,7 +16,8 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
-  server["apps/server<br/>the back end"] <-->|chat turns and reports| computer
+  server["apps/server<br/>the back end"] <-->|chat turns and tool reports| computer
+  events["libs/events<br/>report text check"] -.-> computer
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
   computer -->|sends model requests| gateway["agentgateway<br/>model gateway"]
@@ -26,6 +27,8 @@ flowchart LR
 
 - Builds the container image with Codex, a browser, a remote desktop and document tools.
 - Runs the bridge that receives chat turns and sends progress reports to the server.
+- Reports when a listed tool call starts or finishes, without its arguments or result.
+  Skips invalid names and call ids so later reports can still reach the server.
 - Keeps files in the person's workspace when the computer pauses and starts again.
 - Lets Codex reach the AI gateway only while the current chat turn holds a valid short-lived pass.
 - Separates the assistant, file tools and desktop into different Linux users.

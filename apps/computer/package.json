@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "ws": "8.22.0",
-    "@opencrane/models": "0.1.0"
+    "@opencrane/models": "0.1.0",
+    "@opencrane/events": "0.1.0"
   }
 }

@@ -346,3 +346,30 @@ restoring the old server before allowing default team traffic.
 it defaults to `127.0.0.1:5001`. The Pod image always uses `k3d-ocn-registry:5000`.
 A temporary user-space forwarder can reach the same registry when its published
 host port is broken. This does not change Docker settings or host networking.
+
+## Tool call reports
+
+`Turn.tools` is optional. Each entry has `key`, `serverId`, `connectionId`,
+optional `serverInfo` (`name`, `version`) and string `definitions`. Entries reject
+unknown fields. IDs match `^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`.
+The list allows 20 servers and 48 KiB of JSON encoded as UTF-8. Each server
+allows 1,000 definitions of at most 32,768 characters each. Server name and
+version allow 200 characters each. No entry carries `discoverResult`. The server does not fill this list yet.
+
+Memory-free `mcpToolCall` notifications report call id, mapped server id and tool
+name. Finished reports add completed/failed status and optional duration in whole
+milliseconds. Call ids and tool names accept 1–200 UTF-16 code units and
+exclude Unicode control, format, surrogate, private-use and unassigned characters.
+Provider punctuation such as `functions.write:0` is accepted. The computer and
+event schemas share `isToolCallText` from `@opencrane/events/tool-call`.
+Invalid values and unknown server keys produce no report and use no sequence
+number. Later notifications continue normally. Notifications for a completed
+turn produce no report. Arguments, results and
+error text are excluded. The journal retains these fields across reloads.
+Private turns still refuse tools. Tool discovery and calls through the proxy
+are not built yet. Tests: `test/turn-tools.test.ts`, `test/tool-reports.test.ts`.
+
+The image copies only the dependency-free tool text check from `libs/events`,
+under the repository's AGPL-3.0-or-later licence. It adds no third-party package.
+The bridge channel test checks that bad tool fields leave the socket open and
+later reports still arrive in order.
