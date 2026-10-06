@@ -27,7 +27,8 @@ describe('eventRegistry', () => {
     expect(getEventDefinition('no.such.event')).toBeUndefined();
   });
 
-  // Owner decision 9: two kinds of tools, two events. The first name was
+  // Keep separate event types for the computer's tools and a registered server's tools.
+  // The first name was
   // mcp.tool_list_changed; it is a clean rename, with no alias left behind.
   it('names the MCP tool-change event mcp.tools_changed, and the computer one toolset.changed', () => {
     expect(getEventDefinition('mcp.tool_list_changed')).toBeUndefined();

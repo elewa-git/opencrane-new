@@ -153,7 +153,7 @@ export class ProjectionRunner {
     );
   }
 
-  /** Drain to the head captured on entry. A failure stops immediately; call again with a higher attempt. */
+  /** Process events up to the position read when this call began. Stop on failure; retry with a higher attempt. */
   async run(
     projection: Projection,
     {

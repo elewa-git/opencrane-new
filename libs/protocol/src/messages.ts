@@ -1,12 +1,6 @@
-// The WebSocket messages both sides speak: the server (apps/server) and the
-// browser (apps/web) import these schemas and types instead of each
-// defining their own copy. There is no business logic here yet (see
-// plan.md Phase 1) — this only proves the socket is wired up end to end and
-// validates what comes over it, the way every later WebSocket message in
-// the real protocol will.
-//
-// Moved out of apps/server/src/protocol.ts so apps/web can import the same
-// types without depending on the server's Node-only package.
+// Share these WebSocket message schemas between the server and browser so their types
+// cannot drift. Keep them in this package so the browser does not depend on the server's
+// Node-only code.
 import { chatSubscribeSchema, chatMessageSchema } from './chat.ts';
 import { z } from 'zod';
 import { subscribeSchema, realtimeMessageSchema } from './realtime.ts';

@@ -6,10 +6,10 @@ import type { Projection } from './runner.ts';
 
 // Free text never enters this projection, including approval reasons and tool arguments.
 const auditPrefixes = [
-  // Decisions and effects have typed, safe audit metadata.
+  // Record decisions and effects with fields chosen for the audit view.
   'decision.',
   'effect.',
-  // Approval and connection events carry lifecycle evidence without private review text.
+  // Record approval and connection changes without private review text.
   'approval.',
   'mcp.',
   'connection.',
@@ -141,7 +141,7 @@ export async function readAudit(db: Query, silo: string, filter: AuditFilter & {
     .map(e => [JSON.stringify([e.conversation_id, e.turn_id]), e])).values()];
   const related = (await db.query<Entry>(`SELECT * FROM audit_entries WHERE silo = $1 AND
     (request_id = ANY($2::text[]) OR permit_id = ANY($3::text[])) ORDER BY position`, [silo, requests, permits])).rows;
-  // Exact indexed pairs keep turn-only evidence bounded to the selected streams.
+  // Match each conversation and turn together, so unrelated events cannot add rows to the audit view.
   const context = await Promise.all(turns.map(turn => db.query<Entry>(`SELECT * FROM audit_entries
     WHERE silo = $1 AND conversation_id = $2 AND turn_id = $3 AND request_id IS NULL AND permit_id IS NULL ORDER BY position`,
     [silo, turn.conversation_id, turn.turn_id])));

@@ -34,7 +34,7 @@ it('upgrades pending and settled legacy budget projections to actor totals and k
     await append('budget.settled', { reservationId: 'settled', permitId: 'settled', settledCents: 9 });
     const runner = new ProjectionRunner(db, nats.reader, createLogger('budget-upgrade-test', { level: 'silent' }));
     await runner.initialise(budgets); await runner.run(budgets);
-    // An installed pre-P3-13 row copied modelCall without the envelope's paying group.
+    // Older installations stored modelCall without the paying group from the event envelope.
     const legacy = await readBudget(db, 'test');
     for (const reservation of legacy.reservations) delete reservation.call.payingGroupId;
     await db.query('UPDATE model_budgets SET state = $1 WHERE silo = $2', [JSON.stringify(legacy), 'test']);

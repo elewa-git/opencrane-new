@@ -1,5 +1,5 @@
 import { record as asRecord } from './record.ts';
-// Money is integer euro cents everywhere (owner decision 8): every amount in an
+// Store money as whole euro cents: every amount in an
 // event is a whole, non-negative number of cents, and its name ends in `Cents`
 // (costCents, ceilingCents), never a float in euros and never "MinorUnits".
 //

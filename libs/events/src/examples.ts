@@ -1,9 +1,5 @@
-// Fully-typed `data` schemas for the four example events the Phase 1 task
-// asked for. Every other event type in the registry now has its own real,
-// strict schema too (see data.ts and registry.ts) — these four are kept
-// here, separate, as the task's own worked examples, and reuse the same
-// shared field shapes (ciphertext, keyId) from data.ts so they
-// follow the same rules as everything else.
+// Keep these four example event schemas together. They share the field shapes in data.ts,
+// and each other event type has its own strict schema there too.
 import { z } from 'zod';
 import { centsSchema, ciphertextSchema, keyIdSchema } from './data.ts';
 
