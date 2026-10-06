@@ -91,6 +91,7 @@ export async function openfga(postgres?: string) {
   let httpPort = Number((await docker("port", container, "8080/tcp")).split(":")[1]);
   const proxy = await tcpProxy(() => ({ host: "127.0.0.1", port: httpPort }));
   const apiUrl = `http://127.0.0.1:${proxy.port}`;
+  const directApiUrl = `http://127.0.0.1:${httpPort}`;
   const ready = () =>
     until(async () => {
       try {
@@ -112,6 +113,7 @@ export async function openfga(postgres?: string) {
   }
   return {
     apiUrl,
+    directApiUrl,
     async pause() {
       await docker("pause", container);
     },
