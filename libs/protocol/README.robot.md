@@ -70,3 +70,9 @@ Spending reads use `effectListResponseSchema` and
 `effectDetailResponseSchema`. Price table names can include version punctuation.
 The browser sends one checked evidence entry when it settles or releases a hold;
 the server contract still accepts one to ten entries.
+
+`computerRecovered` describes the assistant's computer, rather than any one chat.
+The browser compares `computerLostAt` with its last agent turn before showing a
+lost-request notice. `lastConfirmedTurnAt` is calculated in the browser from loaded
+turns that are Done; completed turns with lost output are excluded. It is not a
+separate server field. Suspended and resumed computers use the starting state.

@@ -16,9 +16,9 @@
       }
       @if (teamSession()) {
         <div class="mode-choice" role="group" aria-label="Turn memory mode">
-          <button type="button" [attr.aria-pressed]="!memoryFree()"
+          <button type="button" [attr.aria-pressed]="!memoryFree()" [disabled]="busy() || queued()"
             (click)="privateSelected.emit()">Private</button>
-          <button type="button" [attr.aria-pressed]="memoryFree()"
+          <button type="button" [attr.aria-pressed]="memoryFree()" [disabled]="busy() || queued()"
             [attr.aria-label]="memoryFree() ? 'Memory-free selected' : 'Start a fresh memory-free turn'"
             (click)="memoryFreeSelected.emit()">
             <span class="desktop-mode-label">
@@ -48,3 +48,7 @@
   }
 </form>
 @if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
+
+@if (teamSession() && (busy() || queued())) {
+  <p class="notice">Retry or discard the queued message first.</p>
+}

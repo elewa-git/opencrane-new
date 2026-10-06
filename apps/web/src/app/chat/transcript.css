@@ -61,6 +61,7 @@ time { color: var(--oc-ink-muted); font-size: 11px; }
 .caret { display: inline-block; width: 2px; height: 1em; background: #0db5cc; vertical-align: text-bottom; animation: oc-caret 1s steps(1) infinite; }
 @media(max-width:700px) {
   .composer-dock { padding: 10px 16px 12px; background: #fbfcfc; border-top: 1px solid #dee3e4; }.composer-footnote { display: none; }
+  .composer-footnote.team-footnote { display: block; }
   .message { gap: 8px; }.agent-turn { display: grid; grid-template-columns: 24px minmax(0,1fr); }
   .agent-turn>.avatar { width: 24px; height: 24px; grid-row: 1; }.agent-turn .message-content { display: contents; }
   .agent-turn .message-content>header { grid-column: 2; grid-row: 1; align-items: center; }.agent-turn .message-content>:not(header) { grid-column: 1 / -1; }

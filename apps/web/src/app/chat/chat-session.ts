@@ -27,6 +27,8 @@ export class ChatSession implements OnDestroy {
   readonly memoryAdmission = signal<MemoryAdmission>({
     state: 'disabled', failing: ['Private memory checks have not all passed.'],
   });
+  readonly recoveredLostTurn = computed(this.hasRecoveredLostTurn.bind(this));
+  readonly executionMode = signal<'restricted' | 'memory_free'>('restricted');
   readonly loading = signal(true);
   readonly railLoading = signal(true);
   readonly railUnavailable = signal(false);
@@ -119,6 +121,8 @@ export class ChatSession implements OnDestroy {
     const isTeam = this.isTeamConversation(conversation);
     this.executionMode.set(isTeam ? 'restricted' : 'memory_free');
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
+    this.computerRecovered.set(false);
+    this.computerLostAt.set('');
     history.replaceState({}, '', `/workspace?conversation=${encodeURIComponent(id)}`);
     try {
       await this.catchUp(id, revision);
@@ -126,9 +130,15 @@ export class ChatSession implements OnDestroy {
     } catch (error) { if (revision === this.revision) this.fail(error); }
     finally { if (revision === this.revision) this.loading.set(false); }
   }
-  readonly executionMode = signal<'restricted' | 'memory_free'>('memory_free');
   chooseMemoryFree(): void {
+    if (this.busy() || this.queued()) return;
     this.executionMode.set('memory_free');
+    this.announcement.set(
+      'Memory-free selected. This turn has no earlier context and writes to the shared disk.');
+  }
+  choosePrivate(): void {
+    if (this.busy() || this.queued()) return;
+    this.executionMode.set('restricted');
   }
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
@@ -137,11 +147,14 @@ export class ChatSession implements OnDestroy {
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
+    this.computerRecovered.set(false);
+    this.computerLostAt.set('');
+    this.executionMode.set('restricted');
     history.replaceState({}, '', '/workspace');
   }
   async send(text: string): Promise<boolean> {
     if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending()
-      || this.denied() || !this.selectedAssistantId()) return false;
+      || this.denied() || this.computer() === 'recovering' || !this.selectedAssistantId()) return false;
     this.reconnectedAt.set('');
     if (!this.pending) {
       const pending: { id: string; conversationId: string; text: string;
@@ -155,7 +168,10 @@ export class ChatSession implements OnDestroy {
     }
     this.busy.set(true); this.error.set('');
     try {
-      await this.deliver(); this.queued.set(false); return true;
+      await this.deliver();
+      this.queued.set(false);
+      this.executionMode.set('restricted');
+      return true;
     } catch (error) { this.queued.set(true); this.fail(error); return false; }
     finally { this.busy.set(false); }
   }
@@ -207,6 +223,14 @@ export class ChatSession implements OnDestroy {
     if (conversation?.mode === 'agent_session') return conversation.assistantId;
     return this.assistantId();
   }
+  private hasRecoveredLostTurn(): boolean {
+    if (!this.computerRecovered() || !this.computerLostAt()) return false;
+    const agentTurns = this.turns().filter(isAgentTurn);
+    const lastTurn = agentTurns.at(-1);
+    if (!lastTurn || (lastTurn.state !== 'lost' && lastTurn.state !== 'failed')) return false;
+    if (!lastTurn.endedAt) return false;
+    return Date.parse(lastTurn.endedAt) >= Date.parse(this.computerLostAt());
+  }
   private isConfirmedTurn(turn: ReturnType<typeof transcript>[number]): boolean {
     return turn.author === 'agent' && turn.state === 'done';
   }
@@ -233,13 +257,27 @@ export class ChatSession implements OnDestroy {
   private async deliver(): Promise<void> {
     const command = this.pending!;
     await this.ensureConversation(command.conversationId);
-    await this.request(`/api/conversations/${command.conversationId}/messages`, {
-      id: command.id, text: command.text, executionMode: command.executionMode,
-    });
+    const confirmed = this.queued() && await this.pendingWasRecorded(command);
+    if (!confirmed) {
+      await this.request(`/api/conversations/${command.conversationId}/messages`, {
+        id: command.id, text: command.text, executionMode: command.executionMode,
+      });
+    }
     // An optimistic row uses the same id as the durable event and is replaced on catch-up.
     this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, { id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(), data: { text: command.text, authorId: this.memberId() } }]);
     this.pending = undefined;
     this.socket.connect();
+  }
+  private async pendingWasRecorded(command: { id: string; conversationId: string }): Promise<boolean> {
+    try {
+      const path = `/api/conversations/${command.conversationId}/changes/${command.id}`;
+      const result = await this.request(path);
+      const receipt = z.object({ status: z.literal('appended'), commandId: z.string() }).parse(result);
+      return receipt.commandId === command.id;
+    } catch (error) {
+      if (error instanceof ReadFailure && error.status === 404) return false;
+      throw error;
+    }
   }
   private async ensureConversation(conversationId: string): Promise<void> {
     if (this.selected() && this.selected() !== conversationId) throw new Error('Retry belongs to another session');
@@ -282,7 +320,7 @@ export class ChatSession implements OnDestroy {
       if (revision !== this.revision) return;
       if (this.position && feed.generation !== this.generation) { this.position = 0; this.rows.set([]); continue; }
       this.generation = feed.generation;
-      this.computer.set(feed.computerState);
+      this.setComputerState(feed.computerState);
       this.computerRecovered.set(feed.computerRecovered ?? false);
       this.computerLostAt.set(feed.computerLostAt ?? '');
       for (const row of feed.rows) this.apply(row);
@@ -319,11 +357,24 @@ export class ChatSession implements OnDestroy {
   }
   private updateComputerState(message: ServerMessage): void {
     if (!('computerState' in message)) return;
-    if (message.computerState) this.computer.set(message.computerState);
+    if (message.computerState) this.setComputerState(message.computerState);
     if (message.computerRecovered !== undefined) {
       this.computerRecovered.set(message.computerRecovered);
     }
     if (message.computerLostAt !== undefined) this.computerLostAt.set(message.computerLostAt);
+  }
+  private setComputerState(state: ComputerState): void {
+    const previous = this.computer();
+    this.computer.set(state);
+    if (state === previous) return;
+    if (state === 'recovering') {
+      this.announcement.set('Your computer is recovering. Sending is paused.');
+    } else if (previous === 'recovering' && state === 'ready') {
+      this.announcement.set('Your computer is ready again. You can send.');
+    }
+  }
+  queuedReference(): string {
+    return this.pending?.id ?? '';
   }
   private apply(row: ChatRow): boolean {
     if (row.position <= this.position) return false;
@@ -343,7 +394,7 @@ export class ChatSession implements OnDestroy {
       const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
       // Streamed reports can win the append race. Retry the same command id, at most twice.
       if (body && response.status === 409 && attempt < 2) continue;
-      if (!response.ok) throw new ReadFailure(response.status);
+      if (response.status !== 200) throw new ReadFailure(response.status);
       return response.json() as Promise<unknown>;
     }
   }
@@ -357,4 +408,8 @@ export class ChatSession implements OnDestroy {
 
 function isBudgetStop(row: ChatRow): boolean {
   return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
+}
+
+function isAgentTurn(turn: ReturnType<typeof transcript>[number]): boolean {
+  return turn.author === 'agent';
 }

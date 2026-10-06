@@ -21,7 +21,6 @@ import {
 import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
-import { history } from '../../../ops/src/lifecycle.ts';
 import { memoryAdmission } from './memory-admission.ts';
 
 export type { ChatOptions } from './access.ts';
@@ -56,44 +55,16 @@ async function conversationComputerState(options: ChatOptions, conversationId: s
     return { computerState: 'not_applicable' as const, computerRecovered: false,
       computerLostAt: undefined };
   }
-  const conversation = await options.db.query<{ assistant_id: string }>(
-    `SELECT data->>'assistantId' AS assistant_id FROM conversation_feed
-      WHERE silo = $1 AND conversation_id = $2 AND type = 'conversation.created'`,
+  const result = await options.db.query<{
+    chat_state: 'ready' | 'starting' | 'recovering'; recovered: boolean; lost_at: string | null;
+  }>(
+    `SELECT c.chat_state, c.recovered, c.lost_at FROM conversation_feed f
+      LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
+      WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`,
     [options.silo, conversationId]);
-  const assistantId = conversation.rows[0]?.assistant_id;
-  if (!assistantId) return { computerState: 'starting' as const, computerRecovered: false,
-    computerLostAt: undefined };
-  const lifecycle = await history(options.store, `computer-${assistantId}`);
-  return lifecycleComputerState(lifecycle);
-}
-
-export function lifecycleComputerState(lifecycle: { event: { type: string; time: string } }[]) {
-  let computerState: 'ready' | 'starting' | 'recovering' = 'starting';
-  let computerRecovered = false;
-  let computerLostAt: string | undefined;
-  for (const row of lifecycle) {
-    if (row.event.type === 'computer.lost') {
-      computerState = 'recovering';
-      computerRecovered = false;
-      computerLostAt = row.event.time;
-      continue;
-    }
-    if (row.event.type === 'computer.claimed') {
-      if (computerState !== 'recovering') computerState = 'starting';
-      computerRecovered = false;
-      continue;
-    }
-    if (row.event.type === 'computer.ready') {
-      computerRecovered = computerState === 'recovering';
-      computerState = 'ready';
-      continue;
-    }
-    if (row.event.type === 'computer.retired') {
-      computerState = 'starting';
-      computerRecovered = false;
-    }
-  }
-  return { computerState, computerRecovered, computerLostAt };
+  const computer = result.rows[0];
+  return { computerState: computer?.chat_state ?? 'starting',
+    computerRecovered: computer?.recovered ?? false, computerLostAt: computer?.lost_at ?? undefined };
 }
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
@@ -192,11 +163,7 @@ async function conversationList(options: ChatOptions, memberId: string) {
     try {
       if (row.mode === 'agent_session') await readPrivate(row.conversationId);
       const display = await summary(options, row.conversationId, row.mode);
-      if (row.mode !== 'agent_session') return { ...row, ...display };
-      const assistant = await options.db.query<{ kind: 'personal' | 'team' }>(
-        'SELECT kind FROM computers WHERE silo = $1 AND assistant_id = $2',
-        [options.silo, row.assistantId]);
-      return { ...row, ...display, assistantKind: assistant.rows[0]?.kind };
+      return { ...row, ...display };
     } catch (error) {
       if (isChatRefused(error)) return undefined;
       throw error;

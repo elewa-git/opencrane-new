@@ -5,7 +5,8 @@ import { attachWebSocketServer } from '../src/websocket.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { chatRows } from '../src/chat/routes.ts';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga, until } from '@opencrane/authz/testing';
@@ -40,7 +41,8 @@ it('serves private chat commands and reads to joined members, refusing other org
       cookie: `${config.cookieName}=${encodeSession(config, { sub: 'alice', orgId, roles: [], authTime: Math.floor(Date.now()/1000), exp: Math.floor(Date.now()/1000)+60 })}` });
     const personal = await app.inject({ url: '/api/chat', headers: headers() });
     expect(personal.statusCode).toBe(200);
-    expect(personal.json()).toMatchObject({ memberId: 'alice', assistantId: 'assistant', displayName: 'Alice' });
+    expect(personal.json()).toMatchObject({ memberId: 'alice', assistantId: 'assistant', displayName: 'Alice',
+      memoryAdmission: { state: 'disabled', failing: ['The private memory checks have not all passed.'] } });
     expect((await app.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(403);
     for (const [subject, type, data] of [
       ['team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }],
@@ -64,6 +66,7 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers(), payload: {
       id: 'create-sales', conversationId: 'sales', assistantId: 'shared', payingGroupId: 'sales',
     } })).statusCode).toBe(200);
+    await auth.handler.handle((await history(nats.store, 'conversation-sales', 'test'))[0]!.event, db);
     const conversationId = randomUUID(), create = { id: randomUUID(), conversationId, assistantId: 'assistant' };
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: headers('wrong'), payload: create })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url: '/api/conversations', headers: { ...headers(), origin: 'https://wrong.test' }, payload: create })).statusCode).toBe(403);
@@ -75,8 +78,20 @@ it('serves private chat commands and reads to joined members, refusing other org
     await auth.handler.handle((await history(nats.store, `conversation-${conversationId}`, 'test'))[0]!.event, db);
     expect((await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: { id: randomUUID(), text: 'Hello computer' } })).statusCode).toBe(200);
     await runner.run(conversations);
+    await runner.run(computers);
     const list = await app.inject({ url: '/api/conversations', headers: headers() });
     expect(list.statusCode).toBe(200); expect(list.body).toContain(conversationId); expect(list.body).toContain('agent_session'); expect(list.json<{ rows: { title: string }[] }>().rows[0]?.title).toBe('hello-computer');
+    expect(list.json<{ rows: { assistantKind: string }[] }>().rows[0]?.assistantKind)
+      .toBe('personal');
+    const teamRow = list.json<{ rows: { conversationId: string; assistantKind: string }[] }>()
+      .rows.find(row => row.conversationId === 'sales');
+    expect(teamRow?.assistantKind).toBe('team');
+    const lifecycleRead = vi.spyOn(nats.store, 'readStream');
+    lifecycleRead.mockClear();
+    await chatRows({ silo: 'test', store: nats.store, db, keys, binding, feed },
+      conversationId, 'agent_session');
+    expect(lifecycleRead).not.toHaveBeenCalled();
+    lifecycleRead.mockRestore();
     const messages = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(messages.statusCode).toBe(200); expect(messages.body).toContain('Hello computer');
     const turnId = messages.json<{ rows: { id: string; type: string }[] }>().rows.find(row => row.type === 'message.posted')!.id;
@@ -87,6 +102,32 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect((await app.inject({ url: '/api/conversations', headers: headers() })).json<{ rows: { status: string }[] }>().rows[0]?.status).toBe('stopped');
     const stopped = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(stopped.json<{ rows: { type: string }[] }>().rows.filter(row => row.type === 'agent.turn_stop_requested')).toHaveLength(1);
+    for (const [type, data, state] of [
+      ['computer.ready', { assistantId: 'assistant', computerId: 'computer' }, 'ready'],
+      ['computer.suspended', { assistantId: 'assistant', computerId: 'computer' }, 'starting'],
+      ['computer.resumed', { assistantId: 'assistant', computerId: 'computer', tokenId: 'token:resume' }, 'starting'],
+      ['computer.ready', { assistantId: 'assistant', computerId: 'computer' }, 'ready'],
+    ] as const) {
+      const event = envelope('test', 'computer-assistant', type, data);
+      const sequence = (await history(nats.store, 'computer-assistant', 'test')).at(-1)?.sequence ?? 0;
+      expect((await nats.store.append({ event, expectedSequence: sequence })).status).toBe('appended');
+      await runner.run(computers);
+      const response = await app.inject({ url: `/api/conversations/${conversationId}/messages`,
+        headers: headers() });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ computerState: state, computerRecovered: false });
+    }
+    const lost = envelope('test', `conversation-${conversationId}`, 'agent.output_lost', { conversationId, turnId });
+    expect((await nats.store.append({ event: lost,
+      expectedSequence: (await history(nats.store, `conversation-${conversationId}`, 'test')).at(-1)!.sequence
+    })).status).toBe('appended');
+    const completed = envelope('test', `conversation-${conversationId}`, 'agent.turn_completed', { conversationId, turnId });
+    expect((await nats.store.append({ event: completed,
+      expectedSequence: (await history(nats.store, `conversation-${conversationId}`, 'test')).at(-1)!.sequence
+    })).status).toBe('appended');
+    await runner.run(conversations);
+    const lostList = await app.inject({ url: '/api/conversations', headers: headers() });
+    expect(lostList.json<{ rows: { status: string }[] }>().rows[0]?.status).toBe('lost');
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
     let contentQueries = 0;
     const originalQuery = db.query.bind(db);
@@ -121,7 +162,9 @@ it('serves private chat commands and reads to joined members, refusing other org
       const computerReady = envelope('test', 'computer-assistant', 'computer.ready', {
         assistantId: 'assistant', computerId: 'computer', generation: 1,
       });
-      await nats.store.append({ event: computerReady, expectedSequence: 0 });
+      const readySequence = (await history(nats.store, 'computer-assistant', 'test')).at(-1)!.sequence;
+      expect((await nats.store.append({ event: computerReady, expectedSequence: readySequence })).status)
+        .toBe('appended');
       await runner.run(computers);
       await until(() => received.some(r => r.type === 'ready' && r.computerState === 'ready'));
       const cursor = received.at(-1)!; socket.terminate(); await once(socket, 'close'); received.length = 0;

@@ -742,3 +742,14 @@ A synthetic reader supplied all 64 cached chats with 3,000 events each: one crea
 32,000-character text. After collection, the summaries retained 13,240,040 bytes
 (12.6 MiB); total JavaScript heap use was 27,932,112 bytes (26.6 MiB). This measures
 summary storage, not the complete server running on a live silo.
+
+## Computer state in chat replies
+
+Chat feed reads use the `computers` projection for state, the last loss time and the
+recovered marker. They never read lifecycle history. Existing installations need a
+computers rebuild before serving these routes. Assistant kind is joined into the list
+query. `test/chat-http.test.ts` checks the response fields, cold resume and lost list status.
+
+The recovered marker describes the computer. The browser shows the lost-request notice
+only if this chat's last agent turn is lost or failed and ended at or after the last
+computer loss. A later completed turn removes that notice.

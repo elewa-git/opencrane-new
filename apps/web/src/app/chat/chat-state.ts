@@ -9,6 +9,21 @@ export interface Turn {
   reason?: string; executionMode?: 'restricted' | 'memory_free';
 }
 
+export function turnContent(turn: Turn): string {
+  return turn.text + turn.state + turn.files.join() + turn.tools.length;
+}
+
+export function turnOutcome(turn: Turn): string {
+  if (turn.state === 'done') return 'Done';
+  if (!turn.text) return "Didn't complete · nothing was repeated";
+  if (turn.state === 'stopped') return 'Stopped · partial reply kept';
+  return 'Reply did not complete · partial reply kept';
+}
+export function turnStatusIcon(turn: Turn): string {
+  if (turn.state === 'lost') return 'failed';
+  return turn.state;
+}
+
 export interface ChatAttachment {
   conversationId: string;
   fileId: string;
@@ -91,6 +106,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
     turn.executionMode = row.data['executionMode'] === 'restricted' ? 'restricted' : 'memory_free';
     return;
   }
+  // Keep lost output incomplete whether its marker arrives before or after completion.
   if (row.type === 'agent.output_lost') {
     lostOutput.add(row.data.turnId ?? '');
     turn.state = 'lost';
@@ -109,10 +125,15 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
   }
 }
 
+function failureDetail(reason: string | undefined): string {
+  if (reason === 'computer_lost') return 'Computer was lost';
+  return 'Run interrupted';
+}
+
 function updateTurnTools(turn: Turn, row: ChatRow): void {
   if (row.type === 'agent.turn_failed') {
     turn.tools.push({ id: row.id, label: 'Reply failed',
-      detail: row.data.reason ?? 'Run interrupted', failed: true, time: row.time });
+      detail: failureDetail(row.data.reason), failed: true, time: row.time });
     return;
   }
   if (row.type !== 'agent.command_ran') return;

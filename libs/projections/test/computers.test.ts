@@ -44,3 +44,50 @@ it.skipIf(!process.env['PG_TEST_URL'])('rebuilds computer status from real NATS 
     await nats.close();
   }
 }, 30_000);
+
+it('projects cold resumes and recovery without reading lifecycle history in chat', async () => {
+  const storage = await database('pg');
+  let position = 0;
+  async function apply(type: string) {
+    const definition = getEventDefinition(type);
+    if (!definition || typeof definition.example !== 'object' || !definition.example) {
+      throw new Error('Missing computer example');
+    }
+    position += 1;
+    const subject = type === 'assistant.created' ? 'assistant-a' : 'computer-a';
+    const parsed = parseEventByType({ id: `computer-${position}`, commandId: `computer-${position}`,
+      type, subject, silo: 'test', source: 'test',
+      time: `2026-10-06T10:${String(position).padStart(2, '0')}:00Z`,
+      principal: { kind: 'system', id: 'test' }, data: { ...definition.example, assistantId: 'a' } });
+    if (!parsed.success) throw new Error('Invalid computer example');
+    await computers.apply(storage.db, parsed.event, position);
+  }
+  async function state() {
+    const result = await storage.db.query(
+      'SELECT chat_state, recovered, lost_at FROM computers WHERE assistant_id = $1', ['a']);
+    return result.rows[0];
+  }
+  try {
+    await computers.create(storage.db);
+    await apply('assistant.created');
+    await apply('computer.claimed');
+    await apply('computer.ready');
+    await apply('computer.suspended');
+    expect(await state()).toMatchObject({ chat_state: 'starting', recovered: false });
+    await apply('computer.resumed');
+    expect(await state()).toMatchObject({ chat_state: 'starting', recovered: false });
+    await apply('computer.ready');
+    expect(await state()).toMatchObject({ chat_state: 'ready', recovered: false });
+    await apply('computer.lost');
+    await apply('computer.claimed');
+    expect(await state()).toEqual({ chat_state: 'recovering', recovered: false,
+      lost_at: '2026-10-06T10:07:00Z' });
+    await apply('computer.ready');
+    expect(await state()).toEqual({ chat_state: 'ready', recovered: true,
+      lost_at: '2026-10-06T10:07:00Z' });
+    await apply('computer.suspended');
+    expect(await state()).toMatchObject({ chat_state: 'starting', recovered: false });
+  } finally {
+    await storage.close();
+  }
+});

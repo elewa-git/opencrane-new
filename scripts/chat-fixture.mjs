@@ -29,9 +29,13 @@ export async function chatFixture(page, scenario = 'live') {
     failed.time = '2026-10-02T10:03:00Z';
   } else if (scenario === 'private-team-recovered') {
     const human = add('message.posted', { text: 'Draft the reply to Supplier B.', authorId: 'me' });
-    add('agent.turn_started', { turnId: human.id, executionMode: 'restricted' });
-    add('agent.output_lost', { turnId: human.id });
-    add('agent.turn_failed', { turnId: human.id, reason: 'computer_lost' });
+    const started = add('agent.turn_started', { turnId: human.id, executionMode: 'restricted' });
+    const lost = add('agent.output_lost', { turnId: human.id });
+    const failed = add('agent.turn_failed', { turnId: human.id, reason: 'computer_lost' });
+    human.time = '2026-10-02T10:02:00Z';
+    started.time = '2026-10-02T10:02:01Z';
+    lost.time = '2026-10-02T10:03:00Z';
+    failed.time = '2026-10-02T10:03:00Z';
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
     const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
@@ -66,10 +70,19 @@ export async function chatFixture(page, scenario = 'live') {
   await page.route('**/api/**', async route => {
     const request = route.request(), url = new URL(request.url());
     const fulfil = body => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+    if (url.pathname.includes('/changes/')) {
+      const commandId = url.pathname.split('/').at(-1);
+      function hasCommand(row) {
+        return row.id === commandId;
+      }
+      const recorded = rows.some(hasCommand);
+      if (recorded) return fulfil({ status: 'appended', commandId });
+      return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+    }
     if (url.pathname.endsWith('/approvals')) return fulfil({ cards: [], csrf: 'fixture' });
     if (url.pathname === '/api/chat' && offline && scenario === 'rail-offline') return route.abort('connectionfailed');
     if (url.pathname === '/api/chat' && scenario === 'rail-loading') return;
-    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant', memoryAdmission: { state: 'disabled', failing: ['qualification incomplete'] } });
+    if (url.pathname === '/api/chat') return fulfil({ memberId: 'me', displayName: 'Taylor Reed', assistantId: scenario === 'no-agent' ? null : 'assistant', memoryAdmission: { state: 'disabled', failing: ['The private memory checks have not all passed.'] } });
     if (url.pathname.endsWith('/messages') && scenario.startsWith('read-')) {
       const status = Number(scenario.slice('read-'.length));
       return route.fulfill({ status, contentType: 'application/json', body: '{}' });
@@ -87,10 +100,9 @@ export async function chatFixture(page, scenario = 'live') {
       return fulfil({ status: 'appended', sequence: rows.length });
     }
     if (url.pathname === '/api/conversations') return fulfil({ rows: ['draft', 'attach', 'no-agent', 'queued'].includes(scenario) && conversations.length === 5 ? [] : conversations });
-    const computerState = scenario === 'private-team-recovering' ? 'recovering'
-      : scenario === 'folding' ? 'starting' : 'ready';
+    const computerState = fixtureComputerState(scenario);
     const computerRecovered = scenario === 'private-team-recovered';
-    const computerLostAt = scenario === 'private-team-recovering'
+    const computerLostAt = ['private-team-recovering', 'private-team-recovered'].includes(scenario)
       ? '2026-10-02T10:03:00.000Z' : undefined;
     return fulfil({ rows: rows.filter(row => row.position > Number(url.searchParams.get('since') ?? 0)).slice(0, 100), position: rows.length, generation: 1, computerState, computerRecovered, computerLostAt });
   });
@@ -99,10 +111,9 @@ export async function chatFixture(page, scenario = 'live') {
     ws.onMessage(raw => {
       const input = JSON.parse(String(raw));
       for (const row of rows.filter(row => row.position > input.since)) ws.send(JSON.stringify({ version: 1, type: 'event', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: row.position, row }));
-      const computerState = scenario === 'private-team-recovering' ? 'recovering'
-        : scenario === 'folding' ? 'starting' : 'ready';
+      const computerState = fixtureComputerState(scenario);
       const computerRecovered = scenario === 'private-team-recovered';
-      const computerLostAt = scenario === 'private-team-recovering'
+      const computerLostAt = ['private-team-recovering', 'private-team-recovered'].includes(scenario)
         ? '2026-10-02T10:03:00.000Z' : undefined;
       ws.send(JSON.stringify({ version: 1, type: 'ready', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: rows.length, computerState, computerRecovered, computerLostAt }));
       socketReady = true;
@@ -127,4 +138,10 @@ export async function chatFixture(page, scenario = 'live') {
     online: () => { offline = false; },
     rows: () => rows,
   };
+}
+
+function fixtureComputerState(scenario) {
+  if (scenario === 'private-team-recovering') return 'recovering';
+  if (scenario === 'folding') return 'starting';
+  return 'ready';
 }

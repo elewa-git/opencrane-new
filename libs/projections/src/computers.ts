@@ -1,5 +1,8 @@
 import { getEventDefinition } from '@opencrane/events';
 import type { ComputerRow } from '@opencrane/protocol';
+import { lifecycleComputerState } from './computer-chat-state.ts';
+import type { EventEnvelope } from '@opencrane/events';
+import type { Query } from './db.ts';
 import type { Projection } from './runner.ts';
 
 const eventTypes = new Set([
@@ -21,6 +24,21 @@ function numberField(data: unknown, name: string): number {
   return value;
 }
 
+async function nextChatState(db: Query, table: string, event: EventEnvelope) {
+  const previous = await db.query<{
+    chat_state: 'ready' | 'starting' | 'recovering'; recovered: boolean; lost_at: string | null;
+  }>(`SELECT chat_state, recovered, lost_at FROM ${table}
+    WHERE silo = $1 AND assistant_id = $2`, [event.silo, field(event.data, 'assistantId')]);
+  const row = previous.rows[0];
+  let previousState;
+  if (row) {
+    previousState = { computerState: row.chat_state,
+      computerRecovered: row.recovered, computerLostAt: row.lost_at ?? undefined };
+  }
+  const lifecycleRows = [{ event }];
+  return lifecycleComputerState(lifecycleRows, previousState);
+}
+
 function computerProjection(name: string, table: string): Projection {
   return {
     name,
@@ -29,7 +47,12 @@ function computerProjection(name: string, table: string): Projection {
         silo TEXT NOT NULL, assistant_id TEXT NOT NULL, owner_id TEXT NOT NULL,
         kind TEXT NOT NULL, computer_id TEXT, sandbox_uid TEXT, generation INTEGER NOT NULL DEFAULT 0,
         token_id TEXT, status TEXT NOT NULL, changed_at TEXT NOT NULL, position BIGINT NOT NULL,
-        PRIMARY KEY (silo, assistant_id))`);
+        chat_state TEXT NOT NULL DEFAULT 'starting', recovered BOOLEAN NOT NULL DEFAULT FALSE,
+        lost_at TEXT, PRIMARY KEY (silo, assistant_id))`);
+      await db.query(`ALTER TABLE ${table}
+        ADD COLUMN IF NOT EXISTS chat_state TEXT NOT NULL DEFAULT 'starting',
+        ADD COLUMN IF NOT EXISTS recovered BOOLEAN NOT NULL DEFAULT FALSE,
+        ADD COLUMN IF NOT EXISTS lost_at TEXT`);
     },
     drop: (db) => db.query(`DROP TABLE IF EXISTS ${table}`).then(() => undefined),
     async apply(db, event, position) {
@@ -51,13 +74,16 @@ function computerProjection(name: string, table: string): Projection {
         'computer.lost': 'lost', 'computer.retired': 'retired' } as Record<string, string>)[event.type];
       const claimed = event.type === 'computer.claimed';
       const resumed = event.type === 'computer.resumed';
+      const state = await nextChatState(db, table, event);
       const result = await db.query(`UPDATE ${table} SET computer_id = COALESCE($3, computer_id),
         sandbox_uid = COALESCE($4, sandbox_uid), generation = COALESCE($5, generation),
-        token_id = COALESCE($6, token_id), status = $7, changed_at = $8, position = $9
+        token_id = COALESCE($6, token_id), status = $7, changed_at = $8, position = $9,
+        chat_state = $10, recovered = $11, lost_at = $12
         WHERE silo = $1 AND assistant_id = $2 RETURNING assistant_id`, [event.silo, assistantId,
         claimed ? field(data, 'computerId') : null, typeof data === 'object' && data !== null && 'sandboxUid' in data ? field(data, 'sandboxUid') : null,
         claimed ? numberField(data, 'generation') : null,
-        claimed || resumed ? field(data, 'tokenId') : null, status, event.time, position]);
+        claimed || resumed ? field(data, 'tokenId') : null, status, event.time, position,
+        state.computerState, state.computerRecovered, state.computerLostAt ?? null]);
       if (!result.rows.length) throw new Error('Computer event requires an assistant');
     },
   };

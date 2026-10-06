@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat and shared message shapes"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat and computer state"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -31,7 +31,8 @@ flowchart LR
 3. **A person reviews the history of changes.** The server filters the response, then both sides use the same shapes for the request and result.
 
 Chat replies include a typed computer state. After a computer is lost, they also
-include when it was lost so the browser can explain recovery.
+include when it was lost so the browser can explain recovery. The browser uses
+that time and the chat's last turn to decide whether a request was lost.
 
 ## How to run or test it
 

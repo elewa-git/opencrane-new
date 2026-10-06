@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { conversations, listConversations, members, ProjectionRunner } from '../src/index.ts';
+import { computers, conversations, listConversations, members, ProjectionRunner } from '../src/index.ts';
 import { database } from './database.ts';
 
 it('rebuilds conversations and members past an old conversation.created without mode', async () => {
@@ -20,6 +20,7 @@ it('rebuilds conversations and members past an old conversation.created without 
       await runner.initialise(projection);
       expect(await runner.checkpoint(projection)).toBe(0);
     }
+    await runner.initialise(computers);
     const results = await Promise.allSettled([runner.rebuild(conversations), runner.rebuild(members)]);
     expect(results.map(result => result.status)).toEqual(['fulfilled', 'fulfilled']);
     expect(await runner.checkpoint(conversations)).toBe(2);

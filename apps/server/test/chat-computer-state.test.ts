@@ -1,8 +1,10 @@
 import { expect, it } from 'vitest';
-import { lifecycleComputerState } from '../src/chat/routes.ts';
+import { lifecycleComputerState } from '@opencrane/projections';
 
 function event(type: string) {
-  return { event: { type, time: '2026-10-02T10:03:00.000Z' } };
+  const time = type === 'computer.lost' ? '2026-10-02T10:03:00.000Z'
+    : '2026-10-02T10:05:00.000Z';
+  return { event: { type, time } };
 }
 
 it('shows starting until the computer reports ready', () => {
@@ -30,4 +32,14 @@ it('marks a new ready computer after loss so the chat can explain recovery', () 
     event('computer.ready'),
   ])).toEqual({ computerState: 'ready', computerRecovered: true,
     computerLostAt: '2026-10-02T10:03:00.000Z' });
+});
+
+it('shows starting for a suspended computer and throughout a cold resume', () => {
+  const ready = [event('computer.ready')];
+  const suspended = [...ready, event('computer.suspended')];
+  expect(lifecycleComputerState(suspended).computerState).toBe('starting');
+  const resumed = [...suspended, event('computer.resumed')];
+  expect(lifecycleComputerState(resumed).computerState).toBe('starting');
+  expect(lifecycleComputerState([...resumed, event('computer.ready')]))
+    .toMatchObject({ computerState: 'ready', computerRecovered: false });
 });

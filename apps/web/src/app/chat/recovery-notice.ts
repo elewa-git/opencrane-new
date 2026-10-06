@@ -14,15 +14,18 @@ export class RecoveryNotice {
   readonly resumed = input(false);
   readonly lastConfirmedAt = input('');
   readonly computerLostAt = input('');
-  protected readonly lostDetail = computed(() => {
+  protected readonly lostDetail = computed(this.describeLoss.bind(this));
+  protected readonly confirmedDetail = computed(this.describeConfirmedTurn.bind(this));
+
+  private describeLoss(): string {
     const value = this.computerLostAt();
     if (!value) return '';
     return `Connection to your computer was lost at ${shortTime(value)}.`;
-  });
+  }
 
-  protected readonly confirmedDetail = computed(() => {
+  private describeConfirmedTurn(): string {
     const value = this.lastConfirmedAt();
     if (!value) return 'Your earlier conversation is being checked.';
     return `Your last confirmed turn was at ${shortTime(value)}.`;
-  });
+  }
 }

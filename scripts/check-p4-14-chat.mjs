@@ -1,3 +1,4 @@
+/* global document */
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -14,6 +15,7 @@ const states = [
   { name: 'recovering', fixture: 'private-team-recovering' },
   { name: 'recovered-lost-output', fixture: 'private-team-recovered' },
   { name: 'memory-free-choice', fixture: 'private-team-draft' },
+  { name: 'memory-free-selected', fixture: 'private-team-draft' },
 ];
 
 async function serveAssets(route) {
@@ -39,8 +41,39 @@ async function assertMobileModeChoiceFits(page, stateName, width) {
     'The memory choice must not overlap the send button at 320px');
 }
 
+async function assertPhoneTargets(page, width) {
+  if (width === 1280) return;
+  const buttons = page.locator('oc-chat-composer .mode-choice button, oc-memory-free-notice button');
+  for (const button of await buttons.all()) {
+    const bounds = await button.boundingBox();
+    assert(bounds && bounds.width >= 44 && bounds.height >= 44,
+      'Private, Memory-free and notice buttons must have 44px phone targets');
+  }
+}
+
+async function finishAnimations() {
+  const animations = document.getAnimations();
+  const finished = [];
+  for (const animation of animations) {
+    const iterations = animation.effect?.getComputedTiming().iterations;
+    if (iterations === Infinity) continue;
+    finished.push(animation.finished);
+  }
+  await Promise.allSettled(finished);
+}
+
+function composerHasFocus(element) {
+  return element === document.activeElement;
+}
+
+function viewportHeight(width) {
+  if (width === 1280) return 900;
+  if (width === 390) return 844;
+  return 720;
+}
+
 async function captureState(state, width, motion) {
-  const height = width === 1280 ? 900 : width === 390 ? 844 : 720;
+  const height = viewportHeight(width);
   const page = await browser.newPage({
     viewport: { width, height },
     reducedMotion: motion,
@@ -71,17 +104,22 @@ async function captureState(state, width, motion) {
       assert.equal(await page.getByRole('button', { name: 'Attach' }).count(), 0);
     }
 
+    if (state.name === 'memory-free-selected') {
+      const before = fixture.commands.length;
+      await page.locator('oc-memory-free-notice .action').click();
+      assert.equal(fixture.commands.length, before, 'Choosing memory-free must not send the draft');
+      await page.locator('.composer-footnote').getByText(
+        "This turn has no earlier context and writes to the shared computer's disk").waitFor();
+      assert.equal(await page.locator('#message').evaluate(composerHasFocus), true, 'Mode selection focuses the composer');
+    }
+    await assertPhoneTargets(page, width);
+    await page.evaluate(finishAnimations);
     assert(await page.evaluate(pageHasNoOverflow), `No horizontal overflow at ${width}px`);
     const filename = `${state.name}-${width}-${motion}.png`;
     await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
     captures.push(filename);
 
-    if (state.name === 'memory-free-choice') {
-      const before = fixture.commands.length;
-      await page.locator('oc-memory-free-notice .action').click();
-      assert.equal(fixture.commands.length, before, 'Choosing memory-free must not send the draft');
-      await page.getByText('This turn has no earlier context').waitFor();
-    }
+
   } finally {
     await page.close();
   }
@@ -106,7 +144,9 @@ try {
     checks: [
       'Recovery disables the composer and hides attachments.',
       'Lost output stays incomplete and never shows Done or Stop.',
-      'The memory-free choice leaves the draft unsent.',
+      'The selected memory-free state leaves the draft unsent and states its disk use.',
+      'Private, Memory-free and notice buttons have 44px phone targets.',
+      'Finite animations finish before each capture.',
       'No horizontal overflow at any captured width.',
     ],
   };

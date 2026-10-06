@@ -18,7 +18,13 @@
     "memory-free-choice-390-no-preference.png",
     "memory-free-choice-390-reduce.png",
     "memory-free-choice-320-no-preference.png",
-    "memory-free-choice-320-reduce.png"
+    "memory-free-choice-320-reduce.png",
+    "memory-free-selected-1280-no-preference.png",
+    "memory-free-selected-1280-reduce.png",
+    "memory-free-selected-390-no-preference.png",
+    "memory-free-selected-390-reduce.png",
+    "memory-free-selected-320-no-preference.png",
+    "memory-free-selected-320-reduce.png"
   ],
   "widths": [
     1280,
@@ -32,7 +38,9 @@
   "checks": [
     "Recovery disables the composer and hides attachments.",
     "Lost output stays incomplete and never shows Done or Stop.",
-    "The memory-free choice leaves the draft unsent.",
+    "The selected memory-free state leaves the draft unsent and states its disk use.",
+    "Private, Memory-free and notice buttons have 44px phone targets.",
+    "Finite animations finish before each capture.",
     "No horizontal overflow at any captured width."
   ]
 }

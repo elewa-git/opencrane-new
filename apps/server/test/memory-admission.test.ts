@@ -8,13 +8,14 @@ const evidenceSchema = z.object({
   checks: z.record(z.string(), z.object({ result: z.string().optional() })).optional(),
 });
 
-it('keeps private memory disabled while the qualification evidence has any failure', () => {
+it('keeps private memory disabled while the qualification evidence is incomplete or has a failure', () => {
   const evidenceText = readFileSync(
     new URL('../../../docs/process/evidence/p4-14/private-turns.json', import.meta.url), 'utf8');
   const evidence = evidenceSchema.parse(JSON.parse(evidenceText));
-  const results = Object.values(evidence.checks ?? {}).map(check => check.result);
-  const hasFailure = evidence.result === 'FAIL' || results.includes('FAIL');
-
-  if (hasFailure) expect(memoryAdmission.state).toBe('disabled');
-  expect(memoryAdmission.state).toBe('disabled');
+  const checks = Object.values(evidence.checks ?? {});
+  function passed(check: { result?: string | undefined }): boolean {
+    return check.result === 'PASS';
+  }
+  const mayEnable = evidence.result === 'PASS' && checks.length > 0 && checks.every(passed);
+  if (!mayEnable) expect(memoryAdmission.state).toBe('disabled');
 });

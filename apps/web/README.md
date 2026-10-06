@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat, approval cards and tool details"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>private chat, recovery and tool details"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
@@ -37,6 +37,9 @@ flowchart LR
    it brings them back to the start page, where they can open the workspace.
 2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
 3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
+   Team turns are private by default. A memory-free choice applies to one turn and
+   explains that it uses the shared disk. Recovery pauses sending and explains why.
+   A reply whose output was lost stays incomplete.
 4. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 5. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.
 6. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.

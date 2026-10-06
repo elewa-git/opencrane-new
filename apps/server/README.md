@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes and reads new chat events| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|checks chat position and reads changed rows| postgres
+  server -->|reads chat rows and computer state| postgres
   server -->|sends turns and reads the desktop| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -65,7 +65,8 @@ not yet proven on a live computer; memory features stay off until it is.
    reconnects after five seconds and resumes receiving messages. The server checks
    each open chat's feed position every 100 ms and reads chat content only after it
    changes. Computer state follows lifecycle events and stays in recovery until a
-   new ready event appears.
+   new ready event appears. The worker saves this state in the computer read table,
+   so each chat update reads a small record. Sleeping and waking computers show starting.
 4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and a private turn by default. Private turns have
    no local tools. A member can choose a memory-free turn to use the group's shared

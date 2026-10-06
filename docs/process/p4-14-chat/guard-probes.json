@@ -1,0 +1,123 @@
+{
+  "result": "PASS",
+  "probes": [
+    {
+      "probe": "assistant-kind",
+      "result": "PASS",
+      "failedSpecs": [
+        "apps/server/test/chat-http.test.ts > serves private chat commands and reads to joined members, refusing other organisations and wrong origins"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "cold-resume",
+      "result": "PASS",
+      "failedSpecs": [
+        "apps/server/test/chat-computer-state.test.ts > shows starting for a suspended computer and throughout a cold resume",
+        "apps/server/test/chat-http.test.ts > serves private chat commands and reads to joined members, refusing other organisations and wrong origins",
+        "libs/projections/test/computers.test.ts > projects cold resumes and recovery without reading lifecycle history in chat"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "confirmed-default-focus",
+      "result": "PASS",
+      "failedSpecs": [
+        "|web| src/app/chat/workspace.spec.ts > sends team turns privately by default and resets memory-free after a 200 receipt",
+        "|web| src/app/chat/workspace.spec.ts > keeps partial lost output and counts only a genuinely completed turn as confirmed"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "lost-list-status",
+      "result": "PASS",
+      "failedSpecs": [
+        "apps/server/test/chat-http.test.ts > serves private chat commands and reads to joined members, refusing other organisations and wrong origins"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "memory-admission",
+      "result": "PASS",
+      "failedSpecs": [
+        "apps/server/test/chat-http.test.ts > serves private chat commands and reads to joined members, refusing other organisations and wrong origins",
+        "apps/server/test/memory-admission.test.ts > keeps private memory disabled while the qualification evidence is incomplete or has a failure"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "no-lifecycle-read",
+      "result": "PASS",
+      "failedSpecs": [
+        "apps/server/test/chat-http.test.ts > serves private chat commands and reads to joined members, refusing other organisations and wrong origins"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "projected-recovery",
+      "result": "PASS",
+      "failedSpecs": [
+        "libs/projections/test/computers.test.ts > projects cold resumes and recovery without reading lifecycle history in chat"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "restored-focus",
+      "result": "PASS",
+      "failedSpecs": [
+        "|web| src/app/chat/workspace.spec.ts > announces recovery, explains it in personal chats and restores lost composer focus"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "stop-and-receipt",
+      "result": "PASS",
+      "failedSpecs": [
+        "|web| src/app/chat/workspace.spec.ts > places recovery after the last reply and hides both Stop buttons",
+        "|web| src/app/chat/workspace.spec.ts > keeps partial lost output and counts only a genuinely completed turn as confirmed",
+        "|web| src/app/chat/workspace.spec.ts > keeps a message pending until its send returns a 200 receipt"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "two-creates-enter",
+      "result": "PASS",
+      "failedSpecs": [
+        "|web| src/app/chat/workspace.spec.ts > keeps typed text and a single pending command after a lost send reply",
+        "|web| src/app/chat/workspace.spec.ts > creates two fresh conversations in one visit with separate commands"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "typed-text-and-pending",
+      "result": "PASS",
+      "failedSpecs": [
+        "|web| src/app/chat/workspace.spec.ts > keeps typed text and a single pending command after a lost send reply",
+        "|web| src/app/chat/workspace.spec.ts > keeps typed text on a refused send and does not report a healthy refresh as failed"
+      ],
+      "restored": true
+    },
+    {
+      "probe": "web-batch",
+      "result": "PASS",
+      "failedSpecs": [
+        "|web| src/app/chat/chat-state.spec.ts > keeps raw failure codes out of tool details",
+        "|web| src/app/chat/workspace.spec.ts > flips the composer footnote to match the selected memory mode",
+        "|web| src/app/chat/workspace.spec.ts > locks the mode of a queued memory-free message and retries that same command",
+        "|web| src/app/chat/workspace.spec.ts > shows the fresh-computer lost-request notice only for the affected last turn",
+        "|web| src/app/chat/workspace.spec.ts > announces memory-free selection and focuses the composer from the notice",
+        "|web| src/app/chat/workspace.spec.ts > announces recovery, explains it in personal chats and restores lost composer focus",
+        "|web| src/app/chat/workspace.spec.ts > places recovery after the last reply and hides both Stop buttons",
+        "|web| src/app/chat/workspace.spec.ts > pauses queued Retry during recovery and keeps the pending message mode",
+        "|web| src/app/chat/workspace.spec.ts > sends team turns privately by default and resets memory-free after a 200 receipt",
+        "|web| src/app/chat/workspace.spec.ts > omits executionMode in personal chats even when the mode signal is memory-free",
+        "|web| src/app/chat/workspace.spec.ts > keeps partial lost output and counts only a genuinely completed turn as confirmed",
+        "|web| src/app/chat/workspace.spec.ts > clears recovered state when switching chats before the new feed arrives",
+        "|web| src/app/chat/workspace.spec.ts > keeps typed text and a single pending command after a lost send reply",
+        "|web| src/app/chat/workspace.spec.ts > keeps typed text on a refused send and does not report a healthy refresh as failed",
+        "|web| src/app/chat/workspace.spec.ts > checks a lost send reply with a 200 receipt and clears its pending command"
+      ],
+      "restored": true
+    }
+  ]
+}

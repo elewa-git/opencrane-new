@@ -24,7 +24,8 @@ import { sessionSlug, type ChatConversation } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  rejectedScreenshotIds, toolKind, type ChatAttachment, type ToolActivityRecord, type Turn,
+  rejectedScreenshotIds, toolKind, turnContent, turnOutcome, turnStatusIcon,
+  type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
@@ -97,30 +98,33 @@ export class Workspace implements OnInit {
   protected readonly lastConfirmedTurnAt = this.chat.lastConfirmedTurnAt;
   protected readonly teamSession = this.chat.teamSession;
   protected readonly composerPlaceholder = computed(this.messagePlaceholder.bind(this));
+  private restoreComposerAfterRecovery = false;
+  private previousComputerState = this.chat.computer();
   private lastTranscript = '';
   private pendingToolFocus = '';
   private focusComposerAfterNavigation = false;
   private previousCaptureConversation = this.chat.selected();
   private previousCaptureDenied = this.chat.denied();
   constructor() {
+    effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
     effect(this.closeMissingToolDetails.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
-  protected async send(text: string): Promise<void> { if (await this.chat.send(text)) this.draft.set(''); }
-  protected selectMemoryFree(): void { this.chat.chooseMemoryFree(); }
-  protected selectPrivate(): void { this.chat.executionMode.set('restricted'); }
-  protected turnOutcome(turn: Turn): string {
-    if (turn.state === 'done') return 'Done';
-    if (!turn.text) return "Didn't complete · nothing was repeated";
-    if (turn.state === 'stopped') return 'Stopped · partial reply kept';
-    return 'Reply did not complete · partial reply kept';
+  protected async send(text: string): Promise<void> {
+    const sent = await this.chat.send(text);
+    if (sent) this.draft.set('');
   }
-  protected turnStatusIcon(turn: Turn): string {
-    if (turn.state === 'lost') return 'failed';
-    return turn.state;
+  protected selectMemoryFree(): void {
+    this.chat.chooseMemoryFree();
+    this.focusComposer();
   }
+  protected selectPrivate(): void {
+    this.chat.choosePrivate();
+  }
+  protected readonly turnOutcome = turnOutcome;
+  protected readonly turnStatusIcon = turnStatusIcon;
   protected memoryAdmissionDetail(): string {
     const failing = this.chat.memoryAdmission().failing;
     return failing.join(' ');
@@ -354,16 +358,31 @@ export class Workspace implements OnInit {
     this.previousCaptureConversation = conversationId;
     this.previousCaptureDenied = denied;
   }
+  private rememberRecoveryFocus(): void {
+    const state = this.chat.computer();
+    if (state === 'recovering' && this.previousComputerState !== 'recovering') {
+      this.restoreComposerAfterRecovery = document.activeElement?.id === 'message';
+    }
+    this.previousComputerState = state;
+  }
+  private restoreRecoveryFocus(): void {
+    if (!this.restoreComposerAfterRecovery || this.chat.computer() !== 'ready') return;
+    this.restoreComposerAfterRecovery = false;
+    const active = document.activeElement;
+    if (active === document.body || active?.id === 'message') this.focusComposer();
+  }
   private afterRender(): void {
     const turns = this.chat.turns();
-    const content = turns.map(turn => turn.text + turn.state + turn.files.join()
-      + turn.tools.length).join('');
+    const recovery = this.chat.computer() + String(this.chat.recoveredLostTurn());
+    const renderedTurns = turns.map(turnContent);
+    const content = recovery + renderedTurns.join('');
     if (content !== this.lastTranscript) {
       this.lastTranscript = content;
       const element = this.transcriptElement()?.nativeElement;
       if (element) requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
     }
     this.focusPendingComposer();
+    this.restoreRecoveryFocus();
   }
   private scrollTranscriptToBottom(element: HTMLElement): void {
     element.scrollTop = element.scrollHeight;
