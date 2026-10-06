@@ -23,7 +23,7 @@
   <main ocPaperSurface="main"><ng-content /></main>
 </div>
 <oc-navigation-menu id="personal-settings-menu" label="Personal settings"
-  [open]="menuOpen()" [returnFocusTo]="menuButton" (closed)="menuOpen.set(false)">
+  [open]="menuOpen()" [returnFocusTo]="menuButton" (menuClosed)="menuOpen.set(false)">
   <a class="menu-back" href="/workspace">‹ Back to workspace</a>
   <p class="section-label">Your settings</p>
     @for (page of pages; track page.id) {

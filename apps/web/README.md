@@ -22,6 +22,7 @@ flowchart LR
 - Lets people start conversations, send messages and stop a reply.
 - Lets organisation admins create shared assistants for groups and members start private
   sessions with them.
+- Lets someone choose one colleague for a direct conversation between two people.
 - Shows reviewed tool approvals, sanitised tool details, uploaded files and the assistant's desktop.
 - Gives admins pages for People & groups at `/org/people` and
   `/org/people/groups/<id>`, an integration register and detail at
@@ -45,6 +46,8 @@ flowchart LR
    Team turns are private by default. A memory-free choice applies to one turn and
    explains that it uses the shared disk. Recovery pauses sending and explains why.
    A reply whose output was lost stays incomplete.
+   A direct conversation starts with one colleague in its To line. The first message is
+   the point when the server creates that conversation.
 4. **An admin adds a tool server.** MCP (Model Context Protocol) lets an assistant use tools from another server. The website accepts a remote HTTPS address and shows the discovery result. When tools are ready, the admin can continue to set each tool to Allow automatically, Ask or Block. If a save reply is lost, the website checks the saved modes before offering another action. It never sends the save again.
 5. **An admin checks an integration.** The website shows registered MCP servers and the facts it can read for each one. Refresh keeps the current page and keyboard focus in place while it reads again. Connection, access grants and publishing wait for their server support.
 6. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.

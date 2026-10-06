@@ -281,3 +281,11 @@ personal posts, Enter, healthy refresh and two sends during one visit.
 The visual script captures both the choice and selected memory-free states at three
 widths with both motion settings, after finite animations finish. It checks 44px phone
 buttons, overlap and overflow. Fresh-install live qualification remains NOT RUN.
+# Direct conversation recipient screen
+
+`/workspace/direct` searches `GET /api/chat/colleagues?q=&limit=20`. The screen shows
+only colleagues returned by that route. A selected person stays in the To line until
+Change is used. Selection is held in the browser and does not create a conversation.
+
+The complete chat view is in the next part of this stacked change. The present screen
+only chooses the person; it does not send a message or create a conversation.

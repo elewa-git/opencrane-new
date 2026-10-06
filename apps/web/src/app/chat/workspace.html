@@ -200,7 +200,7 @@
     </aside>
   }
   <oc-navigation-menu id="workspace-navigation" [open]="rail()" label="Sessions"
-    [returnFocusTo]="navigationOpener" (closed)="navigationClosed()">
+    [returnFocusTo]="navigationOpener" (menuClosed)="navigationClosed()">
     @if (rail()) {
       <ng-container [ngTemplateOutlet]="sessionNavigation" />
       <footer class="rail-footer">
@@ -240,6 +240,7 @@
       <button type="button" class="ask" (click)="newSession()">
         <oc-icon name="agent" /> Ask your agent <kbd>⌘⇧A</kbd>
       </button>
+      <a class="ask direct-chat-link" href="/workspace/direct">New direct chat</a>
       <h2>Projects</h2>
       <p class="empty-rail">No project sessions</p>
       @if (teamConversations().length) {

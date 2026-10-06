@@ -26,7 +26,7 @@
   <main ocPaperSurface="main"><ng-content /></main>
 </div>
 <oc-navigation-menu id="organisation-menu" label="Organisation settings"
-  [open]="menuOpen()" [returnFocusTo]="menuButton" (closed)="menuOpen.set(false)">
+  [open]="menuOpen()" [returnFocusTo]="menuButton" (menuClosed)="menuOpen.set(false)">
   <div class="organisation">
     <strong>{{ organisationName() }}</strong>
   </div>
