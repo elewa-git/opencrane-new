@@ -1,6 +1,7 @@
 // Protocol fixtures for visual qualification only; never imported into the product.
 export async function chatFixture(page, scenario = 'live') {
   let stopConflict = false;
+  let socketReady = false;
   let rows = [], socket, offline = ['queued', 'rail-offline'].includes(scenario);
   const add = (type, data) => {
     const row = { id: `event-${rows.length + 1}`, position: rows.length + 1, type, data, time: type === 'agent.turn_completed' ? '2026-10-02T10:42:48Z' : '2026-10-02T10:42:00Z' };
@@ -73,12 +74,24 @@ export async function chatFixture(page, scenario = 'live') {
       const input = JSON.parse(String(raw));
       for (const row of rows.filter(row => row.position > input.since)) ws.send(JSON.stringify({ version: 1, type: 'event', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: row.position, row }));
       ws.send(JSON.stringify({ version: 1, type: 'ready', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: rows.length, computerState: scenario === 'folding' ? 'starting your computer' : 'ready' }));
+      socketReady = true;
     });
   });
+  async function waitForReadySocket() {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      if (socketReady) return;
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    throw new Error('The fixture socket did not send ready');
+  }
+  async function closeSocket() {
+    await waitForReadySocket();
+    socket?.close({ code: 1013, reason: 'fixture connection dropped' });
+  }
   return {
     commands,
     add,
-    closeSocket: () => socket?.close(),
+    closeSocket,
     conflictNextStop: () => { stopConflict = true; },
     online: () => { offline = false; },
     rows: () => rows,

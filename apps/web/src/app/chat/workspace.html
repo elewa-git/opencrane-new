@@ -11,10 +11,22 @@
       <button #navigationOpener class="navigation-toggle" type="button" id="navigation-toggle"
         aria-label="Open session navigation" aria-controls="workspace-navigation"
         [attr.aria-expanded]="rail()" (click)="rail.set(!rail())"><oc-icon name="menu" /></button>
-      @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
-      <h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>
+      <div class="header-title">
+        <div class="header-main">
+          @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
+          <h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>
+        </div>
+        @if (approvalWaiting() && chat.selected() && !chat.denied()) {
+          <span class="header-status waiting-status" aria-hidden="true">
+            <span class="approval-dot"></span> Waiting on you
+          </span>
+        } @else {
+          <span class="header-status" aria-live="polite">
+            @if (chat.active()) { <oc-icon name="agent" /> Agent working }
+          </span>
+        }
+      </div>
       @if (!chat.selected()) { <span class="draft-label">Draft</span> }
-      <span class="header-status" aria-live="polite">@if (chat.active()) { <oc-icon name="agent" /> Agent working }</span>
       <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span>
       <button id="panel-toggle" type="button" aria-label="Session panel"
         [attr.aria-expanded]="panelExpanded()" (click)="togglePanel()">
@@ -106,7 +118,10 @@
             Reconnected at {{ time(reconnectedAt()!) }}. You're caught up.
           </div>
         }
-        @if (chat.selected() && !chat.denied()) { <oc-approval-cards [conversationId]="chat.selected()" /> }
+        @if (chat.selected() && !chat.denied()) {
+          <oc-approval-cards [conversationId]="chat.selected()" [viewerId]="chat.memberId()"
+            (waitingOnViewer)="approvalWaiting.set($event)" />
+        }
       </div>
     </section>
     <div class="composer-dock">

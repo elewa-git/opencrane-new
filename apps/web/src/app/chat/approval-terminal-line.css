@@ -1,0 +1,69 @@
+:host {
+  display: block;
+}
+
+.approval-terminal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 14px;
+  border: 1px solid #d9dfe0;
+  border-radius: 12px;
+  background: #fff;
+  color: #202729;
+  text-align: left;
+  cursor: pointer;
+}
+
+.approval-terminal:focus-visible {
+  outline: 2px solid #0a8497;
+  outline-offset: 2px;
+}
+
+.terminal-copy {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 9px;
+  min-width: 0;
+}
+
+.terminal-copy strong {
+  color: #2a7d4f;
+  font-size: 12px;
+}
+
+.terminal-action,
+.terminal-detail {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.terminal-chevron {
+  width: 14px;
+  height: 14px;
+  margin-left: auto;
+}
+
+.terminal-glyph[data-state='denied'] {
+  color: #c1392b;
+}
+
+.terminal-glyph[data-state='expired'] {
+  color: #8a5d1f;
+}
+
+@media (max-width: 700px) {
+  .approval-terminal {
+    min-height: 52px;
+    align-items: flex-start;
+  }
+
+  .terminal-copy {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

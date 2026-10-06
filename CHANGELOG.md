@@ -30,6 +30,7 @@
 
 ### What you can do now
 
+- In a conversation, the person who asked can read a tool approval in full and approve or deny it; others see that it is waiting. Used, denied, expired and cancelled approvals fold to one line, and a lost decision is checked, never resent. Tool lines open a sanitised details panel. Live tool calls, retries and confirmed results are not available yet.
 - Owners and admins can see flat groups, create one, open it, and remove a member after reviewing what they lose; adding members waits for a member list.
 - Organisation settings now has the v2 navigation and phone menu; Integrations keeps the register, Spending owns budgets, and other unfinished areas say Not available yet.
 - Screenshots now show one saving state, a captioned card with capture facts, a full preview with download, and plain failed, rejected, access-check and revoked states. Repeating an unanswered request returns the same file.

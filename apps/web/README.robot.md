@@ -156,14 +156,32 @@ stays with its permit while another hold is open. Access loss clears budgets, ef
 references and the open drawer. The browser check captures 1280px and 390px screens and
 checks layout at 320px.
 
-The chat's 8g approval cards restore from the authenticated approval endpoint above
-the composer. Requested cards show every reviewed field, expiry and conditional
-sign-in; decided, expired, cancelled and consumed cards collapse. A consumed card
-says outcome unknown, not success. Submitting disables both actions; uncertain
-transport offers Check status before any safe retry. No arguments or authority are
-sent back by the browser. Polling every three seconds restores updates without
-introducing another business-state store. Chromium qualification and images are in
-[the P3-2 receipt](../../docs/process/p3-2-approvals.md).
+The chat restores approval cards from the authenticated approval endpoint above
+the composer. The requester sees the reviewed fields and can approve or deny.
+Other participants see that the requester must decide. Terminal cards show only
+what the server proves. A used approval says that its result is unknown. A lost
+decision reply leads to one status read; the browser never repeats the POST by
+itself. A 503 can also mean the server refused before appending. If the approval
+still appears open after another failed decision, its card gives the turn end or
+expiry as the closing limit. Access refusals clear the cards while the three-second
+poll continues. The approval drawer follows the newest server card and closes if
+that card disappears. No decision time, other person's name, cancellation cause,
+tool-server readback or confirmed result is available from this contract.
+The requester-only POST uses the session CSRF token and appends one conditional
+decision. A 403 or 400 means the decision was not recorded. A GET while handling
+that reply may still record that the approval expired or was cancelled. A 409
+means the approval is no longer requested, its conditional append lost, or the
+append was rejected. A 503 can mean the server refused before an append or that
+the append outcome is not known. Check status sends one GET only.
+
+Transcript tool records come from `agent.command_ran` and `agent.turn_failed`.
+Restricted turns do not report commands. Team turns sent from the workspace run
+restricted, so they show at most the “Reply failed” line. Tool details show the
+recorded result, UTC time and event reference, then say that the location, account
+and attempt history are not available. The transcript does not show raw arguments,
+tokens or full tool output. A stored review that fails the review schema makes the
+GET return 400. The browser shows the read-failed state and pauses decisions.
+Chromium captures use intercepted fixtures and do not prove a live governed turn.
 
 ## Desktop view
 

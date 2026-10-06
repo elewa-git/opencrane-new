@@ -1,0 +1,10 @@
+<button type="button" class="approval-terminal" [attr.data-approval]="card().approvalId"
+  [attr.data-state]="card().state" (click)="openDetails($event)">
+  <oc-icon class="terminal-glyph" [attr.data-state]="card().state" [name]="glyph()" />
+  <span class="terminal-copy">
+    <strong>{{ words() }}</strong>
+    <span class="terminal-action">{{ action() }}</span>
+    <span class="terminal-detail">{{ detail() }}</span>
+  </span>
+  <oc-icon class="terminal-chevron" name="chevron" />
+</button>

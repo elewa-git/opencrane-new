@@ -1,0 +1,11 @@
+.header-title { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.header-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+.header-status.waiting-status { display: inline-flex; align-items: center; gap: 6px; color: #8a5d1f; }
+.header-status.waiting-status .approval-dot { width: 8px; height: 8px; border-radius: 50%; background: #f47920; }
+
+@media (max-width: 700px) {
+  .header-title { flex: 1; flex-direction: column; align-items: flex-start; justify-content: center; gap: 1px; }
+  .header-main { width: 100%; flex: none; }
+  .header-main h1 { flex: 1; }
+  .header-title .header-status { margin-left: 0; font-size: 10px; line-height: 12px; }
+}

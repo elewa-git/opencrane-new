@@ -81,27 +81,35 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
       await page.evaluate('document.fonts.ready');
       assert(await requested.evaluate(element => element.scrollWidth <= element.clientWidth), 'Card fits viewport');
       await page.screenshot({ path: `docs/process/p3-2-live/requested-${width}.png`, fullPage: true });
-      const decide = async (button: 'Approve' | 'Deny', label: string) => {
-        const terminal = page.getByRole('region', { name: label, exact: true });
+      const decide = async (button: 'Approve' | 'Deny', label: RegExp | string) => {
+        const terminal = page.getByRole('button', { name: label });
         for (let attempt = 1; attempt <= 3; attempt++) {
-          await requested.getByRole('button', { name: button, exact: true }).click();
+          const decisionPattern = button === 'Approve' ? /^Approve:/ : /^Deny:/;
+          await requested.getByRole('button', { name: decisionPattern }).click();
           const check = requested.getByRole('button', { name: 'Check status', exact: true });
-          await until(async () => await terminal.isVisible() || await check.isVisible());
+          const notRecorded = requested.getByText(
+            'Your decision was not recorded. You can decide again.', { exact: true },
+          );
+          await until(async () => await terminal.isVisible() || await check.isVisible()
+            || await notRecorded.isVisible());
           if (await terminal.isVisible()) return attempt;
-          // A refused or ambiguous submission needs server confirmation before another click.
+          if (await notRecorded.isVisible()) continue;
           for (let read = 1; read <= 3; read++) {
             await check.click();
             try {
-              await terminal.or(requested.getByText('Failed — safe to retry', { exact: true })).waitFor({ timeout: 15_000 });
+              await terminal.or(requested.getByText('The server shows this approval still open'))
+                .waitFor({ timeout: 15_000 });
               break;
-            } catch (error) { if (!(error instanceof errors.TimeoutError) || read === 3) throw error; }
+            } catch (error) {
+              if (!(error instanceof errors.TimeoutError) || read === 3) throw error;
+            }
           }
           if (await terminal.isVisible()) return attempt;
         }
         throw new Error(`${button} did not complete after three submissions with status checks`);
       };
-      const approveAttempts = await decide('Approve', '✓ Approved');
-      const approved = page.getByRole('region', { name: '✓ Approved', exact: true });
+      const approveAttempts = await decide('Approve', /Approved by you.*not used yet/);
+      const approved = page.getByRole('button', { name: /Approved by you.*not used yet/ });
       await page.reload(); await approved.waitFor();
       await page.screenshot({ path: `docs/process/p3-2-live/approved-${width}.png`, fullPage: true });
       assert.equal(await call('Approved journey note'), 200);
@@ -112,17 +120,17 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
       const audit = await history(store, `decision-${recorded.at(-1)!.requestId}`, input.silo);
       assert(audit.some(row => row.event.type === 'decision.recorded' && (row.event.data as { outcome: string }).outcome === 'allow'));
       await page.reload();
-      await page.getByRole('region', { name: 'Outcome unknown · approval used', exact: true }).waitFor();
+      await page.getByRole('button', { name: /Approved by you.*used once/ }).waitFor();
       await page.screenshot({ path: `docs/process/p3-2-live/used-${width}.png`, fullPage: true });
       assert.equal(await call('Denied journey note'), 403);
       await requested.waitFor();
-      const denyAttempts = await decide('Deny', 'Denied');
+      const denyAttempts = await decide('Deny', /Denied by you/);
       assert.equal(await call('Denied journey note'), 403, 'Denied call refused');
       assert.equal((await calls()).length, before + 1, 'Denial has zero upstream effects');
       await page.reload();
-      await page.getByRole('region', { name: 'Denied', exact: true }).waitFor();
-      await page.getByRole('region', { name: 'Outcome unknown · approval used', exact: true }).waitFor();
-      assert.equal(await page.getByRole('button', { name: 'Approve', exact: true }).count(), 0);
+      await page.getByRole('button', { name: /Denied by you/ }).waitFor();
+      await page.getByRole('button', { name: /Approved by you.*used once/ }).waitFor();
+      assert.equal(await page.getByRole('button', { name: /^Approve:/ }).count(), 0);
       await page.screenshot({ path: `docs/process/p3-2-live/denied-${width}.png`, fullPage: true });
       const approvals = await history(store, `approval-${approvalId}`, input.silo);
       assert.equal(approvals.filter(row => row.event.type === 'approval.used' &&

@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>chat and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>chat, approval cards and tool details"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
@@ -20,7 +20,7 @@ flowchart LR
 
 - Shows sign-in and the first-owner claim page.
 - Lets people start conversations, send messages and stop a reply.
-- Shows tool approval requests, uploaded files and the assistant's desktop.
+- Shows reviewed tool approvals, sanitised tool details, uploaded files and the assistant's desktop.
 - Gives admins pages for People & groups at `/org/people` and
   `/org/people/groups/<id>`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
