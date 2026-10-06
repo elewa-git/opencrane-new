@@ -3,7 +3,8 @@ import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
-import { until } from "./services.ts";
+import { createStore, memberAuthorisation } from "../src/index.ts";
+import { openfga, until } from "./services.ts";
 
 const exec = promisify(execFile);
 const module = new URL("./services.ts", import.meta.url).href;
@@ -16,6 +17,29 @@ function startFixture() {
     `import { openfga } from ${JSON.stringify(module)}; await openfga(); process.stdout.write("ready\\n"); setInterval(() => {}, 1000);`,
   ]);
 }
+
+function openTcpSocketCount() {
+  const resources = process.getActiveResourcesInfo();
+  return resources.filter((resource) => resource === "TCPSocketWrap").length;
+}
+
+it("reuses one OpenFGA connection for repeated authorisation checks", async () => {
+  const fga = await openfga();
+  try {
+    const binding = await createStore(fga.apiUrl, "connection-reuse");
+    const socketsBefore = openTcpSocketCount();
+    for (let index = 0; index < 300; index++) {
+      const authorisation = memberAuthorisation({ ...binding });
+      const result = await authorisation.check("alice", "member");
+      expect(result.status).toBe("ok");
+    }
+    const openedSockets = openTcpSocketCount() - socketsBefore;
+
+    expect(openedSockets).toBeLessThanOrEqual(5);
+  } finally {
+    await fga.close();
+  }
+}, 120_000);
 
 it("removes its OpenFGA container when the fixture process is interrupted", async () => {
   const child = startFixture();
