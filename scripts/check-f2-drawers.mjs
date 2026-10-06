@@ -335,13 +335,11 @@ async function checkActivityJump(page) {
   const row = rows.first();
   await row.click();
   await panel.waitFor({ state: 'hidden' });
-  const summaries = page.locator('.tool-line summary');
-  const summary = summaries.first();
-  assert(await summary.evaluate(focused), 'Activity focuses its transcript entry after dismissal');
-  const tools = page.locator('.tool-line');
-  const tool = tools.first();
-  const expanded = await tool.getAttribute('open');
-  assert.notEqual(expanded, null, 'Activity expands its transcript entry');
+  const tool = page.locator('.tool-line').first();
+  assert(await tool.evaluate(focused), 'Activity focuses its transcript entry after dismissal');
+  const message = tool.locator('xpath=ancestor::article[contains(@class, "message")]');
+  assert(await message.evaluate(node => node.classList.contains('highlighted')),
+    'Activity marks the transcript message it focused');
 }
 
 async function checkResize(page, motion) {

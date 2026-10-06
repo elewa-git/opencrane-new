@@ -30,6 +30,7 @@ export class ChatSession implements OnDestroy {
   readonly busy = signal(false);
   readonly error = signal('');
   readonly announcement = signal('');
+  readonly reconnectedAt = signal('');
   readonly denied = signal(false);
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
@@ -52,6 +53,7 @@ export class ChatSession implements OnDestroy {
   private position = 0;
   /** Bumped on session switch or destroy; mismatched async work belongs to an old session. */
   private revision = 0;
+  private sawReconnecting = false;
   private pending: { id: string; conversationId: string; text: string } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
 
@@ -72,9 +74,7 @@ export class ChatSession implements OnDestroy {
       const timer = setInterval(() => this.waitSeconds.update(value => value + 1), 1000);
       onCleanup(() => clearInterval(timer));
     });
-    effect(() => {
-      if (this.socket.state() === 'open') this.socket.send({ type: 'subscribe', topic: 'conversation', conversationId: this.selected(), since: this.position, generation: this.generation });
-    });
+    effect(this.subscribeWhenConnected.bind(this));
   }
   async load(): Promise<void> {
     this.error.set('');
@@ -96,6 +96,8 @@ export class ChatSession implements OnDestroy {
   async select(id: string): Promise<void> {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     const revision = ++this.revision;
+    this.sawReconnecting = false;
+    this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
@@ -108,13 +110,16 @@ export class ChatSession implements OnDestroy {
   }
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
-    ++this.revision; this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
+    ++this.revision; this.sawReconnecting = false; this.reconnectedAt.set('');
+    this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
     history.replaceState({}, '', '/workspace');
   }
   async send(text: string): Promise<boolean> {
     if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending() || this.denied() || !this.assistantId()) return false;
+    this.reconnectedAt.set('');
+    this.announcement.set('');
     if (!this.pending) this.pending = { id: crypto.randomUUID(), conversationId: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()), text: text.trim() };
     this.busy.set(true); this.error.set('');
     try {
@@ -147,6 +152,22 @@ export class ChatSession implements OnDestroy {
   private async list(): Promise<void> {
     const value = chatListSchema.parse(await this.request('/api/conversations'));
     this.conversations.set(value.rows.filter(row => row.mode === 'agent_session').map(row => ({ ...row, title: row.title ? sessionSlug(row.title) : 'New session' })));
+  }
+  private subscribeWhenConnected(): void {
+    const state = this.socket.state();
+    if (state === 'reconnecting') {
+      this.sawReconnecting = true;
+    }
+    if (state !== 'open') {
+      return;
+    }
+    this.socket.send({
+      type: 'subscribe',
+      topic: 'conversation',
+      conversationId: this.selected(),
+      since: this.position,
+      generation: this.generation,
+    });
   }
   private async deliver(): Promise<void> {
     const command = this.pending!;
@@ -206,6 +227,12 @@ export class ChatSession implements OnDestroy {
     if (message.type === 'refused') { this.fail(new ReadFailure(403)); return; }
     if (message.type === 'resync') {
       this.position = 0; this.generation = message.generation; this.rows.set([]); this.socket.connect(); return;
+    }
+    if (message.type === 'ready' && this.sawReconnecting) {
+      this.sawReconnecting = false;
+      const connectedAt = new Date().toISOString();
+      this.reconnectedAt.set(connectedAt);
+      this.announcement.set(`Reconnected at ${shortTime(connectedAt)}. You're caught up.`);
     }
     this.generation = message.generation;
     if (message.computerState) this.computer.set(message.computerState);

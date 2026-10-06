@@ -1,5 +1,5 @@
 import type { ChatRow } from '@opencrane/protocol';
-import { rejectedScreenshotIds, transcript, uploadedFile } from './chat-state';
+import { rejectedScreenshotIds, toolKind, transcript, uploadedFile } from './chat-state';
 
 it('keeps created and modified workspace files but omits deleted files', () => {
   const rows = [
@@ -50,4 +50,11 @@ it('ignores rejected ordinary uploads and validates screenshot facts and size', 
     } } as ChatRow;
   expect(uploadedFile(uploaded)).toMatchObject({ size: 421888,
     screenshot: { width: 1440, height: 900 } });
+});
+
+it('names transcript tool records without adding fields to them', () => {
+  expect(toolKind({ id: 'failed', label: 'Reply failed', detail: 'Run interrupted',
+    failed: true, time: '2026-10-04T10:00:00Z' })).toBe('Agent run');
+  expect(toolKind({ id: 'command', label: 'Command completed', detail: 'Exit code 0',
+    failed: false, time: '2026-10-04T10:00:00Z' })).toBe('Computer command');
 });
