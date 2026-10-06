@@ -5,6 +5,8 @@
 ## Unreleased
 
 - A waiting assistant reply no longer makes the server reread finished chats. A turn the computer has not yet started is sent again until it starts.
+- Open chat pages repeat permission checks only when access records change. Idle pages no longer call the permissions service every 100 ms, and member removal still closes their connection within two seconds.
+
 - Group members' private chats with a shared assistant now use a temporary Codex process with tools off and files in a memory volume. Swap can still write private text to disk. Isolation is not yet proven on a live computer; memory features stay off until it is. The chat screens, including the choice of a memory-free turn with tools, come next (#96).
 - Shared prompt files and skill instructions are now off in personal and memory-free Codex turns as well as private turns.
 - Model and tool calls keep working when another chat, a file upload or someone else's access changes during the access check. Revocations, turn stops and approval invalidation still refuse calls, and unsent spending holds release at zero cents.
@@ -55,6 +57,8 @@
   while turns start and end. Team writes and new team turns check access after
   reading history with its own ten-second budget. Personal posts and turn admission
   keep their existing behaviour. Idle chat sockets reread access when it changes.
+- Idle chat sockets check only membership changes that can remove read access. A role
+  change keeps the chat open while permissions catch up. Participants are set at creation.
 - A payer or membership refusal fails only that shared turn. The bridge stays open
   for other members. Stop remains available after payer removal.
 - Team screenshots return 403 before capturing the shared desktop. Assistant lists

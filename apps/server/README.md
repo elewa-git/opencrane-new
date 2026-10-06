@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in and chats"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chats and access checks"]
   server -.->|uses| libs["libs/*<br/>shared code"]
   server -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -52,6 +52,9 @@ not yet proven on a live computer; memory features stay off until it is.
    reply is pending. It sends a waiting turn again until the computer accepts it and
    sends it again after reconnecting. It retries short service outages so pending
    messages can still reach the computer.
+   Open chat pages repeat permission checks when membership or other access records
+   change. Removing a member closes their chat connection within two seconds, even
+   during a slow history read.
 4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and thread, while everyone shares one disk and
    browser profile. A member who loses spending access can still read and stop their work.

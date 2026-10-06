@@ -1,6 +1,7 @@
 // Regression probes for turn activity during reads and long agent sessions.
 import { setTimeout as delay } from 'node:timers/promises';
 import { once } from 'node:events';
+import { createServer, request, type IncomingMessage, type ServerResponse } from 'node:http';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { WebSocket } from 'ws';
@@ -23,13 +24,51 @@ import { conversationKeys } from '../src/chat/keys.ts';
 import { chatCommand } from '../src/chat/commands.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
-async function fixture() {
+async function countedOpenFga(apiUrl: string) {
+  let checks = 0;
+  const proxy = createServer(forward);
+  function forward(incoming: IncomingMessage, outgoing: ServerResponse) {
+    if (incoming.url?.endsWith('/check')) checks++;
+    const target = new URL(incoming.url ?? '/', apiUrl);
+    const options = { method: incoming.method, headers: incoming.headers };
+    const forwarded = request(target, options, respond);
+    function respond(response: IncomingMessage) {
+      outgoing.writeHead(response.statusCode ?? 502, response.headers);
+      response.pipe(outgoing);
+    }
+    function fail() {
+      outgoing.writeHead(502);
+      outgoing.end();
+    }
+    forwarded.on('error', fail);
+    incoming.pipe(forwarded);
+  }
+  proxy.listen(0, '127.0.0.1');
+  await once(proxy, 'listening');
+  const address = proxy.address();
+  if (!address || typeof address === 'string') throw new Error('No proxy port');
+  function checkCount() {
+    return checks;
+  }
+  async function close() {
+    function stop(resolve: () => void) {
+      proxy.close(resolve);
+      proxy.closeAllConnections();
+    }
+    await new Promise<void>(stop);
+  }
+  return { apiUrl: `http://127.0.0.1:${address.port}`, checkCount, close };
+}
+
+async function fixture(countChecks = false) {
   const nats = await natsFixture();
   const dbs = await databases();
   const fga = await openfga();
+  let fgaProxy: Awaited<ReturnType<typeof countedOpenFga>> | undefined;
+  if (countChecks) fgaProxy = await countedOpenFga(fga.apiUrl);
   const directory = await mkdtemp(`${tmpdir()}/review-p4-4-`);
   const config = { ...testAuthConfig(), expectedOrgId: 'org-test' };
-  const binding = await createStore(fga.apiUrl, 'test');
+  const binding = await createStore(fgaProxy?.apiUrl ?? fga.apiUrl, 'test');
   const db = pgDb(dbs.queue);
   const auth = memberAuthorisation(binding);
   const keys = conversationKeys(directory);
@@ -89,13 +128,294 @@ async function fixture() {
     await feed.close();
     await nats.close();
     await dbs.close();
+    await fgaProxy?.close();
     await fga.close();
     await rm(directory, { recursive: true, force: true });
   }
-  return { app, nats, db, keys, runner, headers, append, agentSession, close, config, options, feed };
+  return { app, nats, db, keys, runner, headers, append, agentSession, close,
+    config, options, feed, fgaProxy, auth };
 }
 
 type Fixture = Awaited<ReturnType<typeof fixture>>;
+
+async function openChatSocket(context: Fixture, conversationId: string) {
+  const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
+  const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
+  const realtime = { feed: context.feed, binding: context.options.binding,
+    chat: context.options };
+  const wss = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
+  const connectionOptions = { headers: context.headers() };
+  const socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connectionOptions);
+  function receive(raw: Buffer) {
+    received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
+  }
+  socket.on('message', receive);
+  await once(socket, 'open');
+  const subscription = { type: 'subscribe', topic: 'conversation', conversationId, since: 0 };
+  socket.send(JSON.stringify(subscription));
+  function ready() {
+    return received.some(isReady);
+  }
+  await until(ready);
+  async function close() {
+    socket.terminate();
+    function closeServer(resolve: () => void) {
+      wss.close(resolve);
+    }
+    await new Promise<void>(closeServer);
+  }
+  return { socket, received, close };
+}
+
+function countStoreReads(context: Fixture) {
+  const originalReadStream = context.options.store.readStream.bind(context.options.store);
+  const originalHead = context.options.store.head.bind(context.options.store);
+  const counts = { readStream: 0, head: 0 };
+  async function* readStream(subject: string, fromSequence?: number, deadline?: number) {
+    counts.readStream++;
+    yield* originalReadStream(subject, fromSequence, deadline);
+  }
+  async function head(subject?: string, deadline?: number) {
+    counts.head++;
+    return originalHead(subject, deadline);
+  }
+  context.options.store.readStream = readStream;
+  context.options.store.head = head;
+  return counts;
+}
+
+it('refuses participant changes on a direct chat', directChatRejectsParticipants, 120_000);
+
+async function directChatRejectsParticipants() {
+  const context = await fixture();
+  try {
+    context.keys.provision('test', 'direct');
+    await context.append('conversation-direct', 'conversation.created', {
+      conversationId: 'direct', createdBy: 'alice', mode: 'direct',
+      participantIds: ['alice', 'bob'],
+    });
+    await context.runner.run(conversations);
+    await context.append('conversation-direct', 'participant.removed', {
+      conversationId: 'direct', participantId: 'alice', removedBy: 'bob',
+    }, false);
+    await expect(context.runner.run(conversations)).rejects.toThrow(
+      'Direct conversation is immutable');
+  } finally {
+    await context.close();
+  }
+}
+
+it('does not read conversation streams while a direct chat socket is idle',
+  idleDirectChatSocket, 120_000);
+
+async function idleDirectChatSocket() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    context.keys.provision('test', 'direct-idle');
+    await context.append('conversation-direct-idle', 'conversation.created', {
+      conversationId: 'direct-idle', createdBy: 'alice', mode: 'direct',
+      participantIds: ['alice', 'bob'],
+    });
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'direct-idle');
+    const storeReads = countStoreReads(context);
+    await delay(2000);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    expect(storeReads.readStream).toBe(0);
+    expect(storeReads.head).toBeLessThanOrEqual(30);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
+it('keeps a team chat idle without OpenFGA calls and closes it when team access is removed',
+  teamSocketAccessChanges, 120_000);
+
+async function teamSocketAccessChanges() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    await context.append('team-sales', 'team.created', {
+      teamId: 'sales', name: 'Sales', createdBy: 'alice',
+    });
+    await context.append('team-sales', 'team.member_added', {
+      teamId: 'sales', memberId: 'alice', addedBy: 'alice',
+    });
+    await context.append('assistant-shared', 'assistant.created', {
+      assistantId: 'shared', kind: 'team', ownerId: 'sales', payingGroupId: 'sales',
+    });
+    context.keys.provision('test', 'team-chat');
+    await context.append('conversation-team-chat', 'conversation.created', {
+      conversationId: 'team-chat', createdBy: 'alice', mode: 'agent_session',
+      assistantId: 'shared', payingGroupId: 'sales',
+    });
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'team-chat');
+    const initialChecks = context.fgaProxy!.checkCount();
+    const storeReads = countStoreReads(context);
+    await delay(2000);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
+    expect(storeReads.readStream).toBe(0);
+    expect(storeReads.head).toBeLessThanOrEqual(50);
+    const roleChange = await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    }, false);
+    await delay(300);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    await context.auth.handler.handle(roleChange, context.db);
+    function roleChangeChecked() {
+      return context.fgaProxy!.checkCount() >= initialChecks + 2;
+    }
+    await until(roleChangeChecked);
+    await delay(300);
+    expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    const closed = once(client.socket, 'close');
+    const started = performance.now();
+    await context.append('team-sales', 'team.member_removed', {
+      teamId: 'sales', memberId: 'alice', removedBy: 'bob',
+    }, false);
+    function expired(): never {
+      throw new Error('Team removal did not close the socket within two seconds');
+    }
+    const timeout = delay(2000).then(expired);
+    const closure: unknown[] = await Promise.race([closed, timeout]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+    expect(client.received.some(isRefused)).toBe(true);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
+it('keeps an idle chat socket cheap and rechecks access when membership changes',
+  idleSocketChecks, 120_000);
+
+async function idleSocketChecks() {
+  const context = await fixture(true);
+  const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
+  let socket: WebSocket | undefined;
+  let wss: ReturnType<typeof attachWebSocketServer> | undefined;
+  try {
+    await context.agentSession('agent');
+    const address = await context.app.listen({ host: '127.0.0.1', port: 0 });
+    const realtime = { feed: context.feed, binding: context.options.binding,
+      chat: context.options };
+    wss = attachWebSocketServer(context.app.server, context.app.log, context.config, realtime);
+    const connectionOptions = { headers: context.headers() };
+    socket = new WebSocket(`${address.replace('http:', 'ws:')}/ws`, connectionOptions);
+    function receive(raw: Buffer) {
+      received.push(chatMessageSchema.parse(JSON.parse(raw.toString()) as unknown));
+    }
+    socket.on('message', receive);
+    await once(socket, 'open');
+    const subscription = { type: 'subscribe', topic: 'conversation',
+      conversationId: 'agent', since: 0 };
+    const checksBeforeSubscription = context.fgaProxy!.checkCount();
+    socket.send(JSON.stringify(subscription));
+    function ready() {
+      return received.some(isReady);
+    }
+    await until(ready);
+    const initialChecks = context.fgaProxy!.checkCount();
+    expect(initialChecks - checksBeforeSubscription).toBe(2);
+    const storeReads = countStoreReads(context);
+    await delay(2000);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    expect(context.fgaProxy!.checkCount() - initialChecks).toBe(0);
+    expect(storeReads.readStream).toBe(0);
+    expect(storeReads.head).toBeLessThanOrEqual(30);
+
+    await context.append('conversation-agent', 'agent.turn_started', {
+      conversationId: 'agent', turnId: 'agent-turn', assistantId: 'assistant',
+    }, false);
+    await context.runner.run(conversations);
+    await delay(300);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
+
+    await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    }, false);
+    function accessRechecked() {
+      return context.fgaProxy!.checkCount() >= initialChecks + 2;
+    }
+    await until(accessRechecked);
+    await delay(300);
+    expect(socket.readyState).toBe(WebSocket.OPEN);
+    expect(context.fgaProxy!.checkCount()).toBe(initialChecks + 2);
+
+    const closed = once(socket, 'close');
+    const started = performance.now();
+    await context.append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'bob',
+    }, false);
+    function expired(): never {
+      throw new Error('Socket removal took more than two seconds');
+    }
+    const timeout = delay(2000).then(expired);
+    const closure: unknown[] = await Promise.race([closed, timeout]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+    expect(received.some(isRefused)).toBe(true);
+    expect(context.fgaProxy!.checkCount()).toBe(initialChecks + 2);
+  } finally {
+    socket?.terminate();
+    if (wss) {
+      function closeServer(resolve: () => void) {
+        wss!.close(resolve);
+      }
+      await new Promise<void>(closeServer);
+    }
+    await context.close();
+  }
+}
+
+it('catches a member removal written after the access positions were read',
+  removalDuringAccessCheck, 120_000);
+
+async function removalDuringAccessCheck() {
+  const context = await fixture();
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    await context.agentSession('injected-removal');
+    client = await openChatSocket(context, 'injected-removal');
+    const realHead = context.options.store.head.bind(context.options.store);
+    let armed = true;
+    const injected = Promise.withResolvers<void>();
+    async function head(subject?: string, deadline?: number) {
+      const position = await realHead(subject, deadline);
+      if (armed && subject === 'member-alice') {
+        armed = false;
+        await context.append('member-alice', 'member.removed', {
+          memberId: 'alice', removedBy: 'bob',
+        }, false);
+        injected.resolve();
+      }
+      return position;
+    }
+    context.options.store.head = head;
+    const closed = once(client.socket, 'close');
+    const started = performance.now();
+    await injected.promise;
+    const closure = await Promise.race([
+      closed,
+      delay(2000).then(expireRemovalCheck),
+    ]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
+function expireRemovalCheck(): never {
+  throw new Error('Member removal during the access check did not close the socket');
+}
 
 function pauseFirstHistoryRead(fixture: Fixture) {
   const originalDb = fixture.options.db;

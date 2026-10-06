@@ -1,6 +1,7 @@
 import type { WebSocket } from 'ws';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
-import { chatAccess, recordedChatMode, isChatRefused } from './access.ts';
+import { AuthorityApplying } from '@opencrane/models';
+import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows, type ChatOptions } from './routes.ts';
 
 type Mode = 'agent_session' | 'direct';
@@ -14,8 +15,10 @@ interface Subscription {
   generation: number;
   running: boolean;
   ready: boolean;
+  accessPassed: boolean;
   computerState: string;
   checking: boolean;
+  access?: Awaited<ReturnType<typeof chatSubscriptionAccess>>;
 }
 
 export function conversationSubscription(
@@ -33,7 +36,7 @@ export function conversationSubscription(
     const state: Subscription = {
       socket, session, config, options, conversationId, position: since,
       generation: requestedGeneration ?? 0, running: false, checking: false,
-      ready: false, computerState: '',
+      ready: false, accessPassed: false, computerState: '',
     };
     function poll() {
       void drain(state);
@@ -59,15 +62,23 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
   }
   const watchdog = setTimeout(expire, 1500);
   try {
-    const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-    if (!validSession(session, config, options) || !memberId) {
+    if (!validSession(session, config, options)) {
       refuse(state);
       return;
     }
-    const request = { memberId, conversationId, deadline };
-    const access = await chatAccess(options, request);
-    return recordedChatMode(access);
+    if (!state.access) {
+      const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+      if (!memberId) {
+        refuse(state);
+        return;
+      }
+      state.access = await chatSubscriptionAccess(options, memberId, conversationId, deadline);
+    }
+    const mode = await state.access(deadline);
+    state.accessPassed = true;
+    return mode;
   } catch (error) {
+    if (state.accessPassed && error instanceof AuthorityApplying) return;
     if (isChatRefused(error)) refuse(state);
     else socket.close(1013);
     return;
