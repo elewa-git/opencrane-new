@@ -17,7 +17,7 @@ export async function uploadComputer() {
   let disk: string | undefined;
   let container: string | undefined, relay: Awaited<ReturnType<typeof tcpProxy>> | undefined;
   const docker = async (...args: string[]) => (await exec('docker', args, { timeout: 120_000 })).stdout.trim();
-  const close = async () => { if (container) await docker('rm', '-f', container); if (disk) await docker('volume', 'rm', disk); await relay?.close(); stub.kill(); await rm(capture, { recursive: true, force: true }); };
+  const close = async () => { if (container) await docker('rm', '-f', '-v', container); if (disk) await docker('volume', 'rm', disk); await relay?.close(); stub.kill(); await rm(capture, { recursive: true, force: true }); };
   try {
     disk = await docker('volume', 'create', `upload-disk-${randomUUID()}`);
     await until(() => /Stub ready (\d+)/u.test(output));
@@ -40,7 +40,7 @@ export async function uploadComputer() {
       if (!response.ok) throw new Error('Test credential refused');
     };
     await credentials();
-    return { get url() { return url; }, close, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', container!); await start(); await credentials(); },
+    return { get url() { return url; }, close, requests: () => readFile(`${capture}/requests.jsonl`, 'utf8'), async restart() { await docker('rm', '-f', '-v', container!); await start(); await credentials(); },
       exec: (...args: string[]) => docker('exec', container!, ...args),
       pause: () => docker('pause', container!), resume: () => docker('unpause', container!),
       read: (path: string) => docker('exec', container!, 'cat', path),

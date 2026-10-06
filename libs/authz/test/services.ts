@@ -20,7 +20,7 @@ function reapContainers() {
       "inspect", "--format", '{{ index .Config.Labels "opencrane.test.process" }}', id,
     ], { encoding: "utf8", timeout: 10_000 });
     if (inspected.status === 0 && inspected.stdout.trim() === fixtureLabelValue) {
-      spawnSync("docker", ["rm", "-f", id], { stdio: "ignore", timeout: 10_000 });
+      spawnSync("docker", ["rm", "-f", "-v", id], { stdio: "ignore", timeout: 10_000 });
     }
   }
 }
@@ -104,7 +104,7 @@ export async function openfga(postgres?: string) {
   try {
     await ready();
   } catch (error) {
-    await docker("rm", "-f", container);
+    await docker("rm", "-f", "-v", container);
     containers.delete(container);
     await proxy.close();
     await relay?.close();
@@ -125,7 +125,7 @@ export async function openfga(postgres?: string) {
       await ready();
     },
     async close() {
-      await docker("rm", "-f", container);
+      await docker("rm", "-f", "-v", container);
       containers.delete(container);
       await proxy.close();
       await relay?.close();
@@ -194,7 +194,7 @@ export async function databases() {
       }
       await admin.end();
       if (container) {
-        await docker("rm", "-f", container);
+        await docker("rm", "-f", "-v", container);
         containers.delete(container);
       }
     },
