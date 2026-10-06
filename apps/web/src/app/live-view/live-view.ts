@@ -121,7 +121,7 @@ export class LiveView implements OnDestroy, OnChanges {
   }
 
   private clearPicture() {
-    // Disconnect events from the old viewer must not close its replacement or the session.
+    // Ignore the old viewer's disconnect so it cannot close the new viewer or session.
     this.viewerToken++;
     const viewer = this.viewer;
     this.viewer = undefined;
@@ -251,7 +251,7 @@ export class LiveView implements OnDestroy, OnChanges {
   }
 
   private updateViewState() {
-    // connect may follow a stalled browser timer; compare the clock again before showing pixels.
+    // Check the clock again before showing pixels because a browser timer may have stalled.
     this.locallyExpired ||= performance.now() >= this.leaseDeadline;
     if (!this.connected) {
       this.state.set('Connecting');

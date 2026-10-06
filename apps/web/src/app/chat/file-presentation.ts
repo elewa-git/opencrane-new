@@ -10,7 +10,7 @@ export function fileType(path: string): string {
 }
 
 export function fileUrl(conversationId: string, path: string, preview = false): string {
-  // The route only serves uploaded files and screenshots that the viewer can read.
+  // Show only uploaded files and screenshots this person can read.
   const conversation = encodeURIComponent(conversationId);
   const encodedPath = encodeURIComponent(path);
   const previewQuery = preview ? '&preview=true' : '';

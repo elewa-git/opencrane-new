@@ -16,7 +16,7 @@ function closeDialog(this: HTMLDialogElement): void {
 function mockDialog(root: HTMLElement): HTMLDialogElement {
   const dialog = root.querySelector('dialog');
   if (!dialog) throw new Error('Missing dialog');
-  // jsdom has no modal implementation. Chromium verifies focus, inertness and Tab.
+  // jsdom has no modal dialogs. Chromium checks focus, blocked background input and Tab.
   const methods = { showModal, close: closeDialog };
   Object.assign(dialog, methods);
   return dialog;
@@ -54,7 +54,7 @@ async function checkCloseLifecycle(
   await fixture.whenStable();
   fixture.componentRef.setInput('open', true);
   await fixture.whenStable();
-  // Browsers queue close events: an old event must not close the newly opened panel.
+  // A queued close event from the old panel must not close the new panel.
   dialog.dispatchEvent(new Event('close'));
   expect(dialog.open).toBe(true);
   expect(closed).toHaveBeenCalledTimes(1);

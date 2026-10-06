@@ -1,5 +1,5 @@
 import { z } from 'zod';
-/** Browser transport only: retry retains the file and key until the server acknowledges it. */
+/** Keep the file and request key for a retry until the server confirms the upload. */
 export function sendUpload(conversation: string, file: File, key: string, progress: (percent: number) => void) {
   const xhr = new XMLHttpRequest();
   const completed = new Promise<string>((resolve, reject) => {

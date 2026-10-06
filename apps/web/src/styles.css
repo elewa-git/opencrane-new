@@ -6,7 +6,7 @@
 @import '@fontsource/dm-sans/700.css';
 @import '@fontsource/dm-mono/500.css';
 
-/* Shared foundation values follow the v2 handoff. Existing consumers keep their token names. */
+/* Keep existing token names while using the shared foundation values. */
 
 .file-type {
 	display: inline-flex;
@@ -70,7 +70,7 @@
 	--oc-border-default: #d9dfe0;
 	--oc-border-strong: #b8c0c1;
 	--oc-accent: #0db5cc;
-	/* Onboarding frames 1a and 1d. */
+	/* Colours used by the sign-in and invitation screens. */
 	--oc-signin-primary: #2f8d9a;
 	--oc-signin-primary-hover: #3a9dab;
 	--oc-signin-primary-shadow: #23707b;
@@ -93,7 +93,7 @@
 	--oc-brand-crane-body: #277f9b;
 	--oc-brand-crane-fold: #3aa8c2;
 	--oc-brand-crane-beak: #f2811f;
-	/* Organisation administration handoff values not present in the copied theme. */
+	/* Add organisation settings colours that the shared theme does not define. */
 	--oc-ink-secondary: #4f575a;
 	--oc-ink-admin-muted: #4f575a;
 	--oc-ink-placeholder: #8a9294;
@@ -114,7 +114,7 @@
 	--oc-warning-border: #f1d8b8;
 	--oc-info-notice: #f2fbfc;
 
-	/* Primary palette and button mapping (opencrane-preset.ts) */
+	/* Match the main colours to the button colours in opencrane-preset.ts. */
 	--oc-primary-50: #e9fbfe;
 	--oc-primary-100: #cff6fb;
 	--oc-primary-200: #9eeaf4;
@@ -275,7 +275,7 @@ select {
 	scrollbar-width: none;
 }
 
-/* Isolation keeps the texture above the main background and behind its content. */
+/* Keep the texture above the background and behind the page content. */
 .oc-rice {
 	position: relative;
 	isolation: isolate;
@@ -329,5 +329,5 @@ select {
 	.oc-crease-complete { animation: none; transform: scaleX(1); }
 }
 
-/* Native modality blocks input; this also keeps scrolling behind every open overlay still. */
+/* Keep the page behind an open dialog from scrolling while the dialog is active. */
 html:has(dialog[open]), body:has(dialog[open]) { overflow: hidden; }

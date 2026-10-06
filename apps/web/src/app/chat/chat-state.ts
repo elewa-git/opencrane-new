@@ -57,7 +57,7 @@ export function toolKind(record: ToolActivityRecord): string {
   return 'Computer command';
 }
 
-/** Rendering is a replay of server rows. Stop freezes only its turn, at the recorded position. */
+/** Render saved server rows. Stop freezes that turn at the saved event position. */
 export function transcript(rows: ChatRow[], memberId: string): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();
   const seen = new Set<string>();
@@ -106,7 +106,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
     turn.executionMode = row.data['executionMode'] === 'restricted' ? 'restricted' : 'memory_free';
     return;
   }
-  // Keep lost output incomplete whether its marker arrives before or after completion.
+  // Keep output marked as lost incomplete, even if its marker arrives after completion.
   if (row.type === 'agent.output_lost') {
     lostOutput.add(row.data.turnId ?? '');
     turn.state = 'lost';

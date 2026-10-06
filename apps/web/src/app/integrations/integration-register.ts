@@ -106,7 +106,7 @@ export class IntegrationRegister implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // Abort the read so a removed page cannot accept protected rows from an old reply.
+    // Stop the read so a removed page cannot use protected rows from an old reply.
     this.request.abort();
   }
 

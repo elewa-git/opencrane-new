@@ -1,4 +1,4 @@
 import './csp';
 
-// Load app code after Zod is set to avoid generated functions under the browser CSP.
+// Set Zod before loading the app because the browser blocks generated functions.
 import('./startup').catch((error) => console.error(error));

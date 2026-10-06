@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 import type { SharedStateKind } from '@opencrane/protocol';
 
-// These aliases are presentation only; persisted events and HTTP states keep their names.
+// Change labels for the screen only. Saved events and HTTP states keep their names.
 export type PresentationState = SharedStateKind | 'applying' | 'confirmed' | 'paused'
   | 'blocked' | 'refused' | 'removed' | 'waiting' | 'scheduled' | 'expired';
 
@@ -49,7 +49,7 @@ export class SharedState {
   readonly timestamp = input<string>();
   readonly changeReference = input<string>();
   readonly hideReferenceFromAnnouncement = input(false);
-  // Repeated rows stay silent. The operation's container normally owns announcements.
+  // Do not announce repeated rows. The surrounding operation usually announces them.
   readonly announce = input(false);
   readonly action = output<void>();
 
@@ -79,7 +79,7 @@ export class SharedState {
       return undefined;
     }
     const label = this.actionLabel();
-    // Only an established safe failure can offer to repeat the operation.
+    // Offer a retry only when the failure is known to be safe to repeat.
     if (label && REPEAT_ACTION_WORDS.test(label)) return undefined;
     return label;
   }

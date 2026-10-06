@@ -65,7 +65,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
   protected readonly monthPeriod = monthPeriod;
   protected readonly loadedTime = loadedTime;
 
-  // Ignore late replies after a refusal, even when the request cannot be stopped in time.
+  // Ignore late replies after access is refused, even if the request keeps running.
   private accessGeneration = 0;
   private budgetReadController?: AbortController;
   private effectsReadController?: AbortController;
@@ -106,7 +106,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
     }
     this.acceptBudget(result.value);
     this.budgetLoadedAt.set(new Date().toISOString());
-    // A successful new read gives the owner fresh values after an uncertain save.
+    // Read again after an unclear save so the owner can see the saved values.
     if (this.budgetSaveState() === 'unknown') {
       this.budgetSaveState.set('idle');
       this.changeReference.set('');
@@ -167,7 +167,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
 
   protected async checkPageStatus(permitId: string): Promise<void> {
     if (!this.pendingResolutions.get(permitId)?.noticeShown) return;
-    // Checking an uncertain command only reads its permit. It never repeats the POST.
+    // Check the saved command status with a read; never send the change again.
     await this.readDetail(permitId, false);
   }
 
@@ -205,7 +205,7 @@ export class SpendingScreen implements OnInit, OnDestroy {
     this.pendingResolutions.set(permitId, pending);
     const generation = this.accessGeneration;
     const controller = pending.controller;
-    // Keep the POST alive when the drawer closes so its reply can still be checked.
+    // Let the save finish after the drawer closes so its reply can still be checked.
     this.drawerSubmitState.set('saving');
     this.drawerMessage.set(sendingResolutionMessage(pending.command.commandId));
     try {

@@ -21,14 +21,14 @@ export class DogEar {
   host: { class: 'oc-crease', '[class.oc-crease-complete]': 'animateCompletion()' },
 })
 export class Crease implements OnChanges {
-  // False is a divider; a new false-to-true completion draws the line once.
+  // A new completion draws one line. A false value separates completed sections.
   readonly ocCrease = input(false);
   protected readonly animateCompletion = signal(false);
 
   ngOnChanges(changes: SimpleChanges): void {
     const completion = changes['ocCrease'];
     if (!completion) return;
-    // Restored completed content is static; only a new completion draws the crease.
+    // Do not animate restored content. Draw the crease only for a new completion.
     const isNewCompletion = !completion.firstChange
       && completion.previousValue === false && completion.currentValue === true;
     this.animateCompletion.set(isNewCompletion);

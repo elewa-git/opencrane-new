@@ -36,7 +36,7 @@ describe('sign-in handoff', () => {
   it('cancels from the focused native button and never redirects afterwards', () => {
     const { cancel } = create();
     vi.advanceTimersByTime(2400);
-    // Native keyboard activation generates click; the live browser tests Enter and Space.
+    // Browsers turn Enter and Space into clicks; live browser checks both keys.
     cancel.click();
     vi.advanceTimersByTime(10_000);
     expect(navigate).toHaveBeenCalledExactlyOnceWith('/');

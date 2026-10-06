@@ -243,7 +243,7 @@ describe('MCP register', () => {
       .toContain('Owner or Admin role');
     expect(root(fixture).querySelector('.access-state')?.textContent)
       .toContain('Ask an Owner or');
-    // Guidance only: there is no request-access flow yet, so no button.
+    // Show guidance without a button because people cannot request access yet.
     expect(root(fixture).querySelector('.access-state button')).toBeNull();
     expect(root(fixture).querySelector('.register')).toBeNull();
     expect(root(fixture).querySelector('a[href="/org/integrations/new"]')).toBeNull();
@@ -253,7 +253,7 @@ describe('MCP register', () => {
   it('clears protected rows after an authority refusal and offers no way to reload them', async () => {
     const fixture = await create();
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3));
-    // A refused response can have no JSON body; authority still clears the previous read.
+    // A refused response may have no JSON body. Still clear the earlier protected data.
     const refusedWithoutBody = new Response(null, { status: 403 });
     fetchSpy.mockResolvedValueOnce(refusedWithoutBody);
     button(root(fixture), 'Refresh list').click();

@@ -1,5 +1,5 @@
-// File-view interaction adapted from Open Terminal b58442aa8599755525878f917b621e0145b0e8f7 (MIT).
-// Original/preview fallback and workspace root: see docs/design/chat/OPEN-TERMINAL-LICENSE.txt.
+// File-view interaction follows Open Terminal; commit b58442aa8599755525878f917b621e0145b0e8f7 (MIT).
+// See docs/design/chat/OPEN-TERMINAL-LICENSE.txt for its preview fallback and workspace root.
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
 import {

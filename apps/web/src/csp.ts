@@ -1,4 +1,4 @@
 import { config } from 'zod';
 
-// Run before schema imports: strict CSP forbids optional validator code generation.
+// Set this before importing schemas because the browser blocks generated validator code.
 config({ jitless: true });

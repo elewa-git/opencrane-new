@@ -60,11 +60,11 @@ export class ChatSession implements OnDestroy {
   private uploadFile: { file: File; key: string; conversation: string } | undefined;
   private transfer: ReturnType<typeof sendUpload> | undefined;
   private creationId = '';
-  /** Feed generation; a change invalidates event positions and clears the old transcript. */
+  /** Change this when the feed changes; old event positions and transcript then become invalid. */
   private generation = 0;
-  /** Latest event position applied; subscriptions resume after this cursor. */
+  /** Latest event position applied; resume the feed after this position. */
   private position = 0;
-  /** Bumped on session switch or destroy; mismatched async work belongs to an old session. */
+  /** Change on session switch or destroy so old async work can be ignored. */
   private revision = 0;
   private sawReconnecting = false;
   private reconnectCount = 0;
@@ -263,7 +263,7 @@ export class ChatSession implements OnDestroy {
         id: command.id, text: command.text, executionMode: command.executionMode,
       });
     }
-    // An optimistic row uses the same id as the durable event and is replaced on catch-up.
+    // Give the temporary row the saved event's id so the later event replaces it.
     this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, { id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(), data: { text: command.text, authorId: this.memberId() } }]);
     this.pending = undefined;
     this.socket.connect();
@@ -284,7 +284,7 @@ export class ChatSession implements OnDestroy {
     if (!this.selected()) {
       await this.request('/api/conversations', { id: `create-${conversationId}`,
         conversationId, assistantId: this.selectedAssistantId(), mode: 'agent_session' });
-      // Creation's access projection is asynchronous. Read until visible, with a fixed deadline.
+      // Access details appear after creation. Read again until they appear or the deadline passes.
       for (let attempt = 0; attempt < 50; attempt++) {
         await this.list();
         if (this.conversations().some(row => row.conversationId === conversationId)) break;
@@ -347,7 +347,7 @@ export class ChatSession implements OnDestroy {
       const parsed = chatRowSchema.safeParse(message.row);
       if (parsed.success) {
         const added = this.apply(parsed.data);
-        // Old notices stay quiet when the workspace reloads.
+        // Do not announce old notices when the workspace reloads.
         if (added && isBudgetStop(parsed.data)) {
           this.announcement.set(`Spending limit reached · ${shortTime(parsed.data.time)}`);
         }
@@ -392,7 +392,8 @@ export class ChatSession implements OnDestroy {
   private async request(path: string, body?: unknown): Promise<unknown> {
     for (let attempt = 0; ; attempt++) {
       const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
-      // Streamed reports can win the append race. Retry the same command id, at most twice.
+      // A streamed report can make this append return 409. Retry the same id up to twice
+      // so an already saved command cannot be saved again.
       if (body && response.status === 409 && attempt < 2) continue;
       if (response.status !== 200) throw new ReadFailure(response.status);
       return response.json() as Promise<unknown>;

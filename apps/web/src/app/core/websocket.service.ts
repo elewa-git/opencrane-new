@@ -1,8 +1,6 @@
-// A signals-based WebSocket client for the /ws endpoint. It speaks the
-// typed protocol from @opencrane/protocol (the same schemas the server
-// uses, not a copy) and reconnects on its own when the connection drops,
-// waiting longer each time with a random jitter so a server restart is not
-// met with every client retrying at once.
+// Use the shared protocol schemas for messages on /ws. Reconnect after a
+// dropped connection with longer, varied waits so clients do not all retry
+// at once after a server restart.
 import { Injectable, type OnDestroy, computed, inject, signal } from '@angular/core';
 import { Subject } from 'rxjs';
 import { serverMessageSchema, type ClientMessage, type ServerMessage } from '@opencrane/protocol';
@@ -17,15 +15,15 @@ import {
 
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed';
 
-// The first retry waits about this long, then each further retry's cap
-// doubles, up to the maximum below.
+// Start with this wait, then double the maximum wait after each retry until
+// it reaches the limit below.
 const BASE_DELAY_MS = 500;
 const MAX_DELAY_MS = 30_000;
 
-// How many past messages the service keeps around for a late subscriber.
+// Keep this many recent messages for subscribers that join late.
 const MAX_HISTORY = 20;
 
-/** The /ws address on the page's own host: wss on an https page (ws would be blocked as mixed content), ws otherwise. */
+  /** Use the page's host, with wss for HTTPS pages and ws for HTTP pages. */
 function socketUrlFor(location: PageLocation): string {
   const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
   return `${scheme}://${location.host}/ws`;
@@ -46,12 +44,12 @@ export class WebSocketService implements OnDestroy {
   private readonly historySignal = signal<ServerMessage[]>([]);
   private readonly lastMessageSignal = signal<ServerMessage | undefined>(undefined);
   private readonly incoming = new Subject<ServerMessage>();
-  /** Every validated envelope, including bursts within one Angular render. */
+  /** Include each checked message, even when several arrive in one render. */
   readonly received = this.incoming.asObservable();
 
   /** The current connection state, for a status indicator. */
   readonly state = this.stateSignal.asReadonly();
-  /** The last {@link MAX_HISTORY} messages received, oldest first. */
+  /** The most recent messages, in the order they arrived. */
   readonly messages = this.historySignal.asReadonly();
   /** The most recently received message, if any. */
   readonly lastMessage = this.lastMessageSignal.asReadonly();
@@ -92,9 +90,8 @@ export class WebSocketService implements OnDestroy {
     this.disconnect();
   }
 
-  // Detaches the handlers before closing. A real browser fires `close` on
-  // its own later turn, and that late event must not touch whatever socket
-  // replaced this one.
+  // Remove the handlers before closing. Browsers fire `close` later, and that
+  // old event must not affect a replacement socket.
   private closeSocket(reason: string): void {
     const socket = this.socket;
     this.socket = undefined;
@@ -112,7 +109,7 @@ export class WebSocketService implements OnDestroy {
     const socket = this.createSocket(url);
     this.socket = socket;
 
-    // Each handler ignores events once this is no longer the current socket.
+    // Ignore events from a socket after another socket has replaced it.
     socket.onopen = () => {
       if (this.socket !== socket) {
         return;
@@ -133,8 +130,8 @@ export class WebSocketService implements OnDestroy {
       if (this.socket !== socket) {
         return;
       }
-      // A WebSocket always fires close right after error, so the retry is
-      // scheduled there; this is only somewhere to see the failure logged.
+      // The socket fires close after error, and that handler schedules retries.
+      // Log the error here without scheduling another retry.
       console.warn('[websocket] connection error');
     };
 
@@ -163,9 +160,8 @@ export class WebSocketService implements OnDestroy {
     }, delay);
   }
 
-  // Full jitter backoff (as described in the AWS backoff writeup): a
-  // random wait between 0 and the exponential cap. This spreads retries
-  // out instead of every client waiting the same length of time.
+  // Choose a random wait up to the growing limit. This spreads retries out
+  // instead of making every client wait the same length of time.
   private nextDelay(): number {
     const cap = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 2 ** this.reconnectAttempt);
     return Math.round(this.random() * cap);

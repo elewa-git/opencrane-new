@@ -1,4 +1,4 @@
-/* Grid/message patterns adapted from OpenCrane 1 10abd0ef6; dimensions and surfaces from Workspace Live. */
+/* Copied from OpenCrane 1; commit 10abd0ef6. */
 :host { display: block; height: 100dvh; overflow: hidden; }
 .workspace { height: 100%; display: grid; grid-template-rows: minmax(0,1fr); grid-template-columns: 236px minmax(0,1fr); overflow: hidden; color: #2b3133; background: #eceff0; }
 .workspace.panel-open { grid-template-columns: 236px minmax(0,1fr) 300px; }

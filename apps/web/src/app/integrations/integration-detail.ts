@@ -44,7 +44,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // Abort both reads so a removed page cannot accept protected data from an old reply.
+    // Stop both reads so a removed page cannot use protected data from an old reply.
     this.request.abort();
   }
 
