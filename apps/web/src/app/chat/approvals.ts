@@ -174,7 +174,7 @@ export class ApprovalCards implements OnDestroy {
       return;
     }
     this.setState(card.approvalId, { kind: 'recorded', decision });
-    // Keep the accepted decision visible if the status read fails or still shows an old view.
+    // Keep the accepted decision visible if the status read fails or shows an older state.
     this.announced.set(this.presentation.statusMessage(card));
     await this.read(conversationId, undefined, 'decision');
     this.announceDecision(this.findCard(card.approvalId));
@@ -221,7 +221,7 @@ export class ApprovalCards implements OnDestroy {
 
   private applyUnknownDecision(card: ApprovalCard, decision: Decision): void {
     if (this.findCard(card.approvalId)?.state !== 'requested') return;
-    // Keep an uncertain decision blocked until a person checks its status.
+    // Keep the decision locked until someone checks whether the server saved it.
     this.setState(card.approvalId, { kind: 'unknown', decision });
     this.announced.set('Decision not confirmed');
   }

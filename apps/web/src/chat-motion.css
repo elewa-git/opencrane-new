@@ -1,4 +1,4 @@
-/* Motion definitions from the owner’s chat handoff. One entrance chain is capped at 1.74s. */
+/* Keep chat entrance motion within 1.74 seconds. */
   @keyframes oc-unroll { from { transform: perspective(1400px) rotate3d(1,-.6,0,46deg) translate(20px,-20px); opacity: 0; } 55% { opacity: 1; } to { transform: perspective(1400px) rotate3d(1,-.6,0,0deg) translate(0,0); opacity: 1; } }
   @keyframes oc-deal { from { transform: perspective(1400px) rotateX(12deg) translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
   @keyframes oc-flutter { 0%, 100% { opacity: .18; transform: rotateY(0); } 50% { opacity: .55; transform: rotateY(38deg); } }

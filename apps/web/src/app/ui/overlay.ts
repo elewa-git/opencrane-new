@@ -46,7 +46,7 @@ function focusPageHeading(): void {
 }
 
 function restoreFocus(opener: HTMLElement | undefined): void {
-  // Prefer the actual opener, then the remaining parent modal, then the page heading.
+  // Return focus to the opener, or the parent dialog, or the page heading if needed.
   if (focusOpener(opener)) return;
   if (focusParentTitle()) return;
   focusPageHeading();
@@ -56,7 +56,7 @@ function dismissChildren(dialog: HTMLDialogElement): void {
   const candidates = dialog.querySelectorAll<HTMLDialogElement>('dialog[open]');
   const children = Array.from(candidates);
   children.reverse();
-  // Children must release modality and their connections before the parent disappears.
+  // Close child dialogs and connections before removing the parent.
   for (const child of children) {
     const overlay = overlays.get(child);
     if (overlay) overlay.dismiss();
@@ -95,7 +95,7 @@ export class Overlay implements OnDestroy {
   }
 
   protected cancel(event: Event): void {
-    // Escape follows the same dismissal path as Back, without submitting a form.
+    // Handle Escape like Back, without submitting a form.
     event.preventDefault();
     this.dismiss();
   }
@@ -144,7 +144,7 @@ export class Overlay implements OnDestroy {
       const active = document.activeElement;
       this.opener = this.returnFocusTo();
       if (!this.opener && active instanceof HTMLElement) this.opener = active;
-      // Native modal dialogs make the background inert, including nested overlays.
+      // A native dialog blocks background input, including input in nested overlays.
       dialog.showModal();
       this.shown = true;
       this.focusTitle();

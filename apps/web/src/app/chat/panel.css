@@ -1,4 +1,4 @@
-/* Session panel shell adapted from OpenCrane 1 10abd0ef6, shared by the desktop column and phone dialog. */
+/* Copied from OpenCrane 1; commit 10abd0ef6. */
 .session-panel { border-left: 1px solid #d9dfe0; background: #f3f6f6; overflow: auto; animation: oc-hinge 420ms var(--oc-ease-fold); transform-origin: right; }
 .panel-header { height: 56px; display: flex; align-items: center; gap: 8px; padding: 0 18px; border-bottom: 1px solid #dee3e4; font-size: 11px; color: #616a6c; }
 .panel-header>span:last-child { margin-left: auto; }.scope { font-size: 6px; line-height: 3px; color: #c9d0d1; }.scope b { color: #16191a; }

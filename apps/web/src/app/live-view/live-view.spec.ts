@@ -23,7 +23,7 @@ it('clears the desktop and explains a refused view without offering control', as
   await fixture.whenStable();
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
-  // jsdom has no native dialog methods; Chromium covers focus and Escape.
+  // jsdom has no dialog methods; Chromium checks focus and Escape handling.
   Object.assign(element.querySelector('dialog')!, { showModal: vi.fn(), close: vi.fn() });
   element.querySelector<HTMLButtonElement>('button')!.click();
   await fixture.whenStable();
@@ -45,7 +45,7 @@ it('cancels an old conversation view when the session panel switches conversatio
   await fixture.whenStable();
   const element: unknown = fixture.nativeElement;
   if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
-  // jsdom has no native dialog methods; Chromium covers focus and Escape.
+  // jsdom has no dialog methods; Chromium checks focus and Escape handling.
   Object.assign(element.querySelector('dialog')!, { showModal: vi.fn(), close: vi.fn() });
   element.querySelector<HTMLButtonElement>('button')!.click();
   await fixture.whenStable();

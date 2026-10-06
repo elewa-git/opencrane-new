@@ -1,4 +1,4 @@
-<!-- Adapted from OpenCrane 1 10abd0ef6. Layout follows Workspace Live and the compact frame. -->
+<!-- Copied from OpenCrane 1; commit 10abd0ef6. -->
 <form class="composer" [class.disabled]="!!reason()" (submit)="$event.preventDefault(); submit()">
   <input #upload type="file" hidden aria-label="Choose a file" (change)="choose($event)">
   @if (reason()) {

@@ -71,7 +71,7 @@ export class LeaseChannel {
   }
 
   localDeadline(notice: Extract<LeaseNotice, { lease: 'valid' }>) {
-    // A notice waiting behind pixels cannot move an already observed clock offset later.
+    // Keep the first measured clock difference when a notice arrives after the image.
     this.offset = Math.min(this.offset, performance.now() - notice.at);
     return notice.until + this.offset;
   }
@@ -88,7 +88,7 @@ export class LeaseChannel {
       return;
     }
     if (!this.handshakeComplete) this.handshake.push(event.data.slice(0));
-    // Detached viewers have no backbuffer into which paused pixels could accumulate.
+    // A detached viewer has no image buffer where paused updates could build up.
     if (this.port?.readyState !== WebSocket.CLOSED) this.port?.onmessage?.(event);
   }
 
@@ -146,8 +146,8 @@ class ViewerPort implements RawChannel {
   }
 
   close() {
-    // noVNC arms its disconnect timer after close() returns. The component then
-    // calls detachViewer(), whose close event clears that timer synchronously.
+    // noVNC starts this timer after close() returns. The component then calls
+    // detachViewer(), and its close event clears the timer straight away.
     this.detached = true;
   }
 

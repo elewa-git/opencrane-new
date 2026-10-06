@@ -77,7 +77,7 @@ it.each(['button', 'form'])('submits an edited refused address through the %s',
     if (submission === 'button') {
       discover.click();
     } else {
-      // jsdom does not submit forms on Enter; dispatch the browser's submit event.
+      // jsdom does not submit a form on Enter, so send the submit event directly.
       const correctedSubmission = new Event('submit', submissionOptions);
       form.dispatchEvent(correctedSubmission);
     }
@@ -110,7 +110,7 @@ it('shows a readable fallback for a loaded file with no rendered preview', async
   const fixture = TestBed.createComponent(FilePreview);
   fixture.componentRef.setInput('path', 'report.bin');
   fixture.componentRef.setInput('conversationId', 'chat');
-  // Install jsdom's missing dialog methods before the after-render loader runs.
+  // Add the dialog methods jsdom lacks before the loader runs after rendering.
   fixture.detectChanges();
   installDialogMethods(fixture);
   await fixture.whenStable();

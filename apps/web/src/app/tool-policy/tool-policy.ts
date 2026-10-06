@@ -70,7 +70,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    // Ignore replies from requests that outlive this page.
+    // Ignore replies that arrive after this page has closed.
     this.requestVersion += 1;
     this.abortController?.abort();
   }
@@ -437,7 +437,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   private focusStatusRegion(): void {
-    // Let Angular remove the pressed button before moving focus to the status message.
+    // Remove the pressed button before moving focus to the status message.
     globalThis.setTimeout(this.focusToolStatusRegion, 0);
   }
 
@@ -505,7 +505,7 @@ export class ToolPolicyScreen implements OnInit, OnDestroy {
   }
 
   private isCurrent(version: number): boolean {
-    // Ignore a reply when a newer request or an access refusal replaced it.
+    // Ignore a reply if a newer request started or access was refused.
     return this.requestVersion === version && this.state() !== 'access';
   }
 

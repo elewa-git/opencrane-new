@@ -1,9 +1,7 @@
 import { type ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 
-// No zone.js, no provideZonelessChangeDetection() call needed: Angular 21
-// runs zoneless by default once zone.js is absent from the build (it is —
-// nothing here imports it), so change detection is driven entirely by
-// signals.
+// Angular 21 uses signals to update the screen because this build does not
+// include zone.js. No extra change-detection provider is needed.
 export const appConfig: ApplicationConfig = {
   providers: [provideBrowserGlobalErrorListeners()],
 };

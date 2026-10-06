@@ -1,4 +1,4 @@
-/* Adapted from OpenCrane 1 10abd0ef6; handoff sizing and toolbar. */
+/* Copied from OpenCrane 1; commit 10abd0ef6. */
 :host { display: block; min-width: 0; }
 .composer { position: relative; background: #fff; border: 1px solid #d9dfe0; border-radius: 12px; box-shadow: 0 3px 14px #16191a08; padding: 12px 14px 8px; }
 .composer:focus-within { border-color: #9fdde8; }

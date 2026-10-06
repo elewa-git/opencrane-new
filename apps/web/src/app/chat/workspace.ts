@@ -1,5 +1,5 @@
-// Workspace grid and message structure adapted from OpenCrane 1 10abd0ef6 (AGPL-3.0-or-later).
-// Presentation follows the owner's Workspace Live; all state comes from the P2 bridge.
+// Workspace grid and messages follow OpenCrane 1, commit 10abd0ef6 (AGPL-3.0-or-later).
+// The bridge supplies all state; the screen follows the owner's Workspace Live design.
 import { HingeDrawer } from '../ui/hinge-drawer';
 import { NavigationMenu } from '../ui/navigation-menu';
 import { PaperSurface, DogEar } from '../ui/paper';
@@ -164,7 +164,7 @@ export class Workspace implements OnInit {
     if (document.querySelector('dialog[open]')) {
       return;
     }
-    // Wait for the selected session to render an enabled composer outside the modal.
+    // Wait until the selected session shows an enabled composer outside the dialog.
     this.focusComposerAfterNavigation = false;
     this.focusComposer();
   }
@@ -183,7 +183,7 @@ export class Workspace implements OnInit {
   }
   protected jumpToTool(id: string): void {
     if (this.panelOverlay()) {
-      // The transcript stays inert until the drawer has actually closed.
+      // Keep the transcript inactive until the drawer has closed.
       this.pendingToolFocus = id;
       this.panelOverlay.set(false);
     } else {
@@ -393,7 +393,7 @@ export class Workspace implements OnInit {
   }
   protected duration(start: string, end: string): number { return Math.max(0, Math.round((Date.parse(end) - Date.parse(start)) / 1000)); }
   protected shortcut(event: KeyboardEvent): void {
-    // A modal owns its keyboard until it closes; workspace shortcuts must not steal focus.
+    // Keep workspace shortcuts out of a dialog while it handles the keyboard.
     if (document.querySelector('dialog[open]')) return;
     if ((event.metaKey || event.ctrlKey) && (event.key.toLowerCase() === 'n' || (event.shiftKey && event.key.toLowerCase() === 'a'))) { event.preventDefault(); this.newSession(); }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); this.searchDialog()?.nativeElement.showModal(); }
@@ -468,12 +468,12 @@ export class Workspace implements OnInit {
   protected canDownload(path: string): boolean {
     if (this.isClosedConversation()) return false;
     const file = this.chat.attachments().find(attachment => attachment.path === path);
-    // Ordinary uploads are private to their uploader; screenshots are readable by session members.
+    // Only the uploader can read regular uploads. Session members can read screenshots.
     return !!file && (!!file.screenshot || file.uploadedBy === this.chat.memberId());
   }
   protected canDownloadPreview(path: string): boolean {
     if (this.isClosedConversation()) return false;
-    // The preview keeps its existing download for files made by this conversation's owner.
+    // Keep downloads available for files made by this conversation's owner.
     return this.canDownload(path) || this.isOwnedAgentFile(path);
   }
   private isOwnedAgentFile(path: string): boolean {

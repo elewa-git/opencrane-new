@@ -51,7 +51,7 @@ export function checkedState(
 }
 
 export function keepStateAfterRead(state: LocalState): boolean {
-  // Keep writes and uncertain decisions locked while the server view catches up.
+  // Keep changes locked until the server confirms the latest decision status.
   return state.kind === 'submitting' || state.kind === 'recorded'
     || state.kind === 'unknown' || state.kind === 'step_up'
     || state.kind === 'still_open' || state.kind === 'conflict_still_open';

@@ -5,7 +5,7 @@ export function approvalReadSignal(
   purpose: ApprovalReadPurpose,
 ): AbortSignal {
   const timeout = AbortSignal.timeout(15000);
-  // End a stuck poll so it cannot block every poll after a laptop wakes.
+  // Stop a stuck check so it cannot block later checks when a laptop wakes.
   if (purpose === 'poll' && abortSignal) {
     return AbortSignal.any([abortSignal, timeout]);
   }
