@@ -119,7 +119,6 @@ export class ChatSession implements OnDestroy {
   async send(text: string): Promise<boolean> {
     if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending() || this.denied() || !this.assistantId()) return false;
     this.reconnectedAt.set('');
-    this.announcement.set('');
     if (!this.pending) this.pending = { id: crypto.randomUUID(), conversationId: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()), text: text.trim() };
     this.busy.set(true); this.error.set('');
     try {

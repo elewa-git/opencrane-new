@@ -644,21 +644,41 @@ it('announces one recovery after the socket reconnects and its conversation is r
   expect(capture.fixture.componentInstance['chat'].announcement()).toMatch(/Reconnected at/);
   expect(document.activeElement).toBe(field);
 
+  capture.fixture.componentInstance['chat'].announcement.set('');
+  capture.fixture.componentInstance['chat'].reconnectedAt.set('');
   capture.socket.onmessage?.(new MessageEvent('message', {
     data: JSON.stringify({ ...readyMessage, computerState: 'starting' }),
   }));
   await capture.fixture.whenStable();
   capture.fixture.detectChanges();
-  expect(capture.root.querySelectorAll('.reconnected-line')).toHaveLength(1);
+  expect(capture.root.querySelector('.reconnected-line')).toBeNull();
+  expect(capture.fixture.componentInstance['chat'].reconnectedAt()).toBe('');
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
+});
 
+it('does not announce a reconnect that started in the conversation being left', async () => {
+  const capture = await createCaptureWorkspace();
+  capture.socket.onopen?.(new Event('open'));
   capture.socket.onclose?.(new CloseEvent('close'));
+  await capture.fixture.whenStable();
+
   await capture.fixture.componentInstance['chat'].select('other');
   capture.socket.onopen?.(new Event('open'));
   capture.socket.onmessage?.(new MessageEvent('message', {
-    data: JSON.stringify({ ...readyMessage, conversationId: 'other' }),
+    data: JSON.stringify({
+      version: 1,
+      topic: 'conversation',
+      conversationId: 'other',
+      type: 'ready',
+      position: 0,
+      generation: 1,
+      computerState: 'ready',
+    }),
   }));
   await capture.fixture.whenStable();
   capture.fixture.detectChanges();
+
   expect(capture.root.querySelector('.reconnected-line')).toBeNull();
-  expect(capture.fixture.componentInstance['chat'].announcement()).not.toMatch(/Reconnected at/);
+  expect(capture.fixture.componentInstance['chat'].reconnectedAt()).toBe('');
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
 });

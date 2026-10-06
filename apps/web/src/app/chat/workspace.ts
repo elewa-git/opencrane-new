@@ -73,6 +73,7 @@ export class Workspace implements OnInit {
     record: ToolActivityRecord;
     opener: HTMLElement;
   } | undefined>(undefined);
+  protected readonly highlightedToolId = signal('');
   protected readonly panelOverlay = signal(false);
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
   protected readonly screenshots = computed(this.screenshotFiles.bind(this));
@@ -147,22 +148,23 @@ export class Workspace implements OnInit {
     if (targetId) this.focusTool(targetId);
   }
   private focusTool(id: string): void {
-    this.clearToolHighlights();
+    this.highlightedToolId.set(id);
     const target = document.getElementById('tool-' + id);
     if (!(target instanceof HTMLButtonElement)) return;
     target.scrollIntoView({ block: 'center' });
     target.focus();
-    const message = target.closest('article.message');
-    if (message) message.classList.add('highlighted');
   }
   protected clearToolHighlight(event: MouseEvent): void {
     const target = event.target;
     if (target instanceof Element && target.closest('.tool-line, .activity-row')) return;
-    this.clearToolHighlights();
+    this.highlightedToolId.set('');
   }
-  private clearToolHighlights(): void {
-    const highlightedMessages = document.querySelectorAll('.message.highlighted');
-    for (const message of highlightedMessages) message.classList.remove('highlighted');
+  protected isHighlighted(tools: ToolActivityRecord[]): boolean {
+    const highlightedToolId = this.highlightedToolId();
+    for (const tool of tools) {
+      if (tool.id === highlightedToolId) return true;
+    }
+    return false;
   }
   protected openToolDetails(record: ToolActivityRecord, opener: HTMLElement): void {
     this.toolDetails.set({ record, opener });

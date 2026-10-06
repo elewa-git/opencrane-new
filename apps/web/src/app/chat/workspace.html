@@ -54,7 +54,13 @@
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
-          <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
+          <article class="message"
+            [class.own]="turn.author === 'you'"
+            [class.agent-turn]="turn.author === 'agent'"
+            [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected"
+            [class.unroll]="turn.author === 'agent' && !!turn.text"
+            [class.highlighted]="isHighlighted(turn.tools)"
+            [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
             @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true"><oc-icon [name]="turn.author === 'agent' ? 'agent' : 'open'" /></span> }
             <div class="message-content">
               @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}@if (turn.endedAt) { · {{ duration(turn.time, turn.endedAt) }}s }</time></header> }
