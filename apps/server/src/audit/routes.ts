@@ -23,22 +23,24 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
       const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u).optional() }).parse(request.params);
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) return reply.code(403).send({ status: 'refused' });
+      if (!conversationId && !(await hasOrganisationHistoryRole(options, memberId))) {
+        return reply.code(403).send({ status: 'refused' });
+      }
       const result = await readAudit(options.db, options.silo, { ...filters,
         ...(conversationId ? { conversationId, requesterId: memberId } : {}) });
       const allowed = await access(options, memberId, conversationId);
       if (!allowed) return reply.code(403).send({ status: 'refused' });
       return reply.send(result);
     } catch (error) {
-      if (error instanceof Error &&
-          (error.message === 'Authority changed' ||
-           error.message === 'Authority snapshot expired')) {
-        return reply.code(403).send({ status: 'refused' });
-      }
       if (error instanceof z.ZodError) return reply.code(400).send({ status: 'invalid_request' });
       request.log.error({ operation: 'audit.read' }, 'Audit history unavailable');
       return reply.code(503).send({ status: 'unavailable' });
     }
   });
+}
+async function hasOrganisationHistoryRole(options: AuditOptions, memberId: string) {
+  const membership = await currentMembership(options.store, options.silo, memberId);
+  return ['owner', 'admin'].includes(membership.role);
 }
 async function access(options: AuditOptions, memberId: string, conversationId?: string) {
   const auth = memberAuthorisation(options.binding);
