@@ -1,0 +1,117 @@
+<nav aria-label="Breadcrumb"><a href="/org/people">People &amp; groups</a> ›
+  <a [href]="'/org/people/groups/' + groupId()">{{ group()?.name ?? 'Group' }}</a> ›
+  <span aria-current="page">Shared assistant</span>
+</nav>
+<header class="admin-heading">
+  <div><h1 #heading tabindex="-1">Create a shared assistant</h1>
+    <p>Choose what the assistant can use and which group pays for its work.</p></div>
+  <button class="button secondary" type="button" (click)="refresh()"
+    [disabled]="loading() || sending() || statusReading()">Refresh</button>
+</header>
+<div class="status-line" role="status" aria-live="polite">
+  @if (loading()) { <oc-shared-state kind="checking" message="Loading assistant choices…" /> }
+  @else if (accessChanged()) {
+    <oc-shared-state kind="access_changed" message="Your access changed"
+      [detail]="notice()" [showAction]="false" />
+  } @else if (failed()) {
+    <oc-shared-state kind="failed" [message]="notice()"
+      detail="Reading again is safe. No assistant was created by this read."
+      [safeToRetry]="true" actionLabel="Try again" (action)="refresh()" />
+  } @else if (notice()) {
+    <p>{{ notice() }}</p>
+    @if (pending()) {
+      <p>Reference: <code>{{ reference() }}</code></p>
+      <button type="button" class="button secondary" (click)="checkStatus()"
+        #statusButton [disabled]="statusReading()">
+        {{ statusReading() ? 'Checking…' : 'Check status' }}</button>
+    }
+  }
+</div>
+@if (!loading() && !failed() && !accessChanged() && group()) {
+  <section class="paper-card assistant-form">
+    <label for="assistant-name">Name <strong>Required</strong></label>
+    <input id="assistant-name" maxlength="200" required [value]="name()"
+      aria-describedby="assistant-error" (input)="setName($event)" [disabled]="isBlocked()" />
+    <dl class="facts">
+      <div><dt>Owner group</dt><dd>{{ group()!.name }}</dd></div>
+      <div><dt>Paying group</dt><dd>
+        <label class="sr-only" for="assistant-payer">Paying group</label>
+        <select id="assistant-payer" [value]="selectedPayer()" (change)="setPayer($event)"
+          [disabled]="isBlocked()">
+          @for (payer of groups(); track payer.groupId) {
+            <option [value]="payer.groupId">{{ payer.name }}</option>
+          }
+        </select>
+      </dd></div>
+      <div><dt>Computer</dt><dd>One computer is created for this assistant.</dd></div>
+    </dl>
+    <fieldset [disabled]="isBlocked()">
+      <legend>Explicit grants</legend>
+      @if (grantChoices().length === 0) {
+        <p>This group has no active model or tool grants to choose from.</p>
+      } @else if (selectedGrants().length === 0) {
+        <p>No grants are selected. Select at least one grant to continue.</p>
+      }
+      @for (grant of grantChoices(); track grant.resourceType + grant.resourceId) {
+        <label class="grant-choice">
+          <input type="checkbox" [checked]="isGrantSelected(grant)"
+            (change)="toggleGrant($event, grant)" />
+          {{ grant.resourceType === 'model' ? 'Model' : 'Tool server' }}
+          <code>{{ grant.resourceId }}</code>
+        </label>
+      }
+      @if (models().length > 0) {
+        <p class="field-note">Model choices come from the current model list and this group’s grants.</p>
+      }
+    </fieldset>
+    <aside class="rule-note"><strong>Before you create it</strong>
+      <p>Selected tools and models also become available to people through this owner group.</p>
+      <p>Memory is not included. Desktop access is granted separately. Group membership alone
+        does not grant desktop access.</p>
+    </aside>
+    @if (error()) { <p id="assistant-error" class="field-error">{{ error() }}</p> }
+    <button #reviewButton class="button primary" type="button" (click)="openReview()"
+      [disabled]="isBlocked() || !name().trim() || selectedGrants().length === 0">
+      Review assistant</button>
+  </section>
+}
+@if (!loading() && hasAssistants()) {
+  <section class="assistant-list" aria-labelledby="existing-assistants-heading">
+    <h2 id="existing-assistants-heading">Assistants owned by {{ group()?.name }}</h2>
+    @for (assistant of assistants(); track assistant.assistantId) {
+      @if (rowForGroup(assistant)) {
+        <article class="paper-card assistant-row">
+          <div><h3>{{ assistant.name ?? assistant.assistantId }}</h3>
+            <p>{{ stateLabel(assistant) }} · {{ assistant.busy ? 'Busy' : 'Not busy' }}</p>
+            <small>Paying group: {{ payerName(assistant.payingGroupId) }}</small>
+          </div>
+          <span>{{ assistant.status }}</span>
+        </article>
+      }
+    }
+  </section>
+}
+<oc-modal-sheet [open]="reviewOpen()" title="Review shared assistant" backLabel="Cancel"
+  [returnFocusTo]="reviewButton()?.nativeElement" (closed)="cancelReview()">
+  @if (group()) {
+    <h2>{{ name().trim() }}</h2>
+    <dl class="facts">
+      <div><dt>Owner group</dt><dd>{{ group()!.name }}</dd></div>
+      <div><dt>Paying group</dt><dd>{{ payerName(selectedPayer()) }}</dd></div>
+      <div><dt>Fixed payer</dt><dd>New work in each private session stays with this paying group.</dd></div>
+    </dl>
+    <h3>Selected access</h3>
+    <ul>@for (grant of selectedGrants(); track grant.resourceType + grant.resourceId) {
+      <li>{{ grant.resourceType === 'model' ? 'Model' : 'Tool server' }}
+        <code>{{ grant.resourceId }}</code></li>
+    }</ul>
+    <p>The owner group also gets person-level use of each selected resource.</p>
+    <p>People need membership in both the owner group and paying group to start work.</p>
+    <p>The assistant can use these resources. This does not give members desktop access.</p>
+  }
+  <div overlayFooter class="overlay-actions">
+    <button class="button primary" type="button" [disabled]="sending() || pending() !== undefined"
+      (click)="create()">{{ sending() ? 'Creating…' : 'Create assistant' }}</button>
+    <button class="button secondary" type="button" (click)="cancelReview()">Cancel</button>
+  </div>
+</oc-modal-sheet>
