@@ -65,7 +65,8 @@ const histories = new WeakMap<EventStore, Map<string, StoredEvent[]>>();
 function saveHistory(cache: Map<string, StoredEvent[]>, key: string, rows: StoredEvent[]) {
   // Concurrent replies must not move the saved checkpoint backwards.
   if ((rows.at(-1)?.sequence ?? 0) < (cache.get(key)?.at(-1)?.sequence ?? 0)) return;
-  // ponytail: keep 64 histories; use compact event projections if histories grow large.
+  // Keep up to 64 histories. If they grow too large, store only the event fields
+  // this check needs.
   if (!cache.has(key) && cache.size >= 64) cache.delete(cache.keys().next().value!);
   cache.set(key, rows);
 }

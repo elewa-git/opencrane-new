@@ -1,4 +1,4 @@
-// Adapted from OC1 mcp-remote-client-https.ts, commit 10abd0ef6182f36bec13d8f1358e43b15ead7cd5.
+// Adapted from OpenCrane 1 commit 10abd0ef6182f36bec13d8f1358e43b15ead7cd5.
 import { lookup } from 'node:dns/promises';
 import { request } from 'node:https';
 import { randomUUID } from 'node:crypto';
@@ -16,7 +16,7 @@ export interface RemoteNetwork {
 }
 const rpcResult = z.object({ jsonrpc: z.literal('2.0'), id: z.string(), result: z.record(z.string(), z.unknown()) }).strict();
 
-/** The caller selects the stored endpoint. No caller headers, credentials, sessions or redirects pass. */
+/** Use the saved endpoint, without caller headers, credentials, sessions or redirects. */
 export async function remoteRequest(locator: string, method: 'server/discover' | 'tools/list', cursor: string | undefined,
   network: RemoteNetwork, signal: AbortSignal) {
   const endpoint = remoteEndpoint(locator);

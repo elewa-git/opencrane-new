@@ -25,7 +25,9 @@ export async function ownershipAccess(store: EventStore, binding: Binding, membe
 export async function ownershipStatusAccess(store: EventStore, binding: Binding, memberId: string,
   fresh: FreshAuthority) {
   const membership = await readableMembership(store, binding, memberId, fresh);
-  // Both sides of step-down can read receipts; owner additions still need their IAM receipt.
+  // Skip step-down events when checking saved permissions, so either side can
+  // still read status after a step-down. Adding an owner still needs OpenFGA's
+  // permission record.
   const facts = membership.facts.filter(isStatusAuthority);
   await checkReceipts(binding, memberId, facts, 'admin');
   return membership;
@@ -132,8 +134,8 @@ export async function ownershipCommand(store: EventStore, binding: Binding,
     time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human' as const, id: actorId },
   };
-  // P4-3: member removal must fence the successor's membership at this append boundary.
-  // The current fence detects changes before append; a removal in the gap still needs protection.
+  // Recheck the successor's membership before appending the ownership change.
+  // This catches a removal that happened after the earlier membership read.
   await fresh();
   const result = await store.append({ event, expectedSequence: input.expectedSequence });
   if (result.status === 'unavailable') {

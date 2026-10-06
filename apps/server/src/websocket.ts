@@ -1,7 +1,7 @@
 import { liveViewPath } from './computers/view.ts';
 // Attaches a plain `ws` WebSocket server to Fastify's underlying HTTP
-// server. We use `ws` directly (no Fastify WebSocket plugin) per the
-// Phase 1 task: a tiny Fastify + ws skeleton, nothing more.
+// server. Use `ws` directly because the server only needs to attach its own
+// WebSocket routes to Fastify.
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { URL } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -55,13 +55,11 @@ export function attachWebSocketServer(
   realtime?: RealtimeOptions,
   sessionNow: () => Date = () => new Date(),
 ): WebSocketServer {
-  // The session cookie alone is not enough. SameSite=Lax keeps the cookie off
-  // requests from other sites, but a sibling subdomain is the same site, so a
-  // page there could still open a socket with the person's cookie. plan.md asks
-  // for a strict Origin check on the upgrade (cross-site WebSocket hijacking).
-  // This slice has one front-end origin: the one the OIDC redirect URI is on.
-  // A browser always sends Origin on a WebSocket handshake, so a missing
-  // Origin is refused too.
+  // Check the Origin as well as the session cookie. SameSite=Lax blocks other
+  // sites, but a sibling subdomain is still the same site and could use the
+  // cookie to open a socket. This deployment has one front-end origin, taken
+  // from the OIDC redirect URI. Browsers send Origin during the handshake, so
+  // refuse requests that omit it too.
   const allowedOrigin = new URL(authConfig.redirectUri).origin;
   const sessions = new WeakMap<IncomingMessage, SessionData>();
   const wss = new WebSocketServer({
@@ -151,9 +149,8 @@ export function attachWebSocketServer(
 
       const validateEvent = validateEventMessageSchema.safeParse(parsed);
       if (validateEvent.success) {
-        // The cross-package path: @opencrane/events binds this event's
-        // `type` to the registry and checks `data` against that type's own
-        // schema (never the generic z.unknown() placeholder).
+        // @opencrane/events checks that `type` is registered and validates
+        // `data` with that event's schema, not the generic unknown schema.
         const outcome = parseEventByType(validateEvent.data.event);
         const reply = outcome.success
           ? { type: 'eventValidationResult' as const, valid: true }

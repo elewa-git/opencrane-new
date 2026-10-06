@@ -1,5 +1,6 @@
 import { conversationKeys } from './chat/keys.ts';
-// The lease elects a process; budget decisions themselves only append to NATS.
+// The lease chooses which process runs this worker. Budget decisions still only
+// append events to NATS.
 import { readFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';

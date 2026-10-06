@@ -70,7 +70,7 @@ function leaseCases() {
     const notifications = events();
     const lease = new ViewLease(pending.check, computer, notifications);
     lease.start();
-    // setSystemTime does not advance Vitest's performance clock. Move both without running timers.
+    // Move the wall clock and performance clock together without running timers.
     vi.setSystemTime(Date.now() + 1201);
     const clock = vi.spyOn(performance, 'now');
     clock.mockReturnValue(1201);
@@ -233,7 +233,7 @@ function leaseCases() {
     }
     const lease = new ViewLease(check, computer, notifications);
     lease.start();
-    // Synchronous time advancement leaves promise callbacks queued, like a stalled server.
+    // Leave promise callbacks queued to model a server that cannot run its tasks.
     vi.advanceTimersByTime(1500);
     expect(pending).toHaveLength(5);
     lease.stop();

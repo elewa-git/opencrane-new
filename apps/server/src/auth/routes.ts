@@ -3,12 +3,9 @@ import { createHash } from 'node:crypto';
 // and report who (if anyone) is signed in. All the OIDC and cookie logic
 // lives in @opencrane/auth; this file just wires it to Fastify.
 //
-// Logging: these routes log through request.log, which is the
-// @opencrane/observability logger. It redacts the `code` and `state` in a
-// callback URL, and header and cookie values never reach a log line. On top
-// of that, a line here carries only a fixed reason. It never carries the
-// error object, a cookie, a code or a token, because an error from the
-// identity provider can hold the response body it sent back.
+// Log only fixed reasons through request.log. The logger removes `code` and
+// `state` from callback URLs, and does not record headers or cookies. Do not log
+// errors, because the identity provider's reply may contain credentials.
 import { sessionFor } from '../members/routes.ts';
 import { URL } from 'node:url';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';

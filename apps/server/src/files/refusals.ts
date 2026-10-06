@@ -17,7 +17,7 @@ const fileRefusals = {
 
 type FileRefusalKind = keyof typeof fileRefusals;
 
-// These refusals belong to files; the shared HTTP guard is tracked in #121.
+// Keep file upload refusal messages together in this module.
 export class FileRefusal extends Error {
   readonly kind: FileRefusalKind;
   readonly statusCode: number;

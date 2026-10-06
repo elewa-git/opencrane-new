@@ -236,8 +236,9 @@ async function saveKey(options: ProviderOptions, memberId: string, params: unkno
     await cleanProviderSecrets(options, providerId, secretRef, input.expectedRevision);
     return { ...result, clearKey: true };
   } catch (error) {
-    // Read events after a lost append reply before deciding whether the candidate is an orphan.
-    // An unavailable history keeps the secret for later reconciliation rather than deleting it.
+    // If the append reply was lost, read the event history before deciding
+    // whether this secret was saved. Keep it when history is unavailable so a
+    // later retry can check again.
     await cleanProviderSecrets(options, providerId, secretRef, input.expectedRevision);
     throw error;
   }

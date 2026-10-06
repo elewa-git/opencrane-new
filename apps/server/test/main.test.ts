@@ -1,7 +1,6 @@
-// Starts the server the way it runs in production: its own Node process, launched
-// with `node --experimental-strip-types`. Nothing else in the suite runs
-// `main.ts` itself, so a bad import there could ship unnoticed. It also checks,
-// on the real process's real stdout, that no secret in a request URL is printed.
+// Start the server in a separate Node process, as production does. This checks
+// that `main.ts` starts successfully and that the process does not print URL
+// secrets to stdout.
 import { setTimeout as sleep } from 'node:timers/promises';
 import { startServer, TEST_OIDC_ENV, parseJsonLines, loggedUrls, sendRaw, type RunningServer } from './support/process.ts';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -57,20 +56,20 @@ describe('main.ts under the real Node runtime', () => {
     const known = await get('/healthz?token=SECRET_MAIN_KNOWN');
     expect(known.status).toBe(200);
     expect(await known.json()).toEqual({ status: 'ok' });
-    // The "Route ... not found" line Fastify writes itself, and a plain GET (no upgrade) to the WebSocket path.
+    // Check Fastify's missing-route message and a normal GET to the WebSocket path.
     expect((await get('/nope?token=SECRET_MAIN_404&code=SECRET_MAIN_CODE')).status).toBe(404);
     expect((await get('/ws?token=SECRET_MAIN_WS')).status).toBe(404);
-    // The sign-in callback: its `code` and `state` are secrets, and so is the login-flow cookie. With a
-    // cookie that is not a real one the route refuses the request, which needs no identity provider.
+    // The callback URL and login-flow cookie contain secrets. An invalid cookie
+    // makes the route refuse the request without contacting an identity provider.
     const callback = await fetch(`http://127.0.0.1:${port}/auth/callback?code=SECRET_MAIN_AUTH_CODE&state=SECRET_MAIN_AUTH_STATE`, {
       headers: { cookie: 'oc_auth_flow=SECRET_MAIN_FLOW_COOKIE' },
     });
     expect(callback.status).toBe(400);
-    // A request line the URL parser rejects: `fetch` will not send it, so use a raw socket.
+    // `fetch` will not send this invalid request line, so send it through a raw socket.
     const raw = await sendRaw(port, 'GET //[x?token=SECRET_MAIN_BRACKET HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n');
     expect(raw).toMatch(/^HTTP\/1\.1 \d{3} /u);
 
-    // Wait until the last request shows up in redacted form before judging the output.
+    // Wait for the last request to appear in redacted form before checking the output.
     const running = server;
     for (let tries = 0; tries < 60 && !loggedUrls(running.stdout()).includes('//[x'); tries += 1) {
       await sleep(50);
@@ -80,13 +79,13 @@ describe('main.ts under the real Node runtime', () => {
     expect(stdout).not.toContain('SECRET_MAIN_');
     const lines = parseJsonLines(stdout);
     const messages = lines.map((line) => line['msg']);
-    // Every line the server wrote is JSON, and the redacted forms are what was logged.
+    // Check that every line is JSON and that the logged URLs have been redacted.
     expect(lines).toHaveLength(stdout.split('\n').filter(Boolean).length);
     expect(loggedUrls(stdout)).toEqual(expect.arrayContaining(['/healthz', '/nope', '/auth/callback', '//[x']));
     expect(messages).toContain('sign-in callback refused: login flow cookie is invalid');
     expect(messages).toContain('Route GET:/nope not found');
     expect(messages).toContain('Route GET:/ws not found');
-    // The request id is called request_id everywhere.
+    // Use the same request id field name as the rest of the logs.
     expect(lines.some((line) => typeof line['request_id'] === 'string')).toBe(true);
     expect(lines.some((line) => 'reqId' in line)).toBe(false);
   }, 40_000);

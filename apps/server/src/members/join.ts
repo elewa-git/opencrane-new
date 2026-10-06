@@ -132,7 +132,8 @@ function isMembershipAdmission(row: StoredEvent) {
 }
 
 function admissionRefusal(events: StoredEvent[], invitation: Invitation): JoinResult | undefined {
-  // Invitation acceptance grants membership; appointment belongs to the ownership stream.
+  // Accepting an invitation adds a member. Choosing an owner is recorded in the
+  // ownership event history.
   if (invitation.role === 'owner') {
     return { status: 'refused', reason: 'ownership_stream_required' };
   }
