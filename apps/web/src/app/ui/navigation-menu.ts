@@ -14,7 +14,7 @@ export class NavigationMenu {
   readonly open = input(false);
   readonly label = input.required<string>();
   readonly returnFocusTo = input<HTMLElement>();
-  readonly menuClosed = output<void>();
+  readonly closed = output<void>();
   private readonly element = inject<ElementRef<HTMLElement>>(ElementRef);
 
   protected move(event: KeyboardEvent): void {

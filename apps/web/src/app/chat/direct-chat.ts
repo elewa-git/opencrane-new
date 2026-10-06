@@ -20,6 +20,8 @@ export class DirectChat implements OnInit, OnDestroy {
   private readonly lifetime = new AbortController();
   private readonly search = viewChild<ElementRef<HTMLInputElement>>('searchField');
   private readonly changeButton = viewChild<ElementRef<HTMLButtonElement>>('changeButton');
+  protected readonly searchState = signal<'loading' | 'ready' | 'failed'>('loading');
+  private searchRequest: AbortController | undefined;
   private focusChangeButton = false;
   private focusSearch = false;
 
@@ -33,6 +35,7 @@ export class DirectChat implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.lifetime.abort();
+    this.searchRequest?.abort();
   }
 
   protected queryChanged(event: Event): void {
@@ -60,28 +63,45 @@ export class DirectChat implements OnInit, OnDestroy {
   }
 
   private async searchColleagues(query: string): Promise<void> {
+    this.searchRequest?.abort();
+    const request = new AbortController();
+    this.searchRequest = request;
+    this.searchState.set('loading');
+    this.colleagues.set([]);
+    this.status.set('Loading colleagues…');
     const parameters = new URLSearchParams({ q: query, limit: '20' });
+    const options = { headers: { accept: 'application/json' }, signal: request.signal };
     try {
-      const response = await fetch(`/api/chat/colleagues?${parameters}`, {
-        headers: { accept: 'application/json' }, signal: this.lifetime.signal,
-      });
+      const response = await fetch(`/api/chat/colleagues?${parameters}`, options);
+      if (!this.isCurrentSearch(request)) return;
       if (!response.ok) {
-        this.status.set('Colleagues could not be loaded. Try the search again.');
+        this.searchFailed();
         return;
       }
       const raw: unknown = await response.json();
+      if (!this.isCurrentSearch(request)) return;
       const parsed = chatColleaguesSchema.safeParse(raw);
       if (!parsed.success) {
-        this.status.set('Colleagues could not be read. Try the search again.');
+        this.searchFailed();
         return;
       }
-      if (this.lifetime.signal.aborted) return;
       this.colleagues.set(parsed.data.rows);
+      this.searchState.set('ready');
       this.status.set('Colleagues loaded.');
     } catch {
-      if (this.lifetime.signal.aborted) return;
-      this.status.set('Colleagues could not be loaded. Try the search again.');
+      if (this.isCurrentSearch(request)) this.searchFailed();
     }
+  }
+
+  private isCurrentSearch(request: AbortController): boolean {
+    // Ignore replies from requests that were replaced, even if fetch did not stop them.
+    return this.searchRequest === request && !request.signal.aborted
+      && !this.lifetime.signal.aborted;
+  }
+
+  private searchFailed(): void {
+    this.searchState.set('failed');
+    this.status.set('Could not search colleagues. Try again.');
   }
 
   private restoreFocus(): void {

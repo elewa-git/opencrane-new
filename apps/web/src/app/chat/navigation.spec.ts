@@ -117,7 +117,9 @@ async function checkGuardedNavigation(condition: 'queued' | 'upload'): Promise<v
   await fixture.whenStable();
   const menu = root.querySelector('oc-navigation-menu');
   if (!(menu instanceof HTMLElement)) throw new Error('Missing menu');
-  expect(menu.querySelectorAll('a')).toHaveLength(2);
+  expect(menu.querySelectorAll('a')).toHaveLength(3);
+  expect(menu.querySelector('a[href="/workspace/direct"]')?.textContent)
+    .toContain('New direct chat');
   expect(menu.textContent).toContain('Failed');
   expect(menu.textContent).toContain('Projects');
   expect(menu.textContent).toContain('Archived');

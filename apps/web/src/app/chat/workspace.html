@@ -200,7 +200,7 @@
     </aside>
   }
   <oc-navigation-menu id="workspace-navigation" [open]="rail()" label="Sessions"
-    [returnFocusTo]="navigationOpener" (menuClosed)="navigationClosed()">
+    [returnFocusTo]="navigationOpener" (closed)="navigationClosed()">
     @if (rail()) {
       <ng-container [ngTemplateOutlet]="sessionNavigation" />
       <footer class="rail-footer">

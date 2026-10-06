@@ -26,8 +26,8 @@ kbd {
 .rail-content kbd { margin-left: auto; font-size: 9px; }
 .new-session { color: var(--oc-warning-text); }
 .rail-content .ask { border: 1px dashed #9fdde8; background: #eefafc; margin: 2px 0 4px; }
-.rail-content>.direct-chat-link { display: flex; align-items: center; min-height: 44px; padding: 8px 10px;
-  color: #2b3133; text-decoration: none; }
+.rail-content>a { display: flex; align-items: center; min-height: 44px;
+  text-decoration: none; }
 .ask>span,.hash { color: var(--oc-accent-dark); }
 h2 { margin: 0; }
 .rail h2 {
