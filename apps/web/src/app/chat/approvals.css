@@ -22,9 +22,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid #0a8497; outline-offs
   border-radius: 50%; animation: approval-spin .8s linear infinite; }
 @keyframes approval-spin { to { transform: rotate(360deg); } }
 .decision-status { margin: 12px 0 0; color: #72531e; line-height: 1.5; }
-.waiting-requester, .only-requester { line-height: 1.5; }
-.waiting-requester { display: flex; align-items: center; gap: 8px; color: #72531e; }
-.waiting-requester oc-icon { width: 16px; height: 16px; }
+.only-requester { line-height: 1.5; }
 .only-requester { margin-bottom: 0; color: #50595b; }
 .terminal-wrap { min-width: 0; }
 .unknown-notice { display: block; margin-top: 8px; background: #f2fbfc; }

@@ -72,7 +72,7 @@ The full receipt records each command and result in the pull request description
 | Install | PASS | `nice -n 10 npm ci` |
 | Lint | PASS | `nice -n 10 npm run lint` |
 | Typecheck | PASS | `nice -n 10 npm run typecheck` |
-| Root tests | Pending | `nice -n 10 npm run test` |
+| Root tests | PARTIAL | `nice -n 10 npm run test -- --maxWorkers=1`: 1,948 passed, 43 skipped and 11 failed in six files. Those six files passed alone with a temporary `PG_TEST_URL`: 105 passed, one skipped. |
 | Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 306 tests. |
 | Event catalogue | PASS | `nice -n 10 npm run check:events` |
 | Web build | PASS | Built by `nice -n 10 npm run visual:p3-5-approvals`. |
