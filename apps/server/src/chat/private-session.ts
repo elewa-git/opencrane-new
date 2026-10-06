@@ -63,9 +63,9 @@ export function privateSessionReader(options: SessionAuthorityOptions, memberId:
   return read;
 }
 
-async function privateSessionCreation(options: SessionAuthorityOptions,
-  conversationId: string) {
-  const event = await creationEvent(options.store, options.silo,
+export async function privateSessionCreation(options: SessionAuthorityOptions,
+  conversationId: string, creation?: Awaited<ReturnType<typeof creationEvent>>) {
+  const event = creation ?? await creationEvent(options.store, options.silo,
     `conversation-${conversationId}`, 'conversation.created');
   const created = sessionSchema.parse(event.data);
   const assistantEvent = await creationEvent(options.store, options.silo,
@@ -76,7 +76,7 @@ async function privateSessionCreation(options: SessionAuthorityOptions,
 
 type PrivateSession = Awaited<ReturnType<typeof privateSessionCreation>>;
 
-async function requirePrivateReader(options: SessionAuthorityOptions,
+export async function requirePrivateReader(options: SessionAuthorityOptions,
   memberId: string, session: PrivateSession) {
   if (session.assistant.kind !== 'team') return;
   if (session.created.createdBy !== memberId) {

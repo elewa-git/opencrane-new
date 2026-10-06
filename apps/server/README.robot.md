@@ -334,10 +334,20 @@ History and status check access once before reading content. The list checks eac
 row's participants and OpenFGA permission once, with eight rows at a time.
 Readers do not use an authority fence, the short check that detects access changes
 before a write. Content reads can take longer than two seconds without an access timeout.
-Socket polls run every 100 ms. Each access check has a 1.5-second limit and ends
-before reading content. Access polling continues during a slow content read, so
-member removal still closes the socket within two seconds. Writes read history
-with its own ten-second limit before opening their short access check.
+Socket polls run every 100 ms. Each socket keeps the conversation's creation facts
+and one OpenFGA client for its membership and conversation checks. It checks access
+at subscription, then calls OpenFGA again only when a watched access record changes.
+It watches member and ownership stream positions. Agent sessions also watch their
+assistant stream and, for a team assistant, its owning team stream. Personal sessions
+never watch conversation history for access. Direct chats check new conversation
+events for participant changes; messages and files do not repeat permission checks.
+Participant changes keep permission checks running until OpenFGA has applied them,
+so an event arriving before its permission update cannot leave old access saved.
+Each access poll has a 1.5-second limit and ends before reading content. Access
+polling continues during a slow content read, so a member-stream removal still
+closes the socket within two seconds without waiting for OpenFGA to apply it.
+Reads use no authority fence. Writes read history with its own ten-second limit
+before opening their short access check.
 
 `GET /api/chat` returns the authenticated member id and their personal assistant
 id (null while provisioning). It requires live silo membership and `acts_for`;

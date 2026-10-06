@@ -1,6 +1,6 @@
 import type { WebSocket } from 'ws';
 import type { AuthConfig, SessionData } from '@opencrane/auth';
-import { chatAccess, recordedChatMode, isChatRefused } from './access.ts';
+import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows, type ChatOptions } from './routes.ts';
 
 type Mode = 'agent_session' | 'direct';
@@ -16,6 +16,7 @@ interface Subscription {
   ready: boolean;
   computerState: string;
   checking: boolean;
+  access?: Awaited<ReturnType<typeof chatSubscriptionAccess>>;
 }
 
 export function conversationSubscription(
@@ -59,14 +60,19 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
   }
   const watchdog = setTimeout(expire, 1500);
   try {
-    const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
-    if (!validSession(session, config, options) || !memberId) {
+    if (!validSession(session, config, options)) {
       refuse(state);
       return;
     }
-    const request = { memberId, conversationId, deadline };
-    const access = await chatAccess(options, request);
-    return recordedChatMode(access);
+    if (!state.access) {
+      const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
+      if (!memberId) {
+        refuse(state);
+        return;
+      }
+      state.access = await chatSubscriptionAccess(options, memberId, conversationId, deadline);
+    }
+    return await state.access(deadline);
   } catch (error) {
     if (isChatRefused(error)) refuse(state);
     else socket.close(1013);
