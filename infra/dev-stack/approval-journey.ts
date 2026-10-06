@@ -136,6 +136,9 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
       assert.equal(approvals.filter(row => row.event.type === 'approval.used' &&
         (row.event.data as { permitId: string }).permitId === recorded.at(-1)!.requestId).length, 1);
       console.log(`PASS approvals ${width}px: Ask → live 8g card → requester approval → exactly one recorded upstream call; second retry and denial refused; requested/approved/used/denied restored after reload; decision submissions approve=${approveAttempts}, deny=${denyAttempts}`);
+    } catch (error) {
+      await page.screenshot({ path: `${directory}/approval-failure-${width}.png`, fullPage: true });
+      throw error;
     } finally {
       await append('agent.turn_completed', `conversation-${conversationId}`, { conversationId, turnId });
       await append('computer.turn_closed', `computer-${input.assistantId}`, { assistantId: input.assistantId, computerId: input.computerId, requesterId: input.requesterId, conversationId, turnId, threadId: conversationId, task: 'chat_turn', status: 'completed' }, 'opencrane-server');

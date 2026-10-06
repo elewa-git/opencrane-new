@@ -138,6 +138,11 @@ binding. Shutdown aborts readers, stops jobs and closes connections.
 
 ## Daily fresh run
 
+`daily-fresh-run.sh` fetches `origin`, checks out `origin/main` detached in
+`~/dev/daily-fresh`, and runs `npm ci` only when `package-lock.json` has changed
+since the previous run. It then starts `daily-fresh.sh` from that checkout.
+The install script copies this launcher to `~/.opencrane/daily-fresh/run.sh`.
+
 `daily-fresh.sh` claims a secondary id using `claim.sh`, then runs `up.sh --fresh`
 with that id. Secondary model services use the local stub. The run makes no paid
 model calls. An EXIT trap calls `down.sh --id` with only the id returned by the
@@ -146,8 +151,10 @@ claim. A failed startup still reaches that cleanup.
 If `claim.sh` cannot return an id, the script records `SKIPPED` with the reason
 `no free slot` and exits successfully. Every run adds one UTC line to
 `~/.opencrane/daily-fresh/ledger.md`. The line records the known `origin/main`
-commit, result, failed step and duration. The directory is mode 0700 and the
-ledger is mode 0600.
+commit, result, failed step and duration. On failure, it copies `last-error.log`
+and any journey failure screenshots into a folder named for that UTC run time
+before `down.sh` removes the stack files. The receipt line names that folder. The
+directory is mode 0700 and the ledger is mode 0600.
 
 The user service is `opencrane-daily-fresh.service`; its timer is
 `opencrane-daily-fresh.timer`. The timer runs daily at 03:17 UTC with

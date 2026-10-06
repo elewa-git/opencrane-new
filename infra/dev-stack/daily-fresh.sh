@@ -33,9 +33,38 @@ write_receipt() {
   chmod 600 "$ledger_file"
 }
 
+preserve_failure_artifacts() {
+  local evidence_time evidence_directory stack_directory screenshot
+  if [ "$run_result" != FAIL ] || [ -z "$stack_id" ]; then
+    return
+  fi
+
+  evidence_time=$(date -u '+%Y-%m-%dT%H-%M-%SZ')
+  evidence_directory="$ledger_directory/$evidence_time"
+  stack_directory="$HOME/.config/opencrane/dev-stack-$stack_id"
+  mkdir -p "$evidence_directory"
+  chmod 700 "$evidence_directory"
+
+  if [ -f "$stack_directory/last-error.log" ]; then
+    cp "$stack_directory/last-error.log" "$evidence_directory/last-error.log"
+    chmod 600 "$evidence_directory/last-error.log"
+  fi
+  for screenshot in "$stack_directory"/*-failure*.png; do
+    if [ ! -f "$screenshot" ]; then
+      continue
+    fi
+    cp "$screenshot" "$evidence_directory/$(basename "$screenshot")"
+    chmod 600 "$evidence_directory/$(basename "$screenshot")"
+  done
+
+  receipt_note="failure evidence $evidence_directory"
+}
+
 clean_up() {
   local original_status=$?
   trap - EXIT
+
+  preserve_failure_artifacts
 
   if [ -n "$stack_id" ]; then
     if "$script_directory/down.sh" --id "$stack_id"; then

@@ -3,6 +3,6 @@ Description=Run the local fresh OpenCrane development stack check
 
 [Service]
 Type=oneshot
-WorkingDirectory=%h/dev/wt/p2-7-timer
+WorkingDirectory=%h/.opencrane/daily-fresh
 Environment=ZITADEL_KEY_FILE=%h/dev/opencrane-new/.keys/.zitadel-key
-ExecStart=/usr/bin/nice -n 10 %h/dev/wt/p2-7-timer/infra/dev-stack/daily-fresh.sh
+ExecStart=/usr/bin/nice -n 10 %h/.opencrane/daily-fresh/run.sh
