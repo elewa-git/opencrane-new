@@ -70,8 +70,16 @@ new event data. These default history searches grow with the entity's history.
 `historyChecked: true` skips the search before publishing, including on retries.
 The caller must have checked every event on the event's own subject up to
 `expectedSequence` and found no earlier copy of that command. Any other supplied
-value is rejected as `invalid_event`. BudgetActor opts in after replay; its
-configure command checks caller-supplied command ids separately.
+value is rejected as `invalid_event`. Three callers opt in:
+
+- `BudgetActor` replays the budget stream. Ordinary commands use new random ids;
+  `configure` checks caller-supplied command ids separately.
+- `recordReport` checks the chat summary's report position for that computer and
+  report sequence, through the copied stream position.
+- `turnCommand` checks the computer summary's start command keys (principal kind,
+  principal id and command id). A close is written only when no close exists for
+  the turn. A repeated start returns without an append, including after the
+  120-second NATS duplicate window.
 
 After a conditional refusal (10071 or 10164), this mode searches the event's own
 subject only from `expectedSequence + 1`. It returns the first matching copy's

@@ -80,3 +80,27 @@ and checks live permissions before reserving money. A closed turn cannot reopen.
 deadline so its event reads stop retrying with the caller's authority check.
 Old readiness events without a generation fail closed until the reconciler observes
 and records readiness again. Token values never enter events or projections.
+
+## Computer summary
+
+`computerSummary` is the shared `SummaryKind<ComputerSummary>` used by credentials
+and server turn commands. The event store keeps up to 64 computers per store
+connection. Each use reads new events before copying facts; a dropped summary
+rebuilds from the first event. Credentials use the caller's deadline, or `Infinity`
+for issuance. They still check every assistant id, computer id, generation and token id.
+A suspension, loss or rotated grant saved through another connection affects the
+next check. A wrong silo keeps the existing `Computer silo mismatch` error.
+
+The summary stores the newest non-turn lifecycle row, newest claim and newest
+claim or resume grant. An open turn keeps its first start, newest start execution
+mode and start command keys. Its first close replaces those fields with `hasStart`
+and the close's position and status. A later start still sets `hasStart`.
+Each thread keeps at most two owners, started turn ids and restricted turn ids.
+Two distinct values always answer whether any value differs from the one checked.
+Callers copy needed facts in `take`; they never keep the mutable summary itself.
+
+`test/computer-summary.test.ts` checks rebuilding at five cuts, first and newest
+facts, compact closed turns, bounded thread sets and checking before changes.
+`test/credentials.test.ts` checks warm reads on 500 earlier turns and suspension
+through another store connection. The gateway credentials test in `apps/ops`
+also covers races, expiry, resume, loss and generation changes.

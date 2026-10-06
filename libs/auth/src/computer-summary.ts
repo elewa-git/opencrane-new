@@ -1,0 +1,86 @@
+import { z } from 'zod';
+import type { StoredEvent, SummaryKind } from '@opencrane/event-store';
+
+type ExecutionMode = 'restricted' | 'memory_free';
+export type TurnSummary = {
+  hasStart: boolean;
+  firstClose: { sequence: number; status: 'completed' | 'failed' } | undefined;
+  firstStart?: StoredEvent;
+  lastStartExecutionMode?: ExecutionMode | undefined;
+  startCommandKeys?: Set<string>;
+};
+export type ThreadSummary = {
+  owners: Set<string>;
+  startedTurnIds: Set<string>;
+  restrictedTurnIds: Set<string>;
+};
+const startDetails = z.object({
+  turnId: z.string(), threadId: z.string(), requesterId: z.string(), conversationId: z.string(),
+  executionMode: z.enum(['restricted', 'memory_free']).optional(),
+});
+const closeDetails = z.object({ turnId: z.string(), status: z.enum(['completed', 'failed']) });
+
+export type ComputerSummary = {
+  lifecycle: StoredEvent | undefined;
+  claim: StoredEvent | undefined;
+  grant: StoredEvent | undefined;
+  turns: Map<string, TurnSummary>;
+  threads: Map<string, ThreadSummary>;
+};
+function emptyComputer(): ComputerSummary {
+  return { lifecycle: undefined, claim: undefined, grant: undefined,
+    turns: new Map(), threads: new Map() };
+}
+function addComputer(summary: ComputerSummary, row: StoredEvent) {
+  const type = row.event.type;
+  if (type === 'computer.turn_started') {
+    const details = startDetails.parse(row.event.data);
+    addStart(summary, row, details);
+    return;
+  }
+  if (type === 'computer.turn_closed') {
+    const details = closeDetails.parse(row.event.data);
+    const previous = summary.turns.get(details.turnId);
+    if (!previous?.firstClose) {
+      const closedTurn: TurnSummary = { hasStart: previous?.hasStart ?? false,
+        firstClose: { sequence: row.sequence, status: details.status } };
+      summary.turns.set(details.turnId, closedTurn);
+    }
+    return;
+  }
+  if (!type.startsWith('computer.turn_')) summary.lifecycle = row;
+  if (type === 'computer.claimed') summary.claim = row;
+  if (type === 'computer.claimed' || type === 'computer.resumed') summary.grant = row;
+}
+function addStart(summary: ComputerSummary, row: StoredEvent,
+  details: z.infer<typeof startDetails>) {
+  let turn = summary.turns.get(details.turnId);
+  if (!turn) {
+    turn = { hasStart: true, firstClose: undefined, firstStart: row,
+      startCommandKeys: new Set() };
+    summary.turns.set(details.turnId, turn);
+  }
+  turn.hasStart = true;
+  if (!turn.firstClose) {
+    turn.lastStartExecutionMode = details.executionMode;
+    const principal = row.event.principal;
+    turn.startCommandKeys?.add(JSON.stringify([
+      principal?.kind, principal?.id, row.event.commandId,
+    ]));
+  }
+  let thread = summary.threads.get(details.threadId);
+  if (!thread) {
+    thread = { owners: new Set(), startedTurnIds: new Set(), restrictedTurnIds: new Set() };
+    summary.threads.set(details.threadId, thread);
+  }
+  addDistinct(thread.owners, JSON.stringify([details.requesterId, details.conversationId]));
+  addDistinct(thread.startedTurnIds, details.turnId);
+  if (details.executionMode === 'restricted') addDistinct(thread.restrictedTurnIds, details.turnId);
+}
+function addDistinct(values: Set<string>, value: string) {
+  // Keep two values: they answer whether any value differs from the one being checked.
+  if (values.size < 2) values.add(value);
+}
+export const computerSummary: SummaryKind<ComputerSummary> = {
+  name: 'computer', keep: 64, empty: emptyComputer, add: addComputer,
+};
