@@ -29,17 +29,23 @@ function registerRoutes(app: FastifyInstance, config: AuthConfig, options?: Inte
       })) return reply.code(403).send({ status: 'refused' });
       try {
         const context = { ...options, store: options.store };
+        if (request.method === 'GET') {
+          return await handleEffectRead(url, request, reply, config, context, session.sub);
+        }
         const operator = await authorise(context, config.issuerUrl, session.sub);
-        return await handleEffect(url, request, reply, config, context, operator);
+        return await handleEffect(request, reply, config, context, operator);
       } catch (error) { return routeError(reply, error); }
     } });
   }
 }
 
-async function authorise(options: EffectOptions, issuer: string, sub: string) {
+async function authorise(options: EffectOptions, issuer: string, sub: string, write = true) {
   const memberId = await options.feed.memberId(options.silo, issuer, sub);
   if (!memberId) throw new Error('Access changed');
-  const fresh = await authorityFence(options.store, performance.now(), [`member-${memberId}`]);
+  let fresh: Awaited<ReturnType<typeof authorityFence>> | undefined;
+  if (write) {
+    fresh = await authorityFence(options.store, performance.now(), [`member-${memberId}`]);
+  }
   const auth = memberAuthorisation(options.binding);
   const membership = await currentMembership(options.store, options.silo, memberId, fresh);
   if (!['owner', 'admin'].includes(membership.role)) {
@@ -56,18 +62,40 @@ async function authorise(options: EffectOptions, issuer: string, sub: string) {
   return { memberId, fresh };
 }
 
-async function handleEffect(url: string, request: FastifyRequest, reply: FastifyReply, config: AuthConfig,
-  options: EffectOptions, operator: Awaited<ReturnType<typeof authorise>>) {
+async function handleEffectRead(url: string, request: FastifyRequest, reply: FastifyReply,
+  config: AuthConfig, options: EffectOptions, sub: string) {
   if (url === '/api/org/effects') {
-    const effects = await listEffects(options.store, options.silo); await operator.fresh();
+    const effects = await listEffects(options.store, options.silo);
+    await authorise(options, config.issuerUrl, sub, false);
     return reply.send({ effects });
   }
-  const { permitId } = z.object({ permitId: z.string().regex(/^[\w-]{1,200}$/u) }).parse(request.params);
-  const csrf = createHmac('sha256', config.cookieSecret).update(JSON.stringify(['effect', request.headers.cookie, permitId])).digest('hex');
-  if (request.method === 'GET') {
-    const effect = await readEffect(options.store, options.silo, permitId); await operator.fresh();
-    return effect ? reply.send({ ...effect, csrf }) : reply.code(404).send({ status: 'not_found' });
+  const permitId = requestPermitId(request);
+  const effect = await readEffect(options.store, options.silo, permitId);
+  // Check current access after the read so a removed admin receives no spending records.
+  await authorise(options, config.issuerUrl, sub, false);
+  const csrf = effectCsrf(request, config, permitId);
+  if (!effect) {
+    return reply.code(404).send({ status: 'not_found' });
   }
+  return reply.send({ ...effect, csrf });
+}
+
+function requestPermitId(request: FastifyRequest) {
+  const params = z.object({ permitId: z.string().regex(/^[\w-]{1,200}$/u) });
+  return params.parse(request.params).permitId;
+}
+
+function effectCsrf(request: FastifyRequest, config: AuthConfig, permitId: string) {
+  const hmac = createHmac('sha256', config.cookieSecret);
+  hmac.update(JSON.stringify(['effect', request.headers.cookie, permitId]));
+  return hmac.digest('hex');
+}
+
+async function handleEffect(request: FastifyRequest, reply: FastifyReply,
+  config: AuthConfig, options: EffectOptions,
+  operator: Awaited<ReturnType<typeof authorise>>) {
+  const permitId = requestPermitId(request);
+  const csrf = effectCsrf(request, config, permitId);
   if (request.headers.origin !== new URL(config.redirectUri).origin || request.headers['x-csrf-token'] !== csrf) return reply.code(403).send({ status: 'refused' });
   const result = await resolveEffect(options.store, options.silo, permitId, operator.memberId, request.body, operator.fresh);
   const codes = { appended: 202, not_found: 404, unavailable: 503, conflict: 409, held: 409, rejected: 409 };

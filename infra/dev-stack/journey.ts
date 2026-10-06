@@ -17,7 +17,7 @@ import { history as modelHistory, models } from '@opencrane/models';
 import { integrationsResponseSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { approvalJourney } from './approval-journey.ts';
 import { browserChatJourney } from './browser-chat.ts';
-import { browserBudgetJourney } from './browser-budgets.ts';
+import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
 import { chatJourney } from './chat-journey.ts';
@@ -285,8 +285,15 @@ try {
       'other audit member authenticated live chat access');
     const ceilings = await modelHistory(events.store, `budget-${silo}`, silo);
     const run = ceilings.some(row => row.event.type === 'budget.ceiling_set' && !['installation', 'dev-only-stub-journey'].includes((row.event.data as { setBy: string }).setBy)) ? 'repeat' : 'fresh';
-    await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, member, identities.get(other)!.cookie, run);
-    await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store, silo, computer!.assistant_id);
+    try {
+      await browserAuditJourney(browser.ownerPage, browser.memberPages, origin, member,
+        identities.get(other)!.cookie, run);
+      await browserBudgetJourney(browser.ownerPage, browser.memberPages, origin, events.store,
+        silo, computer!.assistant_id);
+    } finally {
+      await restoreBudgetCeilings(browser.ownerPage, origin, events.store, silo,
+        computer!.assistant_id);
+    }
   }
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {

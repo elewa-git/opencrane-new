@@ -21,7 +21,7 @@ async function reservation(store: EventStore, silo: string, permitId: string, de
 /** Reads recorded evidence only. No provider call or external-action retry belongs here. */
 export async function readEffect(store: EventStore, silo: string, permitId: string) {
   id.parse(permitId);
-  const deadline = performance.now() + 2000;
+  const deadline = performance.now() + 10_000;
   const r = await reservation(store, silo, permitId, deadline);
   if (!r) return undefined;
   const rows = await history(store, `effect-${permitId}`, silo, deadline);
@@ -51,28 +51,22 @@ function effectStatus(r: BudgetState['reservations'][number], rows: StoredEvent[
 }
 
 export async function listEffects(store: EventStore, silo: string) {
-  const deadline = performance.now() + 2000;
-  const signal = AbortSignal.timeout(2000);
-  const head = await store.head();
+  const deadline = performance.now() + 10_000;
   const budget = emptyBudget();
-  const effects = new Map<string, StoredEvent[]>();
-  // ponytail: bounded log replay; use an effect projection when history outgrows two seconds.
-  if (head > 0) {
-    for await (const row of store.subscribe(1, signal)) {
-      if (row.sequence > head) break;
-      if (row.event.silo === silo) {
-        if (row.event.subject === `budget-${silo}`) applyBudget(budget, row.event, row.sequence);
-        if (row.event.subject.startsWith('effect-')) {
-          const rows = effects.get(row.event.subject) ?? [];
-          rows.push(row);
-          effects.set(row.event.subject, rows);
-        }
-      }
-      if (row.sequence === head) break;
-    }
+  const budgetRows = await history(store, `budget-${silo}`, silo, deadline);
+  for (const row of budgetRows) {
+    applyBudget(budget, row.event, row.sequence);
   }
-  if (performance.now() >= deadline) throw new Error('Effect read expired');
-  return budget.reservations.map(r => effectStatus(r, effects.get(`effect-${r.id}`) ?? []));
+  const effects = [];
+  // Keep every reservation, including old holds whose outcome is still unknown.
+  for (const reservation of budget.reservations) {
+    const rows = await history(store, `effect-${reservation.id}`, silo, deadline);
+    effects.push(effectStatus(reservation, rows));
+  }
+  if (performance.now() >= deadline) {
+    throw new Error('Effect read expired');
+  }
+  return effects;
 }
 
 /** The HTTP adapter supplies session identity; the command rechecks the event-backed role. */

@@ -1,9 +1,11 @@
 /// <reference lib="dom" />
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { copyFile, mkdir } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Page } from 'playwright';
-import type { EventStore } from '@opencrane/event-store';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import type { EventEnvelope } from '@opencrane/events';
 import { history, migrateBudgetDefault } from '@opencrane/models';
 import { budgetSummarySchema } from '@opencrane/protocol';
 import { readEvents } from '@opencrane/projections';
@@ -22,11 +24,9 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   await migrateBudgetDefault(store, silo, 'must-not-replace-default');
   assert.deepEqual(await ceilings(), before, 'Repeated migration preserves all ceilings and the default without appending');
   console.log(`PASS ${run}: default paying group migration is idempotent; one installation event, existing ceilings preserved`);
-  const summary = async () => {
-    const response = await owner.request.get(`${origin}/api/org/models`);
-    assert.equal(response.status(), 200);
-    return budgetSummarySchema.parse((await response.json() as { budget: unknown }).budget);
-  };
+  async function summary() {
+    return readBudgetSummary(owner, origin);
+  }
   const starting = await summary();
   const groupId = starting.defaultPayingGroupId;
   assert(groupId);
@@ -64,29 +64,53 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     for (const scope of ['paying_group', 'assistant'] as const) {
       await save('paying_group', groupId, 20000);
       await save('assistant', assistantId, 20000);
-      await save(scope, scope === 'assistant' ? assistantId : groupId, 0);
-      await owner.screenshot({ path: `${output}/${run}-${scope}-${width}.png`, fullPage: true });
-      const conversationId = new URL(member.url()).searchParams.get('conversation');
-      assert(conversationId);
-      const head = await store.head();
-      const notices = await member.locator('oc-budget-stop-notice').count();
-      const reservations = (await history(store, `budget-${silo}`, silo)).filter(row => row.event.type === 'budget.reserved').length;
-      await member.getByRole('textbox', { name: 'Message your agent' }).fill(`Ceiling refusal: ${scope} at ${width}px.`);
-      await member.getByRole('button', { name: 'Send message', exact: true }).click();
-      await member.waitForFunction(count => document.querySelectorAll('oc-budget-stop-notice').length > count, notices);
-      const notice = member.locator('oc-budget-stop-notice').last();
-      await notice.waitFor();
-      assert((await notice.innerText()).includes('An Owner or Admin can review the limit'));
-      assert((await notice.innerText()).includes('next monthly budget period (UTC)'));
-      await member.reload();
-      await member.waitForFunction(count => document.querySelectorAll('oc-budget-stop-notice').length > count, notices);
-      await notice.waitFor();
-      const rows = [];
-      for await (const row of readEvents(store, (head ?? 0) + 1, (await store.head())!)) rows.push(row.event);
-      assert(rows.some(event => event.type === 'decision.recorded' && (event.data as { reason: string; conversationId: string }).reason === 'budget_exhausted' && (event.data as { conversationId: string }).conversationId === conversationId), 'New call has a durable budget refusal');
-      assert.equal((await history(store, `budget-${silo}`, silo)).filter(row => row.event.type === 'budget.reserved').length, reservations, 'Refused call reserves no money');
-      await member.screenshot({ path: `${output}/${run}-${scope}-refusal-${width}.png`, fullPage: true });
-      console.log(`PASS ${run} ${width}px: owner saves ${scope} ceiling in UI; over-ceiling stub call refused with clear reason, retained after reload`);
+      const scopeId = scope === 'assistant' ? assistantId : groupId;
+      try {
+        await save(scope, scopeId, 0);
+        await owner.screenshot({ path: `${output}/${run}-${scope}-${width}.png`, fullPage: true });
+        const conversationId = new URL(member.url()).searchParams.get('conversation');
+        assert(conversationId);
+        const head = await store.head();
+        const notices = await member.locator('oc-budget-stop-notice').count();
+        const budgetBefore = await history(store, `budget-${silo}`, silo);
+        const reservations = budgetBefore.filter(isReservation).length;
+        const prompt = `Ceiling refusal: ${scope} at ${width}px.`;
+        await member.getByRole('textbox', { name: 'Message your agent' }).fill(prompt);
+        await member.getByRole('button', { name: 'Send message', exact: true }).click();
+        await member.waitForFunction(hasNewBudgetNotice, notices);
+        const notice = member.locator('oc-budget-stop-notice').last();
+        await notice.waitFor();
+        assert((await notice.innerText()).includes('An Owner or Admin can review the limit'));
+        assert((await notice.innerText()).includes('next monthly budget period (UTC)'));
+        await member.reload();
+        await member.waitForFunction(hasNewBudgetNotice, notices);
+        await notice.waitFor();
+        const rows = [];
+        const after = await store.head();
+        for await (const row of readEvents(store, head + 1, after)) {
+          rows.push(row.event);
+        }
+        function isBudgetRefusal(event: EventEnvelope) {
+          if (event.type !== 'decision.recorded') {
+            return false;
+          }
+          const data = event.data as { reason: string; conversationId: string };
+          return data.reason === 'budget_exhausted' && data.conversationId === conversationId;
+        }
+        assert(rows.some(isBudgetRefusal), 'New call has a durable budget refusal');
+        const budgetAfter = await history(store, `budget-${silo}`, silo);
+        const reservationsAfter = budgetAfter.filter(isReservation).length;
+        assert.equal(reservationsAfter, reservations, 'Refused call reserves no money');
+        const refusalScreenshot = {
+          path: `${output}/${run}-${scope}-refusal-${width}.png`, fullPage: true,
+        };
+        await member.screenshot(refusalScreenshot);
+        const savedMessage = `PASS ${run} ${width}px: owner saves ${scope} ceiling in UI; `;
+        console.log(`${savedMessage}over-ceiling stub call refused and retained after reload`);
+      } finally {
+        // Restore through the API even when the Spending page cannot load.
+        await restoreBudgetCeiling(owner, origin, store, silo, scope, scopeId);
+      }
     }
   }
   if (run === 'fresh') {
@@ -96,4 +120,64 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
     await save('global', groupId, 20000);
     await owner.screenshot({ path: `${output}/fresh-repeat-headroom-390.png`, fullPage: true });
   }
+}
+
+async function restoreBudgetCeiling(owner: Page, origin: string, store: EventStore,
+  silo: string, scope: 'global' | 'paying_group' | 'assistant', scopeId: string) {
+  const command = {
+    commandId: randomUUID(), expectedSequence: await store.head(`budget-${silo}`),
+    scope, ceilingCents: 20000,
+    ...(scope === 'global' ? { dailyCeilingCents: 5000 } : { scopeId }),
+  };
+  const request = { headers: { origin }, data: command };
+  const response = await owner.request.post(`${origin}/api/org/models`, request);
+  assert.equal(response.status(), 200, `Restore the ${scope} test ceiling`);
+  const body = await response.json() as { budget: unknown };
+  const saved = budgetSummarySchema.parse(body.budget);
+  const deadline = Date.now() + 90_000;
+  let projected = await readBudgetSummary(owner, origin);
+  while (projected.sequence < saved.sequence) {
+    assert(Date.now() < deadline, 'Restored ceilings reach the budget projection');
+    await delay(100);
+    projected = await readBudgetSummary(owner, origin);
+  }
+}
+
+async function readBudgetSummary(owner: Page, origin: string) {
+  const response = await owner.request.get(`${origin}/api/org/models`);
+  assert.equal(response.status(), 200);
+  const body = await response.json() as { budget: unknown };
+  return budgetSummarySchema.parse(body.budget);
+}
+
+export async function restoreBudgetCeilings(owner: Page, origin: string, store: EventStore,
+  silo: string, assistantId: string) {
+  const summary = await readBudgetSummary(owner, origin);
+  const groupId = summary.defaultPayingGroupId;
+  assert(groupId);
+  const scopes = [
+    { scope: 'paying_group' as const, scopeId: groupId },
+    { scope: 'assistant' as const, scopeId: assistantId },
+    { scope: 'global' as const, scopeId: groupId },
+  ];
+  const failures: unknown[] = [];
+  for (const { scope, scopeId } of scopes) {
+    try {
+      await restoreBudgetCeiling(owner, origin, store, silo, scope, scopeId);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) {
+    throw new AggregateError(failures, 'Could not restore every test ceiling');
+  }
+}
+
+
+function isReservation(row: StoredEvent) {
+  return row.event.type === 'budget.reserved';
+}
+
+function hasNewBudgetNotice(count: number) {
+  return document.querySelectorAll('oc-budget-stop-notice').length > count;
 }
