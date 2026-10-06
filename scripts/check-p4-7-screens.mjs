@@ -198,14 +198,14 @@ async function assertScreenBasics(page, width) {
     }
   }
   await page.keyboard.press('Tab');
-  const focusedTag = await page.evaluate(() => document.activeElement?.tagName ?? '');
+  const focusedTag = await page.evaluate(() => globalThis.document.activeElement?.tagName ?? '');
   assert.notEqual(focusedTag, 'BODY', 'Keyboard focus reaches an interactive control');
 }
 
 function bodyScrollWidth(body) { return body.scrollWidth; }
 
 function waitForAnimationFrame() {
-  return new Promise(resolveFrame => requestAnimationFrame(resolveFrame));
+  return new Promise(resolveFrame => globalThis.requestAnimationFrame(resolveFrame));
 }
 
 function targetsBelowFortyFourPixels(targets) {

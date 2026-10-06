@@ -60,11 +60,6 @@ h1 { min-width: 0; flex: 1; font-size: 15px; font-weight: 600; white-space: nowr
   font-size: 11px;
   white-space: nowrap;
 }
-.payer-id-note {
-  margin: 0;
-  color: var(--oc-ink-muted);
-  font-size: 12px;
-}
 .workspace-header button { flex-shrink: 0; min-width: 32px; min-height: 32px; font-size: 19px; }
 .avatar { display: inline-flex; flex-shrink: 0; width: 30px; height: 30px; align-items: center; justify-content: center; background: #e5eaeb; border-radius: 50%; font-size: 11px; }
 .avatar.agent {

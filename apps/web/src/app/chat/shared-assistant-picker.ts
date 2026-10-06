@@ -171,52 +171,67 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
   protected async checkStatus(): Promise<void> {
     const pending = this.pending();
     if (!pending || pending.stage === 'sending' || pending.stage === 'checking') return;
-    const resultAfterCheck = pending.stage;
+    const previousStage = pending.stage;
     this.pending.set({ ...pending, stage: 'checking' });
     try {
       // Read the saved command only; retrying it needs the person's separate action.
-      const url = `/api/conversations/${encodeURIComponent(pending.conversationId)}` +
-        `/changes/${encodeURIComponent(pending.commandId)}`;
-      const response = await fetch(url, { headers: { accept: 'application/json' },
-        signal: this.request.signal });
+      const response = await this.readStatus(pending);
       if (this.request.signal.aborted) return;
-      if (response.status === 401) {
-        this.clearAccess();
-        return;
-      }
-      if (response.status === 403 || response.status === 404) {
-        this.keepMissingSession(pending, resultAfterCheck);
-        return;
-      }
-      if (!response.ok) {
-        this.pending.set({ ...pending, stage: resultAfterCheck });
-        this.notice.set('We could not tell whether the session was recorded. ' +
-          'Check again before starting another.');
-        return;
-      }
-      const change = changeSchema.parse(await response.json());
-      if (change.conversationId !== pending.conversationId ||
-          change.commandId !== pending.commandId || change.type !== 'conversation.created') {
-        this.pending.set({ ...pending, stage: 'unknown' });
-        this.notice.set('We could not confirm this session. ' +
-          'Check its status before starting another.');
-        return;
-      }
-      if (change.projection.content !== 'current' || change.projection.iam !== 'current') {
-        this.pending.set({ ...pending, stage: 'applying' });
-        this.notice.set('Your session is still being applied. Check its status again shortly.');
-        return;
-      }
-      this.pending.set(undefined);
-      this.notice.set('Your private conversation is open.');
-      location.assign(`/workspace?conversation=${encodeURIComponent(pending.conversationId)}`);
+      await this.showStatusResponse(response, pending, previousStage);
     } catch {
-      if (!this.request.signal.aborted) {
-        this.pending.set({ ...pending, stage: resultAfterCheck });
-        this.notice.set('We could not tell whether the session was recorded. ' +
-          'Check its status before starting another.');
-      }
+      this.keepStatusAfterReadError(pending, previousStage);
     }
+  }
+
+  private async readStatus(pending: PendingSession): Promise<Response> {
+    const url = `/api/conversations/${encodeURIComponent(pending.conversationId)}` +
+      `/changes/${encodeURIComponent(pending.commandId)}`;
+    return fetch(url, { headers: { accept: 'application/json' }, signal: this.request.signal });
+  }
+
+  private async showStatusResponse(
+    response: Response,
+    pending: PendingSession,
+    previousStage: PendingStage,
+  ): Promise<void> {
+    if (response.status === 401) {
+      this.clearAccess();
+      return;
+    }
+    if (response.status === 403 || response.status === 404) {
+      this.keepMissingSession(pending, previousStage);
+      return;
+    }
+    if (!response.ok) {
+      this.keepStatusAfterReadError(pending, previousStage);
+      return;
+    }
+    const change = changeSchema.parse(await response.json());
+    if (change.conversationId !== pending.conversationId ||
+        change.commandId !== pending.commandId || change.type !== 'conversation.created') {
+      this.pending.set({ ...pending, stage: 'unknown' });
+      this.notice.set('We could not confirm this session. ' +
+        'Check its status before starting another.');
+      return;
+    }
+    if (change.projection.content !== 'current' || change.projection.iam !== 'current') {
+      this.pending.set({ ...pending, stage: 'applying' });
+      this.notice.set('Your session is still being applied. Check its status again shortly.');
+      return;
+    }
+    this.pending.set(undefined);
+    this.notice.set('Your private conversation is open.');
+    location.assign(`/workspace?conversation=${encodeURIComponent(pending.conversationId)}`);
+  }
+
+  private keepStatusAfterReadError(
+    pending: PendingSession,
+    previousStage: PendingStage,
+  ): void {
+    if (this.request.signal.aborted) return;
+    this.pending.set({ ...pending, stage: previousStage });
+    this.notice.set('We could not tell whether the session was recorded. ' +
+      'Check again before starting another.');
   }
 
   protected isRemoved(assistant: Assistant): boolean { return assistant.status === 'retired'; }

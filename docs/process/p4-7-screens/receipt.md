@@ -28,12 +28,18 @@ they do not prove live access or computer provisioning.
 
 | Check | Result |
 | --- | --- |
-| Clean install | PASS — `nice -n 10 npm ci` |
-| Typecheck | PASS — root workspace typecheck and Angular app, spec and browser-test checks |
-| Web tests | PASS — 408 tests across 36 files |
-| Visual captures | PASS — 66 captures at 1280, 390 and 320px with normal and reduced motion |
-| F1–F5 checks | PASS — all five existing visual checks |
-| Lint, event catalogue and Angular build | PASS — lint has existing length warnings and Knip hints |
-| Assistant and private chat route tests | PASS — 28 tests across both server route files |
+| Rebase onto the fixed admin branch | PASS — conflicts kept main's private-turn rules, recovery states and memory-free mode. |
+| Root typecheck | PASS — `nice -n 10 npm run typecheck` |
+| Lint | PASS — 9 existing length warnings and 2 Knip hints; no errors. |
+| Angular build | PASS — existing CSS budget and noVNC module warnings remain. |
+| Web tests | PASS — 436 tests across 36 files. |
+| Server route tests | PASS — 73 tests across shared assistant and chat route suites, with throwaway PostgreSQL. |
+| Event catalogue | PASS — all 96 event types match. |
+| P4-7 browser captures | PASS — 114 captures across 19 states at 1280, 390 and 320px, with both motion settings. |
+| Chat browser check | PASS — keyboard, focus, touch targets, streaming, reload, offline retry, wake state and scoped frames. |
+| F5 workspace | PASS — 18 captures at 1280, 390 and 320px, with reduced motion. |
+| P4-14 chat | PASS — 24 captures. |
+| 403 status guard spec | PASS — failed when the 403 case was removed, then passed when restored. |
+| Eligibility and pending-choice guard specs | PASS — each failed with its guard removed, then passed when restored. |
 | Live two-member MCP check | NOT RUN — needs two live requesters and a recording MCP service. |
 | Separate member disk and browser profiles | NOT BUILT — the backend shares these resources. |
