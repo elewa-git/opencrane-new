@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { toolApprovalRequestedDataSchema } from '@opencrane/events';
-import type { EventStore } from '@opencrane/event-store';
+import { toolApprovalRequestedDataSchema, type EventEnvelope } from '@opencrane/events';
+import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { readEvents } from '@opencrane/projections';
 import { approvalReviewSchema, type ApprovalCard } from '@opencrane/protocol';
 import { envelope, history } from './actor.ts';
@@ -19,12 +19,13 @@ type FreshAuthority = (() => Promise<void>) & { deadline?: number };
 interface ApprovalReadOptions {
   now?: Date;
   deadline?: number;
+  conversationRows?: StoredEvent[] | undefined;
 }
 
 /** Deterministic request identity prevents a retry from reopening denied, expired or used authority. */
 async function askApproval(store: EventStore, silo: string, bound: Binding,
   policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys | undefined,
-  now: Date, deadline: number) {
+  now: Date, deadline: number, conversationRows?: StoredEvent[]) {
   const args = policy.args.value, review = policy.review;
   if (!keys || !review || !(args instanceof Map) || !policy.revision) throw new Error('Review unavailable');
   if (args.size !== review.fields.length || new Set(review.fields).size !== args.size ||
@@ -45,7 +46,7 @@ async function askApproval(store: EventStore, silo: string, bound: Binding,
     const result = await store.append({ event: envelope(silo, subject, 'tool.approval_requested', request, `request-${approvalId}`), expectedSequence: 0 });
     if (result.status !== 'appended' && result.status !== 'conflict') throw new Error('Approval persistence unavailable');
   }
-  const readOptions = { now, deadline };
+  const readOptions = { now, deadline, conversationRows };
   const current = await readApproval(store, silo, approvalId, readOptions);
   if (hash(keys.decrypt(silo, bound.conversationId, current.request)) !== reviewDigest) throw new Error('Review unavailable');
   return current;
@@ -67,12 +68,12 @@ export async function readApproval(store: EventStore, silo: string, approvalId: 
   }
   const sequence = rows.at(-1)!.sequence;
   if (state === 'requested' || state === 'approved') {
-    const closed = await invalidated(store, silo, request, deadline);
+    const closed = await invalidated(store, silo, request, deadline, options.conversationRows);
     const terminal = approvalTerminalState(closed, request.expiresAt, now);
     if (terminal) {
       const result = await store.append({ event: envelope(silo, `approval-${approvalId}`, `approval.${terminal}`, { approvalId }), expectedSequence: sequence });
       if (result.status === 'unavailable') throw new Error('Approval persistence unavailable');
-      const readOptions = { now, deadline };
+      const readOptions = { now, deadline, conversationRows: options.conversationRows };
       return readApproval(store, silo, approvalId, readOptions);
     }
   }
@@ -89,13 +90,34 @@ function approvalTerminalState(closed: boolean, expiresAt: string, now: Date) {
   return undefined;
 }
 
-async function invalidated(store: EventStore, silo: string, request: Request, deadline: number) {
-  const rows = await history(store, `conversation-${request.conversationId}`, silo, deadline);
-  const start = rows.findIndex(r => r.event.type === 'agent.turn_started' && z.object({ turnId: z.string() }).parse(r.event.data).turnId === request.turnId);
-  if (start < 0 || rows.slice(start + 1).some(({ event }) =>
-    ['conversation.closed', 'message.posted', 'agent.turn_started'].includes(event.type) ||
-    (['agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested'].includes(event.type) &&
-      z.object({ turnId: z.string() }).parse(event.data).turnId === request.turnId))) return true;
+export function invalidatesApproval(event: EventEnvelope, turnId: string) {
+  if (['conversation.closed', 'message.posted', 'agent.turn_started'].includes(event.type)) {
+    return true;
+  }
+  return closesDecisionTurn(event, turnId);
+}
+
+export function closesDecisionTurn(event: EventEnvelope, turnId: string) {
+  const closesTurn = [
+    'agent.turn_completed', 'agent.turn_failed', 'agent.turn_stop_requested',
+  ].includes(event.type);
+  return closesTurn && z.object({ turnId: z.string() }).parse(event.data).turnId === turnId;
+}
+
+async function invalidated(store: EventStore, silo: string, request: Request, deadline: number,
+  conversationRows?: StoredEvent[]) {
+  const rows = conversationRows ?? await history(
+    store, `conversation-${request.conversationId}`, silo, deadline);
+  function startsBoundTurn(row: StoredEvent) {
+    return row.event.type === 'agent.turn_started' &&
+      z.object({ turnId: z.string() }).parse(row.event.data).turnId === request.turnId;
+  }
+  function invalidatesBoundApproval(row: StoredEvent) {
+    return invalidatesApproval(row.event, request.turnId);
+  }
+  const start = rows.findIndex(startsBoundTurn);
+  const later = rows.slice(start + 1);
+  if (start < 0 || later.some(invalidatesBoundApproval)) return true;
   const policy = await readToolPolicy(store, silo, request.serverId, deadline);
   return !policy.published || policy.sequence !== request.policySequence || policy.connectionId !== request.connectionId;
 }
@@ -151,12 +173,13 @@ export async function approvalCards(store: EventStore, silo: string, conversatio
   return cards;
 }
 
-export async function approvalDecision(store: EventStore, silo: string, bound: Binding, policy: Awaited<ReturnType<typeof mcpPolicy>>,
-  keys: ReviewKeys | undefined, now: () => Date, fresh: FreshAuthority, requestId: string) {
+export async function approvalDecision(store: EventStore, silo: string, bound: Binding,
+  policy: Awaited<ReturnType<typeof mcpPolicy>>, keys: ReviewKeys | undefined,
+  now: () => Date, fresh: FreshAuthority, requestId: string, conversationRows?: StoredEvent[]) {
   if (policy.outcome !== 'ask' || !policy.review || !keys) return { outcome: policy.outcome, reason: policy.reason, approvalId: undefined };
   await fresh();
   const deadline = fresh.deadline ?? Infinity;
-  const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline);
+  const approval = await askApproval(store, silo, bound, policy, keys, now(), deadline, conversationRows);
   const used = await consumeApproval(store, silo, approval, requestId, fresh, now);
   return { outcome: used ? 'allow' as const : 'ask' as const,
     reason: used ? 'approval_used' : `approval_${approval.state}`, approvalId: approval.request.approvalId };

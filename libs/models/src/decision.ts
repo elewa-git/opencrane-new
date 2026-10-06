@@ -1,11 +1,12 @@
 import { admitProviderVerification, runProviderVerification, verifyProviderCapability,
   type ProviderVerificationOptions } from './provider-verification.ts';
 import { ProviderConflict, ProviderRefused, ProviderUnpriced } from './providers.ts';
-import { payingGroupAuthority, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
+import { groupMembership, PayingGroupRefused, AuthorityApplying } from './paying-group.ts';
 import { configureBudget, BudgetAccessRefused } from './budget-config.ts';
-import { approvalDecision, type ReviewKeys } from './approvals.ts';
+import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approvals.ts';
 import { losslessJson } from './lossless-json.ts';
-import { authorityFence, currentAuthority } from './authority.ts';
+import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
+import { decisionActivity } from './decision-activity.ts';
 import { mcpPolicy } from './mcp.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -69,40 +70,61 @@ async function readBody(req: IncomingMessage, allowEmpty = false) {
   if (text || !allowEmpty) losslessJson(text);
   return text;
 }
-async function context(actor: BudgetActor, binding: Binding, c: z.infer<typeof computerSchema>, t: z.infer<typeof turnSchema>, liveSequence: number, resourceType: string, resourceId: string, fresh: Awaited<ReturnType<typeof authorityFence>>): Promise<ModelCall> {
-  const permission = await memberAuthorisation(binding).check(t.requester, 'member');
+async function context(actor: BudgetActor, binding: Binding,
+  computer: z.infer<typeof computerSchema>, turnToken: z.infer<typeof turnSchema>,
+  liveSequence: number, resourceType: string, resourceId: string,
+  fresh: Awaited<ReturnType<typeof authorityFence>>, conversation: StoredEvent[],
+  turn: StoredEvent): Promise<ModelCall> {
+  const permission = await memberAuthorisation(binding).check(turnToken.requester, 'member');
   if (!permission.allowed || binding.silo !== actor.silo) throw new Error('Membership unavailable or refused');
-  const [assistants, conversation, turn, authority] = await Promise.all([
-    history(actor.store, `assistant-${c.assistant}`, actor.silo, fresh.deadline),
-    history(actor.store, `conversation-${t.conversation}`, actor.silo, fresh.deadline),
-    activeTurn(actor, c, t, fresh.deadline),
-    currentAuthority(actor.store, binding, t.requester, c.assistant, t.conversation, resourceType, resourceId, fresh),
-  ]);
+  const assistantRead = history(
+    actor.store, `assistant-${computer.assistant}`, actor.silo, fresh.deadline);
+  const authorityRead = currentAuthority(actor.store, binding, turnToken.requester,
+    computer.assistant, turnToken.conversation, resourceType, resourceId, fresh, conversation);
+  const [assistants, authority] = await Promise.all([assistantRead, authorityRead]);
   const assistant = assistants.find(r => r.event.type === 'assistant.created');
   if (!assistant) throw new Error('Assistant refused');
   const created = conversation.find(r => r.event.type === 'conversation.created');
-  if (!created || data(created.event)['assistantId'] !== c.assistant ||
+  if (!created || data(created.event)['assistantId'] !== computer.assistant ||
       conversation.some(r => r.event.type === 'conversation.closed')) throw new Error('Conversation refused');
   const payingGroupId = data(turn.event)['payingGroupId'];
   if (typeof payingGroupId !== 'string') throw new RequestRefused('Paying group unavailable; ask an Owner or Admin to configure work attribution');
   if (data(assistant.event)['kind'] === 'team') {
-    if (data(created.event)['createdBy'] !== t.requester) throw new Error('Private requester refused');
+    if (data(created.event)['createdBy'] !== turnToken.requester) throw new Error('Private requester refused');
     if (data(created.event)['payingGroupId'] !== payingGroupId ||
         data(assistant.event)['payingGroupId'] !== payingGroupId) {
       throw new RequestRefused('Shared payer binding mismatch');
     }
     fresh.include(`team-${payingGroupId}`);
-    const groupAuthority = await payingGroupAuthority(
-      actor.store, actor.silo, t.requester, payingGroupId, binding, fresh.deadline);
-    await groupAuthority();
+    await groupMembership(
+      actor.store, actor.silo, turnToken.requester, payingGroupId, binding, fresh.deadline);
   }
-  return { model: t.model, payingGroupId, priceTableId, computerId: c.computer, assistantId: c.assistant, requesterId: t.requester,
-    conversationId: t.conversation, turnId: t.turn, threadId: t.thread,
-    contextDigest: createHash('sha256').update(JSON.stringify([c, t, assistant.sequence, liveSequence, turn.sequence, permission.allowed, authority, payingGroupId])).digest('hex') };
+  const facts = [computer, turnToken, assistant.sequence, liveSequence,
+    turn.sequence, permission.allowed, authority, payingGroupId];
+  const contextDigest = digestContext(facts);
+  return { model: turnToken.model, payingGroupId, priceTableId,
+    computerId: computer.computer, assistantId: computer.assistant,
+    requesterId: turnToken.requester, conversationId: turnToken.conversation,
+    turnId: turnToken.turn, threadId: turnToken.thread, contextDigest };
 }
-async function activeTurn(actor: BudgetActor, computer: z.infer<typeof computerSchema>,
-  turnToken: z.infer<typeof turnSchema>, deadline: number) {
-  const rows = await history(actor.store, `computer-${computer.assistant}`, actor.silo, deadline);
+
+function digestContext(facts: unknown) {
+  const encoded = JSON.stringify(facts);
+  const digest = createHash('sha256');
+  digest.update(encoded);
+  return digest.digest('hex');
+}
+function activeTurn(turnToken: z.infer<typeof turnSchema>, rows: StoredEvent[],
+  computerSequence: number) {
+  function isComputerLifecycle(row: StoredEvent) {
+    return !row.event.type.startsWith('computer.turn_');
+  }
+  const computer = rows.findLast(isComputerLifecycle);
+  // Check the same ready computer that supplied the token's current identity.
+  // Refuse a suspension or replacement saved between those two reads.
+  if (computer?.event.type !== 'computer.ready' || computer.sequence !== computerSequence) {
+    throw new Error('Computer changed');
+  }
   function matchesTurn(row: StoredEvent) {
     return row.event.source === 'opencrane-server' &&
       row.event.type.startsWith('computer.turn_') &&
@@ -128,6 +150,20 @@ async function activeTurn(actor: BudgetActor, computer: z.infer<typeof computerS
   }
   return turn;
 }
+function requireActiveConversationTurn(conversation: StoredEvent[], turnId: string) {
+  function closesCurrentTurn(row: StoredEvent) {
+    return closesDecisionTurn(row.event, turnId);
+  }
+  if (conversation.some(closesCurrentTurn)) throw new Error('Turn is not active');
+}
+
+function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
+  // Refuse before holding money when the gateway or another client has hung up.
+  if (req.socket.destroyed || res.destroyed) {
+    throw new Error('Decision client disconnected');
+  }
+}
+
 export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
@@ -155,14 +191,36 @@ export async function startDecision(
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
       if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
-      const fresh = await authorityFence(actor.store, started);
-      const checked = await credentials.check(req.headers, undefined, fresh.deadline);
-      const c = computerSchema.parse(checked.computer), t = turnSchema.parse(checked.turn);
-      fresh.include(`member-${t.requester}`, `assistant-${c.assistant}`, `computer-${c.assistant}`, `conversation-${t.conversation}`);
-      auditedContext = { requesterId: t.requester, assistantId: c.assistant };
-      correlation = { conversationId: t.conversation, turnId: t.turn };
-      contextDigest = createHash('sha256').update(JSON.stringify([c, t])).digest('hex');
-      if (t.delegation[0] !== t.requester) throw new Error('Delegation refused');
+      const decisionDeadline = started + 2000;
+      const checked = await credentials.check(req.headers, undefined, decisionDeadline);
+      const computer = computerSchema.parse(checked.computer);
+      const turnToken = turnSchema.parse(checked.turn);
+      // Share two seconds between history and access because the gateway waits only that long.
+      // Read full histories before watching the small streams that decide access.
+      const activity = await decisionActivity(actor.store, actor.silo,
+        computer.assistant, turnToken.conversation, turnToken.turn, decisionDeadline);
+      const conversation = activity.conversation;
+      requireActiveConversationTurn(conversation, turnToken.turn);
+      const turn = activeTurn(turnToken, activity.computer, checked.sequence);
+      const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
+      const authority = await decisionAuthorityFence(actor.store, started,
+        subjects, turnToken.requester, computer.assistant);
+      let needsApproval = false;
+      async function confirmDecision() {
+        while (true) {
+          const activityChanged = await activity.confirm(authority.deadline, needsApproval);
+          const authorityChanged = await authority();
+          if (!activityChanged && !authorityChanged) return;
+          // Recheck both because a turn can stop while unrelated grants are being read.
+        }
+      }
+      const snapshot = { include: authority.include, head: authority.head,
+        deadline: authority.deadline };
+      const fresh = Object.assign(confirmDecision, snapshot);
+      auditedContext = { requesterId: turnToken.requester, assistantId: computer.assistant };
+      correlation = { conversationId: turnToken.conversation, turnId: turnToken.turn };
+      contextDigest = digestContext([computer, turnToken]);
+      if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
       const raw = await readBody(req);
       if (route === 'mcp') {
         const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
@@ -170,14 +228,19 @@ export async function startDecision(
         fresh.include(`mcp-${match[1]!}`);
         const policy = await mcpPolicy(
           actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers, fresh.deadline);
-        const call = await context(actor, binding, c, t, checked.sequence, 'mcp_server', match[1]!, fresh);
-        contextDigest = createHash('sha256').update(JSON.stringify([call.contextDigest, policy])).digest('hex');
+        needsApproval = policy.outcome === 'ask';
+        const call = await context(actor, binding, computer, turnToken, checked.sequence,
+          'mcp_server', match[1]!, fresh, conversation, turn);
+        contextDigest = digestContext([call.contextDigest, policy]);
         // Only explicitly zero-cost MCP tools reach approval; rejected calls never reserve.
         await fresh();
-        const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo, {
-          requesterId: t.requester, assistantId: c.assistant, conversationId: t.conversation, turnId: t.turn,
+        const approvalBinding = {
+          requesterId: turnToken.requester, assistantId: computer.assistant,
+          conversationId: turnToken.conversation, turnId: turnToken.turn,
           serverId: match[1]!, connectionId: match[2]!,
-        }, policy, keys, actor.now, fresh, requestId);
+        };
+        const { outcome, reason, approvalId } = await approvalDecision(actor.store, actor.silo,
+          approvalBinding, policy, keys, actor.now, fresh, requestId, conversation);
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
         res.setHeader('x-request-id', requestId);
@@ -186,10 +249,12 @@ export async function startDecision(
       const parsed = requestSchema.safeParse(JSON.parse(raw));
       if (!parsed.success) throw new RequestRefused('Model request refused: use a supported model, a positive integer output bound (max_output_tokens: 16–2000), n = 1 and supported text/local tools only');
       const body = parsed.data;
-      if (body.model !== t.model) throw new Error('Model does not match turn grant');
+      if (body.model !== turnToken.model) throw new Error('Model does not match turn grant');
       const amountCents = requestReservationCents(body);
-      const call = await context(actor, binding, c, t, checked.sequence, 'model', body.model, fresh);
+      const call = await context(actor, binding, computer, turnToken, checked.sequence,
+        'model', body.model, fresh, conversation, turn);
       contextDigest = call.contextDigest;
+      requireConnectedClient(req, res);
       const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
       await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {
         // No permit has left this process, so the gateway cannot have dispatched it.

@@ -193,8 +193,14 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
     reject: (status: number) => { rejection = status; },
     admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
-    async call(extra = {}, patch: Record<string, unknown> = {}) {
-      const response = await fetch(`http://127.0.0.1:${options.port}/v1/responses`, { method: 'POST', headers: { ...headers, ...extra }, body: JSON.stringify({ ...body, ...patch }) });
+    async call(extra = {}, patch: Record<string, unknown> = {}, path = '/v1/responses') {
+      let requestBody = patch;
+      if (path === '/v1/responses') {
+        requestBody = { ...body, ...patch };
+      }
+      const request = { method: 'POST', headers: { ...headers, ...extra },
+        body: JSON.stringify(requestBody) };
+      const response = await fetch(`http://127.0.0.1:${options.port}${path}`, request);
       return { status: response.status, text: await response.text() };
     },
     async settled() {
