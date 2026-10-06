@@ -8,6 +8,9 @@ adapters, the checkpoint runner, the members read model and the MCP catalogue.
 Authorisation and reactions belong elsewhere; replay never sends mail,
 changes OpenFGA or performs other external effects.
 
+The conversation table has an index on `silo` and event `type`. The server uses
+it to read created and closed chats in one query when it polls for work.
+
 The public entrypoint is `src/index.ts`:
 
 ```ts

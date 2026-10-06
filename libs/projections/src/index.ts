@@ -21,7 +21,9 @@ export {
   rebuildMcpCatalogueProjection,
   rebuildComputersProjection,
 } from "./rebuild.ts";
-export { conversations, readConversation, listConversations } from './conversations.ts';
+export {
+  conversations, readConversation, listConversations, listOpenConversations,
+} from './conversations.ts';
 
 export { emptyToolPolicy, applyToolPolicy } from './tool-policy.ts';
 export { auditTrail, readAudit } from './audit.ts';

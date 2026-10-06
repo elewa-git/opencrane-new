@@ -22,11 +22,13 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
   const seen = new Map<string, Progress>();
   const kinds = new Map<string, string>();
   const snapshots = new Map<string, { head: number; assistant: Snapshot }>();
-  const readFailures = new Set<string>();
+  const creationReadFailures = new Set<string>();
+  const computerHistoryReadFailures = new Set<string>();
 
-  function recordReadFailure(assistantId: string, error: unknown, message: string) {
-    if (readFailures.has(assistantId)) return;
-    readFailures.add(assistantId);
+  function recordReadFailure(failures: Set<string>, assistantId: string, error: unknown,
+    message: string) {
+    if (failures.has(assistantId)) return;
+    failures.add(assistantId);
     const details = { err: error, assistantId };
     logger.error(details, message);
   }
@@ -40,8 +42,9 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
         const details = assistantKindData.parse(created.data);
         kind = details.kind;
         kinds.set(assistantId, kind);
+        creationReadFailures.delete(assistantId);
       } catch (error) {
-        recordReadFailure(assistantId, error,
+        recordReadFailure(creationReadFailures, assistantId, error,
           'Assistant creation unavailable; waiting for a later check');
       }
     }
@@ -49,6 +52,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     const head = await options.store.head(subject);
     const previous = snapshots.get(assistantId);
     if (previous?.head === head) {
+      computerHistoryReadFailures.delete(assistantId);
       if (previous.assistant.kind === kind) return previous.assistant;
       const assistant = { ...previous.assistant, kind };
       const cached = { head, assistant };
@@ -56,6 +60,7 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       return assistant;
     }
     const lifecycle = await history(options.store, subject);
+    computerHistoryReadFailures.delete(assistantId);
     const assistant = assistantSnapshot(lifecycle, kind, options.silo);
     // Save the earlier position so events arriving during the read get another pass.
     const cached = { head, assistant };
@@ -63,7 +68,8 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
     return assistant;
   }
 
-  async function process(conversation: AgentSession, assistant: Snapshot) {
+  async function process(conversation: AgentSession, assistant: Snapshot,
+    computerHistoryUnavailable = false) {
     try {
       const conversationId = conversation.conversationId;
       const head = await options.store.head(`conversation-${conversationId}`);
@@ -73,11 +79,12 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
       const computerEventId = assistant.current?.id;
       const sameComputer = previous?.computerEventId === computerEventId;
       const sameKind = previous?.kind === assistant.kind;
-      if (previous?.head === head && sameComputer && sameKind && !previous.retry && !linkClosed) {
+      if (!computerHistoryUnavailable && previous?.head === head && sameComputer && sameKind &&
+        !previous.retry && !linkClosed) {
         return previous.pending;
       }
       const result = await processConversation(options, tokens, conversation,
-        assistant, refused, connection);
+        assistant, refused, connection, computerHistoryUnavailable);
       const progress = { ...result, head, computerEventId, kind: assistant.kind };
       seen.set(conversationId, progress);
       return result.pending;
@@ -90,16 +97,18 @@ export function assistantProcessor(options: WatchOptions, tokens: Tokens, refuse
   async function processAssistant(sessions: AgentSession[]) {
     const assistantId = sessions[0]!.assistantId;
     let assistant: Snapshot;
+    let computerHistoryUnavailable = false;
     try {
       assistant = await snapshot(assistantId);
     } catch (error) {
-      recordReadFailure(assistantId, error,
+      computerHistoryUnavailable = true;
+      recordReadFailure(computerHistoryReadFailures, assistantId, error,
         'Assistant computer history unavailable; waiting for a later check');
       // Read the chats to find waiting messages, without sending to an unknown computer.
       assistant = assistantSnapshot([], kinds.get(assistantId), options.silo);
     }
     function processSession(conversation: AgentSession) {
-      return process(conversation, assistant);
+      return process(conversation, assistant, computerHistoryUnavailable);
     }
     const processing = sessions.map(processSession);
     const results = await Promise.all(processing);

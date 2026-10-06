@@ -9,7 +9,7 @@ import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
 import { assistantProcessor } from './bridge-poll.ts';
-import { listConversations } from '@opencrane/projections';
+import { listOpenConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
@@ -31,7 +31,7 @@ const reportDetails = z.object({
   executionMode: z.enum(['restricted', 'memory_free']).optional(), threadId: z.string().optional(),
 });
 
-type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
+type Conversation = Awaited<ReturnType<typeof listOpenConversations>>[number];
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 
@@ -245,6 +245,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
   const refused = new Set<string>();
   type Link = Awaited<ReturnType<typeof connectBridge>> & { connectionId: number };
   const links = new Map<string, Link>();
+  const settlingReports = new Set<Promise<void[]>>();
   const connectionIds = new Map<string, number>();
   let lastConnectionId = 0;
   const opening = new Map<string, Promise<Awaited<ReturnType<typeof connectBridge>>>>();
@@ -271,6 +272,12 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
       links.set(computerId, remembered);
       connectionIds.set(assistantId, remembered.connectionId);
       function forgetConnection() {
+        const reports = remembered.settled();
+        settlingReports.add(reports);
+        function forgetSettledReports() {
+          settlingReports.delete(reports);
+        }
+        void reports.then(forgetSettledReports, forgetSettledReports);
         if (links.get(computerId) !== remembered) return;
         links.delete(computerId);
         if (connectionIds.get(assistantId) === remembered.connectionId) {
@@ -295,9 +302,9 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
           continue;
         }
         const tableBehind = await conversationTableBehind(options.db, head);
-        const conversations = await listConversations(options.db, options.silo);
+        const conversations = await listOpenConversations(options.db, options.silo);
         const sessions = conversations.filter(isAgentSession);
-        const active = await openSessions(options, sessions);
+        const active = sessions;
         processor.forgetMissing(active);
         forgetMissingTurns(links, active);
         const groups = groupSessions(active);
@@ -322,6 +329,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     const active = [...links.values()];
     for (const link of active) link.socket.terminate();
     const pending = active.map(settledBridge);
+    pending.push(...settlingReports);
     await Promise.all(pending);
   }
 }
@@ -375,18 +383,6 @@ function groupSessions(sessions: AgentSession[]) {
     group.push(session);
   }
   return [...groups.values()];
-}
-
-async function openSessions(options: WatchOptions, sessions: AgentSession[]) {
-  const rows = await options.db.query<{ conversation_id: string }>(
-    'SELECT conversation_id FROM conversation_feed WHERE silo = $1 AND type = $2',
-    [options.silo, 'conversation.closed']);
-  const closed = new Set<string>();
-  for (const row of rows.rows) closed.add(row.conversation_id);
-  function isOpen(session: AgentSession) {
-    return !closed.has(session.conversationId);
-  }
-  return sessions.filter(isOpen);
 }
 
 async function conversationTableBehind(db: ChatOptions['db'], head: number) {

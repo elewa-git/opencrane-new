@@ -124,7 +124,8 @@ export function assistantSnapshot(lifecycle: ChatRows, kind: string | undefined,
 
 export async function processConversation(options: WatchOptions, tokens: Tokens,
   conversation: AgentSession, assistant: ReturnType<typeof assistantSnapshot>,
-  refused: Set<string>, connection: Connection): Promise<ConversationProgress> {
+  refused: Set<string>, connection: Connection,
+  computerHistoryUnavailable = false): Promise<ConversationProgress> {
   const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
   agentSession(rows);
   const message = pendingMessage(rows);
@@ -133,7 +134,10 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   }
   if (rows.some(isConversationClosed)) return { pending: false, retry: false };
   const current = assistant.current;
-  if (!current) return { pending: message !== undefined, retry: false };
+  if (!current) {
+    const pending = computerHistoryUnavailable && message !== undefined;
+    return { pending, retry: pending };
+  }
   if (!assistant.kind) return { pending: message !== undefined, retry: message !== undefined };
   const computer = computerData.parse(current.data);
   await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
@@ -168,10 +172,10 @@ function sendWaitingTurn(options: WatchOptions, link: BridgeLink, conversation: 
   const previousDelivery = link.sentTurns.get(conversation.conversationId);
   const accepted = started.has(message.event.id);
   // Retry busy computers until they accept the turn, without flooding the connection.
-  const resendDue = !accepted && Date.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
+  const resendDue = !accepted && performance.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
   if (previousDelivery?.turnId === message.event.id && !resendDue) return;
   sendTurn(options, link.socket, conversation, rows, uploads, message, mode);
-  const delivery = { turnId: message.event.id, sentAt: Date.now() };
+  const delivery = { turnId: message.event.id, sentAt: performance.now() };
   link.sentTurns.set(conversation.conversationId, delivery);
 }
 
