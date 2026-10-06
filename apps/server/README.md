@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads chat rows and computer state| postgres
-  server -->|sends turns and reads the desktop| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns, receives tool reports and reads the desktop| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -31,6 +31,7 @@ flowchart LR
   Resolving a hold also reads its history first and rechecks access before saving.
 - Starts personal turns using the latest default paying group. It keeps a small
   summary and reads only new spending events after the first use.
+- Records tool starts and finishes as events and returns them in the conversation feed.
 - Records streamed replies using a chat summary. After its first use, it reads only
   new events and checks one saved event. It handles repeats without saving them again.
 - Starts, closes and replays turns using the shared computer summary. It reads new

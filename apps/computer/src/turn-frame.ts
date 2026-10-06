@@ -1,4 +1,13 @@
 import { modelForTask } from '@opencrane/models/routing';
+import { record } from './http.ts';
+
+interface ToolServer {
+  key: string;
+  serverId: string;
+  connectionId: string;
+  serverInfo?: { name: string; version: string };
+  definitions: string[];
+}
 
 export interface Turn {
   executionMode: 'restricted' | 'memory_free';
@@ -12,6 +21,7 @@ export interface Turn {
   taskKind: string;
   attachments?: unknown;
   omittedAttachments: number;
+  tools?: ToolServer[];
 }
 
 export function requiredString(value: Record<string, unknown>, name: string) {
@@ -55,6 +65,7 @@ export function parseTurn(value: Record<string, unknown>): Turn {
     omittedAttachments,
   };
   if (typeof requesterId === 'string') turn.requesterId = requesterId;
+  if (value['tools'] !== undefined) turn.tools = parseTools(value['tools']);
   return turn;
 }
 
@@ -62,4 +73,48 @@ function parseExecutionMode(value: unknown) {
   if (value === undefined) return 'memory_free';
   if (value === 'restricted' || value === 'memory_free') return value;
   throw new Error('Invalid execution mode');
+}
+
+function parseTools(value: unknown): ToolServer[] {
+  if (!Array.isArray(value) || value.length > 20) throw new Error('Invalid tool list');
+  const bytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
+  if (bytes > 48 * 1024) throw new Error('Tool list too large');
+  return value.map(parseToolServer);
+}
+
+function parseToolServer(value: unknown): ToolServer {
+  const server = record(value);
+  checkFields(server, ['key', 'serverId', 'connectionId', 'serverInfo', 'definitions']);
+  const key = requiredString(server, 'key');
+  const serverId = requiredString(server, 'serverId');
+  const connectionId = requiredString(server, 'connectionId');
+  if (!/^oc_[a-f0-9]{10}$/u.test(key)
+    || !/^[\w-]{1,200}$/u.test(serverId) || !/^[\w-]{1,200}$/u.test(connectionId)) {
+    throw new Error('Invalid tool server id');
+  }
+  const definitions: unknown = server['definitions'];
+  if (!Array.isArray(definitions) || definitions.length > 1000
+    || !definitions.every(isDefinition)) {
+    throw new Error('Invalid tool definitions');
+  }
+  const toolServer: ToolServer = { key, serverId, connectionId, definitions };
+  if (server['serverInfo'] !== undefined) {
+    const info = record(server['serverInfo']);
+    checkFields(info, ['name', 'version']);
+    const name = requiredString(info, 'name');
+    const version = requiredString(info, 'version');
+    if (name.length > 200 || version.length > 200) throw new Error('Invalid server information');
+    toolServer.serverInfo = { name, version };
+  }
+  return toolServer;
+}
+
+function isDefinition(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= 32768;
+}
+
+function checkFields(value: Record<string, unknown>, fields: string[]) {
+  for (const field of Object.keys(value)) {
+    if (!fields.includes(field)) throw new Error('Unknown tool field');
+  }
 }

@@ -76,3 +76,12 @@ The browser compares `computerLostAt` with its last agent turn before showing a
 lost-request notice. `lastConfirmedTurnAt` is calculated in the browser from loaded
 turns that are Done; completed turns with lost output are excluded. It is not a
 separate server field. Suspended and resumed computers use the starting state.
+
+## Tool fields in chat rows
+
+`chatRowSchema.data` allows optional strings `callId`, `serverId`, `toolName`,
+`requestId` and `approvalId`; `status` is completed/failed, `durationMs` is a
+non-negative integer and `outcome` is allow/ask/deny. Old chat rows remain valid.
+The browser receives these fields through the existing feed and live messages.
+Running tool lines and attempt lists are not rendered yet. Tests are in
+`test/chat-mode.test.ts`.

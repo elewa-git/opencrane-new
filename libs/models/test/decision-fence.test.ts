@@ -102,6 +102,12 @@ const turnStopped: Injection = {
 };
 
 const harmless: Injection[] = [
+  { label: 'agent.tool_call_started', subject: 'conversation-conversation',
+    type: 'agent.tool_call_started', data: { conversationId: 'conversation', turnId: 'turn',
+      callId: 'call_1', serverId: 'fixture', toolName: 'write' } },
+  { label: 'agent.tool_call_finished', subject: 'conversation-conversation',
+    type: 'agent.tool_call_finished', data: { conversationId: 'conversation', turnId: 'turn',
+      callId: 'call_1', serverId: 'fixture', toolName: 'write', status: 'completed', durationMs: 75 } },
   { label: 'agent.output_lost',
     subject: 'conversation-conversation', type: 'agent.output_lost',
     data: { conversationId: 'conversation', turnId: 'turn' } },

@@ -167,6 +167,41 @@ async function openChatSocket(context: Fixture, conversationId: string) {
   return { socket, received, close };
 }
 
+async function keepsReaderOpenDuringToolProgress() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    await context.agentSession('tool-chat');
+    client = await openChatSocket(context, 'tool-chat');
+    const initialChecks = context.fgaProxy!.checkCount();
+    const started = { conversationId: 'tool-chat', turnId: 'tool-chat-turn',
+      callId: 'call_1', serverId: 'fixture', toolName: 'write' };
+    const events = [
+      { type: 'agent.tool_call_started', data: started },
+      { type: 'agent.tool_call_finished', data: { ...started, status: 'completed' } },
+    ];
+    for (const event of events) {
+      await context.append('conversation-tool-chat', event.type, event.data, false);
+      await context.runner.run(conversations);
+      function receivedToolReport() {
+        function hasType(message: ReturnType<typeof chatMessageSchema.parse>) {
+          return message.row?.type === event.type;
+        }
+        return client!.received.some(hasType);
+      }
+      await until(receivedToolReport);
+      expect(client.socket.readyState).toBe(WebSocket.OPEN);
+      expect(client.received.some(isRefused)).toBe(false);
+      expect(context.fgaProxy!.checkCount()).toBe(initialChecks);
+    }
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+it('keeps an authorised reader open during tool starts and finishes',
+  keepsReaderOpenDuringToolProgress, 120_000);
+
 async function openTeamAssistantChat(context: Fixture, conversationId: string) {
   await context.append('team-sales', 'team.created', {
     teamId: 'sales', name: 'Sales', createdBy: 'alice',

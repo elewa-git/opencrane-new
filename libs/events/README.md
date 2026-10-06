@@ -21,7 +21,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event definitions"]
+  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event and tool report definitions"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   handlers["libs/handlers<br/>background reactions"] -.-> events
@@ -38,6 +38,7 @@ flowchart LR
 - List which named background reactions subscribe to each event type.
 - Keep its event type list in step with the [event catalogue](../../docs/architecture/events.md).
 
+It defines tool start and finish records that exclude arguments, results and error text.
 It also records when part of a private reply was lost before the server could save it.
 
 ## Processes it handles

@@ -51,3 +51,5 @@ export { assistantGrantSchema, assistantCreatedDataSchema,
   conversationCreatedDataSchema, hasDirectParticipants } from './data.ts';
 
 export { agentOutputLostDataSchema } from './data.ts';
+
+export { agentToolCallStartedDataSchema, agentToolCallFinishedDataSchema } from './data.ts';

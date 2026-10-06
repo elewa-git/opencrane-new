@@ -208,6 +208,22 @@ export const eventRegistry: readonly EventDefinition[] = [
     { conversationId: 'conv_1', turnId: 'turn_1', commandDigest: DIGEST_EXAMPLE, exitCode: 0 },
   ),
   event(
+    'agent.tool_call_started',
+    'conversation',
+    'The bridge reported that a tool call started, without its arguments.',
+    data.agentToolCallStartedDataSchema,
+    { conversationId: 'conv_1', turnId: 'turn_1', callId: 'call_1',
+      serverId: 'mcp_1', toolName: 'write' },
+  ),
+  event(
+    'agent.tool_call_finished',
+    'conversation',
+    'The bridge reported that a tool call finished, without its result or error text.',
+    data.agentToolCallFinishedDataSchema,
+    { conversationId: 'conv_1', turnId: 'turn_1', callId: 'call_1',
+      serverId: 'mcp_1', toolName: 'write', status: 'completed', durationMs: 75 },
+  ),
+  event(
     'agent.file_changed',
     'conversation',
     'The bridge reported a file the agent changed in its workspace.',

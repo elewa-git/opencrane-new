@@ -22,3 +22,23 @@ it('validates mode-correct creation in HTTP rows and realtime envelopes', () => 
   const missingMode = { ...row, data: { conversationId: 'old', createdBy: 'alice', assistantId: 'assistant' } };
   expect(chatRowSchema.safeParse(missingMode).success).toBe(true);
 });
+
+function validatesToolAndDecisionFields() {
+  const row = { id: 'tool', position: 1, type: 'agent.tool_call_finished',
+    time: '2026-10-06T12:00:00Z', data: {
+      turnId: 'turn', callId: 'call_1', serverId: 'fixture', toolName: 'write',
+      status: 'completed', durationMs: 75, outcome: 'allow',
+      requestId: 'request', approvalId: 'approval',
+    } };
+  expect(chatRowSchema.safeParse(row).success).toBe(true);
+  const invalidFields = [
+    { callId: 1 }, { serverId: [] }, { toolName: null }, { status: 'inProgress' },
+    { durationMs: -1 }, { durationMs: 1.5 }, { outcome: 'maybe' },
+    { requestId: 1 }, { approvalId: false },
+  ];
+  for (const fields of invalidFields) {
+    const invalid = { ...row, data: { ...row.data, ...fields } };
+    expect(chatRowSchema.safeParse(invalid).success).toBe(false);
+  }
+}
+it('validates optional tool progress and decision fields in chat rows', validatesToolAndDecisionFields);

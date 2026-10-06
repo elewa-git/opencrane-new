@@ -9,6 +9,11 @@ export interface BridgeReport {
   assistantId: string;
   requesterId?: string;
   type: string;
+  callId?: string;
+  serverId?: string;
+  toolName?: string;
+  status?: 'completed' | 'failed';
+  durationMs?: number;
   commandDigest?: string;
   exitCode?: number;
   threadId?: string;
@@ -96,6 +101,7 @@ function parseStoredReport(line: string): BridgeReport {
   if (text !== undefined) {
     report.text = text;
   }
+  readToolDetails(value, report);
   readStorageDetails(value, report);
   return report;
 }
@@ -247,5 +253,21 @@ function readStorageDetails(value: Record<string, unknown>, report: BridgeReport
   if (memoryOnly !== undefined) {
     if (typeof memoryOnly !== 'boolean') throw new Error('Invalid journal storage');
     report.memoryOnly = memoryOnly;
+  }
+}
+
+function readToolDetails(value: Record<string, unknown>, report: BridgeReport) {
+  const callId = optionalString(value, 'callId');
+  const serverId = optionalString(value, 'serverId');
+  const toolName = optionalString(value, 'toolName');
+  const durationMs = optionalNumber(value, 'durationMs');
+  const status = value['status'];
+  if (callId !== undefined) report.callId = callId;
+  if (serverId !== undefined) report.serverId = serverId;
+  if (toolName !== undefined) report.toolName = toolName;
+  if (durationMs !== undefined) report.durationMs = durationMs;
+  if (status !== undefined) {
+    if (status !== 'completed' && status !== 'failed') throw new Error('Invalid tool status');
+    report.status = status;
   }
 }

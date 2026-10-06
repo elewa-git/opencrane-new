@@ -329,6 +329,20 @@ export const agentCommandRanDataSchema = z
   })
   .strict();
 
+const toolCallFields = {
+  conversationId: z.string().regex(/^[\w-]{1,200}$/u),
+  turnId: z.string().regex(/^[\w-]{1,200}$/u),
+  callId: z.string().regex(/^[\w-]{1,200}$/u),
+  serverId: z.string().regex(/^[\w-]{1,200}$/u),
+  toolName: z.string().min(1).max(200),
+};
+export const agentToolCallStartedDataSchema = z.object(toolCallFields).strict();
+export const agentToolCallFinishedDataSchema = z.object({
+  ...toolCallFields,
+  status: z.enum(['completed', 'failed']),
+  durationMs: z.int().nonnegative().optional(),
+}).strict();
+
 export const agentFileChangedDataSchema = z
   .object({
     conversationId: id,

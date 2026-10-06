@@ -457,3 +457,13 @@ that gap needs an append condition that also covers the budget stream.
 `apps/server/test/integrations.test.ts` covers a hold released during the first
 budget read and a saved admin role whose OpenFGA admin permission is denied. Both
 refusals leave the effect stream without `effect.resolved`.
+
+## Tool activity during access checks
+
+`outputReportTypes` includes `agent.tool_call_started` and
+`agent.tool_call_finished`. Neither changes access. The decision activity check
+ignores them while still refusing turn closure, Stop and revoked access. The
+regressions inject each type during both model and MCP decisions. Omitting
+either type makes those decisions return 403. Chat readers remain open while
+these reports arrive. Full conversation reads still precede the short access
+check; only new activity is read during it.

@@ -90,7 +90,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `credential.released` | credential broker (P3-8; fixture contract) | audit lease metadata only | none; never release on replay |
 | `egress.observed` | egress observer (P3-18; fixture contract) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
-| `decision.recorded` | ext_authz | audit; verified model budget refusals also feed conversations with only turn id and reason | none; admission is not an observed effect |
+| `decision.recorded` | ext_authz | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,
@@ -227,6 +227,8 @@ generation; it still requires its rotated token id and a newly observed Ready ev
 | `agent.output_lost` | bridge (reported) | activity | browser (WebSocket); never replayed into context |
 | `agent.reasoning_summarised` | bridge (reported) | activity | browser (WebSocket) |
 | `agent.command_ran` / `agent.file_changed` | bridge (reported) | activity | browser (WebSocket) |
+| `agent.tool_call_started` | bridge (reported) | call id, server id and tool name; no arguments | conversation feed; browser (WebSocket) |
+| `agent.tool_call_finished` | bridge (reported) | call id, server id, tool name, completed/failed status and optional duration; no result or error text | conversation feed; browser (WebSocket) |
 | `file.uploaded` | upload or explicit screenshot command after a clean scan and promotion | conversation files, conversations | deliver bytes over the bridge; wake a suspended computer |
 | `file.rejected` | upload or screenshot command after an infected verdict | conversations | refuse the upload clearly; no bytes stored |
 | `file.delivered` | command after the computer acknowledges verified bytes | conversation files, conversations | browser may show the workspace path and delivery outcome (`saved` or `kept_existing`); reconnects skip acknowledged files |

@@ -781,3 +781,15 @@ are no more than rows at 10 plus two. Times are logged, with no timing assertion
 turns, unchanged refusal messages, first bindings, newest execution modes and
 missing or different read-back events. It also injects suspension during admission
 to prove the append still uses the position read with the facts.
+## Tool call feed records
+
+The strict report parser accepts `agent.tool_call_started` and
+`agent.tool_call_finished`. Both require conversation id, turn id, call id,
+server id and tool name. Finished reports require completed/failed status and
+allow a non-negative integer `durationMs`. Unknown fields are refused. Each
+report uses the existing conditional append and computer sequence digest; an
+identical replay is a duplicate and changed bytes are refused. Reports grant
+no access and carry no arguments, results or error text.
+
+Tests: `test/tool-reports.test.ts` and the open-reader regression in
+`test/chat-access-regression.test.ts`.

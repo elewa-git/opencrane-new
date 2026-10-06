@@ -52,3 +52,12 @@ Private-turn reports add `agent.output_lost` to the conversation stream. Message
 commands may request `executionMode: "memory_free"`; agent and computer start
 events record the optional restricted/memory-free mode. A private tool refusal
 uses `restricted_tool_refused`. See the [event catalogue](../../docs/architecture/events.md#conversations-and-agent-activity).
+
+## Tool call events
+
+`agent.tool_call_started` and `agent.tool_call_finished` belong to conversation
+streams. Both carry `conversationId`, `turnId`, `callId`, `serverId` and
+`toolName`. Finished records add `status` (`completed` or `failed`) and optional
+non-negative integer `durationMs`. Their strict schemas exclude arguments,
+results and error text. Registry examples drive the generated schema tests.
+Both names are listed in the event catalogue.

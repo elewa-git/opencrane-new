@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WorkspaceFile } from './files.ts';
 import { record } from './http.ts';
@@ -6,6 +5,7 @@ import { reportJournal, type BridgeReport } from './report-journal.ts';
 import { requiredString, type Turn } from './turn-frame.ts';
 export { parseTurn } from './turn-frame.ts';
 export type { Turn } from './turn-frame.ts';
+import { itemReport } from './item-reports.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
 
 const MAX_PRIVATE_TURNS = 2;
@@ -452,30 +452,6 @@ class TurnRunner {
     return undefined;
   }
 
-  private completedItem(input: Turn, params: Record<string, unknown>) {
-    const completed = record(params['item']);
-    const command = completed['command'];
-    const exitCode = completed['exitCode'];
-    if (input.executionMode !== 'restricted'
-      && completed['type'] === 'commandExecution'
-      && typeof command === 'string'
-      && typeof exitCode === 'number') {
-      const commandHash = createHash('sha256');
-      commandHash.update(command);
-      const commandDigest = commandHash.digest('hex');
-      this.appendReport(input, 'agent.command_ran', {
-        commandDigest,
-        exitCode,
-      });
-    }
-    if (completed['type'] === 'agentMessage' && typeof completed['text'] === 'string') {
-      this.appendReport(input, 'agent.message_completed', {
-        messageId: String(completed['id']),
-        text: completed['text'],
-      });
-    }
-  }
-
   complete(value: unknown) {
     const event = record(value);
     const params = record(event['params'] ?? {});
@@ -506,9 +482,8 @@ class TurnRunner {
     if (event['method'] === 'item/reasoning/summaryTextDelta' && typeof params['delta'] === 'string') {
       this.appendReport(input, 'agent.reasoning_summarised', { text: params['delta'] });
     }
-    if (event['method'] === 'item/completed') {
-      this.completedItem(input, params);
-    }
+    const report = itemReport(input, params, event['method']);
+    if (report) this.appendReport(input, report.type, report.data);
     if (event['method'] !== 'turn/completed') {
       return;
     }
