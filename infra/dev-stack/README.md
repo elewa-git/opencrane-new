@@ -33,6 +33,7 @@ flowchart LR
 - Run browser checks against real local services.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
+- Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.
 
 ## Processes it handles
 
@@ -44,6 +45,9 @@ flowchart LR
 3. **A developer runs a separate stack.** `claim.sh` reserves one of two spare test stacks, numbered 1 and 2.
    Its services use separate data and ports, and `down.sh --id` removes that stack and
    releases its id.
+4. **The daily check runs.** A user timer starts `up.sh --fresh` in a claimed spare stack.
+   The local model stub keeps it free of paid model calls, and a short result line goes in
+   the user's home directory.
 
 ## Secondary stack slots
 
@@ -69,6 +73,13 @@ infra/dev-stack/down.sh
 ```
 
 `up.sh --fresh` replaces this stack's local data and credentials.
+
+The daily timer runs at 03:17 UTC. It claims a spare stack, starts it fresh with the local
+model stub, and removes that stack when the run ends. If both spare stacks are busy, it
+records that it skipped the run. Results are saved in
+`~/.opencrane/daily-fresh/ledger.md`, outside the repository.
+
+Run `infra/dev-stack/install-daily-fresh-timer.sh` to install or update the user timer.
 
 ## Where to read more
 

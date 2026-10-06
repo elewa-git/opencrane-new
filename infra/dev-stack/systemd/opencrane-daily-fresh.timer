@@ -1,0 +1,10 @@
+[Unit]
+Description=Run the local fresh OpenCrane check each day
+
+[Timer]
+OnCalendar=*-*-* 03:17:00 UTC
+Persistent=false
+Unit=opencrane-daily-fresh.service
+
+[Install]
+WantedBy=timers.target
