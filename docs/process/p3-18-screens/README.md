@@ -1,7 +1,8 @@
 # Screenshot screens
 
-Checked on 6 October 2026 from a working tree based on the commit recorded in
-[`visual.json`](visual.json). The browser checks use sample data in Chromium.
+Checked on 6 October 2026 from commit
+`581852944faa42b898ab5be9599f2630ea5da917`. The screenshot manifests record this
+source commit as well. The browser checks use sample data in Chromium.
 They do not qualify a fresh installation.
 
 The chat workspace reads saved screenshots from conversation events. The web
