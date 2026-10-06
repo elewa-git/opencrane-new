@@ -1,0 +1,401 @@
+{
+  "generatedAt": "2026-10-06T19:26:03.197Z",
+  "captures": [
+    {
+      "state": "admin-draft",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-draft-1280-normal.png"
+    },
+    {
+      "state": "admin-draft",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-draft-1280-reduced.png"
+    },
+    {
+      "state": "admin-draft",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-draft-390-normal.png"
+    },
+    {
+      "state": "admin-draft",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-draft-390-reduced.png"
+    },
+    {
+      "state": "admin-draft",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-draft-320-normal.png"
+    },
+    {
+      "state": "admin-draft",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-draft-320-reduced.png"
+    },
+    {
+      "state": "admin-review",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-review-1280-normal.png"
+    },
+    {
+      "state": "admin-review",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-review-1280-reduced.png"
+    },
+    {
+      "state": "admin-review",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-review-390-normal.png"
+    },
+    {
+      "state": "admin-review",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-review-390-reduced.png"
+    },
+    {
+      "state": "admin-review",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-review-320-normal.png"
+    },
+    {
+      "state": "admin-review",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-review-320-reduced.png"
+    },
+    {
+      "state": "admin-provisioning",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-provisioning-1280-normal.png"
+    },
+    {
+      "state": "admin-provisioning",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-provisioning-1280-reduced.png"
+    },
+    {
+      "state": "admin-provisioning",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-provisioning-390-normal.png"
+    },
+    {
+      "state": "admin-provisioning",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-provisioning-390-reduced.png"
+    },
+    {
+      "state": "admin-provisioning",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-provisioning-320-normal.png"
+    },
+    {
+      "state": "admin-provisioning",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-provisioning-320-reduced.png"
+    },
+    {
+      "state": "admin-ready-busy",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-ready-busy-1280-normal.png"
+    },
+    {
+      "state": "admin-ready-busy",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-ready-busy-1280-reduced.png"
+    },
+    {
+      "state": "admin-ready-busy",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-ready-busy-390-normal.png"
+    },
+    {
+      "state": "admin-ready-busy",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-ready-busy-390-reduced.png"
+    },
+    {
+      "state": "admin-ready-busy",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-ready-busy-320-normal.png"
+    },
+    {
+      "state": "admin-ready-busy",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-ready-busy-320-reduced.png"
+    },
+    {
+      "state": "admin-computer-lost",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-computer-lost-1280-normal.png"
+    },
+    {
+      "state": "admin-computer-lost",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-computer-lost-1280-reduced.png"
+    },
+    {
+      "state": "admin-computer-lost",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-computer-lost-390-normal.png"
+    },
+    {
+      "state": "admin-computer-lost",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-computer-lost-390-reduced.png"
+    },
+    {
+      "state": "admin-computer-lost",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-computer-lost-320-normal.png"
+    },
+    {
+      "state": "admin-computer-lost",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-computer-lost-320-reduced.png"
+    },
+    {
+      "state": "admin-removed",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-removed-1280-normal.png"
+    },
+    {
+      "state": "admin-removed",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-removed-1280-reduced.png"
+    },
+    {
+      "state": "admin-removed",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-removed-390-normal.png"
+    },
+    {
+      "state": "admin-removed",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-removed-390-reduced.png"
+    },
+    {
+      "state": "admin-removed",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-removed-320-normal.png"
+    },
+    {
+      "state": "admin-removed",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-removed-320-reduced.png"
+    },
+    {
+      "state": "admin-access-revoked",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-access-revoked-1280-normal.png"
+    },
+    {
+      "state": "admin-access-revoked",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-access-revoked-1280-reduced.png"
+    },
+    {
+      "state": "admin-access-revoked",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-access-revoked-390-normal.png"
+    },
+    {
+      "state": "admin-access-revoked",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-access-revoked-390-reduced.png"
+    },
+    {
+      "state": "admin-access-revoked",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-access-revoked-320-normal.png"
+    },
+    {
+      "state": "admin-access-revoked",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-access-revoked-320-reduced.png"
+    },
+    {
+      "state": "member-assistant-choice",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-assistant-choice-1280-normal.png"
+    },
+    {
+      "state": "member-assistant-choice",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-assistant-choice-1280-reduced.png"
+    },
+    {
+      "state": "member-assistant-choice",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-assistant-choice-390-normal.png"
+    },
+    {
+      "state": "member-assistant-choice",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-assistant-choice-390-reduced.png"
+    },
+    {
+      "state": "member-assistant-choice",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-assistant-choice-320-normal.png"
+    },
+    {
+      "state": "member-assistant-choice",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-assistant-choice-320-reduced.png"
+    },
+    {
+      "state": "member-fixed-payer-review",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-fixed-payer-review-1280-normal.png"
+    },
+    {
+      "state": "member-fixed-payer-review",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-fixed-payer-review-1280-reduced.png"
+    },
+    {
+      "state": "member-fixed-payer-review",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-fixed-payer-review-390-normal.png"
+    },
+    {
+      "state": "member-fixed-payer-review",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-fixed-payer-review-390-reduced.png"
+    },
+    {
+      "state": "member-fixed-payer-review",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-fixed-payer-review-320-normal.png"
+    },
+    {
+      "state": "member-fixed-payer-review",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-fixed-payer-review-320-reduced.png"
+    },
+    {
+      "state": "member-session-unknown",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-session-unknown-1280-normal.png"
+    },
+    {
+      "state": "member-session-unknown",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-session-unknown-1280-reduced.png"
+    },
+    {
+      "state": "member-session-unknown",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-session-unknown-390-normal.png"
+    },
+    {
+      "state": "member-session-unknown",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-session-unknown-390-reduced.png"
+    },
+    {
+      "state": "member-session-unknown",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-session-unknown-320-normal.png"
+    },
+    {
+      "state": "member-session-unknown",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-session-unknown-320-reduced.png"
+    },
+    {
+      "state": "member-no-eligible-assistant",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-no-eligible-assistant-1280-normal.png"
+    },
+    {
+      "state": "member-no-eligible-assistant",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-no-eligible-assistant-1280-reduced.png"
+    },
+    {
+      "state": "member-no-eligible-assistant",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-no-eligible-assistant-390-normal.png"
+    },
+    {
+      "state": "member-no-eligible-assistant",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-no-eligible-assistant-390-reduced.png"
+    },
+    {
+      "state": "member-no-eligible-assistant",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-no-eligible-assistant-320-normal.png"
+    },
+    {
+      "state": "member-no-eligible-assistant",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-no-eligible-assistant-320-reduced.png"
+    }
+  ]
+}

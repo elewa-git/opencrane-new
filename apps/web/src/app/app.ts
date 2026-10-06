@@ -20,6 +20,7 @@ import { PersonalSettingsShell } from './settings/personal-settings-shell';
 import { PeopleScreen } from './people/people-screen';
 import { GroupDetailScreen } from './people/group-detail-screen';
 import { SharedAssistantAdmin } from './people/shared-assistant-admin';
+import { SharedAssistantPicker } from './chat/shared-assistant-picker';
 import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
 
 @Component({
@@ -30,6 +31,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
     OrganisationShell,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
     SharedAssistantAdmin,
+    SharedAssistantPicker,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -43,6 +45,7 @@ export class App {
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
   protected readonly workspacePage = this.pathname === '/workspace';
+  protected readonly sharedAssistantPickerPage = this.pathname === '/workspace/shared';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
   protected readonly settingsPage = personalSettingsPage(this.pathname);
   protected readonly accountPath = this.pathname === '/account'

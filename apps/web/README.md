@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>private chat, recovery, shared assistants and tool details"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>private chat, recovery, shared sessions and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
@@ -20,6 +20,8 @@ flowchart LR
 
 - Shows sign-in and the first-owner claim page.
 - Lets people start conversations, send messages and stop a reply.
+- Lets organisation admins create shared assistants for groups and members start private
+  sessions with them.
 - Shows reviewed tool approvals, sanitised tool details, uploaded files and the assistant's desktop.
 - Gives admins pages for People & groups at `/org/people` and
   `/org/people/groups/<id>`, an integration register and detail at
@@ -53,6 +55,7 @@ flowchart LR
    identity provider manages the group's members. The assistant keeps one paying group
    for its private member sessions.
 9. **An admin reviews held spend.** The website shows settled spend separately from held spend. An Owner or Admin can read a hold's evidence and record a settlement or release. The existing budget editor remains available.
+10. **A member starts a private shared session.** The website shows assistants they can use, confirms the fixed paying group, then opens their private conversation. Group membership does not give desktop access.
 
 ## How to run or test it
 

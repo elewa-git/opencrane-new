@@ -19,6 +19,14 @@ save again. A saved tool policy stays visible until the server replies with new 
 Connected state and access grants remain unavailable until the server provides those details.
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
+Group details link to a shared assistant draft at
+`/org/people/groups/<id>/assistants/new`. The draft reads the owner group, listed groups,
+`/api/assistants` and `/api/org/models`. It offers that group's active model and tool grants.
+Review shows that selected resources also become available to people through the owner group,
+while desktop access stays separate. `POST /api/assistants` records one assistant with its
+owner group, fixed paying group, name and grants. The server assigns its computer later.
+The list shows the returned lifecycle and busy fields. This API has no failed-provisioning
+retry, add-computer command or queue count. A lost computer is not shown as a failed create.
 
 ## Entrypoint and usage
 
@@ -88,6 +96,18 @@ the chat workspace reloads durable history from the bridge projection.
 Dependencies are Angular, RxJS, tslib, the shared protocol schemas and self-hosted
 DM Sans/DM Mono font files from Fontsource (OFL-1.1). Playwright is build-time only.
 See the [repository architecture](../../README.md) and [plan](../../plan.md).
+
+The member picker lives at `/workspace/shared`. It lists only assistant rows with
+`canStartSession` and asks the member to confirm the assistant's fixed paying group.
+It creates a private session with `POST /api/conversations`, using one command id,
+conversation id, assistant id and the same payer id. After a lost reply, Check status
+reads that command's change route and never repeats the create. A confirmed session opens
+at `/workspace?conversation=<id>`. The transcript and payer id come from the authorised
+conversation list; the member route does not supply the payer's name. The workspace says
+that desktop access is separate. Uploads are unavailable for these sessions because this
+create route does not accept them. Child delegation and child start status are not part of
+these routes. Browser captures use intercepted replies and do not prove live access or
+computer provisioning. [P4-7 screen receipt](../../docs/process/p4-7-screens/receipt.md).
 
 ## Sign-in
 

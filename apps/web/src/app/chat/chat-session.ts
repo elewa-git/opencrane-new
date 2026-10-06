@@ -186,6 +186,11 @@ export class ChatSession implements OnDestroy {
     }
   }
   reconnect(): void { this.socket.connect(); }
+  selectedPayingGroupId(): string {
+    const selectedRow = this.conversations().find(isSelectedConversation.bind(null, this.selected()));
+    if (!selectedRow || selectedRow.mode !== 'agent_session') return '';
+    return selectedRow.payingGroupId ?? '';
+  }
   async stop(): Promise<void> {
     const turn = this.active(); if (!turn || this.busy()) return;
     this.busy.set(true); this.error.set('');
@@ -405,6 +410,13 @@ export class ChatSession implements OnDestroy {
       this.error.set('⊘ Access unavailable. Sign in with an account invited to this workspace.');
     } else this.error.set(this.pending ? '↻ Offline or unavailable — message queued on this page. Retry to send it once.' : '× Could not load the conversation. Retry when the connection returns.');
   }
+}
+
+function isSelectedConversation(
+  conversationId: string,
+  row: ReturnType<typeof chatListSchema.parse>['rows'][number],
+): boolean {
+  return row.conversationId === conversationId;
 }
 
 function isBudgetStop(row: ChatRow): boolean {
