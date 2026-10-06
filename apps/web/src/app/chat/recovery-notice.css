@@ -1,0 +1,8 @@
+:host {
+  display: block;
+  margin-bottom: 12px;
+}
+.lost-message {
+  margin: 0 0 1rem;
+  color: var(--state-failed, #b42318);
+}

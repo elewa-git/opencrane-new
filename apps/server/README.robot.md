@@ -273,13 +273,17 @@ whose organisation no longer matches the configured pin or an exact configured i
 
 With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
 (`id`, `conversationId`, `assistantId`, `mode`), `POST /api/conversations/:conversationId/messages`
-(`id`, `text`), and GET on those paths. The caller supplies stable event ids for
+(`id`, `text`, optional `executionMode: "memory_free"`), and GET on those paths.
+The caller supplies stable event ids for
 retries. POST requires the session's exact Origin. Only live silo members acting
 for their personal assistant can create; conversation participants can read/post.
 Owner/admin roles do not bypass private conversation access. List/messages reads
 come from the `conversations` projection; text is decrypted only after permission
-checks. The messages response contains ordered event rows, a position, generation
-and `computerState` (`ready` or `starting your computer`).
+checks. The messages response contains ordered event rows, a position, generation,
+`computerState` (`ready`, `starting`, `recovering` or `not_applicable`),
+`computerRecovered`, and the optional `computerLostAt` time. A lost computer stays
+recovering until a new `computer.ready` event appears. A fresh ready computer sets
+`computerRecovered`.
 
 On `/ws`, subscribe with `{type: 'subscribe', topic: 'conversation', conversationId,
 since, generation}`. Apply event rows by position; deltas append to their message
@@ -738,3 +742,14 @@ A synthetic reader supplied all 64 cached chats with 3,000 events each: one crea
 32,000-character text. After collection, the summaries retained 13,240,040 bytes
 (12.6 MiB); total JavaScript heap use was 27,932,112 bytes (26.6 MiB). This measures
 summary storage, not the complete server running on a live silo.
+
+## Computer state in chat replies
+
+Chat feed reads use the `computers` projection for state, the last loss time and the
+recovered marker. They never read lifecycle history. Existing installations need a
+computers rebuild before serving these routes. Assistant kind is joined into the list
+query. `test/chat-http.test.ts` checks the response fields, cold resume and lost list status.
+
+The recovered marker describes the computer. The browser shows the lost-request notice
+only if this chat's last agent turn is lost or failed and ended at or after the last
+computer loss. A later completed turn removes that notice.

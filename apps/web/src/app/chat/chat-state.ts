@@ -3,9 +3,25 @@ import type { ChatRow } from '@opencrane/protocol';
 
 export interface Turn {
   id: string; author: 'you' | 'person' | 'agent'; text: string; time: string; endedAt?: string;
-  state: 'working' | 'done' | 'failed' | 'stopped';
+  state: 'working' | 'done' | 'failed' | 'stopped' | 'lost';
   tools: ToolActivityRecord[];
   files: string[]; budgetStop?: 'budget_exhausted'; screenshotRejected?: true;
+  reason?: string; executionMode?: 'restricted' | 'memory_free';
+}
+
+export function turnContent(turn: Turn): string {
+  return turn.text + turn.state + turn.files.join() + turn.tools.length;
+}
+
+export function turnOutcome(turn: Turn): string {
+  if (turn.state === 'done') return 'Done';
+  if (!turn.text) return "Didn't complete · nothing was repeated";
+  if (turn.state === 'stopped') return 'Stopped · partial reply kept';
+  return 'Reply did not complete · partial reply kept';
+}
+export function turnStatusIcon(turn: Turn): string {
+  if (turn.state === 'lost') return 'failed';
+  return turn.state;
 }
 
 export interface ChatAttachment {
@@ -45,6 +61,7 @@ export function toolKind(record: ToolActivityRecord): string {
 export function transcript(rows: ChatRow[], memberId: string): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();
   const seen = new Set<string>();
+  const lostOutput = new Set<string>();
   for (const row of rows) {
     if (seen.has(row.id)) continue;
     seen.add(row.id);
@@ -71,25 +88,70 @@ export function transcript(rows: ChatRow[], memberId: string): Turn[] {
     if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') {
       turn.budgetStop = 'budget_exhausted';
     }
-    updateTurn(turn, row, messages.get(turn.id)!);
+    updateTurn(turn, row, messages.get(turn.id)!, lostOutput);
   }
   return turns;
 }
 
-function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>): void {
-  const data = row.data;
-    if (['agent.turn_completed', 'agent.turn_failed'].includes(row.type)) turn.endedAt = row.time;
-    if (row.type === 'agent.turn_failed') turn.tools.push({ id: row.id, label: 'Reply failed', detail: 'Run interrupted', failed: true, time: row.time });
-    if (row.type === 'agent.turn_completed') turn.state = 'done';
-    if (row.type === 'agent.turn_failed') turn.state = 'failed';
-    if (row.type === 'agent.command_ran') turn.tools.push({ id: row.id, label: data.exitCode === 0 ? 'Command completed' : 'Command failed',
-      detail: `Exit code ${data.exitCode ?? 'unknown'}`, failed: data.exitCode !== 0, time: row.time });
-    if (row.type === 'agent.file_changed') addAvailableFile(turn, data);
-    if (['agent.message_delta', 'agent.message_completed'].includes(row.type)) {
-      const id = data.messageId ?? row.id;
-      parts.set(id, (row.type === 'agent.message_delta' ? parts.get(id) ?? '' : '') + (data.text ?? ''));
-      turn.text = [...parts.values()].join('\n\n');
-    }
+function updateTurn(turn: Turn, row: ChatRow, parts: Map<string, string>,
+  lostOutput: Set<string>): void {
+  updateTurnOutcome(turn, row, lostOutput);
+  updateTurnTools(turn, row);
+  if (row.type === 'agent.file_changed') addAvailableFile(turn, row.data);
+  updateTurnText(turn, row, parts);
+}
+
+function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): void {
+  if (row.type === 'agent.turn_started') {
+    turn.executionMode = row.data['executionMode'] === 'restricted' ? 'restricted' : 'memory_free';
+    return;
+  }
+  // Keep lost output incomplete whether its marker arrives before or after completion.
+  if (row.type === 'agent.output_lost') {
+    lostOutput.add(row.data.turnId ?? '');
+    turn.state = 'lost';
+    turn.endedAt = row.time;
+    return;
+  }
+  if (row.type === 'agent.turn_failed') {
+    turn.state = 'failed';
+    turn.endedAt = row.time;
+    if (row.data.reason) turn.reason = row.data.reason;
+    return;
+  }
+  if (row.type === 'agent.turn_completed') {
+    turn.state = lostOutput.has(turn.id) ? 'lost' : 'done';
+    turn.endedAt = row.time;
+  }
+}
+
+function failureDetail(reason: string | undefined): string {
+  if (reason === 'computer_lost') return 'Computer was lost';
+  return 'Run interrupted';
+}
+
+function updateTurnTools(turn: Turn, row: ChatRow): void {
+  if (row.type === 'agent.turn_failed') {
+    turn.tools.push({ id: row.id, label: 'Reply failed',
+      detail: failureDetail(row.data.reason), failed: true, time: row.time });
+    return;
+  }
+  if (row.type !== 'agent.command_ran') return;
+  const succeeded = row.data.exitCode === 0;
+  const label = succeeded ? 'Command completed' : 'Command failed';
+  turn.tools.push({ id: row.id, label, detail: `Exit code ${row.data.exitCode ?? 'unknown'}`,
+    failed: !succeeded, time: row.time });
+}
+
+function updateTurnText(turn: Turn, row: ChatRow, parts: Map<string, string>): void {
+  if (!['agent.message_delta', 'agent.message_completed'].includes(row.type)) return;
+  const messageId = row.data.messageId ?? row.id;
+  let text = row.data.text ?? '';
+  if (row.type === 'agent.message_delta') {
+    text = `${parts.get(messageId) ?? ''}${text}`;
+  }
+  parts.set(messageId, text);
+  turn.text = [...parts.values()].join('\n\n');
 }
 
 function addAvailableFile(turn: Turn, data: ChatRow['data']): void {

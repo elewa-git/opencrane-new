@@ -4,6 +4,9 @@
 
 ## Unreleased
 
+- Team chats are marked private. A lost computer pauses sending and explains recovery. Replies with lost output never show Done. A memory-free turn is a visible, separate choice that resets after sending.
+- Operators: after updating an existing installation, stop the services and run `npm run replay -- computers` once before serving chat again. The new computer state is not filled from older events otherwise. Fresh installations need nothing.
+
 - Streamed replies no longer slow down as a chat gets longer. Repeated turn starts are handled without saving them again.
 
 - Starting a turn on a personal assistant no longer slows down as the silo's spending history grows. Resolving a spending hold reads history before starting its access check.
@@ -17,7 +20,7 @@
 - Open chat pages repeat permission checks only when access records change. Idle pages no longer call the permissions service every 100 ms, and member removal still closes their connection within two seconds.
 - Idle chat sockets check the conversation feed position and keep computer state between ticks, so they read chat content only after the feed changes.
 
-- Group members' private chats with a shared assistant now use a temporary Codex process with tools off and files in a memory volume. Swap can still write private text to disk. Isolation is not yet proven on a live computer; memory features stay off until it is. The chat screens, including the choice of a memory-free turn with tools, come next (#96).
+- Group members' private chats with a shared assistant now use a temporary Codex process with tools off and files in a memory volume. Swap can still write private text to disk. Isolation is not yet proven on a live computer; memory features stay off until it is.
 - Shared prompt files and skill instructions are now off in personal and memory-free Codex turns as well as private turns.
 - Model and tool calls keep working when another chat, a file upload or someone else's access changes during the access check. Revocations, turn stops and approval invalidation still refuse calls, and unsent spending holds release at zero cents.
 

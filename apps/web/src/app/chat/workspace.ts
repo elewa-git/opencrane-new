@@ -11,6 +11,8 @@ import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
 import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
+import { RecoveryNotice } from './recovery-notice';
+import { MemoryFreeNotice } from './memory-free-notice';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
   viewChild, type OnInit,
@@ -18,11 +20,12 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';
 import { BrandMark } from '../ui/brand-mark';
-import { sessionSlug } from '@opencrane/protocol';
+import { sessionSlug, type ChatConversation } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  rejectedScreenshotIds, toolKind, type ChatAttachment, type ToolActivityRecord,
+  rejectedScreenshotIds, toolKind, turnContent, turnOutcome, turnStatusIcon,
+  type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
@@ -38,7 +41,7 @@ import {
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
-    ToolActivityLine,
+    ToolActivityLine, RecoveryNotice, MemoryFreeNotice,
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
@@ -89,19 +92,61 @@ export class Workspace implements OnInit {
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
+  protected readonly teamConversations = computed(this.listTeamConversations.bind(this));
+  protected readonly personalConversations = computed(this.listPersonalConversations.bind(this));
   protected readonly reason = computed(this.composerReason.bind(this));
+  protected readonly lastConfirmedTurnAt = this.chat.lastConfirmedTurnAt;
+  protected readonly teamSession = this.chat.teamSession;
+  protected readonly composerPlaceholder = computed(this.messagePlaceholder.bind(this));
+  private restoreComposerAfterRecovery = false;
+  private previousComputerState = this.chat.computer();
   private lastTranscript = '';
   private pendingToolFocus = '';
   private focusComposerAfterNavigation = false;
   private previousCaptureConversation = this.chat.selected();
   private previousCaptureDenied = this.chat.denied();
   constructor() {
+    effect(this.rememberRecoveryFocus.bind(this));
     effect(this.resetCaptureWhenSessionChanges.bind(this));
     effect(this.closeMissingToolDetails.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
-  protected async send(text: string): Promise<void> { if (await this.chat.send(text)) this.draft.set(''); }
+  protected async send(text: string): Promise<void> {
+    const sent = await this.chat.send(text);
+    if (sent) this.draft.set('');
+  }
+  protected selectMemoryFree(): void {
+    this.chat.chooseMemoryFree();
+    this.focusComposer();
+  }
+  protected selectPrivate(): void {
+    this.chat.choosePrivate();
+  }
+  protected readonly turnOutcome = turnOutcome;
+  protected readonly turnStatusIcon = turnStatusIcon;
+  protected memoryAdmissionDetail(): string {
+    const failing = this.chat.memoryAdmission().failing;
+    return failing.join(' ');
+  }
+  private messagePlaceholder(): string {
+    if (!this.teamSession()) return 'Message your agent…';
+    const sessionTitle = this.chat.selectedConversation()?.title;
+    if (!sessionTitle) return 'Message this private session…';
+    return `Message #${sessionTitle}`;
+  }
+  private isTeamConversation(row: ChatConversation): boolean {
+    return row.mode === 'agent_session' && row.assistantKind === 'team';
+  }
+  private listTeamConversations(): ChatConversation[] {
+    return this.chat.conversations().filter(this.isTeamConversation.bind(this));
+  }
+  private listPersonalConversations(): ChatConversation[] {
+    return this.chat.conversations().filter(this.isPersonalConversation.bind(this));
+  }
+  private isPersonalConversation(row: ChatConversation): boolean {
+    return row.mode === 'agent_session' && row.assistantKind !== 'team';
+  }
   protected newSession(): void {
     this.focusComposerAfterNavigation = this.rail();
     this.chat.newSession();
@@ -313,16 +358,31 @@ export class Workspace implements OnInit {
     this.previousCaptureConversation = conversationId;
     this.previousCaptureDenied = denied;
   }
+  private rememberRecoveryFocus(): void {
+    const state = this.chat.computer();
+    if (state === 'recovering' && this.previousComputerState !== 'recovering') {
+      this.restoreComposerAfterRecovery = document.activeElement?.id === 'message';
+    }
+    this.previousComputerState = state;
+  }
+  private restoreRecoveryFocus(): void {
+    if (!this.restoreComposerAfterRecovery || this.chat.computer() !== 'ready') return;
+    this.restoreComposerAfterRecovery = false;
+    const active = document.activeElement;
+    if (active === document.body || active?.id === 'message') this.focusComposer();
+  }
   private afterRender(): void {
     const turns = this.chat.turns();
-    const content = turns.map(turn => turn.text + turn.state + turn.files.join()
-      + turn.tools.length).join('');
+    const recovery = this.chat.computer() + String(this.chat.recoveredLostTurn());
+    const renderedTurns = turns.map(turnContent);
+    const content = recovery + renderedTurns.join('');
     if (content !== this.lastTranscript) {
       this.lastTranscript = content;
       const element = this.transcriptElement()?.nativeElement;
       if (element) requestAnimationFrame(this.scrollTranscriptToBottom.bind(this, element));
     }
     this.focusPendingComposer();
+    this.restoreRecoveryFocus();
   }
   private scrollTranscriptToBottom(element: HTMLElement): void {
     element.scrollTop = element.scrollHeight;
@@ -340,11 +400,14 @@ export class Workspace implements OnInit {
   }
   protected focusComposer(): void { document.getElementById('message')?.focus(); }
   protected rowStatus(id: string, status = 'open'): string {
-    if (id !== this.chat.selected()) return status;
+    if (id !== this.chat.selected()) return this.displayStatus(status);
     if (this.chat.active()) return 'working';
     if (this.isClosedConversation()) return 'closed';
-    return this.chat.turns().filter(turn => turn.author === 'agent').at(-1)?.state ?? status;
+    const current = this.chat.turns().filter(this.isAgentTurn.bind(this)).at(-1)?.state ?? status;
+    return this.displayStatus(current);
   }
+  private isAgentTurn(turn: Turn): boolean { return turn.author === 'agent'; }
+  private displayStatus(status: string): string { return status === 'lost' ? 'failed' : status; }
   protected words(status: string): string { return ({ working: 'Working', done: 'Done', stopped: 'Stopped', failed: 'Failed', closed: 'Closed', open: 'Open' } as Record<string, string>)[status] ?? 'Open'; }
   protected time(value: string): string { return shortTime(value); }
   protected conversationStatus(): string {
@@ -359,11 +422,14 @@ export class Workspace implements OnInit {
   }
   private composerReason(): string {
     if (this.isClosedConversation()) return 'This session is closed. Start a new session to continue.';
+    if (this.chat.computer() === 'recovering') {
+      return 'Your computer is recovering. Sending is paused until it is ready.';
+    }
     if (this.chat.denied()) return 'Sign in to send messages.';
     if (this.chat.loading()) return 'Loading your workspace…';
     if (this.chat.railUnavailable()) return 'Reconnect to your pod to start a session.';
     if (!this.chat.selected() && !this.recipient()) return 'Choose your agent to start a session.';
-    if (!this.chat.assistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
+    if (!this.chat.selectedAssistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
     return '';
   }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }

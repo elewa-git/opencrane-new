@@ -2,6 +2,7 @@ import { sendUpload } from './upload';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
+import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
 import { transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
@@ -20,7 +21,14 @@ export class ChatSession implements OnDestroy {
   readonly memberId = signal('');
   readonly displayName = signal('You');
   readonly assistantId = signal<string | null>(null);
-  readonly computer = signal('ready');
+  readonly computer = signal<ComputerState>('ready');
+  readonly computerRecovered = signal(false);
+  readonly computerLostAt = signal('');
+  readonly memoryAdmission = signal<MemoryAdmission>({
+    state: 'disabled', failing: ['Private memory checks have not all passed.'],
+  });
+  readonly recoveredLostTurn = computed(this.hasRecoveredLostTurn.bind(this));
+  readonly executionMode = signal<'restricted' | 'memory_free'>('restricted');
   readonly loading = signal(true);
   readonly railLoading = signal(true);
   readonly railUnavailable = signal(false);
@@ -35,6 +43,11 @@ export class ChatSession implements OnDestroy {
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
   readonly turns = computed(() => transcript(this.rows(), this.memberId()));
+  readonly selectedConversation = computed(() =>
+    this.conversations().find(row => row.conversationId === this.selected()));
+  readonly teamSession = computed(this.isTeamSession.bind(this));
+  readonly selectedAssistantId = computed(this.assistantForSelectedSession.bind(this));
+  readonly lastConfirmedTurnAt = computed(this.confirmedTurnAt.bind(this));
   readonly active = computed(() => this.turns().filter(turn => turn.author === 'agent' && turn.state === 'working').at(-1));
   readonly attachments = computed(() => this.rows().flatMap(row => { const file = uploadedFile(row); return file ? [file] : []; }));
   readonly uploadName = signal('');
@@ -55,7 +68,8 @@ export class ChatSession implements OnDestroy {
   private revision = 0;
   private sawReconnecting = false;
   private reconnectCount = 0;
-  private pending: { id: string; conversationId: string; text: string } | undefined;
+  private pending: { id: string; conversationId: string; text: string;
+    executionMode?: 'memory_free' } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
 
   constructor() {
@@ -87,6 +101,7 @@ export class ChatSession implements OnDestroy {
       const context = chatContextSchema.parse(await this.request('/api/chat'));
       const me = z.object({ authenticated: z.boolean(), user: z.object({ name: z.string().optional() }).nullable() }).parse(await this.request('/auth/me'));
       this.memberId.set(context.memberId); this.displayName.set(me.authenticated ? me.user?.name?.trim() || 'You' : 'You'); this.assistantId.set(context.assistantId); this.denied.set(false);
+      if (context.memoryAdmission) this.memoryAdmission.set(context.memoryAdmission);
       await this.list();
       const id = new URL(location.href).searchParams.get('conversation');
       if (id) await this.select(id);
@@ -102,13 +117,28 @@ export class ChatSession implements OnDestroy {
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
+    const conversation = this.conversations().find(row => row.conversationId === id);
+    const isTeam = this.isTeamConversation(conversation);
+    this.executionMode.set(isTeam ? 'restricted' : 'memory_free');
     this.error.set(''); this.loading.set(true); this.computer.set('ready');
+    this.computerRecovered.set(false);
+    this.computerLostAt.set('');
     history.replaceState({}, '', `/workspace?conversation=${encodeURIComponent(id)}`);
     try {
       await this.catchUp(id, revision);
       if (revision === this.revision) this.socket.connect();
     } catch (error) { if (revision === this.revision) this.fail(error); }
     finally { if (revision === this.revision) this.loading.set(false); }
+  }
+  chooseMemoryFree(): void {
+    if (this.busy() || this.queued()) return;
+    this.executionMode.set('memory_free');
+    this.announcement.set(
+      'Memory-free selected. This turn has no earlier context and writes to the shared disk.');
+  }
+  choosePrivate(): void {
+    if (this.busy() || this.queued()) return;
+    this.executionMode.set('restricted');
   }
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
@@ -117,15 +147,31 @@ export class ChatSession implements OnDestroy {
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
+    this.computerRecovered.set(false);
+    this.computerLostAt.set('');
+    this.executionMode.set('restricted');
     history.replaceState({}, '', '/workspace');
   }
   async send(text: string): Promise<boolean> {
-    if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending() || this.denied() || !this.assistantId()) return false;
+    if (!text.trim() || this.busy() || this.active() || this.uploading() || this.uploadPending()
+      || this.denied() || this.computer() === 'recovering' || !this.selectedAssistantId()) return false;
     this.reconnectedAt.set('');
-    if (!this.pending) this.pending = { id: crypto.randomUUID(), conversationId: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()), text: text.trim() };
+    if (!this.pending) {
+      const pending: { id: string; conversationId: string; text: string;
+        executionMode?: 'memory_free' } = { id: crypto.randomUUID(),
+        conversationId: this.selected() || this.creationId || (this.creationId = crypto.randomUUID()),
+        text: text.trim() };
+      if (this.teamSession() && this.executionMode() === 'memory_free') {
+        pending.executionMode = 'memory_free';
+      }
+      this.pending = pending;
+    }
     this.busy.set(true); this.error.set('');
     try {
-      await this.deliver(); this.queued.set(false); return true;
+      await this.deliver();
+      this.queued.set(false);
+      this.executionMode.set('restricted');
+      return true;
     } catch (error) { this.queued.set(true); this.fail(error); return false; }
     finally { this.busy.set(false); }
   }
@@ -153,7 +199,44 @@ export class ChatSession implements OnDestroy {
 
   private async list(): Promise<void> {
     const value = chatListSchema.parse(await this.request('/api/conversations'));
-    this.conversations.set(value.rows.filter(row => row.mode === 'agent_session').map(row => ({ ...row, title: row.title ? sessionSlug(row.title) : 'New session' })));
+    const agentSessions = value.rows.filter(this.isAgentSession.bind(this));
+    const conversations = agentSessions.map(this.addDisplayTitle.bind(this));
+    this.conversations.set(conversations);
+  }
+  private isAgentSession(row: ChatConversation): row is Extract<ChatConversation,
+  { mode: 'agent_session' }> {
+    return row.mode === 'agent_session';
+  }
+  private addDisplayTitle(row: Extract<ChatConversation, { mode: 'agent_session' }>) {
+    let title = 'New session';
+    if (row.title) title = sessionSlug(row.title);
+    return { ...row, title };
+  }
+  private isTeamConversation(row: ChatConversation | undefined): boolean {
+    return row?.mode === 'agent_session' && row.assistantKind === 'team';
+  }
+  private isTeamSession(): boolean {
+    return this.isTeamConversation(this.selectedConversation());
+  }
+  private assistantForSelectedSession(): string | null {
+    const conversation = this.selectedConversation();
+    if (conversation?.mode === 'agent_session') return conversation.assistantId;
+    return this.assistantId();
+  }
+  private hasRecoveredLostTurn(): boolean {
+    if (!this.computerRecovered() || !this.computerLostAt()) return false;
+    const agentTurns = this.turns().filter(isAgentTurn);
+    const lastTurn = agentTurns.at(-1);
+    if (!lastTurn || (lastTurn.state !== 'lost' && lastTurn.state !== 'failed')) return false;
+    if (!lastTurn.endedAt) return false;
+    return Date.parse(lastTurn.endedAt) >= Date.parse(this.computerLostAt());
+  }
+  private isConfirmedTurn(turn: ReturnType<typeof transcript>[number]): boolean {
+    return turn.author === 'agent' && turn.state === 'done';
+  }
+  private confirmedTurnAt(): string {
+    const completed = this.turns().filter(this.isConfirmedTurn.bind(this));
+    return completed.at(-1)?.endedAt ?? '';
   }
   private subscribeWhenConnected(): void {
     const state = this.socket.state();
@@ -174,16 +257,33 @@ export class ChatSession implements OnDestroy {
   private async deliver(): Promise<void> {
     const command = this.pending!;
     await this.ensureConversation(command.conversationId);
-    await this.request(`/api/conversations/${command.conversationId}/messages`, { id: command.id, text: command.text });
+    const confirmed = this.queued() && await this.pendingWasRecorded(command);
+    if (!confirmed) {
+      await this.request(`/api/conversations/${command.conversationId}/messages`, {
+        id: command.id, text: command.text, executionMode: command.executionMode,
+      });
+    }
     // An optimistic row uses the same id as the durable event and is replaced on catch-up.
     this.rows.update(rows => rows.some(row => row.id === command.id) ? rows : [...rows, { id: command.id, position: 0, type: 'message.posted', time: new Date().toISOString(), data: { text: command.text, authorId: this.memberId() } }]);
     this.pending = undefined;
     this.socket.connect();
   }
+  private async pendingWasRecorded(command: { id: string; conversationId: string }): Promise<boolean> {
+    try {
+      const path = `/api/conversations/${command.conversationId}/changes/${command.id}`;
+      const result = await this.request(path);
+      const receipt = z.object({ status: z.literal('appended'), commandId: z.string() }).parse(result);
+      return receipt.commandId === command.id;
+    } catch (error) {
+      if (error instanceof ReadFailure && error.status === 404) return false;
+      throw error;
+    }
+  }
   private async ensureConversation(conversationId: string): Promise<void> {
     if (this.selected() && this.selected() !== conversationId) throw new Error('Retry belongs to another session');
     if (!this.selected()) {
-      await this.request('/api/conversations', { id: `create-${conversationId}`, conversationId: conversationId, assistantId: this.assistantId(), mode: 'agent_session' });
+      await this.request('/api/conversations', { id: `create-${conversationId}`,
+        conversationId, assistantId: this.selectedAssistantId(), mode: 'agent_session' });
       // Creation's access projection is asynchronous. Read until visible, with a fixed deadline.
       for (let attempt = 0; attempt < 50; attempt++) {
         await this.list();
@@ -219,7 +319,10 @@ export class ChatSession implements OnDestroy {
       const feed = chatFeedSchema.parse(await this.request(`/api/conversations/${id}/messages?since=${this.position}`));
       if (revision !== this.revision) return;
       if (this.position && feed.generation !== this.generation) { this.position = 0; this.rows.set([]); continue; }
-      this.generation = feed.generation; this.computer.set(feed.computerState);
+      this.generation = feed.generation;
+      this.setComputerState(feed.computerState);
+      this.computerRecovered.set(feed.computerRecovered ?? false);
+      this.computerLostAt.set(feed.computerLostAt ?? '');
       for (const row of feed.rows) this.apply(row);
       more = feed.rows.length > 0 && this.position < feed.position;
     }
@@ -239,7 +342,7 @@ export class ChatSession implements OnDestroy {
       this.announcement.set(`${reconnectWords} ${shortTime(connectedAt)}. You're caught up.`);
     }
     this.generation = message.generation;
-    if (message.computerState) this.computer.set(message.computerState);
+    this.updateComputerState(message);
     if (message.row) {
       const parsed = chatRowSchema.safeParse(message.row);
       if (parsed.success) {
@@ -251,6 +354,27 @@ export class ChatSession implements OnDestroy {
       }
       else { this.error.set('× Could not read a conversation update. Reload to retry.'); this.socket.disconnect(); }
     }
+  }
+  private updateComputerState(message: ServerMessage): void {
+    if (!('computerState' in message)) return;
+    if (message.computerState) this.setComputerState(message.computerState);
+    if (message.computerRecovered !== undefined) {
+      this.computerRecovered.set(message.computerRecovered);
+    }
+    if (message.computerLostAt !== undefined) this.computerLostAt.set(message.computerLostAt);
+  }
+  private setComputerState(state: ComputerState): void {
+    const previous = this.computer();
+    this.computer.set(state);
+    if (state === previous) return;
+    if (state === 'recovering') {
+      this.announcement.set('Your computer is recovering. Sending is paused.');
+    } else if (previous === 'recovering' && state === 'ready') {
+      this.announcement.set('Your computer is ready again. You can send.');
+    }
+  }
+  queuedReference(): string {
+    return this.pending?.id ?? '';
   }
   private apply(row: ChatRow): boolean {
     if (row.position <= this.position) return false;
@@ -270,7 +394,7 @@ export class ChatSession implements OnDestroy {
       const response = await fetch(path, { signal: AbortSignal.timeout(15_000), ...(body ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) } : {}) });
       // Streamed reports can win the append race. Retry the same command id, at most twice.
       if (body && response.status === 409 && attempt < 2) continue;
-      if (!response.ok) throw new ReadFailure(response.status);
+      if (response.status !== 200) throw new ReadFailure(response.status);
       return response.json() as Promise<unknown>;
     }
   }
@@ -284,4 +408,8 @@ export class ChatSession implements OnDestroy {
 
 function isBudgetStop(row: ChatRow): boolean {
   return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
+}
+
+function isAgentTurn(turn: ReturnType<typeof transcript>[number]): boolean {
+  return turn.author === 'agent';
 }

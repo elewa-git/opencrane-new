@@ -6,14 +6,19 @@ import { ChangeDetectionStrategy, Component, input, output, signal } from '@angu
 @Component({ selector: 'oc-chat-composer', imports: [ChatIcon], templateUrl: './composer.html', styleUrl: './composer.css', changeDetection: ChangeDetectionStrategy.OnPush })
 export class ChatComposer {
   readonly draft = input('');
+  readonly placeholder = input('Message your agent…');
   readonly working = input(false);
   readonly busy = input(false);
   readonly reason = input('');
   readonly queued = input(false);
+  readonly teamSession = input(false);
+  readonly memoryFree = input(false);
   readonly draftChange = output<string>();
   readonly submitted = output<string>();
   readonly stopped = output<void>();
   readonly attached = output<File>();
+  readonly memoryFreeSelected = output<void>();
+  readonly privateSelected = output<void>();
   protected readonly attachOpen = signal(false);
   protected readonly notice = signal('');
   protected closeAttach(): void { this.attachOpen.set(false); document.getElementById('attach-toggle')?.focus(); }

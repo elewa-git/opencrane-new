@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables"]
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables and computer state"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -49,7 +49,10 @@ Not built yet: storing those keys safely for real customers.
 1. **A member joins.** The worker reads the saved event and updates the member
    table. It saves its position with the table change, then sends a notice after
    the change commits.
-2. **An operator rebuilds a table.** They run `npm run replay -- members`. The
+2. **A computer starts, sleeps or recovers.** The worker saves its current state
+   and the time of its last loss. Chat pages read this small record instead of reading
+   all of the computer's past events.
+3. **An operator rebuilds a table.** They run `npm run replay -- members`. The
    command reads the whole event log again, builds fresh tables on the side and
    swaps them in. It does not run reactions or make outside calls.
 

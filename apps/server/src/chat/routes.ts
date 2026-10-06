@@ -21,6 +21,7 @@ import {
 import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
+import { memoryAdmission } from './memory-admission.ts';
 
 export type { ChatOptions } from './access.ts';
 type Access = Awaited<ReturnType<typeof chatAccess>>;
@@ -35,7 +36,7 @@ const parameters = z.object({ conversationId: id.optional(), commandId: id.optio
 export async function chatRows(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct', since = 0) {
   const result = await readConversation(options.db, options.silo, conversationId, since);
-  const computerState = await conversationComputerState(options, conversationId, mode);
+  const computer = await conversationComputerState(options, conversationId, mode);
   function decryptRow(row: (typeof result.rows)[number]) {
     const data = z.record(z.string(), z.unknown()).parse(row.data);
     if (!('ciphertext' in data)) return row;
@@ -44,20 +45,26 @@ export async function chatRows(options: ChatOptions, conversationId: string,
     return { ...row, data: { ...rest, text } };
   }
   const rows = result.rows.map(decryptRow);
-  return { ...result, computerState, rows };
+  return { ...result, ...computer, rows };
 }
 
 async function conversationComputerState(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct') {
   // Use the mode from the event log; the read table may still be catching up.
-  if (mode === 'direct') return 'not_applicable';
-  const computers = await options.db.query<{ status: string }>(
-    `SELECT c.status FROM computers c JOIN conversation_feed f
-      ON f.silo = c.silo AND f.data->>'assistantId' = c.assistant_id
+  if (mode === 'direct') {
+    return { computerState: 'not_applicable' as const, computerRecovered: false,
+      computerLostAt: undefined };
+  }
+  const result = await options.db.query<{
+    chat_state: 'ready' | 'starting' | 'recovering'; recovered: boolean; lost_at: string | null;
+  }>(
+    `SELECT c.chat_state, c.recovered, c.lost_at FROM conversation_feed f
+      LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
       WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`,
     [options.silo, conversationId]);
-  if (computers.rows[0]?.status === 'ready') return 'ready';
-  return 'starting your computer';
+  const computer = result.rows[0];
+  return { computerState: computer?.chat_state ?? 'starting',
+    computerRecovered: computer?.recovered ?? false, computerLostAt: computer?.lost_at ?? undefined };
 }
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
@@ -185,7 +192,8 @@ async function personalContext(options: ChatOptions, memberId: string) {
     const permission = await memberAuthorisation(options.binding).actsFor(memberId, assistantId);
     if (!permission.allowed) assistantId = null;
   }
-  return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId };
+  return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId,
+    memoryAdmission };
 }
 
 type SummaryRow = { type: string; data: unknown };
@@ -198,13 +206,25 @@ function changesStatus(row: SummaryRow) {
     'agent.turn_stop_requested', 'conversation.closed',
   ].includes(row.type);
 }
-function conversationStatus(last: SummaryRow | undefined, mode: string) {
+function conversationStatus(rows: SummaryRow[], last: SummaryRow | undefined, mode: string) {
   if (last?.type === 'conversation.closed') return 'closed';
   if (mode === 'direct' || !last) return 'open';
   if (last.type === 'agent.turn_failed') return 'failed';
   if (last.type === 'agent.turn_stop_requested') return 'stopped';
-  if (last.type === 'agent.turn_completed') return 'done';
+  if (last.type === 'agent.turn_completed') {
+    const turnId = z.object({ turnId: z.string() }).parse(last.data).turnId;
+    const outputWasLost = outputWasLostForTurn(rows, turnId);
+    return outputWasLost ? 'lost' : 'done';
+  }
   return 'working';
+}
+function outputWasLostForTurn(rows: SummaryRow[], turnId: string): boolean {
+  for (const row of rows) {
+    if (row.type !== 'agent.output_lost') continue;
+    const lostTurnId = z.object({ turnId: z.string() }).parse(row.data).turnId;
+    if (lostTurnId === turnId) return true;
+  }
+  return false;
 }
 async function summary(options: ChatOptions, conversationId: string, mode: string) {
   // Scan authorised history for now; a summary projection can replace this when histories grow.
@@ -215,7 +235,7 @@ async function summary(options: ChatOptions, conversationId: string, mode: strin
   const last = result.rows.findLast(changesStatus);
   let title = 'New session';
   if (first) title = sessionSlug(options.keys.decrypt(options.silo, conversationId, first.data));
-  return { title, status: conversationStatus(last, mode) };
+  return { title, status: conversationStatus(result.rows, last, mode) };
 }
 
 async function write(

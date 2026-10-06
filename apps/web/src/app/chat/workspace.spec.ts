@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import type { ChatRow } from '@opencrane/protocol';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Workspace } from './workspace';
 import { ChatComposer } from './composer';
@@ -7,27 +9,39 @@ interface CaptureWorkspace {
   fixture: ComponentFixture<Workspace>;
   root: HTMLElement;
   calls: string[];
+  postBodies: unknown[];
   socket: SocketLike;
   setReply(status: number): void;
   denyFeedRead(): void;
   setMessageStatus(status: number): void;
+  confirmPendingMessage(): void;
   rows: Record<string, unknown>[];
 }
 
 async function createCaptureWorkspace(
   initialRows: Record<string, unknown>[] = [],
   approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
+  assistantKind?: 'team',
+  computerState = 'ready',
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
   const calls: string[] = [];
+  const postBodies: unknown[] = [];
   let replyStatus = 201;
   let denyMessages = false;
   let messageStatus = 200;
+  let messageRecorded = false;
+  const initialConversation = { conversationId: 'chat', assistantId: 'assistant', assistantKind,
+    createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session' };
+  const conversations = [initialConversation];
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
     const path = input instanceof Request ? input.url : String(input);
     const pathname = new URL(path, location.origin).pathname;
     calls.push(`${init?.method ?? 'GET'} ${path}`);
+    if (init?.method === 'POST' && typeof init.body === 'string') {
+      postBodies.push(JSON.parse(init.body));
+    }
     if (pathname === '/auth/me') {
       return Promise.resolve(new Response('{"authenticated":true,"user":{"name":"Alex"}}'));
     }
@@ -41,10 +55,14 @@ async function createCaptureWorkspace(
       return Promise.resolve(new Response(JSON.stringify({ cards: currentCards, csrf: 'fixture' })));
     }
     if (pathname === '/api/conversations' && init?.method !== 'POST') {
-      return Promise.resolve(new Response(JSON.stringify({ rows: [{
-        conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
-        createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session',
-      }] })));
+      return Promise.resolve(new Response(JSON.stringify({ rows: conversations })));
+    }
+    if (pathname === '/api/conversations' && init?.method === 'POST'
+      && typeof init.body === 'string') {
+      const command = z.object({ conversationId: z.string() }).parse(JSON.parse(init.body));
+      const conversation = { ...initialConversation, conversationId: command.conversationId };
+      conversations.push(conversation);
+      return Promise.resolve(new Response('{"status":"appended","sequence":1}'));
     }
     if (pathname.endsWith('/screenshots')) {
       if (replyStatus === 0) return Promise.reject(new TypeError('Network lost'));
@@ -57,15 +75,23 @@ async function createCaptureWorkspace(
         : replyStatus === 422 ? { status: 'infected', fileId: 'rejected-screen' } : {};
       return Promise.resolve(new Response(JSON.stringify(body), { status: replyStatus }));
     }
+    if (pathname.includes('/changes/')) {
+      if (messageRecorded) {
+        return Promise.resolve(new Response(JSON.stringify({ status: 'appended',
+          commandId: pathname.split('/').at(-1) })));
+      }
+      return Promise.resolve(new Response('{}', { status: 404 }));
+    }
     if (pathname.endsWith('/messages')) {
       if (denyMessages) return Promise.resolve(new Response('{}', { status: 403 }));
+      if (messageStatus === 0) return Promise.reject(new TypeError('Network lost'));
       if (messageStatus !== 200) {
         return Promise.resolve(new Response('{}', { status: messageStatus }));
       }
       const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
       const visibleRows = rows.filter(row => Number(row['position']) > since);
       return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
-        position: rows.length, generation: 1, computerState: 'ready' })));
+        position: rows.length, generation: 1, computerState })));
     }
     if (pathname.endsWith('/files/view')) {
       return Promise.resolve(new Response('<svg/>', {
@@ -90,9 +116,10 @@ async function createCaptureWorkspace(
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
   return {
-    fixture, root, calls, rows, socket,
+    fixture, root, calls, postBodies, rows, socket,
     setReply(status) { replyStatus = status; },
     denyFeedRead() { denyMessages = true; },
+    confirmPendingMessage() { messageRecorded = true; },
     setMessageStatus(status) { messageStatus = status; },
   };
 }
@@ -444,7 +471,7 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
     const body = path === '/auth/me' ? { authenticated: true, user: { name: 'Alex Morgan' } } : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path.endsWith('/approvals') ? { cards: [], csrf: 'fixture' } : path === '/api/conversations' ? { rows: [] }
-      : { rows, position: 2, generation: 1, computerState: 'starting your computer' };
+      : { rows, position: 2, generation: 1, computerState: 'starting' };
     return Promise.resolve(new Response(JSON.stringify(body)));
   });
   const socket: SocketLike = { readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null, send: vi.fn(), close: vi.fn() };
@@ -766,6 +793,444 @@ it('clears Waiting on you when the approval cards are destroyed', async () => {
     await capture.fixture.componentInstance['chat'].select('county-rollout');
     await vi.waitFor(() => expect(capture.root.textContent).not.toContain('Waiting on you'));
     expect(capture.root.querySelector('.waiting-status')).toBeNull();
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('shows lost private output as incomplete and never offers Stop or Done', async () => {
+  const rows = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-06T10:00:00Z',
+      data: { authorId: 'me', text: 'Draft the reply.' } },
+    { id: 'started', position: 2, type: 'agent.turn_started', time: '2026-10-06T10:00:01Z',
+      data: { turnId: 'message', executionMode: 'restricted' } },
+    { id: 'lost', position: 3, type: 'agent.output_lost', time: '2026-10-06T10:01:00Z',
+      data: { turnId: 'message' } },
+    { id: 'completed', position: 4, type: 'agent.turn_completed', time: '2026-10-06T10:01:01Z',
+      data: { turnId: 'message' } },
+  ];
+  const capture = await createCaptureWorkspace(rows, [], 'team');
+  try {
+    expect(capture.root.textContent).toContain("Didn't complete · nothing was repeated");
+    expect(capture.root.textContent).not.toContain('Done');
+    expect(capture.root.querySelector('.turn-status')).not.toBeNull();
+    expect(capture.root.querySelector('.turn-status')?.textContent).not.toContain('Stop');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('disables the team composer during recovery and shows the last confirmed turn', async () => {
+  const rows = [
+    { id: 'confirmed-message', position: 1, type: 'message.posted',
+      time: '2026-10-06T09:59:00Z', data: { authorId: 'me', text: 'Earlier request.' } },
+    { id: 'confirmed-turn', position: 2, type: 'agent.turn_completed',
+      time: '2026-10-06T10:01:00Z', data: { turnId: 'confirmed-message' } },
+    { id: 'active-message', position: 3, type: 'message.posted',
+      time: '2026-10-06T10:02:00Z', data: { authorId: 'me', text: 'Current request.' } },
+    { id: 'active-start', position: 4, type: 'agent.turn_started',
+      time: '2026-10-06T10:02:01Z', data: { turnId: 'active-message', executionMode: 'restricted' } },
+    { id: 'active-delta', position: 5, type: 'agent.message_delta',
+      time: '2026-10-06T10:02:02Z', data: { turnId: 'active-message', messageId: 'reply', text: 'Working' } },
+  ];
+  const capture = await createCaptureWorkspace(rows, [], 'team', 'recovering');
+  try {
+    expect(capture.root.textContent).toContain('Recovering your authorised context');
+    expect(capture.root.textContent).toContain('last confirmed turn was at');
+    expect(capture.root.querySelector<HTMLTextAreaElement>('#message')?.disabled).toBe(true);
+    expect(capture.root.querySelector('[aria-label="Attach"]')).toBeNull();
+    expect(capture.root.querySelector('.stop')).toBeNull();
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps a memory-free choice in the draft and does not send it', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const field = capture.root.querySelector<HTMLTextAreaElement>('#message');
+    if (!field) throw new Error('Message field is missing');
+    field.value = 'Review the order note';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    capture.fixture.detectChanges();
+
+    const memoryFreeButton = [...capture.root.querySelectorAll<HTMLButtonElement>(
+      'oc-memory-free-notice button')]
+      .find(button => button.textContent?.includes('Start a fresh memory-free turn'));
+    if (!memoryFreeButton) throw new Error('Memory-free choice is missing');
+    memoryFreeButton.click();
+    capture.fixture.detectChanges();
+
+    expect(field.value).toBe('Review the order note');
+    expect(capture.root.textContent).toContain('This turn has no earlier context');
+    expect(capture.root.textContent).toContain('This mode applies to your next turn');
+    expect(capture.calls.filter(call => call.startsWith('POST '))).toEqual([]);
+    expect(capture.root.querySelector('[aria-label="Attach"]')).toBeNull();
+
+    capture.root.querySelector<HTMLButtonElement>('.send')?.click();
+    await capture.fixture.whenStable();
+    expect(capture.postBodies.at(-1)).toMatchObject({
+      text: 'Review the order note', executionMode: 'memory_free',
+    });
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+function isDisabledModeButton(button: HTMLButtonElement): boolean {
+  return button.disabled;
+}
+
+function isStopButton(button: HTMLButtonElement): boolean {
+  return button.textContent?.trim() === 'Stop';
+}
+
+function memoryModeButtons(root: HTMLElement): HTMLButtonElement[] {
+  return [...root.querySelectorAll<HTMLButtonElement>('.mode-choice button')];
+}
+
+it('flips the composer footnote to match the selected memory mode', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const footnote = capture.root.querySelector('.composer-footnote');
+    expect(footnote?.textContent).toContain("this turn is not saved on the shared computer's disk");
+    memoryModeButtons(capture.root)[1]!.click();
+    capture.fixture.detectChanges();
+    expect(footnote?.textContent).toContain(
+      "This turn has no earlier context and writes to the shared computer's disk");
+    expect(capture.root.querySelector('.composer-dock')?.textContent)
+      .toContain('This turn has no earlier context');
+    memoryModeButtons(capture.root)[0]!.click();
+    capture.fixture.detectChanges();
+    expect(footnote?.textContent).toContain("this turn is not saved on the shared computer's disk");
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('locks the mode of a queued memory-free message and retries that same command', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.chooseMemoryFree();
+    capture.setMessageStatus(503);
+    expect(await chat.send('Keep this mode')).toBe(false);
+    capture.fixture.detectChanges();
+    const buttons = memoryModeButtons(capture.root);
+    expect(buttons.every(isDisabledModeButton)).toBe(true);
+    expect(capture.root.textContent).toContain('Retry or discard the queued message first');
+    buttons[0]!.click();
+    chat.choosePrivate();
+    expect(chat.executionMode()).toBe('memory_free');
+    capture.setMessageStatus(200);
+    expect(await chat.send('Keep this mode')).toBe(true);
+    expect(capture.postBodies.at(-1)).toEqual(capture.postBodies.at(-2));
+    expect(capture.postBodies.at(-1)).toMatchObject({ executionMode: 'memory_free' });
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+function recoveredTurnRows(state: 'lost' | 'done'): ChatRow[] {
+  const rows: ChatRow[] = [
+    { id: 'request', position: 1, type: 'message.posted', time: '2026-10-06T10:02:00Z',
+      data: { authorId: 'me', text: 'My request' } },
+  ];
+  const type = state === 'lost' ? 'agent.output_lost' : 'agent.turn_completed';
+  rows.push({ id: 'outcome', position: 2, type, time: '2026-10-06T10:03:01Z',
+    data: { turnId: 'request' } });
+  return rows;
+}
+
+it('shows the fresh-computer lost-request notice only for the affected last turn', async () => {
+  const capture = await createCaptureWorkspace(recoveredTurnRows('done'), [], 'team');
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.computerRecovered.set(true);
+    chat.computerLostAt.set('2026-10-06T10:03:00Z');
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("Your last request didn't complete");
+    chat.rows.set(recoveredTurnRows('lost'));
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain("Your last request didn't complete");
+    chat.computerLostAt.set('2026-10-06T10:04:00Z');
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("Your last request didn't complete");
+    chat.computerLostAt.set('2026-10-06T10:03:00Z');
+    const later = recoveredTurnRows('done');
+    later[0]!['id'] = 'later';
+    later[0]!['position'] = 3;
+    later[1]!['position'] = 4;
+    later[1]!['data'] = { turnId: 'later' };
+    const updatedRows = [...chat.rows(), ...later];
+    chat.rows.set(updatedRows);
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("Your last request didn't complete");
+    chat.rows.set([]);
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).not.toContain("Your last request didn't complete");
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('announces memory-free selection and focuses the composer from the notice', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const button = capture.root.querySelector<HTMLButtonElement>('oc-memory-free-notice button')!;
+    button.focus();
+    button.click();
+    capture.fixture.detectChanges();
+    expect(document.activeElement).toBe(capture.root.querySelector('#message'));
+    expect(capture.fixture.componentInstance['chat'].announcement())
+      .toBe('Memory-free selected. This turn has no earlier context and writes to the shared disk.');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('announces recovery, explains it in personal chats and restores lost composer focus', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
+    field.focus();
+    const recovering = { version: 1, type: 'ready', topic: 'conversation',
+      conversationId: 'chat', generation: 1, position: 0, computerState: 'recovering' };
+    capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(recovering) }));
+    capture.fixture.detectChanges();
+    expect(chat.announcement()).toBe('Your computer is recovering. Sending is paused.');
+    expect(capture.root.textContent).toContain('Recovering your authorised context');
+    document.body.tabIndex = -1;
+    document.body.focus();
+    expect(document.activeElement).toBe(document.body);
+    const ready = { ...recovering, computerState: 'ready' };
+    capture.socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(ready) }));
+    capture.fixture.detectChanges();
+    expect(chat.announcement()).toBe('Your computer is ready again. You can send.');
+    expect(document.activeElement).toBe(field);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('places recovery after the last reply and hides both Stop buttons', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'request', position: 1, type: 'message.posted', time: '2026-10-06T10:02:00Z',
+      data: { authorId: 'me', text: 'Work on this' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta', time: '2026-10-06T10:02:01Z',
+      data: { turnId: 'request', messageId: 'reply', text: 'Partial reply' } },
+  ], [], 'team', 'recovering');
+  try {
+    const notice = capture.root.querySelector('oc-recovery-notice')!;
+    const lastReply = capture.root.querySelectorAll('article').item(1);
+    expect(lastReply.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+    const stopButtons = [...capture.root.querySelectorAll('button')]
+      .filter(isStopButton);
+    expect(stopButtons).toHaveLength(0);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('pauses queued Retry during recovery and keeps the pending message mode', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    capture.setMessageStatus(503);
+    await chat.send('Wait for recovery');
+    const before = capture.postBodies.length;
+    chat.computer.set('recovering');
+    capture.setMessageStatus(200);
+    capture.fixture.detectChanges();
+    const retry = capture.root.querySelector<HTMLButtonElement>('.connection-strip button')!;
+    expect(retry.disabled).toBe(true);
+    expect(retry.title).toContain('Sending is paused');
+    expect(await chat.send('Wait for recovery')).toBe(false);
+    expect(capture.postBodies).toHaveLength(before);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('sends team turns privately by default and resets memory-free after a 200 receipt', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    expect(await chat.send('Default private')).toBe(true);
+    expect(capture.postBodies.at(-1)).not.toHaveProperty('executionMode');
+    chat.rows.set([]);
+    chat.chooseMemoryFree();
+    expect(await chat.send('One memory-free turn')).toBe(true);
+    expect(capture.postBodies.at(-1)).toMatchObject({ executionMode: 'memory_free' });
+    expect(chat.executionMode()).toBe('restricted');
+    chat.rows.set([]);
+    expect(await chat.send('Private again')).toBe(true);
+    expect(capture.postBodies.at(-1)).not.toHaveProperty('executionMode');
+    expect(capture.postBodies.at(-1)).not.toMatchObject({ id: z.object({ id: z.string() }).parse(capture.postBodies.at(-2)).id });
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('omits executionMode in personal chats even when the mode signal is memory-free', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.chooseMemoryFree();
+    expect(await chat.send('Personal request')).toBe(true);
+    expect(capture.postBodies.at(-1)).not.toHaveProperty('executionMode');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps partial lost output and counts only a genuinely completed turn as confirmed', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'done', position: 1, type: 'message.posted', time: '2026-10-06T10:00:00Z',
+      data: { authorId: 'me', text: 'Earlier' } },
+    { id: 'done-end', position: 2, type: 'agent.turn_completed', time: '2026-10-06T10:01:00Z',
+      data: { turnId: 'done' } },
+    { id: 'lost', position: 3, type: 'message.posted', time: '2026-10-06T10:02:00Z',
+      data: { authorId: 'me', text: 'Later' } },
+    { id: 'partial', position: 4, type: 'agent.message_delta', time: '2026-10-06T10:02:01Z',
+      data: { turnId: 'lost', messageId: 'reply', text: 'Partial answer' } },
+    { id: 'lost-output', position: 5, type: 'agent.output_lost', time: '2026-10-06T10:03:01Z',
+      data: { turnId: 'lost' } },
+    { id: 'lost-end', position: 6, type: 'agent.turn_completed', time: '2026-10-06T10:04:00Z',
+      data: { turnId: 'lost' } },
+  ], [], 'team', 'recovering');
+  try {
+    expect(capture.root.textContent).toContain('Reply did not complete · partial reply kept');
+    expect(capture.root.textContent).toContain('Your last confirmed turn was at 10:01');
+    const chat = capture.fixture.componentInstance['chat'];
+    const withoutCompletion = chat.rows().slice(0, -1);
+    chat.rows.set(withoutCompletion);
+    chat.computer.set('ready');
+    capture.fixture.detectChanges();
+    const stopButtons = [...capture.root.querySelectorAll('button')]
+      .filter(isStopButton);
+    expect(stopButtons).toHaveLength(0);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('clears recovered state when switching chats before the new feed arrives', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.computerRecovered.set(true);
+    chat.computerLostAt.set('2026-10-06T10:03:00Z');
+    const selection = chat.select('another');
+    expect(chat.computerRecovered()).toBe(false);
+    expect(chat.computerLostAt()).toBe('');
+    await selection;
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps typed text and a single pending command after a lost send reply', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
+    field.value = 'Keep my words';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    capture.fixture.detectChanges();
+    capture.setMessageStatus(0);
+    field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    await capture.fixture.whenStable();
+    capture.fixture.detectChanges();
+    expect(capture.postBodies).toHaveLength(1);
+    expect(field.value).toBe('Keep my words');
+    const command = z.object({ id: z.string() }).parse(capture.postBodies[0]);
+    expect(capture.root.textContent).toContain(command.id);
+    const chat = capture.fixture.componentInstance['chat'];
+    await chat.select('another');
+    chat.newSession();
+    expect(chat.selected()).toBe('chat');
+    expect(capture.postBodies).toHaveLength(1);
+    expect(capture.root.textContent).toContain("We couldn't tell whether your message was recorded");
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps typed text on a refused send and does not report a healthy refresh as failed', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const field = capture.root.querySelector<HTMLTextAreaElement>('#message')!;
+    field.value = 'My draft';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    capture.fixture.detectChanges();
+    capture.setMessageStatus(400);
+    capture.root.querySelector<HTMLButtonElement>('.send')!.click();
+    await capture.fixture.whenStable();
+    expect(field.value).toBe('My draft');
+    capture.setMessageStatus(200);
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.error.set('');
+    expect(await chat.refresh()).toBe(true);
+    expect(chat.error()).toBe('');
+    expect(field.value).toBe('My draft');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('checks a lost send reply with a 200 receipt and clears its pending command', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    capture.setMessageStatus(0);
+    expect(await chat.send('Already received')).toBe(false);
+    const command = z.object({ id: z.string() }).parse(capture.postBodies[0]);
+    capture.confirmPendingMessage();
+    expect(await chat.send('Already received')).toBe(true);
+    expect(capture.postBodies).toHaveLength(1);
+    expect(capture.calls).toContain(`GET /api/conversations/chat/changes/${command.id}`);
+    expect(chat.queued()).toBe(false);
+    chat.rows.set([]);
+    capture.setMessageStatus(200);
+    expect(await chat.send('Next message')).toBe(true);
+    expect(capture.postBodies.at(-1)).not.toMatchObject({ id: command.id });
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+function isConversationCreation(body: unknown): body is { id: string; conversationId: string } {
+  const schema = z.object({ id: z.string(), conversationId: z.string() });
+  return schema.safeParse(body).success;
+}
+
+it('creates two fresh conversations in one visit with separate commands', async () => {
+  const capture = await createCaptureWorkspace();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    chat.newSession();
+    expect(await chat.send('First new conversation')).toBe(true);
+    chat.newSession();
+    expect(await chat.send('Second new conversation')).toBe(true);
+    const creates = capture.postBodies.filter(isConversationCreation);
+    expect(creates).toHaveLength(2);
+    expect(creates[1]!.conversationId).not.toBe(creates[0]!.conversationId);
+    expect(creates[1]!.id).not.toBe(creates[0]!.id);
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps a message pending until its send returns a 200 receipt', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    capture.setMessageStatus(202);
+    const chat = capture.fixture.componentInstance['chat'];
+    expect(await chat.send('Wait for the receipt')).toBe(false);
+    expect(chat.queued()).toBe(true);
+    expect(chat.turns()).toHaveLength(0);
   } finally {
     capture.fixture.destroy();
   }

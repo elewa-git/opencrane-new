@@ -227,3 +227,25 @@ Thumbnail and preview failures have their own retry states.
 The [screenshot screen receipt](../../docs/process/p3-18-screens/README.md) records browser
 captures and checks. The [earlier screenshot receipt](../../docs/process/p3-18-screenshots.md)
 records the service journey. Sample browser checks do not qualify a fresh installation.
+
+## Team composer and recovery
+
+Private is the safe default. The memory-free choice applies to one turn, uses the
+shared disk and has no earlier private context. Both buttons lock while a message
+is sending or queued. Retry first reads the pending command's status and reuses its
+id if it must send again. Recovery refuses both Send and Retry.
+A successful receipt clears the pending command and resets the choice to Private.
+The draft stays as typed after refused or lost send replies. Pending commands block
+session changes. They are kept only on this page, with their reference shown.
+
+Recovery notices follow the last reply. Changes are announced through the existing
+conversation status region. Selection from the notice moves focus to the composer;
+recovery restores lost composer focus without taking focus from another control.
+A recovered computer shows the lost-request notice only for an affected last turn.
+The last confirmed time is calculated from loaded Done turns in the browser.
+
+`workspace.spec.ts` covers these states, partial lost output, default/private posts,
+personal posts, Enter, healthy refresh and two sends during one visit.
+The visual script captures both the choice and selected memory-free states at three
+widths with both motion settings, after finite animations finish. It checks 44px phone
+buttons, overlap and overflow. Fresh-install live qualification remains NOT RUN.

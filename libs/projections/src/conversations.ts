@@ -40,11 +40,15 @@ export async function readConversation(db: Query, silo: string, conversationId: 
 }
 
 export async function listConversations(db: Query, silo: string) {
-  const rows = await db.query<{ conversation_id: string; data: unknown; time: string }>(
-    "SELECT conversation_id, data, time FROM conversation_feed WHERE silo = $1 AND type = 'conversation.created' ORDER BY position DESC", [silo]);
+  const rows = await db.query<{ conversation_id: string; data: unknown; time: string;
+    kind: 'personal' | 'team' | null }>(
+    `SELECT f.conversation_id, f.data, f.time, c.kind FROM conversation_feed f
+      LEFT JOIN computers c ON c.silo = f.silo AND c.assistant_id = f.data->>'assistantId'
+      WHERE f.silo = $1 AND f.type = 'conversation.created' ORDER BY f.position DESC`, [silo]);
   function conversationRow(row: (typeof rows.rows)[number]) {
     const data = conversationCreatedDataSchema.parse(row.data);
-    return { ...data, conversationId: row.conversation_id, createdAt: row.time };
+    return { ...data, conversationId: row.conversation_id, createdAt: row.time,
+      assistantKind: row.kind ?? undefined };
   }
   return rows.rows.map(conversationRow);
 }

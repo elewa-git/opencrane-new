@@ -128,3 +128,17 @@ custody remains a deployment qualification responsibility.
 The members worker also maintains the flat-group view (`groups`, `group_members`,
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
+
+## Computer state for chat
+
+The `computers` projection stores `chat_state`, `recovered` and `lost_at` alongside
+its existing lifecycle status. TypeScript applies the lifecycle rules. Suspended and
+resumed computers are starting. A loss stays recovering through the next claim until
+ready arrives. That ready marks recovery; a later claim, suspend, resume or retirement
+clears the marker. The last loss time remains available for the browser's comparison.
+
+Existing installations must rebuild the computers projection before serving the updated
+chat routes. Adding the columns alone does not fill them from older events.
+The chat list joins assistant kind from this table in its existing list query.
+The server reads one computer record per changed chat feed, without lifecycle-history reads.
+`test/computers.test.ts` checks cold resume, recovery and replay with disposable PostgreSQL.

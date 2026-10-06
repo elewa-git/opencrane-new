@@ -37,3 +37,5 @@ export { rebuildGroupProjection } from './group-rebuild.ts';
 
 export { providers, readProviders, applyProvider, type ProviderState } from './providers.ts';
 export { rebuildProviderProjection } from './provider-rebuild.ts';
+
+export { lifecycleComputerState } from './computer-chat-state.ts';

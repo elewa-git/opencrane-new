@@ -48,7 +48,7 @@ export async function chatJourney(server: string, headers: { origin: string; coo
       const positions = rows.filter(r => r.type === 'event').map(r => r.position);
       assert.equal(new Set(positions).size, positions.length);
     },
-    starting: () => rows.some(r => r.computerState === 'starting your computer'),
+    starting: () => rows.some(r => r.computerState === 'starting'),
     close: () => socket.terminate(),
   };
 }
