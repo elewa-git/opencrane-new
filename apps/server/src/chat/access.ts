@@ -73,7 +73,7 @@ export async function chatSubscriptionAccess(options: ChatOptions, memberId: str
     }
     const changed = !previousHeads || heads.some(headMoved);
     if (changed) {
-      await activeChatMember(options, memberId, undefined, auth);
+      await activeChatMember(options, memberId);
       const permission = await auth.conversation(memberId, conversationId, 'read');
       if (permission.status === 'unavailable') throw new Error('IAM unavailable');
       if (!permission.allowed) throw new ChatRefused('Conversation refused');
@@ -134,11 +134,11 @@ async function conversationAccess(options: ChatOptions, request: AccessRequest, 
 /** Check current membership without waiting for role or owner changes to reach OpenFGA.
  * Read removals from the member stream at once, and confirm joins through OpenFGA.
  */
-export async function activeChatMember(options: ChatOptions, memberId: string, fresh?: Fence,
-  authorisation?: ReturnType<typeof memberAuthorisation>) {
+export async function activeChatMember(options: ChatOptions, memberId: string,
+  fresh?: Fence) {
   const membership = await currentMembership(options.store, options.silo, memberId, fresh);
   if (!membership.role) throw new ChatRefused('Active silo membership required');
-  const auth = authorisation ?? memberAuthorisation(options.binding);
+  const auth = memberAuthorisation(options.binding);
   const permission = await auth.check(memberId, 'member');
   if (permission.status === 'unavailable') throw new Error('IAM unavailable');
   if (!permission.allowed) throw new ChatRefused('Membership unavailable');

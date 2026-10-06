@@ -147,8 +147,10 @@ Hosted MCP servers never run inside the gateway.
   - An effect in the gateway log without a matching permit or decision is an alert.
 - **Web app realtime over WebSocket** (one connection per browser tab to opencrane-server). The browser never connects to the `EVENTS` stream.
   - **Subscribe:** the client sends `subscribe {conversation, since}`. The server checks OpenFGA, replays anything after `since` from the projection, then pushes live updates: chat text as it streams, activity, approvals, presence. Every message carries the conversation's position, so a reconnect resumes with no gaps.
-  - **Revocation:** on `participant.removed` or `member.removed`, the server immediately unsubscribes the affected sockets, and closes the socket if the member is gone.
-  - Participant changes require #216 to land with any participant command.
+  - **Revocation:** chat sockets check direct-chat participants when they subscribe.
+    They do not watch later participant changes yet. Member removals close the
+    member's socket within two seconds. #216 covers live participant updates for
+    chat, desktop viewing and file access.
   - **Commands stay on the HTTP API** (the API of record for every client: idempotency keys, OpenAPI). The socket may carry lightweight actions (typing, presence, "mark read") as typed messages with request ids and acknowledgements.
   - **Protocol:** versioned, typed JSON messages (zod schemas shared with the web app) over the plain `ws` library.
   - **Security:** the session cookie is checked on upgrade, with a strict `Origin` check (defence against cross-site WebSocket hijacking), heartbeats, per-connection rate limits, and backpressure (drop live deltas, never drop state updates).

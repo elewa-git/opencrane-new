@@ -167,6 +167,25 @@ async function openChatSocket(context: Fixture, conversationId: string) {
   return { socket, received, close };
 }
 
+async function openTeamAssistantChat(context: Fixture, conversationId: string) {
+  await context.append('team-sales', 'team.created', {
+    teamId: 'sales', name: 'Sales', createdBy: 'alice',
+  });
+  await context.append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'alice', addedBy: 'alice',
+  });
+  await context.append('assistant-shared', 'assistant.created', {
+    assistantId: 'shared', kind: 'team', ownerId: 'sales', payingGroupId: 'sales',
+  });
+  context.keys.provision('test', conversationId);
+  await context.append(`conversation-${conversationId}`, 'conversation.created', {
+    conversationId, createdBy: 'alice', mode: 'agent_session',
+    assistantId: 'shared', payingGroupId: 'sales',
+  });
+  await context.runner.run(conversations);
+  return openChatSocket(context, conversationId);
+}
+
 function countStoreReads(context: Fixture) {
   const originalReadStream = context.options.store.readStream.bind(context.options.store);
   const originalHead = context.options.store.head.bind(context.options.store);
@@ -233,6 +252,106 @@ async function idleDirectChatSocket() {
 it('keeps a team chat idle without OpenFGA calls and closes it when team access is removed',
   teamSocketAccessChanges, 120_000);
 
+it('reconnects when OpenFGA does not apply a later team chat change',
+  teamSocketReconnectsForUnappliedChange, 120_000);
+
+async function teamSocketReconnectsForUnappliedChange() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    await context.append('team-sales', 'team.created', {
+      teamId: 'sales', name: 'Sales', createdBy: 'alice',
+    });
+    await context.append('team-sales', 'team.member_added', {
+      teamId: 'sales', memberId: 'alice', addedBy: 'alice',
+    });
+    await context.append('assistant-shared', 'assistant.created', {
+      assistantId: 'shared', kind: 'team', ownerId: 'sales', payingGroupId: 'sales',
+    });
+    context.keys.provision('test', 'team-chat-timeout');
+    await context.append('conversation-team-chat-timeout', 'conversation.created', {
+      conversationId: 'team-chat-timeout', createdBy: 'alice', mode: 'agent_session',
+      assistantId: 'shared', payingGroupId: 'sales',
+    });
+    await context.runner.run(conversations);
+    client = await openChatSocket(context, 'team-chat-timeout');
+
+    await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    }, false);
+
+    const closed = once(client.socket, 'close');
+    const closure: unknown[] = await Promise.race([
+      closed,
+      delay(6500).then(expireUnappliedChange),
+    ]);
+    expect(closure[0]).toBe(1013);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
+function expireUnappliedChange(): never {
+  throw new Error('Socket did not reconnect after OpenFGA left a change unapplied');
+}
+
+it('closes for silo removal while a role change is still being applied',
+  closesForMemberRemovalDuringApply, 120_000);
+
+async function closesForMemberRemovalDuringApply() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    client = await openTeamAssistantChat(context, 'member-remove-during-apply');
+    await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    }, false);
+    const closed = once(client.socket, 'close');
+    const started = performance.now();
+    await context.append('member-alice', 'member.removed', {
+      memberId: 'alice', removedBy: 'bob',
+    }, false);
+    const closure = await Promise.race([
+      closed,
+      delay(2000).then(expireRemovalCheck),
+    ]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
+it('closes for team removal while a role change is still being applied',
+  closesForTeamRemovalDuringApply, 120_000);
+
+async function closesForTeamRemovalDuringApply() {
+  const context = await fixture(true);
+  let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
+  try {
+    client = await openTeamAssistantChat(context, 'team-remove-during-apply');
+    await context.append('member-alice', 'member.role_changed', {
+      memberId: 'alice', previousRole: 'member', newRole: 'admin', changedBy: 'bob',
+    }, false);
+    const closed = once(client.socket, 'close');
+    const started = performance.now();
+    await context.append('team-sales', 'team.member_removed', {
+      teamId: 'sales', memberId: 'alice', removedBy: 'bob',
+    }, false);
+    const closure = await Promise.race([
+      closed,
+      delay(2000).then(expireRemovalCheck),
+    ]);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(closure[0]).toBe(1008);
+  } finally {
+    await client?.close();
+    await context.close();
+  }
+}
+
 async function teamSocketAccessChanges() {
   const context = await fixture(true);
   let client: Awaited<ReturnType<typeof openChatSocket>> | undefined;
@@ -266,12 +385,20 @@ async function teamSocketAccessChanges() {
     await delay(300);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
     await context.auth.handler.handle(roleChange, context.db);
-    function roleChangeChecked() {
-      return context.fgaProxy!.checkCount() >= initialChecks + 2;
+    const encrypted = context.keys.encrypt('test', 'team-chat', 'After access catches up');
+    await context.append('conversation-team-chat', 'message.posted', {
+      conversationId: 'team-chat', authorId: 'alice', authorKind: 'human',
+      contentType: 'text', ...encrypted,
+    }, false);
+    await context.runner.run(conversations);
+    function deliveredAfterApply() {
+      return client!.received.some(hasRecoveredMessage);
     }
-    await until(roleChangeChecked);
-    await delay(300);
+    await until(deliveredAfterApply);
+    const checksAfterDelivery = context.fgaProxy!.checkCount();
+    await delay(500);
     expect(client.socket.readyState).toBe(WebSocket.OPEN);
+    expect(context.fgaProxy!.checkCount()).toBe(checksAfterDelivery);
     const closed = once(client.socket, 'close');
     const started = performance.now();
     await context.append('team-sales', 'team.member_removed', {
@@ -607,6 +734,10 @@ function isRefused(message: ReturnType<typeof chatMessageSchema.parse>) {
 }
 function isReadyOrRefused(message: ReturnType<typeof chatMessageSchema.parse>) {
   return isReady(message) || isRefused(message);
+}
+
+function hasRecoveredMessage(message: ReturnType<typeof chatMessageSchema.parse>) {
+  return message.type === 'event' && message.row?.data.text === 'After access catches up';
 }
 
 const unchangedAccessEvents = [
