@@ -1,0 +1,8 @@
+Initial install: nice -n 10 npm ci
+Stack claim: infra/dev-stack/claim.sh (claimed id 1 on attempt 1)
+Initial journey: DEV_STACK_ID=1 ZITADEL_KEY_FILE=/home/jente/dev/opencrane-new/.keys/.zitadel-key infra/dev-stack/up.sh --fresh
+Live batch: node --experimental-strip-types infra/dev-stack/live-view-repeat.ts docs/process/i77-live-view/final5
+Resource sampler: python3 infra/dev-stack/live-view-resources.py docs/process/i77-live-view/final5/resources.jsonl
+Post-batch journey 1: DEV_STACK_ID=1 infra/dev-stack/up.sh --fresh
+Post-batch journey 2: DEV_STACK_ID=1 infra/dev-stack/up.sh
+The shell EXIT trap ran infra/dev-stack/down.sh --id 1 and exited 0.

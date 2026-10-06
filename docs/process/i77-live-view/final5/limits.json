@@ -1,0 +1,10 @@
+{
+  "secondaryStackId": "1",
+  "serverHeapLimitMiB": 256,
+  "browserReplyWaitSeconds": 30,
+  "cpuPressureGatePercent": 20,
+  "dataMode": "fresh",
+  "viewerPagesRemainOpenBetweenRuns": true,
+  "v8HeapEndpointAvailable": false,
+  "claimAttempts": 1
+}

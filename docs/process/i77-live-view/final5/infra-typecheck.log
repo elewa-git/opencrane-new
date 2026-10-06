@@ -1,0 +1,2 @@
+npm notice run npx
+npm notice run 'tsc' -p infra/dev-stack/tsconfig.json --noEmit

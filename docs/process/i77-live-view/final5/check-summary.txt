@@ -1,0 +1,21 @@
+Check summary for the batch 5 receipt
+
+PASS: dependency installs on the qualification source and main through #230; #231 changed no dependencies
+PASS: full lint on 8bb9b81 (zero errors, 9 existing code warnings; see lint-current-main-final.log)
+PASS: workspace typecheck on 8bb9b81
+PASS: dev-stack TypeScript check on bc4e531
+PASS: event catalogue check on 8bb9b81 (96 event types)
+FAIL then corrected: first root suite omitted PG_TEST_URL; seven projection tests and one gateway timeout failed.
+PASS: full root suite with disposable PostgreSQL on 4ca7a9f (127 files, 2,010 tests; 4 files and 15 tests skipped)
+PASS: four affected files rerun alone on 4ca7a9f (88 passed, 1 skipped)
+FAIL: full root suite on df5a38b had one 40-second decision-fence timeout (128 files passed, 4 skipped; 2,029 tests passed, 15 skipped, 1 failed)
+PASS: decision-fence file rerun alone on df5a38b (66 tests)
+PASS: focused #230 event-store/model tests on df5a38b (30 tests)
+PASS: web unit tests on 4ca7a9f (34 files, 358 tests)
+PASS: web unit tests on df5a38b (34 files, 397 tests)
+PASS: web production build on df5a38b, with existing CSS-budget and CommonJS warnings
+PASS: secondary stack and all disposable PostgreSQL fixtures were removed
+PASS: #231 bridge replay test on bc4e531 (1 file, 23 tests)
+FAIL then isolated pass: #232 chat-access file had 1 timeout among 29 tests; exact test passed alone on 8bb9b81
+PASS: workspace typecheck on 8bb9b81
+NOT RUN: full root suite on 8bb9b81 after #231/#232; focused tests were run.

@@ -1,0 +1,12 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2 apps/server/test/chat-access-regression.test.ts -t revokes a socket within two seconds while its content read is waiting
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 28 skipped (29)
+   Start at  13:34:34
+   Duration  11.17s (tests 63%, transform 24%, import 13%)

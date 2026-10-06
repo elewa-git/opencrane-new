@@ -697,3 +697,127 @@ the two failed broad journeys. The [live command script](i77-live-view/final4/co
 [check commands](i77-live-view/final4/check-commands.sh),
 [additional commands](i77-live-view/final4/commands-extra.txt) and
 [exit codes](i77-live-view/final4/check-exits.txt) retain the commands and outcomes.
+
+## Final qualification 5 — 6 October 2026
+
+**PASS: all 10 counted runs passed.** Each run started below the unchanged 20% CPU-pressure
+gate; no run was marked LOADED and no retry batch was needed. The 390px and 1280px widths
+alternated. First replies arrived 2,566–4,987 ms after the browser sent each message.
+Revocation cleared the live picture in 311–886 ms in every run, below the 2,000 ms limit.
+There were no denied checks before revocation. The [complete run records](i77-live-view/final5/runs.jsonl)
+include the individual checks and timings.
+
+The stack ran product source `a90f2451df99e025836817e57529449b50271572`, including issues #213, #214, #218, #198, #215 and #228. Main advanced through #222, #225, #230, #231 and #232 during the later checks. The [source record](i77-live-view/final5/source.txt) gives the revisions used for the live batch, checks and PR branch. The measurement scripts were already
+on main, so this batch added no harness or product code. `nice -n 10 npm ci` passed. Secondary
+stack **1** was claimed on the first attempt and used fresh data. The initial `up.sh --fresh`
+journey passed, including both uploads, both live views and Spending. It kept the **256 MiB
+server heap cap**, the **30-second reply wait**, and the **20% pressure gate**. The Spending
+journey restores its monthly and daily test ceilings in a `finally` block.
+
+The two member chat pages stayed open between runs in separate browser contexts. Within each run,
+the first viewer ended normally as `disconnected` with code 1000. The viewer opened during the turn
+was revoked and ended as `access_changed` with code 4003.
+The script derives close codes from the recorded stop reason; it does not capture the wire
+close frame. Pause lengths are empty because no run paused. The first view has no revoke-to-clear
+measurement because it is closed normally at the end of the run.
+
+| Run | Width | Result | First view: stop / code; checks; denied; pauses | During turn: stop / code; checks; denied; pauses | Revoke to clear | First delta | CPU pressure | Server run delay |
+| --- | ---: | --- | --- | --- | ---: | ---: | ---: | ---: |
+| [1](i77-live-view/final5/run-1.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 5; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 6, `authority_changed:unavailable` 2, `none:denied` 1; 0; 0, [] ms | 412 ms | 4,677 ms | 19.56% | 4,261.6 ms |
+| [2](i77-live-view/final5/run-2.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 6; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 5, `none:denied` 2; 0; 0, [] ms | 606 ms | 3,889 ms | 19.04% | 2,277.1 ms |
+| [3](i77-live-view/final5/run-3.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 5; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 4, `none:denied` 2; 0; 0, [] ms | 311 ms | 2,566 ms | 19.62% | 1,715.3 ms |
+| [4](i77-live-view/final5/run-4.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 7; 0; 0, [] ms | `access_changed` / 4003; `deadline:unavailable` 1, `none:ok` 8, `authority_changed:unavailable` 1, `none:denied` 1; 0; 0, [] ms | 376 ms | 3,562 ms | 19.66% | 2,884.9 ms |
+| [5](i77-live-view/final5/run-5.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 5; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 5, `authority_changed:unavailable` 1, `none:denied` 2; 0; 0, [] ms | 602 ms | 3,705 ms | 19.32% | 2,126.0 ms |
+| [6](i77-live-view/final5/run-6.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 5; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 3, `none:denied` 2; 0; 0, [] ms | 618 ms | 4,987 ms | 19.41% | 1,726.1 ms |
+| [7](i77-live-view/final5/run-7.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 5; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 5, `none:denied` 3; 0; 0, [] ms | 808 ms | 3,341 ms | 18.19% | 1,255.9 ms |
+| [8](i77-live-view/final5/run-8.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 8; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 3, `none:denied` 2; 0; 0, [] ms | 582 ms | 3,413 ms | 18.34% | 1,333.5 ms |
+| [9](i77-live-view/final5/run-9.json) | 390px | PASS | `disconnected` / 1000; `none:ok` 6; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 6, `authority_changed:unavailable` 1, `none:denied` 2; 0; 0, [] ms | 651 ms | 3,569 ms | 18.41% | 1,381.1 ms |
+| [10](i77-live-view/final5/run-10.json) | 1280px | PASS | `disconnected` / 1000; `none:ok` 6; 0; 0, [] ms | `access_changed` / 4003; `none:ok` 5, `none:denied` 2; 0; 0, [] ms | 886 ms | 3,468 ms | 19.92% | 1,687.6 ms |
+
+First-delta time is measured from the browser's message request to the first
+`agent.message_delta` frame. Server run delay is the change in `/proc/<pid>/schedstat`
+run-delay time, converted to milliseconds. CPU pressure is the host's `some avg10` reading
+when each run began. Denied counts in the two viewer columns include denials after revocation;
+the separate denied-before-revoke value is zero in every cell.
+
+### Memory and open files in batch 5
+
+The sampler wrote 75 readings at five-second intervals from 10:09:09 to 10:15:19 UTC.
+The table gives RSS in MiB, open file descriptors, and V8 heap use at the start, middle
+(sample 37) and end. The server has no endpoint for V8 heap use, so it is unavailable.
+The [raw readings](i77-live-view/final5/resources.jsonl) include the CPU-pressure record
+for every sample.
+
+| Process | Start: RSS / fds / heap | Middle: RSS / fds / heap | End: RSS / fds / heap |
+| --- | --- | --- | --- |
+| Server | 234.0 MiB / 39 / unavailable | 236.2 MiB / 42 / unavailable | 245.1 MiB / 39 / unavailable |
+| Dispatcher | 163.7 MiB / 37 / not measured | 168.2 MiB / 35 / not measured | 169.7 MiB / 32 / not measured |
+| Models | 106.1 MiB / 36 / not measured | 122.3 MiB / 36 / not measured | 121.3 MiB / 36 / not measured |
+| OpenFGA | 51.6 MiB / 49 / not measured | 51.0 MiB / 69 / not measured | 51.2 MiB / 63 / not measured |
+
+Memory did not rise on every run. From run 1 to run 10, server RSS ended about 33 MiB higher,
+dispatcher RSS about 6 MiB higher, and models RSS about 16 MiB higher; each varied during the
+batch. OpenFGA stayed near 51–52 MiB. File descriptors did not rise run over run: the server
+ended at 45 versus 40 after run 1, dispatcher at 37 versus 40, models at 41 versus 36, and
+OpenFGA fell from 71 after run 1 to 63 after run 10. The OpenFGA count first rose as viewer
+connections opened, then declined. No process showed a steady descriptor increase.
+
+### Core journeys after batch 5
+
+Both requested broad journeys passed on the same claimed stack. The first reset the stack to
+fresh data; the second reused that data. Both reached and passed uploads, live views and
+Spending. The repeated journey also passed the check that keeps an already joined member
+without sending another invitation. Each upload width used one retry after a transport error;
+that retry succeeded. The first journey also logged one preview transport abort, then passed
+its preview checks.
+
+| Journey | Overall | Upload 390px / 1280px | Live view 390px / 1280px | Spending | Repeated member |
+| --- | --- | --- | --- | --- | --- |
+| First after batch (`up.sh --fresh`) | PASS | PASS / PASS | PASS, clear 230 / 393 ms | PASS | not repeated on fresh data |
+| Second on same data (`up.sh`) | PASS | PASS / PASS | PASS, clear 305 / 347 ms | PASS, no invitation sent | PASS |
+
+The initial setup journey also passed before the batch, including uploads, live views and
+Spending. The [startup log](i77-live-view/final5/startup-fresh.log), [first post-batch log]
+(i77-live-view/final5/core-fresh.log), [repeat log](i77-live-view/final5/core-repeat.log),
+[limits](i77-live-view/final5/limits.json), [commands](i77-live-view/final5/commands.txt)
+and [teardown record](i77-live-view/final5/teardown.log) keep the full output.
+
+### Other checks for batch 5
+
+The first root-suite command did not set `PG_TEST_URL`. It failed in seven projection tests
+because those tests need a disposable PostgreSQL database, and one gateway timing test hit its
+40-second timeout. I reran the full suite with a temporary PostgreSQL container on loopback.
+That full run passed. I also reran the four affected files alone with the fixture; they passed.
+The first attempt and both corrected runs are kept so the setup error is clear. The latest
+lint, typechecks and event check ran after rebasing onto `df5a38b`; the receipt branch now also includes #231 and #232.
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Dependency install | PASS: `nice -n 10 npm ci`; 926 packages added, 940 audited | [Initial install](i77-live-view/final5/dependency-install.txt); [current-main install](i77-live-view/final5/dependency-install-current.log) |
+| Full lint | PASS on current `8bb9b81`: zero errors; 9 existing code warnings | [Log](i77-live-view/final5/lint-current-main-final.log) |
+| Workspace typecheck | PASS on current `8bb9b81` | [Log](i77-live-view/final5/typecheck-current-main.log) |
+| Dev-stack TypeScript check | PASS on `bc4e531` | [Log](i77-live-view/final5/infra-typecheck-latest.log) |
+| Event catalogue | PASS on current `8bb9b81`: 96 event types agree | [Log](i77-live-view/final5/check-events-current-main.log) |
+| First root-suite attempt | FAIL: 8 tests in 4 files; missing PostgreSQL fixture caused 7 failures and one gateway test timed out | [Log](i77-live-view/final5/root-test.log) |
+| Full root suite with fixture on `4ca7a9f` | PASS: 127 files and 2,010 tests passed; 4 files and 15 tests skipped | [Log](i77-live-view/final5/root-test-retry.log) |
+| Rerun of the four affected files | PASS: 4 files and 88 tests passed; 1 skipped | [Log](i77-live-view/final5/root-test-targeted.log) |
+| Full root suite on `df5a38b` (before #231 and #232) | FAIL: 128 files and 2,029 tests passed; 4 files and 15 tests skipped; one decision-fence test timed out after 40 seconds | [Log](i77-live-view/final5/root-test-current.log) |
+| Isolated decision-fence file on `df5a38b` | PASS: 1 file and 66 tests; the timed-out test passed in this rerun | [Log](i77-live-view/final5/decision-fence-targeted.log) |
+| Focused #230 event-store and model tests on `df5a38b` | PASS: 3 files and 30 tests | [Log](i77-live-view/final5/current-main-focused-tests.log) |
+| #231 bridge replay test on `bc4e531` | PASS: 1 file and 23 tests | [Log](i77-live-view/final5/current-main-bridge-tests.log) |
+| #232 chat-access regression file on current `8bb9b81` | FAIL: 28 tests passed; one socket revocation test timed out at 120 seconds | [Log](i77-live-view/final5/current-main-chat-access-tests.log) |
+| Timed #232 socket revocation test rerun alone | PASS: 1 passed, 28 skipped | [Log](i77-live-view/final5/current-main-chat-access-isolated.log) |
+| Workspace typecheck on current `8bb9b81` | PASS | [Log](i77-live-view/final5/typecheck-current-main.log) |
+| Web unit tests on `4ca7a9f` | PASS: 34 files and 358 tests | [Log](i77-live-view/final5/web-test.log) |
+| Web unit tests on `df5a38b` | PASS: 34 files and 397 tests | [Log](i77-live-view/final5/web-test-current.log) |
+| Web production build on `df5a38b` | PASS, with CSS budget and CommonJS warnings | [Log](i77-live-view/final5/web-build-current.log) |
+| Secondary stack teardown | PASS: EXIT trap ran `down.sh --id 1` | [Log](i77-live-view/final5/teardown.log) |
+| PostgreSQL test fixtures | PASS: all temporary containers were removed | [Full-suite cleanup](i77-live-view/final5/test-fixture-teardown.log); [targeted cleanup](i77-live-view/final5/targeted-fixture-teardown.log); [current-main cleanup](i77-live-view/final5/test-fixture-current-teardown.log); [decision-test cleanup](i77-live-view/final5/decision-fixture-teardown.log) |
+
+The first root-suite failure was a test setup mistake: its command omitted `PG_TEST_URL`.
+The corrected full run and isolated rerun passed on `4ca7a9f`. On current main, the full suite
+reported one 40-second decision-fence timeout; that file passed when rerun alone. The live
+qualification remains **PASS: 10/10**, with revocation clearing under two seconds in every
+counted run. The current-main suite result is recorded as a failure, not as a pass. The full
+root suite was not rerun after #231 and #232 merged; their focused test files were run instead.
+The #232 chat-access file timed out once with its other tests; the exact test passed alone.

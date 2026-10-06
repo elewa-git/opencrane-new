@@ -1,0 +1,12 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2 apps/server/test/bridge-replay.test.ts
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+
+
+ Test Files  1 passed (1)
+      Tests  23 passed (23)
+   Start at  13:08:30
+   Duration  158.10s (tests 98%, transform 1%, import 1%)
