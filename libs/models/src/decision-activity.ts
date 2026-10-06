@@ -1,9 +1,10 @@
 import type { EventEnvelope } from '@opencrane/events';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
-import { history } from './actor.ts';
+import { readStreamSummary, type EventStore, type StoredEvent } from '@opencrane/event-store';
+import { computerSummary, type ComputerSummary } from '@opencrane/auth';
 import { closesDecisionTurn, invalidatesApproval } from './approvals.ts';
 import { outputReportTypes } from './authority.ts';
 import { data } from './state.ts';
+import { decisionChatSummary } from './decision-summary.ts';
 
 const harmlessConversationTypes = [
   'file.uploaded', 'file.rejected', 'file.delivered', 'message.posted',
@@ -15,14 +16,23 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   const head = await store.head(undefined, deadline);
   const conversationSubject = `conversation-${conversationId}`;
   const computerSubject = `computer-${assistantId}`;
-  const conversationRead = history(store, conversationSubject, silo, deadline);
-  const computerRead = history(store, computerSubject, silo, deadline);
-  const [conversationRows, computerRows] = await Promise.all([conversationRead, computerRead]);
   function capturedBeforeCheck(row: StoredEvent) {
     return row.sequence <= head;
   }
-  const conversation = conversationRows.filter(capturedBeforeCheck);
-  const computer = computerRows.filter(capturedBeforeCheck);
+  function takeConversation(rows: StoredEvent[]) {
+    return rows.filter(capturedBeforeCheck);
+  }
+  function takeComputer(summary: ComputerSummary) {
+    const turn = summary.turns.get(turnId);
+    const firstClose = turn?.firstClose;
+    return { lifecycle: summary.lifecycle, firstStart: turn?.firstStart,
+      firstClose: firstClose === undefined ? undefined : { ...firstClose } };
+  }
+  const conversationRead = readStreamSummary(store, silo, conversationSubject,
+    decisionChatSummary, deadline, takeConversation);
+  const computerRead = readStreamSummary(store, silo, computerSubject,
+    computerSummary, deadline, takeComputer);
+  const [conversation, computer] = await Promise.all([conversationRead, computerRead]);
   const positions = new Map<string, number>();
   const subjects = [conversationSubject, computerSubject];
 

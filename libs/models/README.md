@@ -17,7 +17,7 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|starts gateway and checks calls within two seconds| gateway["agentgateway<br/>AI gateway"]
   gateway -->|new usage lines| models
-  models -->|saves changes| store["libs/event-store<br/>event log"]
+  models -->|saves changes and reads new activity| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -37,8 +37,10 @@ flowchart LR
 - Read each new usage line once and leave old lines alone while idle. Retry a line
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
-- Read chat history before watching the streams that decide access. History and
-  access share two seconds because the gateway waits only that long.
+- Keep chat and computer facts in memory and read new events before each call.
+  Check those facts before watching the streams that decide access. These checks
+  share two seconds because the gateway waits only that long. Older summaries
+  are dropped when their memory budget is reached and rebuilt on their next use.
 - Refuse callers who have disconnected before holding money.
 - Keep calls working when another chat, a file or someone else's access changes during the check.
 - Treat tool start and finish reports as activity that grants no access.

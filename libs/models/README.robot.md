@@ -278,8 +278,8 @@ reached OpenFGA before admission. Decision receipts cover the requester, assista
 and team grants, including revoked team grants. Another member's direct grant
 needs no receipt for this call.
 
-Decisions share one two-second budget for computer credentials, full
-computer/conversation histories and the access check. The gateway stops waiting
+Decisions share one two-second budget for computer credentials, new
+computer/conversation events and the access check. The gateway stops waiting
 for authorisation after two seconds, so the decision must fit within that limit.
 Decisions capture a log position before reading the histories. After reading
 them, they watch only the small streams that decide access, using the time left
@@ -315,7 +315,8 @@ final admission, a relevant change or an expired check refuses the call. A failu
 before reservation holds no money. A destroyed request socket or a disconnected
 client also refuses the model call before `actor.reserve`, without holding money.
 A failure after reservation releases the unsent hold at zero cents.
-No permission or event-history cache survives a decision.
+No permission result survives a decision. Stream summaries survive, but every
+use first reads new events through its own catch-up.
 
 Ask tools keep stricter conversation checks: a posted message or a new turn
 invalidates the old approval, as do stops and closes for its bound turn. Decision
@@ -467,5 +468,79 @@ regressions inject each type during both model and MCP decisions. Omitting
 either type makes those decisions return 403. Approved Ask retries also accept
 both types and use the approval once. The server's approvals GET regression
 adds each type during its access check and expects 200. Removing the matching
-entry from `outputReportTypes` makes that read return 503. Full conversation
-reads still precede the short access check; only new activity is read during it.
+entry from `outputReportTypes` makes that read return 503. Chat and computer
+facts catch up before the short access check; only new activity is read during it.
+
+## Decision activity summaries
+
+`decisionActivity` uses the auth `computer` summary and the models `decision-chat`
+summary. The computer facts include the latest lifecycle event and the requested
+turn's first start and first close. Admission requires the same Ready position
+returned by credentials, no close, a server-owned first start, and matching thread,
+conversation, requester and task. A start from another source cannot grant access;
+a close from any source refuses it.
+
+The chat summary keeps events in their saved order, except `outputReportTypes`.
+A posted message keeps only `{ conversationId }` in its data. No decision reads
+its encrypted text. Each call copies rows up to its captured log position. The
+unchanged `confirm()` checks later activity, including approval invalidation.
+The shared two-second budget, disconnect check before reservation, watched access
+streams and all existing refusal rules remain in place.
+
+The kind keeps at most 64 chats and 30,000 retained rows across those chats.
+The shared computer kind has its own 30,000-fact budget. Whole summaries are
+dropped in least-recently-used order; individual refusal facts are never removed.
+A dropped summary rebuilds from sequence 1. A summary larger than its whole budget
+is not kept after use, so later calls may time out rebuilding it. These are bounds
+on retained caches, not peak memory during concurrent reads or complete service
+memory. More active streams than the cache can hold can cause repeated rebuilds.
+No permissions check skips a catch-up to avoid a rebuild.
+
+After an event-store restore, the server and models processes must restart before
+serving requests. Skipping the restart can leave a suspended or lost computer
+allowed by facts from before the restore. The restart is part of the restore drill.
+
+`test/decision-cost.test.ts` drives real HTTP model admission at 10, 100 and 500
+older turns with 10 and 3,000 chat events. It counts credentials, activity, access,
+reservation and audit reads together. The 500-turn count and long-chat count may
+exceed their short equivalents by at most two rows. It also checks cold catch-up,
+fresh suspension or closure, start source and all turn bindings without new holds.
+`test/decision-activity.test.ts` checks warm reads, removed output/text, saved order
+and the captured position. It also checks that an oversized decision summary is
+dropped and retains old approval activity when rebuilt. Existing fence, authority,
+gateway and shared-assistant
+tests retain their original security checks.
+
+### Decision chat memory measurement
+
+The synthetic reader in `test/summary-memory.ts` supplies a posted message, a turn
+start and a turn completion for every turn. Each message carries a distinct
+32,000-character ciphertext placeholder. Source rows are not kept by the reader.
+Node uses `--expose-gc` and a 256 MiB heap cap. The retained-cache figure compares
+collected heap with and without the store; it excludes the loaded packages.
+
+| Shape | Retained cache bytes | Total heap bytes |
+| --- | ---: | ---: |
+| 1,000 chats, 200 turns each, 64-chat limit without a fact budget | 14,491,880 | 43,843,608 |
+| 1,000 chats, 200 turns each, 64-chat limit and fact budget | 11,328,472 | 40,692,296 |
+| 64 chats, 3,000 kept events each, fact budget | 11,432,432 | 39,789,080 |
+
+The budget limits retained rows to 30,000 even when individual chats keep growing.
+These figures measure one kind at a time, without simultaneous catch-ups or a
+live models service. The computer measurements are in the auth README.robot.md.
+The server chat kind uses the same whole-entry budget, including every report
+position, to bound its previously growing cache too.
+
+A repeatable command from the repository root is:
+
+```sh
+nice -n 10 npm run measure:summaries:memory -w libs/models -- chat 1000 200 1
+```
+
+Arguments are kind, number of streams, turns per stream and turns per thread.
+The last number matters only for computers. Add `unbounded` to disable the fact
+budget in this measurement; it does not change a running service's settings.
+
+Larger active working sets and rebuild counts are tracked in #256. The remaining
+whole-log report and approval reads are tracked in #253, #254 and #255. These
+sites are outside this change. Fresh-install qualification remains in #63.

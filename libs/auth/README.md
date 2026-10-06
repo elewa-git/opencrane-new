@@ -15,6 +15,7 @@ flowchart LR
   models["libs/models<br/>AI access and spending"] -.-> auth
   auth -->|sign-in and sign-out| zitadel["Zitadel<br/>sign-in service"]
   auth -->|reads new computer events| events["Event log<br/>saved events"]
+  auth -.->|checks turn data| catalogue["libs/events<br/>event definitions"]
 ```
 
 ## What it is responsible for
@@ -26,7 +27,9 @@ flowchart LR
 - Sign and check short-lived passes for computers and individual chat turns.
 - Check computer and turn passes against the computer's recorded state. It keeps a
   [stream summary](../../GLOSSARY.md#stream-summary) and reads new events before every check.
-- Share the computer summary with the server so starting a turn reads only new events.
+- Share the computer summary with the server and models process so starting a
+  turn and allowing a call read only new events. Drop older summaries when their
+  memory budget is reached.
 
 ## Processes it handles
 

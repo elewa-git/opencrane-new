@@ -116,7 +116,15 @@ and own connection shutdown; one connection serves one silo.
 memory for one store instance, kind name, silo and subject. `SummaryKind` supplies
 `name`, `keep`, `empty()` and `add(summary, row)`. Names must identify one summary
 shape; `keep` is a positive entry limit. The least recently used entry is dropped
-when that limit is exceeded. A dropped entry rebuilds from sequence 1.
+when that limit is exceeded. An optional `budget: { limit, size(summary) }` also
+bounds retained facts across all entries of a kind. Its size function must be
+quick and count every growing part of the summary. After every catch-up, including
+a failed partial read, the helper drops least recently used whole entries until
+their combined size fits. An entry larger than the entire budget is also dropped.
+The current call and already queued calls still finish on their entry and return
+complete facts; eviction never removes an individual refusal fact. A dropped
+entry rebuilds from sequence 1. Active catch-ups and returned copies are outside
+this retained-cache budget.
 
 Each call queues its own catch-up, starting after that call began. It reads from
 the last added global position plus one to the head observed by `readStream`.
@@ -142,7 +150,8 @@ Summaries assume saved events only grow. A backup restore can move the event log
 backwards. The server and models processes must restart after every event-store
 restore, before serving traffic. This clears all summaries and rebuilds them from
 sequence 1. The Phase 5 restore drill must include these restarts, alongside
-rebuilding projection checkpoints. No summary is stored in a backup or in SQL.
+rebuilding projection checkpoints. Skipping the restarts can keep a suspended or
+lost computer allowed by stale facts. No summary is stored in a backup or in SQL.
 
 ## Stream configuration
 

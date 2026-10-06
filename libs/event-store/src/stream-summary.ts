@@ -4,6 +4,8 @@ import { readBeforeDeadline, type EventStore } from './jetstream.ts';
 export interface SummaryKind<Summary> {
   name: string;
   keep: number;
+  /** Limit retained facts across this kind's cached streams, as well as stream count. */
+  budget?: { limit: number; size(summary: Summary): number };
   empty(): Summary;
   /** Check the row before changing the summary; leave it unchanged if this throws. */
   add(summary: Summary, row: StoredEvent): void;
@@ -20,6 +22,7 @@ interface Entry<Summary> {
   summary: Summary;
   sequence: number;
   queue: Promise<void>;
+  size: number;
 }
 
 type KindEntries = Map<string, Entry<unknown>>;
@@ -46,7 +49,7 @@ function entryFor<Summary>(store: object, silo: string, subject: string,
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Each kind name has one summary shape.
   let entry = entries.get(key) as Entry<Summary> | undefined;
   if (!entry) {
-    entry = { summary: kind.empty(), sequence: 0, queue: Promise.resolve() };
+    entry = { summary: kind.empty(), sequence: 0, queue: Promise.resolve(), size: 0 };
   }
   // Move this entry to the end so the first key is always the least recently used.
   entries.delete(key);
@@ -58,6 +61,19 @@ function entryFor<Summary>(store: object, silo: string, subject: string,
     entries.delete(oldest);
   }
   return entry;
+}
+
+function applyBudget<Summary>(store: object, kind: SummaryKind<Summary>, entry: Entry<Summary>) {
+  if (!kind.budget) return;
+  entry.size = kind.budget.size(entry.summary);
+  const entries = entriesFor(store, kind.name);
+  let retainedSize = 0;
+  for (const cached of entries.values()) retainedSize += cached.size;
+  for (const [key, cached] of entries) {
+    if (retainedSize <= kind.budget.limit) break;
+    entries.delete(key);
+    retainedSize -= cached.size;
+  }
 }
 
 function finished(): void {
@@ -73,13 +89,18 @@ export function readStreamSummary<Summary, Result>(
   async function catchUp() {
     const catchUpDeadline = Math.max(deadline, performance.now() + 10_000);
     const rows = store.readStream(subject, entry.sequence + 1, catchUpDeadline);
-    for await (const row of rows) {
-      if (row.event.silo !== silo) throw new WrongSiloError();
-      kind.add(entry.summary, row);
-      entry.sequence = row.sequence;
+    try {
+      for await (const row of rows) {
+        if (row.event.silo !== silo) throw new WrongSiloError();
+        kind.add(entry.summary, row);
+        entry.sequence = row.sequence;
+      }
+      // Copy facts only after this call's own read reaches the head. Keep both in one slot.
+      return take(entry.summary, entry.sequence);
+    } finally {
+      // Drop whole summaries, including partial reads, rather than forgetting refusal facts.
+      applyBudget(store, kind, entry);
     }
-    // Copy facts only after this call's own read reaches the head. Keep both in one slot.
-    return take(entry.summary, entry.sequence);
   }
   const result = entry.queue.then(catchUp);
   entry.queue = result.then(finished, finished);

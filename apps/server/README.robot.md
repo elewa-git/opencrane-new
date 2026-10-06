@@ -734,16 +734,15 @@ its append. A start from another computer still writes its own start. A new writ
 checks the binding and id of the one event at the returned position; a missing or
 different event gives `Turn binding conflict`.
 
-PR #238 already shipped the start-repeat skip and turnCommand's `historyChecked`
-opt-in from spec section 2.9. PR 4 moves that check from the full computer history
-onto `startCommandKeys`; it does not introduce a second skip. The model decision's
-activity and conversation reads remain work for PR 5.
+PR #238 shipped the start-repeat skip and `turnCommand`'s `historyChecked` opt-in.
+PR #246 moved that check onto `startCommandKeys` in the shared computer summary.
+Model decisions now use that summary and their own chat summary too.
 
 `test/chat-summary.test.ts` uses real NATS to check warmed 500-event chats,
 report and turn repeats, old journals, changed payloads, user posts between reports,
 closed turns and missing or different events at an append's returned position.
 
-Local memory measurement used Node with `--expose-gc --max-old-space-size=256`.
+Before the retained-fact budget was added, a local memory measurement used Node with `--expose-gc --max-old-space-size=256`.
 A synthetic reader supplied all 64 cached chats with 3,000 events each: one creation,
 500 messages, 500 closed turns and 1,999 reply chunks. Message and chunk rows carried
 32,000-character text. After collection, the summaries retained 13,240,040 bytes
@@ -764,7 +763,7 @@ computer loss. A later completed turn removes that notice.
 Known follow-up: report positions grow with every stored reply. The 64-chat limit
 caps the number of chats, not each chat's report count. The measured mix above
 uses about 70 bytes per event; much longer chats can consume several MiB each.
-A follow-up should reduce per-report storage or cap total retained entries.
+Issue #253 should reduce per-report storage or cap total retained entries.
 
 ## Turn admission read growth
 
@@ -799,3 +798,19 @@ refused report leaves the event log unchanged. The approvals GET regression in
 check. It expects 200 and returns 503 if that type leaves `outputReportTypes`.
 `test/bridge-channel.test.ts` checks that the computer skips invalid tool fields
 and keeps sending later reports through its open socket.
+
+## Retained chat summary budget
+
+The server chat kind keeps at most 64 chats and 30,000 facts across them: messages,
+closed turn ids, computer report trackers and report positions. Report positions
+are counted as they arrive, so a budget check does not scan old reports. Older
+whole summaries are dropped and rebuilt on the next use. Closed turns, report
+repeats and thread ownership checks still read complete facts. Reads in progress
+and copies returned to callers are outside this retained-cache budget.
+
+`test/chat-summary-memory.test.ts` checks that an oversized report-position map
+is dropped and that its first saved report is still found after rebuilding.
+
+Rebuild cost for larger active working sets is tracked in #256. The remaining
+approval history and polling reads are tracked in #254 and #255. Fresh-install
+governed-work qualification remains tracked in #63.

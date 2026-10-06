@@ -1,10 +1,12 @@
 import { z } from 'zod';
+import { computerTurnStartedDataSchema as startDetails,
+  computerTurnClosedDataSchema as closeDetails } from '@opencrane/events';
 import type { StoredEvent, SummaryKind } from '@opencrane/event-store';
 
 type ExecutionMode = 'restricted' | 'memory_free';
 export type TurnSummary = {
   hasStart: boolean;
-  firstClose: { sequence: number; status: 'completed' | 'failed' } | undefined;
+  firstClose: { sequence: number; status: z.infer<typeof closeDetails>['status'] } | undefined;
   firstStart?: StoredEvent;
   lastStartExecutionMode?: ExecutionMode | undefined;
   startCommandKeys?: Set<string>;
@@ -14,22 +16,17 @@ export type ThreadSummary = {
   startedTurnIds: Set<string>;
   restrictedTurnIds: Set<string>;
 };
-const startDetails = z.object({
-  turnId: z.string(), threadId: z.string(), requesterId: z.string(), conversationId: z.string(),
-  executionMode: z.enum(['restricted', 'memory_free']).optional(),
-});
-const closeDetails = z.object({ turnId: z.string(), status: z.enum(['completed', 'failed']) });
-
 export type ComputerSummary = {
   lifecycle: StoredEvent | undefined;
   claim: StoredEvent | undefined;
   grant: StoredEvent | undefined;
   turns: Map<string, TurnSummary>;
   threads: Map<string, ThreadSummary>;
+  startCommandCount: number;
 };
 function emptyComputer(): ComputerSummary {
   return { lifecycle: undefined, claim: undefined, grant: undefined,
-    turns: new Map(), threads: new Map() };
+    turns: new Map(), threads: new Map(), startCommandCount: 0 };
 }
 function addComputer(summary: ComputerSummary, row: StoredEvent) {
   const type = row.event.type;
@@ -42,6 +39,7 @@ function addComputer(summary: ComputerSummary, row: StoredEvent) {
     const details = closeDetails.parse(row.event.data);
     const previous = summary.turns.get(details.turnId);
     if (!previous?.firstClose) {
+      summary.startCommandCount -= previous?.startCommandKeys?.size ?? 0;
       const closedTurn: TurnSummary = { hasStart: previous?.hasStart ?? false,
         firstClose: { sequence: row.sequence, status: details.status } };
       summary.turns.set(details.turnId, closedTurn);
@@ -64,9 +62,13 @@ function addStart(summary: ComputerSummary, row: StoredEvent,
   if (!turn.firstClose) {
     turn.lastStartExecutionMode = details.executionMode;
     const principal = row.event.principal;
-    turn.startCommandKeys?.add(JSON.stringify([
+    const commandKey = JSON.stringify([
       principal?.kind, principal?.id, row.event.commandId,
-    ]));
+    ]);
+    if (turn.startCommandKeys && !turn.startCommandKeys.has(commandKey)) {
+      turn.startCommandKeys.add(commandKey);
+      summary.startCommandCount++;
+    }
   }
   let thread = summary.threads.get(details.threadId);
   if (!thread) {
@@ -83,4 +85,8 @@ function addDistinct(values: Set<string>, value: string) {
 }
 export const computerSummary: SummaryKind<ComputerSummary> = {
   name: 'computer', keep: 64, empty: emptyComputer, add: addComputer,
+  budget: { limit: 30_000, size: computerSize },
 };
+function computerSize(summary: ComputerSummary) {
+  return summary.turns.size + summary.threads.size + summary.startCommandCount;
+}
