@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chatFixture } from './chat-fixture.mjs';
@@ -19,6 +19,11 @@ const sceneFrames = {
   'approval-submitting': ['WRK-14'],
   'approval-step-up': ['WRK-21'],
   'approval-terminal': ['WRK-16', 'WRK-17', 'WRK-18', 'WRK-19', 'WRK-20'],
+  'approval-terminal-approved': ['WRK-16'],
+  'approval-terminal-outcome_unknown': ['WRK-16'],
+  'approval-terminal-denied': ['WRK-17'],
+  'approval-terminal-expired': ['WRK-18'],
+  'approval-terminal-cancelled': ['WRK-19', 'WRK-20'],
   'tool-details': ['WRK-03', 'WRK-04'],
   'activity-jump': ['WRK-07'],
   reconnected: ['WRK-22'],
@@ -33,6 +38,33 @@ async function capture(page, scene, width, motion) {
   const filename = `${scene}-${width}-${motion}.png`;
   await page.screenshot({ path: `${output}/${filename}`, fullPage: true });
   captures.push(filename);
+}
+
+async function removeOldPhoneTerminalCaptures() {
+  for (const width of [390, 320]) {
+    for (const motion of motions) {
+      const filename = `${output}/approval-terminal-${width}-${motion}.png`;
+      await rm(filename, { force: true });
+    }
+  }
+}
+
+async function waitForAnimations(page) {
+  await page.evaluate(async () => {
+    const animations = globalThis.document.getAnimations({ subtree: true });
+    const finishingAnimations = animations.filter(animationCanFinish);
+    for (const animation of finishingAnimations) {
+      try {
+        await animation.finished;
+      } catch {
+        // Ignore animations cancelled while the drawer closes.
+      }
+    }
+
+    function animationCanFinish(animation) {
+      return animation.effect?.getTiming().iterations !== Infinity;
+    }
+  });
 }
 
 async function openPage(browser, width, motion, scenario, cards, postHandler, readHandler) {
@@ -54,7 +86,9 @@ async function openPage(browser, width, motion, scenario, cards, postHandler, re
 }
 
 async function openDetails(page) {
-  await page.getByRole('button', { name: 'Details', exact: true }).first().click();
+  const details = page.getByRole('button', { name: 'Details', exact: true }).first();
+  await details.focus();
+  await details.press('Enter');
   const dialog = page.getByRole('dialog');
   await dialog.waitFor();
   const heading = dialog.getByRole('heading').first();
@@ -81,16 +115,20 @@ async function checkFocusedOutline(locator) {
 }
 
 async function captureScene(browser, scene, width, motion) {
+  if (scene === 'approval-terminal' && width < 700) {
+    await capturePhoneTerminalStates(browser, width, motion);
+    return;
+  }
   let cards = [approvalCard(0)];
   let scenario = 'tools';
   if (scene === 'approval-step-up') cards = [{ ...approvalCard(0), stepUp: true }];
   if (scene === 'approval-terminal') {
     cards = [
-      approvalCard(1, 'approved', false),
-      approvalCard(2, 'outcome_unknown', false),
-      approvalCard(3, 'denied', false),
-      approvalCard(4, 'expired', false),
-      approvalCard(5, 'cancelled', false),
+      approvalCard(1, 'approved', false, 'me'),
+      approvalCard(2, 'outcome_unknown', false, 'me'),
+      approvalCard(3, 'denied', false, 'me'),
+      approvalCard(4, 'expired', false, 'me'),
+      approvalCard(5, 'cancelled', false, 'me'),
     ];
   }
   if (scene === 'tool-details' || scene === 'activity-jump' || scene === 'reconnected') {
@@ -99,7 +137,9 @@ async function captureScene(browser, scene, width, motion) {
   const { page, chat } = await openPage(browser, width, motion, scenario, cards, postResponseForScene(scene));
   try {
     if (scene === 'approval-requested') {
-      await page.getByRole('region', { name: 'Approval needed' }).waitFor();
+      const approval = page.getByRole('region', { name: 'Approval needed' });
+      await approval.waitFor();
+      await approval.scrollIntoViewIfNeeded();
       await checkFocusedOutline(page.getByRole('button', { name: /^Approve:/ }).first());
       assert(await page.getByText('Waiting on you', { exact: true }).isVisible());
     } else if (scene === 'approval-details') {
@@ -107,6 +147,8 @@ async function captureScene(browser, scene, width, motion) {
       if (motion === 'reduce') {
         assert.equal(await dialog.evaluate(getAnimationName), 'none');
       }
+      await waitForAnimations(page);
+      if (width < 700) await checkPhoneTargets(page, scene);
       await capture(page, scene, width, motion);
       await page.keyboard.press('Escape');
       assert(await page.getByRole('button', { name: 'Details', exact: true })
@@ -114,8 +156,10 @@ async function captureScene(browser, scene, width, motion) {
       return;
     } else if (scene === 'approval-submitting') {
       await page.getByRole('button', { name: /^Approve:/ }).click();
-      await page.getByRole('region', { name: 'Approval needed' })
-        .getByText('Sending your approval…').waitFor();
+      const sendingHeading = page.locator('.approval.pending header strong');
+      await sendingHeading.waitFor();
+      assert.equal(await sendingHeading.innerText(), 'Sending your approval…');
+      assert.equal(await page.getByText('Waiting on you', { exact: true }).count(), 0);
     } else if (scene === 'approval-step-up') {
       await page.getByRole('button', { name: /^Approve:/ }).click();
       await page.getByRole('link', { name: 'Sign in again to approve' }).waitFor();
@@ -133,6 +177,8 @@ async function captureScene(browser, scene, width, motion) {
       if (motion === 'reduce') {
         assert.equal(await dialog.evaluate(getAnimationName), 'none');
       }
+      await waitForAnimations(page);
+      if (width < 700) await checkPhoneTargets(page, scene);
       await capture(page, scene, width, motion);
       await page.keyboard.press('Escape');
       assert(await tool.evaluate(node => node.ownerDocument.activeElement === node));
@@ -170,6 +216,25 @@ async function captureScene(browser, scene, width, motion) {
   }
 }
 
+async function capturePhoneTerminalStates(browser, width, motion) {
+  const states = ['approved', 'outcome_unknown', 'denied', 'expired', 'cancelled'];
+  for (let index = 0; index < states.length; index += 1) {
+    const state = states[index];
+    const terminalCard = approvalCard(index + 1, state, false, 'me');
+    const { page } = await openPage(browser, width, motion, 'tools', [terminalCard]);
+    try {
+      const terminal = page.locator('.approval-terminal');
+      await terminal.waitFor();
+      await terminal.scrollIntoViewIfNeeded();
+      await checkFocusedOutline(terminal);
+      await checkPhoneTargets(page, `approval-terminal-${state}`);
+      await capture(page, `approval-terminal-${state}`, width, motion);
+    } finally {
+      await page.close();
+    }
+  }
+}
+
 function getAnimationName(element) {
   return element.ownerDocument.defaultView.getComputedStyle(element).animationName;
 }
@@ -180,6 +245,53 @@ function getActiveElement() {
 
 function isActiveElement(element) {
   return globalThis.document.activeElement === element;
+}
+
+function collectCaptureFiles(files) {
+  const results = [];
+  for (const file of files) {
+    const details = file.match(/^(.*)-(\d+)-(no-preference|reduce)\.png$/);
+    assert(details);
+    const scene = details[1];
+    const width = Number(details[2]);
+    const motion = details[3];
+    const frames = framesForCapture(scene, width);
+    results.push({ file, frames, width, motion, checks: checksForCapture(scene, width) });
+  }
+  return results;
+}
+
+function framesForCapture(scene, width) {
+  const frameNames = sceneFrames[scene] ?? [];
+  const frames = [];
+  for (const frameName of frameNames) frames.push(`${frameName}-${width}`);
+  return frames;
+}
+
+function checksForCapture(scene, width) {
+  const checks = ['No horizontal overflow', 'Captured at the listed width and motion setting'];
+  if (scene === 'approval-details' || scene === 'tool-details') {
+    checks.push('Drawer animation ended before the capture');
+  }
+  if (scene === 'approval-details' && width < 700) {
+    checks.push('Measured the drawer Back, Approve and Deny controls');
+  }
+  if (scene === 'tool-details' && width < 700) {
+    checks.push('Measured the drawer Back control');
+  }
+  if (scene.startsWith('approval-terminal-') && width < 700) {
+    checks.push('Shows one folded state with the viewer as requester');
+    checks.push('Measured the folded card and any status action');
+  }
+  return checks;
+}
+
+function framesForAllCaptures(captureFiles) {
+  const frameSet = new Set();
+  for (const captureFile of captureFiles) {
+    for (const frame of captureFile.frames) frameSet.add(frame);
+  }
+  return [...frameSet];
 }
 
 function postResponseForScene(scene) {
@@ -282,6 +394,7 @@ async function checkEmptyConversation(browser) {
 const browser = await chromium.launch();
 try {
   await mkdir(output, { recursive: true });
+  await removeOldPhoneTerminalCaptures();
   const scenes = [
     'approval-requested', 'approval-details', 'approval-submitting',
     'approval-step-up', 'approval-terminal', 'tool-details', 'activity-jump', 'reconnected',
@@ -298,19 +411,7 @@ try {
   await checkUnknownDoesNotPost(browser);
   await checkAccessRecovery(browser);
   await checkEmptyConversation(browser);
-  const captureFiles = captures.map(file => {
-    const details = file.match(/^(.*)-(\d+)-(no-preference|reduce)\.png$/);
-    assert(details);
-    const scene = details[1];
-    const frame = sceneFrames[scene] ?? [];
-    return {
-      file,
-      frames: frame.map(frameId => `${frameId}-${details[2]}`),
-      width: Number(details[2]),
-      motion: details[3],
-      checks: ['No horizontal overflow', 'Captured at the listed width and motion setting'],
-    };
-  });
+  const captureFiles = collectCaptureFiles(captures);
   const result = {
     result: 'PASS',
     widths,
@@ -319,11 +420,11 @@ try {
     files: captures,
     captureChecks: captureFiles,
     environment: 'Built Angular assets; Chromium; intercepted fixtures; no live governed turn',
-    frames: [...new Set(captureFiles.flatMap(captureResult => captureResult.frames))],
+    frames: framesForAllCaptures(captureFiles),
     checks: [
-      '9 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      '8 scenes captured at 1280, 390 and 320 pixels with both motion settings',
       'No horizontal overflow in any capture',
-      'Phone actions and drawer controls are at least 44px tall',
+      'Phone card actions, drawer buttons and drawer Back controls were measured',
       'Approval, tool and terminal buttons show the teal focus ring',
       'Approval POST sends one decision with the fixture CSRF token and page origin',
       'Unknown outcome Check status makes a GET and no POST',

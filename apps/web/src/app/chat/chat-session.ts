@@ -54,6 +54,7 @@ export class ChatSession implements OnDestroy {
   /** Bumped on session switch or destroy; mismatched async work belongs to an old session. */
   private revision = 0;
   private sawReconnecting = false;
+  private reconnectCount = 0;
   private pending: { id: string; conversationId: string; text: string } | undefined;
   private subscription = this.socket.received.subscribe(message => this.receive(message));
 
@@ -97,6 +98,7 @@ export class ChatSession implements OnDestroy {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     const revision = ++this.revision;
     this.sawReconnecting = false;
+    this.reconnectCount = 0;
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(id); this.rows.set([]); this.position = 0; this.generation = 0;
@@ -110,7 +112,8 @@ export class ChatSession implements OnDestroy {
   }
   newSession(): void {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
-    ++this.revision; this.sawReconnecting = false; this.reconnectedAt.set('');
+    ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
+    this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
     this.position = 0; this.generation = 0; this.computer.set('ready'); this.loading.set(false);
@@ -229,9 +232,11 @@ export class ChatSession implements OnDestroy {
     }
     if (message.type === 'ready' && this.sawReconnecting) {
       this.sawReconnecting = false;
+      this.reconnectCount += 1;
       const connectedAt = new Date().toISOString();
       this.reconnectedAt.set(connectedAt);
-      this.announcement.set(`Reconnected at ${shortTime(connectedAt)}. You're caught up.`);
+      const reconnectWords = this.reconnectCount === 1 ? 'Reconnected at' : 'Reconnected again at';
+      this.announcement.set(`${reconnectWords} ${shortTime(connectedAt)}. You're caught up.`);
     }
     this.generation = message.generation;
     if (message.computerState) this.computer.set(message.computerState);

@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import type { ApprovalCard } from '@opencrane/protocol';
 import { ChatIcon } from './icon';
-import { utcDateTime } from './file-presentation';
 
 type TerminalGlyph = 'done' | 'clock' | 'block' | 'dash';
 
@@ -14,7 +13,8 @@ type TerminalGlyph = 'done' | 'clock' | 'block' | 'dash';
 })
 export class ApprovalTerminalLine {
   readonly card = input.required<ApprovalCard>();
-  readonly viewerId = input.required<string>();
+  readonly words = input.required<string>();
+  readonly detail = input.required<string>();
   readonly opened = output<HTMLElement>();
 
   protected glyph(): TerminalGlyph {
@@ -31,37 +31,6 @@ export class ApprovalTerminalLine {
     return 'dash';
   }
 
-  protected words(): string {
-    const state = this.card().state;
-    if (state === 'outcome_unknown') {
-      return this.actorWords('Approved');
-    }
-    if (state === 'approved') {
-      return this.actorWords('Approved');
-    }
-    if (state === 'denied') {
-      return this.actorWords('Denied');
-    }
-    if (state === 'expired') {
-      return 'Expired';
-    }
-    return 'Cancelled';
-  }
-
-  protected detail(): string {
-    const state = this.card().state;
-    if (state === 'outcome_unknown') {
-      return 'used once · can’t be reused';
-    }
-    if (state === 'approved') {
-      return 'not used yet';
-    }
-    if (state === 'denied' || state === 'cancelled') {
-      return 'nothing was sent with this approval';
-    }
-    return `Expired ${utcDateTime(this.card().expiresAt)} · nothing was sent with this approval`;
-  }
-
   protected action(): string {
     return this.card().review.action;
   }
@@ -70,12 +39,5 @@ export class ApprovalTerminalLine {
     if (event.currentTarget instanceof HTMLElement) {
       this.opened.emit(event.currentTarget);
     }
-  }
-
-  private actorWords(verb: string): string {
-    if (this.card().requesterId === this.viewerId()) {
-      return `${verb} by you`;
-    }
-    return `${verb} by the requester`;
   }
 }

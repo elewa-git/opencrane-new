@@ -1,5 +1,6 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Workspace } from './workspace';
+import { ChatComposer } from './composer';
 import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 
 interface CaptureWorkspace {
@@ -15,7 +16,7 @@ interface CaptureWorkspace {
 
 async function createCaptureWorkspace(
   initialRows: Record<string, unknown>[] = [],
-  approvalCards: Record<string, unknown>[] = [],
+  approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
@@ -34,7 +35,10 @@ async function createCaptureWorkspace(
       return Promise.resolve(new Response('{"memberId":"me","assistantId":"assistant"}'));
     }
     if (pathname.endsWith('/approvals')) {
-      return Promise.resolve(new Response(JSON.stringify({ cards: approvalCards, csrf: 'fixture' })));
+      const currentCards = typeof approvalCards === 'function'
+        ? approvalCards(path)
+        : approvalCards;
+      return Promise.resolve(new Response(JSON.stringify({ cards: currentCards, csrf: 'fixture' })));
     }
     if (pathname === '/api/conversations' && init?.method !== 'POST') {
       return Promise.resolve(new Response(JSON.stringify({ rows: [{
@@ -81,6 +85,7 @@ async function createCaptureWorkspace(
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
   await vi.waitFor(() => expect(fixture.componentInstance['chat'].selected()).toBe('chat'));
+  await vi.waitFor(() => expect(fixture.componentInstance['chat'].loading()).toBe(false));
   fixture.detectChanges();
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
@@ -665,6 +670,17 @@ it('announces one recovery after the socket reconnects and its conversation is r
   expect(capture.root.querySelector('.reconnected-line')).toBeNull();
   expect(capture.fixture.componentInstance['chat'].reconnectedAt()).toBe('');
   expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
+
+  capture.socket.onclose?.(new CloseEvent('close'));
+  const previousOpen = capture.socket.onopen;
+  await vi.waitFor(() => expect(capture.socket.onopen).not.toBe(previousOpen));
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify(readyMessage),
+  }));
+  await capture.fixture.whenStable();
+  expect(capture.fixture.componentInstance['chat'].announcement())
+    .toMatch(/Reconnected again at/);
 });
 
 it('does not announce a reconnect that started in the conversation being left', async () => {
@@ -701,12 +717,55 @@ it('shows Waiting on you without adding another live announcement', async () => 
     review: { action: 'Change the note', tool: 'write', target: 'SO-1042', data: '{}',
       destination: 'ERP', account: 'No account', consequence: 'Changes the draft.' },
   };
-  const capture = await createCaptureWorkspace([], [approval]);
+  const capture = await createCaptureWorkspace([], path =>
+    path.includes('/conversations/chat/approvals') ? [approval] : []);
   try {
     await vi.waitFor(() => expect(capture.root.textContent).toContain('Waiting on you'));
     const headerStatus = capture.root.querySelector('.waiting-status');
-    expect(headerStatus?.getAttribute('aria-hidden')).toBe('true');
-    expect(capture.root.querySelector('.workspace-header [aria-live]')).toBeNull();
+    expect(headerStatus?.getAttribute('aria-live')).toBe('polite');
+    expect(capture.root.querySelectorAll('.workspace-header [aria-live]')).toHaveLength(1);
+    await capture.fixture.componentInstance['chat'].select('county-rollout');
+    await vi.waitFor(() => expect(capture.root.textContent).not.toContain('Waiting on you'));
+    expect(capture.root.querySelector('.waiting-status')).toBeNull();
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('uses Enter in the message field to submit its text', () => {
+  const fixture = TestBed.createComponent(ChatComposer);
+  fixture.componentRef.setInput('draft', 'Check the order note');
+  fixture.detectChanges();
+  const submitted: string[] = [];
+  fixture.componentInstance.submitted.subscribe(text => submitted.push(text));
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Message composer is missing');
+  const field = root.querySelector<HTMLTextAreaElement>('#message');
+  if (!field) throw new Error('Message field is missing');
+  field.focus();
+  const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+  field.dispatchEvent(enter);
+  expect(enter.defaultPrevented).toBe(true);
+  expect(submitted).toEqual(['Check the order note']);
+  fixture.destroy();
+});
+
+it('clears Waiting on you when the approval cards are destroyed', async () => {
+  const approval = {
+    approvalId: 'a'.repeat(64), conversationId: 'chat', requesterId: 'me',
+    expiresAt: '2026-10-04T10:32:00Z', state: 'requested', stepUp: false, canDecide: true,
+    review: { action: 'Change the note', tool: 'write', target: 'SO-1042', data: '{}',
+      destination: 'ERP', account: 'No account', consequence: 'Changes the draft.' },
+  };
+  const capture = await createCaptureWorkspace([], path =>
+    path.includes('/conversations/chat/approvals') ? [approval] : []);
+  try {
+    await vi.waitFor(() => expect(capture.root.textContent).toContain('Waiting on you'));
+    capture.fixture.componentInstance['chat'].newSession();
+    capture.fixture.detectChanges();
+    await capture.fixture.componentInstance['chat'].select('county-rollout');
+    await vi.waitFor(() => expect(capture.root.textContent).not.toContain('Waiting on you'));
+    expect(capture.root.querySelector('.waiting-status')).toBeNull();
   } finally {
     capture.fixture.destroy();
   }

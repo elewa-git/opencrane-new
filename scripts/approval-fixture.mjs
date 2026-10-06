@@ -1,10 +1,10 @@
 const approvalIds = ['a', 'b', 'c', 'd', 'e', 'f'];
 
-export function approvalCard(index, state = 'requested', canDecide = true) {
+export function approvalCard(index, state = 'requested', canDecide = true, requesterId) {
   return {
     approvalId: approvalIds[index].repeat(64),
     conversationId: 'chat',
-    requesterId: canDecide ? 'me' : 'another-member',
+    requesterId: requesterId ?? (canDecide ? 'me' : 'another-member'),
     expiresAt: '2026-10-04T10:32:00Z',
     state,
     stepUp: false,

@@ -16,15 +16,12 @@
           @if (chat.selected()) { <span class="hash" aria-hidden="true">#</span> }
           <h1 [class.draft-title]="!chat.selected()">{{ title() }}</h1>
         </div>
-        @if (approvalWaiting() && chat.selected() && !chat.denied()) {
-          <span class="header-status waiting-status" aria-hidden="true">
-            <span class="approval-dot"></span> Waiting on you
-          </span>
-        } @else {
-          <span class="header-status" aria-live="polite">
-            @if (chat.active()) { <oc-icon name="agent" /> Agent working }
-          </span>
-        }
+        <span class="header-status" [class.waiting-status]="approvalWaiting() && chat.selected() && !chat.denied()"
+          aria-live="polite">
+          @if (approvalWaiting() && chat.selected() && !chat.denied()) {
+            <span aria-hidden="true"><span class="approval-dot"></span> Waiting on you</span>
+          } @else if (chat.active()) { <oc-icon name="agent" /> Agent working }
+        </span>
       </div>
       @if (!chat.selected()) { <span class="draft-label">Draft</span> }
       <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span>

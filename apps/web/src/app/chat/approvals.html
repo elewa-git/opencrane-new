@@ -1,7 +1,5 @@
 @if (loaded()) {
-  @if (announced()) {
-    <p class="approval-announcement" role="status" aria-live="polite">{{ announced() }}</p>
-  }
+  <p class="approval-announcement" role="status" aria-live="polite">{{ announced() }}</p>
   @if (checkingAccess()) {
     <oc-shared-state kind="checking" message="Checking access"
       detail="Approvals are hidden until your access is confirmed." [showAction]="false" />
@@ -17,8 +15,7 @@
           aria-label="Approval needed">
           <header>
             <span class="approval-dot" aria-hidden="true"></span>
-            <strong>Approval needed</strong>
-            @if (isSubmitting(card)) { <span class="sending">{{ presentation.statusMessage(card) }}</span> }
+            <strong>{{ presentation.headerMessage(card) }}</strong>
           </header>
           <h2>{{ card.review.action }}</h2>
           @if (card.canDecide) {
@@ -27,20 +24,17 @@
             @if (card.stepUp) {
               <p class="step-up">This action needs a recent sign-in. If yours is too old, you’ll be asked to sign in again.</p>
             }
-            @if (localState(card)?.kind === 'unknown' && !readFailed()) {
-              <oc-shared-state class="decision-state unknown-notice" [ocDogEar]="true"
-                kind="unknown" message="Decision not confirmed"
-                detail="The server did not confirm your decision. Check its status before deciding again."
-                [actionBusy]="checkBusy(card)" (action)="checkUnknown(card)" />
-            }
-            @if (presentation.statusMessage(card) && localState(card)?.kind !== 'submitting') {
-              <p class="decision-status">{{ presentation.statusMessage(card) }}</p>
-            }
+            <oc-approval-decision-status
+              [message]="presentation.statusMessage(card)"
+              [showCheck]="(localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict') && !readFailed()"
+              [showReference]="localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict'"
+              [reference]="presentation.reference(card)"
+              [busy]="checkBusy(card)" (checkRequested)="checkDecisionStatus(card)" />
             <div class="actions">
               @if (localState(card)?.kind === 'step_up') {
                 <a class="approve sign-in" [href]="presentation.signIn(card)">Sign in again to approve</a>
               } @else {
-                <button class="approve" type="button" [disabled]="isBlocked(card)"
+                <button class="approve" type="button" [attr.aria-disabled]="isBlocked(card)"
                   [attr.aria-label]="'Approve: ' + card.review.action"
                   (click)="decide(card, 'approved')">
                   @if (isSubmitting(card) && localState(card)?.decision === 'approved') {
@@ -48,7 +42,7 @@
                   } @else { Approve }
                 </button>
               }
-              <button type="button" [disabled]="isBlocked(card)"
+              <button type="button" [attr.aria-disabled]="isBlocked(card)"
                 [attr.aria-label]="'Deny: ' + card.review.action"
                 (click)="decide(card, 'rejected')">
                 @if (isSubmitting(card) && localState(card)?.decision === 'rejected') {
@@ -63,13 +57,15 @@
         </article>
       } @else {
         <div class="terminal-wrap" [attr.data-approval]="card.approvalId">
-          <oc-approval-terminal-line [card]="card" [viewerId]="viewerId()"
+          <oc-approval-terminal-line [card]="card"
+            [words]="presentation.stateWords(card)"
+            [detail]="presentation.terminalDetail(card)"
             (opened)="openDrawer(card, $event)" />
           @if (presentation.outcomeUnknown(card) && !readFailed()) {
             <oc-shared-state class="unknown-notice" [ocDogEar]="true" kind="unknown"
               message="Result not confirmed"
               detail="The approved call was allowed to go ahead once. OpenCrane has no confirmed result for it yet. Confirmation from the tool server is not available yet."
-              [actionBusy]="checkBusy(card)" (action)="checkUnknown(card)" />
+              [actionBusy]="checkBusy(card)" (action)="checkDecisionStatus(card)" />
           }
           @if (presentation.lastExpired(card)) {
             <oc-shared-state kind="expired" message="Ask again to start new checked work"
@@ -89,6 +85,14 @@
       <oc-approval-ledger [card]="card" [viewerId]="viewerId()" />
       @if (card.state === 'requested') {
         <p class="consequence"><strong>What happens</strong> · {{ card.review.consequence }}</p>
+        @if (card.canDecide) {
+          <oc-approval-decision-status
+            [message]="presentation.statusMessage(card)"
+            [showCheck]="(localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict') && !readFailed()"
+            [showReference]="localState(card)?.kind === 'unknown' || localState(card)?.kind === 'conflict'"
+            [reference]="presentation.reference(card)"
+            [busy]="checkBusy(card)" (checkRequested)="checkDecisionStatus(card)" />
+        }
       } @else {
         <p class="drawer-state">{{ presentation.stateWords(card) }} · {{ presentation.terminalDetail(card) }}</p>
       }
@@ -104,11 +108,11 @@
           @if (localState(card)?.kind === 'step_up') {
             <a class="approve sign-in" [href]="presentation.signIn(card)">Sign in again to approve</a>
           } @else {
-            <button class="approve" type="button" [disabled]="isBlocked(card)"
+            <button class="approve" type="button" [attr.aria-disabled]="isBlocked(card)"
               [attr.aria-label]="'Approve: ' + card.review.action"
               (click)="decideFromDrawer(card, 'approved')">Approve</button>
           }
-          <button type="button" [disabled]="isBlocked(card)"
+          <button type="button" [attr.aria-disabled]="isBlocked(card)"
             [attr.aria-label]="'Deny: ' + card.review.action"
             (click)="decideFromDrawer(card, 'rejected')">Deny</button>
         </div>

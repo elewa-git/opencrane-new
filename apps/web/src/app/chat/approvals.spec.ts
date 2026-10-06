@@ -4,11 +4,16 @@ import { ApprovalCards } from './approvals';
 
 const approvalId = 'a'.repeat(64);
 
-function card(state: ApprovalCard['state'] = 'requested', canDecide = true): ApprovalCard {
+function card(
+  state: ApprovalCard['state'] = 'requested',
+  canDecide = true,
+  id = approvalId,
+  requesterId = canDecide ? 'me' : 'someone-else',
+): ApprovalCard {
   return {
-    approvalId,
+    approvalId: id,
     conversationId: 'chat',
-    requesterId: canDecide ? 'me' : 'someone-else',
+    requesterId,
     expiresAt: '2026-10-04T10:32:00Z',
     state,
     stepUp: false,
@@ -27,6 +32,16 @@ function card(state: ApprovalCard['state'] = 'requested', canDecide = true): App
 
 function response(cards: ApprovalCard[], status = 200): Response {
   return new Response(JSON.stringify({ cards, csrf: 'csrf-token' }), { status });
+}
+
+function decisionBody(body: string): { approvalId: string; decision: string } {
+  const parsed: unknown = JSON.parse(body);
+  if (typeof parsed !== 'object' || parsed === null || !('approvalId' in parsed)
+    || !('decision' in parsed) || typeof parsed.approvalId !== 'string'
+    || typeof parsed.decision !== 'string') {
+    throw new Error('Decision body has an unexpected shape');
+  }
+  return { approvalId: parsed.approvalId, decision: parsed.decision };
 }
 
 async function mount(fetchImplementation: typeof fetch): Promise<ComponentFixture<ApprovalCards>> {
@@ -110,6 +125,45 @@ it('shows that only the requester can decide without decision buttons', async ()
   fixture.destroy();
 });
 
+it('keeps one pending decision with its own approval when another card is chosen', async () => {
+  const secondApprovalId = 'b'.repeat(64);
+  let currentCards = [card(), card('requested', true, secondApprovalId)];
+  const postIds: string[] = [];
+  let releaseFirstPost: ((value: Response) => void) | undefined;
+  const fixture = await mount((_url, init) => {
+    if (init?.method !== 'POST') return Promise.resolve(response(currentCards));
+    if (typeof init.body !== 'string') throw new Error('Decision body must be JSON text');
+    const body = decisionBody(init.body);
+    postIds.push(body.approvalId);
+    if (body.approvalId === approvalId) {
+      return new Promise<Response>(resolve => { releaseFirstPost = resolve; });
+    }
+    currentCards = [card(), card('approved', false, secondApprovalId)];
+    return Promise.resolve(new Response('{}'));
+  });
+  const root = rootOf(fixture);
+  const firstCard = requiredElement<HTMLElement>(root, `[data-approval="${approvalId}"]`);
+  const secondCard = requiredElement<HTMLElement>(root, `[data-approval="${secondApprovalId}"]`);
+
+  firstCard.querySelector<HTMLButtonElement>('.approve')!.click();
+  fixture.detectChanges();
+  const updatedFirstCard = requiredElement<HTMLElement>(root, `[data-approval="${approvalId}"]`);
+  expect(updatedFirstCard.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('true');
+  expect(secondCard.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('false');
+  secondCard.querySelector<HTMLButtonElement>('.approve')!.click();
+
+  await vi.waitFor(() => expect(root.querySelector(
+    `oc-approval-terminal-line [data-approval="${secondApprovalId}"]`,
+  )).not.toBeNull());
+  expect(postIds).toEqual([approvalId, secondApprovalId]);
+  if (!releaseFirstPost) throw new Error('The first decision did not start');
+  releaseFirstPost(new Response('{}', { status: 503 }));
+  await vi.waitFor(() => expect(firstCard.textContent).toContain('Decision not confirmed'));
+  fixture.destroy();
+});
+
 it('keeps both actions disabled when a poll arrives during a pending POST', async () => {
   vi.useFakeTimers();
   let releasePost: ((value: Response) => void) | undefined;
@@ -130,11 +184,105 @@ it('keeps both actions disabled when a poll arrives during a pending POST', asyn
   expect(postCount).toBe(1);
   await vi.advanceTimersByTimeAsync(3000);
   fixture.detectChanges();
-  expect(approve.disabled).toBe(true);
-  expect(deny.disabled).toBe(true);
+  expect(approve.getAttribute('aria-disabled')).toBe('true');
+  expect(deny.getAttribute('aria-disabled')).toBe('true');
   if (!releasePost) throw new Error('The approval POST did not start');
   releasePost(new Response('{}', { status: 503 }));
   await vi.waitFor(() => expect(root.textContent).toContain('Decision not confirmed'));
+  fixture.destroy();
+});
+
+it('stops showing Waiting on you while the decision is being sent', async () => {
+  let releasePost: ((value: Response) => void) | undefined;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+    if (init?.method === 'POST') {
+      return new Promise<Response>(resolve => { releasePost = resolve; });
+    }
+    return Promise.resolve(response([card()]));
+  });
+  const fixture = TestBed.createComponent(ApprovalCards);
+  const emissions: boolean[] = [];
+  fixture.componentInstance.waitingOnViewer.subscribe(value => emissions.push(value));
+  fixture.componentRef.setInput('conversationId', 'chat');
+  fixture.componentRef.setInput('viewerId', 'me');
+  fixture.detectChanges();
+  await vi.waitFor(() => expect(emissions.at(-1)).toBe(true));
+  rootOf(fixture).querySelector<HTMLButtonElement>('.approve')!.click();
+  await vi.waitFor(() => expect(emissions.at(-1)).toBe(false));
+  if (!releasePost) throw new Error('The decision request did not start');
+  releasePost(new Response('{}', { status: 503 }));
+  fixture.destroy();
+});
+
+it('keeps the healthy approval list quiet during a refresh', async () => {
+  vi.useFakeTimers();
+  let getCount = 0;
+  const fixture = await mount(() => {
+    getCount += 1;
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  await vi.advanceTimersByTimeAsync(3000);
+  fixture.detectChanges();
+  expect(getCount).toBe(2);
+  expect(root.querySelector('.approval-announcement')?.textContent).toBe('');
+  expect(root.textContent).not.toContain('Approval status unavailable');
+  fixture.destroy();
+});
+
+it('ends a stuck approval read so the next poll can refresh the list', async () => {
+  vi.useFakeTimers();
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10);
+    return controller.signal;
+  });
+  let getCount = 0;
+  const fixture = TestBed.createComponent(ApprovalCards);
+  fixture.componentRef.setInput('conversationId', 'chat');
+  fixture.componentRef.setInput('viewerId', 'me');
+  vi.spyOn(globalThis, 'fetch').mockImplementation((_url, init) => {
+    getCount += 1;
+    if (getCount > 1) return Promise.resolve(response([card()]));
+    return new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('Timed out')));
+    });
+  });
+  fixture.detectChanges();
+  await vi.waitFor(() => expect(getCount).toBe(1));
+  await vi.advanceTimersByTimeAsync(10);
+  await vi.waitFor(() => expect(rootOf(fixture).textContent)
+    .toContain('Approval status unavailable'));
+  await vi.advanceTimersByTimeAsync(3000);
+  await vi.waitFor(() => expect(getCount).toBe(2));
+  await vi.waitFor(() => expect(rootOf(fixture).textContent)
+    .not.toContain('Approval status unavailable'));
+  fixture.destroy();
+});
+
+it('keeps an accepted decision honest when its status read fails', async () => {
+  vi.useFakeTimers();
+  let postCount = 0;
+  let getCount = 0;
+  const fixture = await mount((_url, init) => {
+    if (init?.method === 'POST') {
+      postCount += 1;
+      return Promise.resolve(new Response('{}'));
+    }
+    getCount += 1;
+    if (getCount === 1) return Promise.resolve(response([card()]));
+    if (getCount === 2) return Promise.resolve(new Response('{}', { status: 503 }));
+    return Promise.resolve(response([card('approved', false)]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.approve')!.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Your decision was recorded'));
+  expect(root.textContent).not.toContain('Sending your approval');
+  expect(root.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('true');
+  await vi.advanceTimersByTimeAsync(3000);
+  await vi.waitFor(() => expect(root.querySelector('.approval-terminal')).not.toBeNull());
+  expect(postCount).toBe(1);
   fixture.destroy();
 });
 
@@ -157,7 +305,8 @@ it('checks a 503 outcome with one GET and enables a still-open approval', async 
   await vi.waitFor(() => expect(root.textContent).toContain('The server shows this approval still open'));
   expect(getCount - beforeCheck).toBe(1);
   expect(root.textContent).toContain('approval closes when its turn ends or at 4 Oct 2026, 10:32 UTC');
-  expect(root.querySelector<HTMLButtonElement>('.approve')?.disabled).toBe(false);
+  expect(root.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('false');
   expect(postCount).toBe(1);
   fixture.destroy();
 });
@@ -193,17 +342,67 @@ it('checks a second 503 without sending another decision and shows the expiry li
   fixture.destroy();
 });
 
+it('checks a lost reply with one GET and does not resend the decision', async () => {
+  let postCount = 0;
+  let getCount = 0;
+  const fixture = await mount((_url, init) => {
+    if (init?.method === 'POST') {
+      postCount += 1;
+      return Promise.reject(new TypeError('Connection closed'));
+    }
+    getCount += 1;
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.approve')!.click();
+  await vi.waitFor(() => expect(root.textContent).toContain('Decision not confirmed'));
+  expect(root.textContent).toContain(approvalId);
+  const readsBeforeCheck = getCount;
+  root.querySelector<HTMLButtonElement>('.state-action')!.click();
+  await vi.waitFor(() => expect(getCount).toBe(readsBeforeCheck + 1));
+  expect(postCount).toBe(1);
+  fixture.destroy();
+});
+
+it.each([503, 403, 428])('shows a %s outcome inside the approval drawer', async status => {
+  const fixture = await mount((_url, init) => {
+    if (init?.method === 'POST') return Promise.resolve(new Response('{}', { status }));
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.details')!.click();
+  fixture.detectChanges();
+  root.querySelector<HTMLButtonElement>('dialog .approve')!.click();
+
+  await vi.waitFor(() => {
+    const dialog = root.querySelector('dialog[open]');
+    expect(dialog).not.toBeNull();
+    if (status === 503) expect(dialog?.textContent).toContain('Decision not confirmed');
+    if (status === 403) expect(dialog?.textContent).toContain('Your decision was not recorded');
+    if (status === 428) expect(dialog?.querySelector('a.sign-in')).not.toBeNull();
+  });
+  if (status === 503) {
+    expect(root.querySelector('dialog[open] .state-action')).not.toBeNull();
+  }
+  fixture.destroy();
+});
+
 it.each([400, 403])('re-reads a %s refusal and re-enables a still-open decision', async status => {
   const fixture = await mount((_url, init) => {
     if (init?.method === 'POST') return Promise.resolve(new Response('{}', { status }));
     return Promise.resolve(response([card()]));
   });
   const root = rootOf(fixture);
-  root.querySelector<HTMLButtonElement>('.approve')!.click();
+  const approve = root.querySelector<HTMLButtonElement>('.approve')!;
+  approve.focus();
+  approve.click();
   await vi.waitFor(() => expect(root.textContent)
     .toContain('Your decision was not recorded. You can decide again.'));
-  expect(root.querySelector<HTMLButtonElement>('.approve')?.disabled).toBe(false);
-  expect(root.querySelector<HTMLButtonElement>('[aria-label^="Deny:"]')?.disabled).toBe(false);
+  expect(root.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('false');
+  expect(root.querySelector<HTMLButtonElement>('[aria-label^="Deny:"]')?.getAttribute('aria-disabled'))
+    .toBe('false');
+  expect(document.activeElement).toBe(approve);
   fixture.destroy();
 });
 
@@ -217,8 +416,11 @@ it('does not turn an outcome-unknown status check into a POST', async () => {
   });
   const root = rootOf(fixture);
   const beforeCheck = getCount;
-  root.querySelector<HTMLButtonElement>('.state-action')!.click();
+  const checkStatus = root.querySelector<HTMLButtonElement>('.state-action')!;
+  checkStatus.click();
+  checkStatus.click();
   await vi.waitFor(() => expect(getCount).toBe(beforeCheck + 1));
+  expect(getCount).toBe(beforeCheck + 1);
   expect(postCount).toBe(0);
   fixture.destroy();
 });
@@ -238,6 +440,21 @@ it('moves focus to the collapsed card after a 409 and the follow-up read', async
   approve.click();
   await vi.waitFor(() => expect(root.querySelector('.approval-terminal')).not.toBeNull());
   expect(document.activeElement).toBe(root.querySelector('.approval-terminal'));
+  fixture.destroy();
+});
+
+it('says a 409 left the approval open when the follow-up read shows it is still open', async () => {
+  const fixture = await mount((_url, init) => {
+    if (init?.method === 'POST') return Promise.resolve(new Response('{}', { status: 409 }));
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.approve')!.click();
+  await vi.waitFor(() => expect(root.textContent).toContain(
+    'The server did not record your decision. The approval is still open.',
+  ));
+  expect(root.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('false');
   fixture.destroy();
 });
 
@@ -276,7 +493,8 @@ it('shows a step-up link for this approval and keeps it through a poll', async (
   await vi.advanceTimersByTimeAsync(3000);
   fixture.detectChanges();
   expect(root.querySelector('a.sign-in')).not.toBeNull();
-  expect(root.querySelector<HTMLButtonElement>('[aria-label^="Deny:"]')?.disabled).toBe(false);
+  expect(root.querySelector<HTMLButtonElement>('[aria-label^="Deny:"]')?.getAttribute('aria-disabled'))
+    .toBe('false');
   fixture.destroy();
 });
 
@@ -302,6 +520,74 @@ it('clears cards on a 403 and restores them after a later 200', async () => {
   fixture.destroy();
 });
 
+it('does not announce the same request again after access is restored', async () => {
+  vi.useFakeTimers();
+  let getCount = 0;
+  const fixture = await mount(() => {
+    getCount += 1;
+    if (getCount === 2) return Promise.resolve(response([], 403));
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(root.textContent).toContain('Checking access');
+  await vi.advanceTimersByTimeAsync(3000);
+  await vi.waitFor(() => expect(root.querySelector('.approval.pending')).not.toBeNull());
+  expect(root.querySelector('.approval-announcement')?.textContent).toBe('');
+  fixture.destroy();
+});
+
+it('keeps an open decision locked while access is checked and restored', async () => {
+  vi.useFakeTimers();
+  let getCount = 0;
+  let postCount = 0;
+  let releasePost: ((value: Response) => void) | undefined;
+  const fixture = await mount((_url, init) => {
+    if (init?.method === 'POST') {
+      postCount += 1;
+      return new Promise<Response>(resolve => { releasePost = resolve; });
+    }
+    getCount += 1;
+    if (getCount === 2) return Promise.resolve(response([], 403));
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.approve')!.click();
+  await vi.advanceTimersByTimeAsync(3000);
+  expect(root.textContent).toContain('Checking access');
+  await vi.advanceTimersByTimeAsync(3000);
+  await vi.waitFor(() => expect(root.querySelector('.approval.pending')).not.toBeNull());
+  const approve = root.querySelector<HTMLButtonElement>('.approve')!;
+  expect(approve.getAttribute('aria-disabled')).toBe('true');
+  approve.click();
+  expect(postCount).toBe(1);
+  if (!releasePost) throw new Error('The decision request did not start');
+  releasePost(new Response('{}', { status: 503 }));
+  fixture.destroy();
+});
+
+it('moves focus out of a pending card when access changes', async () => {
+  vi.useFakeTimers();
+  let getCount = 0;
+  const fixture = await mount(() => {
+    getCount += 1;
+    if (getCount === 2) return Promise.resolve(response([], 403));
+    return Promise.resolve(response([card()]));
+  });
+  const root = rootOf(fixture);
+  const transcript = document.createElement('section');
+  transcript.className = 'transcript';
+  transcript.tabIndex = 0;
+  root.parentElement?.replaceChild(transcript, root);
+  transcript.append(root);
+  const approve = root.querySelector<HTMLButtonElement>('.approve')!;
+  approve.focus();
+  await vi.advanceTimersByTimeAsync(3000);
+  fixture.detectChanges();
+  expect(document.activeElement).toBe(transcript);
+  fixture.destroy();
+});
+
 it('keeps loaded cards disabled after a read failure and lets one status read recover them', async () => {
   vi.useFakeTimers();
   let getCount = 0;
@@ -315,13 +601,15 @@ it('keeps loaded cards disabled after a read failure and lets one status read re
   fixture.detectChanges();
   expect(root.textContent).toContain('Approval status unavailable');
   expect(root.querySelector('.approval.pending')).not.toBeNull();
-  expect(root.querySelector<HTMLButtonElement>('.approve')?.disabled).toBe(true);
+  expect(root.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'))
+    .toBe('true');
   const checkStatus = root.querySelector<HTMLButtonElement>('.state-action')!;
   checkStatus.click();
   checkStatus.click();
   await vi.waitFor(() => expect(getCount).toBe(3));
-  await vi.waitFor(() => expect(root.querySelector<HTMLButtonElement>('.approve')?.disabled)
-    .toBe(false));
+  await vi.waitFor(() => expect(
+    root.querySelector<HTMLButtonElement>('.approve')?.getAttribute('aria-disabled'),
+  ).toBe('false'));
   fixture.destroy();
 });
 
@@ -372,6 +660,26 @@ it('moves focus to the terminal card when a poll folds the focused request', asy
   fixture.destroy();
 });
 
+it('moves focus to the transcript when the focused approval disappears', async () => {
+  vi.useFakeTimers();
+  let getCount = 0;
+  const fixture = await mount(() => {
+    getCount += 1;
+    return Promise.resolve(response(getCount === 1 ? [card()] : []));
+  });
+  const root = rootOf(fixture);
+  const transcript = document.createElement('section');
+  transcript.className = 'transcript';
+  transcript.tabIndex = 0;
+  root.parentElement?.replaceChild(transcript, root);
+  transcript.append(root);
+  root.querySelector<HTMLButtonElement>('.approve')!.focus();
+  await vi.advanceTimersByTimeAsync(3000);
+  fixture.detectChanges();
+  expect(document.activeElement).toBe(transcript);
+  fixture.destroy();
+});
+
 it('updates an open drawer with a poll and closes it when its card disappears', async () => {
   vi.useFakeTimers();
   let current: ApprovalCard | undefined = card();
@@ -399,6 +707,27 @@ it('updates an open drawer with a poll and closes it when its card disappears', 
   fixture.detectChanges();
   await vi.waitFor(() => expect(root.querySelector('dialog[open]')).toBeNull());
   expect(document.activeElement).toBe(transcript);
+  fixture.destroy();
+});
+
+it('returns focus to the folded card after its drawer closes', async () => {
+  vi.useFakeTimers();
+  let getCount = 0;
+  const fixture = await mount(() => {
+    getCount += 1;
+    const state: ApprovalCard['state'] = getCount === 1 ? 'requested' : 'approved';
+    return Promise.resolve(response([card(state, state === 'requested')]));
+  });
+  const root = rootOf(fixture);
+  root.querySelector<HTMLButtonElement>('.details')!.click();
+  fixture.detectChanges();
+  const drawer = root.querySelector<HTMLDialogElement>('dialog[open]');
+  expect(drawer).not.toBeNull();
+  await vi.advanceTimersByTimeAsync(3000);
+  fixture.detectChanges();
+  drawer?.dispatchEvent(new Event('cancel', { cancelable: true }));
+  fixture.detectChanges();
+  expect(document.activeElement).toBe(root.querySelector('.approval-terminal'));
   fixture.destroy();
 });
 
@@ -432,7 +761,7 @@ it.each([
   expect(button).not.toBeNull();
   if (!button) throw new Error('Terminal approval button is missing');
   expect(button.textContent).toContain(words);
-  expect(button.textContent).toContain(detail);
+  expect(button.textContent?.toLowerCase()).toContain(detail.toLowerCase());
   expect(root.querySelector('[aria-label^="Approve:"]')).toBeNull();
   expect(root.querySelector('[aria-label^="Deny:"]')).toBeNull();
   expect(root.textContent).not.toMatch(/try again|retry/i);
@@ -448,6 +777,32 @@ it.each([
   await fixture.whenStable();
   expect(document.activeElement).toBe(button);
   fixture.destroy();
+});
+
+it('uses the viewer wording for their own folded approval', async () => {
+  const fixture = await mount(() => Promise.resolve(response([
+    card('denied', false, approvalId, 'me'),
+  ])));
+  expect(rootOf(fixture).querySelector('.approval-terminal')?.textContent)
+    .toContain('Denied by you');
+  fixture.destroy();
+});
+
+it('keeps a folded card read-only after remount and hides sign-in for a non-requester', async () => {
+  const folded = { ...card('approved', false), stepUp: true };
+  const firstFixture = await mount(() => Promise.resolve(response([folded])));
+  const firstRoot = rootOf(firstFixture);
+  expect(firstRoot.querySelector('.approval-ledger')).toBeNull();
+  expect(firstRoot.querySelector('a.sign-in')).toBeNull();
+  expect(firstRoot.querySelector('[aria-label^="Approve:"]')).toBeNull();
+  firstFixture.destroy();
+
+  const secondFixture = await mount(() => Promise.resolve(response([folded])));
+  const secondRoot = rootOf(secondFixture);
+  expect(secondRoot.querySelector('.approval-ledger')).toBeNull();
+  expect(secondRoot.querySelector('a.sign-in')).toBeNull();
+  expect(secondRoot.querySelector('[aria-label^="Approve:"]')).toBeNull();
+  secondFixture.destroy();
 });
 
 it('emits waitingOnViewer when a decision opens and when the card folds', async () => {
@@ -471,4 +826,17 @@ it('emits waitingOnViewer when a decision opens and when the card folds', async 
   await vi.waitFor(() => expect(root.querySelector('.approval-terminal')).not.toBeNull());
   expect(emissions).toContain(false);
   fixture.destroy();
+});
+
+it('clears waitingOnViewer when the component is destroyed', async () => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(() => Promise.resolve(response([card()])));
+  const fixture = TestBed.createComponent(ApprovalCards);
+  const emissions: boolean[] = [];
+  fixture.componentInstance.waitingOnViewer.subscribe(value => emissions.push(value));
+  fixture.componentRef.setInput('conversationId', 'chat');
+  fixture.componentRef.setInput('viewerId', 'me');
+  fixture.detectChanges();
+  await vi.waitFor(() => expect(emissions).toContain(true));
+  fixture.destroy();
+  expect(emissions.at(-1)).toBe(false);
 });

@@ -26,6 +26,9 @@ export class ApprovalPresentation {
     if (state.kind === 'submitting') {
       return state.decision === 'approved' ? 'Sending your approval…' : 'Sending your denial…';
     }
+    if (state.kind === 'recorded') {
+      return 'Your decision was recorded. Waiting for the latest status.';
+    }
     if (state.kind === 'step_up') {
       return 'Your sign-in is older than this approval allows. Signing in again doesn’t change '
         + 'what you’re approving.';
@@ -35,12 +38,24 @@ export class ApprovalPresentation {
       return 'Your decision was not recorded. You can decide again.';
     }
     if (state.kind === 'not_decidable') return 'You can’t decide this approval.';
-    if (state.kind === 'conflict') return 'This approval was already decided or is no longer open.';
+    if (state.kind === 'conflict') {
+      return 'The server did not confirm whether this approval is still open. Check its status.';
+    }
+    if (state.kind === 'conflict_still_open') {
+      return 'The server did not record your decision. The approval is still open. You can decide again.';
+    }
     if (state.kind === 'still_open') {
       return `The server shows this approval still open. You can decide again. If it fails again, `
         + `the approval closes when its turn ends or at ${utcDateTime(card.expiresAt)}.`;
     }
     return '';
+  }
+
+  headerMessage(card: ApprovalCard): string {
+    const state = this.localState(card);
+    if (state?.kind === 'submitting') return this.statusMessage(card);
+    if (state?.kind === 'recorded') return 'Decision recorded';
+    return 'Approval needed';
   }
 
   signIn(card: ApprovalCard): string {
@@ -65,7 +80,7 @@ export class ApprovalPresentation {
   terminalDetail(card: ApprovalCard): string {
     if (card.state === 'approved') return 'Not used yet';
     if (card.state === 'outcome_unknown') {
-      return 'The call was allowed to go ahead once. It can’t be reused.';
+      return 'used once · can’t be reused';
     }
     if (card.state === 'expired') {
       return `${utcDateTime(card.expiresAt)} · nothing was sent with this approval`;
@@ -84,7 +99,7 @@ export class ApprovalPresentation {
   }
 
   reference(card: ApprovalCard): string {
-    return card.approvalId.slice(0, 12);
+    return card.approvalId;
   }
 
   decisionAnnouncement(card: ApprovalCard | undefined): string {

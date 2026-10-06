@@ -158,15 +158,20 @@ checks layout at 320px.
 
 The chat restores approval cards from the authenticated approval endpoint above
 the composer. The requester sees the reviewed fields and can approve or deny.
-Other participants see that the requester must decide. Terminal cards show only
+Other participants see that the requester must decide. Folded cards show only
 what the server proves. A used approval says that its result is unknown. A lost
 decision reply leads to one status read; the browser never repeats the POST by
-itself. A 503 can also mean the server refused before appending. If the approval
-still appears open after another failed decision, its card gives the turn end or
-expiry as the closing limit. Access refusals clear the cards while the three-second
-poll continues. The approval drawer follows the newest server card and closes if
-that card disappears. No decision time, other person's name, cancellation cause,
-tool-server readback or confirmed result is available from this contract.
+itself. A 503 can also mean the server refused before recording the choice. If a
+409 is followed by a still-open approval, the card says the choice was not recorded
+and lets the requester choose again. A 200 keeps the card locked with a recorded
+message until a later read shows its latest state, even if the first read fails.
+Access refusals hide the cards but keep any open or uncertain choice locked. A
+15-second timeout ends a stuck poll so later polls can run. The approval drawer
+shows the same result and status check as the card. It closes if that card
+disappears. Focus moves to the conversation when a focused card disappears or
+access changes, and moves to a folded card when the drawer's opener is gone. No
+decision time, other person's name, cancellation cause, tool-server readback or
+confirmed result is available from this contract.
 The requester-only POST uses the session CSRF token and appends one conditional
 decision. A 403 or 400 means the decision was not recorded. A GET while handling
 that reply may still record that the approval expired or was cancelled. A 409

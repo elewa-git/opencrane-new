@@ -2,12 +2,14 @@ export type Decision = 'approved' | 'rejected';
 
 export type LocalState =
   | { kind: 'submitting'; decision: Decision }
+  | { kind: 'recorded'; decision: Decision }
   | { kind: 'step_up'; decision: Decision }
-  | { kind: 'unknown'; decision: Decision; repeated: boolean }
+  | { kind: 'unknown'; decision: Decision }
   | { kind: 'not_recorded'; decision: Decision }
   | { kind: 'not_decidable'; decision: Decision }
   | { kind: 'conflict'; decision: Decision }
-  | { kind: 'still_open'; decision: Decision };
+  | { kind: 'still_open'; decision: Decision }
+  | { kind: 'conflict_still_open'; decision: Decision };
 
 export function isTerminal(card: { state: string }): boolean {
   return card.state !== 'requested';
@@ -45,26 +47,33 @@ export function checkedState(
   if (card?.state === 'requested') {
     return { kind: 'still_open', decision: current.decision };
   }
-  if (card) return current;
   return undefined;
 }
 
-export function failedCheckState(current: LocalState | undefined): LocalState | undefined {
-  if (current?.kind !== 'unknown') return undefined;
-  return { ...current, repeated: true };
+export function keepStateAfterRead(state: LocalState): boolean {
+  // Keep writes and uncertain decisions locked while the server view catches up.
+  return state.kind === 'submitting' || state.kind === 'recorded'
+    || state.kind === 'unknown' || state.kind === 'step_up'
+    || state.kind === 'still_open' || state.kind === 'conflict_still_open';
 }
 
-export function clearDecidedStates(
+export function conflictStateAfterRead(
+  canDecide: boolean,
+  decision: Decision,
+): LocalState {
+  if (canDecide) return { kind: 'conflict_still_open', decision };
+  return { kind: 'not_decidable', decision };
+}
+
+export function statesDuringAccessCheck(
   states: Record<string, LocalState>,
-  cards: Array<{ approvalId: string; state: string }>,
 ): Record<string, LocalState> {
-  const next = { ...states };
-  const cardIds = new Set(cards.map(card => card.approvalId));
-  for (const card of cards) {
-    if (card.state !== 'requested') delete next[card.approvalId];
+  const retained: Record<string, LocalState> = {};
+  for (const [approvalId, state] of Object.entries(states)) {
+    if (state.kind === 'submitting' || state.kind === 'unknown'
+      || state.kind === 'conflict') {
+      retained[approvalId] = state;
+    }
   }
-  for (const approvalId of Object.keys(next)) {
-    if (!cardIds.has(approvalId)) delete next[approvalId];
-  }
-  return next;
+  return retained;
 }

@@ -2,7 +2,7 @@
   [attr.data-state]="card().state" (click)="openDetails($event)">
   <oc-icon class="terminal-glyph" [attr.data-state]="card().state" [name]="glyph()" />
   <span class="terminal-copy">
-    <strong>{{ words() }}</strong>
+    <strong [attr.data-state]="card().state">{{ words() }}</strong>
     <span class="terminal-action">{{ action() }}</span>
     <span class="terminal-detail">{{ detail() }}</span>
   </span>

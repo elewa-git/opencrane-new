@@ -32,8 +32,24 @@
 }
 
 .terminal-copy strong {
-  color: #2a7d4f;
   font-size: 12px;
+}
+
+.terminal-copy strong[data-state='approved'],
+.terminal-copy strong[data-state='outcome_unknown'] {
+  color: #2a7d4f;
+}
+
+.terminal-copy strong[data-state='denied'] {
+  color: #c1392b;
+}
+
+.terminal-copy strong[data-state='expired'] {
+  color: #8a5d1f;
+}
+
+.terminal-copy strong[data-state='cancelled'] {
+  color: #4f575a;
 }
 
 .terminal-action,
