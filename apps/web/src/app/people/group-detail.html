@@ -1,10 +1,8 @@
 <div class="group-summary"><p>{{ memberCountLabel(group().members.length) }} ·
   {{ group().membershipSource === 'local' ? 'local group' : 'identity-provider group' }} ·
   {{ grantCountLabel(useGrants(group().access.grants).length) }}</p>
-  @if (group().membershipSource === 'local') {
-    <a class="button primary" [href]="'/org/people/groups/' + group().groupId +
-      '/assistants/new'">Create shared assistant</a>
-  }
+  <a class="button primary" [href]="'/org/people/groups/' + group().groupId +
+    '/assistants/new'">Create shared assistant</a>
 </div>
 @if (group().membershipSource === 'identity_provider') {
   <aside class="supplied"><strong><span class="lock" aria-hidden="true"></span>

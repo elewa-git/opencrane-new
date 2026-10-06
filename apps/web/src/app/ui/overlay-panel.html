@@ -1,11 +1,13 @@
 <dialog [ocOverlay]="open()" #overlay="ocOverlay" ocPaperSurface="plain"
   [class.computer]="kind() === 'computer'"
-  [returnFocusTo]="returnFocusTo()" (overlayClosed)="closed.emit()"
+  [returnFocusTo]="returnFocusTo()" [dismissDisabled]="dismissDisabled()"
+  (overlayClosed)="closed.emit()"
   [attr.aria-labelledby]="overlay.titleId"
   [attr.aria-describedby]="description() ? overlay.descriptionId : null">
   <header>
     @if (backLabel()) {
-      <button type="button" class="back" (click)="overlay.dismiss()">
+      <button type="button" class="back" (click)="overlay.dismiss()"
+        [disabled]="dismissDisabled()">
         <span aria-hidden="true">‹</span> {{ backLabel() }}
       </button>
     }
@@ -15,6 +17,7 @@
     </div>
     @if (!backLabel()) {
       <button type="button" class="close" (click)="overlay.dismiss()"
+        [disabled]="dismissDisabled()"
         [attr.aria-label]="'Close ' + title()">×</button>
     }
   </header>

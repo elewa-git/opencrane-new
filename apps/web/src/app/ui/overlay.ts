@@ -76,6 +76,7 @@ function dismissChildren(dialog: HTMLDialogElement): void {
 export class Overlay implements OnDestroy {
   readonly ocOverlay = input(false);
   readonly returnFocusTo = input<HTMLElement>();
+  readonly dismissDisabled = input(false);
   readonly overlayClosed = output<void>();
   readonly titleId = `oc-overlay-title-${++nextOverlayId}`;
   readonly descriptionId = `${this.titleId}-description`;
@@ -89,6 +90,7 @@ export class Overlay implements OnDestroy {
   }
 
   dismiss(): void {
+    if (this.dismissDisabled()) return;
     dismissChildren(this.element.nativeElement);
     this.element.nativeElement.close();
     this.finishClose();
@@ -97,6 +99,7 @@ export class Overlay implements OnDestroy {
   protected cancel(event: Event): void {
     // Handle Escape like Back, without submitting a form.
     event.preventDefault();
+    if (this.dismissDisabled()) return;
     this.dismiss();
   }
 

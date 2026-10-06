@@ -6,7 +6,9 @@
   <div><h1 #heading tabindex="-1">Create a shared assistant</h1>
     <p>Choose what the assistant can use and which group pays for its work.</p></div>
   <button class="button secondary" type="button" (click)="refresh()"
-    [disabled]="loading() || sending() || statusReading() || accessChanged()">Refresh</button>
+    [disabled]="loading() || pending()?.stage === 'sending' ||
+      pending()?.stage === 'checking' || accessChanged()"
+    [attr.aria-disabled]="refreshing()">{{ refreshing() ? 'Refreshing…' : 'Refresh' }}</button>
 </header>
 <div class="status-line" role="status" aria-live="polite">
   @if (loading()) { <oc-shared-state kind="checking" message="Loading assistant choices…" /> }
@@ -14,16 +16,24 @@
     <oc-shared-state kind="access_changed" message="Your access changed"
       [detail]="notice()" [showAction]="false" />
   } @else if (failed()) {
-    <oc-shared-state kind="failed" [message]="notice()"
+    <oc-shared-state kind="failed" [message]="loadMessage()"
       detail="Reading again is safe. No assistant was created by this read."
       [safeToRetry]="true" actionLabel="Try again" (action)="refresh()" />
-  } @else if (notice()) {
+  } @else if (loadMessage()) {
+    <p>{{ loadMessage() }}</p>
+  }
+  @if (!failed() && notice()) {
     <p>{{ notice() }}</p>
     @if (pending()) {
-      <p>Reference: <code>{{ reference() }}</code></p>
+      <p>Reference: <code>{{ pending()!.commandId }}</code></p>
       <button type="button" class="button secondary" (click)="checkStatus()"
-        #statusButton [disabled]="statusReading()">
-        {{ statusReading() ? 'Checking…' : 'Check status' }}</button>
+        #statusButton [disabled]="pending()?.stage === 'sending' ||
+          pending()?.stage === 'checking'">
+        {{ pending()?.stage === 'checking' ? 'Checking…' : 'Check status' }}</button>
+      @if (pending()?.stage === 'unknown') {
+        <button type="button" class="button secondary" (click)="resendPending()">
+          Send the same request again</button>
+      }
     }
   }
 </div>
@@ -92,7 +102,9 @@
     }
   </section>
 }
-<oc-modal-sheet [open]="reviewOpen()" title="Review shared assistant" backLabel="Cancel"
+<oc-modal-sheet [open]="reviewOpen()" title="Review shared assistant"
+  [backLabel]="pending()?.stage === 'sending' ? 'Sending…' : 'Cancel'"
+  [dismissDisabled]="pending()?.stage === 'sending'"
   [returnFocusTo]="reviewButton()?.nativeElement" (closed)="cancelReview()">
   @if (group()) {
     <h2>{{ name().trim() }}</h2>
@@ -112,8 +124,10 @@
     <p>The assistant can use these resources. This does not give members desktop access.</p>
   }
   <div overlayFooter class="overlay-actions">
-    <button class="button primary" type="button" [disabled]="sending() || pending() !== undefined"
-      (click)="create()">{{ sending() ? 'Creating…' : 'Create assistant' }}</button>
-    <button class="button secondary" type="button" (click)="cancelReview()">Cancel</button>
+    <button class="button primary" type="button" [disabled]="pending() !== undefined"
+      (click)="create()">{{ pending()?.stage === 'sending' ? 'Creating…' : 'Create assistant' }}</button>
+    <p>@if (pending()?.stage === 'sending') { Sending… this cannot be cancelled once sent. }</p>
+    <button class="button secondary" type="button" (click)="cancelReview()"
+      [disabled]="pending()?.stage === 'sending'">Cancel</button>
   </div>
 </oc-modal-sheet>

@@ -15,6 +15,8 @@ const otherGroup = {
 };
 
 let fetchMock: MockInstance<typeof fetch>;
+let firstLostCreateBody: z.infer<typeof createBodySchema> | undefined;
+let statusReadCount = 0;
 
 function showModal(this: HTMLDialogElement): void { this.setAttribute('open', ''); }
 function closeDialog(this: HTMLDialogElement): void {
@@ -72,7 +74,7 @@ async function mount(): Promise<HTMLElement> {
 }
 
 function fetchAdminRequest(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const url = urlOf(input);
   if (url === '/api/groups/sales') return Promise.resolve(response({ rows: [group] }));
   if (url === '/api/groups') return Promise.resolve(response({ rows: [group, otherGroup] }));
   if (url === '/api/assistants' && init?.method !== 'POST') return Promise.resolve(rows());
@@ -117,7 +119,12 @@ function selectFirstGrant(root: HTMLElement): void {
   checkbox.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-beforeEach(() => { vi.restoreAllMocks(); });
+beforeEach(() => {
+  vi.restoreAllMocks();
+  groupReadCount = 0;
+  firstLostCreateBody = undefined;
+  statusReadCount = 0;
+});
 
 it('keeps a healthy list clean when refreshed', async () => {
   const root = await mount();
@@ -152,7 +159,7 @@ it('does not create when Enter is pressed in the name field', async () => {
 it('keeps typed values after a refused create', async () => {
   const root = await mount();
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = urlOf(input);
     if (url === '/api/assistants' && init?.method === 'POST') {
       return Promise.resolve(response({ status: 'refused' }, 400));
     }
@@ -169,6 +176,38 @@ it('keeps typed values after a refused create', async () => {
   expect(nameField(root).value).toBe('A deliberately long team helper name');
 });
 
+it('keeps the form and typed values when a create is refused with 403', async () => {
+  const root = await mount();
+  const input = nameField(root);
+  const typedName = 'Quarterly helper';
+  input.value = typedName;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  selectFirstGrant(root);
+  fetchMock.mockImplementation(fetchWithCreateRefused);
+  buttonNamed(root, 'Review assistant').click();
+  await Promise.resolve();
+  buttonNamed(root, 'Create assistant').click();
+  await vi.waitFor(() => expect(rootText(root)).toContain('The server refused this assistant'));
+  expect(nameField(root).value).toBe(typedName);
+  expect(root.querySelector('.grant-choice input')).not.toBeNull();
+  expect(rootText(root)).not.toContain('Your access changed');
+});
+
+it('clears a failed load message after a successful retry', async () => {
+  fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(failFirstGroupRead);
+  const fixture = TestBed.createComponent(SharedAssistantAdmin);
+  fixture.componentRef.setInput('groupId', 'sales');
+  fixture.detectChanges();
+  await fixture.whenStable();
+  fixture.detectChanges();
+  const root = fixtureRoot(fixture.nativeElement);
+  await vi.waitFor(() => expect(rootText(root)).toContain('Could not load the group assistant choices.'));
+  buttonNamed(root, 'Try again').click();
+  await vi.waitFor(() => expect(root.querySelector('#assistant-name')).not.toBeNull());
+  expect(rootText(root)).not.toContain('Could not load the group assistant choices.');
+  fixture.destroy();
+});
+
 it('keeps typed values and the command reference when the create reply is lost', async () => {
   const root = await mount();
   const input = nameField(root);
@@ -176,7 +215,7 @@ it('keeps typed values and the command reference when the create reply is lost',
   input.value = 'Typed assistant name';
   input.dispatchEvent(new Event('input', { bubbles: true }));
   fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = urlOf(input);
     if (url === '/api/assistants' && init?.method === 'POST') {
       return Promise.reject(new Error('reply lost'));
     }
@@ -191,11 +230,33 @@ it('keeps typed values and the command reference when the create reply is lost',
   expect(rootText(root)).toContain('Reference:');
 });
 
+it('resends an unknown create with the same ids after status returns 404', async () => {
+  const root = await mount();
+  fetchMock.mockImplementation(fetchLostCreateThenMissing);
+  nameField(root).value = 'Retry helper';
+  nameField(root).dispatchEvent(new Event('input', { bubbles: true }));
+  selectFirstGrant(root);
+  buttonNamed(root, 'Review assistant').click();
+  await Promise.resolve();
+  buttonNamed(root, 'Create assistant').click();
+  await vi.waitFor(() => expect(rootText(root)).toContain('We could not tell whether'));
+  buttonNamed(root, 'Check status').click();
+  await vi.waitFor(() => expect(rootText(root)).toContain('No record was found yet'));
+  expect(rootText(root)).toContain('Send the same request again');
+  buttonNamed(root, 'Send the same request again').click();
+  await vi.waitFor(() => expect(rootText(root)).toContain('The assistant is recorded and'));
+  const postBodies = fetchMock.mock.calls
+    .filter(isCreateCall)
+    .map(readCreateBodyFromCall);
+  expect(postBodies).toHaveLength(2);
+  expect(postBodies[1]).toEqual(firstLostCreateBody);
+});
+
 it('blocks another create while the first reply is still pending', async () => {
   let finishPost!: (reply: Response) => void;
   fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(
     (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = urlOf(input);
     if (url === '/api/assistants' && init?.method === 'POST') {
       return new Promise<Response>(resolve => { finishPost = resolve; });
     }
@@ -219,6 +280,13 @@ it('blocks another create while the first reply is still pending', async () => {
   buttonNamed(root, 'Create assistant').click();
   await vi.waitFor(() => expect(buttonNamed(root, 'Creating…').disabled).toBe(true));
   expect(buttonNamed(root, 'Refresh').disabled).toBe(true);
+  const createButton = buttonNamed(root, 'Creating…');
+  createButton.disabled = false;
+  createButton.click();
+  expect(fetchMock.mock.calls.filter(isCreateCall)).toHaveLength(1);
+  buttonNamed(root, 'Cancel').click();
+  expect(rootText(root)).toContain('Sending… this cannot be cancelled once sent');
+  expect(rootText(root)).toContain('Review shared assistant');
   finishPost(response({ status: 'appended', assistantId: 'team-one', sequence: 1,
     changeId: 'command-one' }));
   await fixture.whenStable();
@@ -227,12 +295,9 @@ it('blocks another create while the first reply is still pending', async () => {
 
 it('clears a confirmed create so the next create gets a new command id', async () => {
   const root = await mount();
-  const input = nameField(root);
-  input.value = 'Repeated helper';
-  input.dispatchEvent(new Event('input', { bubbles: true }));
   const commandIds: string[] = [];
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = urlOf(input);
     if (url === '/api/assistants' && init?.method === 'POST') {
       const body = readCreateBody(init);
       commandIds.push(body.commandId);
@@ -242,12 +307,79 @@ it('clears a confirmed create so the next create gets a new command id', async (
     return fetchAdminRequest(input, init);
   });
   for (let createNumber = 0; createNumber < 2; createNumber += 1) {
+    const typedName = `Repeated helper ${createNumber + 1}`;
+    const currentNameField = nameField(root);
+    currentNameField.value = typedName;
+    currentNameField.dispatchEvent(new Event('input', { bubbles: true }));
     selectFirstGrant(root);
     buttonNamed(root, 'Review assistant').click();
     await Promise.resolve();
     buttonNamed(root, 'Create assistant').click();
-    await vi.waitFor(() => expect(rootText(root)).toContain('The assistant record and access changes are current'));
+    await vi.waitFor(() => expect(commandIds).toHaveLength(createNumber + 1));
+    await vi.waitFor(() => expect(rootText(root)).toContain('Updated.'));
+    await vi.waitFor(() => expect(nameField(root).value).toBe(''));
   }
   expect(commandIds).toHaveLength(2);
   expect(commandIds[0]).not.toBe(commandIds[1]);
 });
+
+function fetchWithCreateRefused(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const requestUrl = urlOf(input);
+  if (requestUrl === '/api/assistants' && init?.method === 'POST') {
+    return Promise.resolve(response({ error: 'Model unavailable' }, 403));
+  }
+  return fetchAdminRequest(input, init);
+}
+
+function fetchLostCreateThenMissing(
+  input: RequestInfo | URL, init?: RequestInit,
+): Promise<Response> {
+  const requestUrl = urlOf(input);
+  if (requestUrl === '/api/assistants' && init?.method === 'POST') {
+    const requestBody = readCreateBody(init);
+    if (!firstLostCreateBody) {
+      firstLostCreateBody = requestBody;
+      return Promise.reject(new Error('reply lost'));
+    }
+    return Promise.resolve(response({ status: 'appended', assistantId: requestBody.assistantId,
+      sequence: 1, changeId: requestBody.commandId }));
+  }
+  if (requestUrl.includes('/changes/')) {
+    statusReadCount += 1;
+    if (statusReadCount === 1) return Promise.resolve(response({}, 404));
+    const path = requestUrl.split('/');
+    const commandId = path.at(-1) ?? '';
+    const assistantId = path.at(-3) ?? '';
+    return Promise.resolve(currentChange(assistantId, commandId));
+  }
+  return fetchAdminRequest(input, init);
+}
+
+type FetchCall = MockInstance<typeof fetch>['mock']['calls'][number];
+
+function isCreateCall(call: FetchCall): boolean {
+  return urlOf(call[0]) === '/api/assistants' && call[1]?.method === 'POST';
+}
+
+function readCreateBodyFromCall(
+  call: FetchCall,
+): z.infer<typeof createBodySchema> {
+  return readCreateBody(call[1]);
+}
+
+let groupReadCount = 0;
+
+function failFirstGroupRead(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const requestUrl = urlOf(input);
+  if (requestUrl === '/api/groups/sales') {
+    groupReadCount += 1;
+    if (groupReadCount === 1) return Promise.resolve(response({}, 503));
+  }
+  return fetchAdminRequest(input, init);
+}
+
+function urlOf(input: RequestInfo | URL): string {
+  if (typeof input === 'string') return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}

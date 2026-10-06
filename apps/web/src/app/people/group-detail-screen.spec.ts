@@ -15,6 +15,8 @@ const group = {
       { resourceType: 'assistant', resourceId: 'assistant-a', relation: 'acts_for' },
     ] },
 };
+const suppliedGroup = { ...group, groupId: 'identity-provider-group',
+  membershipSource: 'identity_provider' };
 const dialogPrototype = globalThis.HTMLDialogElement.prototype;
 
 function closeDialog(this: HTMLDialogElement): void {
@@ -33,8 +35,8 @@ Object.defineProperty(dialogPrototype, 'showModal', {
 function response(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
 }
-async function mount(reply: Response): Promise<HTMLElement> {
-  const fixture = await mountWithFetch(replyOnce(reply));
+async function mount(reply: Response, groupId = 'sales-team'): Promise<HTMLElement> {
+  const fixture = await mountWithFetch(replyOnce(reply), groupId);
   return rootElement(fixture);
 }
 type SeenRequest = {
@@ -59,11 +61,13 @@ function requestUrl(input: RequestInfo | URL): string {
   if (input instanceof Request) return input.url;
   return String(input);
 }
-async function mountWithFetch(fetcher: typeof fetch): Promise<ComponentFixture<GroupDetailScreen>> {
+async function mountWithFetch(
+  fetcher: typeof fetch, groupId = 'sales-team',
+): Promise<ComponentFixture<GroupDetailScreen>> {
   vi.stubGlobal('fetch', fetcher);
   TestBed.configureTestingModule({ imports: [GroupDetailScreen] });
   const fixture = TestBed.createComponent(GroupDetailScreen);
-  fixture.componentRef.setInput('groupId', 'sales-team');
+  fixture.componentRef.setInput('groupId', groupId);
   fixture.detectChanges();
   await vi.waitFor(() => {
     fixture.detectChanges();
@@ -77,6 +81,14 @@ function rootElement(fixture: ComponentFixture<GroupDetailScreen>): HTMLElement 
   return element;
 }
 afterEach(() => vi.unstubAllGlobals());
+
+it('lets admins create a shared assistant for an identity-provider group', async () => {
+  const root = await mount(response({ rows: [suppliedGroup] }), suppliedGroup.groupId);
+  const link = root.querySelector<HTMLAnchorElement>('a.button.primary');
+  expect(link?.textContent?.trim()).toBe('Create shared assistant');
+  expect(link?.getAttribute('href')).toBe(
+    '/org/people/groups/identity-provider-group/assistants/new');
+});
 
 it('shows one detail heading and one skeleton while the group is loading', async () => {
   let releaseGroup: ((reply: Response) => void) | undefined;

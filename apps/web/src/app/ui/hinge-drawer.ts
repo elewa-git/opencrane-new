@@ -18,6 +18,7 @@ export class HingeDrawer {
   readonly title = input.required<string>();
   readonly description = input('');
   readonly backLabel = input('Back');
+  readonly dismissDisabled = input(false);
   readonly returnFocusTo = input<HTMLElement>();
   readonly closed = output<void>();
 }

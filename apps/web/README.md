@@ -10,7 +10,7 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>private chat, recovery and tool details"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>private chat, recovery, shared assistants and tool details"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
@@ -25,6 +25,9 @@ flowchart LR
   `/org/people/groups/<id>`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
   modes for each tool, as well as models, spending and change history.
+- Lets organisation admins create a shared assistant for a group with selected grants
+  and a fixed paying group, including groups managed by an identity provider. Group
+  membership does not grant desktop access.
 - Clears private information when the server refuses access.
 - Adapts the workspace and menus for phones and desktop screens.
 - Supports keyboard use in menus, dialogs and the chat workspace.
@@ -46,6 +49,9 @@ flowchart LR
 7. **An admin checks a change.** The website shows organisation history to people with access.
 8. **An Owner or Admin opens People & groups.** The website checks group reads,
    shows members and grants, creates groups and removes a member after review.
+   An organisation admin can also create a shared assistant for a group, even when an
+   identity provider manages the group's members. The assistant keeps one paying group
+   for its private member sessions.
 9. **An admin reviews held spend.** The website shows settled spend separately from held spend. An Owner or Admin can read a hold's evidence and record a settlement or release. The existing budget editor remains available.
 
 ## How to run or test it

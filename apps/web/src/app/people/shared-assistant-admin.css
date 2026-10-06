@@ -1,36 +1,45 @@
-:host { display: block; max-width: 980px; margin: 0 auto; padding: 24px; color: #16191a; }
-nav { margin-bottom: 18px; color: #4f575a; font-size: .9rem; }
-nav a { color: #0a6f7e; }
+:host { display: block; max-width: 980px; margin: 0 auto; padding: 24px;
+  color: var(--oc-ink-strong); }
+nav { margin-bottom: 18px; color: var(--oc-ink-admin-muted); font-size: .9rem; }
+nav a { display: inline-flex; min-height: 44px; align-items: center;
+  color: var(--oc-accent-dark); }
 .admin-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 h1 { margin: 0; font-size: 1.8rem; }
-.admin-heading p { color: #4f575a; }
+.admin-heading p { color: var(--oc-ink-admin-muted); }
 .status-line { min-height: 1px; }
-.paper-card { border: 1px solid #cdd4d5; border-radius: 12px; background: #fff; padding: 20px; }
+.paper-card { border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-app); background: #fff; padding: 20px; }
 .assistant-form { display: grid; gap: 18px; }
 label, legend { font-weight: 600; }
 label strong { margin-left: 8px; color: #4f575a; font-size: .85rem; font-weight: 400; }
-input:not([type=checkbox]), select { width: 100%; min-height: 44px; border: 1px solid #aeb9bb;
-  border-radius: 8px; background: #fff; color: #16191a; padding: 10px 12px; font: inherit; }
+input:not([type=checkbox]), select { width: 100%; min-height: 44px;
+  border: 1px solid var(--oc-border-input); border-radius: var(--oc-radius-control);
+  background: #fff; color: var(--oc-ink-strong); padding: 10px 12px; font: inherit; }
 input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
-  outline: 2px solid #0a8497; outline-offset: 2px; }
-.facts { margin: 0; border: 1px solid #cdd4d5; border-radius: 10px; overflow: hidden; }
+  outline: 2px solid var(--oc-accent-dark); outline-offset: 2px; }
+.facts { margin: 0; border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-card); overflow: hidden; }
 .facts > div { display: grid; grid-template-columns: minmax(130px, 1fr) 2fr; gap: 12px;
-  padding: 12px 14px; border-bottom: 1px solid #e1e6e7; }
+  padding: 12px 14px; border-bottom: 1px solid var(--oc-border-row); }
 .facts > div:last-child { border-bottom: 0; }
-dt { color: #4f575a; }
+dt { color: var(--oc-ink-admin-muted); }
 dd { margin: 0; }
 fieldset { display: flex; flex-wrap: wrap; gap: 10px; margin: 0; border: 0; padding: 0; }
 legend { width: 100%; margin-bottom: 4px; }
 .grant-choice { display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
-  border: 1px solid #cdd4d5; border-radius: 8px; padding: 8px 12px; font-weight: 500; }
-.grant-choice input { width: 18px; height: 18px; accent-color: #08788a; }
-.rule-note { border: 1px solid #9adce4; border-radius: 10px; background: #effbfc; padding: 14px; }
+  border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-control);
+  padding: 8px 12px; font-weight: 500; }
+.grant-choice input { width: 18px; height: 18px; accent-color: var(--oc-accent-dark); }
+.rule-note { border: 1px solid var(--oc-border-default);
+  border-radius: var(--oc-radius-card); background: var(--oc-info-notice); padding: 14px; }
 .rule-note p { margin: 6px 0 0; }
-.field-note, small { color: #4f575a; }
-.field-error { color: #9d2d23; }
-.button { min-height: 44px; border: 1px solid #7e898b; border-radius: 8px; background: #fff;
-  color: #16191a; padding: 9px 16px; font: inherit; cursor: pointer; }
-.button.primary { border-color: #0b7788; background: #0db5cc; color: #102629; font-weight: 650; }
+.field-note, small { color: var(--oc-ink-admin-muted); }
+.field-error { color: var(--oc-danger); }
+.button { min-height: 44px; border: 1px solid var(--oc-border-input);
+  border-radius: var(--oc-radius-control); background: #fff;
+  color: var(--oc-ink-strong); padding: 9px 16px; font: inherit; cursor: pointer; }
+.button.primary { border-color: var(--oc-accent); background: var(--oc-accent);
+  color: var(--oc-ink-strong); font-weight: 650; }
 .button:disabled { cursor: not-allowed; opacity: .6; }
 .assistant-list { margin-top: 28px; }
 .assistant-row { display: flex; justify-content: space-between; align-items: start; gap: 12px;
