@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { OpenFgaClient, ConsistencyPreference, type Store } from "@openfga/sdk";
 import model from "../model/v1.json" with { type: "json" };
 
+// Keep every field here in the cache key used by members.ts.
 export interface Binding {
   apiUrl: string;
   storeId: string;

@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { readlinkSync, readdirSync } from "node:fs";
 import { once } from "node:events";
 import { promisify } from "node:util";
 import { expect, it } from "vitest";
@@ -8,6 +9,25 @@ import { openfga, until } from "./services.ts";
 
 const exec = promisify(execFile);
 const module = new URL("./services.ts", import.meta.url).href;
+
+it("shares clients only when every OpenFGA binding field matches", () => {
+  const binding = {
+    apiUrl: "http://127.0.0.1:8080",
+    storeId: "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    authorizationModelId: "01ARZ3NDEKTSV4RRFFQ69G5FAW",
+    silo: "identity-test",
+  };
+  const equalBinding = { ...binding };
+  const otherStore = { ...binding, storeId: "01ARZ3NDEKTSV4RRFFQ69G5FAX" };
+  const otherModel = {
+    ...binding,
+    authorizationModelId: "01ARZ3NDEKTSV4RRFFQ69G5FAY",
+  };
+
+  expect(memberAuthorisation(equalBinding)).toBe(memberAuthorisation(binding));
+  expect(memberAuthorisation(otherStore)).not.toBe(memberAuthorisation(binding));
+  expect(memberAuthorisation(otherModel)).not.toBe(memberAuthorisation(binding));
+});
 
 function startFixture() {
   return spawn(process.execPath, [
@@ -18,22 +38,34 @@ function startFixture() {
   ]);
 }
 
-function openTcpSocketCount() {
-  const resources = process.getActiveResourcesInfo();
-  return resources.filter((resource) => resource === "TCPSocketWrap").length;
+function isSocketDescriptor(descriptor: string) {
+  try {
+    const target = readlinkSync(`/proc/self/fd/${descriptor}`);
+    return target.startsWith("socket:");
+  } catch {
+    // Skip a descriptor that closed after readdirSync returned it.
+    return false;
+  }
+}
+
+function openSocketDescriptorCount() {
+  // Count sockets because keep-alive sockets do not show as active handles.
+  const descriptors = readdirSync("/proc/self/fd");
+  const sockets = descriptors.filter(isSocketDescriptor);
+  return sockets.length;
 }
 
 it("reuses one OpenFGA connection for repeated authorisation checks", async () => {
   const fga = await openfga();
   try {
-    const binding = await createStore(fga.apiUrl, "connection-reuse");
-    const socketsBefore = openTcpSocketCount();
+    const binding = await createStore(fga.directApiUrl, "connection-reuse");
+    const socketsBefore = openSocketDescriptorCount();
     for (let index = 0; index < 300; index++) {
       const authorisation = memberAuthorisation({ ...binding });
       const result = await authorisation.check("alice", "member");
       expect(result.status).toBe("ok");
     }
-    const openedSockets = openTcpSocketCount() - socketsBefore;
+    const openedSockets = openSocketDescriptorCount() - socketsBefore;
 
     expect(openedSockets).toBeLessThanOrEqual(5);
   } finally {

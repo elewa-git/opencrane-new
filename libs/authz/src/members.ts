@@ -34,20 +34,22 @@ export function grantStream(resourceType: string, resourceId: string): string {
   return `grant-${Buffer.from(JSON.stringify([resourceType, resourceId])).toString('base64url')}`;
 }
 
+// Only use start-up or provisioning bindings here so request data cannot grow this map.
 const authorisations = new Map<string, ReturnType<typeof createMemberAuthorisation>>();
 
 export function memberAuthorisation(binding: Binding) {
-  // Keep silo in the key so a mismatched binding cannot inherit another silo's checks.
-  const key = JSON.stringify([
-    binding.apiUrl,
-    binding.storeId,
-    binding.authorizationModelId,
-    binding.silo,
-  ]);
+  // Keep the cached client tied to these values if a caller later changes its binding.
+  const cachedBinding = Object.freeze({
+    apiUrl: binding.apiUrl,
+    storeId: binding.storeId,
+    authorizationModelId: binding.authorizationModelId,
+    silo: binding.silo,
+  } satisfies Binding);
+  const key = JSON.stringify(cachedBinding);
   const existing = authorisations.get(key);
   if (existing) return existing;
 
-  const authorisation = createMemberAuthorisation(binding);
+  const authorisation = createMemberAuthorisation(cachedBinding);
   authorisations.set(key, authorisation);
   return authorisation;
 }
