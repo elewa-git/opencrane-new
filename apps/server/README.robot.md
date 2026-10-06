@@ -613,8 +613,19 @@ Tests use disposable NATS, PostgreSQL and OpenFGA plus Chromium at 1280/390px.
 The chat watcher checks the global event position every 250 ms. It skips conversation
 and computer history when that position is unchanged and the last pass found no
 pending message or file. The conversation table must have processed that event
-position before idle skipping starts. A failed read or pending work keeps retries enabled. The
-first pass after restart always runs. Failed event-position or table reads are logged
+position before idle skipping starts. A failed read or pending work keeps retries enabled.
+
+During a pass, sessions share one read of their assistant's computer history and
+creation event. The watcher remembers each chat's last stream position. It skips
+unchanged chats unless delivery is waiting for the computer to accept a turn,
+uploads remain, the computer changes, or the connection closes. A failed read does
+not save that chat's position, so retries still read it. Each connection remembers the
+last turn sent for each chat. New Stop requests still reach an accepted turn. A new
+connection sends pending turns again, including turns already accepted before the
+connection closed. These are delivery checks; turn admission keeps its separate
+access checks on the small streams that grant permission.
+
+The first pass after restart always runs. Failed event-position or table reads are logged
 and retried after 250 ms. An unexpected watcher failure logs a fatal error and exits
 the server with status 1 so its supervisor can restart chat delivery.
 

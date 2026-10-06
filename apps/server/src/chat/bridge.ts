@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import type { Client } from 'minio/dist/esm/minio.mjs';
 import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
 import { sendFile } from '../files/delivery.ts';
 import { fileCommand } from '../files/commands.ts';
@@ -8,22 +7,25 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket, type RawData } from 'ws';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models/routing';
+import { assistantSnapshot, processConversation, type ConversationProgress,
+  type WatchOptions, type AgentSession } from './bridge-conversation.ts';
 import { listConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
 import { z } from 'zod';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
-import { turnCommand, TurnAdmissionRejected, requiredExecutionMode, type ExecutionMode } from './turns.ts';
+import { turnCommand, TurnAdmissionRejected } from './turns.ts';
 import { privateContext } from './private-context.ts';
 import { creationEvent } from './private-session.ts';
 import { chatHistory } from './commands.ts';
-import { agentSession, recordReport, reportPosition, ReportRejected } from './reports.ts';
+import { recordReport, reportPosition, ReportRejected } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
 
 type BridgeOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys'> &
   Partial<Pick<ChatOptions, 'binding'>>;
 type BridgeInput = { url: string; computerId: string; assistantId: string; bearer: string };
 type ReportQueue = { pending: Promise<void>; count: number; bytes: number };
+const assistantKindData = z.object({ kind: z.string() });
 const receiptData = z.object({ type: z.literal('file_received') });
 const reportDetails = z.object({
   sequence: z.int(), previousSequence: z.int().optional(), conversationId: z.string(),
@@ -31,16 +33,9 @@ const reportDetails = z.object({
   executionMode: z.enum(['restricted', 'memory_free']).optional(), threadId: z.string().optional(),
 });
 
-type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
-  Partial<Pick<ChatOptions, 'binding'>> & { objects?: Client };
 type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
-type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
-type Connection = (computerId: string, assistantId: string) =>
-  Promise<Awaited<ReturnType<typeof connectBridge>>>;
-const turnIdData = z.object({ turnId: z.string() });
-const computerData = z.object({ computerId: z.string() });
 
 type Tokens = Awaited<ReturnType<typeof tokenIssuer>>;
 
@@ -234,7 +229,13 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     transfers = work.catch(terminateSocket);
     return work;
   }
-  return { socket, deliver, delivered, get rejection() { return rejection; }, settled: reports.settled };
+  // Remember delivery only for this socket; reconnecting must send pending turns again.
+  const sentTurns = new Map<string, string>();
+  return {
+    socket, deliver, delivered, sentTurns,
+    get rejection() { return rejection; },
+    settled: reports.settled,
+  };
 }
 
 // Keep one socket per computer. Resume saved messages after a server restart.
@@ -264,14 +265,7 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     }
     return link;
   }
-  async function process(conversation: AgentSession) {
-    try {
-      return await processConversation(options, tokens, conversation, refused, connection);
-    } catch {
-      // Retry after a failed read even when no new event arrives.
-      return true;
-    }
-  }
+  const processAssistant = assistantProcessor(options, tokens, refused, connection);
   try {
     while (!signal.aborted) {
       try {
@@ -283,7 +277,8 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
         const tableBehind = await conversationTableBehind(options.db, head);
         const conversations = await listConversations(options.db, options.silo);
         const sessions = conversations.filter(isAgentSession);
-        const processing = sessions.map(process);
+        const groups = groupSessions(sessions);
+        const processing = groups.map(processAssistant);
         const pendingResults = await Promise.all(processing);
         pending = tableBehind || pendingResults.includes(true);
         // Keep the position from before the pass so events arriving during it are read next time.
@@ -306,6 +301,57 @@ export async function watchBridges(options: WatchOptions, tokens: Tokens,
     const pending = active.map(settledBridge);
     await Promise.all(pending);
   }
+}
+
+function assistantProcessor(options: WatchOptions, tokens: Tokens, refused: Set<string>,
+  connection: Parameters<typeof processConversation>[5]) {
+  const seen = new Map<string, ConversationProgress & {
+    head: number; computerEventId: string | undefined;
+  }>();
+  async function process(conversation: AgentSession,
+    assistant: Parameters<typeof processConversation>[3]) {
+    try {
+      const conversationId = conversation.conversationId;
+      const head = await options.store.head(`conversation-${conversationId}`);
+      const previous = seen.get(conversationId);
+      const linkClosed = previous?.link &&
+        previous.link.socket.readyState !== previous.link.socket.OPEN;
+      const computerEventId = assistant.current?.id;
+      const sameComputer = previous?.computerEventId === computerEventId;
+      if (previous?.head === head && sameComputer && !previous.retry && !linkClosed) {
+        return previous.pending;
+      }
+      const result = await processConversation(options, tokens, conversation,
+        assistant, refused, connection);
+      // Save the earlier position so a message arriving during the read gets another pass.
+      const progress = { ...result, head, computerEventId };
+      seen.set(conversationId, progress);
+      return result.pending;
+    } catch {
+      // Retry after a failed read even when no new event arrives.
+      return true;
+    }
+  }
+  async function processAssistant(sessions: AgentSession[]) {
+    try {
+      const assistantId = sessions[0]!.assistantId;
+      const lifecycle = await history(options.store, `computer-${assistantId}`);
+      const created = await creationEvent(options.store, options.silo,
+        `assistant-${assistantId}`, 'assistant.created');
+      const assistantDetails = assistantKindData.parse(created.data);
+      const kind = assistantDetails.kind;
+      const assistant = assistantSnapshot(lifecycle, kind, options.silo);
+      function processSession(conversation: AgentSession) {
+        return process(conversation, assistant);
+      }
+      const processing = sessions.map(processSession);
+      const results = await Promise.all(processing);
+      return results.includes(true);
+    } catch {
+      return true;
+    }
+  }
+  return processAssistant;
 }
 
 function isAgentSession(conversation: Conversation): conversation is AgentSession {
@@ -335,145 +381,17 @@ function settledBridge(link: Awaited<ReturnType<typeof connectBridge>>) {
   return link.settled();
 }
 
-function pendingMessage(rows: ChatRows) {
-  const completed = new Set<string>();
-  const started = new Set<string>();
-  const stopped = new Set<string>();
-  for (const row of rows) {
-    if (['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) {
-      completed.add(turnIdData.parse(row.event.data).turnId);
+function groupSessions(sessions: AgentSession[]) {
+  const groups = new Map<string, AgentSession[]>();
+  for (const session of sessions) {
+    let group = groups.get(session.assistantId);
+    if (!group) {
+      group = [];
+      groups.set(session.assistantId, group);
     }
-    if (row.event.type === 'agent.turn_started') {
-      started.add(turnIdData.parse(row.event.data).turnId);
-    }
-    if (row.event.type === 'agent.turn_stop_requested') {
-      stopped.add(turnIdData.parse(row.event.data).turnId);
-    }
+    group.push(session);
   }
-  function isPending(row: ChatRows[number]) {
-    return row.event.type === 'message.posted' && !completed.has(row.event.id) &&
-      (!stopped.has(row.event.id) || started.has(row.event.id));
-  }
-  return rows.find(isPending);
-}
-
-function pendingUploads(rows: ChatRows, uploads: Upload[], computerId: string) {
-  const acknowledged = new Set<string>();
-  for (const row of rows) {
-    if (row.event.type !== 'file.delivered') continue;
-    const delivery = fileDeliveredDataSchema.parse(row.event.data);
-    if (delivery.computerId === computerId) acknowledged.add(delivery.fileId);
-  }
-  function notDelivered(file: Upload) {
-    return !acknowledged.has(file.fileId);
-  }
-  return uploads.filter(notDelivered);
-}
-
-function attachmentsBefore(rows: ChatRows, uploads: Upload[], sequence: number) {
-  const allowed = new Set<string>();
-  for (const upload of uploads) allowed.add(upload.fileId);
-  const attachments: { fileId: string; name: string; mime: string }[] = [];
-  for (const row of rows) {
-    if (row.event.type !== 'file.uploaded' || row.sequence >= sequence) continue;
-    const file = fileUploadedDataSchema.parse(row.event.data);
-    if (allowed.has(file.fileId)) {
-      attachments.push({ fileId: file.fileId, name: file.name, mime: file.mime });
-    }
-  }
-  return attachments;
-}
-
-function sendTurn(options: WatchOptions, socket: WebSocket, conversation: AgentSession,
-  rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
-  const attachments = executionMode === 'restricted'
-    ? [] : attachmentsBefore(rows, uploads, message.sequence);
-  const requester = z.object({ authorId: z.string() }).parse(message.event.data);
-  const text = options.keys.decrypt(options.silo, conversation.conversationId, message.event.data);
-  const turn = { type: 'turn', id: message.event.id, conversationId: conversation.conversationId,
-    requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
-    attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
-    token: 'preparing', expiresAt: Date.now() + 120_000 };
-  socket.send(JSON.stringify(turn));
-  sendStop(socket, rows, message.event.id, conversation.conversationId);
-}
-
-async function deliverUploads(objects: Client | undefined,
-  link: Awaited<ReturnType<typeof connectBridge>>, uploads: Upload[]) {
-  if (!objects) return;
-  for (const file of uploads) {
-    if (link.delivered.has(file.fileId)) continue;
-    const bytes = await promotedBytes(objects, file);
-    await link.deliver(file, bytes);
-  }
-}
-
-async function processConversation(options: WatchOptions, tokens: Tokens,
-  conversation: AgentSession, refused: Set<string>, connection: Connection) {
-  const rows = await chatHistory(options.store, options.silo, conversation.conversationId);
-  agentSession(rows);
-  const message = pendingMessage(rows);
-  const lifecycle = await history(options.store, `computer-${conversation.assistantId}`);
-  function isLifecycle(row: ChatRows[number]) {
-    return !row.event.type.startsWith('computer.turn_');
-  }
-  function isConversationClosed(row: ChatRows[number]) {
-    return row.event.type === 'conversation.closed';
-  }
-  const current = lifecycle.findLast(isLifecycle)?.event;
-  if (!current || rows.some(isConversationClosed)) return false;
-  const computer = computerData.parse(current.data);
-  const closed = new Set<string>();
-  for (const row of lifecycle) {
-    if (row.event.type === 'computer.turn_closed' && row.event.silo === options.silo) {
-      closed.add(turnIdData.parse(row.event.data).turnId);
-    }
-  }
-  await recoverTerminalTurns(options, computer.computerId, conversation.assistantId,
-    conversation.conversationId, rows, closed);
-  const allUploads = await conversationUploads(options, rows);
-  const uploads = pendingUploads(rows, allUploads, computer.computerId);
-  if (!message && !uploads.length) return false;
-  if (current.type === 'computer.suspended') {
-    await resumeComputer(options.store, tokens, options.silo, conversation.assistantId);
-    return true;
-  }
-  if (current.type !== 'computer.ready' || refused.has(computer.computerId)) return true;
-  const link = await connection(computer.computerId, conversation.assistantId);
-  await deliverUploads(options.objects, link, uploads);
-  if (message) {
-    const created = await creationEvent(options.store, options.silo,
-      `assistant-${conversation.assistantId}`, 'assistant.created');
-    const assistant = z.object({ kind: z.string() }).parse(created.data);
-    const requested = z.object({ executionMode: z.literal('memory_free').optional() })
-      .parse(message.event.data);
-    const mode = requiredExecutionMode(assistant.kind, requested.executionMode);
-    sendTurn(options, link.socket, conversation, rows, allUploads, message, mode);
-  }
-  return true;
-}
-
-async function conversationUploads(options: Pick<ChatOptions, 'store' | 'silo'>,
-  rows: Awaited<ReturnType<typeof chatHistory>>) {
-  const uploads = rows.filter(isUpload);
-  if (!uploads.length) return [];
-  function isCreated(row: typeof rows[number]) {
-    return row.event.type === 'conversation.created';
-  }
-  const created = rows.find(isCreated);
-  const session = z.object({ assistantId: z.string() }).parse(created?.event.data);
-  const event = await creationEvent(options.store, options.silo,
-    `assistant-${session.assistantId}`, 'assistant.created');
-  const assistant = z.object({ kind: z.string() }).parse(event.data);
-  // Keep old team uploads off the shared disk and out of every new turn's input.
-  if (assistant.kind === 'team') return [];
-  function isUpload(row: typeof rows[number]) {
-    return row.event.type === 'file.uploaded';
-  }
-  function uploadedFile(row: typeof rows[number]) {
-    return fileUploadedDataSchema.parse(row.event.data);
-  }
-  return uploads.map(uploadedFile);
+  return [...groups.values()];
 }
 
 async function conversationTableBehind(db: ChatOptions['db'], head: number) {
@@ -482,38 +400,4 @@ async function conversationTableBehind(db: ChatOptions['db'], head: number) {
     'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['conversations']);
   const position = Number(checkpoint.rows[0]?.sequence ?? 0);
   return position < head;
-}
-
-function sendStop(socket: WebSocket, rows: ChatRows, turnId: string, conversationId: string) {
-  function isStopRequest(row: ChatRows[number]) {
-    return row.event.type === 'agent.turn_stop_requested' &&
-      turnIdData.parse(row.event.data).turnId === turnId;
-  }
-  if (rows.some(isStopRequest)) {
-    socket.send(JSON.stringify({ type: 'stop', turnId, conversationId }));
-  }
-}
-
-async function promotedBytes(objects: Client, file: z.infer<typeof fileUploadedDataSchema>) {
-  const stream = await objects.getObject('files', file.objectKey), parts: Buffer[] = [];
-  let size = 0;
-  for await (const part of stream) {
-    const bytes = z.instanceof(Buffer).parse(part); size += bytes.length;
-    if (size > file.size) { stream.destroy(); throw new Error('Stored file size mismatch'); }
-    parts.push(bytes);
-  }
-  return Buffer.concat(parts);
-}
-
-async function recoverTerminalTurns(options: Pick<ChatOptions, 'silo' | 'store'>,
-  computerId: string, assistantId: string, conversationId: string, rows: ChatRows,
-  closed: Set<string>) {
-  // Recover a server crash between a terminal report and its separate lifecycle command.
-  for (const row of rows) {
-    if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) continue;
-    const terminal = turnIdData.parse(row.event.data);
-    if (closed.has(terminal.turnId)) continue;
-    await turnCommand(options.store, { silo: options.silo, computerId, assistantId },
-      { ...terminal, conversationId, status: row.event.type === 'agent.turn_completed' ? 'completed' : 'failed' });
-  }
 }

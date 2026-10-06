@@ -470,3 +470,252 @@ it.each(temporaryFailures)(
   'delivers the next message after one temporary %s failure without another event',
   deliversAfterTemporaryFailure,
 );
+
+async function finishedChatFixture(count: number) {
+  const names: string[] = [];
+  for (let index = 0; index < count; index++) {
+    names.push(`old-${index}`);
+  }
+  names.push('fresh');
+  const fixture = await replayFixture(names);
+  const computer = { computerId: 'computer', assistantId: 'assistant', generation: 1 };
+  const claimedData = { ...computer, tokenId: 'token:test' };
+  const claimed = envelope('test', 'computer-assistant', 'computer.claimed', claimedData);
+  const claimCommand = { event: claimed, expectedSequence: 0 };
+  const claim = await fixture.store.append(claimCommand);
+  if (claim.status !== 'appended') throw new Error('Computer fixture failed');
+  const readyData = { ...computer, podUid: 'pod' };
+  const ready = envelope('test', 'computer-assistant', 'computer.ready', readyData);
+  const readyCommand = { event: ready, expectedSequence: claim.sequence };
+  await fixture.store.append(readyCommand);
+  for (let index = 0; index < count; index++) {
+    const conversationId = `old-${index}`;
+    const report = {
+      sequence: index + 1, previousSequence: 0, conversationId,
+      turnId: `message-${conversationId}`, assistantId: 'assistant', type: 'agent.turn_failed',
+    };
+    await recordReport(fixture.store, fixture.keys, fixture.context, report);
+    const closeTurn = { ...report, status: 'failed' as const };
+    await turnCommand(fixture.store, fixture.context, closeTurn);
+  }
+  return fixture;
+}
+
+function isFreshTurn(message: unknown) {
+  return typeof message === 'object' && message !== null &&
+    Reflect.get(message, 'type') === 'turn' && Reflect.get(message, 'id') === 'message-fresh';
+}
+
+async function avoidsRepeatedPendingReads() {
+  const fixture = await finishedChatFixture(30);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-pending'));
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials');
+  credentials.mockResolvedValue();
+  let pass = 0;
+  const query = db.query.bind(db);
+  async function countPass(...args: Parameters<typeof db.query>) {
+    if (typeof args[0] === 'string' && args[0].includes('FROM conversation_feed')) {
+      pass++;
+      if (pass === 5) {
+        stop.abort();
+        throw new Error('Three passes after connection opening finished');
+      }
+    }
+    return query(...args);
+  }
+  const queries = vi.spyOn(db, 'query');
+  queries.mockImplementation(countPass);
+  const reads: { pass: number; subject: string }[] = [];
+  const read = fixture.store.readStream.bind(fixture.store);
+  async function* countRead(...args: Parameters<typeof fixture.store.readStream>) {
+    const observation = { pass, subject: args[0] };
+    reads.push(observation);
+    yield* read(...args);
+  }
+  const reading = vi.spyOn(fixture.store, 'readStream');
+  reading.mockImplementation(countRead);
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  try {
+    await work;
+    for (let checkedPass = 2; checkedPass <= 4; checkedPass++) {
+      function isComputerRead(read: typeof reads[number]) {
+        return read.pass === checkedPass && read.subject === 'computer-assistant';
+      }
+      function isAssistantRead(read: typeof reads[number]) {
+        return read.pass === checkedPass && read.subject === 'assistant-assistant';
+      }
+      expect(reads.filter(isComputerRead).length).toBeLessThanOrEqual(1);
+      expect(reads.filter(isAssistantRead).length).toBeLessThanOrEqual(1);
+    }
+    function isRepeatedFinishedChatRead(read: typeof reads[number]) {
+      return read.pass > 1 && read.subject.startsWith('conversation-old-');
+    }
+    expect(reads.filter(isRepeatedFinishedChatRead)).toEqual([]);
+    expect(fixture.messages.filter(isFreshTurn)).toHaveLength(1);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+it('keeps one waiting turn from rereading 30 finished chats or resending on the same link',
+  avoidsRepeatedPendingReads, 120_000);
+
+async function sendsPromptlyWithFinishedChats() {
+  const fixture = await finishedChatFixture(90);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-many-chats'));
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials');
+  credentials.mockResolvedValue();
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const heads = vi.spyOn(fixture.store, 'head');
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  function freshTurnArrived() {
+    return fixture.messages.some(isFreshTurn);
+  }
+  function isNextTurn(message: unknown) {
+    return typeof message === 'object' && message !== null &&
+      Reflect.get(message, 'id') === 'next-message';
+  }
+  function nextTurnArrived() {
+    return fixture.messages.some(isNextTurn);
+  }
+  function isGlobalHead(call: typeof heads.mock.calls[number]) {
+    return call[0] === undefined;
+  }
+  try {
+    await until(freshTurnArrived, 60_000);
+    const terminal = {
+      sequence: 91, previousSequence: 0, conversationId: 'fresh', turnId: 'message-fresh',
+      assistantId: 'assistant', type: 'agent.turn_failed',
+    };
+    await recordReport(fixture.store, fixture.keys, fixture.context, terminal);
+    const closeTurn = { ...terminal, status: 'failed' as const };
+    await turnCommand(fixture.store, fixture.context, closeTurn);
+    await runner.run(conversations);
+    const previousPolls = heads.mock.calls.filter(isGlobalHead).length;
+    function finishedTurnProcessed() {
+      return heads.mock.calls.filter(isGlobalHead).length >= previousPolls + 3;
+    }
+    await until(finishedTurnProcessed, 60_000);
+    const command = { id: 'next-message', conversationId: 'fresh', text: 'New work' };
+    const postedAt = performance.now();
+    const member = { silo: 'test', memberId: 'fresh' };
+    await chatCommand(fixture.store, fixture.keys, member, command);
+    await until(nextTurnArrived, 60_000);
+    expect(performance.now() - postedAt).toBeLessThan(2000);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+it('sends a posted turn within two seconds with 90 finished chats',
+  sendsPromptlyWithFinishedChats, 180_000);
+
+async function stopsAndReconnectsAcceptedTurn() {
+  const fixture = await finishedChatFixture(0);
+  const dbs = await databases();
+  const stop = new AbortController();
+  const tokens = await bridgeTokens(fixture);
+  const db = pgDb(dbs.queue);
+  const runner = new ProjectionRunner(db, fixture.store, createLogger('bridge-accepted'));
+  await runner.initialise(conversations);
+  await runner.run(conversations);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const credentials = vi.spyOn(kube, 'credentials');
+  credentials.mockResolvedValue();
+  const reads = vi.spyOn(fixture.store, 'readStream');
+  const queries = vi.spyOn(db, 'query');
+  function isPass(call: typeof queries.mock.calls[number]) {
+    return typeof call[0] === 'string' && call[0].includes('FROM conversation_feed');
+  }
+  function passCount() {
+    return queries.mock.calls.filter(isPass).length;
+  }
+  async function waitForPasses() {
+    const count = passCount();
+    function threePassesStarted() {
+      return passCount() >= count + 3;
+    }
+    await until(threePassesStarted);
+  }
+  function turnArrived() {
+    return fixture.messages.some(isFreshTurn);
+  }
+  function isAcknowledgement(message: unknown) {
+    return typeof message === 'object' && message !== null &&
+      Reflect.get(message, 'type') === 'ack' && Reflect.get(message, 'token') !== undefined;
+  }
+  function admitted() {
+    return fixture.messages.some(isAcknowledgement);
+  }
+  function isStop(message: unknown) {
+    return typeof message === 'object' && message !== null &&
+      Reflect.get(message, 'type') === 'stop' && Reflect.get(message, 'turnId') === 'message-fresh';
+  }
+  function stopArrived() {
+    return fixture.messages.some(isStop);
+  }
+  function resentAfterReconnect() {
+    return fixture.messages.filter(isFreshTurn).length >= 2;
+  }
+  function readFreshChat(call: typeof reads.mock.calls[number]) {
+    return call[0] === 'conversation-fresh';
+  }
+  const options = { silo: 'test', store: fixture.store, keys: fixture.keys, db };
+  const work = watchBridges(options, tokens, kube, fixture.url, stop.signal);
+  try {
+    await until(turnArrived);
+    const peer = [...fixture.wss.clients][0]!;
+    const report = {
+      sequence: 1, previousSequence: 0, conversationId: 'fresh', turnId: 'message-fresh',
+      assistantId: 'assistant', type: 'agent.turn_started', threadId: 'thread-fresh',
+    };
+    peer.send(JSON.stringify(report));
+    await until(admitted);
+    await waitForPasses();
+    reads.mockClear();
+    await waitForPasses();
+    expect(reads.mock.calls.filter(readFreshChat)).toEqual([]);
+    expect(fixture.messages.filter(isFreshTurn)).toHaveLength(1);
+    const request = { id: 'stop-fresh', conversationId: 'fresh', stopTurnId: 'message-fresh' };
+    const member = { silo: 'test', memberId: 'fresh' };
+    await chatCommand(fixture.store, fixture.keys, member, request);
+    await until(stopArrived);
+    peer.terminate();
+    await until(resentAfterReconnect);
+    await waitForPasses();
+    expect(fixture.messages.filter(isFreshTurn)).toHaveLength(2);
+    expect(fixture.messages.filter(isStop)).toHaveLength(2);
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await fixture.close();
+    await dbs.close();
+  }
+}
+
+it('leaves an accepted turn unread, still sends Stop, and resends after reconnecting',
+  stopsAndReconnectsAcceptedTurn);
