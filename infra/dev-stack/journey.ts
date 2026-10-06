@@ -272,8 +272,14 @@ try {
     identities.set(other, { sub, cookie: `${config.cookieName}=${encodeSession(config, {
       sub, orgId: config.expectedOrgId!, roles: [], authTime: now, exp: now + 300,
     })}` });
-    await invite(other, 'member');
-    await join(other);
+    const existingMember = await db.db.query(
+      "SELECT 1 FROM members WHERE member_id=$1 AND status='joined'",
+      [other],
+    );
+    if (!existingMember.rows.length) {
+      await invite(other, 'member');
+      await join(other);
+    }
     await until(async () => (await authz.check(other, 'member')).allowed, 'other audit member OpenFGA');
     await until(async () => (await fetch(`${origin}/api/chat`, { headers: headers(other) })).status === 200,
       'other audit member authenticated live chat access');

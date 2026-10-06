@@ -49,6 +49,8 @@
 
 ### Fixed or improved
 
+- Permission checks reuse their OpenFGA connection. The dev-stack journey can run
+  again after its audit member has joined.
 - Chat lists handle 60 sessions, and transcript reads and live sockets keep working
   while turns start and end. Team writes and new team turns check access after
   reading history with its own ten-second budget. Personal posts and turn admission
