@@ -729,7 +729,7 @@ it('projects protected discovery as Needs input and replays inventory without an
   } finally { await remote.close(); }
 });
 
-it('lists 50 held and settled reservations and reads their details within the authority deadline', async () => {
+it('lists 50 held and settled reservations and reads their details within two seconds', async () => {
   const permits: string[] = [];
   for (let index = 0; index < 50; index++) {
     const permitId = await actor.reserve({ model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
@@ -813,3 +813,85 @@ it('exposes safe effect evidence to Owner/Admin, refuses other identities and re
   const completed = await app.inject({ method: 'GET', url, headers: operatorHeaders });
   expect(completed.json()).toMatchObject({ state: 'released', settledCents: 0 });
 });
+
+async function readsSlowEffects(view: 'list' | 'detail') {
+  const call = {
+    model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+    computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
+    conversationId: 'private-conversation', turnId: 'private-turn', threadId: 'private-thread',
+    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+  };
+  const permitId = await actor.reserve(call, 10);
+  await actor.effect(permitId);
+  const readStream = nats.store.readStream.bind(nats.store);
+  type StreamArguments = Parameters<typeof nats.store.readStream>;
+  async function* slowBudgetRead(...streamArguments: StreamArguments) {
+    if (streamArguments[0] === 'budget-test') {
+      await delay(2200);
+    }
+    yield* readStream(...streamArguments);
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(slowBudgetRead);
+  let url = '/api/org/effects';
+  if (view === 'detail') {
+    url = `${url}/${permitId}`;
+  }
+  try {
+    const response = await app.inject({ url, headers: headers('oidc-amina') });
+    expect(response.statusCode).toBe(200);
+    function isAdminRead(call: StreamArguments) {
+      return call[0] === 'member-amina';
+    }
+    const adminReads = reads.mock.calls.filter(isAdminRead);
+    expect(adminReads).toHaveLength(1);
+  } finally {
+    reads.mockRestore();
+  }
+}
+
+it.each(['list', 'detail'] as const)(
+  'returns the effect %s after a read longer than the write access limit', readsSlowEffects,
+);
+
+async function refusesAdminRemovedDuringEffectRead(view: 'list' | 'detail') {
+  const call = {
+    model: 'gpt-6.1-sol', priceTableId: 'openai-2026-10-02-all-eur95',
+    computerId: 'computer', assistantId: 'personal-alice', requesterId: 'alice',
+    conversationId: 'private-conversation', turnId: 'private-turn', threadId: 'private-thread',
+    payingGroupId: 'personal-default', contextDigest: '0'.repeat(64),
+  };
+  const permitId = await actor.reserve(call, 10);
+  await actor.effect(permitId);
+  const readStream = nats.store.readStream.bind(nats.store);
+  type StreamArguments = Parameters<typeof nats.store.readStream>;
+  let removed = false;
+  async function* removeAdminDuringRead(...streamArguments: StreamArguments) {
+    yield* readStream(...streamArguments);
+    if (streamArguments[0] === 'budget-test' && !removed) {
+      removed = true;
+      const removal = fixture('member.removed', 'member-amina', {
+        memberId: 'amina', removedBy: 'alice',
+      });
+      await append(removal);
+      // Leave OpenFGA and the member table behind to prove the saved removal wins.
+    }
+  }
+  const reads = vi.spyOn(nats.store, 'readStream').mockImplementation(removeAdminDuringRead);
+  let url = '/api/org/effects';
+  if (view === 'detail') {
+    url = `${url}/${permitId}`;
+  }
+  try {
+    const response = await app.inject({ url, headers: headers('oidc-amina') });
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused' });
+    expect(response.body).not.toContain(permitId);
+  } finally {
+    reads.mockRestore();
+  }
+}
+
+it.each(['list', 'detail'] as const)(
+  'refuses the effect %s when the admin is removed during the read',
+  refusesAdminRemovedDuringEffectRead,
+);

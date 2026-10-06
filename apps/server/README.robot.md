@@ -546,6 +546,10 @@ See the [P3-18 evidence](../../docs/process/p3-18-screenshots.md) for remaining 
 Owners and Admins can list and inspect monetary uncertainty with
 `GET /api/org/effects` and `GET /api/org/effects/:permitId`, then submit attested
 receipt evidence with `POST /api/org/effects/:permitId/resolve`.
+Both GET routes read the saved spending records with their own ten-second limit,
+then check current membership and OpenFGA once before returning them. A removal
+during the read returns 403 even if the member table and OpenFGA are still behind.
+POST keeps its two-second access check and conditional append.
 [The resolution contract](../../docs/process/p3-15-reconcile.md) specifies the
 CSRF token, optimistic sequence and pending settlement state. No screen is added.
 Flat group administration is available through the [groups HTTP interface](../../docs/api/groups.md).

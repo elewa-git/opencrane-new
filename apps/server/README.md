@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chats and access checks"]
-  server -.->|uses| libs["libs/*<br/>shared code"]
+  server -.->|checks access and reads spending| libs["libs/*<br/>shared code"]
   server -->|records changes| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
@@ -26,6 +26,8 @@ flowchart LR
 - Checks permissions before returning private information or changing data.
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
+- Returns spending records to current owners and admins. It reads the records first,
+  then checks access, so a longer read does not use up the write access time limit.
 - Lets two silo members exchange private messages without starting assistant work.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
   and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that

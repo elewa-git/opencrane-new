@@ -391,8 +391,12 @@ The command conditionally appends one evidence-backed resolution on the effect
 stream; `settle-budget` applies it through the fenced budget actor. Conflicting
 observations preserve the largest charge and retain the full reservation.
 Status reads replay safe metadata and evidence references without provider calls.
-Lists use one finite, batched log replay; details read the exact budget and effect
-subjects. Both reads are bounded to two seconds and fail closed on expiry.
+Lists read only `budget-<silo>` and `effect-<permitId>` for each saved reservation.
+They keep reservation order and include settled reservations and unknown holds.
+Details and resolutions already read these exact subjects; none of these reads
+replay chat history. List and detail reads share a ten-second deadline across
+their subject reads and fail closed on expiry. Resolution writes keep their
+existing two-second membership check and conditional append.
 [The HTTP contract and source evidence](../../docs/process/p3-15-reconcile.md)
 cover the screen binding, refusals and remaining live qualification.
 

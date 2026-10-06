@@ -10,7 +10,7 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.-> models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks calls and reads spending| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
@@ -25,6 +25,8 @@ flowchart LR
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
 - Hold money before an AI call and settle the charge when usage is reported.
+- List spending from the saved budget and call records, without reading chat history.
+  Keep calls with an unknown outcome in the list alongside settled calls.
 - Release an expired hold at zero cents when it was never allowed or sent.
 - Read each new usage line once and leave old lines alone while idle. Retry a line
   if its event could not be saved.
