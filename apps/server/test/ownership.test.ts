@@ -177,7 +177,8 @@ async function readsAuditDuringChatActivity() {
   const spy = vi.spyOn(nats.store, 'readStream')
     .mockImplementation(appendChatActivityBeforeMembershipRead);
   try {
-    const response = await request('GET', undefined, 'idp-owner', '/api/org/history');
+    const response = await request('GET', undefined, 'idp-owner',
+      '/api/conversations/private-owner-chat/history');
     expect(response.statusCode).toBe(200);
     expect(activityAppended).toBe(true);
   } finally {
