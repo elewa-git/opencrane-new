@@ -157,6 +157,13 @@ function requireActiveConversationTurn(conversation: StoredEvent[], turnId: stri
   if (conversation.some(closesCurrentTurn)) throw new Error('Turn is not active');
 }
 
+function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
+  // Refuse before holding money when the gateway or another client has hung up.
+  if (req.socket.destroyed || res.destroyed) {
+    throw new Error('Decision client disconnected');
+  }
+}
+
 export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
@@ -184,19 +191,19 @@ export async function startDecision(
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
       if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
-      const historyDeadline = started + 10_000;
-      const checked = await credentials.check(req.headers, undefined, historyDeadline);
+      const decisionDeadline = started + 2000;
+      const checked = await credentials.check(req.headers, undefined, decisionDeadline);
       const computer = computerSchema.parse(checked.computer);
       const turnToken = turnSchema.parse(checked.turn);
-      // Give history reads ten seconds, then start the two-second access check.
+      // Share two seconds between history and access because the gateway waits only that long.
+      // Read full histories before watching the small streams that decide access.
       const activity = await decisionActivity(actor.store, actor.silo,
-        computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline);
+        computer.assistant, turnToken.conversation, turnToken.turn, decisionDeadline);
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const accessStarted = performance.now();
-      const authority = await decisionAuthorityFence(actor.store, accessStarted,
+      const authority = await decisionAuthorityFence(actor.store, started,
         subjects, turnToken.requester, computer.assistant);
       let needsApproval = false;
       async function confirmDecision() {
@@ -247,6 +254,7 @@ export async function startDecision(
       const call = await context(actor, binding, computer, turnToken, checked.sequence,
         'model', body.model, fresh, conversation, turn);
       contextDigest = call.contextDigest;
+      requireConnectedClient(req, res);
       const reservation = await actor.reserve({ ...call, requestId }, amountCents, fresh);
       await audit('allow', 'model_allowed', reservation).then(fresh).catch(async (error: unknown) => {
         // No permit has left this process, so the gateway cannot have dispatched it.

@@ -15,7 +15,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models <-->|starts gateway and checks access and active turns| gateway["agentgateway<br/>AI gateway"]
+  models <-->|starts gateway and checks calls within two seconds| gateway["agentgateway<br/>AI gateway"]
   gateway -->|new usage lines| models
 ```
 
@@ -29,8 +29,9 @@ flowchart LR
 - Read each new usage line once and leave old lines alone while idle. Retry a line
   if its event could not be saved.
 - Check access passes, current permissions, tool rules, approvals and budgets before calls proceed.
-- Read chat history before starting the short access check, so a long chat does not
-  use up the time needed to check permissions.
+- Read chat history before watching the streams that decide access. History and
+  access share two seconds because the gateway waits only that long.
+- Refuse callers who have disconnected before holding money.
 - Keep calls working when another chat, a file or someone else's access changes during the check.
 - Start agentgateway without giving its provider key to the server or computer.
 - Record what the AI provider used. When the result of a call is unknown, keep the held money in place until an owner or admin settles it.

@@ -9,6 +9,7 @@ type Fixture = Awaited<ReturnType<typeof fixture>>;
 interface Injection { label: string; subject: string; type: string; data: Record<string, unknown> }
 
 const ciphertext = 'ZmFrZS1jaXBoZXJ0ZXh0';
+const appendedEventSchema = z.object({ type: z.string(), data: z.unknown() });
 const otherTurn = {
   assistantId: 'assistant', computerId: 'computer', conversationId: 'other',
   turnId: 'other-turn', threadId: 'other-thread', requesterId: 'alice', task: 'chat_turn',
@@ -266,7 +267,7 @@ async function readsConversationBeforeAccessCheck() {
 it('reads full conversation history once before the short access check',
   readsConversationBeforeAccessCheck, 40_000);
 
-async function allowsSlowHistoryRead(route: 'model' | 'mcp') {
+async function refusesHistoryAndAccessOverBudget(route: 'model' | 'mcp') {
   const setup = await fixture();
   const read = setup.nats.store.readStream.bind(setup.nats.store);
   let historyDelayed = false;
@@ -289,8 +290,9 @@ async function allowsSlowHistoryRead(route: 'model' | 'mcp') {
     try {
       const response = await decide(setup, route);
       expect(historyDelayed).toBe(true);
-      expect(accessDelayed).toBe(true);
-      expect(response.status, response.body).toBe(200);
+      expect(response.status, response.body).toBe(403);
+      expect(setup.actor.state.reservations).toHaveLength(0);
+      expect(setup.received()).toBe(0);
     } finally {
       reads.mockRestore();
     }
@@ -299,8 +301,135 @@ async function allowsSlowHistoryRead(route: 'model' | 'mcp') {
   }
 }
 const historyRoutes = ['model', 'mcp'] as const;
-it.each(historyRoutes)('%s allows a 1.9-second history read before checking access',
-  allowsSlowHistoryRead, 40_000);
+it.each(historyRoutes)('%s refuses when history and access exceed the shared two-second budget',
+  refusesHistoryAndAccessOverBudget, 40_000);
+
+async function refusesDisconnectedClient() {
+  const setup = await fixture();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const controller = new AbortController();
+  const recorded = Promise.withResolvers<unknown>();
+  let disconnected = false;
+  async function* disconnectDuringAccess(...args: Parameters<typeof read>) {
+    yield* read(...args);
+    if (args[0] === 'member-alice' && !disconnected) {
+      disconnected = true;
+      controller.abort();
+      // Let the server receive the disconnect before the remaining access reads finish.
+      await delay(100);
+    }
+  }
+  async function recordDecision(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const event = appendedEventSchema.parse(command.event);
+    if (event.type === 'decision.recorded') {
+      recorded.resolve(event.data);
+    }
+    return result;
+  }
+  const reads = vi.spyOn(setup.nats.store, 'readStream');
+  reads.mockImplementation(disconnectDuringAccess);
+  const writes = vi.spyOn(setup.nats.store, 'append');
+  writes.mockImplementation(recordDecision);
+  try {
+    const body = { model: 'gpt-6-luna', input: 'OK', max_output_tokens: 128, stream: true };
+    const request = { method: 'POST', headers: setup.headers,
+      body: JSON.stringify(body), signal: controller.signal };
+    const response = fetch(`${setup.options.decisionUrl}/authorize`, request);
+    await expect(response).rejects.toMatchObject({ name: 'AbortError' });
+    const decision = await recorded.promise;
+    expect(disconnected).toBe(true);
+    expect(decision).toMatchObject({ outcome: 'deny' });
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    setup.advance();
+    await setup.actor.expire();
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    reads.mockRestore();
+    writes.mockRestore();
+    await setup.close();
+  }
+}
+it('reserves nothing when the client disconnects during the access check',
+  refusesDisconnectedClient, 40_000);
+
+async function callGatewayRoute(setup: Fixture, route: 'model' | 'mcp') {
+  if (route === 'model') {
+    return setup.call();
+  }
+  const headers = { 'mcp-protocol-version': '2026-07-28',
+    'mcp-method': 'tools/call', 'mcp-tool-name': 'write' };
+  const body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
+    params: { name: 'write', arguments: { note: 'x' } },
+    _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28',
+      'io.modelcontextprotocol/client-capabilities': {} } };
+  return setup.call(headers, body, '/mcp/fixture/installed');
+}
+
+async function refusesAfterGatewayTimeout(route: 'model' | 'mcp') {
+  const setup = await fixture();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const recorded = Promise.withResolvers<unknown>();
+  const savedEventTypes: string[] = [];
+  let historyDelayed = false;
+  let accessDelayed = false;
+  async function* delayDecisionPastGatewayTimeout(...args: Parameters<typeof read>) {
+    if (args[0] === 'conversation-conversation' && args[1] === 1 && !historyDelayed) {
+      historyDelayed = true;
+      await delay(1100);
+    }
+    if (args[0] === 'member-alice' && !accessDelayed) {
+      accessDelayed = true;
+      await delay(1100);
+    }
+    yield* read(...args);
+  }
+  async function recordDecision(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const event = appendedEventSchema.parse(command.event);
+    if (result.status === 'appended') {
+      savedEventTypes.push(event.type);
+      if (event.type === 'decision.recorded') {
+        recorded.resolve(event.data);
+      }
+    }
+    return result;
+  }
+  try {
+    await prepareRoute(setup, route);
+    const reads = vi.spyOn(setup.nats.store, 'readStream');
+    reads.mockImplementation(delayDecisionPastGatewayTimeout);
+    const writes = vi.spyOn(setup.nats.store, 'append');
+    writes.mockImplementation(recordDecision);
+    try {
+      const response = await callGatewayRoute(setup, route);
+      expect(response.status, response.text).toBe(503);
+      expect(response.text).toContain('upstream call timeout');
+      // Wait for the late decision too, so an early gateway error cannot hide a later hold.
+      const decision = await recorded.promise;
+      expect(historyDelayed).toBe(true);
+      expect(accessDelayed).toBe(true);
+      expect(setup.actor.state.reservations).toHaveLength(0);
+      expect(decision).toMatchObject({ outcome: 'deny' });
+      setup.advance();
+      await setup.actor.expire();
+      expect(setup.actor.state.reservations).toHaveLength(0);
+      expect(savedEventTypes).not.toContain('budget.reserved');
+      expect(savedEventTypes).not.toContain('effect.uncertain');
+      expect(setup.received()).toBe(0);
+    } finally {
+      reads.mockRestore();
+      writes.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(historyRoutes)('%s gateway timeout leaves no reservation or uncertain hold',
+  refusesAfterGatewayTimeout, 40_000);
 
 async function handlesEventDuringAudit(injection: Injection, allowed: boolean) {
   const setup = await fixture();

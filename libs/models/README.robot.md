@@ -268,11 +268,13 @@ reached OpenFGA before admission. Decision receipts cover the requester, assista
 and team grants, including revoked team grants. Another member's direct grant
 needs no receipt for this call.
 
-Decisions read computer credentials and full computer/conversation histories first,
-with a ten-second limit, as chat turn reads do. They capture a log position before
-those histories. After reading them, they start the two-second access check.
-History reads do not use up the access check's time. `decisionActivity` reads only
-new computer and conversation events after the captured position. It refuses
+Decisions share one two-second budget for computer credentials, full
+computer/conversation histories and the access check. The gateway stops waiting
+for authorisation after two seconds, so the decision must fit within that limit.
+Decisions capture a log position before reading the histories. After reading
+them, they watch only the small streams that decide access, using the time left
+in the same budget. `decisionActivity` reads only new computer and conversation
+events after the captured position. It refuses
 participant changes, a closed conversation, changes to the computer's identity or
 ready state, and a stop, completion, failure or computer close for the current turn.
 The recorded ready computer must match the one that supplied the token check.
@@ -297,11 +299,13 @@ than retrying a reservation or a single-use approval.
 
 `authorityFence` returns a freshness check with `include(...subjects)`, `head` and
 an absolute `deadline`. Decision policy, approval and access reads share the
-access deadline. Store retries and budget-queue waits cannot reset it. Discovered
+decision deadline. Store retries and budget-queue waits cannot reset it. Discovered
 subjects use the same starting position. Before reservation, approval use and
 final admission, a relevant change or an expired check refuses the call. A failure
-before reservation holds no money. A failure after reservation releases the
-unsent hold at zero cents. No permission or event-history cache survives a decision.
+before reservation holds no money. A destroyed request socket or a disconnected
+client also refuses the model call before `actor.reserve`, without holding money.
+A failure after reservation releases the unsent hold at zero cents.
+No permission or event-history cache survives a decision.
 
 Ask tools keep stricter conversation checks: a posted message or a new turn
 invalidates the old approval, as do stops and closes for its bound turn. Decision
@@ -314,8 +318,13 @@ The tests in `test/decision-fence.test.ts` adapt the event-store probes for #164
 They cover each harmless event and real revocation through model and MCP HTTP
 admission, early and late money safety, the computer-token handover, unrelated
 projection delays, full-history ordering and single-use approval admission.
-They also cover owning and separately granted teams, a 1.9-second history read,
+They also cover owning and separately granted teams, refusal when history and
+access exceed their shared budget, a client disconnecting before reservation,
 and a turn stopped or closed while a harmless grant is checked again.
+Both routes also run through the real gateway with a decision slower than its
+unchanged authorisation timeout. They check that the provider receives no call
+and that no reservation or uncertain hold appears after the decision finishes
+or after the budget actor checks for expired holds.
 The existing gateway and server approval tests cover real gateway forwarding,
 late revocation and message invalidation. The tests use disposable services and
 scripted providers; they make no paid model calls.
