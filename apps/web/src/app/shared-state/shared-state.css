@@ -71,6 +71,17 @@ svg {
   font-weight: 500;
   text-align: left;
 }
+.state[data-state='unknown'] .state-action {
+  box-sizing: border-box;
+  min-width: 44px;
+  padding: 8px 16px;
+  border: 1px solid var(--oc-accent);
+  border-radius: 6px;
+  background: var(--oc-accent);
+  color: var(--oc-ink-strong);
+  text-align: center;
+  text-decoration: none;
+}
 @keyframes oc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 @media (max-width: 600px) {

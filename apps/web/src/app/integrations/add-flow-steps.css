@@ -1,0 +1,14 @@
+:host { display: block; min-width: 0; }
+.add-flow { margin: 20px 0; }
+ol { display: flex; gap: 18px; margin: 0; padding: 0; list-style: none; }
+li { display: grid; gap: 4px; color: var(--oc-ink-secondary); font-size: 13px; }
+li[aria-current="step"] { color: var(--oc-ink-strong); font-weight: 600; }
+.unavailable { color: var(--oc-ink-secondary); font-size: 12px; font-weight: 400; }
+.phone-step, .phone-bars { display: none; }
+@media (max-width: 700px) {
+  ol { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .phone-step { display: block; margin: 0 0 8px; color: var(--oc-ink-strong); }
+  .phone-bars { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .phone-bars span { height: 4px; border-radius: 4px; background: var(--oc-border-default); }
+  .phone-bars span.current { background: var(--oc-accent); }
+}

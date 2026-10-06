@@ -7,12 +7,16 @@ The [server](../server/README.md) owns sessions and register truth. The register
 authenticated HTTP reads; the workspace uses the authenticated WebSocket.
 The browser retains the last successful register read only while access remains valid.
 The Integrations register searches and filters that read. Its detail page reads the
-register first, then reads the matching server's tool policy. It shows the row as soon as
-the register read succeeds. A failed list refresh keeps the row, says that availability
-was not checked, and hides that failure notice while another refresh is running. A saved
-tool policy stays visible until a new tools reply arrives. Connected state and access
-grants remain unavailable until the server provides those reads. A 401 or 403 clears the
-register and detail page before showing the shared access-lost message.
+register first, then reads the matching server's tool policy. It shows a server row as soon
+as the register read succeeds. A failed list refresh keeps the row, says that availability
+was not checked, and hides that message while another refresh is running. A 401 or 403
+clears the register and detail page before showing the shared access-lost message.
+
+The add page accepts a remote HTTPS address and follows discovery status. When discovery
+returns an inventory, the page links to Tools & access. That page saves a changed tool
+mode once. If its reply is lost, Check status reads the saved modes and never sends the
+save again. A saved tool policy stays visible until the server replies with new modes.
+Connected state and access grants remain unavailable until the server provides those details.
 People & groups reads flat group rows from `/api/groups`, validates them through
 the shared protocol package and creates groups through the same-origin API.
 
@@ -132,11 +136,13 @@ provider and includes streamed text, Stop and reload through the shipped UI.
 
 ## Tool policy
 
-P3-1 adds Tools & access at `/org/integrations/:serverId/tools`, linked from the
-existing register. Native radio groups offer Allow automatically, Ask and Block
-for reads and writes. Pending saves disable edits; uncertain replies require Check
-status; 401/403 clears protected tool details. Desktop and 390px browser evidence
-comes from `apps/server/test/integrations.test.ts` with real API dependencies.
+Tools & access lives at `/org/integrations/:serverId/tools`. Native radio groups offer
+Allow automatically, Ask and Block. Saves need the validation connection returned by
+the policy read. A 409 offers a GET to review current modes or discard edits. A lost save
+reply keeps its command id in memory and offers GET-only status checks. Access refusal
+aborts reads, clears the policy and focuses the shared access-lost heading. Publishing,
+grants and review marking wait for server support. The add flow offers remote URLs;
+catalogue and hosted packages remain unavailable.
 
 `/org/models` is Models & providers: the pinned registry remains here, with provider
 and routing editing explicitly unavailable. `/org/spending` shows the existing budget

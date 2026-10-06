@@ -29,7 +29,7 @@ it('maps a refused MCP address to Refused rather than Draft', async () => {
   const fixture = TestBed.createComponent(McpInstall);
   fixture.detectChanges();
   const element = rootOf(fixture);
-  const input = element.querySelector<HTMLInputElement>('input');
+  const input = element.querySelector<HTMLInputElement>('#remote-url');
   if (!input) throw new Error('Missing source input');
   input.value = 'https://private.example/mcp';
   input.dispatchEvent(new Event('input'));
@@ -54,7 +54,7 @@ it.each(['button', 'form'])('submits an edited refused address through the %s',
     const fixture = TestBed.createComponent(McpInstall);
     fixture.detectChanges();
     const element = rootOf(fixture);
-    const input = element.querySelector<HTMLInputElement>('input');
+    const input = element.querySelector<HTMLInputElement>('#remote-url');
     const form = element.querySelector('form');
     if (!input || !form) throw new Error('Missing source form');
     input.value = 'https://private.example/mcp';
@@ -72,8 +72,8 @@ it.each(['button', 'form'])('submits an edited refused address through the %s',
     expect(element.querySelector('[data-state]')?.getAttribute('data-state')).toBe('draft');
     expect(element.textContent).not.toContain('This address was refused');
     const discover = element.querySelector<HTMLButtonElement>('button[type=submit]');
-    if (!discover) throw new Error('Missing Discover tools button');
-    expect(discover.textContent).toContain('Discover tools');
+    if (!discover) throw new Error('Missing Continue button');
+    expect(discover.textContent).toContain('Continue');
     if (submission === 'button') {
       discover.click();
     } else {

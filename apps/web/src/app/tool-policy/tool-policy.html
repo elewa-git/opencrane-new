@@ -1,34 +1,115 @@
-<section class="tool-policy">
-  <a href="/org/integrations">‹ Back to integrations</a>
-  <h1>Tools &amp; access</h1>
-  <p>Choose what assistants may do. Allow automatically includes the first write. Ask requires approval, even for reads.</p>
-  <div role="status" aria-live="polite">
-    <oc-shared-state [kind]="statusKind()" [message]="message()"
-      [evidenceAt]="evidenceAt()" [changeReference]="changeReference()" [showAction]="false" />
-  </div>
-<div [attr.aria-busy]="state() === 'loading' || state() === 'pending'">
-  @if (state() === 'error') { <button type="button" (click)="load()">Check status</button> }
-  @if (policy(); as policy) {
-    @if (!policy.published) { <p>− Calls are blocked until this connection is published and reviewed.</p> }
-    @for (readOnly of toolGroups; track readOnly) {
-      <h2>{{ readOnly ? 'Read' : 'Changes data or unclear' }}</h2>
-      @for (tool of policy.tools; track tool.name) {
-        @if (tool.readOnly === readOnly) {
-          <fieldset [disabled]="state() !== 'ready' || !tool.reviewed">
-            <legend>{{ tool.name }}</legend>
-            <p>{{ tool.reviewed ? 'Suggested: ' + (tool.suggestion === 'allow' ? 'Allow automatically' : 'Ask') + '. Suggestions do not grant access.' : '− Unreviewed · Blocked until reviewed' }}</p>
-            <div class="modes">
-              @for (mode of modes; track mode.value) {
-                <label><input type="radio" [name]="tool.name" [value]="mode.value" [checked]="selected(tool) === mode.value" (change)="choose(tool.name, mode.value)" />{{ mode.label }}</label>
-              }
-            </div>
-            <button type="button" [disabled]="selected(tool) === tool.mode" (click)="save(tool)">Save {{ tool.name }}</button>
-          </fieldset>
-        }
+@if (state() === 'access') {
+  <h1>Integrations</h1>
+  <oc-integrations-access-lost />
+} @else {
+  <section class="tool-policy">
+    <nav aria-label="Breadcrumb" class="breadcrumbs">
+      <a href="/org/integrations">Integrations</a>
+      <span class="breadcrumb-step">
+        <span aria-hidden="true">›</span>
+        <a [href]="'/org/integrations/' + serverId()">Integration details</a>
+      </span>
+      <span class="breadcrumb-step">
+        <span aria-hidden="true">›</span>
+        <span aria-current="page">Tools &amp; access</span>
+      </span>
+    </nav>
+    <h1>Tools &amp; access</h1>
+    <p class="intro">Set access for each tool. Reads are included.</p>
+    <oc-add-flow-steps [current]="4" />
+
+    <div id="tool-status" class="status-region" [class.status-failed]="statusKind() === 'failed'"
+      [class.status-unknown]="statusKind() === 'unknown'"
+      [class.status-conflict]="state() === 'conflict'" role="status" aria-live="polite"
+      aria-atomic="true" tabindex="-1">
+      @if (message()) {
+        <oc-shared-state [kind]="statusKind()" [message]="message()" [detail]="detail()"
+          [changeReference]="changeReference()"
+          [showAction]="false" />
       }
+    </div>
+    @if (state() === 'unknown' && pendingCommand()) {
+      <div class="notice-actions">
+        <button type="button" class="state-action" (click)="statusAction()">
+          Check status
+        </button>
+        @if (showReload()) {
+          <button type="button" class="secondary" (click)="reloadTools()">
+            Reload tools
+          </button>
+        }
+      </div>
     }
-    @if (!policy.tools.length) { <p>− No reviewed tool list is available yet.</p> }
-    <p>Only an Owner or Admin can save modes. People and assistants also need current access grants.</p>
-  }
-</div>
-</section>
+    @if (state() === 'conflict') {
+      <div class="notice-actions">
+        <button type="button" (click)="reviewCurrentModes()">Review the current modes</button>
+        <button type="button" class="secondary" (click)="discardEdits()">
+          Discard my edits
+        </button>
+      </div>
+    }
+    @if (state() === 'failed' || (showReload() && state() !== 'unknown')) {
+      <div class="notice-actions">
+        <button type="button" class="secondary" (click)="reloadTools()">Reload tools</button>
+      </div>
+    }
+
+    @if (policy(); as policy) {
+      <p class="editing-summary">{{ summary() }}</p>
+      @if (policy.connectionId === null && policy.tools.length > 0) {
+        <p id="connection-note" class="connection-note">
+          Modes can't be saved yet: this server has no validation connection.
+        </p>
+      }
+      @if (policy.tools.length === 0) {
+        <p>No tool list has been read yet. Discovery fills it in.</p>
+      } @else {
+        <section class="tools-card" aria-label="Tool modes" [attr.aria-busy]="toolsBusy()">
+          <h2>{{ policy.tools.length }} {{ policy.tools.length === 1 ? 'tool' : 'tools' }}</h2>
+          @for (tool of policy.tools; track tool.name) {
+            <fieldset [disabled]="state() !== 'ready' || !tool.reviewed
+              || policy.connectionId === null"
+              [attr.aria-describedby]="policy.connectionId === null ? 'connection-note' : null">
+              <legend>{{ tool.name }}</legend>
+              <span class="data-chip">{{ tool.readOnly ? 'Reads data' : 'May change data' }}</span>
+              @if (!tool.reviewed) {
+                <p [id]="toolDescriptionId(tool)">
+                  <oc-shared-state kind="blocked"
+                    message="Unreviewed — blocked until reviewed" [showAction]="false" />
+                </p>
+              } @else if (tool.mode === 'block' && selected(tool) === 'block') {
+                <oc-shared-state kind="draft" message="Blocked — nobody can use it"
+                  [showAction]="false" />
+              } @else {
+                <p class="saved-mode">Saved mode: {{ modeWords(tool.mode) }}</p>
+              }
+              @if (hasUnsavedChoice(tool)) {
+                <p class="unsaved-choice">Your unsaved choice</p>
+              }
+              <p class="suggestion">{{ suggestion(tool) }}</p>
+              <div class="modes" role="radiogroup" [attr.aria-label]="'Mode for ' + tool.name">
+                @for (mode of modeOptions; track mode.value) {
+                  <label>
+                    <input type="radio" [name]="'mode-' + tool.name" [value]="mode.value"
+                      [checked]="selected(tool) === mode.value"
+                      [attr.aria-describedby]="!tool.reviewed ? toolDescriptionId(tool) : null"
+                      (change)="choose(tool, mode.value)" />
+                    <span>{{ mode.label }}</span>
+                  </label>
+                }
+              </div>
+              <button type="button" [attr.aria-label]="saveLabel(tool)"
+                [disabled]="saveDisabled(tool)" (click)="save(tool)">Save</button>
+            </fieldset>
+          }
+        </section>
+      }
+      <section class="audience" aria-labelledby="audience-heading">
+        <h2 id="audience-heading">Audience</h2>
+        <oc-shared-state kind="not_configured" message="Not available yet"
+          detail="People and assistant access can't be set here yet. Both the person asking and
+            the assistant will need a current grant." [showAction]="false" />
+      </section>
+    }
+  </section>
+}
