@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
-import { normalisePathname, organisationPage, organisationPageLabel } from './pages';
+import { assistantCreateGroupId, normalisePathname, organisationPage,
+  organisationPageLabel } from './pages';
 
 function checkTrailingSlash(pathname: string): void {
   expect(organisationPage(`${pathname}/`)).toBe(organisationPage(pathname));
@@ -18,6 +19,14 @@ it.each(destinations)(
 it('keeps integration detail inside the Integrations destination', () => {
   expect(organisationPage('/org/integrations/odoo')).toBe('integrations');
   expect(organisationPage('/org/integrations/new')).toBe('integrations');
+});
+
+it('keeps the shared assistant create page inside People & groups', () => {
+  expect(assistantCreateGroupId('/org/people/groups/sales-team/assistants/new'))
+    .toBe('sales-team');
+  expect(organisationPage('/org/people/groups/sales-team/assistants/new')).toBe('people');
+  expect(assistantCreateGroupId('/org/people/groups/sales-team/assistants/other'))
+    .toBeUndefined();
 });
 
 function checkNonNavigationPages(): void {

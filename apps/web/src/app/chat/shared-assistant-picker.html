@@ -1,0 +1,87 @@
+<main class="picker-page">
+  <header class="picker-heading">
+    <div><a href="/workspace" class="back-link">‹ Back to workspace</a>
+      <h1 #heading tabindex="-1">{{ pageTitle }}</h1>
+      <p>One shared assistant starts a private session for you.</p></div>
+    <button class="button secondary" type="button" (click)="refresh()"
+      [disabled]="loading() || pending() !== undefined || accessChanged()">
+      {{ refreshing() ? 'Refreshing…' : 'Refresh list' }}</button>
+  </header>
+  <div class="notice" role="status" aria-live="polite">
+    @if (loading() && !loaded()) {
+      <oc-shared-state kind="checking" message="Loading shared assistants…" />
+    } @else if (accessChanged()) {
+      <oc-shared-state kind="access_changed" message="Your access changed"
+        [detail]="notice()" [showAction]="false" />
+    } @else if (failed() && !loaded()) {
+      <oc-shared-state kind="failed" [message]="notice()" detail="Reading again is safe."
+        [safeToRetry]="true" actionLabel="Try again" (action)="refresh()" />
+    } @else if (pending()?.stage === 'sending') {
+      <oc-shared-state kind="checking" [message]="notice()" [showAction]="false" />
+    } @else if (pending()) {
+      <oc-shared-state [kind]="pending()?.stage === 'checking' ? 'checking' : 'unknown'"
+        [message]="notice()" [changeReference]="pending()!.commandId"
+        [hideReferenceFromAnnouncement]="true" [showAction]="false" />
+      <p>Reference: <code>{{ pending()!.commandId }}</code></p>
+      <button class="button secondary" type="button" (click)="checkStatus()"
+        #statusButton [disabled]="pending()?.stage === 'checking'">
+        {{ pending()?.stage === 'checking' ? 'Checking…' : 'Check status' }}</button>
+      @if (pending()?.stage === 'unknown') {
+        <button class="button secondary" type="button" (click)="resendPending()">
+          Send the same request again</button>
+      }
+    } @else if (failed()) {
+      <p>{{ notice() }}</p>
+    } @else if (notice()) { <p>{{ notice() }}</p> }
+  </div>
+  @if (loaded() && !accessChanged()) {
+    @if (eligible().length === 0) {
+      <section class="empty-state paper-card">
+        <oc-shared-state kind="not_configured" message="No shared assistants are available"
+          detail="You need current access through both the owner group and paying group."
+          [showAction]="false" />
+      </section>
+    } @else {
+      <section aria-labelledby="assistant-list-heading" class="assistant-list">
+        <h2 id="assistant-list-heading">Choose an assistant</h2>
+        @for (assistant of eligible(); track assistant.assistantId) {
+          <button class="assistant-choice" type="button" (click)="openSelection(assistant, $event)"
+            [disabled]="isBlocked()" [attr.aria-label]="'Choose ' +
+              (assistant.name ?? assistant.assistantId) + ', ' + statusLabel(assistant)">
+            <span class="assistant-copy"><strong>
+              {{ assistant.name ?? assistant.assistantId }}</strong>
+              <span>Private session · paying group ID {{ payerId(assistant) }} (fixed)</span>
+              <span>{{ statusLabel(assistant) }}</span>
+            </span><span aria-hidden="true" class="chevron">›</span>
+          </button>
+        }
+      </section>
+    }
+    <aside class="scope-note">
+      <strong>Private to you</strong>
+      <p>Your transcript is private. Group membership does not share your session history.</p>
+      <p>Desktop access is separate and is not included with group membership.</p>
+    </aside>
+  }
+  <oc-modal-sheet [open]="selection() !== undefined" title="Start a private session?"
+    backLabel="Cancel" [returnFocusTo]="selectionOpener()"
+    (closed)="cancelSelection()">
+    @if (selection(); as assistant) {
+      <h2>Start a session with {{ assistant.name ?? assistant.assistantId }}?</h2>
+      <dl class="facts">
+        <div><dt>Paying group ID</dt><dd>{{ payerId(assistant) }}</dd></div>
+        <div><dt>Group name</dt><dd>The group’s name is not available to members yet.</dd></div>
+        <div><dt>Fixed</dt><dd>This session always uses this paying group.</dd></div>
+      </dl>
+      @if (assistant.status !== 'ready') {
+        <p>{{ availabilityMessage(assistant) }}</p>
+      }
+      <p>This creates a private conversation for you. It does not add a group conversation.</p>
+    }
+    <div overlayFooter class="overlay-actions">
+      <button class="button primary" type="button" [disabled]="pending() !== undefined"
+        (click)="startSession()">Start session</button>
+      <button class="button secondary" type="button" (click)="cancelSelection()">Cancel</button>
+    </div>
+  </oc-modal-sheet>
+</main>

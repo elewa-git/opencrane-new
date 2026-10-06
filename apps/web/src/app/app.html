@@ -2,6 +2,8 @@
   <oc-claim />
 } @else if (workspacePage) {
   <oc-workspace />
+} @else if (sharedAssistantPickerPage) {
+  <oc-shared-assistant-picker />
 } @else if (accountPath) {
   <oc-personal-settings-shell [activePage]="settingsPage">
     @if (!settingsPage) {

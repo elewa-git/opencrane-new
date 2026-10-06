@@ -25,7 +25,10 @@
       </div>
       @if (teamSession()) { <span class="private-session-label">Private session</span> }
       @if (!chat.selected()) { <span class="draft-label">Draft</span> }
-      <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span>
+      <span class="avatar agent"
+        [attr.aria-label]="teamSession() ? 'Shared assistant' : 'Personal agent'">
+        <oc-icon name="agent" />
+      </span>
       <button id="panel-toggle" type="button" aria-label="Session panel"
         [attr.aria-expanded]="panelExpanded()" (click)="togglePanel()">
         <oc-icon name="panel" />
@@ -42,6 +45,13 @@
             detail="A memory-free turn has no earlier context and writes to the shared disk."
             (memoryFreeSelected)="selectMemoryFree()" />
         }
+        @if (teamSession() && chat.selected() && !chat.loading() && !chat.denied()) {
+          <p class="payer-id-note">
+            Paying group ID:
+            <code>{{ chat.selectedPayingGroupId() || 'Not available' }}</code>.
+            The group's name is not available to members yet.
+          </p>
+        }
         @if (chat.loading()) { <div class="skeleton" aria-hidden="true">
           <oc-shared-state kind="checking" message="Loading conversation…" />
           <oc-grain-loader width="80%" />
@@ -54,6 +64,7 @@
         }
         @if (!chat.selected() && !chat.loading() && !chat.railUnavailable() && !chat.denied()) {
           <section class="draft" [class.no-agent]="!chat.assistantId()" aria-label="Session recipients">
+            <a class="shared-assistant-link" href="/workspace/shared">Use a shared assistant</a>
             <div class="to-line"><span class="to-label">To:</span>
               @if (!chat.assistantId()) { <span class="recipient unavailable"><oc-icon name="agent" /> Your agent</span> }
               @else if (recipient()) { <span class="recipient" [ocDogEar]="true"><oc-icon name="agent" /> Your agent <button type="button" aria-label="Remove agent recipient" (click)="recipient.set(false)"><oc-icon name="close" /></button></span> }
