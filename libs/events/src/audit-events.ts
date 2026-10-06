@@ -4,7 +4,8 @@ import { event } from './definition.ts';
 const id = z.string().regex(/^[\w:.-]{1,300}$/u);
 const call = { requestId: id, permitId: id };
 export const auditEvents = [
-  // Owning P3 features emit these before release/after egress; P3-19 supplies the typed fixtures.
+  // Keep these events beside the audit events they describe. The registry examples provide
+  // valid fixture data for each event.
   event('credential.released', 'credential', 'A request-bound credential lease was recorded before forwarding.',
     z.object({ ...call, connectionId: id, profileId: id, leaseId: id, generation: z.int().nonnegative() }).strict(),
     { requestId: 'request', permitId: 'permit', connectionId: 'connection', profileId: 'default', leaseId: 'lease', generation: 1 }),

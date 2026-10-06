@@ -22,7 +22,7 @@ const id = z.string().min(1);
 const tokenId = z.string().regex(/^token:[A-Za-z0-9_-]+$/, 'tokenId must be a reference, never a token value');
 const roleSchema = z.enum(['owner', 'admin', 'member']);
 
-// Money is integer euro cents everywhere (owner decision 8): 150 = €1.50. Every
+// Store money as whole euro cents: 150 = €1.50. Every
 // amount in an event is a whole, non-negative number of cents and its name ends
 // in `Cents`, never a float in euros (0.1 + 0.2 !== 0.3), so sums stay exact.
 // `z.int()` also refuses anything beyond the safe integer range.
@@ -64,8 +64,8 @@ const secretRefSchema = z
 
 // An MCP server is registered as a URL or as an image (plan.md, "Installing
 // an MCP server"), and `locator` means something different for each, so the
-// two are separate shapes keyed on `kind`. Neither may hold a accountMode: that
-// goes in the secret store, referenced later by a connection's `secretRef`.
+// Use a separate shape for each `kind`, because each locator means something different.
+// Keep connection credentials in the secret store and refer to them with `secretRef`.
 //
 // A remote locator is a plain http(s) URL: a scheme other than http or https
 // (`file:`, `javascript:`) is out; no username or password, checked on the
@@ -212,7 +212,7 @@ export const takeoverEndedDataSchema = z
   .strict();
 
 // A computer profile is one computer image plus the Codex built-in tool
-// settings that go with it (owner decision 9). Publishing a profile whose tools
+// settings that go with it. Publishing a profile whose tools
 // differ is `toolset.changed`; it is about the computer's own tools, not about a
 // registered MCP server (that is mcp.tools_changed). It goes on the profile's own
 // stream, `toolset-<profile>`, not on a computer's stream: one admin command
@@ -560,7 +560,8 @@ export const securityAlertRaisedDataSchema = z
   })
   .strict();
 
-// Server-owned admission and suspend fence; reports never carry this authority.
+// Let only the server start or close turns that affect computer suspension. Reports cannot
+// claim this authority.
 export const computerTurnStartedDataSchema = z.object({
   assistantId: id, computerId: id, conversationId: id, turnId: id, threadId: id, requesterId: id, task: z.literal('chat_turn'), payingGroupId: id.optional(),
   executionMode: z.enum(['restricted', 'memory_free']).optional(),

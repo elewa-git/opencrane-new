@@ -45,7 +45,8 @@ async function append(store: Store, trigger: EventEnvelope, events: StoredEvent[
   } });
   if (result.status === 'unavailable') throw new Error('Lifecycle append unavailable', { cause: result.cause });
   if (result.status === 'rejected') throw new Error('Lifecycle append rejected');
-  // Read the winner, including after deduplication or a lost conditional append.
+  // Read the newest stored event. A repeated command or a competing append may have kept
+  // another event instead of the one this handler tried to write.
   return (await history(store, subject)).at(-1)!.event;
 }
 

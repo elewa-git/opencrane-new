@@ -1,5 +1,5 @@
 import { record as asRecord } from './record.ts';
-// toolset.changed (owner decision 9): an admin published a computer profile
+// Record toolset.changed when an admin publishes a computer profile
 // whose tools differ, either a new computer image or changed Codex built-in tool
 // settings. It is about the computer's own tools; a registered MCP server's tools
 // are mcp.tools_changed. Every negative test starts from the registry's valid
