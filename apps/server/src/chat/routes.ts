@@ -21,6 +21,8 @@ import {
 import { sessionFor } from '../members/routes.ts';
 import { colleagues, chatChange } from './reads.ts';
 import { chatCommand, chatInput, ChatConflict } from './commands.ts';
+import { history } from '../../../ops/src/lifecycle.ts';
+import { memoryAdmission } from './memory-admission.ts';
 
 export type { ChatOptions } from './access.ts';
 type Access = Awaited<ReturnType<typeof chatAccess>>;
@@ -35,7 +37,7 @@ const parameters = z.object({ conversationId: id.optional(), commandId: id.optio
 export async function chatRows(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct', since = 0) {
   const result = await readConversation(options.db, options.silo, conversationId, since);
-  const computerState = await conversationComputerState(options, conversationId, mode);
+  const computer = await conversationComputerState(options, conversationId, mode);
   function decryptRow(row: (typeof result.rows)[number]) {
     const data = z.record(z.string(), z.unknown()).parse(row.data);
     if (!('ciphertext' in data)) return row;
@@ -44,20 +46,54 @@ export async function chatRows(options: ChatOptions, conversationId: string,
     return { ...row, data: { ...rest, text } };
   }
   const rows = result.rows.map(decryptRow);
-  return { ...result, computerState, rows };
+  return { ...result, ...computer, rows };
 }
 
 async function conversationComputerState(options: ChatOptions, conversationId: string,
   mode: 'agent_session' | 'direct') {
   // Use the mode from the event log; the read table may still be catching up.
-  if (mode === 'direct') return 'not_applicable';
-  const computers = await options.db.query<{ status: string }>(
-    `SELECT c.status FROM computers c JOIN conversation_feed f
-      ON f.silo = c.silo AND f.data->>'assistantId' = c.assistant_id
-      WHERE f.silo = $1 AND f.conversation_id = $2 AND f.type = 'conversation.created'`,
+  if (mode === 'direct') {
+    return { computerState: 'not_applicable' as const, computerRecovered: false,
+      computerLostAt: undefined };
+  }
+  const conversation = await options.db.query<{ assistant_id: string }>(
+    `SELECT data->>'assistantId' AS assistant_id FROM conversation_feed
+      WHERE silo = $1 AND conversation_id = $2 AND type = 'conversation.created'`,
     [options.silo, conversationId]);
-  if (computers.rows[0]?.status === 'ready') return 'ready';
-  return 'starting your computer';
+  const assistantId = conversation.rows[0]?.assistant_id;
+  if (!assistantId) return { computerState: 'starting' as const, computerRecovered: false,
+    computerLostAt: undefined };
+  const lifecycle = await history(options.store, `computer-${assistantId}`);
+  return lifecycleComputerState(lifecycle);
+}
+
+export function lifecycleComputerState(lifecycle: { event: { type: string; time: string } }[]) {
+  let computerState: 'ready' | 'starting' | 'recovering' = 'starting';
+  let computerRecovered = false;
+  let computerLostAt: string | undefined;
+  for (const row of lifecycle) {
+    if (row.event.type === 'computer.lost') {
+      computerState = 'recovering';
+      computerRecovered = false;
+      computerLostAt = row.event.time;
+      continue;
+    }
+    if (row.event.type === 'computer.claimed') {
+      if (computerState !== 'recovering') computerState = 'starting';
+      computerRecovered = false;
+      continue;
+    }
+    if (row.event.type === 'computer.ready') {
+      computerRecovered = computerState === 'recovering';
+      computerState = 'ready';
+      continue;
+    }
+    if (row.event.type === 'computer.retired') {
+      computerState = 'starting';
+      computerRecovered = false;
+    }
+  }
+  return { computerState, computerRecovered, computerLostAt };
 }
 
 export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, options?: ChatOptions) {
@@ -156,7 +192,11 @@ async function conversationList(options: ChatOptions, memberId: string) {
     try {
       if (row.mode === 'agent_session') await readPrivate(row.conversationId);
       const display = await summary(options, row.conversationId, row.mode);
-      return { ...row, ...display };
+      if (row.mode !== 'agent_session') return { ...row, ...display };
+      const assistant = await options.db.query<{ kind: 'personal' | 'team' }>(
+        'SELECT kind FROM computers WHERE silo = $1 AND assistant_id = $2',
+        [options.silo, row.assistantId]);
+      return { ...row, ...display, assistantKind: assistant.rows[0]?.kind };
     } catch (error) {
       if (isChatRefused(error)) return undefined;
       throw error;
@@ -185,7 +225,8 @@ async function personalContext(options: ChatOptions, memberId: string) {
     const permission = await memberAuthorisation(options.binding).actsFor(memberId, assistantId);
     if (!permission.allowed) assistantId = null;
   }
-  return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId };
+  return { memberId, displayName: member.rows[0]?.display_name ?? null, assistantId,
+    memoryAdmission };
 }
 
 type SummaryRow = { type: string; data: unknown };
@@ -198,13 +239,25 @@ function changesStatus(row: SummaryRow) {
     'agent.turn_stop_requested', 'conversation.closed',
   ].includes(row.type);
 }
-function conversationStatus(last: SummaryRow | undefined, mode: string) {
+function conversationStatus(rows: SummaryRow[], last: SummaryRow | undefined, mode: string) {
   if (last?.type === 'conversation.closed') return 'closed';
   if (mode === 'direct' || !last) return 'open';
   if (last.type === 'agent.turn_failed') return 'failed';
   if (last.type === 'agent.turn_stop_requested') return 'stopped';
-  if (last.type === 'agent.turn_completed') return 'done';
+  if (last.type === 'agent.turn_completed') {
+    const turnId = z.object({ turnId: z.string() }).parse(last.data).turnId;
+    const outputWasLost = outputWasLostForTurn(rows, turnId);
+    return outputWasLost ? 'lost' : 'done';
+  }
   return 'working';
+}
+function outputWasLostForTurn(rows: SummaryRow[], turnId: string): boolean {
+  for (const row of rows) {
+    if (row.type !== 'agent.output_lost') continue;
+    const lostTurnId = z.object({ turnId: z.string() }).parse(row.data).turnId;
+    if (lostTurnId === turnId) return true;
+  }
+  return false;
 }
 async function summary(options: ChatOptions, conversationId: string, mode: string) {
   // Scan authorised history for now; a summary projection can replace this when histories grow.
@@ -215,7 +268,7 @@ async function summary(options: ChatOptions, conversationId: string, mode: strin
   const last = result.rows.findLast(changesStatus);
   let title = 'New session';
   if (first) title = sessionSlug(options.keys.decrypt(options.silo, conversationId, first.data));
-  return { title, status: conversationStatus(last, mode) };
+  return { title, status: conversationStatus(result.rows, last, mode) };
 }
 
 async function write(

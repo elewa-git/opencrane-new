@@ -27,7 +27,9 @@ against the [event catalogue package](../events/README.md) before accepting it.
 `integrationsRefusalSchema` names the admin-only refusal without trusting cookie roles.
 
 `chatContextSchema` includes the authorised member’s optional display name and
-personal assistant id. `sessionSlug` formats the first message consistently for
+personal assistant id. Chat feed and live reply schemas type the computer state
+as ready, starting, recovering or not applicable. They may include the time of
+the latest computer loss. `sessionSlug` formats the first message consistently for
 the server list, rail and header. Conversation list status distinguishes `stopped` from
 `done`; both are derived from events, never a separate stored status.
 

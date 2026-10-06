@@ -64,10 +64,13 @@ not yet proven on a live computer; memory features stay off until it is.
    within two seconds. If OpenFGA takes too long to apply another change, the page
    reconnects after five seconds and resumes receiving messages. The server checks
    each open chat's feed position every 100 ms and reads chat content only after it
-   changes. Computer state also updates when the computer record changes.
+   changes. Computer state follows lifecycle events and stays in recovery until a
+   new ready event appears.
 4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
-   Each member gets a private chat and thread, while everyone shares one disk and
-   browser profile. A member who loses spending access can still read and stop their work.
+   Each member gets a private chat and a private turn by default. Private turns have
+   no local tools. A member can choose a memory-free turn to use the group's shared
+   computer disk and browser. That turn has no earlier private context. A member who
+   loses spending access can still read and stop their work.
 5. **Two people chat.** The server checks who can read their direct conversation,
    then returns messages and live updates. Busy chats and slow reads keep working.
 6. **An admin adds a tool server.** The server checks the remote address, lists its

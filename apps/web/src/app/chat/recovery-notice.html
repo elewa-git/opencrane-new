@@ -1,0 +1,10 @@
+@if (recovering()) {
+  @if (lostDetail()) { <p class="lost-message">{{ lostDetail() }}</p> }
+  <oc-shared-state kind="checking" message="Recovering your authorised context…"
+    [detail]="confirmedDetail()" [showAction]="false" />
+}
+@if (resumed()) {
+  <oc-shared-state kind="confirmed" message="Resumed on a fresh computer"
+    detail="Your last request didn't complete; nothing was repeated."
+    [showAction]="false" />
+}

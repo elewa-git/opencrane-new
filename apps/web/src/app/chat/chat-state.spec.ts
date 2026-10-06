@@ -58,3 +58,22 @@ it('names transcript tool records without adding fields to them', () => {
   expect(toolKind({ id: 'command', label: 'Command completed', detail: 'Exit code 0',
     failed: false, time: '2026-10-04T10:00:00Z' })).toBe('Computer command');
 });
+
+it('keeps a completed turn incomplete when the private reply output was lost', () => {
+  const rows = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-06T10:00:00Z',
+      data: { text: 'Review this', authorId: 'me' } },
+    { id: 'started', position: 2, type: 'agent.turn_started', time: '2026-10-06T10:00:01Z',
+      data: { turnId: 'message', executionMode: 'restricted' } },
+    { id: 'lost', position: 3, type: 'agent.output_lost', time: '2026-10-06T10:01:00Z',
+      data: { turnId: 'message' } },
+    { id: 'completed', position: 4, type: 'agent.turn_completed', time: '2026-10-06T10:01:01Z',
+      data: { turnId: 'message' } },
+  ] as ChatRow[];
+
+  const agentTurn = transcript(rows, 'me').find(turn => turn.author === 'agent');
+
+  expect(agentTurn?.state).toBe('lost');
+  expect(agentTurn?.executionMode).toBe('restricted');
+  expect(agentTurn?.text).toBe('');
+});

@@ -18,7 +18,9 @@ interface Subscription {
   running: boolean;
   ready: boolean;
   accessPassed: boolean;
-  computerState: string;
+  computerState: Awaited<ReturnType<typeof chatRows>>['computerState'] | '';
+  computerRecovered: boolean;
+  computerLostAt: string | undefined;
   checking: boolean;
   applyingSince?: number;
   access?: Awaited<ReturnType<typeof chatSubscriptionAccess>>;
@@ -39,7 +41,8 @@ export function conversationSubscription(
     const state: Subscription = {
       socket, session, config, options, conversationId, position: since,
       generation: requestedGeneration ?? 0, running: false, checking: false,
-      ready: false, accessPassed: false, computerState: '',
+      ready: false, accessPassed: false, computerState: '', computerRecovered: false,
+      computerLostAt: undefined,
     };
     function poll() {
       void drain(state);
@@ -169,9 +172,14 @@ function sendRows(state: Subscription, result: Awaited<ReturnType<typeof chatRow
     const extra = { row };
     send(state, 'event', extra);
   }
-  if (!state.ready || state.computerState !== result.computerState) {
+  if (!state.ready || state.computerState !== result.computerState ||
+      state.computerRecovered !== result.computerRecovered ||
+      state.computerLostAt !== result.computerLostAt) {
     state.computerState = result.computerState;
-    const extra = { computerState: state.computerState };
+    state.computerRecovered = result.computerRecovered;
+    state.computerLostAt = result.computerLostAt;
+    const extra = { computerState: state.computerState, computerRecovered: state.computerRecovered,
+      computerLostAt: state.computerLostAt };
     send(state, 'ready', extra);
     state.ready = true;
   }

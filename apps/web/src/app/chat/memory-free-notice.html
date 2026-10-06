@@ -1,0 +1,8 @@
+<section class="callout">
+  <oc-shared-state kind="needs_input"
+    message="Local file and browser writes are not available while private memory is loaded."
+    [detail]="detail()" [showAction]="false" />
+  <button class="action" type="button" (click)="memoryFreeSelected.emit()">
+    Start a fresh memory-free turn
+  </button>
+</section>

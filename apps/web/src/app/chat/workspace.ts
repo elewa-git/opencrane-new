@@ -11,6 +11,8 @@ import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
 import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
+import { RecoveryNotice } from './recovery-notice';
+import { MemoryFreeNotice } from './memory-free-notice';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
   viewChild, type OnInit,
@@ -18,11 +20,11 @@ import {
 import { NgTemplateOutlet } from '@angular/common';
 import { ChatIcon } from './icon';
 import { BrandMark } from '../ui/brand-mark';
-import { sessionSlug } from '@opencrane/protocol';
+import { sessionSlug, type ChatConversation } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
 import {
-  rejectedScreenshotIds, toolKind, type ChatAttachment, type ToolActivityRecord,
+  rejectedScreenshotIds, toolKind, type ChatAttachment, type ToolActivityRecord, type Turn,
 } from './chat-state';
 import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
@@ -38,7 +40,7 @@ import {
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
     SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
-    ToolActivityLine,
+    ToolActivityLine, RecoveryNotice, MemoryFreeNotice,
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
@@ -89,7 +91,12 @@ export class Workspace implements OnInit {
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
+  protected readonly teamConversations = computed(this.listTeamConversations.bind(this));
+  protected readonly personalConversations = computed(this.listPersonalConversations.bind(this));
   protected readonly reason = computed(this.composerReason.bind(this));
+  protected readonly lastConfirmedTurnAt = this.chat.lastConfirmedTurnAt;
+  protected readonly teamSession = this.chat.teamSession;
+  protected readonly composerPlaceholder = computed(this.messagePlaceholder.bind(this));
   private lastTranscript = '';
   private pendingToolFocus = '';
   private focusComposerAfterNavigation = false;
@@ -102,6 +109,40 @@ export class Workspace implements OnInit {
   }
   ngOnInit(): void { void this.chat.load(); }
   protected async send(text: string): Promise<void> { if (await this.chat.send(text)) this.draft.set(''); }
+  protected selectMemoryFree(): void { this.chat.chooseMemoryFree(); }
+  protected selectPrivate(): void { this.chat.executionMode.set('restricted'); }
+  protected turnOutcome(turn: Turn): string {
+    if (turn.state === 'done') return 'Done';
+    if (!turn.text) return "Didn't complete · nothing was repeated";
+    if (turn.state === 'stopped') return 'Stopped · partial reply kept';
+    return 'Reply did not complete · partial reply kept';
+  }
+  protected turnStatusIcon(turn: Turn): string {
+    if (turn.state === 'lost') return 'failed';
+    return turn.state;
+  }
+  protected memoryAdmissionDetail(): string {
+    const failing = this.chat.memoryAdmission().failing;
+    return failing.join(' ');
+  }
+  private messagePlaceholder(): string {
+    if (!this.teamSession()) return 'Message your agent…';
+    const sessionTitle = this.chat.selectedConversation()?.title;
+    if (!sessionTitle) return 'Message this private session…';
+    return `Message #${sessionTitle}`;
+  }
+  private isTeamConversation(row: ChatConversation): boolean {
+    return row.mode === 'agent_session' && row.assistantKind === 'team';
+  }
+  private listTeamConversations(): ChatConversation[] {
+    return this.chat.conversations().filter(this.isTeamConversation.bind(this));
+  }
+  private listPersonalConversations(): ChatConversation[] {
+    return this.chat.conversations().filter(this.isPersonalConversation.bind(this));
+  }
+  private isPersonalConversation(row: ChatConversation): boolean {
+    return row.mode === 'agent_session' && row.assistantKind !== 'team';
+  }
   protected newSession(): void {
     this.focusComposerAfterNavigation = this.rail();
     this.chat.newSession();
@@ -340,11 +381,14 @@ export class Workspace implements OnInit {
   }
   protected focusComposer(): void { document.getElementById('message')?.focus(); }
   protected rowStatus(id: string, status = 'open'): string {
-    if (id !== this.chat.selected()) return status;
+    if (id !== this.chat.selected()) return this.displayStatus(status);
     if (this.chat.active()) return 'working';
     if (this.isClosedConversation()) return 'closed';
-    return this.chat.turns().filter(turn => turn.author === 'agent').at(-1)?.state ?? status;
+    const current = this.chat.turns().filter(this.isAgentTurn.bind(this)).at(-1)?.state ?? status;
+    return this.displayStatus(current);
   }
+  private isAgentTurn(turn: Turn): boolean { return turn.author === 'agent'; }
+  private displayStatus(status: string): string { return status === 'lost' ? 'failed' : status; }
   protected words(status: string): string { return ({ working: 'Working', done: 'Done', stopped: 'Stopped', failed: 'Failed', closed: 'Closed', open: 'Open' } as Record<string, string>)[status] ?? 'Open'; }
   protected time(value: string): string { return shortTime(value); }
   protected conversationStatus(): string {
@@ -359,11 +403,14 @@ export class Workspace implements OnInit {
   }
   private composerReason(): string {
     if (this.isClosedConversation()) return 'This session is closed. Start a new session to continue.';
+    if (this.chat.computer() === 'recovering') {
+      return 'Your computer is recovering. Sending is paused until it is ready.';
+    }
     if (this.chat.denied()) return 'Sign in to send messages.';
     if (this.chat.loading()) return 'Loading your workspace…';
     if (this.chat.railUnavailable()) return 'Reconnect to your pod to start a session.';
     if (!this.chat.selected() && !this.recipient()) return 'Choose your agent to start a session.';
-    if (!this.chat.assistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
+    if (!this.chat.selectedAssistantId()) return 'Your personal agent is being prepared. Refresh shortly.';
     return '';
   }
   protected searchChanged(event: Event): void { if (event.target instanceof HTMLInputElement) this.search.set(event.target.value); }

@@ -7,6 +7,7 @@ interface CaptureWorkspace {
   fixture: ComponentFixture<Workspace>;
   root: HTMLElement;
   calls: string[];
+  postBodies: unknown[];
   socket: SocketLike;
   setReply(status: number): void;
   denyFeedRead(): void;
@@ -17,10 +18,13 @@ interface CaptureWorkspace {
 async function createCaptureWorkspace(
   initialRows: Record<string, unknown>[] = [],
   approvalCards: Record<string, unknown>[] | ((path: string) => Record<string, unknown>[]) = [],
+  assistantKind?: 'team',
+  computerState = 'ready',
 ): Promise<CaptureWorkspace> {
   history.replaceState({}, '', '/workspace?conversation=chat');
   const rows = [...initialRows];
   const calls: string[] = [];
+  const postBodies: unknown[] = [];
   let replyStatus = 201;
   let denyMessages = false;
   let messageStatus = 200;
@@ -28,6 +32,9 @@ async function createCaptureWorkspace(
     const path = input instanceof Request ? input.url : String(input);
     const pathname = new URL(path, location.origin).pathname;
     calls.push(`${init?.method ?? 'GET'} ${path}`);
+    if (init?.method === 'POST' && typeof init.body === 'string') {
+      postBodies.push(JSON.parse(init.body));
+    }
     if (pathname === '/auth/me') {
       return Promise.resolve(new Response('{"authenticated":true,"user":{"name":"Alex"}}'));
     }
@@ -42,7 +49,7 @@ async function createCaptureWorkspace(
     }
     if (pathname === '/api/conversations' && init?.method !== 'POST') {
       return Promise.resolve(new Response(JSON.stringify({ rows: [{
-        conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
+        conversationId: 'chat', assistantId: 'assistant', assistantKind, createdBy: 'me',
         createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session',
       }] })));
     }
@@ -65,7 +72,7 @@ async function createCaptureWorkspace(
       const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
       const visibleRows = rows.filter(row => Number(row['position']) > since);
       return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
-        position: rows.length, generation: 1, computerState: 'ready' })));
+        position: rows.length, generation: 1, computerState })));
     }
     if (pathname.endsWith('/files/view')) {
       return Promise.resolve(new Response('<svg/>', {
@@ -90,7 +97,7 @@ async function createCaptureWorkspace(
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
   return {
-    fixture, root, calls, rows, socket,
+    fixture, root, calls, postBodies, rows, socket,
     setReply(status) { replyStatus = status; },
     denyFeedRead() { denyMessages = true; },
     setMessageStatus(status) { messageStatus = status; },
@@ -444,7 +451,7 @@ it('renders streamed replies, wake progress and durable Stop, then replays the s
   vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
     const path = input instanceof Request ? input.url : String(input);
     const body = path === '/auth/me' ? { authenticated: true, user: { name: 'Alex Morgan' } } : path === '/api/chat' ? { memberId: 'me', assistantId: 'assistant' } : path.endsWith('/approvals') ? { cards: [], csrf: 'fixture' } : path === '/api/conversations' ? { rows: [] }
-      : { rows, position: 2, generation: 1, computerState: 'starting your computer' };
+      : { rows, position: 2, generation: 1, computerState: 'starting' };
     return Promise.resolve(new Response(JSON.stringify(body)));
   });
   const socket: SocketLike = { readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null, send: vi.fn(), close: vi.fn() };
@@ -766,6 +773,85 @@ it('clears Waiting on you when the approval cards are destroyed', async () => {
     await capture.fixture.componentInstance['chat'].select('county-rollout');
     await vi.waitFor(() => expect(capture.root.textContent).not.toContain('Waiting on you'));
     expect(capture.root.querySelector('.waiting-status')).toBeNull();
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('shows lost private output as incomplete and never offers Stop or Done', async () => {
+  const rows = [
+    { id: 'message', position: 1, type: 'message.posted', time: '2026-10-06T10:00:00Z',
+      data: { authorId: 'me', text: 'Draft the reply.' } },
+    { id: 'started', position: 2, type: 'agent.turn_started', time: '2026-10-06T10:00:01Z',
+      data: { turnId: 'message', executionMode: 'restricted' } },
+    { id: 'lost', position: 3, type: 'agent.output_lost', time: '2026-10-06T10:01:00Z',
+      data: { turnId: 'message' } },
+    { id: 'completed', position: 4, type: 'agent.turn_completed', time: '2026-10-06T10:01:01Z',
+      data: { turnId: 'message' } },
+  ];
+  const capture = await createCaptureWorkspace(rows, [], 'team');
+  try {
+    expect(capture.root.textContent).toContain("Didn't complete · nothing was repeated");
+    expect(capture.root.textContent).not.toContain('Done');
+    expect(capture.root.querySelector('.turn-status')).not.toBeNull();
+    expect(capture.root.querySelector('.turn-status')?.textContent).not.toContain('Stop');
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('disables the team composer during recovery and shows the last confirmed turn', async () => {
+  const rows = [
+    { id: 'confirmed-message', position: 1, type: 'message.posted',
+      time: '2026-10-06T09:59:00Z', data: { authorId: 'me', text: 'Earlier request.' } },
+    { id: 'confirmed-turn', position: 2, type: 'agent.turn_completed',
+      time: '2026-10-06T10:01:00Z', data: { turnId: 'confirmed-message' } },
+    { id: 'active-message', position: 3, type: 'message.posted',
+      time: '2026-10-06T10:02:00Z', data: { authorId: 'me', text: 'Current request.' } },
+    { id: 'active-start', position: 4, type: 'agent.turn_started',
+      time: '2026-10-06T10:02:01Z', data: { turnId: 'active-message', executionMode: 'restricted' } },
+    { id: 'active-delta', position: 5, type: 'agent.message_delta',
+      time: '2026-10-06T10:02:02Z', data: { turnId: 'active-message', messageId: 'reply', text: 'Working' } },
+  ];
+  const capture = await createCaptureWorkspace(rows, [], 'team', 'recovering');
+  try {
+    expect(capture.root.textContent).toContain('Recovering your authorised context');
+    expect(capture.root.textContent).toContain('last confirmed turn was at');
+    expect(capture.root.querySelector<HTMLTextAreaElement>('#message')?.disabled).toBe(true);
+    expect(capture.root.querySelector('[aria-label="Attach"]')).toBeNull();
+    expect(capture.root.querySelector('.stop')).toBeNull();
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps a memory-free choice in the draft and does not send it', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    const field = capture.root.querySelector<HTMLTextAreaElement>('#message');
+    if (!field) throw new Error('Message field is missing');
+    field.value = 'Review the order note';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    capture.fixture.detectChanges();
+
+    const memoryFreeButton = [...capture.root.querySelectorAll<HTMLButtonElement>(
+      'oc-memory-free-notice button')]
+      .find(button => button.textContent?.includes('Start a fresh memory-free turn'));
+    if (!memoryFreeButton) throw new Error('Memory-free choice is missing');
+    memoryFreeButton.click();
+    capture.fixture.detectChanges();
+
+    expect(field.value).toBe('Review the order note');
+    expect(capture.root.textContent).toContain('This turn has no earlier context');
+    expect(capture.root.textContent).toContain('draft has not been sent');
+    expect(capture.calls.filter(call => call.startsWith('POST '))).toEqual([]);
+    expect(capture.root.querySelector('[aria-label="Attach"]')).toBeNull();
+
+    capture.root.querySelector<HTMLButtonElement>('.send')?.click();
+    await capture.fixture.whenStable();
+    expect(capture.postBodies.at(-1)).toMatchObject({
+      text: 'Review the order note', executionMode: 'memory_free',
+    });
   } finally {
     capture.fixture.destroy();
   }

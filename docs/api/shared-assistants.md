@@ -90,6 +90,16 @@ Use the existing chat routes:
 | `GET /api/conversations` | None | Only the requester's permitted sessions |
 | `GET /api/conversations/:conversationId/messages` | Optional `since` | Permitted private transcript |
 
+Agent session rows include `assistantKind` as `personal` or `team`. The chat uses
+that value to keep shared assistant sessions in their own list and to offer the
+private or memory-free mode choice.
+
+Message feeds report `computerState` as `ready`, `starting`, `recovering` or
+`not_applicable`. A computer stays `recovering` after `computer.lost` until a new
+`computer.ready` event. A ready computer after a loss also reports
+`computerRecovered: true`, so the chat can explain that it resumed on a fresh
+computer. Direct chats report `not_applicable` and never report a recovery.
+
 Creating a session, posting and admitting a new turn require current membership
 in both the owner group and paying group. Session creation records the creator
 and the assistant's fixed payer. Personal work retains the installation default.

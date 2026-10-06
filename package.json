@@ -39,7 +39,8 @@
     "visual:p3-15-spending": "node scripts/check-p3-15-spending.mjs",
     "visual:integrations": "npm run build -w apps/web && node scripts/check-integrations-screens.mjs",
     "visual:p4-1-people": "node scripts/check-p4-1-people.mjs",
-    "visual:p3-18-screens": "npm run build -w apps/web && node scripts/check-p3-18-screens.mjs"
+    "visual:p3-18-screens": "npm run build -w apps/web && node scripts/check-p3-18-screens.mjs",
+    "visual:p4-14-chat": "npm run build -w apps/web && node scripts/check-p4-14-chat.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

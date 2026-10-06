@@ -1,0 +1,38 @@
+{
+  "result": "PASS",
+  "captures": [
+    "recovering-1280-no-preference.png",
+    "recovering-1280-reduce.png",
+    "recovering-390-no-preference.png",
+    "recovering-390-reduce.png",
+    "recovering-320-no-preference.png",
+    "recovering-320-reduce.png",
+    "recovered-lost-output-1280-no-preference.png",
+    "recovered-lost-output-1280-reduce.png",
+    "recovered-lost-output-390-no-preference.png",
+    "recovered-lost-output-390-reduce.png",
+    "recovered-lost-output-320-no-preference.png",
+    "recovered-lost-output-320-reduce.png",
+    "memory-free-choice-1280-no-preference.png",
+    "memory-free-choice-1280-reduce.png",
+    "memory-free-choice-390-no-preference.png",
+    "memory-free-choice-390-reduce.png",
+    "memory-free-choice-320-no-preference.png",
+    "memory-free-choice-320-reduce.png"
+  ],
+  "widths": [
+    1280,
+    390,
+    320
+  ],
+  "motion": [
+    "no-preference",
+    "reduce"
+  ],
+  "checks": [
+    "Recovery disables the composer and hides attachments.",
+    "Lost output stays incomplete and never shows Done or Stop.",
+    "The memory-free choice leaves the draft unsent.",
+    "No horizontal overflow at any captured width."
+  ]
+}

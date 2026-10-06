@@ -23,6 +23,7 @@
           } @else if (chat.active()) { <oc-icon name="agent" /> Agent working }
         </span>
       </div>
+      @if (teamSession()) { <span class="private-session-label">Private session</span> }
       @if (!chat.selected()) { <span class="draft-label">Draft</span> }
       <span class="avatar agent" aria-label="Personal agent"><oc-icon name="agent" /></span>
       <button id="panel-toggle" type="button" aria-label="Session panel"
@@ -35,6 +36,30 @@
     </span>
     <section class="transcript" #transcript tabindex="0" aria-label="Conversation messages" [attr.aria-busy]="chat.loading()">
       <div class="transcript-inner">
+        @if (teamSession() && chat.computer() === 'recovering') {
+          <oc-recovery-notice [recovering]="true"
+            [lastConfirmedAt]="lastConfirmedTurnAt()"
+            [computerLostAt]="chat.computerLostAt()" />
+        }
+        @if (teamSession() && chat.computerRecovered()) {
+          <oc-recovery-notice [resumed]="true"
+            [lastConfirmedAt]="lastConfirmedTurnAt()" />
+          <oc-shared-state kind="needs_input" message="Earlier context unavailable"
+            detail="Ask again with what you need." [showAction]="false" />
+          <oc-shared-state kind="disabled" message="Memory admission is disabled"
+            [detail]="memoryAdmissionDetail()" [showAction]="false" />
+        }
+        @if (teamSession() && chat.executionMode() === 'restricted'
+          && chat.computer() !== 'recovering' && !chat.computerRecovered()) {
+          <oc-memory-free-notice
+            detail="A memory-free turn has no earlier context and writes to the shared disk."
+            (memoryFreeSelected)="selectMemoryFree()" />
+        }
+        @if (teamSession() && chat.executionMode() === 'memory_free') {
+          <oc-shared-state kind="unknown" message="This turn has no earlier context"
+            detail="Memory-free turns use local tools and write to the shared computer disk. Your draft has not been sent."
+            [showAction]="false" />
+        }
         @if (chat.loading()) { <div class="skeleton" aria-hidden="true">
           <oc-shared-state kind="checking" message="Loading conversation…" />
           <oc-grain-loader width="80%" />
@@ -95,11 +120,17 @@
                   [timestamp]="turn.time" [showAction]="false" />
               }
               @if (turn.budgetStop) { <oc-budget-stop-notice /> }
-              @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
+              @if (turn.author === 'agent' && turn.state !== 'working') {
+                <p class="turn-status" [class.stopped]="turn.state === 'stopped'"
+                  [class.failed]="turn.state === 'failed' || turn.state === 'lost'"
+                  role="status">
+                  <oc-icon [name]="turnStatusIcon(turn)" /> {{ turnOutcome(turn) }}
+                </p>
+              }
             </div>
           </article>
         }
-        @if (!chat.denied()) {
+        @if (!chat.denied() && (!teamSession() || chat.executionMode() === 'memory_free')) {
           <div class="capture-line" [class.sr-only]="captureLineVisuallyHidden()"
             [attr.role]="panelExpanded() || chat.loading() ? null : 'status'"
             [attr.aria-live]="panelExpanded() || chat.loading() ? null : 'polite'">
@@ -130,8 +161,15 @@
           @if (chat.uploadError()) { <button type="button" (click)="chat.upload()">Retry upload</button> }
         </div>
       }
-      <oc-chat-composer [draft]="draft()" [working]="!!chat.active()" [busy]="chat.busy() || chat.uploading() || chat.uploadPending()" (attached)="chat.upload($event)" [reason]="reason()" [queued]="chat.queued()" (draftChange)="draft.set($event)" (submitted)="send($event)" (stopped)="chat.stop()" />
-      <p class="composer-footnote">Your personal Agent · private to you</p>
+      <oc-chat-composer [draft]="draft()" [placeholder]="composerPlaceholder()"
+        [working]="!!chat.active()"
+        [busy]="chat.busy() || chat.uploading() || chat.uploadPending()"
+        (attached)="chat.upload($event)" [reason]="reason()" [queued]="chat.queued()"
+        [teamSession]="teamSession()" [memoryFree]="chat.executionMode() === 'memory_free'"
+        (memoryFreeSelected)="selectMemoryFree()" (privateSelected)="selectPrivate()"
+        (draftChange)="draft.set($event)" (submitted)="send($event)"
+        (stopped)="chat.stop()" />
+      <p class="composer-footnote">@if (teamSession()) { Private to you · this turn is not saved on the shared computer's disk } @else { Your personal Agent · private to you }</p>
     </div>
   </main>
   @if (desktop() && panel()) {
@@ -182,9 +220,32 @@
       </button>
       <h2>Projects</h2>
       <p class="empty-rail">No project sessions</p>
+      @if (teamConversations().length) {
+        <h2>Shared</h2>
+        @for (conversation of teamConversations(); track conversation.conversationId;
+          let index = $index) {
+          <button type="button" class="session-row"
+            [class.active]="chat.selected() === conversation.conversationId"
+            [attr.aria-current]="chat.selected() === conversation.conversationId ? 'page' : null"
+            [style.--row]="index > 40 ? 40 : index"
+            (click)="select(conversation.conversationId)">
+            @if (rowStatus(conversation.conversationId, conversation.status) === 'working') {
+              <oc-flutter-loader />
+            } @else {
+              <oc-icon class="state-mark"
+                [attr.data-state]="rowStatus(conversation.conversationId, conversation.status)"
+                [name]="rowStatus(conversation.conversationId, conversation.status)" />
+            }
+            <span class="slug">{{ conversation.title || 'Shared session' }}</span>
+            <span class="row-status">
+              {{ words(rowStatus(conversation.conversationId, conversation.status)) }}
+            </span>
+          </button>
+        }
+      }
       <h2>Personal</h2>
       <ng-container [ngTemplateOutlet]="railStatus" />
-      @for (conversation of chat.conversations(); track conversation.conversationId;
+      @for (conversation of personalConversations(); track conversation.conversationId;
         let index = $index) {
         <button type="button" class="session-row"
           [class.active]="chat.selected() === conversation.conversationId"

@@ -273,13 +273,17 @@ whose organisation no longer matches the configured pin or an exact configured i
 
 With `CONVERSATION_KEYS_DIR`, the server exposes `POST /api/conversations`
 (`id`, `conversationId`, `assistantId`, `mode`), `POST /api/conversations/:conversationId/messages`
-(`id`, `text`), and GET on those paths. The caller supplies stable event ids for
+(`id`, `text`, optional `executionMode: "memory_free"`), and GET on those paths.
+The caller supplies stable event ids for
 retries. POST requires the session's exact Origin. Only live silo members acting
 for their personal assistant can create; conversation participants can read/post.
 Owner/admin roles do not bypass private conversation access. List/messages reads
 come from the `conversations` projection; text is decrypted only after permission
-checks. The messages response contains ordered event rows, a position, generation
-and `computerState` (`ready` or `starting your computer`).
+checks. The messages response contains ordered event rows, a position, generation,
+`computerState` (`ready`, `starting`, `recovering` or `not_applicable`),
+`computerRecovered`, and the optional `computerLostAt` time. A lost computer stays
+recovering until a new `computer.ready` event appears. A fresh ready computer sets
+`computerRecovered`.
 
 On `/ws`, subscribe with `{type: 'subscribe', topic: 'conversation', conversationId,
 since, generation}`. Apply event rows by position; deltas append to their message
