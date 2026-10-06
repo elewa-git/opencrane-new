@@ -13,11 +13,11 @@ create clears the form before the next one.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Rebase on `origin/main` | PASS | Rebased the two admin screen commits onto `f3096e8`. |
+| Rebase on `origin/main` | PASS | Rebased onto `f3096e8`; pushed final #245 head `785dded`. |
 | Refused create spec guard | PASS | The spec failed when a POST 403 used the access-lost path. The resource-refusal path was restored. |
 | Load retry spec guard | PASS | The spec failed when a successful retry did not clear the earlier load message. The clear was restored. |
 | Web typecheck | PASS | `nice -n 10 npm run typecheck -w apps/web` |
-| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false` |
+| Web tests | PASS | 427 tests across 35 files after removing the synthetic Enter test. The real composer Enter test remains. |
 | Angular build | PASS | `nice -n 10 npm run build -w apps/web`; existing CSS budget and noVNC module warnings remain. |
 | Shared-assistant and group routes | PASS | `shared-assistant.test.ts` and `groups.test.ts`: 43 tests with the required throwaway PostgreSQL database. |
 | Repository lint | PASS | `nice -n 10 npm run lint`; 9 existing max-lines warnings and two knip configuration hints. |
