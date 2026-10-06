@@ -52,15 +52,13 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
 .register-header, .register-row {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr) minmax(60px, 1.2fr)
-    minmax(0, 1.3fr) auto;
+    minmax(0, 1.3fr) 120px;
   gap: 16px;
   align-items: center;
   padding: 10px 18px;
   border-bottom: 1px solid var(--oc-border-row);
 }
 .register-header {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, .9fr) minmax(60px, 1.2fr)
-    minmax(0, 1.3fr) 120px;
   background: var(--oc-surface-table-header);
   color: var(--oc-ink-admin-muted);
   font: var(--oc-type-column);
@@ -68,7 +66,7 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   text-transform: uppercase;
 }
 .register-row { position: relative; min-height: 80px; }
-.server { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.server { position: relative; display: flex; align-items: center; gap: 11px; min-width: 0; }
 .server strong { display: block; font: var(--oc-type-row); }
 .server small { display: block; margin-top: 2px; }
 .row-link {
@@ -85,15 +83,29 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   inset: 0;
   content: '';
 }
-.chevron { position: absolute; right: 16px; top: 50%; font-size: 22px; }
+.chevron {
+  position: absolute;
+  top: 50%;
+  right: 16px;
+  transform: translateY(-50%);
+  font-size: 22px;
+}
+.has-row-action .chevron { display: none; }
 .row-action {
   position: relative;
   z-index: 1;
   display: flex;
   align-items: center;
+  justify-content: center;
   min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid var(--oc-border-input);
+  border-radius: 8px;
   color: var(--oc-accent-dark);
+  font-size: 13px;
+  text-decoration: none;
 }
+.row-action-placeholder { min-height: 1px; }
 .tile {
   display: inline-flex;
   align-items: center;
@@ -167,8 +179,9 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
   }
   .server { min-height: 44px; }
   .row-link { min-height: 44px; padding-right: 20px; }
-  .chevron { right: 0; }
+  .chevron { right: 16px; }
   .account, .tools, .status { display: grid; grid-template-columns: 96px minmax(0, 1fr); }
+  .status .column-label { color: var(--oc-ink-admin-muted); font-size: 12px; }
   .column-label {
     position: static;
     width: auto;
@@ -184,6 +197,7 @@ p, small, .account, .tools { color: var(--oc-ink-admin-muted); font-size: 12px; 
     clip-path: inset(50%);
   }
   .row-action { display: flex; align-items: center; justify-content: center; width: 100%; }
+  .row-action-placeholder { display: none; }
   .refresh-notice { display: grid; grid-template-columns: 12px minmax(0, 1fr); }
   .notice-copy { grid-column: 2; }
   .refresh-notice oc-shared-state { grid-column: 1 / -1; }

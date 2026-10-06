@@ -399,15 +399,17 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
       const firstFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.goto(`${base}/org/integrations`);
       expect((await firstFailure).status()).toBe(503);
-      await firstRead.getByRole('tabpanel').getByText(
+      await firstRead.getByRole('status').getByText(
         "Couldn't load the integrations list.",
       ).waitFor();
       const retryFailure = firstRead.waitForResponse((response) => response.url().endsWith('/api/org/integrations'));
       await firstRead.getByRole('button', { name: 'Refresh list' }).click();
       await firstRead.getByText('Refreshing the integrations list…').waitFor();
-      expect(await firstRead.getByText('Nothing set up yet').count()).toBe(0);
+      expect(await firstRead.getByText('No integrations yet').count()).toBe(0);
+      expect(await firstRead.getByText('0 integrations').count()).toBe(0);
       expect((await retryFailure).status()).toBe(503);
-      expect(await firstRead.getByText('Nothing set up yet').count()).toBe(0);
+      expect(await firstRead.getByText('No integrations yet').count()).toBe(0);
+      expect(await firstRead.getByText('0 integrations').count()).toBe(0);
       await firstRead.close();
     } finally {
       await held.query('ROLLBACK');
@@ -437,7 +439,7 @@ it('loads through the dev proxy and preserves the accessible refresh journey in 
         response.url().endsWith('/api/org/integrations'));
       await unavailablePage.goto(`${base}/org/integrations`);
       expect((await unavailableRead).status()).toBe(503);
-      await unavailablePage.getByRole('tabpanel').getByText(
+      await unavailablePage.getByRole('status').getByText(
         "Couldn't load the integrations list.",
       ).waitFor();
       expect(await unavailablePage.locator('.register-row').count()).toBe(0);

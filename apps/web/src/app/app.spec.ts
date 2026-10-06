@@ -102,15 +102,33 @@ describe('MCP register', () => {
     button(root(fixture), 'Pending review · 0').click();
     await fixture.whenStable();
     expect(root(fixture).querySelector('.empty')?.textContent)
-      .toContain('No integrations match');
+      .toContain('No servers are pending review');
     expect(root(fixture).textContent).not.toContain('Nothing reaches an assistant');
+  });
+
+  it('shows a no-match message only after a search was entered', async () => {
+    const fixture = await create(response({
+      rows: [row('odoo', 'ready', 'Published')], loadedAt: loaded.loadedAt,
+    } satisfies IntegrationsResponse));
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1));
+    button(root(fixture), 'Pending review · 0').click();
+    await fixture.whenStable();
+    const search = root(fixture).querySelector<HTMLInputElement>('#integration-search');
+    if (!search) throw new Error('Missing integration search');
+    search.value = 'missing';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    expect(root(fixture).textContent).toContain('No integrations match “missing”.');
   });
 
   it('shows a failure, not an empty-organisation claim, when the first read is unavailable', async () => {
     const fixture = await create(response({ status: 'unavailable' }, 503));
     await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't load the integrations list"));
     expect(root(fixture).textContent).toContain('The organisation register is unavailable');
-    expect(root(fixture).textContent).not.toContain('Nothing set up yet');
+    expect(root(fixture).textContent).not.toContain('No integrations yet');
+    expect(root(fixture).textContent).not.toContain('0 integrations');
+    expect(root(fixture).querySelectorAll('[role="status"] .message'))
+      .toHaveLength(1);
   });
 
   it('keeps old rows after a read failure and names when they were loaded', async () => {
@@ -138,10 +156,49 @@ describe('MCP register', () => {
     const retry = button(root(fixture), 'Refreshing list…');
     expect(notice?.parentElement?.getAttribute('aria-live')).toBe('polite');
     expect(notice?.textContent).toContain('Refreshing the integrations list…');
-    expect(root(fixture).textContent).not.toContain('Nothing set up yet');
+    expect(root(fixture).textContent).not.toContain('No integrations yet');
     expect(retry.getAttribute('aria-disabled')).toBe('true');
     finish(response(loaded));
     await fixture.whenStable();
+  });
+
+  it('keeps the first-load failure from looking empty while its retry is pending', async () => {
+    const fixture = await create(response({ status: 'unavailable' }, 503));
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain("Couldn't load the integrations list"));
+    let finishRetry!: (value: Response) => void;
+    fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      finishRetry = resolve;
+    }));
+    button(root(fixture), 'Refresh list').click();
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.register-row')).toBeNull();
+    expect(root(fixture).textContent).not.toContain('No integrations yet');
+    expect(root(fixture).textContent).not.toContain('0 integrations');
+    expect(root(fixture).textContent).toContain('Waiting for the list to load.');
+    finishRetry(response(loaded));
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row'))
+      .toHaveLength(3));
+  });
+
+  it('keeps healthy rows and announces no failure during a refresh', async () => {
+    const fixture = await create();
+    await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row'))
+      .toHaveLength(3));
+    let finishRefresh!: (value: Response) => void;
+    fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      finishRefresh = resolve;
+    }));
+    button(root(fixture), 'Refresh list').click();
+    fixture.detectChanges();
+    expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(3);
+    expect(root(fixture).querySelector('[role="status"]')?.textContent)
+      .toContain('Refreshing the integrations list…');
+    expect(root(fixture).textContent).not.toContain("Couldn't load the integrations list");
+    expect(root(fixture).textContent).not.toContain("We couldn't refresh the list");
+    finishRefresh(response(loaded));
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain('All · 3'));
   });
 
   it('labels unsupported actions instead of rendering inert row controls', async () => {
@@ -207,6 +264,22 @@ describe('MCP register', () => {
       fixture.detectChanges();
       expect(root(fixture).textContent).toContain('No integrations match “nothing”.');
       expect(root(fixture).textContent).toContain('Clear the search to see every row.');
+    });
+
+  it('keeps the search text and current results when Enter is pressed in the search field',
+    async () => {
+      const fixture = await create();
+      await vi.waitFor(() => expect(root(fixture).querySelectorAll('.register-row'))
+        .toHaveLength(3));
+      const search = root(fixture).querySelector<HTMLInputElement>('#integration-search');
+      if (!search) throw new Error('Missing integration search');
+      search.value = 'pricing';
+      search.dispatchEvent(new Event('input', { bubbles: true }));
+      search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      fixture.detectChanges();
+      expect(search.value).toBe('pricing');
+      expect(root(fixture).querySelectorAll('.register-row')).toHaveLength(1);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
     });
 
   it('gives each integration a detail link and only offers review for pending review', async () => {

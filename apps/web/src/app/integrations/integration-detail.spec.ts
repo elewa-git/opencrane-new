@@ -14,8 +14,15 @@ function row(
     source: { kind: 'remote_url', label: 'Remote URL', detail: 'tools.example.test' },
     version: 'Version not provided', accountModel: 'Not provided',
     toolsAllowed: 0, toolsTotal: 2,
-    status: { kind, label: kind === 'ready' ? 'Ready' : 'Needs input', detail },
+    status: { kind, label: statusLabel(kind), detail },
   };
+}
+
+function statusLabel(kind: IntegrationRow['status']['kind']): string {
+  if (kind === 'ready') return 'Ready';
+  if (kind === 'disabled') return 'Disabled';
+  if (kind === 'needs_input') return 'Needs input';
+  return 'Failed';
 }
 
 function listResponse(integration: IntegrationRow): IntegrationsResponse {
@@ -81,7 +88,7 @@ describe('integration detail', () => {
   });
 
   it('shows the four facts in order and does not claim grants for unpublished servers', async () => {
-    const fixture = create(row('ready', 'Unpublished'));
+    const fixture = create(row('disabled', 'Unpublished 5 Oct 2026, 09:14'));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.fact')).toHaveLength(4));
     const labels = [...root(fixture).querySelectorAll('.fact h3')];
     const labelTexts = labels.map(readHeading);
@@ -93,12 +100,12 @@ describe('integration detail', () => {
     expect(root(fixture).querySelectorAll('.fact')[1]?.textContent).toContain('Not available yet');
     expect(root(fixture).querySelectorAll('.fact')[2]?.textContent).toContain('Not available yet');
     const text = root(fixture).textContent ?? '';
-    expect(text.match(/\b\d{2}:\d{2}\b/gu)).toEqual(['09:14']);
+    expect(text.match(/\b\d{2}:\d{2}\b/gu)).toEqual(['09:14', '09:14']);
     fixture.destroy();
   });
 
   it('does not confirm access for a published server', async () => {
-    const fixture = create(row('ready', 'Published'), response(policy(true)));
+    const fixture = create(row('ready', 'Published 5 Oct 2026, 09:14'), response(policy(true)));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.fact')).toHaveLength(4));
     expect(root(fixture).querySelectorAll('.fact')[3]?.textContent)
       .toContain('Not available yet');
@@ -116,7 +123,8 @@ describe('integration detail', () => {
   });
 
   it('keeps the other facts when the tools read fails', async () => {
-    const fixture = create(row('ready', 'Unpublished'), response({ status: 'unavailable' }, 503));
+    const fixture = create(row('disabled', 'Unpublished 5 Oct 2026, 09:14'),
+      response({ status: 'unavailable' }, 503));
     await vi.waitFor(() => expect(root(fixture).querySelectorAll('.fact')).toHaveLength(4));
     expect(root(fixture).querySelectorAll('.fact')[3]?.textContent).toContain("Couldn't check");
     expect(root(fixture).querySelectorAll('.fact')[1]?.textContent).toContain('Not available yet');
@@ -125,8 +133,67 @@ describe('integration detail', () => {
     fixture.destroy();
   });
 
+  it('shows the list failure and keeps Refresh after a tools failure', async () => {
+    fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(response(listResponse(row('disabled', 'Unpublished 5 Oct 2026, 09:14'))))
+      .mockResolvedValueOnce(response({ status: 'unavailable' }, 503))
+      .mockResolvedValueOnce(response({ status: 'unavailable' }, 503));
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't check"));
+    const refresh = root(fixture).querySelector<HTMLButtonElement>('button');
+    if (!refresh) throw new Error('Expected a detail refresh button');
+    refresh.click();
+    await vi.waitFor(() => expect(root(fixture).textContent)
+      .toContain("Couldn't load this integration."));
+    expect(root(fixture).textContent).not.toContain('Published, but access grants');
+    expect(root(fixture).textContent).toContain('Unpublished 5 Oct 2026, 09:14');
+    expect(root(fixture).querySelector('button')?.textContent).toContain('Refresh');
+    fixture.destroy();
+  });
+
+  it('keeps focus on Refresh and announces a successful detail refresh', async () => {
+    let finishList!: (reply: Response) => void;
+    let finishPolicy!: (reply: Response) => void;
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = requestUrl(input);
+      if (url === '/api/org/integrations') {
+        return Promise.resolve(response(listResponse(row('ready',
+          'Published 5 Oct 2026, 09:14'))));
+      }
+      return Promise.resolve(response({ status: 'unavailable' }, 503));
+    });
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(root(fixture).textContent).toContain("Couldn't check"));
+    fetchSpy.mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      finishList = resolve;
+    })).mockImplementationOnce(() => new Promise<Response>((resolve) => {
+      finishPolicy = resolve;
+    }));
+    const refresh = [...root(fixture).querySelectorAll('button')]
+      .find((buttonElement) => buttonElement.textContent?.trim() === 'Refresh');
+    if (!refresh) throw new Error('Expected a detail refresh button');
+    refresh.focus();
+    refresh.click();
+    fixture.detectChanges();
+    expect(globalThis.document.activeElement).toBe(refresh);
+    expect(refresh.getAttribute('aria-disabled')).toBe('true');
+    finishList(response(listResponse(row('ready', 'Published 5 Oct 2026, 09:14'))));
+    await vi.waitFor(() => expect(finishPolicy).toBeTypeOf('function'));
+    finishPolicy(response(policy(true)));
+    await vi.waitFor(() => expect(root(fixture).querySelector('[role="status"]')?.textContent)
+      .toContain('Integration details loaded.'));
+    expect(root(fixture).querySelector('button')).toBe(refresh);
+    expect(globalThis.document.activeElement).toBe(refresh);
+    fixture.destroy();
+  });
+
   it('clears the page after access is refused', async () => {
-    const fixture = create(row('ready', 'Unpublished'), new Response(null, { status: 403 }));
+    const fixture = create(row('ready', 'Published 5 Oct 2026, 09:14'),
+      new Response(null, { status: 403 }));
     await vi.waitFor(() => expect(root(fixture).querySelector('.access-state')).not.toBeNull());
     expect(root(fixture).querySelectorAll('.fact')).toHaveLength(0);
     expect(root(fixture).textContent).not.toContain('Fixture server');
@@ -137,7 +204,9 @@ describe('integration detail', () => {
 
   it('focuses access lost after protected detail content was visible', async () => {
     fetchSpy = vi.spyOn(globalThis, 'fetch')
-      .mockResolvedValueOnce(response(listResponse(row('ready', 'Unpublished'))))
+      .mockResolvedValueOnce(response(listResponse(
+        row('ready', 'Published 5 Oct 2026, 09:14'),
+      )))
       .mockResolvedValueOnce(response({ status: 'unavailable' }, 503))
       .mockResolvedValueOnce(new Response(null, { status: 403 }));
     const fixture = TestBed.createComponent(IntegrationDetail);
@@ -154,13 +223,43 @@ describe('integration detail', () => {
     fixture.destroy();
   });
 
+  it('does not restore tools after access is refused while their read is pending', async () => {
+    let toolsSignal: AbortSignal | null | undefined;
+    let finishTools: ((reply: Response) => void) | undefined;
+    fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, options) => {
+      const url = requestUrl(input);
+      if (url === '/api/org/integrations') {
+        return Promise.resolve(response(listResponse(
+          row('ready', 'Published 5 Oct 2026, 09:14'),
+        )));
+      }
+      toolsSignal = options?.signal;
+      return new Promise<Response>((resolve) => { finishTools = resolve; });
+    });
+    const fixture = TestBed.createComponent(IntegrationDetail);
+    fixture.componentRef.setInput('serverId', 'fixture-server');
+    fixture.detectChanges();
+    await vi.waitFor(() => expect(toolsSignal).toBeDefined());
+    refuseDetailAccess(fixture);
+    fixture.detectChanges();
+    expect(root(fixture).querySelector('.access-state')).not.toBeNull();
+    finishTools?.(response(policy(true)));
+    await fixture.whenStable();
+    expect(toolsSignal?.aborted).toBe(true);
+    expect(root(fixture).querySelectorAll('.fact')).toHaveLength(0);
+    expect(root(fixture).textContent).not.toContain('Fixture server');
+    fixture.destroy();
+  });
+
   it('aborts an in-flight tools read when the detail page is destroyed', async () => {
     let toolsSignal: AbortSignal | null | undefined;
     let finishTools: ((reply: Response) => void) | undefined;
     fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, options) => {
       const url = requestUrl(input);
       if (url === '/api/org/integrations') {
-        return Promise.resolve(response(listResponse(row('ready', 'Unpublished'))));
+        return Promise.resolve(response(listResponse(
+          row('ready', 'Published 5 Oct 2026, 09:14'),
+        )));
       }
       toolsSignal = options?.signal;
       return new Promise<Response>((resolve) => { finishTools = resolve; });
@@ -185,4 +284,11 @@ function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
   if (input instanceof URL) return input.href;
   return input.url;
+}
+
+function refuseDetailAccess(fixture: ComponentFixture<IntegrationDetail>): void {
+  const response = new Response(null, { status: 403 });
+  if (!fixture.componentInstance.isAccessRefusal(response)) {
+    throw new Error('Expected the detail read to refuse access');
+  }
 }

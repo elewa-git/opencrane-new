@@ -35,6 +35,14 @@
       "adaptations": "Current API data shown as supplied."
     },
     {
+      "name": "register-failed-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-no-match-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
       "name": "access-lost-1280-no-preference.png",
       "adaptations": "Back to workspace replaces the unavailable Overview destination."
     },
@@ -44,6 +52,22 @@
     },
     {
       "name": "detail-published-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-not-found-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-failed-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-tools-failed-1280-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-access-lost-1280-no-preference.png",
       "adaptations": "Current API data shown as supplied."
     },
     {
@@ -71,6 +95,14 @@
       "adaptations": "Current API data shown as supplied."
     },
     {
+      "name": "register-failed-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-no-match-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
       "name": "access-lost-1280-reduce.png",
       "adaptations": "Back to workspace replaces the unavailable Overview destination."
     },
@@ -80,6 +112,22 @@
     },
     {
       "name": "detail-published-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-not-found-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-failed-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-tools-failed-1280-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-access-lost-1280-reduce.png",
       "adaptations": "Current API data shown as supplied."
     },
     {
@@ -107,6 +155,14 @@
       "adaptations": "Current API data shown as supplied."
     },
     {
+      "name": "register-failed-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-no-match-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
       "name": "access-lost-390-no-preference.png",
       "adaptations": "Back to workspace replaces the unavailable Overview destination."
     },
@@ -116,6 +172,22 @@
     },
     {
       "name": "detail-published-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-not-found-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-failed-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-tools-failed-390-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-access-lost-390-no-preference.png",
       "adaptations": "Current API data shown as supplied."
     },
     {
@@ -143,6 +215,14 @@
       "adaptations": "Current API data shown as supplied."
     },
     {
+      "name": "register-failed-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-no-match-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
       "name": "access-lost-390-reduce.png",
       "adaptations": "Back to workspace replaces the unavailable Overview destination."
     },
@@ -152,6 +232,22 @@
     },
     {
       "name": "detail-published-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-not-found-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-failed-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-tools-failed-390-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-access-lost-390-reduce.png",
       "adaptations": "Current API data shown as supplied."
     },
     {
@@ -187,6 +283,14 @@
       "adaptations": "Current API data shown as supplied."
     },
     {
+      "name": "register-failed-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-no-match-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
       "name": "access-lost-320-no-preference.png",
       "adaptations": "Back to workspace replaces the unavailable Overview destination."
     },
@@ -196,6 +300,22 @@
     },
     {
       "name": "detail-published-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-not-found-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-failed-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-tools-failed-320-no-preference.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-access-lost-320-no-preference.png",
       "adaptations": "Current API data shown as supplied."
     },
     {
@@ -223,6 +343,14 @@
       "adaptations": "Current API data shown as supplied."
     },
     {
+      "name": "register-failed-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "register-no-match-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
       "name": "access-lost-320-reduce.png",
       "adaptations": "Back to workspace replaces the unavailable Overview destination."
     },
@@ -232,6 +360,22 @@
     },
     {
       "name": "detail-published-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-not-found-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-failed-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-tools-failed-320-reduce.png",
+      "adaptations": "Current API data shown as supplied."
+    },
+    {
+      "name": "detail-access-lost-320-reduce.png",
       "adaptations": "Current API data shown as supplied."
     },
     {

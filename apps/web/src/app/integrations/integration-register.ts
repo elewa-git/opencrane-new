@@ -79,6 +79,7 @@ export class IntegrationRegister implements OnInit, OnDestroy {
 
   private announcementText(): string {
     if (this.loadState() === 'loading') return 'Loading integrations…';
+    if (!this.loadedAt()) return '';
     const count = this.visibleRows().length;
     if (this.selectedTab() === 'attention') {
       return count === 1 ? '1 integration needs attention' : `${count} integrations need attention`;
@@ -95,6 +96,7 @@ export class IntegrationRegister implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // Abort the read so a removed page cannot accept protected rows from an old reply.
     this.request.abort();
   }
 
@@ -149,8 +151,14 @@ export class IntegrationRegister implements OnInit, OnDestroy {
   }
 
   protected tabCount(count: number): string {
-    if (this.loadState() === 'loading') return '–';
+    if (!this.loadedAt()) return '–';
     return `· ${count}`;
+  }
+
+  protected emptyTabMessage(): string {
+    if (this.selectedTab() === 'attention') return 'No servers need attention';
+    if (this.selectedTab() === 'review') return 'No servers are pending review';
+    return 'No integrations match the current view.';
   }
 
   private async load(): Promise<void> {

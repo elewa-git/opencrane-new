@@ -29,6 +29,8 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   protected readonly loadedAt = signal('');
   protected readonly state = signal<DetailState>('loading');
   protected readonly toolsReadState = signal<ToolsReadState>('loading');
+  protected readonly refreshing = signal(false);
+  protected readonly showRefresh = signal(false);
   protected readonly hasRenderedProtectedContent = signal(false);
   protected readonly facts = computed(this.integrationFacts.bind(this));
   protected readonly needsReview = needsReview;
@@ -42,14 +44,27 @@ export class IntegrationDetail implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
+    // Abort both reads so a removed page cannot accept protected data from an old reply.
     this.request.abort();
   }
 
   protected refresh(): void {
-    if (this.state() === 'loading' || this.accessLost) return;
-    this.state.set('loading');
+    if (this.refreshing() || this.state() === 'loading' || this.accessLost) return;
+    this.refreshing.set(true);
     this.toolsReadState.set('loading');
+    this.policy.set(undefined);
     void this.load();
+  }
+
+  protected announcementText(): string {
+    if (this.refreshing()) return 'Refreshing integration…';
+    if (this.state() === 'loading') return 'Loading integration…';
+    if (this.state() === 'failed') return "Couldn't load this integration.";
+    if (this.toolsReadState() === 'failed') return "Couldn't check the tool policy.";
+    if (this.state() === 'access') return 'You no longer have access to Integrations.';
+    if (this.state() === 'not-found') return 'Integration not found.';
+    if (this.toolsReadState() === 'loaded') return 'Integration details loaded.';
+    return '';
   }
 
   protected toolsReviewedCount(): number {
@@ -99,7 +114,10 @@ export class IntegrationDetail implements OnInit, OnDestroy {
       const integrations = integrationsResponseSchema.parse(listRaw);
       const row = findIntegrationRow(integrations.rows, this.serverId());
       if (!row) {
+        this.row.set(undefined);
+        this.policy.set(undefined);
         this.state.set('not-found');
+        this.refreshing.set(false);
         return;
       }
       this.row.set(row);
@@ -120,6 +138,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
         this.policy.set(policy);
         this.toolsReadState.set('loaded');
         this.state.set('ready');
+        this.refreshing.set(false);
         this.hasRenderedProtectedContent.set(true);
       } catch {
         if (this.shouldIgnoreResult()) return;
@@ -128,12 +147,17 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     } catch {
       if (this.shouldIgnoreResult()) return;
       this.state.set('failed');
+      this.toolsReadState.set('failed');
+      this.refreshing.set(false);
+      this.showRefresh.set(true);
     }
   }
 
   private markToolsReadFailed(): void {
     this.toolsReadState.set('failed');
     this.state.set('ready');
+    this.refreshing.set(false);
+    this.showRefresh.set(true);
     this.hasRenderedProtectedContent.set(true);
   }
 
@@ -145,7 +169,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     return this.accessLost || this.request.signal.aborted;
   }
 
-  private isAccessRefusal(response: Response): boolean {
+  isAccessRefusal(response: Response): boolean {
     if (response.status !== 401 && response.status !== 403) return false;
     this.accessLost = true;
     this.request.abort();
@@ -153,6 +177,7 @@ export class IntegrationDetail implements OnInit, OnDestroy {
     this.policy.set(undefined);
     this.loadedAt.set('');
     this.toolsReadState.set('loading');
+    this.refreshing.set(false);
     this.state.set('access');
     this.focusAccessHeading();
     return true;

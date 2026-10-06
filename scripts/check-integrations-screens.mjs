@@ -23,7 +23,8 @@ const contentTypes = {
 const integrations = {
   loadedAt: '2026-10-05T09:14:00.000Z',
   rows: [
-    makeRow('orders', 'Orders server', 'ready', 'Published'),
+    makeRow('orders', 'Orders server', 'ready', 'Published 5 Oct 2026, 09:14'),
+    makeRow('legacy', 'Legacy server', 'disabled', 'Unpublished 5 Oct 2026, 09:14'),
     makeRow('pricing', 'Pricing server', 'needs_input', 'Pending review'),
     makeRow('metrics', 'Metrics server', 'checking', 'Validating server…'),
     makeRow('broken', 'Broken server', 'failed', 'Validation failed; review before trying again'),
@@ -34,7 +35,8 @@ const integrations = {
 
 function makeRow(serverId, name, kind, detail) {
   const labels = {
-    ready: 'Ready', needs_input: 'Needs input', checking: 'Applying / checking', failed: 'Failed',
+    ready: 'Ready', disabled: 'Disabled', needs_input: 'Needs input',
+    checking: 'Applying / checking', failed: 'Failed',
   };
   return {
     serverId, name, version: 'Version not provided',
@@ -90,6 +92,20 @@ function makeFixtures(scenario) {
         await route.fulfill({ status: 503, json: { status: 'unavailable' } });
         return;
       }
+      if (scenario === 'register-failed' && registerReads === 1) {
+        await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+        return;
+      }
+      if (scenario.startsWith('detail-') && scenario !== 'detail-tools-failed'
+        && scenario !== 'detail-not-found' && registerReads === 1) {
+        const status = scenario === 'detail-access-lost' ? 403 : 503;
+        await route.fulfill({ status, body: '' });
+        return;
+      }
+      if (scenario === 'detail-not-found' && registerReads === 1) {
+        await route.fulfill({ json: { rows: [], loadedAt: integrations.loadedAt } });
+        return;
+      }
       if (scenario === 'access-lost' && registerReads === 2) {
         await route.fulfill({ status: 403, body: '' });
         return;
@@ -99,6 +115,10 @@ function makeFixtures(scenario) {
       return;
     }
     if (pathname.endsWith('/tools')) {
+      if (scenario === 'detail-tools-failed') {
+        await route.fulfill({ status: 503, json: { status: 'unavailable' } });
+        return;
+      }
       const toolsPolicy = { ...policy, published: scenario === 'published' };
       await route.fulfill({ json: toolsPolicy });
       return;
@@ -189,6 +209,10 @@ async function waitForRegisterState(page, scenario) {
     assert(await emptyMessage.isVisible());
     return;
   }
+  if (scenario === 'register-failed') {
+    await page.getByText("Couldn't load the integrations list.", { exact: true }).waitFor();
+    return;
+  }
   await page.locator('.register-row').first().waitFor();
 }
 
@@ -206,7 +230,28 @@ async function prepareStale(page) {
   await page.locator('.register-row').first().waitFor();
   await page.getByRole('button', { name: 'Refresh list' }).click();
   await page.getByText('Showing what we loaded at 09:14 UTC').waitFor();
-  assert.equal(await page.locator('.register-row').count(), 5);
+  assert.equal(await page.locator('.register-row').count(), 6);
+}
+
+async function prepareNoMatch(page) {
+  const search = page.getByRole('searchbox', { name: 'Search integrations' });
+  await search.fill('no-such-integration');
+  await page.getByText('No integrations match “no-such-integration”.').waitFor();
+}
+
+async function checkRegisterColumns(page) {
+  const positions = await page.evaluate(() => {
+    const headings = [...globalThis.document.querySelectorAll('.register-header span')];
+    const rows = [...globalThis.document.querySelectorAll('.register-row')];
+    return rows.map((row) => ({
+      headings: headings.map((cell) => Math.round(cell.getBoundingClientRect().x)),
+      cells: ['.server', '.account', '.tools', '.status'].map((selector) =>
+        Math.round(row.querySelector(selector).getBoundingClientRect().x)),
+    }));
+  });
+  for (const row of positions) {
+    assert.deepEqual(row.cells, row.headings.slice(0, 4), 'Columns line up with their headings');
+  }
 }
 
 async function prepareAccessLost(page) {
@@ -278,7 +323,24 @@ async function captureDetail(browser, name, width, motion, scenario, serverId) {
   const { page } = opened;
   try {
     await page.goto(`${origin}/org/integrations/${serverId}`);
-    await page.locator('.fact').nth(3).waitFor();
+    if (scenario === 'detail-not-found') {
+      await page.getByRole('heading', { name: 'Integration not found' }).waitFor();
+    } else if (scenario === 'detail-failed') {
+      await page.locator('.message-state .message').waitFor();
+    } else if (scenario === 'detail-access-lost') {
+      await page.getByRole('heading', { name: 'You no longer have access to Integrations' }).waitFor();
+    } else if (scenario === 'detail-tools-failed') {
+      await page.locator('.fact').nth(3).getByText("Couldn't check", { exact: true }).waitFor();
+    } else {
+      await page.locator('.fact').nth(3).waitFor();
+    }
+    const messageState = scenario === 'detail-not-found' || scenario === 'detail-failed'
+      || scenario === 'detail-tools-failed' || scenario === 'detail-access-lost';
+    if (messageState) {
+      await waitForFonts(page);
+      await capture(page, name, width, motion);
+      return;
+    }
     const labels = await page.locator('.fact h3').allTextContents();
     assert.deepEqual(labels.map((label) => label.trim()), [
       'Installed', 'Connected', 'Allowed for', 'Available to the assistant',
@@ -310,12 +372,30 @@ try {
         await loading.context.close();
       }
       await captureRegister(browser, 'register-all', width, motion, 'all');
+      if (width === 1280) {
+        const aligned = await openPage(browser, width, motion, 'all');
+        try {
+          await aligned.page.goto(`${origin}/org/integrations`);
+          await aligned.page.locator('.register-row').first().waitFor();
+          await checkRegisterColumns(aligned.page);
+        } finally {
+          await aligned.context.close();
+        }
+      }
       await captureRegister(browser, 'register-attention', width, motion, 'all', prepareAttention);
       await captureRegister(browser, 'register-review', width, motion, 'all', prepareReview);
       await captureRegister(browser, 'register-stale', width, motion, 'stale', prepareStale);
+      await captureRegister(browser, 'register-failed', width, motion, 'register-failed');
+      await captureRegister(browser, 'register-no-match', width, motion, 'all', prepareNoMatch);
       await captureRegister(browser, 'access-lost', width, motion, 'access-lost', prepareAccessLost);
       await captureDetail(browser, 'detail-draft', width, motion, 'draft', 'pricing');
       await captureDetail(browser, 'detail-published', width, motion, 'published', 'orders');
+      await captureDetail(browser, 'detail-not-found', width, motion, 'detail-not-found', 'missing');
+      await captureDetail(browser, 'detail-failed', width, motion, 'detail-failed', 'orders');
+      await captureDetail(browser, 'detail-tools-failed', width, motion,
+        'detail-tools-failed', 'orders');
+      await captureDetail(browser, 'detail-access-lost', width, motion,
+        'detail-access-lost', 'orders');
       await checkRegisterInteraction(browser, width, motion);
     }
     if (width <= 390) {

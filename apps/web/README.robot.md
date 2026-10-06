@@ -44,10 +44,12 @@ The browser uses same-origin auth and WebSocket URLs; no credentials are built i
 
 The client validates the register response and incoming messages with
 [protocol](../../libs/protocol/README.md).
-Register refresh failures keep old rows and their load time visible. The always-available
-refresh button stays in place and keeps keyboard focus while retrying. Refusal clears
-protected rows before any response body is parsed. Non-admins see that the Owner or
-Admin role is required. Adding a remote MCP server uses `/org/integrations/new`;
+Register refresh failures keep old rows and their load time visible. A retry after a
+failed first read never shows the empty-register message or zero counts. The refresh
+button stays in place and keeps keyboard focus while retrying. Detail refresh keeps its
+facts and refresh button in place, marks the policy as checking, and announces the result.
+Refusal clears protected rows before any response body is parsed. Non-admins see that the
+Owner or Admin role is required. Adding a remote MCP server uses `/org/integrations/new`;
 discovery and tool review retain their existing API flows.
 Socket closure updates state and schedules reconnect with jitter;
 there is no durable outgoing message queue. Sign out uses a native form POST to

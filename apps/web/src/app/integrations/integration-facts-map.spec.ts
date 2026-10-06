@@ -72,6 +72,15 @@ describe('integration facts mapping', () => {
     });
   });
 
+  it('does not call an unread tool policy published', () => {
+    const fact = buildAvailabilityFact(undefined, 'loading');
+    expect(fact).toEqual({
+      label: 'Available to the assistant', kind: 'checking', value: 'Checking',
+      evidence: 'The tool policy is being read.',
+    });
+    expect(fact.evidence).not.toContain('Published');
+  });
+
   it('keeps the four facts in the required order', () => {
     const facts = buildIntegrationFacts(
       integrationRow('needs_input', 'Needs input', 'Pending review'), undefined, 'failed', loadedAt,

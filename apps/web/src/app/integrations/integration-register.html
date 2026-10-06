@@ -21,7 +21,8 @@
     @if (loadState() === 'retrying') {
       <div class="refresh-notice" data-retrying="true">
         <oc-shared-state kind="checking" message="Refreshing the integrations list…"
-          detail="The list below stays usable." [showAction]="false" />
+          [detail]="loadedAt() ? 'The list below stays usable.' : 'Waiting for the list to load.'"
+          [showAction]="false" />
       </div>
     } @else if (loadState() === 'failed' && loadedAt()) {
       <div class="refresh-notice">
@@ -67,10 +68,18 @@
           </div>
         </div>
       }
-    } @else if (loadState() === 'failed' && !loadedAt()) {
-      <div class="empty"><oc-shared-state kind="failed"
-        message="Couldn't load the integrations list." detail="Nothing changed on the server."
-        [showAction]="false" /></div>
+    } @else if ((loadState() === 'failed' || loadState() === 'retrying') && !loadedAt()) {
+      @if (loadState() === 'retrying') {
+        @for (width of skeletonWidths; track $index) {
+          <div class="skeleton-row" aria-hidden="true">
+            <oc-grain-loader width="28px" height="28px" />
+            <div class="skeleton-copy">
+              <oc-grain-loader [width]="width" />
+              <oc-grain-loader width="36%" height="8px" />
+            </div>
+          </div>
+        }
+      }
     } @else if (rows().length === 0) {
       <div class="empty">
         <oc-shared-state kind="not_configured" message="No integrations yet"
@@ -78,18 +87,20 @@
             are reviewed and access is published." [showAction]="false" />
         <a class="button primary" href="/org/integrations/new">Add an integration</a>
       </div>
-    } @else if (visibleRows().length === 0) {
+    } @else if (visibleRows().length === 0 && search().trim()) {
       <div class="empty">
         <strong>No integrations match “{{ search() }}”.</strong>
         <span>Clear the search to see every row.</span>
         <button class="button secondary" type="button" (click)="clearSearch()">Clear search</button>
       </div>
+    } @else if (visibleRows().length === 0) {
+      <div class="empty"><strong>{{ emptyTabMessage() }}</strong></div>
     } @else {
       <div class="register-header"><span>Server</span><span>Account</span>
         <span>Tools</span><span>Status</span></div>
       <ul class="register-list" aria-label="Integrations">
       @for (row of visibleRows(); track row.serverId) {
-        <li class="register-row">
+        <li class="register-row" [class.has-row-action]="needsReview(row)">
           <div class="server">
             <span class="column-label">Server: </span>
             <span class="tile" aria-hidden="true">{{ row.name.slice(0, 2).toUpperCase() }}</span>
@@ -99,7 +110,8 @@
               <span class="chevron" aria-hidden="true">›</span>
             </a>
           </div>
-          <span class="account"><span class="column-label">Account: </span>{{ row.accountModel }}</span>
+          <span class="account"><span class="column-label">Account: </span>
+            {{ row.accountModel }}</span>
           <span class="tools"><span class="column-label">Tools: </span>{{ tools(row) }}</span>
           <div class="status">
             <span class="column-label">Status: </span>
@@ -110,6 +122,8 @@
           @if (needsReview(row)) {
             <a class="row-action" [href]="'/org/integrations/' + row.serverId + '/tools'"
               [attr.aria-label]="'Continue review for ' + row.name">Continue review</a>
+          } @else {
+            <span class="row-action-placeholder" aria-hidden="true"></span>
           }
         </li>
       }

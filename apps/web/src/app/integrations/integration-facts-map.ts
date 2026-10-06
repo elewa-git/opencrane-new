@@ -50,7 +50,8 @@ export function buildAllowedForFact(): IntegrationFact {
     label: 'Allowed for',
     kind: 'not_configured',
     value: 'Not available yet',
-    evidence: "Access grants for this server can't be read yet. A tool mode alone gives nobody access.",
+    evidence: "Access grants for this server can't be read yet. A tool mode alone gives nobody "
+      + 'access.',
   };
 }
 
@@ -72,6 +73,14 @@ export function buildAvailabilityFact(
       kind: 'blocked',
       value: 'No',
       evidence: 'Not published. The gateway refuses every call to an unpublished server.',
+    };
+  }
+  if (policy?.published !== true) {
+    return {
+      label: 'Available to the assistant',
+      kind: 'checking',
+      value: 'Checking',
+      evidence: 'The tool policy is being read.',
     };
   }
   return {

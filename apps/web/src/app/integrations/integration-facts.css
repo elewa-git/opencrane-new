@@ -10,7 +10,13 @@
   border-radius: 12px;
   background: white;
 }
-.fact h3 { margin: 0 0 12px; font: var(--oc-type-card); }
+.fact h3 {
+  margin: 0 0 12px;
+  color: var(--oc-ink-admin-muted);
+  font: var(--oc-type-column);
+  letter-spacing: var(--oc-tracking-column);
+  text-transform: uppercase;
+}
 .sr-only {
   position: absolute;
   width: 1px;
