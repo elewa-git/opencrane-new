@@ -67,6 +67,12 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
   color: var(--oc-accent-dark); }
 .detail-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px; margin-top: 24px; }
+.group-summary { display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 12px; }
+.group-summary .button { display: inline-flex; min-height: 44px; align-items: center;
+  border: 1px solid var(--oc-accent-dark); border-radius: var(--oc-radius-button);
+  background: var(--oc-accent); color: var(--oc-ink); padding: 8px 14px;
+  font-weight: 650; text-decoration: none; }
 .paper-card { padding: 18px; }
 .paper-card h2 { margin-top: 0; }
 .paper-card code, .members small { overflow-wrap: anywhere; font-family: var(--oc-font-mono); }
@@ -109,6 +115,7 @@ nav[aria-label=Breadcrumb] a { display: inline-flex; min-height: 44px; align-ite
   .chevron { position: absolute; right: 12px; }
   .group-list li { position: relative; }
   .detail-cards { grid-template-columns: 1fr; }
+  .group-summary .button { width: 100%; justify-content: center; }
   .remove-button { width: 100%; grid-column: 1 / -1 !important; grid-row: auto; }
   .refresh-notice, .supplied { display: block; }
   .refresh-notice .button { width: 100%; margin-top: 12px; }

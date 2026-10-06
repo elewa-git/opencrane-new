@@ -32,7 +32,9 @@
   <oc-sign-in />
 } @else {
   <oc-organisation-shell [activePage]="activePage" [organisationName]="organisation">
-    @if (installPage) {
+    @if (assistantCreateGroupId) {
+      <oc-shared-assistant-admin [groupId]="assistantCreateGroupId" />
+    } @else if (installPage) {
       <oc-mcp-install />
     } @else if (toolServer) {
       <oc-tool-policy [serverId]="toolServer" />

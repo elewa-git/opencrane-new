@@ -244,6 +244,18 @@ recovery restores lost composer focus without taking focus from another control.
 A recovered computer shows the lost-request notice only for an affected last turn.
 The last confirmed time is calculated from loaded Done turns in the browser.
 
+## Shared assistant administration
+
+An organisation admin opens a group's shared assistant page from People & groups.
+The page reads the group, group list, assistant list and active model list before it
+offers a create. It offers the group's model and tool grants, and sends the selected
+paying group with the create command. A 401 or a refused read clears the protected
+group details. A 403 create refusal keeps the form and its typed values because the
+server may have refused a model or tool server that is no longer available.
+A lost reply keeps the command and assistant ids. Check status only reads. If no
+record is found yet, the page can send the same request again with the same ids.
+A confirmed create clears the name and grants before the next create.
+
 `workspace.spec.ts` covers these states, partial lost output, default/private posts,
 personal posts, Enter, healthy refresh and two sends during one visit.
 The visual script captures both the choice and selected memory-free states at three

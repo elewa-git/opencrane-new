@@ -15,6 +15,12 @@ export function peopleGroupId(pathname: string): string | undefined {
   return peopleGroupPath.exec(normalisePathname(pathname))?.[1];
 }
 
+export function assistantCreateGroupId(pathname: string): string | undefined {
+  const match = /^\/org\/people\/groups\/([\w-]{1,200})\/assistants\/new$/u
+    .exec(normalisePathname(pathname));
+  return match?.[1];
+}
+
 export function organisationPage(pathname: string): OrganisationPage | undefined {
   pathname = normalisePathname(pathname);
   // Keep /org on a supported page until the overview has real task reads.
@@ -26,7 +32,8 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
       return page.id;
     }
   }
-  if (pathname === '/org/people' || peopleGroupId(pathname) !== undefined) {
+  if (pathname === '/org/people' || peopleGroupId(pathname) !== undefined ||
+      assistantCreateGroupId(pathname) !== undefined) {
     return 'people';
   }
   if (pathname === '/org/integrations/new') {
