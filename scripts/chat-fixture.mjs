@@ -10,7 +10,8 @@ export async function chatFixture(page, scenario = 'live') {
     return row;
   };
   const teamSession = scenario.startsWith('private-team-');
-  const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant' };
+  const creation = { conversationId: 'chat', createdBy: 'me', assistantId: 'assistant',
+    ...(teamSession ? { payingGroupId: 'opaque-sales' } : {}) };
   add('conversation.created', creation);
   if (scenario === 'private-team-recovering') {
     const earlier = add('message.posted', { text: 'Earlier question', authorId: 'me' });
@@ -63,7 +64,7 @@ export async function chatFixture(page, scenario = 'live') {
       if (scenario === 'closed') add('conversation.closed', {});
     }
   }
-  const conversations = ['chat', 'research', 'done', 'closed', 'failed'].map((id, index) => ({ conversationId: id, assistantId: 'assistant', assistantKind: teamSession ? 'team' : 'personal', createdBy: 'me', mode: 'agent_session', createdAt: '2026-10-02T10:40:00Z',
+  const conversations = ['chat', 'research', 'done', 'closed', 'failed'].map((id, index) => ({ conversationId: id, assistantId: 'assistant', assistantKind: teamSession ? 'team' : 'personal', ...(teamSession ? { payingGroupId: 'opaque-sales' } : {}), createdBy: 'me', mode: 'agent_session', createdAt: '2026-10-02T10:40:00Z',
     title: ['board-pack-q3', 'county-rollout', 'weekly-review', 'last-quarter', 'finance-export'][index], status: ['open', 'working', 'done', 'closed', 'failed'][index] }));
   const commands = [];
   await page.route('**/auth/me', route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ authenticated: true, user: { name: 'Alex Morgan' } }) }));

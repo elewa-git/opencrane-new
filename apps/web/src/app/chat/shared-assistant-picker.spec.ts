@@ -48,7 +48,7 @@ async function mount(): Promise<{ root: HTMLElement; fixture: ComponentFixture<S
 }
 
 function fetchSharedRequest(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  const url = urlOf(input);
   if (url === '/api/assistants') return Promise.resolve(response({ rows: [assistant] }));
   if (url.includes('/changes/')) {
     const parts = url.split('/');
@@ -62,6 +62,13 @@ function fetchSharedRequest(input: RequestInfo | URL, init?: RequestInit): Promi
     return Promise.resolve(response({ status: 'appended', sequence: 1 }));
   }
   throw new Error(`Unexpected request: ${url}`);
+}
+
+function fetchAssistants(rows: object[]): typeof fetch {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    if (urlOf(input) === '/api/assistants') return response({ rows });
+    return fetchSharedRequest(input);
+  };
 }
 
 function fetchLostCreateThenForbiddenStatus(
@@ -120,10 +127,24 @@ it('shows one full-row choice and confirms its fixed payer', async () => {
   const { root, fixture } = await mount();
   const row = root.querySelector<HTMLButtonElement>('.assistant-choice');
   expect(row?.textContent).toContain('Sales assistant');
-  expect(row?.textContent).toContain('paying group sales (fixed)');
+  expect(row?.textContent).toContain('paying group ID sales (fixed)');
   row?.click();
   fixture.detectChanges();
-  expect(text(root)).toContain('The payer stays sales for this session’s work.');
+  expect(text(root)).toContain('This session always uses this paying group.');
+  fixture.destroy();
+});
+
+it('hides assistants that cannot start a session or have been retired', async () => {
+  const { root, fixture } = await mount();
+  const unavailable = { ...assistant, assistantId: 'unavailable', canStartSession: false };
+  const retired = { ...assistant, assistantId: 'retired', status: 'retired' as const };
+  fetchMock.mockImplementation(fetchAssistants([assistant, unavailable, retired]));
+  button(root, 'Refresh list').click();
+  await vi.waitFor(() => expect(text(root)).toContain('Shared assistant list refreshed.'));
+  expect(root.querySelectorAll('.assistant-choice')).toHaveLength(1);
+  expect(text(root)).toContain('Sales assistant');
+  expect(text(root)).not.toContain('unavailable');
+  expect(text(root)).not.toContain('retired');
   fixture.destroy();
 });
 
@@ -201,7 +222,25 @@ it('blocks selecting a second assistant while the first session is unresolved', 
   fixture.detectChanges();
   const refreshedChoices = [...root.querySelectorAll<HTMLButtonElement>('.assistant-choice')];
   expect(refreshedChoices.every(choice => choice.disabled)).toBe(true);
+  const secondChoice = refreshedChoices[1];
+  if (!secondChoice) throw new Error('Second assistant choice is missing');
+  secondChoice.disabled = false;
+  secondChoice.click();
+  fixture.detectChanges();
+  expect(root.textContent).not.toContain('Start a session with Support assistant');
   expect(fetchMock.mock.calls.filter(isPostCall)).toHaveLength(1);
+  fixture.destroy();
+});
+
+it('clears the assistant list when a refresh confirms access was refused', async () => {
+  const { root, fixture } = await mount();
+  fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+    if (urlOf(input) === '/api/assistants') return response({}, 403);
+    return fetchSharedRequest(input);
+  });
+  button(root, 'Refresh list').click();
+  await vi.waitFor(() => expect(text(root)).toContain('Your access changed'));
+  expect(root.querySelector('.assistant-choice')).toBeNull();
   fixture.destroy();
 });
 

@@ -50,7 +50,7 @@
               (assistant.name ?? assistant.assistantId) + ', ' + statusLabel(assistant)">
             <span class="assistant-copy"><strong>
               {{ assistant.name ?? assistant.assistantId }}</strong>
-              <span>Private session · paying group {{ payerId(assistant) }} (fixed)</span>
+              <span>Private session · paying group ID {{ payerId(assistant) }} (fixed)</span>
               <span>{{ statusLabel(assistant) }}</span>
             </span><span aria-hidden="true" class="chevron">›</span>
           </button>
@@ -69,10 +69,13 @@
     @if (selection(); as assistant) {
       <h2>Start a session with {{ assistant.name ?? assistant.assistantId }}?</h2>
       <dl class="facts">
-        <div><dt>Paying group</dt><dd>{{ payerId(assistant) }}</dd></div>
-        <div><dt>Fixed</dt><dd>The payer stays {{ payerId(assistant) }}
-          for this session’s work.</dd></div>
+        <div><dt>Paying group ID</dt><dd>{{ payerId(assistant) }}</dd></div>
+        <div><dt>Group name</dt><dd>The group’s name is not available to members yet.</dd></div>
+        <div><dt>Fixed</dt><dd>This session always uses this paying group.</dd></div>
       </dl>
+      @if (assistant.status !== 'ready') {
+        <p>{{ availabilityMessage(assistant) }}</p>
+      }
       <p>This creates a private conversation for you. It does not add a group conversation.</p>
     }
     <div overlayFooter class="overlay-actions">

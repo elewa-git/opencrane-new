@@ -16,12 +16,12 @@ they do not prove live access or computer provisioning.
 | PPL-62 provisioning failure | Not available yet | No failed provisioning status or retry command is returned | A lost computer is shown as lost; it does not prove that nothing was created. |
 | PPL-62 removed | Removed lifecycle state | Row `status: retired` | No removal date is returned, so no date is shown. |
 | PPL-62 permission revoked | Access changed and cleared details | A 401 or 403 from the assistant read | The refusal does not name which grant changed. |
-| PPL-63 private session | The selected shared assistant, private conversation and fixed payer id | `POST /api/conversations` records `assistantId`, `createdBy`, `mode: agent_session` and `payingGroupId`; the conversation list returns the same ids | The list does not return a payer name here, so the screen shows its group id. It does not show sample messages. |
+| PPL-63 private session | A private team session and the saved paying group id | `POST /api/conversations` records `assistantId`, `createdBy`, `mode: agent_session` and `payingGroupId`; the conversation list returns the same ids | The list does not return the assistant or payer's display name here, so the workspace shows the payer id. It does not show sample messages. |
 | PPL-64 payer confirmation | Fixed paying group before session creation | Assistant row `payingGroupId`; conversation creation must repeat that id | Payer id is shown when no group name is supplied by the member route. |
-| THR-07 assistant draft | One shared assistant recipient | `GET /api/assistants` returns rows the caller may read and `canStartSession` | People and an assistant are not combined in this picker. |
+| THR-07 assistant draft | One shared assistant recipient | `GET /api/assistants` returns rows the caller may read and `canStartSession` | The picker is a separate page. Text in a draft is not carried to it. People and an assistant are not combined in this picker. |
 | THR-08 people plus assistant | Not offered by this screen | The conversation create schema accepts either `direct` with a colleague or `agent_session` with an assistant | The two modes cannot share one new conversation command. |
 | THR-21 queued, starting and ready child | Not available yet | No child start API or child projection exists in P4-7 | Child work belongs to the later delegation feature. |
-| THR-22 failed or unknown child start | Not available yet | No child start command or status route exists in P4-7 | The private session create status check reads only its original conversation command. |
+| THR-22 removed shared assistant | Not available yet | The workspace has no event-backed banner naming a removed assistant | The picker filters assistants that the member cannot start. |
 | THR-23 no eligible child assistant | Not available yet | No child assistant eligibility route exists in P4-7 | The private session picker does show when it has no eligible shared assistants. |
 
 ## Check receipts

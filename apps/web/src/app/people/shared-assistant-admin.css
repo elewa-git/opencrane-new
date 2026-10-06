@@ -1,7 +1,8 @@
 :host { display: block; max-width: 980px; margin: 0 auto; padding: 24px;
   color: var(--oc-ink-strong); }
 nav { margin-bottom: 18px; color: var(--oc-ink-admin-muted); font-size: .9rem; }
-nav a { display: inline-flex; min-height: 44px; align-items: center;
+nav[aria-label="Breadcrumb"] a { display: inline-flex; min-width: 44px; height: 44px;
+  align-items: center; justify-content: center; padding: 0 4px;
   color: var(--oc-accent-dark); }
 .admin-heading { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
 h1 { margin: 0; font-size: 1.8rem; }

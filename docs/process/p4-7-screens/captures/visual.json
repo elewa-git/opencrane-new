@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T19:26:03.197Z",
+  "generatedAt": "2026-10-06T21:19:35.781Z",
   "captures": [
     {
       "state": "admin-draft",
@@ -254,6 +254,150 @@
       "file": "admin-access-revoked-320-reduced.png"
     },
     {
+      "state": "admin-failed",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-failed-1280-normal.png"
+    },
+    {
+      "state": "admin-failed",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-failed-1280-reduced.png"
+    },
+    {
+      "state": "admin-failed",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-failed-390-normal.png"
+    },
+    {
+      "state": "admin-failed",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-failed-390-reduced.png"
+    },
+    {
+      "state": "admin-failed",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-failed-320-normal.png"
+    },
+    {
+      "state": "admin-failed",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-failed-320-reduced.png"
+    },
+    {
+      "state": "admin-refused",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-refused-1280-normal.png"
+    },
+    {
+      "state": "admin-refused",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-refused-1280-reduced.png"
+    },
+    {
+      "state": "admin-refused",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-refused-390-normal.png"
+    },
+    {
+      "state": "admin-refused",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-refused-390-reduced.png"
+    },
+    {
+      "state": "admin-refused",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-refused-320-normal.png"
+    },
+    {
+      "state": "admin-refused",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-refused-320-reduced.png"
+    },
+    {
+      "state": "admin-unknown",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-unknown-1280-normal.png"
+    },
+    {
+      "state": "admin-unknown",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-unknown-1280-reduced.png"
+    },
+    {
+      "state": "admin-unknown",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-unknown-390-normal.png"
+    },
+    {
+      "state": "admin-unknown",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-unknown-390-reduced.png"
+    },
+    {
+      "state": "admin-unknown",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-unknown-320-normal.png"
+    },
+    {
+      "state": "admin-unknown",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-unknown-320-reduced.png"
+    },
+    {
+      "state": "admin-applying",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "admin-applying-1280-normal.png"
+    },
+    {
+      "state": "admin-applying",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "admin-applying-1280-reduced.png"
+    },
+    {
+      "state": "admin-applying",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "admin-applying-390-normal.png"
+    },
+    {
+      "state": "admin-applying",
+      "width": 390,
+      "motion": "reduce",
+      "file": "admin-applying-390-reduced.png"
+    },
+    {
+      "state": "admin-applying",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "admin-applying-320-normal.png"
+    },
+    {
+      "state": "admin-applying",
+      "width": 320,
+      "motion": "reduce",
+      "file": "admin-applying-320-reduced.png"
+    },
+    {
       "state": "member-assistant-choice",
       "width": 1280,
       "motion": "no-preference",
@@ -362,6 +506,114 @@
       "file": "member-session-unknown-320-reduced.png"
     },
     {
+      "state": "member-failed",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-failed-1280-normal.png"
+    },
+    {
+      "state": "member-failed",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-failed-1280-reduced.png"
+    },
+    {
+      "state": "member-failed",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-failed-390-normal.png"
+    },
+    {
+      "state": "member-failed",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-failed-390-reduced.png"
+    },
+    {
+      "state": "member-failed",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-failed-320-normal.png"
+    },
+    {
+      "state": "member-failed",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-failed-320-reduced.png"
+    },
+    {
+      "state": "member-access-lost",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-access-lost-1280-normal.png"
+    },
+    {
+      "state": "member-access-lost",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-access-lost-1280-reduced.png"
+    },
+    {
+      "state": "member-access-lost",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-access-lost-390-normal.png"
+    },
+    {
+      "state": "member-access-lost",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-access-lost-390-reduced.png"
+    },
+    {
+      "state": "member-access-lost",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-access-lost-320-normal.png"
+    },
+    {
+      "state": "member-access-lost",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-access-lost-320-reduced.png"
+    },
+    {
+      "state": "member-applying",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-applying-1280-normal.png"
+    },
+    {
+      "state": "member-applying",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-applying-1280-reduced.png"
+    },
+    {
+      "state": "member-applying",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-applying-390-normal.png"
+    },
+    {
+      "state": "member-applying",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-applying-390-reduced.png"
+    },
+    {
+      "state": "member-applying",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-applying-320-normal.png"
+    },
+    {
+      "state": "member-applying",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-applying-320-reduced.png"
+    },
+    {
       "state": "member-no-eligible-assistant",
       "width": 1280,
       "motion": "no-preference",
@@ -396,6 +648,42 @@
       "width": 320,
       "motion": "reduce",
       "file": "member-no-eligible-assistant-320-reduced.png"
+    },
+    {
+      "state": "member-session-note",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "member-session-note-1280-normal.png"
+    },
+    {
+      "state": "member-session-note",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "member-session-note-1280-reduced.png"
+    },
+    {
+      "state": "member-session-note",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "member-session-note-390-normal.png"
+    },
+    {
+      "state": "member-session-note",
+      "width": 390,
+      "motion": "reduce",
+      "file": "member-session-note-390-reduced.png"
+    },
+    {
+      "state": "member-session-note",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "member-session-note-320-normal.png"
+    },
+    {
+      "state": "member-session-note",
+      "width": 320,
+      "motion": "reduce",
+      "file": "member-session-note-320-reduced.png"
     }
   ]
 }

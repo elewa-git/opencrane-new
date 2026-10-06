@@ -33,6 +33,7 @@ async function createCaptureWorkspace(
   let messageStatus = 200;
   let messageRecorded = false;
   const initialConversation = { conversationId: 'chat', assistantId: 'assistant', assistantKind,
+    payingGroupId: assistantKind === 'team' ? 'opaque-sales' : undefined,
     createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session' };
   const conversations = [initialConversation];
   vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
@@ -872,6 +873,18 @@ it('keeps a memory-free choice in the draft and does not send it', async () => {
     expect(capture.postBodies.at(-1)).toMatchObject({
       text: 'Review the order note', executionMode: 'memory_free',
     });
+  } finally {
+    capture.fixture.destroy();
+  }
+});
+
+it('shows the saved paying group id in a private team session', async () => {
+  const capture = await createCaptureWorkspace([], [], 'team');
+  try {
+    expect(capture.root.textContent).toContain('Paying group ID: opaque-sales');
+    expect(capture.root.textContent).toContain("The group's name is not available to members yet.");
+    expect(capture.root.querySelector('.avatar.agent')?.getAttribute('aria-label'))
+      .toBe('Shared assistant');
   } finally {
     capture.fixture.destroy();
   }

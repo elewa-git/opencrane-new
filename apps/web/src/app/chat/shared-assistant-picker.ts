@@ -29,6 +29,7 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
   protected readonly pageTitle = 'Choose a shared assistant';
   protected readonly heading = viewChild<ElementRef<HTMLElement>>('heading');
   protected readonly statusButton = viewChild<ElementRef<HTMLButtonElement>>('statusButton');
+  protected readonly selectionOpener = signal<HTMLElement | undefined>(undefined);
   protected readonly assistants = signal<Assistant[]>([]);
   protected readonly loaded = signal(false);
   protected readonly loading = signal(false);
@@ -38,7 +39,6 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
   protected readonly selection = signal<Assistant | undefined>(undefined);
   protected readonly pending = signal<PendingSession | undefined>(undefined);
   protected readonly notice = signal('');
-  protected readonly selectionOpener = signal<HTMLElement | undefined>(undefined);
   private readonly request = new AbortController();
 
   ngOnInit(): void { void this.load(); }
@@ -47,10 +47,12 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
   protected async load(): Promise<void> {
     if (this.loading() || this.pending() || this.accessChanged()) return;
     const hasLoaded = this.loaded();
+    const retryingFirstLoad = this.failed() && !hasLoaded;
     this.loading.set(!hasLoaded);
     this.refreshing.set(this.loaded());
     this.failed.set(false);
     this.notice.set('');
+    if (retryingFirstLoad) this.focusHeading();
     try {
       const response = await fetch('/api/assistants', {
         headers: { accept: 'application/json' }, signal: this.request.signal,
@@ -139,11 +141,13 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
         return;
       }
       if (response.status === 400 || response.status === 409) {
+        // Clear a refused request because the server confirms it appended nothing.
         this.pending.set(undefined);
         this.notice.set('The server refused this session. Refresh the list and choose again.');
         return;
       }
       if (!response.ok) {
+        // Keep the command ids when no receipt proves whether the server appended it.
         this.pending.set({ ...pending, stage: 'unknown' });
         this.notice.set('We could not tell whether the session was recorded. ' +
           'Check its status before starting again.');
@@ -170,6 +174,7 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
     const resultAfterCheck = pending.stage;
     this.pending.set({ ...pending, stage: 'checking' });
     try {
+      // Read the saved command only; retrying it needs the person's separate action.
       const url = `/api/conversations/${encodeURIComponent(pending.conversationId)}` +
         `/changes/${encodeURIComponent(pending.commandId)}`;
       const response = await fetch(url, { headers: { accept: 'application/json' },
@@ -228,6 +233,16 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
     return assistant.payingGroupId ?? 'Not available';
   }
 
+  protected availabilityMessage(assistant: Assistant): string {
+    if (assistant.status === 'lost') {
+      return 'The computer is lost. Your session will wait until it recovers.';
+    }
+    if (assistant.status === 'claiming' || assistant.status === 'starting') {
+      return 'The computer is still being set up. Your session will wait until it is ready.';
+    }
+    return 'The computer is paused. Your session will wait until it is available.';
+  }
+
   protected isBlocked(): boolean {
     return this.loading() || this.pending() !== undefined || this.accessChanged();
   }
@@ -248,6 +263,7 @@ export class SharedAssistantPicker implements OnInit, OnDestroy {
       this.notice.set('Your private session was recorded, but its status could not be read yet.');
       return;
     }
+    // A missing conversation can return 403 before its create reaches the server.
     this.pending.set({ ...pending, stage: 'unknown' });
     this.notice.set('The session change was not recorded. You can send the same request again.');
   }
