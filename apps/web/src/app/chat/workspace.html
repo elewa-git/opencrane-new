@@ -31,6 +31,11 @@
           <oc-grain-loader width="80%" />
         </div> }
         @if (chat.error() && !chat.queued()) { <div class="error" role="alert">{{ chat.error() }} @if (!chat.queued()) { <button type="button" (click)="chat.load()">Retry</button> } @if (chat.denied()) { <a href="/">Sign in</a> }</div> }
+        @if (chat.denied()) {
+          <oc-shared-state kind="access_changed"
+            message="You don't have access to this conversation's files"
+            detail="Nothing from this conversation is shown." [showAction]="false" />
+        }
         @if (!chat.selected() && !chat.loading() && !chat.railUnavailable() && !chat.denied()) {
           <section class="draft" [class.no-agent]="!chat.assistantId()" aria-label="Session recipients">
             <div class="to-line"><span class="to-label">To:</span>
@@ -49,7 +54,7 @@
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
-          <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
+          <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
             @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true"><oc-icon [name]="turn.author === 'agent' ? 'agent' : 'open'" /></span> }
             <div class="message-content">
               @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}@if (turn.endedAt) { · {{ duration(turn.time, turn.endedAt) }}s }</time></header> }
@@ -64,13 +69,30 @@
                 <oc-conversation-file-card [conversationId]="chat.selected()" [path]="file"
                   [createdAt]="turn.time" [createdBy]="fileCreator(turn.author)"
                   [downloadAllowed]="canDownload(file)"
+                  [screenshot]="screenshotFactsForPath(file)"
                   [thumbnailUrl]="isScreenshot(file) ? screenshotUrl(file) : ''"
                   (opened)="preview.set($event)" (filesOpened)="showFiles()" />
+              }
+              @if (turn.screenshotRejected) {
+                <oc-shared-state kind="refused" message="Screenshot rejected"
+                  detail="The security scan refused this image. Nothing was saved."
+                  [timestamp]="turn.time" [showAction]="false" />
               }
               @if (turn.budgetStop) { <oc-budget-stop-notice /> }
               @if (turn.author === 'agent' && turn.state !== 'working') { <p class="turn-status" [class.stopped]="turn.state === 'stopped'" [class.failed]="turn.state === 'failed'" role="status"><oc-icon [name]="turn.state" /> {{ turn.state === 'stopped' ? 'Stopped · partial reply kept' : turn.state === 'failed' ? 'Reply interrupted · partial reply kept' : 'Done' }}</p> }
             </div>
           </article>
+        }
+        @if (!chat.denied()) {
+          <div class="capture-line" [class.sr-only]="captureLineVisuallyHidden()"
+            [attr.role]="panelExpanded() || chat.loading() ? null : 'status'"
+            [attr.aria-live]="panelExpanded() || chat.loading() ? null : 'polite'">
+            @if (showCaptureLine()) {
+              <oc-capture-status [capture]="captureViewModel()" [busy]="captureBusy()"
+                [checking]="statusChecking()" [announce]="!panelExpanded() && !chat.loading()"
+                (action)="captureAction()" (repeated)="repeatCapture()" />
+            }
+          </div>
         }
         @if (chat.selected() && !chat.denied()) { <oc-approval-cards [conversationId]="chat.selected()" /> }
       </div>
@@ -198,21 +220,28 @@
     <div class="panel-tabs" role="tablist" aria-label="Session views">
       <button type="button" role="tab" [attr.aria-selected]="panelTab() === 'files'"
         (click)="panelTab.set('files')">
-        Files<small>{{ files().length + chat.attachments().length }}</small>
+        Files<small class="tab-count">@if (chat.denied()) { –<span class="sr-only"> unavailable</span> } @else { {{ files().length + chat.attachments().length }} }</small>
       </button>
       <button type="button" role="tab" [attr.aria-selected]="panelTab() === 'activity'"
         (click)="panelTab.set('activity')">
-        Activity<small>{{ activity().length }}</small>
+        Activity<small class="tab-count">@if (chat.denied()) { –<span class="sr-only"> unavailable</span> } @else { {{ activity().length }} }</small>
       </button>
     </div>
     @if (chat.selected() && !chat.denied()) {
-      <oc-live-view [conversationId]="chat.selected()" (saved)="chat.refresh()" />
+      <oc-live-view [conversationId]="chat.selected()" [capture]="captureViewModel()"
+        [captureBusy]="captureBusy()" [captureChecking]="statusChecking()"
+        [captureCanStart]="captureCanStart()"
+        (captureRequested)="startCapture()"
+        (captureRepeated)="repeatCapture()" (captureStatusChecked)="checkCaptureStatus()" />
     }
     @if (chat.selected()) {
       <a class="audit-link" [href]="'/history/' + chat.selected()">Action history</a>
     }
     @if (panelTab() === 'files') {
       <section class="panel-section" role="tabpanel" aria-label="Files">
+        @if (chat.denied()) {
+          <oc-shared-state kind="access_changed" message="Files unavailable" [showAction]="false" />
+        } @else {
         @if (uploads().length) { <h2>Attached by you · {{ uploads().length }}</h2> }
         @for (file of uploads(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><span class="file-type" [attr.data-type]="type(file.name)">{{ type(file.name) }}</span><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
         @if (screenshots().length) { <h2>Screenshots · {{ screenshots().length }}</h2> }
@@ -222,7 +251,18 @@
             detail="Open the computer viewer and choose Screenshot. Files you attach or create appear here."
             [showAction]="false" />
         }
-        @for (file of screenshots(); track file.fileId) { <button type="button" class="panel-file" (click)="preview.set(file.path)"><img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt="Computer desktop" loading="lazy"><span class="file-name">{{ file.name }}</span><small>saved</small></button> }
+        @for (file of screenshots(); track file.fileId) {
+          <button type="button" class="panel-file screenshot-panel-file"
+            (click)="preview.set(file.path)">
+            <img class="screenshot-thumbnail" [src]="screenshotUrl(file.path)" alt=""
+              loading="lazy" (error)="hideBrokenThumbnail($event)">
+            <span class="file-type screenshot-type" hidden>{{ type(file.name) }}</span>
+            <span class="screenshot-panel-details">
+              <span class="file-name">{{ file.name }}</span>
+              <small>{{ capturedLine(file) }}</small>
+            </span>
+          </button>
+        }
         @if (files().length) { <h2>Created by assistant · {{ files().length }}</h2> }
         @for (file of files(); track file) {
           <button type="button" class="panel-file created" (click)="preview.set(file)">
@@ -233,8 +273,11 @@
             </span>
           </button>
         }
+        }
       </section>
-      <footer class="panel-footnote">Saved files remain in the transcript after retries and session close.</footer>
+      @if (!chat.denied()) {
+        <footer class="panel-footnote">Saved files remain in the transcript after retries and session close.</footer>
+      }
     } @else {
       <section class="panel-section" role="tabpanel" aria-label="Activity">
         @for (tool of activity(); track tool.id) { <button type="button" class="activity-row" (click)="jumpToTool(tool.id)"><time>{{ time(tool.time) }}</time><span>{{ tool.label }}<small>{{ tool.detail }}</small></span><oc-icon class="state-mark" [attr.data-state]="tool.failed ? 'failed' : 'done'" [name]="tool.failed ? 'failed' : 'done'" /></button> }
@@ -244,5 +287,8 @@
     }
   </ng-template>
   <dialog class="search-dialog" #searchDialog aria-label="Find a session"><form method="dialog"><button type="submit" aria-label="Close session search">×</button></form><label for="session-search">Find a session</label><input id="session-search" type="search" placeholder="Session id" (input)="searchChanged($event)">@for (conversation of chat.conversations(); track conversation.conversationId) { @if (conversation.conversationId.includes(search())) { <button type="button" (click)="select(conversation.conversationId)"># session-{{ conversation.conversationId.slice(0, 8) }}</button> } }</dialog>
-  @if (preview()) { <oc-file-preview [path]="preview()" [conversationId]="chat.selected()" (closed)="preview.set('')" /> }
+  @if (preview()) { <oc-file-preview [path]="preview()" [conversationId]="chat.selected()"
+    [screenshot]="screenshotFactsForPath(preview())" [createdBy]="screenshotCreator(preview())"
+    [conversationTitle]="title()" [downloadAllowed]="canDownloadPreview(preview())"
+    (accessCheckRequested)="chat.refresh()" (closed)="preview.set('')" /> }
 </div>

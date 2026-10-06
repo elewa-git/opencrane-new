@@ -1,35 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { extname, resolve } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chatFixture } from './chat-fixture.mjs';
+import { serveWebBuild } from './serve-web-build.mjs';
 
 const output = resolve('docs/process/f5-workspace');
 const build = resolve('apps/web/dist/web/browser');
 const origin = 'https://f5.opencrane.test';
 const captures = [];
-const contentTypes = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.css': 'text/css',
-  '.woff2': 'font/woff2',
-  '.jpg': 'image/jpeg',
-  '.svg': 'image/svg+xml',
-};
-
 async function serveAssets(route) {
-  const url = new URL(route.request().url());
-  let filename = resolve(build, `.${url.pathname}`);
-  if (!extname(url.pathname)) {
-    filename = resolve(build, 'index.html');
-  }
-  if (!filename.startsWith(`${build}/`)) {
-    await route.abort();
-    return;
-  }
-  const body = await readFile(filename);
-  const contentType = contentTypes[extname(filename)] ?? 'application/octet-stream';
-  await route.fulfill({ body, contentType });
+  await serveWebBuild(route, build);
 }
 
 async function serveScreenshotThumbnail(route) {
@@ -161,7 +142,7 @@ async function checkFileCard(page, width) {
     assert((await filesButton.boundingBox()).height >= 44);
     assert((await assistantCard.locator('.file-name').boundingBox()).width > 80);
     const screenshotOpen = screenshotCard.getByRole('button', {
-      name: 'Open quarterly-screen-capture.png',
+      name: 'Open preview of quarterly-screen-capture.png',
     });
     assert((await screenshotOpen.boundingBox()).height >= 44);
     assert((await download.boundingBox()).height >= 44);

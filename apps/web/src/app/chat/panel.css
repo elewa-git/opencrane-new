@@ -58,7 +58,13 @@
   font: 10px var(--oc-font-mono);
   margin-top: 2px;
 }
-.panel-file small { margin: 0 4px 0 auto; color: #2a7d4f; }
+.panel-file small { margin: 4px 0 0; color: #2a7d4f; }
+.screenshot-panel-file { align-items: flex-start; }
+.screenshot-panel-details { display: flex; flex: 1; min-width: 0; flex-direction: column; }
+.screenshot-panel-details .file-name { width: 100%; }
+.screenshot-panel-file .screenshot-thumbnail { width: 72px; }
+.screenshot-type:not([hidden]) { display: inline-flex; }
+.screenshot-type[hidden] { display: none; }
 .panel-footnote {
   margin-top: auto;
   border-top: 1px solid #e1e6e7;

@@ -44,6 +44,7 @@ export class SharedState {
   readonly actionLabel = input<string>();
   readonly safeToRetry = input(false);
   readonly showAction = input(true);
+  readonly actionBusy = input(false);
   readonly evidenceAt = input<string>();
   readonly timestamp = input<string>();
   readonly changeReference = input<string>();
@@ -70,7 +71,7 @@ export class SharedState {
   }
 
   private actionText(): string | undefined {
-    if (!this.showAction()) return undefined;
+    if (!this.showAction() && !this.actionBusy()) return undefined;
     if (this.glyph() === 'spinner') return undefined;
     if (this.kind() === 'unknown') return 'Check status';
     if (this.kind() === 'failed') {
@@ -81,6 +82,11 @@ export class SharedState {
     // Only an established safe failure can offer to repeat the operation.
     if (label && REPEAT_ACTION_WORDS.test(label)) return undefined;
     return label;
+  }
+
+  protected runAction(): void {
+    if (this.actionBusy()) return;
+    this.action.emit();
   }
 
   private formatEvidenceTime(): string | undefined {

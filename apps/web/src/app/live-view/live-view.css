@@ -11,6 +11,10 @@ button {
   color: var(--oc-ink-default);
   font: inherit;
 }
+button[aria-disabled='true'] {
+  opacity: var(--oc-opacity-disabled);
+  cursor: not-allowed;
+}
 .display {
   flex: 1;
   min-height: 0;
@@ -22,6 +26,12 @@ button {
 }
 .display[hidden] { display: none; }
 .tools { display: flex; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+.entry-capture-status {
+  width: auto;
+  min-width: 0;
+  margin: 0 18px;
+}
+.retry { min-height: 44px; }
 @media (max-width: 600px) {
   .display { flex: none; aspect-ratio: 4 / 3; }
   .tools { gap: 6px; margin: 12px 0; }

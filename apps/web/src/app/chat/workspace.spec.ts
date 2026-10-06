@@ -1,6 +1,109 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Workspace } from './workspace';
 import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
+
+interface CaptureWorkspace {
+  fixture: ComponentFixture<Workspace>;
+  root: HTMLElement;
+  calls: string[];
+  setReply(status: number): void;
+  denyFeedRead(): void;
+  setMessageStatus(status: number): void;
+  rows: Record<string, unknown>[];
+}
+
+async function createCaptureWorkspace(initialRows: Record<string, unknown>[] = []): Promise<CaptureWorkspace> {
+  history.replaceState({}, '', '/workspace?conversation=chat');
+  const rows = [...initialRows];
+  const calls: string[] = [];
+  let replyStatus = 201;
+  let denyMessages = false;
+  let messageStatus = 200;
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+    const path = input instanceof Request ? input.url : String(input);
+    const pathname = new URL(path, location.origin).pathname;
+    calls.push(`${init?.method ?? 'GET'} ${path}`);
+    if (pathname === '/auth/me') {
+      return Promise.resolve(new Response('{"authenticated":true,"user":{"name":"Alex"}}'));
+    }
+    if (pathname === '/api/chat') {
+      return Promise.resolve(new Response('{"memberId":"me","assistantId":"assistant"}'));
+    }
+    if (pathname === '/api/conversations' && init?.method !== 'POST') {
+      return Promise.resolve(new Response(JSON.stringify({ rows: [{
+        conversationId: 'chat', assistantId: 'assistant', createdBy: 'me',
+        createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session',
+      }] })));
+    }
+    if (pathname.endsWith('/screenshots')) {
+      if (replyStatus === 0) return Promise.reject(new TypeError('Network lost'));
+      if (replyStatus === 201 && !rows.some(row => row['type'] === 'file.uploaded')) {
+        rows.push(screenshotRow(rows.length + 1));
+      }
+      if (replyStatus === 422) rows.push(rejectedRow(rows.length + 1));
+      const body = replyStatus === 201
+        ? { status: 'appended', fileId: 'screen' }
+        : replyStatus === 422 ? { status: 'infected', fileId: 'rejected-screen' } : {};
+      return Promise.resolve(new Response(JSON.stringify(body), { status: replyStatus }));
+    }
+    if (pathname.endsWith('/messages')) {
+      if (denyMessages) return Promise.resolve(new Response('{}', { status: 403 }));
+      if (messageStatus !== 200) {
+        return Promise.resolve(new Response('{}', { status: messageStatus }));
+      }
+      const since = Number(new URL(path, location.origin).searchParams.get('since') ?? 0);
+      const visibleRows = rows.filter(row => Number(row['position']) > since);
+      return Promise.resolve(new Response(JSON.stringify({ rows: visibleRows,
+        position: rows.length, generation: 1, computerState: 'ready' })));
+    }
+    if (pathname.endsWith('/files/view')) {
+      return Promise.resolve(new Response('<svg/>', {
+        headers: { 'content-type': 'image/svg+xml' },
+      }));
+    }
+    return Promise.resolve(new Response('{}'));
+  });
+  const socket: SocketLike = {
+    readyState: 1, onopen: null, onclose: null, onerror: null, onmessage: null,
+    send: vi.fn(), close: vi.fn(),
+  };
+  TestBed.configureTestingModule({ providers: [
+    { provide: SOCKET_FACTORY, useValue: () => socket },
+  ] });
+  const fixture = TestBed.createComponent(Workspace);
+  await fixture.whenStable();
+  await vi.waitFor(() => expect(fixture.componentInstance['chat'].selected()).toBe('chat'));
+  fixture.detectChanges();
+  const root: unknown = fixture.nativeElement;
+  if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
+  return {
+    fixture, root, calls, rows,
+    setReply(status) { replyStatus = status; },
+    denyFeedRead() { denyMessages = true; },
+    setMessageStatus(status) { messageStatus = status; },
+  };
+}
+
+function screenshotRow(position: number): Record<string, unknown> {
+  return { id: `screen-${position}`, position, type: 'file.uploaded',
+    time: '2026-10-02T10:42:00Z', data: {
+      conversationId: 'chat', fileId: 'screen', uploadedBy: 'me', name: 'screen.png',
+      size: 421888, mime: 'image/png', screenshot: {
+        computerId: 'computer', generation: 4, capturedAt: '2026-10-02T10:42:00Z',
+        width: 1440, height: 900,
+      },
+    } };
+}
+
+function rejectedRow(position: number): Record<string, unknown> {
+  return { id: `rejected-${position}`, position, type: 'file.rejected',
+    time: '2026-10-02T10:42:00Z', data: {
+      conversationId: 'chat', fileId: 'rejected-screen', uploadedBy: 'me',
+      name: 'screen.png', size: 421888, sha256: 'hash', reason: 'infected',
+      screenshot: { computerId: 'computer', generation: 4,
+        capturedAt: '2026-10-02T10:42:00Z', width: 1440, height: 900 },
+    } };
+}
 
 function openPanelDialog(this: HTMLDialogElement): void {
   this.setAttribute('open', '');
@@ -74,7 +177,7 @@ const downloadScenarios: DownloadScenario[] = [
       id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
       data: {
         conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
-        name: 'brief.pdf', mime: 'application/pdf',
+        name: 'brief.pdf', size: 1024, mime: 'application/pdf',
       },
     }],
   },
@@ -85,7 +188,7 @@ const downloadScenarios: DownloadScenario[] = [
       id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
       data: {
         conversationId: 'chat', fileId: 'file', uploadedBy: 'someone-else',
-        name: 'brief.pdf', mime: 'application/pdf',
+        name: 'brief.pdf', size: 1024, mime: 'application/pdf',
       },
     }],
   },
@@ -112,7 +215,7 @@ const downloadScenarios: DownloadScenario[] = [
         id: 'upload', position: 1, type: 'file.uploaded', time: '2026-10-03T10:00:00Z',
         data: {
           conversationId: 'chat', fileId: 'file', uploadedBy: 'me',
-          name: 'brief.pdf', mime: 'application/pdf',
+          name: 'brief.pdf', size: 1024, mime: 'application/pdf',
         },
       },
       {
@@ -127,9 +230,157 @@ function runDownloadScenario(scenario: DownloadScenario): Promise<void> {
   return checkDownloadVisibility(scenario);
 }
 
-afterEach(() => { vi.restoreAllMocks(); history.replaceState({}, '', '/'); });
+const originalViewportWidth = globalThis.innerWidth;
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  history.replaceState({}, '', '/');
+  Object.defineProperty(globalThis, 'innerWidth', {
+    configurable: true, value: originalViewportWidth,
+  });
+});
 
 it.each(downloadScenarios)('shows Download only when the route can serve $name', runDownloadScenario);
+
+it('reads status without sending another screenshot request', async () => {
+  const context = await createCaptureWorkspace();
+  context.setReply(0);
+  await context.fixture.componentInstance['capture'].start('chat', []);
+  const screenshotPosts = context.calls.filter(call =>
+    call.startsWith('POST ') && call.includes('/screenshots')).length;
+  await context.fixture.componentInstance['checkCaptureStatus']();
+  const finalScreenshotPosts = context.calls.filter(call =>
+    call.startsWith('POST ') && call.includes('/screenshots')).length;
+  expect(finalScreenshotPosts).toBe(screenshotPosts);
+  expect(context.calls.some(call => call.startsWith('GET ') && call.includes('/messages')))
+    .toBe(true);
+  const state = context.fixture.componentInstance['capture'].state();
+  expect(state.phase).toBe('unknown');
+  if (state.phase === 'unknown') expect(state.checkedAt).toBeDefined();
+  expect(context.fixture.componentInstance['chat'].error()).toBe('');
+  context.fixture.destroy();
+});
+
+it('does not say Files were read after a failed status read', async () => {
+  const context = await createCaptureWorkspace();
+  context.setReply(0);
+  await context.fixture.componentInstance['startCapture']();
+  context.fixture.detectChanges();
+  expect(context.fixture.componentInstance['capture'].state().phase).toBe('unknown');
+
+  context.setMessageStatus(500);
+  await context.fixture.componentInstance['checkCaptureStatus']();
+  context.fixture.detectChanges();
+
+  expect(context.root.textContent).toContain('Could not load the conversation');
+  expect(context.root.textContent).toContain('Could not read Files at');
+  expect(context.root.textContent).toContain('Check status again when the connection returns');
+  expect(context.root.textContent).not.toContain('Files read again');
+  expect(context.fixture.componentInstance['capture'].state().phase).toBe('unknown');
+  context.fixture.destroy();
+});
+
+it('keeps a previous load error after a successful refresh on a healthy list', async () => {
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = context.fixture.componentInstance['chat'];
+  context.setMessageStatus(500);
+  await chat.load();
+  expect(chat.error()).toContain('Could not load the conversation');
+
+  context.setMessageStatus(200);
+
+  expect(await chat.refresh()).toBe(true);
+  context.fixture.detectChanges();
+  await context.fixture.whenStable();
+  expect(chat.error()).toContain('Could not load the conversation');
+  expect(context.root.textContent).toContain('Could not load the conversation');
+  context.fixture.destroy();
+});
+
+it('shows one card and keeps the saved announcement when the feed contains its file', async () => {
+  const context = await createCaptureWorkspace();
+  await context.fixture.componentInstance['startCapture']();
+  await vi.waitFor(() => expect(context.root.querySelectorAll('.screenshot-card'))
+    .toHaveLength(1));
+  const status = context.root.querySelector('.capture-line');
+  expect(status?.getAttribute('role')).toBe('status');
+  expect(status?.textContent).toContain('Screenshot saved');
+  expect(status?.classList.contains('sr-only')).toBe(true);
+  context.fixture.destroy();
+});
+
+it('keeps the already-saved line for a repeated response with one card', async () => {
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  await context.fixture.componentInstance['startCapture']();
+  await vi.waitFor(() => expect(context.root.querySelectorAll('.screenshot-card'))
+    .toHaveLength(1));
+  context.fixture.detectChanges();
+  expect(context.fixture.componentInstance['capture'].state())
+    .toMatchObject({ phase: 'saved', fileId: 'screen', repeated: true });
+  expect(context.root.querySelector('.capture-line')?.textContent)
+    .toContain('Screenshot already saved');
+  context.fixture.destroy();
+});
+
+it('shows one transcript rejection after the matching rejected event arrives', async () => {
+  const context = await createCaptureWorkspace();
+  context.setReply(422);
+  await context.fixture.componentInstance['startCapture']();
+  await vi.waitFor(() => expect(context.root.textContent).toContain('Screenshot rejected'));
+  expect(context.root.querySelectorAll('.message-content oc-shared-state .message'))
+    .toHaveLength(1);
+  expect(context.root.textContent).not.toContain('screen.png');
+  context.fixture.destroy();
+});
+
+it('moves the capture line announcement to LiveView when the session panel opens', async () => {
+  Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1280 });
+  const context = await createCaptureWorkspace();
+  context.root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
+  context.fixture.detectChanges();
+  const captureLine = context.root.querySelector('.capture-line');
+  expect(captureLine?.getAttribute('role')).toBe('status');
+  context.root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
+  context.fixture.detectChanges();
+  expect(captureLine?.getAttribute('role')).toBeNull();
+  expect(context.root.querySelector('.entry-capture-status [role="status"]')
+    ?.getAttribute('role')).toBe('status');
+  context.fixture.destroy();
+});
+
+it('clears the preview, screenshot rows and counts when access is denied', async () => {
+  Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 1280 });
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  context.setReply(503);
+  await context.fixture.componentInstance['capture'].start('chat', []);
+  context.fixture.componentInstance['preview'].set('uploads/chat/screen/screen.png');
+  context.fixture.detectChanges();
+  context.denyFeedRead();
+  await context.fixture.componentInstance['chat'].refresh();
+  await vi.waitFor(() => expect(context.fixture.componentInstance['chat'].denied()).toBe(true));
+  context.fixture.detectChanges();
+  expect(context.fixture.componentInstance['capture'].state()).toEqual({ phase: 'idle' });
+  expect(context.fixture.componentInstance['preview']()).toBe('');
+  expect(context.root.textContent).toContain('Files unavailable');
+  expect(context.root.querySelectorAll('.tab-count').length).toBe(2);
+  expect([...context.root.querySelectorAll('.tab-count')]
+    .every(count => count.textContent?.trim().startsWith('–'))).toBe(true);
+  expect(context.root.textContent).not.toContain('screen.png');
+  expect(context.root.querySelector('img[src*="files/view"]')).toBeNull();
+  context.fixture.destroy();
+});
+
+it('resets the capture state when the conversation changes', async () => {
+  const context = await createCaptureWorkspace();
+  context.setReply(503);
+  await context.fixture.componentInstance['capture'].start('chat', []);
+  expect(context.fixture.componentInstance['capture'].state().phase).toBe('failed');
+  await context.fixture.componentInstance['chat'].select('another-chat');
+  await vi.waitFor(() => expect(context.fixture.componentInstance['capture'].state())
+    .toEqual({ phase: 'idle' }));
+  context.fixture.destroy();
+});
 
 it.each([500, 503, 403])('does not show empty states after a %s conversation read', async status => {
   history.replaceState({}, '', '/workspace?conversation=chat');
@@ -254,7 +505,7 @@ it('uploads with progress, retries the same bytes and key, and replays attached 
   expect(root.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.disabled).toBe(true);
 
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify({ type: 'event', version: 1, topic: 'conversation', conversationId: 'chat', generation: 1, position: 2,
-    row: { id: 'upload', position: 2, type: 'file.uploaded', time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', fileId: 'file', uploadedBy: 'me', name: 'project.pdf', mime: 'application/pdf' } } }) }));
+    row: { id: 'upload', position: 2, type: 'file.uploaded', time: '2026-10-03T10:00:01Z', data: { conversationId: 'chat', fileId: 'file', uploadedBy: 'me', name: 'project.pdf', size: 1024, mime: 'application/pdf' } } }) }));
   await fixture.whenStable();
   expect(root.querySelector('.transcript .file-card')?.textContent).toContain('project.pdf');
   const drawer = root.querySelector('oc-hinge-drawer dialog');

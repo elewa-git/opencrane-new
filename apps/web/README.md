@@ -10,8 +10,9 @@ This is the browser app layer. It talks to `apps/server` over web requests and a
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>the back end"]
+  web["apps/web<br/>the website and screenshot screens"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
+  web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
 ```
 
 ## What it is responsible for
@@ -34,7 +35,7 @@ flowchart LR
 2. **The first owner claims a new installation.** They sign in and enter its one-time token. The server records them as the owner.
 3. **A person sends a message.** The website opens a conversation and sends the message to the server. It shows the reply as it arrives and offers Stop.
 4. **An admin reviews a tool.** The website shows the tools found on a tool server (MCP server) that an admin has added. The admin can allow, ask before use or block each tool.
-5. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation.
+5. **A person watches a computer.** The website opens a read-only live view. A screenshot can be saved to the conversation. The transcript and Files panel show its name and capture facts. The preview shows the image and offers a download. Failed saves, scan refusals and access changes have separate messages. If the reply is lost, the website checks Files before it offers another action. The same status appears in the viewer and chat, and keeps keyboard focus while Files are checked.
 6. **An admin checks a change.** The website shows organisation history to people with access.
 7. **An Owner or Admin opens People & groups.** The website checks group reads,
    shows members and grants, creates groups and removes a member after review.
@@ -54,3 +55,4 @@ npm run typecheck -w apps/web
 - [apps/server](../server/README.md) handles the website's requests.
 - [Who may watch a computer's live desktop, and why](../../docs/adr/0006-computer-disk-and-live-view.md).
 - [The shared words used in these guides](../../GLOSSARY.md).
+- [Screenshot screens and browser checks](../../docs/process/p3-18-screens/README.md).

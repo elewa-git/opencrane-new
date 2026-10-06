@@ -165,11 +165,23 @@ core and the authenticated proxy; it provides no control or clipboard path.
 host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
 [Licence and live evidence](../../docs/process/live-view-evidence.md).
 
-The viewer's **Screenshot** button explicitly captures one desktop image. It
-announces capture/scanning progress, disables duplicate clicks and reports a saved
-result only after the file event is committed. Uncertain requests retain the same command key for a retry; a terminal malware
-rejection allows a new capture with a new key. Screenshots appear as PNG thumbnails in the
-conversation and the panel's Screenshots group; Open uses the existing authenticated
-file preview and download. Reload restores them from conversation events. Keyboard
-Enter/Space activates native buttons; Escape closes viewer and preview dialogs.
-The [P3-18 receipt](../../docs/process/p3-18-screenshots.md) records 1280/390px pixel evidence.
+The viewer's **Screenshot** button starts one capture and save request. It shows one
+saving message and stays focused while the request runs. The transcript and both viewer
+locations use the same capture status component. While Check status reads the feed, its
+button stays in place, announces that it is unavailable and ignores extra clicks. If the
+read fails, the status gives the same explanation in the viewer or transcript where it
+was opened. Try again and the same-request resend move focus to the status region before
+the button disappears. A saved PNG appears in the
+transcript and Files panel with a name, caption and capture facts. Its preview shows
+the image, the computer id, the generation number and a download link. A 503 offers a
+same-key retry. An unanswered request shows its command id and says that its result
+could not be confirmed. It keeps the Screenshot action unavailable until Check status
+successfully reads the feed. That read marks only the unanswered request it began for.
+The same-key resend appears after a successful read. A new Screenshot after that read
+uses a new command id. A failed read never says that Files were read. A scan rejection
+appears once in the transcript and does not show the file name. A 401 or 403 asks the
+person to check access; a later denial clears file details and closes the preview.
+Thumbnail and preview failures have their own retry states.
+The [screenshot screen receipt](../../docs/process/p3-18-screens/README.md) records browser
+captures and checks. The [earlier screenshot receipt](../../docs/process/p3-18-screenshots.md)
+records the service journey. Sample browser checks do not qualify a fresh installation.

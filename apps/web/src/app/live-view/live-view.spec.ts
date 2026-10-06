@@ -4,6 +4,18 @@ import { LIVE_VIEWER, LiveView } from './live-view';
 import type { RawChannel } from '@novnc/novnc/lib/rfb.js';
 
 afterEach(function restoreGlobals() { vi.useRealTimers(); vi.unstubAllGlobals(); });
+it('keeps the initial disconnected status paused with only its state label', () => {
+  const fixture = TestBed.createComponent(LiveView);
+  fixture.componentRef.setInput('conversationId', 'chat');
+  fixture.detectChanges();
+  const element: unknown = fixture.nativeElement;
+  if (!(element instanceof HTMLElement)) throw new Error('Missing viewer');
+  const status = element.querySelector('dialog [role="status"]');
+  expect(status?.querySelector('[data-state]')?.getAttribute('data-state')).toBe('paused');
+  expect(status?.textContent?.trim()).toBe('Disconnected');
+  fixture.destroy();
+});
+
 it('clears the desktop and explains a refused view without offering control', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 403 })));
   const fixture = TestBed.createComponent(LiveView);
@@ -107,6 +119,21 @@ async function watchFakeView(status: number) {
   await fixture.whenStable();
   return { fixture, element, request };
 }
+
+it('offers Screenshot only while the viewer is Viewing', async () => {
+  const { fixture, element } = await watchFakeView(503);
+  const states = ['Disconnected', 'Unavailable', 'Paused', 'Connecting', 'Failed',
+    'Access changed'];
+  for (const state of states) {
+    fixture.componentInstance['state'].set(state);
+    fixture.detectChanges();
+    const screenshotButtons = [...element.querySelectorAll('button')]
+      .filter(button => button.textContent?.trim() === 'Screenshot');
+    expect(screenshotButtons).toHaveLength(0);
+  }
+  fixture.destroy();
+});
+
 async function unconfirmedBrowserAdmission() {
   const { fixture, element, request } = await watchFakeView(503);
   expect(element.textContent).toContain('Failed');
@@ -132,6 +159,99 @@ async function browserCloseState(scenario: { code: number; state: string }) {
 it.each([
   { code: 4503, state: 'Failed' }, { code: 4003, state: 'Access changed' },
 ])('clears the canvas and shows $state for close $code', browserCloseState);
+
+it('shows Screenshot only while Viewing and keeps its keyboard action disabled while busy', async () => {
+  const { fixture, element } = await watchFakeView(503);
+  expect(element.querySelector('button')?.textContent).toContain('Watch your computer');
+  expect(element.textContent).not.toContain('Screenshot');
+  fixture.componentInstance['state'].set('Viewing');
+  fixture.detectChanges();
+  const screenshot = element.querySelector<HTMLButtonElement>('.tools button');
+  if (!screenshot) throw new Error('Missing Screenshot action');
+  const requested = vi.fn();
+  fixture.componentInstance.captureRequested.subscribe(requested);
+  screenshot.focus();
+  fixture.componentRef.setInput('captureBusy', true);
+  fixture.detectChanges();
+  expect(screenshot.getAttribute('aria-disabled')).toBe('true');
+  expect(screenshot.disabled).toBe(false);
+  expect(document.activeElement).toBe(screenshot);
+  screenshot.click();
+  expect(requested).not.toHaveBeenCalled();
+  fixture.componentRef.setInput('captureBusy', false);
+  fixture.detectChanges();
+  screenshot.focus();
+  screenshot.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  screenshot.click();
+  expect(requested).toHaveBeenCalledOnce();
+  fixture.destroy();
+});
+
+it('keeps the capture status outside Viewing and announces at both component entry points', async () => {
+  const { fixture, element } = await watchFakeView(503);
+  const state = {
+    kind: 'unknown', message: 'Screenshot outcome unknown', detail: 'Check status.',
+    safeToRetry: false, repeatAvailable: true,
+  };
+  fixture.componentRef.setInput('capture', state);
+  fixture.detectChanges();
+  const entry = element.querySelector('.entry-capture-status');
+  const dialog = element.querySelector('dialog');
+  const sheetStatus = element.querySelector('.capture-status');
+  expect(entry?.querySelector('[role="status"]')?.getAttribute('role')).toBe('status');
+  expect(dialog?.contains(entry)).toBe(false);
+  expect(sheetStatus?.querySelector('oc-shared-state')).not.toBeNull();
+  expect(element.textContent).toContain('Send the same request again');
+  fixture.componentInstance['state'].set('Paused');
+  fixture.detectChanges();
+  expect(element.querySelector('.capture-status')?.textContent)
+    .toContain('Screenshot outcome unknown');
+  fixture.componentInstance['state'].set('Disconnected');
+  fixture.detectChanges();
+  expect(element.querySelector('.capture-status')?.textContent)
+    .toContain('Screenshot outcome unknown');
+  const repeated = vi.fn();
+  fixture.componentInstance.captureRepeated.subscribe(repeated);
+  element.querySelector<HTMLButtonElement>('.repeat-capture')?.click();
+  expect(repeated).toHaveBeenCalledOnce();
+});
+
+it('wires the unknown action to status refresh and failed safe retry to repeat', async () => {
+  const { fixture, element } = await watchFakeView(503);
+  const checked = vi.fn();
+  const repeated = vi.fn();
+  fixture.componentInstance.captureStatusChecked.subscribe(checked);
+  fixture.componentInstance.captureRepeated.subscribe(repeated);
+  fixture.componentRef.setInput('capture', {
+    kind: 'unknown', message: 'Screenshot outcome unknown', detail: 'Check status.',
+    safeToRetry: false, repeatAvailable: false,
+  });
+  fixture.detectChanges();
+  element.querySelector<HTMLButtonElement>('.entry-capture-status button')?.click();
+  expect(checked).toHaveBeenCalledOnce();
+  fixture.componentRef.setInput('capture', {
+    kind: 'failed', message: "Screenshot wasn't saved", detail: 'Same request.',
+    safeToRetry: true, repeatAvailable: false,
+  });
+  fixture.detectChanges();
+  const actions = [...element.querySelectorAll<HTMLButtonElement>('oc-shared-state button')];
+  actions.find(button => button.textContent?.includes('Try again'))?.click();
+  expect(repeated).toHaveBeenCalledOnce();
+});
+
+it('offers Reconnect when disconnected and gives the unavailable screenshot explanation', async () => {
+  const { fixture, element } = await watchFakeView(503);
+  fixture.componentInstance['state'].set('Disconnected');
+  fixture.detectChanges();
+  expect(element.textContent).toContain('Reconnect to take a screenshot.');
+  expect(element.querySelector('.retry')?.textContent).toContain('Reconnect');
+  expect([...element.querySelectorAll('button')]
+    .filter(button => button.textContent?.trim() === 'Screenshot')).toHaveLength(0);
+  fixture.componentInstance['state'].set('Unavailable');
+  fixture.detectChanges();
+  expect(element.textContent)
+    .toContain('New screenshots are not available until you can watch this computer.');
+});
 
 it('hides expired pixels, clears paused pixels and rebuilds the viewer without another POST',
   async function pauseResume() {
