@@ -6,3 +6,4 @@ export {
   type AppendResult,
   type StoredEvent,
 } from "./contract.ts";
+export { readEventAt } from './read-event-at.ts';

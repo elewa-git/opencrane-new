@@ -22,7 +22,7 @@ with `libs/events`.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -->|saves changes| store["libs/event-store<br/>event log"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes| store
+  models["libs/models<br/>AI rules and budgets"] -->|saves budget changes| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves and reads| nats["NATS JetStream<br/>event service"]
   store -.-> events["libs/events<br/>event definitions"]
@@ -34,6 +34,8 @@ flowchart LR
   caller last read it. Otherwise report a conflict, so the caller can reload and
   try again.
 - Return the earlier result when a caller repeats the same request.
+- Let callers that have checked their history save a change without reading that
+  history again. A conflict still checks for an earlier copy of the request.
 - Read the history of one thing, such as one member, or follow the whole event
   log in order.
 - Check that the NATS event stream keeps its history and cannot be deleted.

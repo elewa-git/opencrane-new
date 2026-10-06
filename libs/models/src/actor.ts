@@ -76,7 +76,9 @@ export class BudgetActor {
   }
   private async append(type: string, payload: unknown, id: string = randomUUID()) {
     const event = envelope(this.silo, `budget-${this.silo}`, type, payload, id, this.now());
-    const result = await this.store.append({ event, expectedSequence: this.sequence });
+    // Reuse replayed history; configure checks its caller's command id before this append.
+    const command = { event, expectedSequence: this.sequence, historyChecked: true as const };
+    const result = await this.store.append(command);
     if (result.status !== 'appended') { this.failed = true; throw new Error('Budget writer lost its fence'); }
     this.sequence = result.sequence;
     this.apply(event);

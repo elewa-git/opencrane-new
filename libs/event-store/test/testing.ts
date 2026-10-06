@@ -9,7 +9,7 @@ import { certificates } from "./certificates.ts";
 import { jetstream } from "@nats-io/jetstream";
 import { wireSubject } from "../src/contract.ts";
 import { getEventDefinition, type EventEnvelope } from "@opencrane/events";
-import { createEventStore, connectNats } from "../src/index.ts";
+import { createEventStore, connectNats, type EventStore } from "../src/index.ts";
 import { afterAll, expect, onTestFinished } from "vitest";
 
 function registerChildCleanup(child: ChildProcess) {
@@ -92,6 +92,7 @@ export function event(
   ) {
     throw new Error("Unknown fixture event");
   }
+  const principal: NonNullable<EventEnvelope["principal"]> = { id: "admin", kind: "human" };
   return {
     id,
     commandId: id,
@@ -100,7 +101,8 @@ export function event(
     time: "2026-10-01T00:00:00Z",
     subject,
     silo: "test",
-    principal: { id: "admin", kind: "human" },
+    correlation: {},
+    principal,
     data: { ...definition.example, memberId: subject.slice("member-".length) },
   };
 }
@@ -219,4 +221,37 @@ export async function natsFixture({ provision = true } = {}) {
       await rm(directory, { recursive: true, force: true });
     },
   };
+}
+
+export interface ReadCall {
+  subject: string;
+  fromSequence: number;
+  rows: number;
+}
+
+/** Count instance reads so append's own history searches are included. */
+export function countReads(store: Pick<EventStore, 'readStream'>) {
+  const calls: ReadCall[] = [];
+  const read = store.readStream.bind(store);
+  async function* countedRead(subject: string, fromSequence = 1, deadline = Infinity) {
+    const call = { subject, fromSequence, rows: 0 };
+    calls.push(call);
+    for await (const row of read(subject, fromSequence, deadline)) {
+      call.rows++;
+      yield row;
+    }
+  }
+  function clear() {
+    calls.length = 0;
+  }
+  store.readStream = countedRead;
+  return { calls, clear };
+}
+
+export function expectNoWholeReads(calls: ReadCall[], largestAllowed = 20) {
+  for (const call of calls) {
+    if (call.fromSequence <= 1) {
+      expect(call.rows, `Whole-stream read of ${call.subject}`).toBeLessThanOrEqual(largestAllowed);
+    }
+  }
 }

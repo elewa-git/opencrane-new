@@ -17,6 +17,7 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|starts gateway and checks calls within two seconds| gateway["agentgateway<br/>AI gateway"]
   gateway -->|new usage lines| models
+  models -->|saves budget changes| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -25,6 +26,8 @@ flowchart LR
 - Keep model prices and estimate each request's cost before sending it.
 - Keep the spending limits that admins set: a daily and a monthly limit for the silo, and a monthly limit for each paying group and each assistant.
 - Hold money before an AI call and settle the charge when usage is reported.
+  Keep the budget state in memory after replay, so saving each change does not
+  read all the old spending events again.
 - List spending from the saved budget and call records, without reading chat history.
   Keep calls with an unknown outcome in the list alongside settled calls.
 - Release an expired hold at zero cents when it was never allowed or sent.

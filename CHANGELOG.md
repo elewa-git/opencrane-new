@@ -6,6 +6,7 @@
 
 - Docker test fixtures remove their anonymous volumes when they remove containers.
 - Spending reads only budget and call records, so long chats no longer make it fail. Unknown holds stay listed. Browser budget checks restore their test limits after a failed step.
+- Model budget writes no longer slow down as the silo's spending history grows.
 
 - A waiting assistant reply no longer makes the server reread finished chats. A turn the computer has not yet started is sent again until it starts.
 - Open chat pages repeat permission checks only when access records change. Idle pages no longer call the permissions service every 100 ms, and member removal still closes their connection within two seconds.

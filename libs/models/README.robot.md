@@ -2,6 +2,16 @@
 
 For people, read [README.md](README.md) first.
 
+## Budget writes
+
+BudgetActor replays every budget event before writing. Its appends opt into the
+event store's `historyChecked` mode, using the last applied sequence. Ordinary
+commands use fresh UUIDs. Configure checks its caller's command id against the
+history before appending. A lost reply is found after the original position;
+another writer's event causes a conflict and disables the old actor.
+`test/actor.test.ts` checks reservation reads on 500 events, configure repeats
+and the old actor stopping without holding money.
+
 ## Recovery after store outages
 
 Expiry releases a hold at zero cents with `outcome: not_dispatched` when
