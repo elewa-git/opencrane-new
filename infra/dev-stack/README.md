@@ -18,7 +18,7 @@ flowchart LR
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|builds scanner| clamav["infra/clamav<br/>virus scanner"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks| journeys["Browser journeys<br/>end-to-end checks"]
+  stack -->|runs checks| journeys["Browser journeys<br/>checks and measurements"]
   devbox["infra/devbox<br/>machine setup"] -->|creates cluster| cluster["k3d cluster<br/>local computers"]
   stack -->|uses cluster| cluster
 ```
@@ -31,6 +31,7 @@ flowchart LR
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Run browser checks against real local services.
+- Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
 
 ## Processes it handles

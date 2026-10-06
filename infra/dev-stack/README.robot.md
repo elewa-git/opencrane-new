@@ -435,7 +435,16 @@ For ten instrumented live-view repetitions on a claimed secondary, run
 `node --experimental-strip-types infra/dev-stack/live-view-repeat.ts <output-directory>`.
 The directory defaults to `docs/process/i77-live-view`; choose a new directory
 to retain an earlier batch. Each run records safe server stage/lease timings
-and browser admission/connection milestones. See the
+and browser admission/connection milestones. `replyTiming.firstDeltaMs` measures
+the time from the browser's message POST to its first received `agent.message_delta`
+frame. A null value means the measurement was not reached before the run ended.
+No message or reply text is retained by this observer.
+Run `python3 infra/dev-stack/live-view-resources.py <output-file>` during a batch
+to sample RSS, file descriptor counts and host CPU pressure every five seconds.
+It checks the selected secondary belongs to this worktree. It uses `sudo -n ls`
+to count descriptors for container processes with another uid. It records missing
+readings as errors. V8 heap used is unavailable because the server has no heap endpoint.
+See the
 [diagnostic receipt](../../docs/process/i77-live-view.md#safe-timing-records)
 for field meanings and collection limits.
 
