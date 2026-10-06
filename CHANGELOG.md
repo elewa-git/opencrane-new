@@ -63,9 +63,11 @@
 - Chat lists handle 60 sessions, and transcript reads and live sockets keep working
   while turns start and end. Team writes and new team turns check access after
   reading history with its own ten-second budget. Personal posts and turn admission
-  keep their existing behaviour. Idle chat sockets reread access when it changes.
-- Idle chat sockets check only membership changes that can remove read access. A role
-  change keeps the chat open while permissions catch up. Participants are set at creation.
+  keep their existing behaviour.
+- Open chat pages check access again when silo or team membership changes. Idle pages
+  do not call OpenFGA every 100 ms. Removals close within two seconds, and a change
+  that takes more than five seconds to apply makes the page reconnect. The people in a
+  chat are fixed when it is created; chat sockets do not watch participant changes yet.
 - A payer or membership refusal fails only that shared turn. The bridge stays open
   for other members. Stop remains available after payer removal.
 - Team screenshots return 403 before capturing the shared desktop. Assistant lists

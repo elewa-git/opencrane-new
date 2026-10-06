@@ -18,6 +18,7 @@ interface Subscription {
   accessPassed: boolean;
   computerState: string;
   checking: boolean;
+  applyingSince?: number;
   access?: Awaited<ReturnType<typeof chatSubscriptionAccess>>;
 }
 
@@ -76,9 +77,13 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
     }
     const mode = await state.access(deadline);
     state.accessPassed = true;
+    delete state.applyingSince;
     return mode;
   } catch (error) {
-    if (state.accessPassed && error instanceof AuthorityApplying) return;
+    if (state.accessPassed && error instanceof AuthorityApplying) {
+      closeAfterLongApplyWait(state);
+      return;
+    }
     if (isChatRefused(error)) refuse(state);
     else socket.close(1013);
     return;
@@ -86,6 +91,15 @@ async function pollAccess(state: Subscription): Promise<Mode | undefined> {
     clearTimeout(watchdog);
     state.checking = false;
   }
+}
+
+function closeAfterLongApplyWait(state: Subscription) {
+  const now = performance.now();
+  if (state.applyingSince === undefined) {
+    state.applyingSince = now;
+    return;
+  }
+  if (now - state.applyingSince >= 5000) state.socket.close(1013);
 }
 
 async function drain(state: Subscription) {

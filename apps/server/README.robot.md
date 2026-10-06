@@ -345,6 +345,11 @@ changes and covers chat, live view and file access.
 Each access poll has a 1.5-second limit and ends before reading content. Access
 polling continues during a slow content read, so a member-stream removal still
 closes the socket within two seconds without waiting for OpenFGA to apply it.
+The first access check closes with 1013 if OpenFGA has not applied a change yet.
+After a successful check, a later unapplied change keeps the socket open but pauses
+message delivery while each poll checks again. If it stays unapplied for five seconds,
+the server closes with 1013 so the browser reconnects. A member or team removal is
+checked before this wait and still closes with 1008 within two seconds.
 Reads use no authority fence. Writes read history with its own ten-second limit
 before opening their short access check.
 
