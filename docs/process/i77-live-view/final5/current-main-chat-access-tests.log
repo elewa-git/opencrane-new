@@ -1,0 +1,30 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2 apps/server/test/chat-access-regression.test.ts
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+
+ ❯ apps/server/test/chat-access-regression.test.ts (29 tests | 1 failed) 450193ms
+   × revokes a socket within two seconds while its content read is waiting 120094ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  apps/server/test/chat-access-regression.test.ts > revokes a socket within two seconds while its content read is waiting
+Error: Test timed out in 120000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ apps/server/test/chat-access-regression.test.ts:1045:1
+    1043| }
+    1044|
+    1045| it('revokes a socket within two seconds while its content read is wait…
+       | ^
+    1046|   removalDuringSlowSocketRead, 120_000);
+    1047|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 28 passed (29)
+   Start at  13:25:49
+   Duration  454.48s (tests 99%, transform 1%)

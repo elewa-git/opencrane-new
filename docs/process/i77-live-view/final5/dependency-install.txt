@@ -1,0 +1,4 @@
+Command: nice -n 10 npm ci
+Result: PASS (exit 0)
+Added 926 packages and audited 940 packages. npm reported 16 existing audit findings:
+3 low, 5 moderate, 6 high and 2 critical.

@@ -1,0 +1,17 @@
+git log --oneline -1: a90f245 💳 The Spending page loads in installations with long chat history, and a failed journey step no longer leaves a zero spending limit behind (#228)
+
+cat /proc/loadavg: 2.03 2.45 3.13 2/2559 436757
+nproc: 8
+/proc/pressure/cpu:
+some avg10=4.46 avg60=4.41 avg300=5.07 total=126060852721
+full avg10=0.00 avg60=0.00 avg300=0.00 total=0
+
+source commits:
+a90f245 💳 The Spending page loads in installations with long chat history, and a failed journey step no longer leaves a zero spending limit behind (#228)
+c5cccd3 🧰 Tool details in chat open in a drawer, and a dropped connection shows one quiet reconnect line (#221)
+d12ce49 🧽 Test runs no longer leave a Docker volume behind each time, which had filled the dev box's disk (#229)
+1d14b41 📊 Live-view qualification 4: replies now start reliably, and a spending page failure explains the remaining failed runs (#226)
+a4508ae 🔕 Idle chat pages stop asking for permission every tenth of a second, and a role change no longer drops a team chat (#214)
+8cba6e2 🧠 Permission checks reuse one OpenFGA connection per organisation instead of opening a new one each time (#218)
+d1c9d43 ⚡ Waiting replies no longer make the server reread every finished chat, and a turn the computer drops is sent again until it starts (#213)
+f5b57a5 🔌 Owners and admins can search the integration register and open a detail page for each server (#204)

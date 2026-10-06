@@ -1,0 +1,12 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2 libs/models/test/gateway.test.ts libs/projections/test/audit.test.ts libs/projections/test/legacy-conversation.test.ts libs/projections/test/direct-mode.test.ts
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+
+
+ Test Files  4 passed (4)
+      Tests  88 passed | 1 skipped (89)
+   Start at  12:00:42
+   Duration  357.01s (tests 98%, import 1%, transform 1%)

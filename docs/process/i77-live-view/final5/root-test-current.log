@@ -1,0 +1,33 @@
+npm notice run pretest
+npm notice run sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh
+npm notice run test
+npm notice run vitest run --maxWorkers=2
+
+ RUN  v5.0.3 /home/jente/dev/wt/i77-batch5
+
+ ❯ libs/models/test/decision-fence.test.ts (66 tests | 1 failed) 249499ms
+   × mcp refuses a turn stopped after a harmless grant during the access check 40083ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  libs/models/test/decision-fence.test.ts > mcp refuses a turn stopped after a harmless grant during the access check
+Error: Test timed out in 40000ms.
+If this is a long-running test, pass a timeout value as the last argument or configure it globally with "testTimeout".
+ ❯ libs/models/test/decision-fence.test.ts:732:15
+    730|   }
+    731| }
+    732| it.each(routes)('%s refuses a turn stopped after a harmless grant duri…
+       |               ^
+    733|   refusesStopAfterHarmlessGrant, 40_000);
+    734|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 128 passed | 4 skipped (133)
+      Tests  1 failed | 2029 passed | 15 skipped (2045)
+   Start at  12:29:00
+   Duration  1714.91s (tests 96%, import 3%)
+
+    Isolate  133 workers spawned · ~245ms startup each (spawn + environment, per file)
+             at least ~16.02s faster with isolate: false — reuses workers across files instead of one per file

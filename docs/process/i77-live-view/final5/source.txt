@@ -1,0 +1,11 @@
+Product source used for the live qualification: a90f2451df99e025836817e57529449b50271572.
+This was origin/main when the stack was claimed and the batch ran. It includes #213 (d1c9d43),
+#214 (a4508ae), #218 (8cba6e2), #198 (1eaa646), #215 (6c67ef1) and #228 (a90f245).
+The live-view first-reply timer and five-second process sampler were already merged.
+No product or harness code changed for this batch.
+
+Main later advanced through #222 (4ca7a9f), #225 (9e20336), #230 (df5a38b), #231
+(bc4e531) and #232 (8bb9b81). The full root suite, web suite and focused #230 tests ran on
+df5a38b before #231 and #232 merged. Focused bridge tests ran on bc4e531. The receipt branch
+is now based on 8bb9b814ef70444255a5b032ab4cdc91364005d1. The live qualification evidence
+remains from a90f245.
