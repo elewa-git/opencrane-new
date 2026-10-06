@@ -62,15 +62,37 @@ sequence across that category in the same native conditional publish. Only the
 event's own subject or category is accepted. Bootstrap uses zero across all
 member streams, which also contain identity bindings, to require a fresh silo.
 
-Command identity is checked in entity history before every attempt and
-again after a conflict. It is scoped to principal kind/id and subject.
-No separate ledger or duplicate window determines success. Reusing a key
-returns the earlier sequence even if the caller supplies new event data.
-History scans are linear; very large entity histories need a later indexed
-read optimisation that preserves this guarantee.
+By default, command identity is checked in entity history before every attempt
+and again after a conflict. It is scoped to commandId, principal kind/id and
+subject. Reusing a key returns the earlier sequence even if the caller supplies
+new event data. These default history searches grow with the entity's history.
+
+`historyChecked: true` skips the search before publishing, including on retries.
+The caller must have checked every event on the event's own subject up to
+`expectedSequence` and found no earlier copy of that command. Any other supplied
+value is rejected as `invalid_event`. BudgetActor opts in after replay; its
+configure command checks caller-supplied command ids separately.
+
+After a conditional refusal (10071 or 10164), this mode searches the event's own
+subject only from `expectedSequence + 1`. It returns the first matching copy's
+position, or `conflict` if none exists. A lost reply or racing attempt cannot
+store another copy: retries keep the original expected position. The normal
+path makes one publish and no history reads. A refusal reads only later events.
+Both modes keep the same Msg-Id and conditional headers. Duplicate
+acknowledgements still check the saved event with `sameCommand`.
+No separate ledger or duplicate window determines command success.
+
+`test/testing.ts` exports `countReads` and `expectNoWholeReads` through `./testing`.
+The counter wraps a store instance's `readStream`, including append's own searches.
+It records subject, starting position and rows returned, and provides `clear()`.
+The assertion rejects reads from sequence 1 or earlier that exceed a row limit
+(20 by default). It cannot count whole-log reads through `subscribe`.
 
 `readStream(subject, fromSequence)` is a finite snapshot through the head
 observed on entry; `fromSequence` is an inclusive global position.
+`readEventAt(store, subject, sequence, deadline)` returns the first row only when
+its global position equals `sequence`; it returns `undefined` for a gap or missing
+row. It reads at most one row and keeps the caller's absolute deadline.
 Read subjects may select a category, such as `member-*`; appends still require an entity.
 `subscribe(fromSequence, signal)` reads exact global sequences from the caller's
 SQL checkpoint, with no durable consumer cursor. Historical reads fetch at most
@@ -123,7 +145,12 @@ For focused tests, run `sh scripts/fetch-nats.sh`, then
 `npx vitest run libs/event-store/test`. Tests launch random-port NATS servers
 and prove conditional races, scoped retries, ordered reads, restart/outage
 bounds and native snapshot/restore idempotency. `@opencrane/event-store/testing`
-is test infrastructure only. Security tests prove command/reader/excluded roles,
+is test infrastructure only. Its `countReads(store)` helper wraps the instance's
+`readStream`, including append's internal searches. Calls record subject,
+fromSequence and yielded rows; `clear()` starts a new measurement.
+`expectNoWholeReads(calls, largestAllowed = 20)` refuses reads from sequence 1
+or earlier that yield more than the allowed rows. This helper does not count
+whole-log reads through `subscribe`. Security tests prove command/reader/excluded roles,
 unknown and missing credentials, plaintext and wrong-CA refusals. The pinned NATS server is 2.15.0; both downloaded
 platform archives have fixed SHA-256 checksums.
 

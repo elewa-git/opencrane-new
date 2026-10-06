@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it } from 'vitest';
-import { natsFixture } from '@opencrane/event-store/testing';
+import { countReads, expectNoWholeReads, natsFixture } from '@opencrane/event-store/testing';
 import { BudgetActor, envelope, history, priceTableId, totals } from '../src/index.ts';
 
 let nats: Awaited<ReturnType<typeof natsFixture>>;
@@ -214,3 +214,65 @@ async function refusesUncertaintyWithoutAllow() {
 
 it('keeps a released hold at zero when uncertainty has no allow decision',
   refusesUncertaintyWithoutAllow);
+
+async function reservesWithoutRereadingOldBudgetEvents() {
+  const events = [];
+  for (let index = 0; index < 498; index++) {
+    const payload = { periodStart: '2026-10-01T00:00:00.000Z' };
+    events.push(envelope('test', 'budget-test', 'budget.period_started', payload));
+  }
+  await nats.seed(events);
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  const reads = countReads(nats.store);
+  await reserve();
+  reads.clear();
+  await reserve();
+  expectNoWholeReads(reads.calls);
+  let budgetRows = 0;
+  for (const call of reads.calls) {
+    if (call.subject === 'budget-test') {
+      budgetRows += call.rows;
+    }
+  }
+  expect(budgetRows).toBeLessThanOrEqual(2);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 2, monthCents: 0 });
+}
+it('reserves on 500 budget events without rereading the old spending history',
+  reservesWithoutRereadingOldBudgetEvents);
+
+async function keepsConfigureRepeatFromWritingAgain() {
+  const payload = {
+    scope: 'global', dailyCeilingCents: 200, ceilingCents: 200, setBy: 'alice',
+  };
+  const saved = envelope('test', 'budget-test', 'budget.ceiling_set', payload, 'configure-once');
+  // Give the saved attempt another event id so NATS deduplication cannot hide a repeat.
+  saved.id = 'earlier-configure-attempt';
+  await nats.seed([saved]);
+  actor = new BudgetActor(nats.store, 'test', now);
+  await actor.start();
+  await reserve();
+  const before = await nats.store.head();
+  expect(await actor.configure(payload, 'configure-once')).toEqual({ status: 'appended' });
+  expect(await nats.store.head()).toBe(before);
+  const changed = { ...payload, ceilingCents: 300 };
+  expect(await actor.configure(changed, 'configure-once')).toEqual({ status: 'conflict' });
+  expect(await nats.store.head()).toBe(before);
+  expect(actor.state.ceilingCents).toBe(200);
+}
+it('recognises an old configure command after later budget writes',
+  keepsConfigureRepeatFromWritingAgain);
+
+async function stopsAfterAnotherLeaderWrites() {
+  const replacement = new BudgetActor(nats.store, 'test', now);
+  await replacement.start();
+  const before = await nats.store.head();
+  const reads = countReads(nats.store);
+  await expect(reserve()).rejects.toThrow('Budget writer lost its fence');
+  expect(reads.calls).toEqual([{ subject: 'budget-test', fromSequence: 3, rows: 1 }]);
+  await expect(reserve()).rejects.toThrow('Budget writer unavailable');
+  expect(await nats.store.head()).toBe(before);
+  expect(totals(actor.state, clock)).toMatchObject({ reservedCents: 0, monthCents: 0 });
+}
+it('stops the old actor after another leader writes without holding money',
+  stopsAfterAnotherLeaderWrites);

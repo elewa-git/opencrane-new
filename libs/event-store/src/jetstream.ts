@@ -273,7 +273,7 @@ export class EventStore {
     while (performance.now() < deadline) {
       try {
         return await this.attempt(event, command.expectedSequence, deadline, command.expectedSubject,
-          command.expectedGlobalSequence);
+          command.expectedGlobalSequence, command.historyChecked);
       } catch (error) {
         if (!isEventStoreUnavailable(error)) {
           throw new Error("Event append failed", { cause: error });
@@ -291,8 +291,9 @@ export class EventStore {
   private async previous(
     event: EventEnvelope,
     deadline: number,
+    fromSequence = 1,
   ): Promise<AppendResult | undefined> {
-    for await (const stored of this.readStream(event.subject, 1, deadline)) {
+    for await (const stored of this.readStream(event.subject, fromSequence, deadline)) {
       if (sameCommand(stored.event, event)) {
         return { status: "appended", sequence: stored.sequence };
       }
@@ -306,10 +307,13 @@ export class EventStore {
     deadline: number,
     expectedSubject?: string,
     expectedGlobalSequence?: number,
+    historyChecked?: true,
   ): Promise<AppendResult> {
-    const previous = await this.previous(event, deadline);
-    if (previous) {
-      return previous;
+    if (!historyChecked) {
+      const previous = await this.previous(event, deadline);
+      if (previous) {
+        return previous;
+      }
     }
     if (performance.now() >= deadline) {
       throw new TimeoutError();
@@ -342,7 +346,8 @@ export class EventStore {
         error instanceof JetStreamApiError &&
         [10071, 10164].includes(error.code)
       ) {
-        return (await this.previous(event, deadline)) ?? { status: "conflict" };
+        const fromSequence = historyChecked ? expectedSequence + 1 : 1;
+        return (await this.previous(event, deadline, fromSequence)) ?? { status: "conflict" };
       }
       throw error;
     }

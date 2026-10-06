@@ -11,6 +11,9 @@ export interface StoredEvent {
 export interface AppendCommand {
   event: unknown;
   expectedSequence: number;
+  /** Check every event on this subject up to expectedSequence before opting in.
+   * Find no earlier copy with the same commandId, principal and subject. */
+  historyChecked?: true;
   /** Check the whole event category (for example member-*) instead of only this entity. */
   expectedSubject?: string;
   /** Only ownership migration may fence the complete captured event history. */
@@ -47,7 +50,8 @@ export function validateCommand(
   if (
     !parsed.success ||
     !Number.isSafeInteger(command.expectedSequence) ||
-    command.expectedSequence < 0
+    command.expectedSequence < 0 ||
+    !validHistoryChecked(command.historyChecked)
   ) {
     return undefined;
   }
@@ -69,6 +73,10 @@ export function validateCommand(
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
+}
+
+function validHistoryChecked(value: unknown): boolean {
+  return value === undefined || value === true;
 }
 
 function validMigrationFence(command: AppendCommand, event: EventEnvelope) {
