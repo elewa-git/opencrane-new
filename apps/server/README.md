@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat access and live updates"]
   server -.->|checks access and reads spending| libs["libs/*<br/>shared code"]
-  server -->|records changes| nats["NATS<br/>event log"]
+  server -->|records changes and reads new chat events| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|checks chat position and reads changed rows| postgres
@@ -31,6 +31,8 @@ flowchart LR
   Resolving a hold also reads its history first and rechecks access before saving.
 - Starts personal turns using the latest default paying group. It keeps a small
   summary and reads only new spending events after the first use.
+- Records streamed replies using a chat summary. After its first use, it reads only
+  new events and checks one saved event. It handles repeats without saving them again.
 - Lets two silo members exchange private messages without starting assistant work.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
   and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that

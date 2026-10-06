@@ -3,11 +3,11 @@ import { authorityFence, groupMembership, PayingGroupRefused, MemberAccessRefuse
   activeMember } from '@opencrane/models';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { readStreamSummary, type EventStore, type StoredEvent,
+import { readStreamSummary, type AppendCommand, type EventStore, type StoredEvent,
   type SummaryKind } from '@opencrane/event-store';
-import { chatHistory } from './commands.ts';
+import { readChatFacts, type ChatFacts } from './chat-summary.ts';
 import { creationEvent } from './private-session.ts';
-import { agentSession, ReportRejected } from './reports.ts';
+import { agentSessionData, ReportRejected } from './reports.ts';
 
 const binding = z.object({
   conversationId: z.string(), turnId: z.string(), threadId: z.string().optional(),
@@ -46,11 +46,11 @@ type WriteAuthority = Awaited<ReturnType<typeof authorityFence>>;
 
 /** Append one lifecycle event. Reports cannot reopen a closed turn. */
 export async function turnCommand(store: EventStore, context: TurnContext, input: TurnInput) {
-  const rows = await chatHistory(store, context.silo, input.conversationId);
-  const requested = requestedTurn(rows, context.assistantId, input.turnId);
+  const conversation = await readChatFacts(store, context.silo, input.conversationId, input.turnId);
+  const requested = requestedTurn(conversation, context.assistantId);
   const subject = `computer-${context.assistantId}`;
   const events = await computerHistory(store, subject, context.silo, performance.now() + 10_000);
-  const data = decideTurn(events, rows, input, context.computerId, requested.requesterId);
+  const data = decideTurn(events, conversation, input, context.computerId, requested.requesterId);
   if (!data) return;
   let fresh: WriteAuthority | undefined;
   let status = input.status;
@@ -60,7 +60,7 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   if (newAdmission(input.status, events, input.turnId)) {
     try {
       executionMode = input.executionMode ?? 'memory_free';
-      const admission = await admitTurn(store, context, rows, events, data,
+      const admission = await admitTurn(store, context, conversation, events, data,
         requested.executionMode, executionMode);
       data.payingGroupId = admission.payer;
       fresh = admission.fresh;
@@ -85,13 +85,21 @@ export async function turnCommand(store: EventStore, context: TurnContext, input
   };
   addLifecycleDetails(eventData, status, executionMode);
   await fresh?.();
-  const result = await store.append({ expectedSequence: events.at(-1)?.sequence ?? 0, event });
-  if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
-  const committed = await computerHistory(store, subject, context.silo, performance.now() + 10_000);
-  function isSaved(row: StoredEvent) {
-    return row.event.id === id;
+  const previous = previousTurnCommand(events, id, subject);
+  if (previous) {
+    verifyBinding(previous, data);
+  } else {
+    const command: AppendCommand = {
+      expectedSequence: events.at(-1)?.sequence ?? 0, historyChecked: true, event,
+    };
+    const result = await store.append(command);
+    if (result.status !== 'appended') throw new Error('Turn append conflict or unavailable');
+    const committed = await computerHistory(store, subject, context.silo, performance.now() + 10_000);
+    function isSaved(row: StoredEvent) {
+      return row.event.id === id;
+    }
+    verifyBinding(committed.find(isSaved), data);
   }
-  verifyBinding(committed.find(isSaved), data);
   if (refusal) throw refusal;
   if (input.status === 'started') return { ...data, threadId: z.string().parse(data.threadId),
     executionMode: executionMode ?? 'memory_free' };
@@ -107,38 +115,36 @@ async function computerHistory(store: EventStore, subject: string, silo: string,
   return rows;
 }
 
-function isConversationCreated(row: StoredEvent) {
-  return row.event.type === 'conversation.created';
-}
-function requestedTurn(rows: StoredEvent[], assistantId: string, turnId: string) {
-  const created = agentSession(rows);
-  function isRequestedMessage(row: StoredEvent) {
-    return row.event.id === turnId && row.event.type === 'message.posted';
+function previousTurnCommand(events: StoredEvent[], id: string, subject: string) {
+  function isSameCommand(row: StoredEvent) {
+    const event = row.event;
+    return event.type === 'computer.turn_started' && event.commandId === id &&
+      event.subject === subject && event.principal?.kind === 'system' &&
+      event.principal.id === 'turn-lifecycle';
   }
-  const message = rows.find(isRequestedMessage);
-  if (created.assistantId !== assistantId || !message) throw new ReportRejected('Unrequested turn');
+  // Check the command itself before opting out of the store's repeat search.
+  return events.find(isSameCommand);
+}
+function requestedTurn(conversation: ChatFacts, assistantId: string) {
+  const created = agentSessionData(conversation.created);
+  if (created.assistantId !== assistantId || !conversation.message) {
+    throw new ReportRejected('Unrequested turn');
+  }
   const details = z.object({ authorId: z.string(), executionMode: z.literal('memory_free').optional() })
-    .parse(message.event.data);
+    .parse(conversation.message);
   return { requesterId: details.authorId, executionMode: details.executionMode };
 }
 function isComputerLifecycle(row: StoredEvent) {
   return !row.event.type.startsWith('computer.turn_');
 }
-function reportedClosed(rows: StoredEvent[], turnId: string) {
-  function isClosedReport(row: StoredEvent) {
-    if (!['agent.turn_completed', 'agent.turn_failed'].includes(row.event.type)) return false;
-    return z.object({ turnId: z.string() }).parse(row.event.data).turnId === turnId;
-  }
-  return rows.some(isClosedReport);
-}
-function checkStart(events: StoredEvent[], rows: StoredEvent[], computerId: string, turnId: string) {
+function checkStart(events: StoredEvent[], conversation: ChatFacts, computerId: string) {
   const current = events.findLast(isComputerLifecycle);
   const computer = z.object({ computerId: z.string() });
   if (current?.event.type !== 'computer.ready' ||
       computer.parse(current.event.data).computerId !== computerId) {
     throw new Error('Computer is not ready');
   }
-  if (reportedClosed(rows, turnId)) throw new ReportRejected('Turn is closed');
+  if (conversation.closed) throw new ReportRejected('Turn is closed');
 }
 function isClosedTurn(row: StoredEvent) {
   return row.event.type === 'computer.turn_closed';
@@ -147,15 +153,15 @@ function isStartedTurn(row: StoredEvent) {
   return row.event.type === 'computer.turn_started';
 }
 function isRefusedAdmission(closed: StoredEvent | undefined, started: StoredEvent | undefined,
-  rows: StoredEvent[], input: TurnInput) {
+  conversation: ChatFacts, input: TurnInput) {
   if (!closed || started || input.status !== 'started') {
     return false;
   }
   const status = closedTurnDetails.parse(closed.event.data).status;
-  return status === 'failed' && !reportedClosed(rows, input.turnId);
+  return status === 'failed' && !conversation.closed;
 }
 
-function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput,
+function decideTurn(events: StoredEvent[], conversation: ChatFacts, input: TurnInput,
   computerId: string, requesterId: string) {
   function isMatchingTurn(row: StoredEvent) {
     return row.event.type.startsWith('computer.turn_') &&
@@ -164,11 +170,11 @@ function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput
   const turns = events.filter(isMatchingTurn);
   const closed = turns.find(isClosedTurn);
   const started = turns.find(isStartedTurn);
-  if (isRefusedAdmission(closed, started, rows, input)) {
+  if (isRefusedAdmission(closed, started, conversation, input)) {
     throw new TurnAdmissionRejected('Turn admission was refused');
   }
   const recoveringClosed = input.replay && input.status === 'started' &&
-    reportedClosed(rows, input.turnId);
+    conversation.closed;
   // Accept a verified duplicate without admitting a new turn after its final report.
   if (closed || recoveringClosed) {
     if (input.status === 'started' && !input.replay) throw new ReportRejected('Turn is closed');
@@ -185,7 +191,7 @@ function decideTurn(events: StoredEvent[], rows: StoredEvent[], input: TurnInput
       throw new ReportRejected('Thread mismatch');
     }
     if (started) return data;
-    checkStart(events, rows, computerId, input.turnId);
+    checkStart(events, conversation, computerId);
   }
   return data;
 }
@@ -203,7 +209,7 @@ async function assistantDetailsFor(store: EventStore, context: TurnContext) {
 }
 
 async function payingGroup(store: EventStore, context: TurnContext,
-  conversation: StoredEvent[], requesterId: string, details: z.infer<typeof assistantDetails>) {
+  conversation: ChatFacts, requesterId: string, details: z.infer<typeof assistantDetails>) {
   if (details.kind === 'team') {
     if (!context.binding) throw new ReportRejected('IAM binding required for a new team turn');
     const group = sessionPayer(conversation, requesterId, details.payingGroupId);
@@ -221,10 +227,9 @@ async function payingGroup(store: EventStore, context: TurnContext,
   const payer = await personalPayer(store, context.silo, performance.now() + 10_000);
   return { payer, fresh: undefined };
 }
-function sessionPayer(conversation: StoredEvent[], requesterId: string,
+function sessionPayer(conversation: ChatFacts, requesterId: string,
   assistantPayer: string | undefined) {
-  const creation = conversation.find(isConversationCreated);
-  const created = sessionDetails.parse(creation?.event.data);
+  const created = sessionDetails.parse(conversation.created);
   if (created.createdBy !== requesterId) throw new ReportRejected('Private requester mismatch');
   const group = created.payingGroupId;
   if (!group) throw new ReportRejected('Paying group unavailable for shared work');
@@ -307,13 +312,13 @@ function storedExecutionMode(events: StoredEvent[], turnId: string) {
   return executionMode;
 }
 
-async function admitTurn(store: EventStore, context: TurnContext, rows: StoredEvent[],
+async function admitTurn(store: EventStore, context: TurnContext, conversation: ChatFacts,
   events: StoredEvent[], data: TurnBinding, requested: unknown, mode: ExecutionMode) {
   const details = await assistantDetailsFor(store, context);
   const required = requiredExecutionMode(details.kind, requested);
   if (mode !== required) throw new TurnAdmissionRejected('Execution mode mismatch');
   requireFreshPrivateThread(events, data, mode);
-  return payingGroup(store, context, rows, data.requesterId, details);
+  return payingGroup(store, context, conversation, data.requesterId, details);
 }
 
 

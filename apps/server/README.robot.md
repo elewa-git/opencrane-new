@@ -698,3 +698,43 @@ outside its access check. A warmed summary reads only new budget events.
 missing defaults and at most two new budget rows after warming a 500-event stream.
 `test/integrations.test.ts` covers resolution after a long history read and member
 removal during that read, through the real HTTP route and disposable services.
+
+## Chat summary and report writes
+
+Reports and turn commands share the event-store `chat` summary. The server keeps
+up to 64 conversations per store connection and rebuilds a dropped summary from
+the first event. Each call reads through the latest saved event before copying
+its facts. History reads have their own ten-second limit and finish before turn
+admission starts its access check.
+
+The summary keeps the first conversation creation, the first message's raw author
+and execution mode for each event id, closed turn ids, and report positions by
+computer and report sequence. It keeps no message or reply text. The newest stored
+report supplies that computer's last report sequence; the first matching report
+supplies the replay position. Callers parse the copied fields with the existing
+schemas. Replies without `previousSequence` still use the whole-log
+`reportPosition` check for old journals.
+
+`recordReport` checks a repeated report by reading its saved position. A verified
+repeat returns `duplicate` without calling `append`. A new report passes
+`historyChecked: true` and the summary's sequence to the unchanged conditional
+append. It checks the digest of the event at the returned position, including its
+id, and keeps the existing refusal messages.
+
+`turnCommand` uses the copied creation, requested message and closed status. It
+still reads the computer's complete history. Before opting into `historyChecked`,
+it checks for the same start command id, principal and subject in that history.
+A repeat verifies the saved binding and returns without an append. A closed turn
+already skips its append. A start from another computer still writes its own start.
+Computer summaries, credentials and model decisions are outside this change.
+
+`test/chat-summary.test.ts` uses real NATS to check warmed 500-event chats,
+report and turn repeats, old journals, changed payloads, user posts between reports,
+closed turns and missing or different events at an append's returned position.
+
+Local memory measurement used Node with `--expose-gc --max-old-space-size=256`.
+A synthetic reader supplied all 64 cached chats with 3,000 events each: one creation,
+500 messages, 500 closed turns and 1,999 reply chunks. Message and chunk rows carried
+32,000-character text. After collection, the summaries retained 13,240,040 bytes
+(12.6 MiB); total JavaScript heap use was 27,932,112 bytes (26.6 MiB). This measures
+summary storage, not the complete server running on a live silo.
