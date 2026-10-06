@@ -5,6 +5,7 @@
 ## Unreleased
 
 - Team chats are marked private. A lost computer pauses sending and explains recovery. Replies with lost output never show Done. A memory-free turn is a visible, separate choice that resets after sending.
+- Operators: after updating an existing installation, stop the services and run `npm run replay -- computers` once before serving chat again. The new computer state is not filled from older events otherwise. Fresh installations need nothing.
 
 - Streamed replies no longer slow down as a chat gets longer. Repeated turn starts are handled without saving them again.
 
