@@ -54,12 +54,19 @@
           </section>
         }
         @for (turn of chat.turns(); track turn.author + turn.id) {
-          <article class="message" [class.own]="turn.author === 'you'" [class.agent-turn]="turn.author === 'agent'" [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected" [class.unroll]="turn.author === 'agent' && !!turn.text" [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
+          <article class="message"
+            [class.own]="turn.author === 'you'"
+            [class.agent-turn]="turn.author === 'agent'"
+            [class.file-turn]="hasScreenshot(turn.files) || !!turn.screenshotRejected"
+            [class.unroll]="turn.author === 'agent' && !!turn.text"
+            [class.highlighted]="isHighlighted(turn.tools)"
+            [attr.aria-label]="turn.author === 'agent' ? 'Agent reply' : turn.author === 'you' ? 'Your message' : 'Message'">
             @if (turn.author !== 'you') { <span class="avatar" [class.agent]="turn.author === 'agent'" aria-hidden="true"><oc-icon [name]="turn.author === 'agent' ? 'agent' : 'open'" /></span> }
             <div class="message-content">
               @if (turn.author !== 'you') { <header><strong>{{ turn.author === 'agent' ? 'Agent' : 'Participant' }}</strong><time>{{ time(turn.time) }}@if (turn.endedAt) { · {{ duration(turn.time, turn.endedAt) }}s }</time></header> }
               @for (tool of turn.tools; track tool.id) {
-                <oc-tool-activity-line [record]="tool" />
+                <oc-tool-activity-line [record]="tool"
+                  (detailsOpened)="openToolDetails(tool, $event)" />
               }
               @if (turn.text) { <div class="prose" [class.ink]="turn.author === 'agent'">@for (paragraph of turn.text.split('\n\n'); track $index; let last = $last) { <div class="paragraph">@for (part of textParts(paragraph); track $index) {@switch (part.kind) {@case ('bold') {<strong>{{ part.text }}</strong>}@case ('citation') {<button type="button" class="citation" (click)="preview.set('Citation ' + part.text)"><span class="citation-paper" [ocDogEar]="true">{{ part.text.slice(1, -1) }}</span></button>}@case ('a2ui') {<div class="a2ui" [ocDogEar]="true"><header><span class="agent-badge">Ag</span> Interactive · built from approved components</header><p>This interface is not available yet.</p></div>}@default {<ng-container>{{ part.text }}</ng-container>}}}@if (last && turn.author === 'agent' && turn.state === 'working') {<span class="caret" aria-hidden="true"></span>}</div>}</div> }
               @if (turn.author === 'you') { <time class="own-time">{{ time(turn.time) }}</time> }
@@ -92,6 +99,11 @@
                 [checking]="statusChecking()" [announce]="!panelExpanded() && !chat.loading()"
                 (action)="captureAction()" (repeated)="repeatCapture()" />
             }
+          </div>
+        }
+        @if (reconnectedAt()) {
+          <div class="reconnected-line"><oc-icon name="done" />
+            Reconnected at {{ time(reconnectedAt()!) }}. You're caught up.
           </div>
         }
         @if (chat.selected() && !chat.denied()) { <oc-approval-cards [conversationId]="chat.selected()" /> }
@@ -129,6 +141,22 @@
     <oc-hinge-drawer [open]="panelOverlay()" title="Session"
       (closed)="sessionPanelClosed()">
       <ng-container [ngTemplateOutlet]="panelContent" />
+    </oc-hinge-drawer>
+  }
+  @if (toolDetails(); as details) {
+    <oc-hinge-drawer [open]="true" [title]="details.record.label"
+      [description]="toolKind(details.record)" backLabel="Back to conversation"
+      [returnFocusTo]="details.opener" (closed)="closeToolDetails()">
+      <dl class="tool-detail-ledger">
+        <dt>Result</dt><dd>{{ toolResult(details.record) }}</dd>
+        <dt>Recorded</dt><dd>{{ toolTime(details.record) }}</dd>
+        <dt>Reference</dt><dd class="tool-reference">{{ details.record.id }}</dd>
+      </dl>
+      <p>Where it ran, the account used and attempt history: Not available yet.</p>
+      <aside class="sanitised-note">
+        <strong>Sanitised</strong>
+        <span>Raw arguments, tokens and full tool output are not shown here.</span>
+      </aside>
     </oc-hinge-drawer>
   }
   <ng-template #sessionNavigation>

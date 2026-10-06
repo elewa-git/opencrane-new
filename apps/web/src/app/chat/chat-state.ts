@@ -34,6 +34,13 @@ export interface ToolActivityRecord {
   time: string;
 }
 
+export function toolKind(record: ToolActivityRecord): string {
+  if (record.label === 'Reply failed') {
+    return 'Agent run';
+  }
+  return 'Computer command';
+}
+
 /** Rendering is a replay of server rows. Stop freezes only its turn, at the recorded position. */
 export function transcript(rows: ChatRow[], memberId: string): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();

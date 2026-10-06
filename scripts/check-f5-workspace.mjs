@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import { chatFixture } from './chat-fixture.mjs';
 import { serveWebBuild } from './serve-web-build.mjs';
+import { outline, pageHasNoOverflow, waitForFonts } from './visual-helpers.mjs';
 
 const output = resolve('docs/process/f5-workspace');
 const build = resolve('apps/web/dist/web/browser');
@@ -29,23 +30,8 @@ async function serveScreenshotThumbnail(route) {
   await route.fulfill({ status: 404 });
 }
 
-function pageHasNoOverflow() {
-  const documentWidth = globalThis.document.documentElement.scrollWidth;
-  const viewportWidth = globalThis.window.innerWidth;
-  return documentWidth <= viewportWidth;
-}
-
 function focused(node) {
   return node === globalThis.document.activeElement;
-}
-
-function outline(node) {
-  const style = globalThis.getComputedStyle(node);
-  return [style.outlineWidth, style.outlineColor, style.outlineOffset];
-}
-
-async function waitForFonts() {
-  await globalThis.document.fonts.ready;
 }
 
 function panelAnimation(node) {
@@ -89,18 +75,22 @@ async function capture(page, name, width, motion) {
 async function checkToolAndBudget(page) {
   const toolLine = page.locator('oc-tool-activity-line').first();
   await toolLine.waitFor();
-  const summary = toolLine.locator('summary');
-  assert.equal((await summary.textContent())?.trim(), 'Command failed');
-  await summary.focus();
-  assert.deepEqual(await summary.evaluate(outline),
+  const button = toolLine.locator('.tool-line');
+  assert.equal((await button.textContent())?.trim(), 'Command failed');
+  await button.focus();
+  assert.deepEqual(await button.evaluate(outline),
     ['2px', 'rgb(10, 132, 151)', '2px']);
   await page.keyboard.press('Enter');
-  const details = toolLine.locator('.tool-drawer');
+  const details = page.getByRole('dialog', { name: 'Command failed' });
   await details.waitFor();
-  assert.equal(await toolLine.getByRole('button', { name: /retry/i }).count(), 0,
+  assert.equal(await details.getByRole('button', { name: /retry/i }).count(), 0,
     'Tool details do not suggest a fresh message retry');
   assert((await details.innerText()).includes('Failed · Exit code 1'));
-  assert.equal(await toolLine.locator('[data-state="failed"]').count(), 1);
+  assert.equal(await details.locator('[data-state="failed"]').count(), 0);
+  assert((await button.innerHTML()).includes('data-state="failed"'));
+  await page.keyboard.press('Escape');
+  assert(await button.evaluate(node => node.ownerDocument.activeElement === node),
+    'Closing tool details returns focus to its button');
   await page.getByText('Reply failed', { exact: true }).waitFor();
 
   const budgetNotice = page.locator('oc-budget-stop-notice');

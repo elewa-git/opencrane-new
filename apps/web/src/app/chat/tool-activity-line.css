@@ -1,20 +1,16 @@
 .tool-line {
-  margin: 8px 0;
-  color: var(--oc-ink-muted);
-  font-size: 11px;
-}
-
-.tool-line summary {
   display: flex;
   align-items: center;
   gap: 6px;
+  margin: 8px 0;
+  color: var(--oc-ink-muted);
+  font-size: 11px;
   min-height: 32px;
   cursor: pointer;
-  list-style: none;
-}
-
-.tool-line summary::-webkit-details-marker {
-  display: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
 }
 
 .state-mark {
@@ -36,45 +32,9 @@
   transition: transform 220ms var(--oc-ease-standard);
 }
 
-.tool-line[open] .chevron {
-  transform: rotate(90deg);
-}
-
-.tool-drawer {
-  margin: 4px 0 10px 14px;
-  padding: 12px;
-  border: 1px solid #dee3e4;
-  border-radius: 7px;
-  background: white;
-}
-
-.tool-drawer dl {
-  display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
-  gap: 5px 8px;
-  margin: 0;
-  color: #616a6c;
-  font: 10px/1.5 var(--oc-font-mono);
-}
-
-.tool-drawer dd {
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-
-.tool-drawer footer {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #eef1f2;
-  line-height: 1.5;
-}
-
 @media (max-width: 700px) {
   .tool-line {
     margin: 0;
-  }
-
-  .tool-line summary {
     min-height: 44px;
   }
 }

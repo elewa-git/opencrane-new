@@ -75,5 +75,12 @@ export async function chatFixture(page, scenario = 'live') {
       ws.send(JSON.stringify({ version: 1, type: 'ready', topic: 'conversation', conversationId: input.conversationId, generation: 1, position: rows.length, computerState: scenario === 'folding' ? 'starting your computer' : 'ready' }));
     });
   });
-  return { commands, add, conflictNextStop: () => { stopConflict = true; }, online: () => { offline = false; }, rows: () => rows };
+  return {
+    commands,
+    add,
+    closeSocket: () => socket?.close(),
+    conflictNextStop: () => { stopConflict = true; },
+    online: () => { offline = false; },
+    rows: () => rows,
+  };
 }

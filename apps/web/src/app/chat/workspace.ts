@@ -21,14 +21,16 @@ import { BrandMark } from '../ui/brand-mark';
 import { sessionSlug } from '@opencrane/protocol';
 import { ChatSession } from './chat-session';
 import { ScreenshotCapture, captureView } from './screenshot-capture';
-import { rejectedScreenshotIds, type ChatAttachment } from './chat-state';
+import {
+  rejectedScreenshotIds, toolKind, type ChatAttachment, type ToolActivityRecord,
+} from './chat-state';
 import { ChatComposer } from './composer';
 import { WebSocketService } from '../core/websocket.service';
 import { FoldLoader } from '../ui/fold-loader/fold-loader';
 import { FilePreview } from './file-preview';
 import { LiveView } from '../live-view/live-view';
 import {
-  capturedByLine, fileName, fileType, fileUrl, shortTime, type ScreenshotFacts,
+  capturedByLine, fileName, fileType, fileUrl, shortTime, utcDateTime, type ScreenshotFacts,
 } from './file-presentation';
 
 @Component({
@@ -42,10 +44,11 @@ import {
   ],
   providers: [ChatSession, WebSocketService, ScreenshotCapture],
   templateUrl: './workspace.html',
-  styleUrls: ['./workspace.css', './transcript.css', './panel.css'],
+  styleUrls: ['./workspace.css', './transcript.css', './panel.css', './tool-details.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(document:keydown)': 'shortcut($event)',
+    '(document:click)': 'clearToolHighlight($event)',
     '(window:resize)': 'resized()',
   },
 })
@@ -66,6 +69,11 @@ export class Workspace implements OnInit {
   protected readonly preview = signal('');
   protected readonly search = signal('');
   protected readonly transcriptElement = viewChild<ElementRef<HTMLElement>>('transcript');
+  protected readonly toolDetails = signal<{
+    record: ToolActivityRecord;
+    opener: HTMLElement;
+  } | undefined>(undefined);
+  protected readonly highlightedToolId = signal('');
   protected readonly panelOverlay = signal(false);
   protected readonly searchDialog = viewChild<ElementRef<HTMLDialogElement>>('searchDialog');
   protected readonly screenshots = computed(this.screenshotFiles.bind(this));
@@ -73,6 +81,7 @@ export class Workspace implements OnInit {
   protected readonly screenshotIds = computed(this.screenshotFileIds.bind(this));
   protected readonly rejectedScreenshotIds = computed(this.rejectedScreenshotFileIds.bind(this));
   protected readonly captureViewModel = computed(this.capturePresentation.bind(this));
+  protected readonly reconnectedAt = this.chat.reconnectedAt;
   protected readonly statusChecking = signal(false);
   protected readonly files = computed(() => [...new Set(this.chat.turns().filter(turn => turn.author === 'agent').flatMap(turn => turn.files))]);
   protected readonly title = computed(() => this.chat.selected() ? sessionSlug(this.chat.turns().find(turn => turn.author === 'you' && turn.text)?.text ?? this.chat.conversations().find(row => row.conversationId === this.chat.selected())?.title ?? 'Personal session') : 'New session');
@@ -84,6 +93,7 @@ export class Workspace implements OnInit {
   private previousCaptureDenied = this.chat.denied();
   constructor() {
     effect(this.resetCaptureWhenSessionChanges.bind(this));
+    effect(this.closeMissingToolDetails.bind(this));
     afterEveryRender(this.afterRender.bind(this));
   }
   ngOnInit(): void { void this.chat.load(); }
@@ -138,12 +148,57 @@ export class Workspace implements OnInit {
     if (targetId) this.focusTool(targetId);
   }
   private focusTool(id: string): void {
+    this.highlightedToolId.set(id);
     const target = document.getElementById('tool-' + id);
-    if (!(target instanceof HTMLDetailsElement)) return;
-    target.open = true;
+    if (!(target instanceof HTMLButtonElement)) return;
     target.scrollIntoView({ block: 'center' });
-    const summary = target.querySelector('summary');
-    summary?.focus();
+    target.focus();
+  }
+  protected clearToolHighlight(event: MouseEvent): void {
+    const target = event.target;
+    if (target instanceof Element && target.closest('.tool-line, .activity-row')) return;
+    this.highlightedToolId.set('');
+  }
+  protected isHighlighted(tools: ToolActivityRecord[]): boolean {
+    const highlightedToolId = this.highlightedToolId();
+    for (const tool of tools) {
+      if (tool.id === highlightedToolId) return true;
+    }
+    return false;
+  }
+  protected openToolDetails(record: ToolActivityRecord, opener: HTMLElement): void {
+    this.toolDetails.set({ record, opener });
+  }
+  protected closeToolDetails(): void {
+    this.toolDetails.set(undefined);
+  }
+  protected toolResult(record: ToolActivityRecord): string {
+    if (record.failed) {
+      return `Failed · ${record.detail}`;
+    }
+    return `Completed · ${record.detail}`;
+  }
+  protected toolTime(record: ToolActivityRecord): string {
+    return utcDateTime(record.time);
+  }
+  protected toolKind(record: ToolActivityRecord): string {
+    return toolKind(record);
+  }
+  private closeMissingToolDetails(): void {
+    const details = this.toolDetails();
+    if (!details) return;
+    const recordStillExists = this.activity().some(
+      this.isSameToolRecord.bind(this, details.record.id),
+    );
+    if (recordStillExists) return;
+    this.toolDetails.set(undefined);
+    requestAnimationFrame(this.focusTranscript.bind(this));
+  }
+  private isSameToolRecord(recordId: string, record: ToolActivityRecord): boolean {
+    return record.id === recordId;
+  }
+  private focusTranscript(): void {
+    this.transcriptElement()?.nativeElement.focus();
   }
   protected showFiles(): void {
     this.panelTab.set('files');

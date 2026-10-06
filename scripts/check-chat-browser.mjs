@@ -123,13 +123,19 @@ try {
   await draft.page.close();
   console.log('PASS draft recipient selection');
   const activity = await open('tools', 1280);
-  await activity.page.locator('.tool-line summary').first().click();
-  assert(!(await activity.page.locator('.tool-line').first().innerText()).includes('a'.repeat(64)), 'Failure drawer never exposes a raw digest');
+  const toolLine = activity.page.locator('.tool-line').first();
+  await toolLine.click();
+  const toolDrawer = activity.page.getByRole('dialog', { name: 'Command failed' });
+  await toolDrawer.waitFor();
+  assert(!(await toolDrawer.innerText()).includes('a'.repeat(64)), 'Failure drawer never exposes a raw digest');
+  await activity.page.keyboard.press('Escape');
+  assert(await toolLine.evaluate(node => node.ownerDocument.activeElement === node),
+    'Closing tool details returns focus to the first tool line');
   await activity.page.getByRole('tab', { name: /Activity/ }).click();
   await activity.page.locator('.desktop-panel .activity-row').first().waitFor();
   assert.equal(await activity.page.locator('.desktop-panel .activity-row').count(), 2);
   await activity.page.locator('.desktop-panel .activity-row').first().click();
-  assert.equal(await activity.page.locator('.tool-line').first().getAttribute('open'), '');
+  assert(await toolLine.evaluate(node => node.ownerDocument.activeElement === node));
   activity.fixture.add('agent.turn_failed', { turnId: 'event-2', reason: 'provider failed' });
   await activity.page.locator('.desktop-panel .activity-row').filter({ hasText: 'Reply failed' }).waitFor();
   await activity.page.close();
@@ -178,7 +184,7 @@ try {
       await page.getByRole('button', { name: 'Session panel', exact: true }).click();
       await page.getByRole('dialog', { name: 'Session', exact: true }).waitFor(); await page.keyboard.press('Escape');
       assert.equal(await page.locator(':focus').getAttribute('id'), 'panel-toggle');
-      for (const target of await page.locator('button:visible, summary:visible, textarea:visible').all()) {
+      for (const target of await page.locator('button:visible, textarea:visible').all()) {
         const box = await target.boundingBox(); assert(box.height >= 44 && box.width >= 44, `44px target: ${await target.getAttribute('aria-label')}`);
       }
     }
@@ -223,7 +229,10 @@ try {
       if (scenario === 'attach') await page.getByRole('button', { name: 'Attach', exact: true }).click();
       if (scenario === 'queued') { await page.getByRole('textbox', { name: 'Message your agent' }).fill('Compare this brief against what we promised.'); await page.getByRole('button', { name: 'Send message' }).click(); await page.getByRole('button', { name: 'Retry queued message' }).waitFor(); }
       if (scenario === 'panel' && width === 390) await page.getByRole('button', { name: 'Session panel', exact: true }).click();
-      if (scenario === 'tools' && frame !== '8i-activity') await page.locator('.tool-line summary').first().click();
+      if (scenario === 'tools' && frame !== '8i-activity') {
+        await page.locator('.tool-line').first().click();
+        await page.getByRole('dialog', { name: /Command/ }).waitFor();
+      }
       if (scenario === 'assets') { await page.locator('.file-card').getByRole('button', { name: /^Open (?!session files)/ }).click(); await page.getByText('Preview unavailable.', { exact: false }).waitFor(); }
       if (scenario === 'a2ui') {
         const badge = await page.locator('.a2ui .agent-badge').evaluate(agentBadgeStyle);
@@ -238,7 +247,7 @@ try {
       if (width === 390) {
         const header = await page.locator('.workspace-header').boundingBox(), transcript = await page.locator('.transcript').boundingBox(), dock = await page.locator('.composer-dock').boundingBox();
         assert(transcript.y >= header.y + header.height && transcript.y + transcript.height <= dock.y + 1, 'Transcript stays between header and dock');
-        for (const target of await page.locator('button:visible, summary:visible, textarea:visible').all()) {
+        for (const target of await page.locator('button:visible, textarea:visible').all()) {
           if (await target.evaluate(node => node.classList.contains('citation'))) {
             assert(await target.evaluate(node => { const hit = globalThis.getComputedStyle(node, '::before'); return hit.width === '44px' && hit.height === '44px'; }), 'Citation has a 44px invisible target');
           } else {

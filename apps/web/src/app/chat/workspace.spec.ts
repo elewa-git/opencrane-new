@@ -1,11 +1,12 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { Workspace } from './workspace';
-import { SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
+import { RANDOM_SOURCE, SOCKET_FACTORY, type SocketLike } from '../core/socket-factory';
 
 interface CaptureWorkspace {
   fixture: ComponentFixture<Workspace>;
   root: HTMLElement;
   calls: string[];
+  socket: SocketLike;
   setReply(status: number): void;
   denyFeedRead(): void;
   setMessageStatus(status: number): void;
@@ -69,6 +70,7 @@ async function createCaptureWorkspace(initialRows: Record<string, unknown>[] = [
   };
   TestBed.configureTestingModule({ providers: [
     { provide: SOCKET_FACTORY, useValue: () => socket },
+    { provide: RANDOM_SOURCE, useValue: () => 0 },
   ] });
   const fixture = TestBed.createComponent(Workspace);
   await fixture.whenStable();
@@ -77,7 +79,7 @@ async function createCaptureWorkspace(initialRows: Record<string, unknown>[] = [
   const root: unknown = fixture.nativeElement;
   if (!(root instanceof HTMLElement)) throw new Error('Missing workspace root');
   return {
-    fixture, root, calls, rows,
+    fixture, root, calls, rows, socket,
     setReply(status) { replyStatus = status; },
     denyFeedRead() { denyMessages = true; },
     setMessageStatus(status) { messageStatus = status; },
@@ -562,4 +564,121 @@ it('keeps an upload retry in the same draft conversation after creation catch-up
   await fixture.whenStable();
   [...root.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Retry upload')!.click();
   await vi.waitFor(() => expect(opened).toHaveBeenCalledWith('POST', `/api/conversations/${created[0]}/files`));
+});
+
+function toolRows(): Record<string, unknown>[] {
+  return [
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Run the command', authorId: 'me' } },
+    { id: 'command', position: 2, type: 'agent.command_ran',
+      time: '2026-10-04T10:01:00Z', data: { turnId: 'message', exitCode: 1 } },
+  ];
+}
+
+it('opens tool details from the line and focuses the line from Activity', async () => {
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal: openPanelDialog,
+    close: closePanelDialog,
+  });
+  const capture = await createCaptureWorkspace(toolRows());
+  const toolLine = capture.root.querySelector<HTMLButtonElement>('.tool-line');
+  if (!toolLine) throw new Error('Missing tool line');
+  Object.defineProperty(toolLine, 'getClientRects', {
+    value: () => [{ width: 100, height: 44 }],
+  });
+
+  capture.fixture.componentInstance['jumpToTool']('command');
+  capture.fixture.detectChanges();
+  expect(document.activeElement).toBe(toolLine);
+  expect(toolLine.closest('.message')?.classList.contains('highlighted')).toBe(true);
+
+  toolLine.click();
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  const dialogs = Array.from(capture.root.querySelectorAll<HTMLDialogElement>(
+    'oc-hinge-drawer dialog',
+  ));
+  const dialog = dialogs.find(candidate => candidate.querySelector('h2')?.textContent
+    === 'Command failed');
+  expect(dialog?.querySelector('h2')?.textContent).toBe('Command failed');
+  expect(document.activeElement).toBe(dialog?.querySelector('h2'));
+  expect(dialog?.textContent).toContain('Failed · Exit code 1');
+  expect(dialog?.textContent).toContain('4 Oct 2026, 10:01 UTC');
+  expect(dialog?.textContent).toContain('Reference');
+  expect(dialog?.textContent).toContain('Not available yet');
+
+  dialog?.dispatchEvent(new Event('cancel', { cancelable: true }));
+  await capture.fixture.whenStable();
+  expect(document.activeElement).toBe(toolLine);
+});
+
+it('announces one recovery after the socket reconnects and its conversation is ready', async () => {
+  const capture = await createCaptureWorkspace();
+  const field = capture.root.querySelector<HTMLTextAreaElement>('textarea');
+  field?.focus();
+  const originalOpen = capture.socket.onopen;
+  originalOpen?.(new Event('open'));
+  capture.socket.onclose?.(new CloseEvent('close'));
+  await vi.waitFor(() => expect(capture.socket.onopen).not.toBe(originalOpen));
+  capture.socket.onopen?.(new Event('open'));
+
+  const readyMessage = {
+    version: 1,
+    topic: 'conversation',
+    conversationId: 'chat',
+    type: 'ready',
+    position: 0,
+    generation: 1,
+    computerState: 'ready',
+  };
+  capture.socket.onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify(readyMessage),
+  }));
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+
+  const reconnected = capture.root.querySelector('.reconnected-line');
+  expect(reconnected?.textContent).toContain('Reconnected at');
+  expect(capture.root.querySelectorAll('.reconnected-line')).toHaveLength(1);
+  expect(capture.fixture.componentInstance['chat'].announcement()).toMatch(/Reconnected at/);
+  expect(document.activeElement).toBe(field);
+
+  capture.fixture.componentInstance['chat'].announcement.set('');
+  capture.fixture.componentInstance['chat'].reconnectedAt.set('');
+  capture.socket.onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify({ ...readyMessage, computerState: 'starting' }),
+  }));
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+  expect(capture.root.querySelector('.reconnected-line')).toBeNull();
+  expect(capture.fixture.componentInstance['chat'].reconnectedAt()).toBe('');
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
+});
+
+it('does not announce a reconnect that started in the conversation being left', async () => {
+  const capture = await createCaptureWorkspace();
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onclose?.(new CloseEvent('close'));
+  await capture.fixture.whenStable();
+
+  await capture.fixture.componentInstance['chat'].select('other');
+  capture.socket.onopen?.(new Event('open'));
+  capture.socket.onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify({
+      version: 1,
+      topic: 'conversation',
+      conversationId: 'other',
+      type: 'ready',
+      position: 0,
+      generation: 1,
+      computerState: 'ready',
+    }),
+  }));
+  await capture.fixture.whenStable();
+  capture.fixture.detectChanges();
+
+  expect(capture.root.querySelector('.reconnected-line')).toBeNull();
+  expect(capture.fixture.componentInstance['chat'].reconnectedAt()).toBe('');
+  expect(capture.fixture.componentInstance['chat'].announcement()).toBe('');
 });

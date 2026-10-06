@@ -1,0 +1,46 @@
+.reconnected-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  color: #2a7d4f;
+  font-size: 12px;
+}
+
+.reconnected-line oc-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tool-detail-ledger {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin: 0;
+}
+
+.tool-detail-ledger dt {
+  color: #4f575a;
+  font-size: 12px;
+}
+
+.tool-detail-ledger dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.tool-reference {
+  font-family: var(--oc-font-mono);
+}
+
+.sanitised-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f2fbfc;
+  color: #006a78;
+  font-size: 12px;
+}

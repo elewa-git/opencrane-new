@@ -1,7 +1,6 @@
-import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { ChatIcon } from './icon';
 import type { ToolActivityRecord } from './chat-state';
-import { shortTime } from './file-presentation';
 
 @Component({
   selector: 'oc-tool-activity-line',
@@ -12,21 +11,11 @@ import { shortTime } from './file-presentation';
 })
 export class ToolActivityLine {
   readonly record = input.required<ToolActivityRecord>();
-  protected toolName(): string {
-    if (this.record().label === 'Reply failed') {
-      return 'agent run';
-    }
-    return 'computer command';
-  }
+  readonly detailsOpened = output<HTMLElement>();
 
-  protected result(): string {
-    if (this.record().failed) {
-      return `Failed · ${this.record().detail}`;
+  protected openDetails(event: MouseEvent): void {
+    if (event.currentTarget instanceof HTMLElement) {
+      this.detailsOpened.emit(event.currentTarget);
     }
-    return `Completed · ${this.record().detail}`;
-  }
-
-  protected time(): string {
-    return shortTime(this.record().time);
   }
 }
