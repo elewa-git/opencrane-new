@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
+import { setTimeout as delay } from 'node:timers/promises';
 import { decideApproval, readApproval } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
@@ -33,7 +34,8 @@ async function decide(setup: Fixture, route: 'model' | 'mcp') {
   const response = await fetch(url, request);
   const responseBody = await response.text();
   return { status: response.status, body: responseBody,
-    requestId: response.headers.get('x-request-id') };
+    requestId: response.headers.get('x-request-id'),
+    reservationId: response.headers.get('x-reservation-id') };
 }
 
 function injectDuringDecision(setup: Fixture, injection: Injection) {
@@ -99,6 +101,9 @@ const turnStopped: Injection = {
 };
 
 const harmless: Injection[] = [
+  { label: 'agent.output_lost',
+    subject: 'conversation-conversation', type: 'agent.output_lost',
+    data: { conversationId: 'conversation', turnId: 'turn' } },
   { label: 'agent.message_delta',
     subject: 'conversation-conversation', type: 'agent.message_delta',
     data: { conversationId: 'conversation', turnId: 'turn', messageId: 'm1',
@@ -260,6 +265,42 @@ async function readsConversationBeforeAccessCheck() {
 }
 it('reads full conversation history once before the short access check',
   readsConversationBeforeAccessCheck, 40_000);
+
+async function allowsSlowHistoryRead(route: 'model' | 'mcp') {
+  const setup = await fixture();
+  const read = setup.nats.store.readStream.bind(setup.nats.store);
+  let historyDelayed = false;
+  let accessDelayed = false;
+  async function* delayHistoryAndAccess(...args: Parameters<typeof read>) {
+    if (args[0] === 'conversation-conversation' && args[1] === 1 && !historyDelayed) {
+      historyDelayed = true;
+      await delay(1900);
+    }
+    if (args[0] === 'member-alice' && !accessDelayed) {
+      accessDelayed = true;
+      await delay(200);
+    }
+    yield* read(...args);
+  }
+  try {
+    await prepareRoute(setup, route);
+    const reads = vi.spyOn(setup.nats.store, 'readStream');
+    reads.mockImplementation(delayHistoryAndAccess);
+    try {
+      const response = await decide(setup, route);
+      expect(historyDelayed).toBe(true);
+      expect(accessDelayed).toBe(true);
+      expect(response.status, response.body).toBe(200);
+    } finally {
+      reads.mockRestore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+const historyRoutes = ['model', 'mcp'] as const;
+it.each(historyRoutes)('%s allows a 1.9-second history read before checking access',
+  allowsSlowHistoryRead, 40_000);
 
 async function handlesEventDuringAudit(injection: Injection, allowed: boolean) {
   const setup = await fixture();
@@ -426,3 +467,167 @@ it.each(routes)('%s allows another team member to leave during the access check'
   allowsOtherGroupMemberRemoval, 40_000);
 it.each(routes)('%s refuses the requester leaving the team without reserving money',
   refusesRequesterGroupRemoval, 40_000);
+
+interface TeamGrantChange {
+  label: string;
+  teamId: string;
+  type: 'grant.given' | 'grant.revoked';
+}
+
+const teamGrantChanges: TeamGrantChange[] = [
+  { label: 'the owning team grant is revoked', teamId: 'sales', type: 'grant.revoked' },
+  { label: 'a separate granted team grant is revoked', teamId: 'eng', type: 'grant.revoked' },
+  { label: 'a team grant is given', teamId: 'eng', type: 'grant.given' },
+];
+
+async function prepareTeamGrant(setup: Fixture, route: 'model' | 'mcp',
+  change: TeamGrantChange) {
+  if (change.teamId === 'eng') {
+    const team = { teamId: 'eng', name: 'Engineering', createdBy: 'alice' };
+    await setup.append('team-eng', 'team.created', team);
+    const membership = { teamId: 'eng', memberId: 'alice', addedBy: 'alice' };
+    await setup.append('team-eng', 'team.member_added', membership);
+  }
+  if (change.type !== 'grant.revoked') return;
+  const grant: Injection = {
+    label: change.label, subject: grantStream('model', 'gpt-6-luna'), type: 'grant.given',
+    data: { resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: change.teamId,
+      granteeKind: 'team', grantedBy: 'alice' },
+  };
+  const teamGrant = routeInjection(route, grant);
+  const given = await setup.append(teamGrant.subject, teamGrant.type, teamGrant.data);
+  await setup.auth.handler.handle(given, setup.db);
+  const directGrant = routeInjection(route, grantRevoked);
+  const revoked = await setup.append(directGrant.subject, directGrant.type, directGrant.data);
+  await setup.auth.handler.handle(revoked, setup.db);
+  const permission = await setup.auth.use('person', 'alice',
+    String(teamGrant.data['resourceType']), String(teamGrant.data['resourceId']));
+  expect(permission.allowed).toBe(true);
+}
+
+async function refusesTeamGrantChange(route: 'model' | 'mcp', change: TeamGrantChange) {
+  const ownsAssistant = change.teamId === 'sales';
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', ownsAssistant);
+  try {
+    await prepareRoute(setup, route);
+    await prepareTeamGrant(setup, route, change);
+    const fields: Record<string, unknown> = {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: change.teamId,
+    };
+    if (change.type === 'grant.given') {
+      fields['granteeKind'] = 'team';
+      fields['grantedBy'] = 'alice';
+    } else {
+      fields['revokedBy'] = 'alice';
+    }
+    const injection: Injection = { label: change.label,
+      subject: grantStream('model', 'gpt-6-luna'), type: change.type, data: fields };
+    const event = routeInjection(route, injection);
+    const response = await injectedDecision(setup, route, event);
+    expect(response.status, response.body).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(0);
+    expect(setup.received()).toBe(0);
+  } finally {
+    await setup.close();
+  }
+}
+
+for (const route of routes) {
+  async function refuseTeamGrant(change: TeamGrantChange) {
+    await refusesTeamGrantChange(route, change);
+  }
+  it.each(teamGrantChanges)(`${route} refuses when $label without reserving money`,
+    refuseTeamGrant, 40_000);
+}
+
+function injectStopDuringAuthorityCheck(setup: Fixture, route: 'model' | 'mcp',
+  afterAudit: boolean, stopped: Injection) {
+  const append = setup.nats.store.append.bind(setup.nats.store);
+  const head = setup.nats.store.head.bind(setup.nats.store);
+  let audited = false;
+  let grantChecks = 0;
+  let injected = false;
+  async function recordAudit(command: Parameters<typeof append>[0]) {
+    const result = await append(command);
+    const event = z.object({ type: z.string() }).parse(command.event);
+    if (event.type === 'decision.recorded') audited = true;
+    return result;
+  }
+  const harmlessGrant: Injection = {
+    label: 'a grant for another member', subject: grantStream('model', 'gpt-6-luna'),
+    type: 'grant.given', data: { resourceType: 'model', resourceId: 'gpt-6-luna',
+      granteeId: 'bob', granteeKind: 'member', grantedBy: 'alice' },
+  };
+  const grant = routeInjection(route, harmlessGrant);
+  async function appendStopAfterGrant(...args: Parameters<typeof head>) {
+    if (args[0] === grant.subject && !injected && audited === afterAudit) {
+      grantChecks++;
+      // Wait until the call has passed its first permission check.
+      if (grantChecks === 2) {
+        injected = true;
+        await setup.append(grant.subject, grant.type, grant.data);
+        await setup.append(stopped.subject, stopped.type, stopped.data);
+      }
+    }
+    return head(...args);
+  }
+  const appends = vi.spyOn(setup.nats.store, 'append');
+  appends.mockImplementation(recordAudit);
+  const heads = vi.spyOn(setup.nats.store, 'head');
+  heads.mockImplementation(appendStopAfterGrant);
+  function restore() {
+    appends.mockRestore();
+    heads.mockRestore();
+    expect(injected).toBe(true);
+  }
+  return restore;
+}
+
+async function refusesStopAfterHarmlessGrant(route: 'model' | 'mcp') {
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  try {
+    await prepareRoute(setup, route);
+    const restore = injectStopDuringAuthorityCheck(setup, route, false, turnStopped);
+    try {
+      const response = await decide(setup, route);
+      expect(response.status, response.body).toBe(403);
+      expect(setup.actor.state.reservations).toHaveLength(0);
+      expect(setup.received()).toBe(0);
+    } finally {
+      restore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(routes)('%s refuses a turn stopped after a harmless grant during the access check',
+  refusesStopAfterHarmlessGrant, 40_000);
+
+const lateTurnClosures: Injection[] = [
+  turnStopped,
+  { label: 'the computer turn closes', subject: 'computer-assistant',
+    type: 'computer.turn_closed', data: { ...otherTurn, conversationId: 'conversation',
+      turnId: 'turn', status: 'failed' } },
+];
+
+async function releasesHoldAfterHarmlessGrantAndStop(stopped: Injection) {
+  const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true);
+  try {
+    const restore = injectStopDuringAuthorityCheck(setup, 'model', true, stopped);
+    try {
+      const response = await decide(setup, 'model');
+      expect(response.status, response.body).toBe(503);
+      expect(response.reservationId).toBeNull();
+      expect(setup.actor.state.reservations).toHaveLength(1);
+      expect(setup.actor.state.reservations[0]?.settledCents).toBe(0);
+      expect(setup.received()).toBe(0);
+    } finally {
+      restore();
+    }
+  } finally {
+    await setup.close();
+  }
+}
+it.each(lateTurnClosures)(
+  'releases the unsent hold when $label after a harmless grant during the final check',
+  releasesHoldAfterHarmlessGrantAndStop, 40_000);

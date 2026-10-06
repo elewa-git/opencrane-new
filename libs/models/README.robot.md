@@ -269,15 +269,17 @@ and team grants, including revoked team grants. Another member's direct grant
 needs no receipt for this call.
 
 Decisions read computer credentials and full computer/conversation histories first,
-with their own read deadline. They capture a log position before those histories,
-then start the access check. The whole decision keeps its original two-second
-deadline; reading history does not buy more time. `decisionActivity` reads only
+with a ten-second limit, as chat turn reads do. They capture a log position before
+those histories. After reading them, they start the two-second access check.
+History reads do not use up the access check's time. `decisionActivity` reads only
 new computer and conversation events after the captured position. It refuses
 participant changes, a closed conversation, changes to the computer's identity or
 ready state, and a stop, completion, failure or computer close for the current turn.
 The recorded ready computer must match the one that supplied the token check.
 Other conversations' computer turn events, file uploads/deliveries/rejections,
 posted messages and output reports leave ordinary call access unchanged.
+Both activity checks and the shared access check use `outputReportTypes` from
+`authority.ts`, including `agent.output_lost`, so their output rules stay in step.
 
 `decisionAuthorityFence` checks only the small member, ownership, assistant,
 resource-grant, discovered team and MCP policy streams. It ignores member
@@ -286,6 +288,9 @@ and direct grants for unrelated grantees. Shared spending checks the caller's
 current group membership and waits for that person's changes to reach OpenFGA.
 Team grants stay strict because they can supply access to the requester.
 The shared `authorityFence` and `conversationAccessFence` keep their existing rules.
+Decision checks repeat the activity and access reads together until neither finds
+new rows. This catches a turn stop or computer close saved while harmless events
+are being checked, before returning a permit. The access deadline stays fixed.
 All failures caused by a relevant change retain the exact `Authority changed`
 message used by the live-view checks. This design filters unrelated events rather
 than retrying a reservation or a single-use approval.
@@ -309,6 +314,8 @@ The tests in `test/decision-fence.test.ts` adapt the event-store probes for #164
 They cover each harmless event and real revocation through model and MCP HTTP
 admission, early and late money safety, the computer-token handover, unrelated
 projection delays, full-history ordering and single-use approval admission.
+They also cover owning and separately granted teams, a 1.9-second history read,
+and a turn stopped or closed while a harmless grant is checked again.
 The existing gateway and server approval tests cover real gateway forwarding,
 late revocation and message invalidation. The tests use disposable services and
 scripted providers; they make no paid model calls.

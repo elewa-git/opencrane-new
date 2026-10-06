@@ -2,12 +2,12 @@ import type { EventEnvelope } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { history } from './actor.ts';
 import { closesDecisionTurn, invalidatesApproval } from './approvals.ts';
+import { outputReportTypes } from './authority.ts';
 import { data } from './state.ts';
 
 const harmlessConversationTypes = [
   'file.uploaded', 'file.rejected', 'file.delivered', 'message.posted',
-  'agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
-  'agent.message_delta', 'agent.message_completed',
+  ...outputReportTypes,
 ];
 
 export async function decisionActivity(store: EventStore, silo: string, assistantId: string,
@@ -29,6 +29,7 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   async function confirm(deadline: number, needsApproval: boolean) {
     // Read only activity saved since the histories above. Never replay a long chat
     // inside the short access check. Keep these positions within this request only.
+    let foundNewRows = false;
     for (const subject of subjects) {
       const from = (positions.get(subject) ?? head) + 1;
       const to = await store.head(subject, deadline);
@@ -39,7 +40,9 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
         if (changed) throw new Error('Authority changed');
       }
       positions.set(subject, to);
+      foundNewRows = true;
     }
+    return foundNewRows;
   }
   return { conversation, computer, confirm };
 }

@@ -184,23 +184,28 @@ export async function startDecision(
       res.setHeader('content-type', 'application/json');
       if (await internalRoutes(req, res, actor, identity, binding, providers)) return;
       if ((!req.url?.startsWith('/authorize/mcp/') && req.url !== '/authorize') || req.method !== 'POST') { res.writeHead(404); res.end(); return; }
-      const historyDeadline = started + 2000;
+      const historyDeadline = started + 10_000;
       const checked = await credentials.check(req.headers, undefined, historyDeadline);
       const computer = computerSchema.parse(checked.computer);
       const turnToken = turnSchema.parse(checked.turn);
-      // Read long histories before starting the short access check.
+      // Give history reads ten seconds, then start the two-second access check.
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, historyDeadline);
       const conversation = activity.conversation;
       requireActiveConversationTurn(conversation, turnToken.turn);
       const turn = activeTurn(turnToken, activity.computer, checked.sequence);
       const subjects = [`member-${turnToken.requester}`, `assistant-${computer.assistant}`];
-      const authority = await decisionAuthorityFence(actor.store, started,
+      const accessStarted = performance.now();
+      const authority = await decisionAuthorityFence(actor.store, accessStarted,
         subjects, turnToken.requester, computer.assistant);
       let needsApproval = false;
       async function confirmDecision() {
-        await activity.confirm(authority.deadline, needsApproval);
-        await authority();
+        while (true) {
+          const activityChanged = await activity.confirm(authority.deadline, needsApproval);
+          const authorityChanged = await authority();
+          if (!activityChanged && !authorityChanged) return;
+          // Recheck both because a turn can stop while unrelated grants are being read.
+        }
       }
       const snapshot = { include: authority.include, head: authority.head,
         deadline: authority.deadline };

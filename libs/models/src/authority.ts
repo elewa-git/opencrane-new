@@ -5,6 +5,11 @@ import { wireSubject, type StoredEvent, type EventStore } from '@opencrane/event
 import { data } from './state.ts';
 import { memberStateTypes } from './ownership.ts';
 
+export const outputReportTypes: readonly string[] = [
+  'agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
+  'agent.message_delta', 'agent.message_completed', 'agent.output_lost',
+];
+
 /** Shared by model/MCP decisions; destination checks can use this same resource grant. */
 export async function currentAuthority(store: EventStore, binding: Binding, requester: string, assistant: string,
   conversation: string, resourceType: string, resourceId: string,
@@ -140,13 +145,17 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
 /** Add exact subjects as they are discovered; all are fenced against the same starting head. */
 export async function authorityFence(store: EventStore, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
-  return createAuthorityFence(store, started, subjects, callerDeadline, checkOutputReports);
+  const authority = await createAuthorityFence(
+    store, started, subjects, callerDeadline, checkOutputReports);
+  return authority.fresh;
 }
 
 /** Watch chat participants and membership; keep work approval checks stricter. */
 export async function conversationAccessFence(store: EventStore, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
-  return createAuthorityFence(store, started, subjects, callerDeadline, checkChatAccessChanges);
+  const authority = await createAuthorityFence(
+    store, started, subjects, callerDeadline, checkChatAccessChanges);
+  return authority.fresh;
 }
 
 async function createAuthorityFence(store: EventStore, started: number,
@@ -162,31 +171,34 @@ async function createAuthorityFence(store: EventStore, started: number,
   };
   include(...subjects);
   const outputHeads = new Map<string, number>();
-  const fresh = async () => {
-    while (true) {
-      if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
-      async function readSubjectHead(subject: string) {
-        const sequence = await store.head(subject, deadline);
-        return { subject, sequence };
-      }
-      const headReads = [...watched].map(readSubjectHead);
-      const current = await Promise.all(headReads);
-      function hasChanged({ subject, sequence }: { subject: string; sequence: number }) {
-        return sequence > (outputHeads.get(subject) ?? head);
-      }
-      const changed = current.filter(hasChanged);
-      if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
-      if (!changed.length) return;
-      for (const { subject, sequence } of changed) {
-        const fromSequence = (outputHeads.get(subject) ?? head) + 1;
-        await checkChanges(store, subject, fromSequence, sequence, deadline);
-        outputHeads.set(subject, sequence);
-      }
-      // Recheck every exact subject: revocation may have arrived while reading reports.
+  async function confirm() {
+    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+    async function readSubjectHead(subject: string) {
+      const sequence = await store.head(subject, deadline);
+      return { subject, sequence };
     }
-  };
+    const headReads = [...watched].map(readSubjectHead);
+    const current = await Promise.all(headReads);
+    function hasChanged({ subject, sequence }: { subject: string; sequence: number }) {
+      return sequence > (outputHeads.get(subject) ?? head);
+    }
+    const changed = current.filter(hasChanged);
+    if (performance.now() >= deadline) throw new Error('Authority snapshot expired');
+    for (const { subject, sequence } of changed) {
+      const fromSequence = (outputHeads.get(subject) ?? head) + 1;
+      await checkChanges(store, subject, fromSequence, sequence, deadline);
+      outputHeads.set(subject, sequence);
+    }
+    return changed.length > 0;
+  }
+  async function fresh() {
+    // Recheck every subject because access can change while reading reports.
+    while (await confirm()) {
+      continue;
+    }
+  }
   const snapshot = { include, head, deadline };
-  return Object.assign(fresh, snapshot);
+  return { fresh: Object.assign(fresh, snapshot), confirm };
 }
 
 async function checkOutputReports(store: EventStore, subject: string, from: number,
@@ -196,8 +208,7 @@ async function checkOutputReports(store: EventStore, subject: string, from: numb
   // Keep them from refusing an in-flight call or a reader.
   for await (const row of store.readStream(subject, from, deadline)) {
     if (row.sequence > to) break;
-    if (!['agent.command_ran', 'agent.file_changed', 'agent.reasoning_summarised',
-      'agent.message_delta', 'agent.message_completed', 'agent.output_lost'].includes(row.event.type)) {
+    if (!outputReportTypes.includes(row.event.type)) {
       throw new Error('Authority changed');
     }
   }
@@ -241,15 +252,16 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
   }
   const authority = await createAuthorityFence(
     store, started, subjects, Infinity, checkDecisionChanges);
-  const includeSubjects = authority.include;
+  const includeSubjects = authority.fresh.include;
   function include(...subjects: string[]) {
     includeSubjects(...subjects);
     for (const subject of subjects) {
+      // Remember team ids so revocations without granteeKind still refuse this call.
       if (subject.startsWith('team-')) grantees.add(subject.slice('team-'.length));
     }
   }
-  const snapshot = { include };
-  return Object.assign(authority, snapshot);
+  const snapshot = { include, head: authority.fresh.head, deadline: authority.fresh.deadline };
+  return Object.assign(authority.confirm, snapshot);
 }
 
 function unrelatedDecisionEvent(event: EventEnvelope, requesterId: string,
