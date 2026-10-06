@@ -1,0 +1,64 @@
+TAP version 13
+# Subtest: claim skips a slot with a held port and leaves it unclaimed
+ok 1 - claim skips a slot with a held port and leaves it unclaimed
+  ---
+  duration_ms: 3069.215837
+  type: 'test'
+  ...
+# Subtest: status leaves a free slot alone and claim reuses this worktree slot
+ok 2 - status leaves a free slot alone and claim reuses this worktree slot
+  ---
+  duration_ms: 5957.225865
+  type: 'test'
+  ...
+# Subtest: a claim within 15 minutes with a dead owner is not reclaimed
+ok 3 - a claim within 15 minutes with a dead owner is not reclaimed
+  ---
+  duration_ms: 3192.033388
+  type: 'test'
+  ...
+# Subtest: a claim older than 15 minutes with no live processes is reclaimed
+ok 4 - a claim older than 15 minutes with no live processes is reclaimed
+  ---
+  duration_ms: 1498.584839
+  type: 'test'
+  ...
+# Subtest: a running stack host process prevents reclaim after 15 minutes
+ok 5 - a running stack host process prevents reclaim after 15 minutes
+  ---
+  duration_ms: 3030.636613
+  type: 'test'
+  ...
+# Subtest: a running stack container prevents reclaim after 15 minutes
+ok 6 - a running stack container prevents reclaim after 15 minutes
+  ---
+  duration_ms: 1508.234167
+  type: 'test'
+  ...
+# Subtest: an old one-line owner file can be reclaimed without live processes
+ok 7 - an old one-line owner file can be reclaimed without live processes
+  ---
+  duration_ms: 1501.576363
+  type: 'test'
+  ...
+# Subtest: owner restore removes secondary redirects, preserves other settings, and refuses a foreign app
+ok 8 - owner restore removes secondary redirects, preserves other settings, and refuses a foreign app
+  ---
+  duration_ms: 1970.509802
+  type: 'test'
+  ...
+# Subtest: secondary setup keeps the owner app unchanged and reuses its own private credentials after teardown
+ok 9 - secondary setup keeps the owner app unchanged and reuses its own private credentials after teardown
+  ---
+  duration_ms: 2665.150939
+  type: 'test'
+  ...
+1..9
+# tests 9
+# suites 0
+# pass 9
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19986.629316

@@ -1,0 +1,4 @@
+{"level":30,"time":1791299271064,"pid":1963544,"hostname":"opencrane-dev-server","name":"opencrane-server","msg":"Server listening at http://127.0.0.1:25105"}
+{"level":30,"time":1791299271067,"pid":1963544,"hostname":"opencrane-dev-server","name":"opencrane-server","msg":"opencrane-server listening on http://127.0.0.1:25105 (ws at /ws)"}
+{"level":30,"time":1791299271367,"pid":1963544,"hostname":"opencrane-dev-server","name":"opencrane-server","request_id":"req-1","req":{"method":"GET","url":"/healthz","host":"127.0.0.1:25105","remotePort":49410},"msg":"incoming request"}
+{"level":30,"time":1791299271378,"pid":1963544,"hostname":"opencrane-dev-server","name":"opencrane-server","request_id":"req-1","res":{"statusCode":200},"responseTime":9.235977000000275,"msg":"request completed"}

@@ -1,0 +1,6 @@
+AssertionError [ERR_ASSERTION]: Approval journey timeout
+
+- status: Approved
+- button "Approved by you Update order note Not used yet":
+  - strong: Approved by you
+  - text: Update order note Not used yet
