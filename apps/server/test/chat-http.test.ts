@@ -88,6 +88,18 @@ it('serves private chat commands and reads to joined members, refusing other org
     const stopped = await app.inject({ url: `/api/conversations/${conversationId}/messages`, headers: headers() });
     expect(stopped.json<{ rows: { type: string }[] }>().rows.filter(row => row.type === 'agent.turn_stop_requested')).toHaveLength(1);
     const address = await app.listen({ host: '127.0.0.1', port: 0 });
+    let contentQueries = 0;
+    const originalQuery = db.query.bind(db);
+    const countContentQueries = async <Row extends Record<string, unknown>>(
+      sql: string, parameters?: unknown[],
+    ) => {
+      if (sql.startsWith('SELECT * FROM conversation_feed') ||
+          sql.startsWith('SELECT c.status FROM computers')) {
+        contentQueries += 1;
+      }
+      return originalQuery<Row>(sql, parameters);
+    };
+    db.query = countContentQueries;
     const wss = attachWebSocketServer(app.server, app.log, config, { feed, binding, chat: { silo: 'test', store: nats.store, db, keys, binding, feed } });
     const received: Array<ReturnType<typeof chatMessageSchema.parse>> = [];
     const connect = async (since: number, generation?: number) => {
@@ -98,6 +110,20 @@ it('serves private chat commands and reads to joined members, refusing other org
     let socket = await connect(0);
     try {
       await until(() => received.some(r => r.type === 'ready'));
+      const contentQueriesAfterFirstRead = contentQueries;
+      await new Promise(resolve => setTimeout(resolve, 350));
+      expect(contentQueries).toBe(contentQueriesAfterFirstRead);
+      const liveMessageId = randomUUID();
+      await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`,
+        headers: headers(), payload: { id: liveMessageId, text: 'Arrives while connected' } });
+      await runner.run(conversations);
+      await until(() => received.some(r => r.type === 'event' && r.row?.id === liveMessageId));
+      const computerReady = envelope('test', 'computer-assistant', 'computer.ready', {
+        assistantId: 'assistant', computerId: 'computer', generation: 1,
+      });
+      await nats.store.append({ event: computerReady, expectedSequence: 0 });
+      await runner.run(computers);
+      await until(() => received.some(r => r.type === 'ready' && r.computerState === 'ready'));
       const cursor = received.at(-1)!; socket.terminate(); await once(socket, 'close'); received.length = 0;
       const id = randomUUID();
       await app.inject({ method: 'POST', url: `/api/conversations/${conversationId}/messages`, headers: headers(), payload: { id, text: 'Posted offline' } });

@@ -335,6 +335,11 @@ row's participants and OpenFGA permission once, with eight rows at a time.
 Readers do not use an authority fence, the short check that detects access changes
 before a write. Content reads can take longer than two seconds without an access timeout.
 Socket polls run every 100 ms. Each socket keeps the conversation's creation facts.
+Each poll checks the conversation feed position, projection generation and computer
+record position with one small query. It reads chat rows and computer state only when
+one of those values changes, then keeps the computer state for the next tick. This keeps
+new messages and computer changes within the existing poll delay without repeating the
+content queries on an idle page.
 The server shares the OpenFGA client for each silo and permission model. It checks
 access at subscription, then calls OpenFGA again only when a watched access record changes.
 It watches member stream positions and, for a team assistant, its team stream.
