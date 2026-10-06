@@ -313,6 +313,7 @@ async function checkNavigation(page, motion) {
   await destination.click();
   await page.waitForURL('**/workspace?conversation=research');
   const openMenus = page.locator('oc-navigation-menu dialog[open]');
+  await openMenus.waitFor({ state: 'detached' });
   assert.equal(await openMenus.count(), 0);
   const selectedComposer = page.getByRole('textbox', { name: 'Message your agent' });
   assert(await selectedComposer.evaluate(focused), 'Session selection focuses the composer');
