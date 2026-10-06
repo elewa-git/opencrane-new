@@ -47,6 +47,8 @@
     }
   </span>
   @if (shownAction(); as label) {
-    <button type="button" class="state-action" (click)="action.emit()">{{ label }}</button>
+    <button type="button" class="state-action"
+      [attr.aria-disabled]="actionBusy() ? 'true' : null"
+      (click)="runAction()">{{ label }}</button>
   }
 </span>

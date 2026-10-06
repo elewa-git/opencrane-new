@@ -1,0 +1,18 @@
+<div #region class="capture-status" tabindex="-1"
+  [attr.role]="announce() ? 'status' : null"
+  [attr.aria-live]="announce() ? 'polite' : null">
+  @if (capture(); as state) {
+    <oc-shared-state [kind]="state.kind"
+      [message]="checking() ? 'Checking Files…' : state.message"
+      [detail]="state.detail" [evidenceAt]="state.evidenceAt"
+      [timestamp]="state.timestamp" [safeToRetry]="state.safeToRetry"
+      [showAction]="!busy()" [actionBusy]="checking()"
+      (action)="runAction()" />
+    @if (state.repeatAvailable) {
+      <button type="button" class="repeat-capture" [disabled]="busy()"
+        (click)="repeatCapture()">
+        Send the same request again
+      </button>
+    }
+  }
+</div>

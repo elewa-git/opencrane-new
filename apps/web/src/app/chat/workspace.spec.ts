@@ -274,8 +274,27 @@ it('does not say Files were read after a failed status read', async () => {
   context.fixture.detectChanges();
 
   expect(context.root.textContent).toContain('Could not load the conversation');
+  expect(context.root.textContent).toContain('Could not read Files at');
+  expect(context.root.textContent).toContain('Check status again when the connection returns');
   expect(context.root.textContent).not.toContain('Files read again');
   expect(context.fixture.componentInstance['capture'].state().phase).toBe('unknown');
+  context.fixture.destroy();
+});
+
+it('keeps a previous load error after a successful refresh on a healthy list', async () => {
+  const context = await createCaptureWorkspace([screenshotRow(1)]);
+  const chat = context.fixture.componentInstance['chat'];
+  context.setMessageStatus(500);
+  await chat.load();
+  expect(chat.error()).toContain('Could not load the conversation');
+
+  context.setMessageStatus(200);
+
+  expect(await chat.refresh()).toBe(true);
+  context.fixture.detectChanges();
+  await context.fixture.whenStable();
+  expect(chat.error()).toContain('Could not load the conversation');
+  expect(context.root.textContent).toContain('Could not load the conversation');
   context.fixture.destroy();
 });
 
@@ -325,7 +344,8 @@ it('moves the capture line announcement to LiveView when the session panel opens
   context.root.querySelector<HTMLButtonElement>('#panel-toggle')?.click();
   context.fixture.detectChanges();
   expect(captureLine?.getAttribute('role')).toBeNull();
-  expect(context.root.querySelector('.entry-capture-status')?.getAttribute('role')).toBe('status');
+  expect(context.root.querySelector('.entry-capture-status [role="status"]')
+    ?.getAttribute('role')).toBe('status');
   context.fixture.destroy();
 });
 

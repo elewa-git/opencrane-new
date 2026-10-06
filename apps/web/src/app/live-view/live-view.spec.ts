@@ -198,7 +198,7 @@ it('keeps the capture status outside Viewing and announces at both component ent
   const entry = element.querySelector('.entry-capture-status');
   const dialog = element.querySelector('dialog');
   const sheetStatus = element.querySelector('.capture-status');
-  expect(entry?.getAttribute('role')).toBe('status');
+  expect(entry?.querySelector('[role="status"]')?.getAttribute('role')).toBe('status');
   expect(dialog?.contains(entry)).toBe(false);
   expect(sheetStatus?.querySelector('oc-shared-state')).not.toBeNull();
   expect(element.textContent).toContain('Send the same request again');

@@ -1,6 +1,6 @@
 import { ModalSheet } from '../ui/modal-sheet';
 import { SharedState, type PresentationState } from '../shared-state/shared-state';
-import { NgTemplateOutlet } from '@angular/common';
+import { CaptureStatus } from '../chat/capture-status';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -39,7 +39,7 @@ function stateForCloseCode(code: number) {
 
 @Component({
   selector: 'oc-live-view',
-  imports: [SharedState, ModalSheet, NgTemplateOutlet],
+  imports: [SharedState, CaptureStatus, ModalSheet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './live-view.html',
   styleUrl: './live-view.css',

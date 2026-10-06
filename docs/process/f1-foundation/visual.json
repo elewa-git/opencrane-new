@@ -1,7 +1,7 @@
 {
   "result": "PASS",
-  "date": "2026-10-05T22:05:14.413Z",
-  "source": "cf7f9c693c10fd961d32c950065b59b7080fff4f",
+  "date": "2026-10-06T01:20:00.000Z",
+  "source": "implementation commit recorded in this receipt",
   "screenComparison": "PARTIAL: shared treatments match; existing screens retain their fields and shells",
   "freshInstall": false,
   "liveQualification": "NOT RUN: intercepted fixtures only",

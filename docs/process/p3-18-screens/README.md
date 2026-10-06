@@ -1,8 +1,8 @@
 # Screenshot screens
 
-Checked on 5 October 2026 from a working tree based on commit
-`cf7f9c693c10fd961d32c950065b59b7080fff4f`. The browser
-checks use sample data in Chromium. They do not qualify a fresh installation.
+Checked on 6 October 2026 from a working tree based on the commit recorded in
+[`visual.json`](visual.json). The browser checks use sample data in Chromium.
+They do not qualify a fresh installation.
 
 The chat workspace reads saved screenshots from conversation events. The web
 app sends capture requests and shows the same files in the transcript and Files
@@ -33,7 +33,7 @@ dev-stack journey ran, so this receipt is not live qualification.
 
 ## Visual comparison
 
-[`visual.json`](visual.json) records 62 captures at 1280px, 390px and 320px,
+[`visual.json`](visual.json) records 63 captures at 1280px, 390px and 320px,
 including reduced-motion captures at 390px. It includes each viewer state with
 the sheet open and the workspace with the sheet closed.
 
@@ -41,6 +41,7 @@ the sheet open and the workspace with the sheet closed.
 | --- | --- | --- |
 | Empty | `*empty-*` | The existing Files empty state stays unchanged. |
 | Saving | `*saving-*` | Capturing, scanning and saving use one combined state. |
+| Saving with a file already listed | `saving-with-file-row-390-no-preference.png` | A separate capture checks the saving message while an earlier screenshot is already in Files. |
 | Workspace capture | `*workspace-*`, `*chat-*` | With the viewer closed, desktop shows the transcript, card and Files. On phones, the Files drawer and chat appear in separate captures. |
 | Saved | `*saved-*` | Uses “another participant” and replaces friendly computer names with the computer id. |
 | Preview | `*preview-*` | Says “Download original file”. Close stays in the header only. |
@@ -69,16 +70,17 @@ data and do not qualify a fresh installation.
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Lint | PASS | `nice -n 10 npm run lint`; six existing warnings and no errors. |
-| Typecheck | PASS | `nice -n 10 npm run typecheck`. |
-| Event catalogue | PASS | `nice -n 10 npm run check:events`; 95 event types agree. |
-| Web and Live View test builds | PASS | `nice -n 10 npm run build -w apps/web`; `nice -n 10 npm run build:live-view-test -w apps/web`. |
-| Angular tests | PASS | `nice -n 10 npm test -w apps/web -- --watch=false`; 243 tests passed. |
-| Screenshot visual check | PASS | 62 Chromium captures at 1280px, 390px and 320px; reduced motion at 390px. |
+| Typecheck | PASS | `nice -n 10 npm run typecheck`; all workspaces passed. |
+| Event catalogue | PASS | `nice -n 10 npm run check:events`; all 96 event types agree. |
+| Web build | PASS | `nice -n 10 npm run build -w apps/web`; existing style budget and noVNC notices remain. |
+| Live View test build | PASS | `nice -n 10 npm run build:live-view-test -w apps/web`. |
+| Angular tests | PASS | `nice -n 10 npm test -w apps/web -- --watch=false`; 284 tests passed. |
+| Screenshot visual check | PASS | 63 Chromium captures at 1280px, 390px and 320px; status focus checks and reduced motion. |
 | Foundation visual check | PASS | 56 captures. |
 | Drawer visual check | PASS | 38 captures. |
 | Organisation shell visual check | PASS | 22 captures. |
 | Settings visual check | PASS | 20 captures. |
-| Workspace visual check | PASS | 18 captures at 1280px, 390px and 320px, including reduced motion. |
+| Workspace visual check | FAIL | The existing “No messages yet” assertion failed; the pass-2 review recorded the same failure on `origin/main`. |
 | Chat browser check | PASS | Keyboard, focus, touch targets, streaming, Stop/reload, offline retry and wake state. |
 | Root test suite | NOT RUN | Excluded as requested. |
 | Live journey and fresh-install check | NOT RUN | No secondary dev stack was claimed. These browser checks use sample data. |

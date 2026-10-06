@@ -9,6 +9,7 @@ import { SharedState } from '../shared-state/shared-state';
 import { ApprovalCards } from './approvals';
 import { BudgetStopNotice } from './budget-stop-notice';
 import { ConversationFileCard } from './conversation-file-card';
+import { CaptureStatus } from './capture-status';
 import { ToolActivityLine } from './tool-activity-line';
 import {
   ChangeDetectionStrategy, Component, ElementRef, afterEveryRender, computed, effect, inject, signal,
@@ -34,7 +35,8 @@ import {
   selector: 'oc-workspace',
   imports: [
     HingeDrawer, NavigationMenu, PaperSurface, DogEar, GrainLoader, FlutterLoader,
-    SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, ToolActivityLine,
+    SharedState, ApprovalCards, BudgetStopNotice, ConversationFileCard, CaptureStatus,
+    ToolActivityLine,
     FoldLoader, ChatComposer, FilePreview, LiveView,
     NgTemplateOutlet, ChatIcon, BrandMark,
   ],
@@ -172,7 +174,10 @@ export class Workspace implements OnInit {
     this.statusChecking.set(true);
     try {
       const readSucceeded = await this.chat.refresh();
-      if (!readSucceeded) return;
+      if (!readSucceeded) {
+        this.capture.markCheckFailed(state.startedAt);
+        return;
+      }
       this.capture.markChecked(state.startedAt);
       this.showFiles();
     } finally {

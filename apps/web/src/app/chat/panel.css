@@ -64,6 +64,7 @@
 .screenshot-panel-details .file-name { width: 100%; }
 .screenshot-panel-file .screenshot-thumbnail { width: 72px; }
 .screenshot-type:not([hidden]) { display: inline-flex; }
+.screenshot-type[hidden] { display: none; }
 .panel-footnote {
   margin-top: auto;
   border-top: 1px solid #e1e6e7;

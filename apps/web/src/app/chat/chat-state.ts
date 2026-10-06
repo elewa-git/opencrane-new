@@ -105,7 +105,9 @@ export function uploadedFile(row: ChatRow) {
   return { ...file, path, textPath: file.mime === 'application/pdf' ? `${path}.md` : path };
 }
 
-function rejectedScreenshot(row: ChatRow): { fileId: string; uploadedBy: string; capturedAt: string } | undefined {
+function rejectedScreenshot(
+  row: ChatRow,
+): { fileId: string; uploadedBy: string; capturedAt: string } | undefined {
   if (row.type !== 'file.rejected') return undefined;
   const parsed = rejectedScreenshotSchema.safeParse(row.data);
   if (!parsed.success) return undefined;

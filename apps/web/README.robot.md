@@ -166,7 +166,12 @@ host from `test/live-view-main.ts`; the k3d test serves it on `/live-view-test`.
 [Licence and live evidence](../../docs/process/live-view-evidence.md).
 
 The viewer's **Screenshot** button starts one capture and save request. It shows one
-saving message and stays focused while the request runs. A saved PNG appears in the
+saving message and stays focused while the request runs. The transcript and both viewer
+locations use the same capture status component. While Check status reads the feed, its
+button stays in place, announces that it is unavailable and ignores extra clicks. If the
+read fails, the status gives the same explanation in the viewer or transcript where it
+was opened. Try again and the same-request resend move focus to the status region before
+the button disappears. A saved PNG appears in the
 transcript and Files panel with a name, caption and capture facts. Its preview shows
 the image, the computer id, the generation number and a download link. A 503 offers a
 same-key retry. An unanswered request shows its command id and says that its result

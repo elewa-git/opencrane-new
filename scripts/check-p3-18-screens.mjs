@@ -236,9 +236,11 @@ async function installScreenshotRoute(page, fixture, firstMode) {
   async function answerScreenshot(route) {
     const requestKey = route.request().headers()['idempotency-key'];
     keys.push(requestKey);
-    if (mode === 'hold') {
-      addScreenshot(fixture);
-      fileAppended = true;
+    if (mode === 'hold' || mode === 'hold-with-file') {
+      if (mode === 'hold-with-file') {
+        addScreenshot(fixture);
+        fileAppended = true;
+      }
       await new Promise(holdScreenshotReply);
       await route.fulfill({ status: 201, contentType: 'application/json',
         body: JSON.stringify({ status: 'appended', fileId }) });
@@ -359,6 +361,13 @@ async function savedScreenshot(browser, width, preview = false, thumbStatus = 20
   await panelName.waitFor();
   const panelNameWidth = await panelName.evaluate(node => node.getBoundingClientRect().width);
   assert(panelNameWidth > 0, `Files shows the screenshot name at ${width}px`);
+  if (thumbStatus === 200) {
+    const typeChip = context.page.locator('.screenshot-panel-file .screenshot-type').first();
+    const thumbnail = context.page.locator('.screenshot-panel-file img').first();
+    const thumbnailHasLoaded = await thumbnail.evaluate(image => image.naturalWidth > 0);
+    assert(thumbnailHasLoaded, `Files thumbnail loaded at ${width}px`);
+    assert(!(await typeChip.isVisible()), `Files hides the PNG chip at ${width}px`);
+  }
   if (preview) {
     await closePhoneSessionPanel(context.page);
     if (thumbStatus === 200) {
@@ -426,6 +435,9 @@ async function checkKeyboardAndRepeatedRetries(browser) {
   const originalKey = keys.at(-1);
   route.setMode('saved');
   await viewer.getByRole('button', { name: 'Try again', exact: true }).click();
+  await viewer.locator('div.capture-status[role="status"]').waitFor();
+  assert.equal(await viewer.locator('div.capture-status[role="status"]')
+    .evaluate(nodeIsFocused), true, 'Try again moves focus to the capture status');
   await viewer.getByText('Screenshot saved', { exact: true }).waitFor();
   assert.equal(keys.at(-1), originalKey, 'The 503 retry repeats the same key');
   const saved = await savedScreenshot(browser, 390);
@@ -443,11 +455,72 @@ async function checkScreenshotFocusDuringSave(browser) {
   await focusByKeyboard(context.page, screenshot);
   await context.page.keyboard.press('Enter');
   await viewer.getByText('Capturing and saving screenshot…', { exact: true }).waitFor();
+  const screenshotCountWhileSaving = keys.length;
+  await context.page.keyboard.press('Enter');
+  assert.equal(keys.length, screenshotCountWhileSaving,
+    'Enter cannot start another capture while the first request is saving');
   assert.equal(await screenshot.evaluate(nodeIsFocused), true,
     'Screenshot keeps keyboard focus while its request is saving');
   assert.equal(await screenshot.getAttribute('aria-disabled'), 'true');
   route.release();
   await viewer.getByText('Screenshot saved', { exact: true }).waitFor();
+  await context.page.close();
+}
+
+async function checkStatusKeepsFocusDuringRead(browser) {
+  const context = await openWorkspace(browser, 390);
+  await installScreenshotRoute(context.page, context.fixture, 'unknown');
+  const { viewer } = await openViewer(context.page);
+  await viewer.getByRole('button', { name: 'Screenshot', exact: true }).click();
+  await viewer.getByText('Screenshot outcome unknown', { exact: true }).waitFor();
+
+  let finishRead;
+  const readHeld = new Promise(resolve => {
+    finishRead = resolve;
+  });
+  let holdRead = false;
+  await context.page.route('**/api/conversations/*/messages?*', async function holdReadRoute(
+    requestRoute,
+  ) {
+    if (!holdRead) {
+      await requestRoute.fallback();
+      return;
+    }
+    await readHeld;
+    await requestRoute.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ rows: [], position: 0, generation: 1, computerState: 'ready' }) });
+  });
+
+  holdRead = true;
+  const checkButton = viewer.getByRole('button', { name: 'Check status', exact: true });
+  await focusByKeyboard(context.page, checkButton);
+  await context.page.keyboard.press('Enter');
+  await viewer.getByText('Checking Files…', { exact: true }).waitFor();
+  assert.equal(await checkButton.evaluate(nodeIsFocused), true,
+    'Check status keeps focus while the feed read is held open');
+  assert.equal(await checkButton.getAttribute('aria-disabled'), 'true');
+  await context.page.keyboard.press('Enter');
+  assert.equal(await checkButton.evaluate(nodeIsFocused), true,
+    'An extra Enter keeps focus on the disabled Check status action');
+
+  finishRead();
+  await viewer.getByText('Files read again at', { exact: false }).waitFor();
+  assert.equal(await viewer.getByRole('button', { name: 'Check status', exact: true })
+    .evaluate(nodeIsFocused), true, 'Check status keeps focus after the read completes');
+  await context.page.close();
+}
+
+async function captureSavingWithExistingFile(browser) {
+  const context = await openWorkspace(browser, 390);
+  addScreenshot(context.fixture);
+  const route = await installScreenshotRoute(
+    context.page, context.fixture, 'hold-with-file',
+  );
+  const { viewer } = await openViewer(context.page);
+  await viewer.getByRole('button', { name: 'Screenshot', exact: true }).click();
+  await viewer.getByText('Capturing and saving screenshot…', { exact: true }).waitFor();
+  await capture(context.page, 'saving-with-file-row', 390);
+  route.release();
   await context.page.close();
 }
 
@@ -462,9 +535,14 @@ async function unknownAndRepeated(browser, width) {
   assert.equal(await screenshot.getAttribute('aria-disabled'), 'true',
     'Screenshot stays unavailable until the status read completes');
   await viewer.getByRole('button', { name: 'Check status', exact: true }).click();
+  assert.equal(await viewer.getByRole('button', { name: 'Check status', exact: true })
+    .evaluate(nodeIsFocused), true, 'Check status keeps focus while the read runs');
   await viewer.getByText('Files read again at', { exact: false }).waitFor();
   route.setMode('saved');
   await viewer.getByRole('button', { name: 'Send the same request again', exact: true }).click();
+  assert.equal(await viewer.locator('div.capture-status[role="status"]')
+    .evaluate(nodeIsFocused), true,
+    'Resending moves focus to the capture status');
   await viewer.getByText('Screenshot already saved', { exact: true }).waitFor();
   assert.equal(keys.at(-1), originalKey, 'Unknown resend repeats the same key');
   assert.equal(await context.page.locator('.screenshot-card').count(), 1,
@@ -609,8 +687,10 @@ async function main() {
     await disconnectedViewer(browser, 390, true);
     await disconnectedViewer(browser, 320, true);
     await checkScreenshotFocusDuringSave(browser);
+    await checkStatusKeepsFocusDuringRead(browser);
     await checkKeyboardAndRepeatedRetries(browser);
     await reducedMotionCaptures(browser);
+    await captureSavingWithExistingFile(browser);
   } finally {
     await browser.close();
   }
@@ -626,6 +706,8 @@ async function main() {
       'No horizontal overflow at 1280px, 390px and 320px',
       'Capture, card, preview and retry actions meet phone target sizes',
       'Screenshot starts by keyboard and shows the 2px focus ring',
+      'Check status keeps focus while Files are read; extra Enter is ignored',
+      'Try again and same-request resend move focus to the shared status region',
       'Escape returns focus from preview to its opening card button',
       '503 retry and unknown resend reuse their keys; a new capture changes its key',
       'A repeated capture returns one card and says the screenshot was already saved',
@@ -633,6 +715,7 @@ async function main() {
       'A denial hides names, images and numeric tab counts',
       'No Link expired or 10 MB copy appears',
       'Reduced-motion saving and saved frames use a static spinner',
+      'Saving with an existing file row has a separate named capture',
     ],
   };
   await writeFile(`${output}/visual.json`, `${JSON.stringify(visual, null, 2)}\n`);

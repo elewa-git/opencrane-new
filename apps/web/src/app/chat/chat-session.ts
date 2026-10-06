@@ -123,10 +123,10 @@ export class ChatSession implements OnDestroy {
     finally { this.busy.set(false); }
   }
   async refresh(): Promise<boolean> {
-    this.error.set('');
+    const revision = this.revision;
     try {
-      await this.catchUp(this.selected(), this.revision);
-      return !this.error();
+      await this.catchUp(this.selected(), revision);
+      return revision === this.revision;
     } catch (error) {
       this.fail(error);
       return false;

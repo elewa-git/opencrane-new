@@ -88,19 +88,9 @@
             [attr.role]="panelExpanded() || chat.loading() ? null : 'status'"
             [attr.aria-live]="panelExpanded() || chat.loading() ? null : 'polite'">
             @if (showCaptureLine()) {
-              <oc-shared-state [kind]="captureViewModel()!.kind"
-                [message]="captureViewModel()!.message" [detail]="captureViewModel()!.detail"
-                [evidenceAt]="captureViewModel()!.evidenceAt"
-                [timestamp]="captureViewModel()!.timestamp"
-                [safeToRetry]="captureViewModel()!.safeToRetry" [announce]="false"
-                [showAction]="!captureBusy()"
-                (action)="captureAction()" />
-              @if (captureViewModel()!.repeatAvailable) {
-                <button type="button" class="repeat-capture" [disabled]="captureBusy()"
-                  (click)="repeatCapture()">
-                  Send the same request again
-                </button>
-              }
+              <oc-capture-status [capture]="captureViewModel()" [busy]="captureBusy()"
+                [checking]="statusChecking()" [announce]="!panelExpanded() && !chat.loading()"
+                (action)="captureAction()" (repeated)="repeatCapture()" />
             }
           </div>
         }

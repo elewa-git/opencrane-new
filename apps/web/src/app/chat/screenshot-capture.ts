@@ -3,6 +3,11 @@ import type { ChatAttachment } from './chat-state';
 import { utcDateTime } from './file-presentation';
 import type { PresentationState } from '../shared-state/shared-state';
 
+const FAILED_SCREENSHOT_DETAIL = 'The server reported that it could not save the screenshot. '
+  + 'Trying again repeats the same request, so it cannot make a second copy.';
+const UNKNOWN_SCREENSHOT_DETAIL = "We couldn't tell whether it was recorded. "
+  + 'Check its status before sending again. Reference:';
+
 export type CaptureState =
   | { phase: 'idle' }
   | { phase: 'saving'; commandId: string }
@@ -10,7 +15,10 @@ export type CaptureState =
   | { phase: 'rejected'; fileId: string; answeredAt: string }
   | { phase: 'failed'; commandId: string; answeredAt: string; sameKeyRetry: boolean }
   | { phase: 'access_changed'; answeredAt: string; signIn: boolean }
-  | { phase: 'unknown'; commandId: string; startedAt: string; checkedAt?: string };
+  | {
+    phase: 'unknown'; commandId: string; startedAt: string;
+    checkedAt?: string; checkFailedAt?: string;
+  };
 
 export interface CaptureViewModel {
   kind: PresentationState;
@@ -48,7 +56,18 @@ export class ScreenshotCapture implements OnDestroy {
   markChecked(startedAt: string): void {
     const state = this.state();
     if (state.phase === 'unknown' && state.startedAt === startedAt) {
-      this.state.set({ ...state, checkedAt: new Date().toISOString() });
+      const checkedState = { ...state, checkedAt: new Date().toISOString() };
+      delete checkedState.checkFailedAt;
+      this.state.set(checkedState);
+    }
+  }
+
+  markCheckFailed(startedAt: string): void {
+    const state = this.state();
+    if (state.phase === 'unknown' && state.startedAt === startedAt) {
+      const failedState = { ...state, checkFailedAt: new Date().toISOString() };
+      delete failedState.checkedAt;
+      this.state.set(failedState);
     }
   }
 
@@ -173,7 +192,7 @@ export function captureView(
   }
   if (state.phase === 'failed') {
     const detail = state.sameKeyRetry
-      ? 'The server reported that it could not save the screenshot. Trying again repeats the same request, so it cannot make a second copy.'
+      ? FAILED_SCREENSHOT_DETAIL
       : 'Take a new screenshot to try again.';
     return { ...view('failed', "Screenshot wasn't saved", detail,
       state.sameKeyRetry, false), timestamp: state.answeredAt };
@@ -185,14 +204,24 @@ export function captureView(
     return { ...view('access_changed', 'Screenshot access changed', detail, false, false),
       timestamp: state.answeredAt };
   }
+  return unknownCaptureView(state);
+}
+
+function unknownCaptureView(
+  state: Extract<CaptureState, { phase: 'unknown' }>,
+): CaptureViewModel {
   if (state.checkedAt) {
     return view('unknown', 'Screenshot outcome unknown',
-      checkedUnknownDetail(state.checkedAt, state.commandId),
-      false, true);
+      checkedUnknownDetail(state.checkedAt, state.commandId), false, true);
+  }
+  if (state.checkFailedAt) {
+    const failedAt = utcDateTime(state.checkFailedAt);
+    return view('unknown', `Could not read Files at ${failedAt}.`,
+      `Check status again when the connection returns. Reference: ${state.commandId}.`,
+      false, false);
   }
   return view('unknown', 'Screenshot outcome unknown',
-    `We couldn't tell whether it was recorded. Check its status before sending again. Reference: ${state.commandId}.`,
-    false, false);
+    `${UNKNOWN_SCREENSHOT_DETAIL} ${state.commandId}.`, false, false);
 }
 
 function checkedUnknownDetail(checkedAt: string, commandId: string): string {
