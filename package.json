@@ -11,7 +11,7 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures",
+    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures && npm run lint:changelog",
     "typecheck": "npm run typecheck --workspaces",
     "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
@@ -28,6 +28,7 @@
     "visual:fold-loader": "node scripts/check-fold-loader.mjs --capture",
     "visual:signin": "node scripts/capture-signin.mjs",
     "lint:fixtures": "python3 infra/odoo/boundary.py",
+    "lint:changelog": "node scripts/changelog-gather.mjs --check",
     "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture",
     "test:chat:production": "NO_COLOR=1 node scripts/check-chat-production.mjs",
     "visual:f1-foundation": "node scripts/check-f1-foundation.mjs",

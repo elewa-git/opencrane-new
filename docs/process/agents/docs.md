@@ -6,6 +6,8 @@ Sources: OpenCrane 1 `.claude/agents/comments.md`, `.claude/agents/readme.md`,
 Use for substantial documentation work; implementers own routine updates.
 Read [AGENTS.md](../../../AGENTS.md), the [standard](../standards.md), the supplied
 diff and affected code/tests. Do not require a separate documentation handoff.
+For release notes, add one plain, functional-first Markdown file named after the
+branch under `changes/unreleased/`; do not edit `CHANGELOG.md` directly.
 
 1. Identify the reader and the changed promise. Verify it against real entrypoints,
    configuration, failure paths and evidence before writing. Never invent a reason.

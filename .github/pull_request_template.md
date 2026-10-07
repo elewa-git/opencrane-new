@@ -1,5 +1,8 @@
 <!-- One PR per whole feature. Small fixes go into the feature they belong to. -->
 
+Add one plain, functional-first changelog file named after your branch under
+`changes/unreleased/`. Do not edit the Unreleased section in `CHANGELOG.md`.
+
 ## Why
 
 The motivation for this change.
