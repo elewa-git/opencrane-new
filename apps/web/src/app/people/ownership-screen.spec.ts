@@ -179,11 +179,12 @@ it('announces a failed first owner read', async () => {
 it('moves focus to Owners and announces success after retrying a failed read', async () => {
   const requests: SeenRequest[] = [];
   let ownerReads = 0;
+  let finishRetry: ((reply: Response) => void) | undefined;
   const fixture = await mount(requests, (request) => {
     if (request.url === '/api/ownership') {
       ownerReads += 1;
       if (ownerReads === 1) return Promise.resolve(jsonResponse({}, 503));
-      return Promise.resolve(jsonResponse(ownershipResponse(owners)));
+      return new Promise<Response>((resolve) => { finishRetry = resolve; });
     }
     return Promise.resolve(jsonResponse({}, 503));
   });
@@ -191,6 +192,12 @@ it('moves focus to Owners and announces success after retrying a failed read', a
   makeVisible(retryButton);
   retryButton.focus();
   retryButton.click();
+  await vi.waitFor(() => expect(finishRetry).toBeDefined());
+  fixture.detectChanges();
+  expect(buttonByLabel(rootElement(fixture), 'Try again').getAttribute('aria-disabled'))
+    .toBe('true');
+  expect(buttonByLabel(rootElement(fixture), 'Try again').disabled).toBe(false);
+  finishRetry?.(jsonResponse(ownershipResponse(owners)));
   await vi.waitFor(() => {
     fixture.detectChanges();
     expect(document.activeElement?.id).toBe('ownership-heading');
@@ -370,6 +377,8 @@ it('uses singular and plural wording for the Owners who remain after step-down',
   clickButton(rootElement(singleSuccessor), 'Step down');
   singleSuccessor.detectChanges();
   expect(rootElement(singleSuccessor).textContent).toContain('Grace Achieng stays an Owner');
+  singleSuccessor.destroy();
+  TestBed.resetTestingModule();
 
   const severalSuccessors = await mount([], ownerHandler([
     ...twoOwners, owner('member-3', 'Peter Ndlovu'),

@@ -30,6 +30,10 @@ it('keeps the shared assistant create page inside People & groups', () => {
     .toBeUndefined();
 });
 
+it('opens the owner screen inside People & groups', () => {
+  expect(organisationPage('/org/people/owners')).toBe('people');
+});
+
 function checkNonNavigationPages(): void {
   expect(organisationPage('/org/states')).toBeUndefined();
   expect(organisationPage('/org/missing')).toBeUndefined();

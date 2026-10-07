@@ -10,6 +10,8 @@ import type { OwnershipChange, OwnershipOwner, OwnershipResponse } from '@opencr
 import { SharedState } from '../shared-state/shared-state';
 import { ModalSheet } from '../ui/modal-sheet';
 import { fetchOwnership, fetchOwnershipChange, sendOwnershipCommand } from './ownership-api';
+import { ownershipOwnerSummary, ownershipRecordedAt,
+  transferSuccessMessage } from './ownership-screen-view';
 
 type ScreenState = 'loading' | 'ready' | 'failed' | 'access';
 type ReviewKind = 'transfer_entry' | 'transfer_review' | 'step_down' | undefined;
@@ -262,33 +264,17 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     return '!';
   }
 
-  protected memberIdOf(change: OwnershipChange | undefined): string {
-    if (!change || typeof change.data['memberId'] !== 'string') return '';
-    return change.data['memberId'];
-  }
-
   protected transferSuccessMessage(): string {
-    const memberId = this.memberIdOf(this.recordedChange());
-    const successor = this.owners().find(ownerMatchesMemberId(memberId));
-    const displayName = successor?.displayName ?? memberId;
-    return `${displayName} is now an owner`;
+    return transferSuccessMessage(this.recordedChange(), this.owners());
   }
 
   protected formattedRecordedAt(change: OwnershipChange | undefined): string {
-    if (!change) return '';
-    const date = new Date(change.recordedAt);
-    if (Number.isNaN(date.getTime())) return '';
-    return new Intl.DateTimeFormat('en-GB', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
-      timeZone: 'UTC',
-    }).format(date) + ' UTC';
+    return ownershipRecordedAt(change);
   }
 
   protected ownerSummary(): string {
-    if (!this.ownershipReady()) return `${this.organisationName()} · ownership unavailable`;
-    return `${this.organisationName()} · ${this.owners().length} owner${
-      this.owners().length === 1 ? '' : 's'}`;
+    return ownershipOwnerSummary(this.organisationName(), this.ownershipReady(),
+      this.owners().length);
   }
 
   private createPendingChange(

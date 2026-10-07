@@ -155,7 +155,7 @@ async function prepareTransferEntry(page) {
 
 async function prepareTransferReview(page) {
   await prepareTransferEntry(page);
-  await page.getByLabel('Successor member id').fill('member-2');
+  await page.getByLabel('Successor member ID').fill('member-2');
   await page.getByRole('button', { name: 'Review appointment' }).click();
   await waitForSheetAnimations(page);
 }
@@ -182,7 +182,7 @@ async function prepareTransferConfirmed(page) {
   await prepareTransferReview(page);
   const opener = page.getByRole('button', { name: 'Appoint an owner' });
   await page.getByRole('button', { name: 'Appoint this owner' }).click();
-  await page.getByText('member-2 is now an owner', { exact: true }).waitFor();
+  await page.getByText('Grace Achieng is now an owner', { exact: true }).waitFor();
   const openerHandle = await opener.elementHandle();
   assert.ok(openerHandle, 'The action stays on the page after a transfer');
   await page.waitForFunction(isFocused, openerHandle);
@@ -203,7 +203,7 @@ async function prepareLastOwnerConflict(page) {
 async function prepareInactiveSuccessorRefusal(page) {
   await prepareTransferReview(page);
   await page.getByRole('button', { name: 'Appoint this owner' }).click();
-  await page.getByText('This member is not active', { exact: true }).waitFor();
+  await page.getByText('member-2 is not an active member', { exact: true }).waitFor();
 }
 
 async function waitForSheetAnimations(page) {
