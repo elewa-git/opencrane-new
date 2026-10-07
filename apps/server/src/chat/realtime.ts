@@ -1,5 +1,5 @@
 import type { WebSocket } from 'ws';
-import type { AuthConfig, SessionData } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
 import { AuthorityApplying } from '@opencrane/models';
 import { chatSubscriptionAccess, isChatRefused } from './access.ts';
 import { chatRows, type ChatOptions } from './routes.ts';
@@ -200,6 +200,6 @@ function refuse(state: Subscription) {
 }
 
 function validSession(session: SessionData, config: AuthConfig, options: ChatOptions) {
-  return session.orgId === config.expectedOrgId && session.exp * 1000 > Date.now() &&
+  return isOrganisationSession(config, session) && session.exp * 1000 > Date.now() &&
     options.silo === options.binding.silo;
 }

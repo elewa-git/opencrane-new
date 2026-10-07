@@ -104,6 +104,20 @@ function readExtraIdentities(raw: string | undefined): unknown {
   }
 }
 
+/**
+ * Checks that a signed-in session belongs to this installation's organisation.
+ * Uses the same rule as sign-in, so an allowed identity from another organisation keeps access.
+ * Refuses when no organisation is configured.
+ */
+export function isOrganisationSession(
+  config: AuthConfig,
+  session: { sub: string; orgId: string },
+): boolean {
+  if (!config.expectedOrgId) return false;
+  const identity = { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId };
+  return isIdentityAllowed(config, identity);
+}
+
 /** Checks the organisation id, allowing exact issuer and subject exceptions. */
 export function isIdentityAllowed(
   config: AuthConfig,

@@ -2,7 +2,7 @@ import { approvalReviewSchema } from '@opencrane/protocol';
 import { createHash, createHmac } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { AuthConfig, SessionData } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { history, approvalCards, readApproval, decideApproval, authorityFence, currentAuthority } from '@opencrane/models';
 import { sessionFor } from '../members/routes.ts';
@@ -15,7 +15,7 @@ export function registerApprovalRoutes(app: FastifyInstance, config: AuthConfig,
     const session = sessionFor(req, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (session.orgId !== config.expectedOrgId || options.binding.silo !== options.silo) return reply.code(403).send({ status: 'refused' });
+    if (!isOrganisationSession(config, session) || options.binding.silo !== options.silo) return reply.code(403).send({ status: 'refused' });
     try {
       // Capture before identity and IAM reads; a projected removal cannot reset the baseline.
       const fresh = await authorityFence(options.store, started);

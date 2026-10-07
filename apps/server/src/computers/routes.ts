@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { connectComputers, connectMemberFeed } from '@opencrane/projections';
 import type { ComputersResponse } from '@opencrane/protocol';
@@ -22,7 +22,7 @@ export function registerComputerRoutes(app: FastifyInstance, config: AuthConfig,
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     if (!authorisation) return reply.code(503).send({ status: 'unavailable' });
     if (!config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
-    if (session.orgId !== config.expectedOrgId) {
+    if (!isOrganisationSession(config, session)) {
       return reply.code(403).send({ status: 'refused', reason: 'wrong_silo' });
     }
     if (options.silo !== options.binding.silo) {

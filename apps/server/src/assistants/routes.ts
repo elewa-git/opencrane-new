@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { z } from 'zod';
 import { assistantCreatedDataSchema } from '@opencrane/events';
@@ -25,7 +25,7 @@ export function registerAssistantRoutes(
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
     const origin = new URL(config.redirectUri).origin;
-    if (!config.expectedOrgId || session.orgId !== config.expectedOrgId ||
+    if (!isOrganisationSession(config, session) ||
         options.silo !== options.binding.silo ||
         (request.method === 'POST' && request.headers.origin !== origin)) {
       return reply.code(403).send({ status: 'refused' });

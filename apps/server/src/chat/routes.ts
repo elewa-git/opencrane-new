@@ -4,7 +4,7 @@ import { creationEvent, privateSessionReader, sharedAssistantAuthority,
 import { sessionSlug } from '@opencrane/protocol';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import {
   listConversations, readConversation,
@@ -89,7 +89,7 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!trustedRequest(request, config, options, session.orgId)) {
+    if (!trustedRequest(request, config, options, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
     try {
@@ -127,9 +127,10 @@ export function registerChatRoutes(app: FastifyInstance, config: AuthConfig, opt
 }
 
 function trustedRequest(
-  request: FastifyRequest, config: AuthConfig, options: ChatOptions, orgId?: string,
+  request: FastifyRequest, config: AuthConfig, options: ChatOptions,
+  session: { sub: string; orgId: string },
 ) {
-  if (!config.expectedOrgId || orgId !== config.expectedOrgId) return false;
+  if (!isOrganisationSession(config, session)) return false;
   if (options.silo !== options.binding.silo) return false;
   if (request.method !== 'POST') return true;
   return request.headers.origin === new URL(config.redirectUri).origin;

@@ -11,7 +11,7 @@ import type { Client } from 'minio/dist/esm/minio.mjs';
 import { z } from 'zod';
 import { fileUploadedDataSchema } from '@opencrane/events';
 import type { StoredEvent } from '@opencrane/event-store';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { listFiles } from '@opencrane/projections';
 import type { ChatOptions } from '../chat/routes.ts';
@@ -222,7 +222,7 @@ async function authorise(options: FileOptions, config: AuthConfig, request: Fast
   if (!session) {
     throw new FileRefusal('unauthenticated');
   }
-  const wrongOrganisation = session.orgId !== config.expectedOrgId;
+  const wrongOrganisation = !isOrganisationSession(config, session);
   const wrongSilo = options.silo !== options.binding.silo;
   const appOrigin = new URL(config.redirectUri).origin;
   const wrongOrigin = request.method === 'POST' && request.headers.origin !== appOrigin;
