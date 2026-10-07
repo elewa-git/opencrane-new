@@ -1,4 +1,4 @@
-import { setupDirectory } from './directory-setup.ts';
+import { removeDirectory } from './directory-cleanup.ts';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -74,13 +74,6 @@ async function secondarySetup() {
     await writeFile(`${credentials}/${file}`, value, { mode: 0o600 });
     await chmod(`${credentials}/${file}`, 0o600);
   }
-  function hasCredential(file: string) {
-    return exists(`${credentials}/${file}`);
-  }
-  await setupDirectory(api, stackId, hasCredential, retain);
-  await save('zitadel-directory-key', await readFile(`${credentials}/zitadel-directory-key`, 'utf8'));
-  await chmod(`${directory}/zitadel-directory-key`, 0o600);
-  if (process.argv[2] === '--directory-only') return;
   const appName = `OpenCrane 2 Dev CI ${stackId}`;
   const apps = await list(`/management/v1/projects/${projectId}/apps/_search`, exactName(appName));
   assert(apps.length <= 1, 'Duplicate secondary apps');
@@ -141,7 +134,13 @@ async function secondarySetup() {
 }
 try {
   if (process.argv[2] === '--restore-owner-app') { await restoreOwnerApp(); process.exit(0); }
-  assert(process.argv[2] !== '--directory-only' || secondary, 'Directory setup needs a secondary slot');
+  if (process.argv[2] === '--remove-directory') {
+    orgId = '393311211338337681';
+    const receipt = await removeDirectory(api, stackId, homedir());
+    console.log(JSON.stringify(receipt));
+    process.exit(0);
+  }
+  assert(process.argv[2] === undefined, 'Unknown Zitadel setup option');
   await prepareDirectory();
   if (secondary) { await secondarySetup(); process.exit(0); }
   const pinned = z.object({ orgId: z.string().optional(), extraIdentities: z.array(identity).length(1) })

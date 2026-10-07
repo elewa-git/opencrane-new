@@ -297,7 +297,8 @@ prints **FAIL sign-in** and exits non-zero even if the service checks pass.
 For secondary bring-up, `zitadel-setup.ts` checks organisation
 `393311211338337681` and existing project `393311211539664273`. Under a shared
 setup lock, each id creates or reuses its own app, `OpenCrane 2 Dev CI <id>`, and
-users `opencrane2-dev-ci-<id>-owner` and `opencrane2-dev-ci-<id>-member`.
+four users named `opencrane2-dev-ci-<id>-<role>`. The roles in the names are
+owner, member, without-assistant and wrong-account.
 The owner app and users are never modified, and no owner credentials are read.
 Secondary users need no Zitadel administration role; product roles come from events.
 Each secondary app permits only its id's exact callback and logout URIs from the
@@ -520,7 +521,32 @@ budget API rather than loading the Spending page. It waits for the budget table 
 catch up before the next step. Monthly test limits are 20,000 cents; the daily global
 limit is 5,000 cents. It attempts every scope and reports any failed restoration.
 
-Secondary setup retains a mode-0600 `zitadel-directory-key` for an org-owned machine with only
-`ORG_OWNER_VIEWER`. It refuses broader roles and missing retained keys. The server gets its path
-in `ZITADEL_DIRECTORY_KEY_FILE`. `--directory-only` sets up only this credential on a claimed slot.
-The four slot users are owner, member, without-assistant and wrong-account; passwords stay private.
+## Removing the former directory accounts
+
+Secondary setup no longer creates a directory machine user, grants
+`ORG_OWNER_VIEWER` or creates a machine key. The server receives no directory
+credential. The four human test accounts and OIDC sign-in app remain.
+
+`zitadel-setup.ts --remove-directory` is a one-time repair for the old accounts.
+It runs only with `DEV_STACK_ID=1` or `2`, before normal setup, and does not start
+or change a dev stack. It uses the management credential through `ZITADEL_KEY_FILE`,
+a file path. The credential value is read only into the request header.
+The command checks the exact organisation id `393311211338337681` and name
+`OpenCrane 2 Dev`. It searches only the selected slot's exact directory username,
+checks that it is an organisation-owned machine and refuses the owner's user id.
+It removes only that user's `ORG_OWNER_VIEWER` membership, all its machine keys
+and the machine user. The command checks the complete key list and refuses more than 100 keys.
+It then removes `zitadel-directory-key` from the slot's
+retained and disposable folders. Linked folders and unexpected roles are refused.
+It calls no instance API and changes no other organisation or user.
+A repeat confirms absence. Output contains only PASS statuses after checked removal.
+
+```sh
+DEV_STACK_ID=2 ZITADEL_KEY_FILE=/path/to/service-key \
+  flock "/tmp/opencrane-dev-stack-zitadel-$(id -u).lock" \
+  nice -n 10 node --experimental-strip-types infra/dev-stack/zitadel-setup.ts --remove-directory
+```
+
+The [receipt](../../docs/process/p4-3-pr2-rework.md) records the live cleanup.
+`directory-cleanup.test.ts` checks removal, repeat runs and refusals before writes.
+`zitadel-setup.test.ts` checks that ordinary setup creates no directory credential.

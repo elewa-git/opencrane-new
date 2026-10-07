@@ -1,4 +1,3 @@
-import { zitadelDirectory } from './members/zitadel.ts';
 import { seedOwnership, providerSecrets } from '@opencrane/models';
 import { tokenIssuer } from '@opencrane/auth';
 import { desktopConnection } from './computers/desktop.ts';
@@ -87,10 +86,9 @@ const app = buildServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),
-  ...(realtime && events && process.env['ZITADEL_DIRECTORY_KEY_FILE'] ? { identity: {
-    silo: realtime.binding.silo, store: events.store, feed: realtime.feed, binding: realtime.binding,
-    directory: zitadelDirectory(authConfig.issuerUrl, authConfig.expectedOrgId!,
-      process.env['ZITADEL_DIRECTORY_KEY_FILE']),
+  ...(realtime && events ? { invitationEmail: {
+    silo: realtime.binding.silo, store: events.store,
+    feed: realtime.feed, binding: realtime.binding,
   } } : {}),
   ...(realtime && events && modelDb ? { ownership: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,

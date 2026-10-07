@@ -26,22 +26,53 @@ The socket checks current Owner/Admin events and IAM on every drain and every 25
 A 1.5-second watchdog and delivery expiry stop late delivery. Members, demoted Admins and removed people
 receive no protected rows. Members use `/api/chat/colleagues`. No conversation stream is checked here.
 
-## Identity lookup
+## Invitation email
 
-`POST /api/invitations/identity` is an Owner/Admin read with exact same-origin and organisation checks.
-Its strict body is `{ email }`, at most 1 KiB; email length ≤254. It appends nothing and uses no write fence.
-A match returns only `status: match`, `subject`, `displayName`, `email`, `memberId`, `memberSequence`,
-`membership: none|pending|joined`, and `defaults: { role: member, personalAssistant: provision, expiresAfterDays: 7 }`.
-Other results contain only `status`: not_found, unverified, inactive, not_human, ambiguous,
-other_organisation, identity_mismatch or admission_limit. Timeouts/errors return 503/unavailable.
-Active/pending event bindings keep older ids. Otherwise SHA-256 of JSON `[silo, issuer, subject, admissionNumber]`
-selects `admission-<hash>`, starting at zero and skipping removed streams, with a limit of 20 admissions.
-Earlier conflicting identity events refuse lookup. Multiple active/pending bindings return ambiguous.
-The ten-second read stops at 10,000 member events; an incomplete search returns unavailable.
-Zitadel uses exact two-row email search, checks organisation id/name and each user's owner,
-and bounds responses to 64 KiB. Its only directory operations are search/get. Machine JWTs last one minute.
+`POST /api/invitations/identity` accepts an email for the invitation form.
+The URL is retained, but it no longer looks up a person in Zitadel.
+Only current Owners and Admins may use it. It checks the signed-in session,
+the exact Origin, the configured organisation, current member events and OpenFGA.
+Cookie roles do not grant access. Its strict body is `{ email }`, at most 1 KiB,
+with an email length of at most 254 characters. It appends no events.
 
-Live evidence, 7 October 2026, base `871c40d9`, slot 2 (existing, not fresh): PASS scoped
-verified user search and mode 0600; PASS 403 for an ungranted organisation context without reading its body.
-The foreign context id was a sentinel; access to another known existing organisation is NOT RUN.
-The complete fresh-install journey is NOT RUN. No owner user, owner app or instance settings were changed.
+A successful response is exactly:
+
+```json
+{
+  "status": "confirmation_on_acceptance",
+  "email": "person@example.test",
+  "message": "The person is confirmed when they accept the invitation."
+}
+```
+
+The email is the Admin's input. The response says nothing about whether an account
+exists, whether its email is verified or which organisation it belongs to. It
+returns no sign-in subject, name, member id or membership status. The server has
+no Zitadel directory credential and makes no directory request.
+Missing sessions return 401, access refusals return 403 and invalid input returns
+400. Missing services, access-check errors and the ten-second deadline return
+503 with `{ status: unavailable }`. Errors never become claims about a person.
+This read checks access once and uses no write freshness check.
+
+The invitation creation and acceptance changes are still to come. They must check
+the accepting person's authenticated identity before granting membership. The
+existing `/members/join` command still requires an invitation bound to a sign-in
+identity; this email response creates no invitation and does not change that rule.
+
+## Admission member ids
+
+The server keeps a helper for selecting a member id from an authenticated issuer
+and subject. The email route does not call it. Acceptance will use it after checking
+the person's identity. Active or pending invitations keep their existing event-bound
+ids. Otherwise SHA-256 of JSON `[silo, issuer, subject, admissionNumber]` selects
+`admission-<hash>`, starting at zero and skipping removed member streams.
+The helper tries at most 20 admissions. Conflicting identity events return
+`identity_mismatch`; multiple active or pending bindings return `ambiguous`.
+Twenty removed admissions return `admission_limit`.
+The caller supplies a read deadline. More than 10,000 member events or any event
+from another silo makes the search unavailable. It appends nothing.
+
+The [rework receipt](../process/p4-3-pr2-rework.md) records checks and the removal
+of the former directory accounts. The earlier 403 probe used an organisation id
+whose existence was not established. It did not prove organisation isolation.
+The complete fresh-install invitation journey is NOT RUN.

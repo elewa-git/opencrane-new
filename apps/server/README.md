@@ -17,13 +17,14 @@ flowchart LR
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, chat rows and computer state| postgres
   server -->|sends turns and optional tool offers; receives reports| computer["apps/computer<br/>personal or group assistant"]
-  server -->|sign-in and directory reads| zitadel["Zitadel<br/>sign-in service"]
+  server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
 ## What it is responsible for
 
-- Signs people in, keeps their browser session and checks invite identities in their organisation.
+- Signs people in and keeps their browser session.
 - Checks permissions before returning private information or changing data.
+- Checks an invitation email and explains that the person is confirmed when they accept.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
@@ -62,7 +63,9 @@ not yet proven on a live computer; memory features stay off until it is.
 2. **The first owner claims a new installation.** An operator runs the one-time command,
    which prints a token. The first person signs in and enters that token on the claim page.
    The server checks it and records them as the owner.
-3. **A person chats with an assistant.** The server sends the turn to that person's
+3. **An admin prepares an invitation.** The server checks the email input. The person
+   is confirmed when they accept; the server does not look them up in Zitadel.
+4. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
   person can stop the turn. A personal turn may include a short list of reviewed
   tools. The gateway checks permission again each time one is used. The chat watcher
@@ -80,19 +83,19 @@ not yet proven on a live computer; memory features stay off until it is.
    changes. Computer state follows lifecycle events and stays in recovery until a
    new ready event appears. The worker saves this state in the computer read table,
    so each chat update reads a small record. Sleeping and waking computers show starting.
-4. **A group uses a shared assistant.** An admin chooses its tools and paying group.
+5. **A group uses a shared assistant.** An admin chooses its tools and paying group.
    Each member gets a private chat and a private turn by default. Private turns have
    no local tools. A member can choose a memory-free turn to use the group's shared
    computer disk and browser. That turn has no earlier private context. A member who
    loses spending access can still read and stop their work.
-5. **Two people chat.** The server checks who can read their direct conversation,
+6. **Two people chat.** The server checks who can read their direct conversation,
    then returns messages and live updates. Busy chats and slow reads keep working.
-6. **An admin adds a tool server.** The server checks the remote address, lists its
+7. **An admin adds a tool server.** The server checks the remote address, lists its
    tools and leaves them blocked until an admin reviews them.
-7. **An assistant asks an AI model for help.** The request goes through agentgateway, the
+8. **An assistant asks an AI model for help.** The request goes through agentgateway, the
    AI gateway. The gateway asks the models process whether the budget allows it, and only
    then sends it on to the model provider.
-8. **A person watches the assistant's desktop.** The server checks their conversation
+9. **A person watches the assistant's desktop.** The server checks their conversation
    access and desktop grant. A confirmed member removal or conversation permission denial
    ends the view straight away, even if another access read is slow.
 

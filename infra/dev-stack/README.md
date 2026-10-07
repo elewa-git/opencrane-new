@@ -16,7 +16,7 @@ The stack starts OpenCrane apps against them. It uses the
 flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
-  stack -->|sets up sign-in and a read-only directory user| zitadel["Zitadel<br/>development organisation"]
+  stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, Codex call fixtures and daily run"]
   devbox["infra/devbox<br/>machine setup"] -->|creates cluster| cluster["k3d cluster<br/>local computers"]
@@ -27,7 +27,7 @@ flowchart LR
 
 - Start and stop the local services and OpenCrane processes.
 - Create private local credentials for the services.
-- Set up four sign-in test users and a private read-only directory key for each spare stack.
+- Set up four sign-in test users for each spare stack.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Run browser checks against real local services. The approval check sends Codex's

@@ -4,9 +4,13 @@ import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { legacyMemberRole } from '@opencrane/events';
 import { history } from '@opencrane/models';
 
-const fields = z.object({ identity: z.object({ issuer: z.string(), sub: z.string() }).optional(),
-  invitedIdentity: z.object({ issuer: z.string(), sub: z.string() }).optional(),
-  expiresAt: z.string().optional() });
+const identityFields = z.object({ issuer: z.string(), sub: z.string() });
+const fields = z.object({
+  identity: identityFields.optional(),
+  invitedIdentity: identityFields.optional(),
+  expiresAt: z.string().optional(),
+});
+
 function admission(rows: StoredEvent[], issuer: string, subject: string, now: Date) {
   let bound = false;
   let conflicting = false;
@@ -16,8 +20,11 @@ function admission(rows: StoredEvent[], issuer: string, subject: string, now: Da
     const data = fields.parse(row.event.data);
     const identity = data.invitedIdentity ?? data.identity;
     if (identity) {
-      if (identity.issuer === issuer && identity.sub === subject) bound = true;
-      else conflicting = true;
+      if (identity.issuer === issuer && identity.sub === subject) {
+        bound = true;
+      } else {
+        conflicting = true;
+      }
     }
     const nextRole = legacyMemberRole(row.event);
     if (nextRole !== undefined) {
@@ -29,9 +36,13 @@ function admission(rows: StoredEvent[], issuer: string, subject: string, now: Da
     }
   }
   let membership: 'none' | 'joined' | 'pending' | 'removed' = 'none';
-  if (role === '') membership = 'removed';
-  else if (role) membership = 'joined';
-  else if (pending) membership = 'pending';
+  if (role === '') {
+    membership = 'removed';
+  } else if (role) {
+    membership = 'joined';
+  } else if (pending) {
+    membership = 'pending';
+  }
   return { membership, bound, conflicting };
 }
 
@@ -39,24 +50,36 @@ function memberSequence(rows: StoredEvent[]) {
   return rows.at(-1)?.sequence ?? 0;
 }
 
-export async function deriveAdmission(store: EventStore, silo: string, issuer: string,
-  subject: string, now: Date, deadline: number) {
+async function memberStreams(store: EventStore, silo: string, deadline: number) {
   const streams = new Map<string, StoredEvent[]>();
   let read = 0;
   // Refuse an incomplete search rather than miss an older active identity binding.
   for await (const row of store.readStream('member-*', 1, deadline)) {
-    if (row.event.silo !== silo || ++read > 10_000) throw new Error('Identity history unavailable');
+    read++;
+    if (row.event.silo !== silo || read > 10_000) {
+      throw new Error('Identity history unavailable');
+    }
     const rows = streams.get(row.event.subject) ?? [];
     rows.push(row);
     streams.set(row.event.subject, rows);
   }
+  return streams;
+}
+
+export async function deriveAdmission(store: EventStore, silo: string, issuer: string,
+  subject: string, now: Date, deadline: number) {
+  const streams = await memberStreams(store, silo, deadline);
   const existing = [];
   for (const [stream, rows] of streams) {
     const state = admission(rows, issuer, subject, now);
     if (state.bound && ['joined', 'pending'].includes(state.membership)) {
       if (state.conflicting) return { status: 'identity_mismatch' as const };
-      existing.push({ memberId: stream.slice(7), memberSequence: memberSequence(rows),
-        membership: state.membership });
+      const candidate = {
+        memberId: stream.slice(7),
+        memberSequence: memberSequence(rows),
+        membership: state.membership,
+      };
+      existing.push(candidate);
     }
   }
   if (existing.length > 1) return { status: 'ambiguous' as const };
@@ -69,8 +92,7 @@ export async function deriveAdmission(store: EventStore, silo: string, issuer: s
     const state = admission(rows, issuer, subject, now);
     if (state.membership === 'removed') continue;
     if (state.conflicting) return { status: 'identity_mismatch' as const };
-    return { memberId, memberSequence: memberSequence(rows),
-      membership: state.membership };
+    return { memberId, memberSequence: memberSequence(rows), membership: state.membership };
   }
   return { status: 'admission_limit' as const };
 }

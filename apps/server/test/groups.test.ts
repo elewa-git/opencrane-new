@@ -1,5 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
-import type { IdentityOptions } from '../src/members/identity.ts';
+import { deriveAdmission } from '../src/members/admission.ts';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
@@ -49,11 +48,11 @@ const initialiseGroupsFixture = async () => {
     await auth.handler.handle(joined, db);
   }
   await append('member-identity-owner', 'member.joined', { memberId: 'identity-owner',
-    email: 'identity-owner@example.test', displayName: 'Directory admin', role: 'admin' });
+    email: 'identity-owner@example.test', displayName: 'Invitation admin', role: 'admin' });
   await runner.run(members);
-  const identity = { silo: 'acme', store: nats.store, binding,
-    feed: { memberId: resolveMemberId }, directory: { search } };
-  app = buildServer(config, { identity, groups: { silo: 'acme', store: nats.store, db, binding,
+  const invitationEmail = { silo: 'acme', store: nats.store, binding,
+    feed: { memberId: resolveMemberId } };
+  app = buildServer(config, { invitationEmail, groups: { silo: 'acme', store: nats.store, db, binding,
     feed: { memberId: resolveMemberId } } });
 };
 beforeAll(initialiseGroupsFixture, 120_000);
@@ -253,25 +252,11 @@ function resolveMemberId(_silo: string, _issuer: string, subject: string) {
   return Promise.resolve(memberId);
 }
 
-const person = { id: 'invitee', state: 'USER_STATE_ACTIVE',
-  details: { resourceOwner: 'org-acme' }, human: {
-    profile: { displayName: 'Invitee' },
-    email: { email: 'invitee@example.test', isEmailVerified: true },
-  } };
-type ProviderPerson = Awaited<ReturnType<IdentityOptions['directory']['search']>>[number];
-let people: ProviderPerson[] = [person];
-let hung = false;
-async function search(_email: string, signal: AbortSignal): Promise<ProviderPerson[]> {
-  if (hung) {
-    await delay(30_000, undefined, { signal });
-  }
-  return people;
-}
 function appendIdentity(memberId: string, type: string, data: unknown, apply = false) {
   return append(`member-${memberId}`, type, data, apply);
 }
 
-function lookup(sub = 'idp-identity-owner', orgId = 'org-acme', origin = 'https://app.example.test',
+function checkEmail(sub = 'idp-identity-owner', orgId = 'org-acme', origin = 'https://app.example.test',
   payload: unknown = { email: 'invitee@example.test' }) {
   const cookie = encodeSession(config, { sub, orgId, roles: ['admin'],
     authTime: 1790856000, exp: 2000000000 });
@@ -280,65 +265,54 @@ function lookup(sub = 'idp-identity-owner', orgId = 'org-acme', origin = 'https:
       'content-type': 'application/json', origin, cookie: `${config.cookieName}=${cookie}`,
     } });
 }
-async function findsIdentityWithoutWriting() {
+async function acceptsEmailWithoutClaimingIdentity() {
   const before = await nats.store.head();
-  const response = await lookup();
-  expect(response.statusCode).toBe(200);
-  expect(response.headers['cache-control']).toBe('no-store');
-  expect(response.json()).toMatchObject({ status: 'match', subject: 'invitee',
-    displayName: 'Invitee', email: 'invitee@example.test', memberSequence: 0,
-    membership: 'none', defaults: { role: 'member', personalAssistant: 'provision',
-      expiresAfterDays: 7 } });
-  expect(response.json<{ memberId: string }>().memberId).toMatch(/^admission-[a-f0-9]{64}$/u);
+  for (const email of ['invitee@example.test', 'unknown@example.test']) {
+    const response = await checkEmail('idp-identity-owner', 'org-acme',
+      'https://app.example.test', { email });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.json()).toEqual({
+      status: 'confirmation_on_acceptance', email,
+      message: 'The person is confirmed when they accept the invitation.',
+    });
+  }
   expect(await nats.store.head()).toBe(before);
 }
-it('an admin looks up a verified human and gets a derived admission without an append',
-  findsIdentityWithoutWriting);
+it('accepts an email without claiming existence, verification or organisation membership',
+  acceptsEmailWithoutClaimingIdentity);
 
-const cases = [
-  ['not_found', []],
-  ['not_human', [{ id: person.id, state: person.state, details: person.details }]],
-  ['unverified', [{ ...person, human: { ...person.human,
-    email: { ...person.human.email, isEmailVerified: false } } }]],
-  ['inactive', [{ ...person, state: 'USER_STATE_INACTIVE' }]],
-  ['ambiguous', [person, person]],
-  ['other_organisation', [{ ...person, details: { resourceOwner: 'another-org' } }]],
-] as const;
-async function refusesUnsafeMatch(status: string, result: readonly ProviderPerson[]) {
-  people = [...result];
-  const before = await nats.store.head();
-  expect((await lookup()).json()).toEqual({ status });
-  expect(await nats.store.head()).toBe(before);
-  people = [person];
-}
-it.each(cases)('returns only %s for an unsafe provider match', refusesUnsafeMatch);
-async function refusesTimeout() {
-  hung = true;
-  const before = await nats.store.head();
-  const response = await lookup();
-  expect(response.statusCode).toBe(503);
-  expect(response.json()).toEqual({ status: 'unavailable' });
-  expect(await nats.store.head()).toBe(before);
-  hung = false;
-}
-it('a hung provider times out without an append or identity data', refusesTimeout);
 async function rejectsUntrustedRequests() {
   await appendIdentity('member', 'member.joined', { memberId: 'member', email: 'member@example.test',
     displayName: 'Member', role: 'member' }, true);
   for (const args of [['idp-member'], ['pending'], ['idp-identity-owner', 'another-org'],
     ['idp-identity-owner', 'org-acme', 'https://foreign.test']] as const) {
-    expect((await lookup(...args)).statusCode).toBe(403);
+    expect((await checkEmail(...args)).statusCode).toBe(403);
   }
-  expect((await lookup('idp-identity-owner', 'org-acme', 'https://app.example.test',
+  expect((await checkEmail('idp-identity-owner', 'org-acme', 'https://app.example.test',
     { email: 'invitee@example.test', memberId: 'client-choice' })).statusCode).toBe(400);
+  for (const email of ['invalid', `${'a'.repeat(255)}@example.test`]) {
+    const response = await checkEmail('idp-identity-owner', 'org-acme',
+      'https://app.example.test', { email });
+    expect(response.statusCode).toBe(400);
+  }
+  const oversized = await checkEmail('idp-identity-owner', 'org-acme',
+    'https://app.example.test', { email: 'invitee@example.test', extra: 'a'.repeat(1024) });
+  expect(oversized.statusCode).toBe(413);
   const anonymous = await app.inject({ method: 'POST', url: '/api/invitations/identity',
     payload: { email: 'invitee@example.test' } });
   expect(anonymous.statusCode).toBe(401);
 }
 it('refuses stale elevated cookies, absent membership, foreign organisation and Origin',
   rejectsUntrustedRequests);
+function admissionForInvitee() {
+  return deriveAdmission(nats.store, 'acme', config.issuerUrl, 'invitee',
+    new Date(), performance.now() + 10_000);
+}
 async function keepsAdmissionsSeparate() {
-  const first = (await lookup()).json<{ memberId: string }>().memberId;
+  const firstResult = await admissionForInvitee();
+  if (!('memberId' in firstResult)) throw new Error('Expected a new admission');
+  const first = firstResult.memberId;
   const invited = { memberId: 'legacy', email: 'invitee@example.test', role: 'member',
     invitedBy: 'owner', invitationId: 'legacy-invite',
     invitedIdentity: { issuer: config.issuerUrl, sub: 'invitee' },
@@ -349,32 +323,158 @@ async function keepsAdmissionsSeparate() {
       await appendIdentity(memberId, 'member.invited', { ...invited, memberId,
         invitedIdentity: { issuer: config.issuerUrl, sub } });
     }
-    expect((await lookup()).json()).toEqual({ status: 'identity_mismatch' });
+    expect(await admissionForInvitee()).toEqual({ status: 'identity_mismatch' });
     await appendIdentity(memberId, 'member.removed', { memberId, removedBy: 'owner' });
   }
   await appendIdentity('legacy', 'member.invited', invited);
-  expect((await lookup()).json()).toMatchObject({ memberId: 'legacy', membership: 'pending' });
+  expect(await admissionForInvitee()).toMatchObject({ memberId: 'legacy', membership: 'pending' });
   await appendIdentity('legacy', 'member.joined', { memberId: 'legacy', email: invited.email,
     displayName: 'Invitee', role: 'member' });
-  expect((await lookup()).json()).toMatchObject({ memberId: 'legacy', membership: 'joined' });
+  expect(await admissionForInvitee()).toMatchObject({ memberId: 'legacy', membership: 'joined' });
+  await appendIdentity('duplicate', 'member.invited', { ...invited, memberId: 'duplicate' });
+  expect(await admissionForInvitee()).toEqual({ status: 'ambiguous' });
+  await appendIdentity('duplicate', 'member.removed', { memberId: 'duplicate', removedBy: 'owner' });
   await appendIdentity('legacy', 'member.removed', { memberId: 'legacy', removedBy: 'owner' });
-  expect((await lookup()).json()).toMatchObject({ memberId: first, memberSequence: 0 });
+  expect(await admissionForInvitee()).toMatchObject({ memberId: first, memberSequence: 0 });
   await appendIdentity(first, 'member.invited', { ...invited, memberId: first });
   await appendIdentity(first, 'member.removed', { memberId: first, removedBy: 'owner' });
-  const next = (await lookup()).json<{ memberId: string }>().memberId;
+  const nextResult = await admissionForInvitee();
+  if (!('memberId' in nextResult)) throw new Error('Expected the next admission');
+  const next = nextResult.memberId;
   expect(next).not.toBe(first);
-  expect((await lookup()).json()).toMatchObject({ memberId: next, memberSequence: 0 });
+  expect(await admissionForInvitee()).toMatchObject({ memberId: next, memberSequence: 0 });
   await appendIdentity(next, 'member.invited', { ...invited, memberId: next,
     invitedIdentity: { issuer: config.issuerUrl, sub: 'different-person' } });
-  expect((await lookup()).json()).toEqual({ status: 'identity_mismatch' });
+  expect(await admissionForInvitee()).toEqual({ status: 'identity_mismatch' });
 }
 it('uses older bound ids and skips removed admissions when deriving the next id',
   keepsAdmissionsSeparate);
+async function refusesWrongSiloAndMissingServices() {
+  const invitationEmail = { silo: 'foreign', store: nats.store, binding: auth.binding,
+    feed: { memberId: resolveMemberId } };
+  const wrongSilo = buildServer(config, { invitationEmail });
+  const missingServices = buildServer(config);
+  const cookie = encodeSession(config, { sub: 'idp-identity-owner', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  const input = { method: 'POST' as const, url: '/api/invitations/identity',
+    payload: { email: 'invitee@example.test' }, headers: {
+      origin: 'https://app.example.test', cookie: `${config.cookieName}=${cookie}`,
+    } };
+  const before = await nats.store.head();
+  try {
+    expect((await wrongSilo.inject(input)).statusCode).toBe(403);
+    expect((await missingServices.inject(input)).statusCode).toBe(503);
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    await wrongSilo.close();
+    await missingServices.close();
+  }
+}
+it('refuses a mismatched silo and reports missing services as unavailable',
+  refusesWrongSiloAndMissingServices);
+
+async function reportsBrokenAccessAsUnavailable() {
+  function brokenMemberId(): Promise<string | undefined> {
+    return Promise.reject(new Error('private-provider-error'));
+  }
+  const invitationEmail = { silo: 'acme', store: nats.store, binding: auth.binding,
+    feed: { memberId: brokenMemberId } };
+  const errorApp = buildServer(config, { invitationEmail });
+  const cookie = encodeSession(config, { sub: 'idp-identity-owner', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  const input = { method: 'POST' as const, url: '/api/invitations/identity',
+    payload: { email: 'invitee@example.test' }, headers: {
+      origin: 'https://app.example.test', cookie: `${config.cookieName}=${cookie}`,
+    } };
+  const before = await nats.store.head();
+  try {
+    const response = await errorApp.inject(input);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    await errorApp.close();
+  }
+}
+it('reports an access-check error as unavailable without claims about the person',
+  reportsBrokenAccessAsUnavailable);
+
+async function timesOutSlowAccessWithoutIdentityClaims() {
+  let release!: (memberId: string) => void;
+  function captureRelease(resolve: (memberId: string) => void) {
+    release = resolve;
+  }
+  const waiting = new Promise<string>(captureRelease);
+  function slowMemberId() {
+    return waiting;
+  }
+  const invitationEmail = { silo: 'acme', store: nats.store, binding: auth.binding,
+    feed: { memberId: slowMemberId } };
+  const slowApp = buildServer(config, { invitationEmail });
+  const cookie = encodeSession(config, { sub: 'idp-identity-owner', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  const input = { method: 'POST' as const, url: '/api/invitations/identity',
+    payload: { email: 'invitee@example.test' }, headers: {
+      origin: 'https://app.example.test', cookie: `${config.cookieName}=${cookie}`,
+    } };
+  const before = await nats.store.head();
+  try {
+    const response = await slowApp.inject(input);
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toEqual({ status: 'unavailable' });
+    expect(await nats.store.head()).toBe(before);
+  } finally {
+    release('identity-owner');
+    await slowApp.close();
+  }
+}
+it('times out a slow access read without appending or returning identity claims',
+  timesOutSlowAccessWithoutIdentityClaims);
+
 async function deniesRemovedManager() {
   await appendIdentity('identity-owner', 'member.removed', { memberId: 'identity-owner', removedBy: 'admin' });
-  const response = await lookup();
+  const response = await checkEmail();
   expect(response.statusCode).toBe(403);
   expect(response.json()).toEqual({ status: 'refused' });
 }
-it('removal refuses lookup while the identity mapping and IAM still grant admin access',
+it('removal refuses the email check while the identity mapping and IAM still grant admin access',
   deniesRemovedManager);
+
+async function refusesAdmissionLimits() {
+  for (let number = 0; number < 20; number++) {
+    const result = await deriveAdmission(nats.store, 'acme', config.issuerUrl, 'limited-invitee',
+      new Date(), performance.now() + 10_000);
+    if (!('memberId' in result)) throw new Error('Expected an unused admission');
+    await appendIdentity(result.memberId, 'member.removed',
+      { memberId: result.memberId, removedBy: 'owner' });
+  }
+  const before = await nats.store.head();
+  const result = await deriveAdmission(nats.store, 'acme', config.issuerUrl, 'limited-invitee',
+    new Date(), performance.now() + 10_000);
+  expect(result).toEqual({ status: 'admission_limit' });
+  expect(await nats.store.head()).toBe(before);
+}
+it('refuses a twenty-first admission without reusing a removed member stream', refusesAdmissionLimits);
+
+async function refusesIncompleteAdmissionHistory() {
+  const fixture = { ...event('bulk-member', 'member-bulk', 'member.removed'), silo: 'acme',
+    data: { memberId: 'bulk', removedBy: 'owner' } };
+  async function* bulkHistory() {
+    for (let index = 1; index <= 10_001; index++) {
+      const storedEvent = { event: fixture, sequence: index };
+      yield await Promise.resolve(storedEvent);
+    }
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(bulkHistory);
+  try {
+    const pending = admissionForInvitee();
+    await expect(pending).rejects.toThrow('Identity history unavailable');
+  } finally {
+    spy.mockRestore();
+  }
+  await append('member-foreign-admission', 'member.removed',
+    { memberId: 'foreign-admission', removedBy: 'owner' }, false, 'foreign');
+  await expect(admissionForInvitee()).rejects.toThrow('Identity history unavailable');
+}
+it('refuses an incomplete member search and member events from another silo',
+  refusesIncompleteAdmissionHistory);

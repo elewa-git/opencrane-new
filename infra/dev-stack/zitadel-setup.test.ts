@@ -83,13 +83,15 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     assert.equal(state.apps[config.appId].oidcConfig.devMode, true);
     const credentials: Record<string, string> = {};
     for (const name of ['client-secret', 'owner-password', 'member-password', 'without-assistant-password',
-      'wrong-account-password', 'directory-key']) {
+      'wrong-account-password']) {
       const path = `${directory}/zitadel-${name}`;
       credentials[name] = await readFile(path, 'utf8');
       assert.equal((await stat(path)).mode & 0o777, 0o600);
       assert.ok(!`${first.stdout}${first.stderr}`.includes(credentials[name]!));
     }
-    assert.deepEqual(state.directoryRoles, ['ORG_OWNER_VIEWER']);
+    assert.equal(state.directoryRoles, undefined);
+    await assert.rejects(stat(`${directory}/zitadel-directory-key`));
+    await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-ci-1/zitadel-directory-key`));
     for (const role of ['owner', 'member', 'without-assistant', 'wrong-account']) {
       assert.equal(config.users[role].login, `opencrane2-dev-ci-1-${role}`);
       assert.equal(state.users[config.users[role].id].password, credentials[`${role}-password`]);
@@ -104,11 +106,6 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     for (const [name, value] of Object.entries(credentials)) {
       assert.equal(await readFile(`${directory}/zitadel-${name}`, 'utf8'), value);
     }
-    state.directoryRoles = ['ORG_OWNER'];
-    await writeFile(providerFile, JSON.stringify(state));
-    await assert.rejects(setup());
-    assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), state);
-    state.directoryRoles = ['ORG_OWNER_VIEWER'];
     // Refuse an existing app with broad redirects without rewriting its config.
     state.apps[config.appId].oidcConfig.redirectUris = ['http://127.0.0.1:*/auth/callback'];
     await writeFile(providerFile, JSON.stringify(state));

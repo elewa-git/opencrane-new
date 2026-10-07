@@ -893,5 +893,13 @@ governed-work qualification remains tracked in #63.
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
 
-Identity lookup uses `ZITADEL_DIRECTORY_KEY_FILE`, a machine key file; it never uses the management PAT.
-The [member API](../../docs/api/members.md#identity-lookup) defines its response and limits.
+The [invitation email API](../../docs/api/members.md#invitation-email) checks an Admin's
+email input. It makes no directory request and needs no directory credential.
+It returns no account or organisation claims. Identity confirmation belongs to
+acceptance; the existing bound-invitation join command is unchanged.
+`src/members/admission.ts` keeps the event-based member-id helper for that work.
+It is not called by the email route. The member-history limit is 10,000 events.
+To support larger histories, use the identity-binding read table to find candidate
+member streams, then confirm those streams from their events. That change is not
+implemented here. `test/groups.test.ts` covers existing ids, removed admissions,
+conflicting identities, duplicate bindings and both limits.
