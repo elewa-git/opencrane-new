@@ -1,6 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelsScreen } from './model-registry';
+import type { ProviderRow } from './provider-api';
 
 Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
   configurable: true,
@@ -16,7 +17,7 @@ const emptyProviderRead = { rows: [], loadedAt: '2026-10-07T09:00:00.000Z',
   access: { grantsAvailable: false, reason: 'p4_22_required' } };
 const registryRead = { models: [{ id: 'gpt-6.1-sol', retired: false }], taskRouting };
 
-function provider(providerId: string, name: string) {
+function provider(providerId: string, name: string): ProviderRow {
   return { providerId, provider: 'openai', name, revision: 2, position: 2,
     saved: { changeId: `saved-${providerId}`, time: '2026-10-07T08:00:00.000Z', revision: 2,
       outcome: 'recorded' }, enabledModels: [], status: 'saved_unverified' };
@@ -451,4 +452,55 @@ it('prevents a native key form submit from putting the key in a URL', async () =
   const event = new Event('submit', { bubbles: true, cancelable: true });
   form.dispatchEvent(event);
   expect(event.defaultPrevented).toBe(true);
+});
+
+it('keeps the same provider open while a confirmed key change reads its updated row', async () => {
+  const first = provider('one', 'Primary');
+  const second = provider('two', 'Second');
+  let readStarted = false;
+  let releaseRead: ((response: Response) => void) | undefined;
+  function storeRelease(resolve: (response: Response) => void): void {
+    releaseRead = resolve;
+  }
+  const updatedRow = new Promise<Response>(storeRelease);
+  function serve(request: RequestSeen): Response | Promise<Response> {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.url === '/api/org/providers') {
+      return reply({ ...emptyProviderRead, rows: [first, second] });
+    }
+    if (request.method === 'POST') {
+      return reply({ status: 'appended', changeId: 'saved-key' });
+    }
+    if (request.url.includes('/changes/')) {
+      return reply({ status: 'appended', operation: 'provider.key_saved',
+        projection: { content: 'current', iam: 'current' } });
+    }
+    readStarted = true;
+    return updatedRow;
+  }
+  const fixture = await mount(serve);
+  clickButton(fixture, 'Replace key');
+  const key = field(fixture, 'replace-provider-key');
+  key.value = 'fixture-key';
+  key.dispatchEvent(new Event('input', { bubbles: true }));
+  fixture.detectChanges();
+  clickDialogButton(fixture, 'Replace key');
+  function readWasStarted(): void {
+    fixture.detectChanges();
+    expect(readStarted).toBe(true);
+  }
+  await vi.waitFor(readWasStarted);
+  try {
+    const cancel = screenElement(fixture).querySelector<HTMLButtonElement>(
+      'dialog[open] .sheet-actions button.secondary');
+    expect(cancel?.disabled).toBe(true);
+    cancel?.click();
+    const opener = screenElement(fixture).querySelector('.page-actions .button.primary');
+    if (!(opener instanceof HTMLButtonElement)) throw new Error('Missing provider opener');
+    fixture.componentInstance['startReplacement'](second, opener);
+    expect(fixture.componentInstance['replaceProviderId']()).toBe('one');
+  } finally {
+    releaseRead?.(reply({ rows: [first] }));
+    await settle(fixture);
+  }
 });

@@ -327,7 +327,9 @@ export class ModelsScreen implements OnInit, OnDestroy {
   }
 
   protected startReplacement(provider: ProviderRow, opener: HTMLElement): void {
-    if (this.pendingKeys()[provider.providerId]) return;
+    if (this.busy() || this.pendingKeys()[provider.providerId]) {
+      return;
+    }
     this.replaceProviderId.set(provider.providerId);
     this.replaceKeyDraft.set('');
     this.replaceKeyError.set('');
@@ -388,7 +390,10 @@ export class ModelsScreen implements OnInit, OnDestroy {
   }
 
   private async refreshProvider(id: string): Promise<void> {
+    // Keep the dialog in place until the updated provider has been read.
+    this.busy.set(true);
     const result = await readProvider(id, this.request.signal);
+    this.busy.set(false);
     if (result.kind === 'ok') {
       const remaining = this.providers().filter(isOtherProvider(id));
       this.providers.set([...remaining, result.value]);

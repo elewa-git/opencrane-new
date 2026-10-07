@@ -169,7 +169,9 @@ and save or replace their keys. The browser keeps one pending command per provid
 and checks its original command id after a lost reply. Enter uses the same pending
 guard as the save button. Key fields stay as typed after refused or lost replies
 and clear after a 200 receipt. List status comes from the server status field.
-Key saved times come from the saved fact and stay unchanged during refresh. `/org/spending` shows the existing budget
+Key saved times come from the saved fact and stay unchanged during refresh.
+A confirmed change keeps its controls locked until the updated provider row has
+been read, so a late reply cannot change another open dialog. `/org/spending` shows the existing budget
 summary and editor, then lists held spend before the budget cards. It displays global
 and configured paying-group/assistant monthly ceilings, current charges and held
 reservations. It edits whole euro cents through `/api/org/models`. Running calls stay

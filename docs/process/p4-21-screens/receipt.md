@@ -34,14 +34,14 @@ All checks ran with `nice -n 10`. Captures use intercepted replies only.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Rebase onto main | PASS | Rebase completed; `origin/main` is an ancestor of the branch. |
-| Lint | PASS | All lint stages completed, with existing function-size warnings. |
+| Rebase onto main | PASS | Rebase completed. Main at `bbb42e2` is an ancestor. The required checks were repeated after the last rebase and the protection for the final provider read. |
+| Lint | PASS | All lint stages completed, with existing function-size warnings. Shared dependency links in the temporary checkout first confused the dependency check; local copies corrected the setup and the remaining stages passed. |
 | Typecheck | PASS | All workspaces completed; the final web check also completed. |
-| Web suite | PASS | 454 tests passed after the rebase; the provider run passed all 16 specs. |
-| Failing-first and guard removal | PASS | Lost key reply then Enter, Back then Next, all seven status labels, saved time, healthy refresh, two quick Enters, focus return and native submit each failed with the matching protection removed. All protections were restored. |
+| Web suite | PASS | 460 tests passed at the final source, including all 17 provider specs. |
+| Failing-first and guard removal | PASS | Lost key reply then Enter, Back then Next, all seven status labels, saved time, healthy refresh, two quick Enters, focus return and native submit each failed with the matching protection removed. The confirmed-key read also failed with its lock removed. All protections were restored. |
 | Angular build | PASS | Build completed with existing bundle warnings. |
-| Provider routes | PASS | 56 tests passed with local fake upstreams. An earlier run had one timeout and one 503; the separate rerun passed. |
+| Provider routes | PASS | 56 tests passed again at the final source head with local fake upstreams. The root runner had a throwaway PostgreSQL URL, and its database was removed with its volume. An earlier run had a timeout and a 503; both later runs passed. |
 | Event catalogue | PASS | All 98 registered event types match the catalogue. |
-| Phone and desktop captures | PASS | Nine list, replacement and connect captures at 1280, 390 and 320 pixels; no horizontal overflow. See `list-key-captures/`. |
+| Phone and desktop captures | PASS | Nine list, replacement and connect captures were repeated from the final build at 1280, 390 and 320 pixels; no horizontal overflow. See `list-key-captures/`. |
 | F1–F5 | NOT RUN | These regression scripts run on the second branch. |
 | Fresh-install provider journey | NOT RUN | No owner credentials or paid provider request was used. |
