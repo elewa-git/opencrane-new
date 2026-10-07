@@ -53,8 +53,16 @@ async function readFixture(route) {
   if (pathname === '/api/org/integrations') {
     json = integrations;
   }
+  if (pathname === '/api/org/providers') {
+    json = { rows: [{ providerId: 'fixture-provider', provider: 'openai',
+      name: 'Pinned model provider', revision: 1, position: 1,
+      enabledModels: ['pinned-model'], status: 'saved_unverified' }],
+      loadedAt: '2026-10-04T08:40:00Z',
+      access: { grantsAvailable: false, reason: 'p4_22_required' } };
+  }
   if (pathname === '/api/org/models') {
-    json = { budget, models: [{ id: 'pinned-model' }, { id: 'retired-model', retired: true }] };
+    json = { budget, models: [{ id: 'pinned-model' }, { id: 'retired-model', retired: true }],
+      taskRouting: { chat_turn: { model: 'pinned-model', reason: 'Chat' } } };
   }
   if (pathname.endsWith('/tools')) {
     json = {
@@ -171,12 +179,12 @@ async function checkRowLabels(register, width) {
 }
 
 async function checkModelStatus(page) {
-  await page.getByText('Models loaded', { exact: true }).waitFor();
-  assert.equal(await page.locator('oc-models time').count(), 0, 'No invented evidence date');
-  const checkStatus = page.getByRole('button', { name: 'Check status', exact: true });
-  assert((await checkStatus.boundingBox()).width < 250, 'Check status fits its label');
-  const spendingLink = page.locator('oc-models').getByRole('link', { name: 'Spending' });
-  assert((await spendingLink.boundingBox()).height >= 44, 'Spending target is at least 44px');
+  await page.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
+  assert.equal(await page.locator('time').count(), 0, 'No invented evidence date');
+  await page.getByText('pinned-model', { exact: true }).waitFor();
+  await page.getByText('Not available yet', { exact: true }).first().waitFor();
+  assert.equal(await page.getByText('retired-model', { exact: true }).count(), 0,
+    'Retired models are not offered');
 }
 
 async function checkPages(page, width, motion) {
