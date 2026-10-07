@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { FastifyInstance } from 'fastify';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { auditFilterSchema } from '@opencrane/protocol';
@@ -17,7 +17,7 @@ export function registerAuditRoutes(app: FastifyInstance, config: AuthConfig, op
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (session.orgId !== config.expectedOrgId || options.silo !== options.binding.silo) return reply.code(403).send({ status: 'refused' });
+    if (!isOrganisationSession(config, session) || options.silo !== options.binding.silo) return reply.code(403).send({ status: 'refused' });
     try {
       const filters = auditFilterSchema.parse(request.query);
       const { conversationId } = z.object({ conversationId: z.string().regex(/^[\w-]{1,200}$/u).optional() }).parse(request.params);

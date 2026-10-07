@@ -12,7 +12,9 @@ import { groups, members, pgDb, ProjectionRunner, rebuildMemberProjection, type 
 import { memberDirectorySchema, memberDetailSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
-const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme', SILO_ID: 'test' };
+const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme', SILO_ID: 'test',
+  // The owner signs in from their own organisation and is allowed by name.
+  OIDC_EXTRA_IDENTITIES: JSON.stringify([{ issuer: TEST_OIDC_ENV.OIDC_ISSUER_URL, subject: 'oidc-owner' }]) };
 const config = loadAuthConfig(env);
 let fga: Awaited<ReturnType<typeof openfga>>;
 let dbs: Awaited<ReturnType<typeof databases>>;
@@ -321,6 +323,19 @@ it('refuses member reads when OpenFGA has revoked access but membership events a
   const header = await memberRead('/api/members/bob');
   expect(header.status).toBe(403);
   expect(await header.json()).toEqual({ status: 'refused' });
+});
+
+it('admits the allowed owner from another organisation to member reads and the live feed', async () => {
+  await append('owner', 'member.invited', { invitationId: 'invite-owner',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-owner' } });
+  await append('owner', 'member.joined', { invitationId: 'invite-owner', role: 'owner' });
+  const directory = await fetch(`http://127.0.0.1:${server.port}/api/members`,
+    { headers: headers('oidc-owner', 'org-owner-home') });
+  expect(directory.status).toBe(200);
+  const client = await connect('oidc-owner', 'org-owner-home');
+  client.subscribe();
+  await until(() => client.messages.some((message) => message.type === 'ready'));
+  expect(client.messages.map((message) => message.type)).not.toContain('refused');
 });
 
 it('refuses member reads from a different organisation', async () => {

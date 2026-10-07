@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { currentMembership, readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import { memberHeaderSchema, memberPageQuerySchema, memberDetailSchema,
   memberDirectorySchema } from '@opencrane/protocol';
@@ -25,7 +25,7 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!trustedRead(config, options, session.orgId)) {
+    if (!trustedRead(config, options, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
     function expire() {
@@ -138,9 +138,9 @@ async function readHeader(options: GroupOptions, memberId: string,
   return { code: 200, body: memberDetailSchema.parse(detail) };
 }
 
-function trustedRead(config: AuthConfig, options: GroupOptions, orgId?: string) {
-  return Boolean(config.expectedOrgId && orgId === config.expectedOrgId
-    && options.silo === options.binding.silo);
+function trustedRead(config: AuthConfig, options: GroupOptions,
+  session: { sub: string; orgId: string }) {
+  return isOrganisationSession(config, session) && options.silo === options.binding.silo;
 }
 
 function isManager(role: string) {

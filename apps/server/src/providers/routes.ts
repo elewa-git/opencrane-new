@@ -3,7 +3,7 @@ import { memberAuthorisation } from '@opencrane/authz';
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { AuthConfig, tokenIssuer } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig, type tokenIssuer } from '@opencrane/auth';
 import { readProviders } from '@opencrane/projections';
 import { providerAuthority, providerCommand, providerReceipt,
   ProviderRefused, ProviderUnpriced, ProviderConflict, providerHistory, providerSecretRef,
@@ -46,7 +46,7 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
       if (!options) {
         return reply.code(503).send({ status: 'unavailable' });
       }
-      if (!trustedRequest(request, config, options, session.orgId)) {
+      if (!trustedRequest(request, config, options, session)) {
         return reply.code(403).send({ status: 'refused' });
       }
       try {
@@ -67,8 +67,8 @@ export function registerProviderRoutes(app: FastifyInstance, config: AuthConfig,
 type ProviderHandler = (request: FastifyRequest, reply: FastifyReply,
   options: ProviderOptions, memberId: string) => Promise<unknown>;
 function trustedRequest(request: FastifyRequest, config: AuthConfig,
-  options: ProviderOptions, orgId: string | undefined) {
-  if (!config.expectedOrgId || orgId !== config.expectedOrgId) {
+  options: ProviderOptions, session: { sub: string; orgId: string }) {
+  if (!isOrganisationSession(config, session)) {
     return false;
   }
   if (options.silo !== options.binding.silo) {

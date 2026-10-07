@@ -10,7 +10,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket, type RawData } from 'ws';
 import type { FastifyInstance } from 'fastify';
-import { decodeSession, isIdentityAllowed, parseCookieHeader, type AuthConfig } from '@opencrane/auth';
+import { decodeSession, isOrganisationSession, parseCookieHeader, type AuthConfig } from '@opencrane/auth';
 import type { connectMemberFeed } from '@opencrane/projections';
 import { envelope } from '@opencrane/models';
 import { viewAccess, ViewCheckUnavailable, type ViewAccessOptions } from './view-access.ts';
@@ -83,7 +83,7 @@ export function registerLiveView(app: FastifyInstance, config: AuthConfig, optio
     const cookie = parseCookieHeader(headers.cookie)[config.cookieName];
     if (!cookie) throw new Error('No session');
     const session = decodeSession(config, cookie);
-    if (session.orgId !== config.expectedOrgId || !isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })) throw new Error('Wrong silo');
+    if (!isOrganisationSession(config, session)) throw new Error('Wrong silo');
     return { session, cookie };
   }
   async function refusal(

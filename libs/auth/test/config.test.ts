@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadAuthConfig } from '../src/config.ts';
+import { isOrganisationSession, loadAuthConfig } from '../src/config.ts';
 
 const requiredEnv = {
   OIDC_ISSUER_URL: 'https://idp.example.test',
@@ -132,5 +132,40 @@ describe('loadAuthConfig', () => {
     // secret) is read. A variable literally called OIDC_CLIENT_SECRET is not.
     const config = loadAuthConfig({ ...requiredEnv, OIDC_CLIENT_SECRET: 'a-direct-value-that-must-be-ignored' });
     expect(config.clientSecret).toBeUndefined();
+  });
+});
+
+describe('isOrganisationSession', () => {
+  const owner = { issuer: 'https://idp.example.test', subject: 'owner-1' };
+  const pinned = loadAuthConfig({
+    ...requiredEnv,
+    OIDC_EXPECTED_ORG_ID: 'org-home',
+    OIDC_EXTRA_IDENTITIES: JSON.stringify([owner]),
+  });
+
+  it('accepts a session from the installation organisation', () => {
+    expect(isOrganisationSession(pinned, { sub: 'alice', orgId: 'org-home' })).toBe(true);
+  });
+
+  it('accepts an allowed identity from another organisation, as sign-in does', () => {
+    expect(isOrganisationSession(pinned, { sub: 'owner-1', orgId: 'org-elsewhere' })).toBe(true);
+  });
+
+  it('refuses anyone else from another organisation', () => {
+    expect(isOrganisationSession(pinned, { sub: 'mallory', orgId: 'org-elsewhere' })).toBe(false);
+  });
+
+  it('refuses the allowed subject when the exception names another issuer', () => {
+    const config = loadAuthConfig({
+      ...requiredEnv,
+      OIDC_EXPECTED_ORG_ID: 'org-home',
+      OIDC_EXTRA_IDENTITIES: JSON.stringify([{ issuer: 'https://other-idp.example.test', subject: 'owner-1' }]),
+    });
+    expect(isOrganisationSession(config, { sub: 'owner-1', orgId: 'org-elsewhere' })).toBe(false);
+  });
+
+  it('refuses every session when no organisation is configured', () => {
+    const config = loadAuthConfig({ ...requiredEnv, OIDC_EXTRA_IDENTITIES: JSON.stringify([owner]) });
+    expect(isOrganisationSession(config, { sub: 'owner-1', orgId: 'org-home' })).toBe(false);
   });
 });

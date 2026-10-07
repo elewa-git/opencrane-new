@@ -1,7 +1,7 @@
 import { setImmediate as yieldIo } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
-import { isIdentityAllowed, type AuthConfig, type SessionData } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig, type SessionData } from '@opencrane/auth';
 import type { Binding } from '@opencrane/authz';
 import type { EventStore } from '@opencrane/event-store';
 import { readActiveMember, MemberAccessRefused } from '@opencrane/models';
@@ -27,9 +27,8 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
   let checking = false;
   let leaseUntil = 0;
   async function allowed() {
-    if (!options?.store || !config.expectedOrgId || session.orgId !== config.expectedOrgId
-      || !isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub,
-        orgId: session.orgId }) || session.exp * 1000 <= Date.now()) return false;
+    if (!options?.store || !isOrganisationSession(config, session)
+      || session.exp * 1000 <= Date.now()) return false;
     const deadline = performance.now() + 1500;
     function expire() {
       active = false;

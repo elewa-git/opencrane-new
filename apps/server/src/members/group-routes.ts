@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
 import { authorityFence, history } from '@opencrane/models';
@@ -26,7 +26,7 @@ export function registerGroupRoutes(
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!trustedRequest(request, config, options, session.orgId)) {
+    if (!trustedRequest(request, config, options, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
     try {
@@ -66,8 +66,8 @@ async function readChange(options: GroupOptions, groupId: string, commandId: str
 }
 
 function trustedRequest(request: FastifyRequest, config: AuthConfig,
-  options: GroupOptions, orgId: string | undefined) {
-  if (!config.expectedOrgId || orgId !== config.expectedOrgId) return false;
+  options: GroupOptions, session: { sub: string; orgId: string }) {
+  if (!isOrganisationSession(config, session)) return false;
   if (options.silo !== options.binding.silo) return false;
   if (request.method !== 'POST') return true;
   const origin = new URL(config.redirectUri).origin;

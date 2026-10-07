@@ -44,6 +44,15 @@ it('serves private chat commands and reads to joined members, refusing other org
     expect(personal.json()).toMatchObject({ memberId: 'alice', assistantId: 'assistant', displayName: 'Alice',
       memoryAdmission: { state: 'disabled', failing: ['The private memory checks have not all passed.'] } });
     expect((await app.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(403);
+    // An identity allowed by name keeps access from its own organisation, as at sign-in.
+    // Naming someone else does not let Alice in from another organisation.
+    for (const [subject, status] of [['alice', 200], ['bob', 403]] as const) {
+      const allowed = { ...config, extraIdentities: [{ issuer: config.issuerUrl, subject }] };
+      const allowedApp = buildServer(allowed, { chat: { silo: 'test', store: nats.store, db, keys, binding, feed } });
+      try {
+        expect((await allowedApp.inject({ url: '/api/chat', headers: headers('wrong') })).statusCode).toBe(status);
+      } finally { await allowedApp.close(); }
+    }
     for (const [subject, type, data] of [
       ['team-sales', 'team.created', { teamId: 'sales', name: 'Sales', createdBy: 'alice' }],
       ['team-sales', 'team.member_added', { teamId: 'sales', memberId: 'alice', addedBy: 'alice' }],

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { fileUploadedDataSchema, fileRejectedDataSchema } from '@opencrane/events';
 import { sessionFor } from '../members/routes.ts';
 import { FileRefusal } from '../files/refusals.ts';
@@ -76,11 +76,7 @@ function isCaptureIdentityCurrent(
   if (!session) {
     return false;
   }
-  if (session.orgId !== config.expectedOrgId) {
-    return false;
-  }
-  const identity = { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId };
-  if (!isIdentityAllowed(config, identity)) {
+  if (!isOrganisationSession(config, session)) {
     return false;
   }
   const expectedOrigin = new URL(config.redirectUri).origin;
