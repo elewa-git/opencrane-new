@@ -28,10 +28,10 @@ with one ownership sequence and returns a reference for each change.
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Rebase | PASS | #262 was rebased onto `origin/main`; #263 was rebased onto the pushed #262 head. |
-| Web specs | PASS | `nice -n 10 npm run test -w apps/web` — 511 tests in 40 files on the rebased #263 branch. |
+| Web specs | PASS | `nice -n 10 npm run test -w apps/web` — 512 tests in 40 files on the rebased #263 branch. |
 | Ownership route specs | PASS | 16 ownership and ordering tests used a throwaway PostgreSQL database, which was removed. |
 | Lint, typecheck and Angular build | PASS | Root lint and typecheck and the Angular production build ran under `nice -n 10`. Lint reported existing warnings only. |
 | Ownership visual script | PASS | `nice -n 10 npm run visual:p4-2-screens` — 60 captures at 1280, 390 and 320 pixels, with motion on and off. |
 | F1–F5 visual checks | PASS | F1 56, F2 38, F3 22, F4 20 and F5 18 captures passed on the rebased branch. F3's fixtures now match the current provider response. |
-| Guard removal check | PASS | Removing the covered guards made 20 focused specs fail. After restoring the code, all 78 focused ownership specs passed. |
+| Guard removal check | PASS | Removing the covered guards made 20 focused specs fail. Removing the sign-in message made its 401 spec fail. The source was restored and all 78 focused ownership specs passed. |
 | Fresh-install journey | NOT RUN | Browser captures use intercepted replies and do not qualify a fresh installation. |
