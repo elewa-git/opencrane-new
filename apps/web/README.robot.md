@@ -184,8 +184,35 @@ guard as the save button. Key fields stay as typed after refused or lost replies
 and clear after a 200 receipt. List status comes from the server status field.
 Key saved times come from the saved fact and stay unchanged during refresh.
 A confirmed change keeps its controls locked until the updated provider row has
-been read, so a late reply cannot change another open dialog. `/org/spending` shows the existing budget
-summary and editor, then lists held spend before the budget cards. It displays global
+been read, so a late reply cannot change another open dialog.
+The Verify step posts only `commandId`, `expectedRevision` and `action` for
+reachability and skip. A priced test adds the model, price table id, reserved euro
+cents and explicit consent. The provider id belongs only in the URL. Consent is
+one quote record and clears before sending, when its result arrives, and when a
+quote, step or provider changes. An unfinished or unknown test keeps its original
+command locked; Check status sends one GET and never starts a new paid request.
+A fresh visit restores this lock from an unknown model-answer fact returned by
+the server. A settled result hides the paid controls until Test again is chosen;
+the consent box then starts unticked.
+Only pass, fail, skipped or budget_refused settles that UI lock. Budget refusal
+uses the blocked state; unknown outcomes use the question mark state.
+
+Anthropic skips model selection without a command. OpenAI writes model choices
+only when the set changed. A 403 command refusal rechecks the provider list and
+clears the page only if that read also refuses access. A 404 create or key status
+read offers Start over; it never starts a new command by itself. The person types
+a key again after choosing Start over. An unknown paid attempt has no Start over.
+
+`provider-page-state.ts` keeps list reads, pending commands and access checks.
+`provider-key-changes.ts` handles creation and write-only key saves. The screen
+handles verification and model selection. `provider-display.ts` formats server
+facts without turning unknown results into failures. Each open modal has its own
+status region, and closing it returns focus to its own opening control.
+The visual fixture checks request bodies with the real verification schema and
+rejects a provider id in the body, just as the real route does. All priced-test
+specs and captures intercept requests; none uses a paid upstream.
+
+`/org/spending` shows the existing budget summary and editor, then lists held spend before the budget cards. It displays global
 and configured paying-group/assistant monthly ceilings, current charges and held
 reservations. It edits whole euro cents through `/api/org/models`. Running calls stay
 in a waiting count. Owners and admins can read a hold's evidence and send one settlement

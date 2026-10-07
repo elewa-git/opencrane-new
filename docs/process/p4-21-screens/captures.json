@@ -1,0 +1,655 @@
+{
+  "result": "PASS",
+  "captures": [
+    {
+      "name": "MOD-01-empty",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-02-ready",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-03-stale-read",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-04-role-needed",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-10-provider",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-11-key",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-12-saving-key",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-13-saved-unverified",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-14-priced-warning",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-15-model-answer-stub",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-19-models",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-20-access-gap",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-21-done",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-05-provider-facts",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-16-connected-not-tested",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-test-refused",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-budget_refused",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-fail",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-unknown",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-25-replace-review",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-18-lost-key-reply",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-26-key-accepted",
+      "width": 1280,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-01-empty",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-02-RM",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-10-provider",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-11-key",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-12-saving-key",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-13-saved-unverified",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-14-priced-warning",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-15-model-answer-stub",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-19-models",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-20-access-gap",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-21-done",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-05-provider-facts",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-16-connected-not-tested",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-test-refused",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-budget_refused",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-fail",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-unknown",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-25-replace-review",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-18-lost-key-reply",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-26-key-accepted",
+      "width": 1280,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-01-empty",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-02-ready",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-06-menu",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-03-stale-read",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-04-role-needed",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-10-provider",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-11-key",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-12-saving-key",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-13-saved-unverified",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-14-priced-warning",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-15-model-answer-stub",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-19-models",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-20-access-gap",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-21-done",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-05-provider-facts",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-16-connected-not-tested",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-test-refused",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-budget_refused",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-fail",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-unknown",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-25-replace-review",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-18-lost-key-reply",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-26-key-accepted",
+      "width": 390,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-01-empty",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-02-RM",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-06-menu",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-10-provider",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-11-key",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-12-saving-key",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-13-saved-unverified",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-14-priced-warning",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-15-model-answer-stub",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-19-models",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-20-access-gap",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-21-done",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-05-provider-facts",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-16-connected-not-tested",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-test-refused",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-budget_refused",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-fail",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-unknown",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-25-replace-review",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-18-lost-key-reply",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-26-key-accepted",
+      "width": 390,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-01-empty",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-02-ready",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-06-menu",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-03-stale-read",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-04-role-needed",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-10-provider",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-11-key",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-12-saving-key",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-13-saved-unverified",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-14-priced-warning",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-15-model-answer-stub",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-19-models",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-20-access-gap",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-21-done",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-05-provider-facts",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-16-connected-not-tested",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-test-refused",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-budget_refused",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-fail",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-17-unknown",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-25-replace-review",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-18-lost-key-reply",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-26-key-accepted",
+      "width": 320,
+      "motion": "normal"
+    },
+    {
+      "name": "MOD-01-empty",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-02-RM",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-06-menu",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-10-provider",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-11-key",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-12-saving-key",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-13-saved-unverified",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-14-priced-warning",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-15-model-answer-stub",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-19-models",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-20-access-gap",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-21-done",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-05-provider-facts",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-16-connected-not-tested",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-test-refused",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-budget_refused",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-fail",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-17-unknown",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-25-replace-review",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-18-lost-key-reply",
+      "width": 320,
+      "motion": "reduced"
+    },
+    {
+      "name": "MOD-26-key-accepted",
+      "width": 320,
+      "motion": "reduced"
+    }
+  ]
+}

@@ -321,7 +321,7 @@ async function checkNavigation(page, motion) {
   const selectedComposer = page.getByRole('textbox', { name: 'Message your agent' });
   assert(await selectedComposer.evaluate(focused), 'Session selection focuses the composer');
   await opener.click();
-  const ask = menu.locator('.ask');
+  const ask = menu.locator('button.ask');
   await ask.click();
   await menu.waitFor({ state: 'hidden' });
   const composer = page.getByRole('textbox', { name: 'Message your agent' });
