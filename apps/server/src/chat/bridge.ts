@@ -8,6 +8,7 @@ import { WebSocket, type RawData } from 'ws';
 import { computerCredentials, type tokenIssuer } from '@opencrane/auth';
 import { modelForTask } from '@opencrane/models/routing';
 import type { WatchOptions, AgentSession } from './bridge-conversation.ts';
+import type { TurnDelivery } from './turn-tools.ts';
 import { assistantProcessor } from './bridge-poll.ts';
 import { listOpenConversations } from '@opencrane/projections';
 import { createLogger, type Logger } from '@opencrane/observability';
@@ -228,7 +229,7 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
     return work;
   }
   // Remember delivery only for this socket; reconnecting must send pending turns again.
-  const sentTurns = new Map<string, { turnId: string; sentAt: number }>();
+  const sentTurns = new Map<string, TurnDelivery>();
   return {
     socket, deliver, delivered, sentTurns,
     get rejection() { return rejection; },

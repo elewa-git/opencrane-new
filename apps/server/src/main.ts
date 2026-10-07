@@ -62,7 +62,7 @@ if (chat && process.env['MINIO_CREDENTIALS_FILE']) {
   const objects = storageClient(process.env['MINIO_URL']!, process.env['MINIO_CREDENTIALS_FILE']);
   files = { ...chat, objects, scan: bytes => scanFile(process.env['CLAMD_HOST'] ?? '127.0.0.1', Number(process.env['CLAMD_PORT'] ?? 43310), bytes) };
 }
-const closeBridges = chat ? await startBridges({ ...chat, ...(files ? { objects: files.objects } : {}) }, process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
+const closeBridges = chat ? await startBridges({ ...chat, ...(files ? { objects: files.objects } : {}), ...(catalogue ? { catalogue } : {}) }, process.env['KUBECONFIG']!, process.env['KUBE_NAMESPACE']!,
   process.env['TOKEN_SIGNING_KEY_FILE']!, process.env['TOKEN_ISSUER']!) : undefined;
 const budgetDecisionUrl = process.env['MODEL_DECISION_URL'] ?? (process.env['NODE_ENV'] === 'development' ? 'http://127.0.0.1:43001' : undefined);
 const budget = budgetDecisionUrl && process.env['TOKEN_SIGNING_KEY_FILE'] && process.env['TOKEN_ISSUER'] ? {

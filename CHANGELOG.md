@@ -9,6 +9,9 @@
 - Owners can review and confirm a transfer, check a lost reply without sending it again,
   see clear messages while ownership records update, and step down without leaving an
   organisation without an Owner.
+  and see clear messages while ownership records update.
+- Personal memory-free chat turns now carry only reviewed, zero-cost Allow tools that both the requester and assistant may use. Waiting-turn resends reuse the same bounded list; the gateway still checks each call against current policy and grants.
+
 - The decision service accepts Codex tool calls and the model request that follows a tool result. It checks the request thread against the signed turn and records safe call ids with parsed tool decisions. Unsafe ids and repeated tool-name headers are refused.
 
 - Conversation feeds now carry tool start and finish records and tool access decisions, without tool arguments or results. Tool activity keeps approval reads and concurrent access checks working. Delivered uploads still load with their saved outcomes. Invalid tool names and call ids are skipped without stopping later reports.

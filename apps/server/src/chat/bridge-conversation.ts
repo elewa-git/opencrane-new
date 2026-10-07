@@ -1,26 +1,36 @@
 import type { Client } from 'minio/dist/esm/minio.mjs';
-import { fileDeliveredDataSchema, fileUploadedDataSchema } from '@opencrane/events';
+import { fileDeliveredDataSchema, fileUploadedDataSchema,
+  mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import type { WebSocket } from 'ws';
-import type { listConversations } from '@opencrane/projections';
+import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
+import { memberAuthorisation } from '@opencrane/authz';
+import { history as modelHistory } from '@opencrane/models';
+import { applyToolPolicy, emptyToolPolicy } from '@opencrane/projections';
+import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, requiredExecutionMode, type ExecutionMode } from './turns.ts';
 import { chatHistory } from './commands.ts';
 import { agentSession } from './reports.ts';
 import type { ChatOptions } from './routes.ts';
+import { buildTurnTools, mayOfferTurnTools, toolsForMessage, type TurnDelivery }
+  from './turn-tools.ts';
 
 type ChatRows = Awaited<ReturnType<typeof chatHistory>>;
 type Upload = z.infer<typeof fileUploadedDataSchema>;
 type Tokens = Parameters<typeof resumeComputer>[1];
 export type WatchOptions = Pick<ChatOptions, 'silo' | 'store' | 'keys' | 'db'> &
-  Partial<Pick<ChatOptions, 'binding'>> & { objects?: Client };
+  Partial<Pick<ChatOptions, 'binding'>> & {
+    objects?: Client;
+    catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
+  };
 type Conversation = Awaited<ReturnType<typeof listConversations>>[number];
 export type AgentSession = Extract<Conversation, { mode: 'agent_session' }>;
 type BridgeLink = {
   connectionId: number;
   socket: WebSocket;
   delivered: Set<string>;
-  sentTurns: Map<string, { turnId: string; sentAt: number }>;
+  sentTurns: Map<string, TurnDelivery>;
   deliver: (file: Upload, bytes: Buffer) => Promise<void>;
 };
 type Connection = (computerId: string, assistantId: string) => Promise<BridgeLink>;
@@ -32,6 +42,8 @@ export type ConversationProgress = {
 };
 const turnIdData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
+const logger = createLogger('bridge');
+const toolBuildLimitMs = 1000;
 
 function pendingMessage(rows: ChatRows) {
   const completed = new Set<string>();
@@ -82,7 +94,7 @@ function attachmentsBefore(rows: ChatRows, uploads: Upload[], sequence: number) 
   return attachments;
 }
 
-function sendTurn(options: WatchOptions, socket: WebSocket, conversation: AgentSession,
+export function turnMessage(options: WatchOptions, conversation: AgentSession,
   rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
   const attachments = executionMode === 'restricted'
     ? [] : attachmentsBefore(rows, uploads, message.sequence);
@@ -92,7 +104,7 @@ function sendTurn(options: WatchOptions, socket: WebSocket, conversation: AgentS
     requesterId: requester.authorId, assistantId: conversation.assistantId, text, executionMode,
     attachments: attachments.slice(-100), omittedAttachments: Math.max(0, attachments.length - 100),
     token: 'preparing', expiresAt: Date.now() + 120_000 };
-  socket.send(JSON.stringify(turn));
+  return turn;
 }
 
 async function deliverUploads(objects: Client | undefined,
@@ -155,7 +167,7 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   const link = await connection(computer.computerId, conversation.assistantId);
   await deliverUploads(options.objects, link, uploads);
   if (message) {
-    sendWaitingTurn(options, link, conversation, rows, allUploads, message,
+    await sendWaitingTurn(options, link, conversation, rows, allUploads, message,
       assistant.kind, assistant.started);
     sendStop(link.socket, rows, message.event.id, conversation.conversationId);
   }
@@ -164,8 +176,9 @@ export async function processConversation(options: WatchOptions, tokens: Tokens,
   return { pending: true, retry, connectionId: link.connectionId };
 }
 
-function sendWaitingTurn(options: WatchOptions, link: BridgeLink, conversation: AgentSession,
-  rows: ChatRows, uploads: Upload[], message: ChatRows[number], kind: string, started: Set<string>) {
+async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
+  conversation: AgentSession, rows: ChatRows, uploads: Upload[],
+  message: ChatRows[number], kind: string, started: Set<string>) {
   const requested = z.object({ executionMode: z.literal('memory_free').optional() })
     .parse(message.event.data);
   const mode = requiredExecutionMode(kind, requested.executionMode);
@@ -174,9 +187,133 @@ function sendWaitingTurn(options: WatchOptions, link: BridgeLink, conversation: 
   // Retry busy computers until they accept the turn, without flooding the connection.
   const resendDue = !accepted && performance.now() - (previousDelivery?.sentAt ?? 0) >= 1000;
   if (previousDelivery?.turnId === message.event.id && !resendDue) return;
-  sendTurn(options, link.socket, conversation, rows, uploads, message, mode);
-  const delivery = { turnId: message.event.id, sentAt: performance.now() };
-  link.sentTurns.set(conversation.conversationId, delivery);
+  const turn = turnMessage(options, conversation, rows, uploads, message, mode) as
+    ReturnType<typeof turnMessage> & { tools?: Awaited<ReturnType<typeof buildTurnTools>> };
+  async function buildTools() {
+    return toolsForTurn(options, conversation, turn, kind, mode);
+  }
+  const tools = await toolsForMessageOrEmpty(link.sentTurns, conversation.conversationId,
+    message.event.id, buildTools);
+  if (tools.length) turn.tools = tools;
+  const delivery = link.sentTurns.get(conversation.conversationId);
+  if (delivery) {
+    link.sentTurns.set(conversation.conversationId, {
+      ...delivery,
+      sentAt: performance.now(),
+    });
+  }
+  link.socket.send(JSON.stringify(turn));
+}
+
+async function toolsForMessageOrEmpty(sentTurns: Map<string, TurnDelivery>,
+  conversationId: string, turnId: string,
+  build: () => Promise<Awaited<ReturnType<typeof buildTurnTools>>>) {
+  try {
+    return await toolsForMessage(sentTurns, conversationId, turnId,
+      () => withToolBuildLimit(build));
+  } catch {
+    logger.error({ operation: 'chat.turn_tools', reason: 'build_failed' },
+      'Tool list unavailable; sending turn without tools');
+    return toolsForMessage(sentTurns, conversationId, turnId, emptyTools);
+  }
+}
+
+async function withToolBuildLimit<T>(build: () => Promise<T>) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(toolBuildDeadline(reject), toolBuildLimitMs);
+  });
+  try {
+    return await Promise.race([build(), deadline]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function toolBuildDeadline(reject: (reason: Error) => void) {
+  function rejectToolBuildDeadline() {
+    reject(new Error('Tool list build deadline exceeded'));
+  }
+  return rejectToolBuildDeadline;
+}
+
+function emptyTools() {
+  return Promise.resolve([]);
+}
+
+async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
+  turn: ReturnType<typeof turnMessage>, kind: string, mode: ExecutionMode) {
+  if (!mayOfferTurnTools(kind, mode, options.binding !== undefined) ||
+      !options.binding || !options.catalogue || typeof turn.requesterId !== 'string') return [];
+
+  const catalogueRows = await options.catalogue.rows(options.silo);
+  const auth = memberAuthorisation(options.binding);
+  const serializedMessageBytes = Buffer.byteLength(JSON.stringify(turn), 'utf8');
+  function serverReference(row: (typeof catalogueRows)[number]) {
+    return { serverId: row.serverId };
+  }
+  async function readServer(serverId: string) {
+    const rows = await modelHistory(options.store, `mcp-${serverId}`, options.silo,
+      performance.now() + toolBuildLimitMs);
+    let policy = emptyToolPolicy();
+    for (const row of rows) {
+      policy = applyToolPolicy(policy, row.event, row.sequence);
+    }
+    const discoveredRow = rows.findLast(isDiscoveryEvent);
+    if (!discoveredRow) return undefined;
+    const discovered = mcpServerDiscoveredDataSchema.parse(discoveredRow.event.data);
+    function discoveryTool(tool: NonNullable<typeof discovered.tools>[number]) {
+      return {
+        name: tool.name,
+        revision: tool.revision,
+        ...(tool.definition ? { definition: tool.definition } : {}),
+      };
+    }
+    function policyTool(tool: (typeof policy.tools)[number]) {
+      return {
+        name: tool.name,
+        revision: tool.revision,
+        reviewed: tool.reviewed,
+        mode: tool.mode,
+        ...(tool.costCents === undefined ? {} : { costCents: tool.costCents }),
+      };
+    }
+    const discoveryTools = (discovered.tools ?? []).map(discoveryTool);
+    const policyTools = policy.tools.map(policyTool);
+    return {
+      serverId,
+      connectionId: policy.connectionId,
+      published: policy.published,
+      accountMode: policy.accountMode,
+      ...(discovered.serverInfo ? { serverInfo: discovered.serverInfo } : {}),
+      discoveryTools,
+      policyTools,
+    };
+  }
+  function isDiscoveryEvent(row: Awaited<ReturnType<typeof modelHistory>>[number]) {
+    return row.event.type === 'mcp.server_discovered';
+  }
+  async function canUseServer(serverId: string, subjectKind: 'person' | 'assistant',
+    subjectId: string) {
+    const permission = await auth.use(subjectKind, subjectId, 'mcp_server', serverId);
+    return permission.allowed;
+  }
+  const readyRows = catalogueRows.filter(isPublishedServer);
+  const serverRows = readyRows.map(serverReference);
+  return buildTurnTools({
+    rows: serverRows,
+    requesterId: turn.requesterId,
+    assistantId: conversation.assistantId,
+    baseMessageBytes: serializedMessageBytes,
+    readServer,
+    canUse: canUseServer,
+  });
+}
+
+function isPublishedServer(
+  row: Awaited<ReturnType<NonNullable<WatchOptions['catalogue']>['rows']>>[number],
+) {
+  return row.status.kind === 'ready';
 }
 
 function conversationUploads(rows: ChatRows, assistantKind: string) {

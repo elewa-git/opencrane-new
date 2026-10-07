@@ -3,12 +3,16 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { tokenIssuer } from '@opencrane/auth';
 import { createLogger } from '@opencrane/observability';
+import type { connectMcpCatalogue } from '@opencrane/projections';
 import { SandboxClient } from '../../../ops/src/kubernetes.ts';
 import { watchBridges } from './bridge.ts';
 import type { ChatOptions } from './routes.ts';
 
 /** The dev host reaches private Pods through its scoped Kubernetes identity. No public listener. */
-export async function startBridges(options: ChatOptions & { objects?: Client }, kubeconfig: string, namespace: string, privateKeyPath: string, issuer: string) {
+export async function startBridges(options: ChatOptions & {
+  objects?: Client;
+  catalogue?: Pick<ReturnType<typeof connectMcpCatalogue>, 'rows'>;
+}, kubeconfig: string, namespace: string, privateKeyPath: string, issuer: string) {
   const tokens = await tokenIssuer({ privateKeyPath, issuer });
   const child = spawn('kubectl', ['--kubeconfig', kubeconfig, 'proxy', '--address=127.0.0.1', '--port=0'], { stdio: ['ignore', 'pipe', 'ignore'] });
   const url = await new Promise<string>((resolve, reject) => {

@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads chat rows and computer state| postgres
-  server -->|sends turns, receives tool reports and reads the desktop| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns and optional tool offers; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -26,6 +26,7 @@ flowchart LR
 - Checks permissions before returning private information or changing data.
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
+- Offers a personal assistant only reviewed, free tools that both the person and assistant can use.
 - Returns spending records to current owners and admins. It reads the records first,
   then checks access, so a longer read does not use up the write access time limit.
   Resolving a hold also reads its history first and rechecks access before saving.
@@ -61,10 +62,14 @@ not yet proven on a live computer; memory features stay off until it is.
    The server checks it and records them as the owner.
 3. **A person chats with an assistant.** The server sends the turn to that person's
    computer and passes the assistant's progress back to the browser as it arrives. The
-   person can stop the turn. The chat watcher leaves finished chats alone while another
-   reply is pending. It sends a waiting turn again until the computer accepts it, and
+  person can stop the turn. A personal turn may include a short list of reviewed
+  tools. The gateway checks permission again each time one is used. The chat watcher
+  leaves finished chats alone while another reply is pending. It sends a waiting turn
+  again until the computer accepts it, and
    sends it again after reconnecting. It retries short service outages so pending
-   messages can still reach the computer.
+   messages can still reach the computer. Personal memory-free turns include only tools
+   that have been reviewed, cost nothing and are allowed for both the person and assistant.
+   Private team turns stay restricted and do not receive tools.
    Open chat pages repeat permission checks when silo or team membership changes.
    Removing someone from a team closes their private chat with that team's assistant
    within two seconds. If OpenFGA takes too long to apply another change, the page
