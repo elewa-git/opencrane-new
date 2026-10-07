@@ -30,7 +30,7 @@ function conversationFeedEntry(event: EventEnvelope) {
     const conversationId = decision.conversationId;
     if (!conversationId) return;
     if (decision.route === 'mcp') {
-      const data = { turnId: decision.turnId, outcome: decision.outcome,
+      const data = { turnId: decision.turnId, callId: decision.callId, outcome: decision.outcome,
         reason: decision.reason, requestId: decision.requestId,
         approvalId: event.correlation.approval };
       return { conversationId, data };

@@ -146,7 +146,7 @@ The server reads one computer record per changed chat feed, without lifecycle-hi
 ## Tool decisions in conversation feeds
 
 An MCP `decision.recorded` with a `conversationId` enters that conversation's
-feed with only `turnId`, `outcome`, `reason`, `requestId` and optional
+feed with only `turnId`, `outcome`, `reason`, `requestId` and optional `callId` and
 `approvalId` from `correlation.approval`. It excludes requester id, assistant id
 and context digest. Model decisions keep the existing budget-refusal rule.
 Conversation tool reports are copied as events in order.

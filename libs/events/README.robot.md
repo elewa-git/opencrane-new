@@ -73,3 +73,8 @@ the same check.
 for the auth computer summary. It parses the full stored data with the same rules
 as the event registry and takes the close status type from the closed schema.
 Changing that schema therefore changes the summary's checked types too.
+
+`decision.recorded.callId` is an optional string of 1–200 characters. Parsed MCP
+requests supply it, including policy and thread refusals. Requests that fail before
+parsing may omit it. Older events still parse. The conversation feed keeps it
+to join decisions to tool reports without storing arguments or results.

@@ -17,7 +17,7 @@ const MCP_UPSTREAM_HEADERS = [
   '"accept":"application/json"',
   '"mcp-protocol-version":request.headers["mcp-protocol-version"]',
   '"mcp-method":request.headers["mcp-method"]',
-  '"mcp-tool-name":request.headers["mcp-tool-name"]',
+  '"mcp-name":request.headers["mcp-name"]',
   '"x-request-id":request.headers["x-request-id"]',
 ];
 // The model provider receives no caller headers or turn token after authz checks the request.
@@ -48,7 +48,7 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
         location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
       extAuthz: { host: new URL(decisionUrl).host,
-        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-tool-name'],
+        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-name'],
         includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
         protocol: { http: { path: JSON.stringify(`/authorize${path}`), includeResponseHeaders: ['x-request-id'] } },
         failureMode: { denyWithStatus: 503 } },

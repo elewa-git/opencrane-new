@@ -1,3 +1,4 @@
+import codexFollowUp from './fixtures/codex-0.159.2-follow-up.json' with { type: 'json' };
 import { existsSync } from 'node:fs';
 import { z } from 'zod';
 import { execFile } from 'node:child_process';
@@ -875,13 +876,21 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
       await f.auth.handler.handle(event, f.db);
     }
-    const call = async (name: string, extra = {}, patch = {}) => {
-      const response = await fetch(`http://127.0.0.1:${f.options.port}/mcp/fixture/installed`, { method: 'POST', headers: { ...f.headers,
-        'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': name, ...extra }, body: JSON.stringify({ jsonrpc: '2.0', id: 1,
-        method: 'tools/call', params: { name, arguments: { note: 'secret-canary' } },
-        _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28', 'io.modelcontextprotocol/client-capabilities': {} }, ...patch }) });
+    async function call(name: string, extra = {}, patch = {}) {
+      const metadata = {
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientCapabilities': {},
+        threadId: 'thread', callId: 'call_probe_1',
+      };
+      const params = { name, arguments: { note: 'secret-canary' }, _meta: metadata };
+      const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params, ...patch };
+      const headers = { ...f.headers, 'mcp-protocol-version': '2026-07-28',
+        'mcp-method': 'tools/call', 'mcp-name': name, ...extra };
+      const request = { method: 'POST', headers, body: JSON.stringify(body) };
+      const response = await fetch(`http://127.0.0.1:${f.options.port}/mcp/fixture/installed`,
+        request);
       return { status: response.status, text: await response.text() };
-    };
+    }
     expect((await call('write')).status).toBe(403); expect(f.received()).toBe(0);
     const mode = (name: string, mode: string, revision = 'a'.repeat(64)) => f.append('mcp-fixture', 'mcp.tool_mode_set', {
       serverId: 'fixture', connectionId: 'installed', toolName: name, toolRevision: revision, mode, setBy: 'alice' });
@@ -939,8 +948,10 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       if (row.event.type === 'decision.recorded') events.push(row.event.data);
       if (row.sequence === await f.nats.store.head()) break;
     }
-    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ outcome: 'allow', reason: 'policy_allow', requesterId: 'alice', assistantId: 'assistant' }),
-      expect.objectContaining({ outcome: 'ask', reason: 'approval_required' }), expect.objectContaining({ outcome: 'deny', reason: 'policy_block' })]));
+    expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ outcome: 'allow', reason: 'policy_allow', callId: 'call_probe_1',
+        requesterId: 'alice', assistantId: 'assistant' }),
+      expect.objectContaining({ outcome: 'ask', reason: 'approval_required', callId: 'call_probe_1' }),
+      expect.objectContaining({ outcome: 'deny', reason: 'policy_block', callId: 'call_probe_1' })]));
     expect(JSON.stringify(events)).not.toContain('secret-canary');
     const append = f.nats.store.append.bind(f.nats.store);
     const fault = vi.spyOn(f.nats.store, 'append').mockImplementation(command => {
@@ -1288,3 +1299,39 @@ async function fencesDistinctPayingGroupAfterAudit() {
 }
 it('fences a selected paying group distinct from the assistant owner through the final allow audit',
   fencesDistinctPayingGroupAfterAudit, 40_000);
+
+async function admitsCapturedFollowUp() {
+  const setup = await fixture(2000, 20000, false, 'gpt-6.1-sol');
+  try {
+    const request = { ...codexFollowUp, model: 'gpt-6.1-sol', max_output_tokens: 128 };
+    const response = await setup.call({}, request);
+    expect(response.status, response.text).toBe(200);
+    expect(setup.received()).toBe(1);
+    const functionCall = request.input.find(isFunctionCall);
+    const functionOutput = request.input.find(isFunctionOutput);
+    if (!functionCall || !functionOutput) throw new Error('Captured continuation missing');
+    const invalidItems = [
+      { ...functionCall, unexpected: true },
+      { ...functionOutput, unexpected: true },
+      { ...functionCall, namespace: 'x'.repeat(201) },
+      { ...functionOutput, output: [{ type: 'input_text', text: 'saved', unexpected: true }] },
+    ];
+    for (const item of invalidItems) {
+      const invalidRequest = { ...request, input: [item] };
+      const refused = await setup.call({}, invalidRequest);
+      expect(refused.status, refused.text).toBe(403);
+    }
+    expect(setup.received()).toBe(1);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+  } finally {
+    await setup.close();
+  }
+}
+it('admits the full captured Codex follow-up after an MCP tool result', admitsCapturedFollowUp);
+
+function isFunctionCall(item: (typeof codexFollowUp.input)[number]) {
+  return item.type === 'function_call';
+}
+function isFunctionOutput(item: (typeof codexFollowUp.input)[number]) {
+  return item.type === 'function_call_output';
+}

@@ -68,13 +68,23 @@ export async function approvalJourney(pages: Page[], store: EventStore, auth: Re
       const rows = await history(store, `computer-${input.assistantId}`, input.silo);
       const { tokenId } = z.object({ tokenId: z.string() }).parse(rows.findLast(row => ['computer.claimed', 'computer.resumed'].includes(row.event.type))?.event.data);
       const computer = await tokens.computer({ ...input, tokenId });
-      const body = (note: string) => JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'write', arguments: { order: `Order-${width}`, note } },
-        _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28', 'io.modelcontextprotocol/client-capabilities': {} } });
+      function body(note: string) {
+        const metadata = {
+          'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          'io.modelcontextprotocol/clientCapabilities': {},
+          threadId: conversationId,
+          callId: `approval-${width}`,
+        };
+        const argumentsData = { order: `Order-${width}`, note };
+        const request = { jsonrpc: '2.0', id: 1, method: 'tools/call',
+          params: { name: 'write', arguments: argumentsData, _meta: metadata } };
+        return JSON.stringify(request);
+      }
       const call = async (note: string) => {
         const turn = await computerCredentials(store, tokens, input.silo).turn({ ...input, conversationId, turnId, threadId: conversationId, task: 'chat_turn', model: 'gpt-6-luna' });
         const result = await fetch(`http://127.0.0.1:${settings['MODEL_GATEWAY_PORT']}/mcp/${serverId}/${connectionId}`, { method: 'POST',
           headers: { authorization: `Bearer ${computer.value}`, 'x-turn-token': turn.value, 'session-id': conversationId,
-            'content-type': 'application/json', 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': 'write' }, body: body(note) });
+            'content-type': 'application/json', 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'write' }, body: body(note) });
         await result.arrayBuffer(); return result.status;
       };
       const before = (await calls()).length;

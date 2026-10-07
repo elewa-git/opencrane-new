@@ -30,10 +30,19 @@ async function approvalFixture(stepUp = false) {
     const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', { resourceType: 'mcp_server', resourceId: 'fixture', granteeId, granteeKind, grantedBy: 'alice' });
     await f.auth.handler.handle(event, f.db);
   }
-  const body = (args = '{"order":9007199254740993,"note":"hello","amount":1.00e2}') => `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"write","arguments":${args}},"_meta":{"io.modelcontextprotocol/protocol-version":"2026-07-28","io.modelcontextprotocol/client-capabilities":{}}}`;
+  function body(args = '{"order":9007199254740993,"note":"hello","amount":1.00e2}') {
+    const metadata = {
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientCapabilities': {},
+      threadId: 'thread', callId: 'approval-call',
+    };
+    const encodedMetadata = JSON.stringify(metadata);
+    const parameters = `{"name":"write","arguments":${args},"_meta":${encodedMetadata}}`;
+    return `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":${parameters}}`;
+  }
   const call = async (args?: string, extra = {}, raw = body(args)) => {
     const response = await fetch(`http://127.0.0.1:${f.options.port}/mcp/fixture/installed`, { method: 'POST', headers: { ...f.headers,
-      'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': 'write', ...extra }, body: raw });
+      'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-name': 'write', ...extra }, body: raw });
     return { status: response.status, text: await response.text() };
   };
   const url = '/api/conversations/conversation/approvals';
@@ -87,7 +96,8 @@ it('opens one encrypted Ask card and forwards approved lossless bytes once acros
     const used = z.object({ permitId: z.string() }).parse(events.find(e => e.type === 'approval.used')!.data);
     const decision = (await history(f.nats.store, `decision-${used.permitId}`, 'test'))[0]!;
     expect(decision.event).toMatchObject({ correlation: { approval: cards[0]!.approvalId },
-      data: { requestId: used.permitId, permitId: used.permitId, outcome: 'allow', reason: 'approval_used' } });
+      data: { requestId: used.permitId, permitId: used.permitId, callId: 'approval-call',
+        outcome: 'allow', reason: 'approval_used' } });
     await f.runner.initialise(auditTrail); await f.runner.run(auditTrail);
     const audit = await readAudit(f.db, 'test', { requestId: used.permitId });
     expect(audit.rows).toHaveLength(1);

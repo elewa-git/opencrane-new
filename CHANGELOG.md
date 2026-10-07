@@ -4,6 +4,8 @@
 
 ## Unreleased
 
+- The decision service accepts Codex tool calls and the model request that follows a tool result. It checks the request thread against the signed turn and records the call id with each parsed tool decision.
+
 - Conversation feeds now carry tool start and finish records and tool access decisions, without tool arguments or results. Tool activity keeps approval reads and concurrent access checks working. Delivered uploads still load with their saved outcomes. Invalid tool names and call ids are skipped without stopping later reports.
 - Model and tool calls read only new chat and computer events while their summaries fit in memory.
 

@@ -90,7 +90,7 @@ If a stale read slips past validation, the expected-version check rejects the ap
 | `credential.released` | credential broker (P3-8; fixture contract) | audit lease metadata only | none; never release on replay |
 | `egress.observed` | egress observer (P3-18; fixture contract) | audit | none; never dispatch on replay |
 | `gateway.observation_recorded` | safe gateway log ingest | audit, including unverified JWT failures | none; no asserted requester identity |
-| `decision.recorded` | ext_authz | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
+| `decision.recorded` | ext_authz | audit; MCP decisions feed conversations with turn id, outcome, reason, request id and optional call id and approval id; model budget refusals keep only turn id and reason | none; admission is not an observed effect |
 
 Each admission attempt records `requestId`, `route`, `outcome` (allow/ask/deny),
 `reason` and `contextDigest`. Verified callers also carry `requesterId`,

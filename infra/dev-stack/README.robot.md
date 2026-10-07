@@ -430,7 +430,9 @@ the [audit receipt](../../docs/process/p3-19-audit-evidence.md) records qualific
 ## Browser approval qualification
 
 Every journey also configures the credential-free `approval-journey` MCP route
-against the local recording stub. It seeds reviewed Ask policy, grants and an active
+against the local recording stub. Calls use `mcp-name` and `params._meta` with
+camelCase version/capability keys, the signed thread id and a stable call id.
+It seeds reviewed Ask policy, grants and an active
 tool turn through events, then calls the running gateway with lifecycle credentials.
 The signed-in requester sees the 8g card, approves in the browser and retries the tool once.
 A refused or ambiguous decision submission uses Check status before a safe retry,

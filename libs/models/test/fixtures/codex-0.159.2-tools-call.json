@@ -1,0 +1,54 @@
+{
+  "httpMethod": "POST",
+  "method": "tools/call",
+  "headers": {
+    "mcp-protocol-version": "2026-07-28",
+    "mcp-method": "tools/call",
+    "mcp-name": "write"
+  },
+  "body": {
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "_meta": {
+        "callId": "call_probe_1",
+        "x-codex-turn-metadata": {
+          "session_id": "01a1127a-0b82-7303-9800-92b5d4e0af9e",
+          "thread_id": "01a1127a-0b82-7303-9800-92b5d4e0af9e",
+          "model": "probe-model",
+          "turn_id": "01a1127a-0ba2-73a3-8f07-c11b7365225f",
+          "turn_started_at_unix_ms": 1791311350696,
+          "sandbox": "none",
+          "sandbox_mode": "danger-full-access",
+          "auto_review_enabled": false,
+          "node_repl_auto_review_required": false,
+          "node_repl_disabled": false,
+          "codex_version": "0.159.2"
+        },
+        "threadId": "01a1127a-0b82-7303-9800-92b5d4e0af9e",
+        "sessionId": "01a1127a-0b82-7303-9800-92b5d4e0af9e",
+        "windowId": "01a1127a-0b82-7303-9800-92b5d4e0af9e:0",
+        "itemId": "fc_1",
+        "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+        "io.modelcontextprotocol/clientInfo": {
+          "name": "codex-mcp-client",
+          "title": "Codex",
+          "version": "0.159.2"
+        },
+        "io.modelcontextprotocol/clientCapabilities": {
+          "elicitation": {
+            "form": {},
+            "url": {}
+          }
+        },
+        "progressToken": 1
+      },
+      "arguments": {
+        "order": "SO-1042",
+        "note": "Deliver 1.0 pallets"
+      },
+      "name": "write"
+    }
+  }
+}

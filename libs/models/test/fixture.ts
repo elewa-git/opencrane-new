@@ -122,7 +122,14 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
-  const providerRequests: { time: string; path: string; method: string; correlationHeaders: Record<string, string | string[] | undefined>; bodyDigest: string }[] = [];
+  const providerRequests: {
+    time: string;
+    path: string;
+    method: string;
+    correlationHeaders: Record<string, string | string[] | undefined>;
+    bodyDigest: string;
+    mcpName: string | string[] | undefined;
+  }[] = [];
   // S0.1c's scripted Responses stream, reduced to the final usage-bearing event.
   const stub = createServer((req, res) => {
     const requestId = String(req.headers['x-request-id']);
@@ -135,6 +142,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     req.on('data', (chunk: Buffer) => { upstreamBody += chunk.toString('utf8'); body.push(chunk); });
     req.on('end', () => providerRequests.push({ time: new Date().toISOString(), path: req.url ?? '', method: req.method ?? '',
       correlationHeaders: Object.fromEntries(Object.entries(req.headers).filter(([name]) => /(?:request-id|correlation|traceparent|audit-id)/i.test(name))),
+      mcpName: req.headers['mcp-name'],
       bodyDigest: createHash('sha256').update(Buffer.concat(body)).digest('hex') }));
     req.resume();
     if (req.url?.startsWith('/mcp/')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"jsonrpc":"2.0","id":1,"result":{"content":[]}}'); return; }

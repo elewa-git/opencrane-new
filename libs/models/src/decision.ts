@@ -7,7 +7,7 @@ import { approvalDecision, closesDecisionTurn, type ReviewKeys } from './approva
 import { losslessJson } from './lossless-json.ts';
 import { authorityFence, decisionAuthorityFence, currentAuthority } from './authority.ts';
 import { decisionActivity } from './decision-activity.ts';
-import { mcpPolicy } from './mcp.ts';
+import { mcpPolicy, parseMcpCall } from './mcp.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
@@ -45,8 +45,10 @@ const requestSchema = z.object({ model: z.enum(models.filter(row => !row.retired
     z.object({ type: z.literal('custom_tool_call'), call_id: z.string(), name: z.string(), input: z.string(), id: z.string().optional(),
       status: z.enum(['in_progress', 'completed', 'incomplete']).optional() }).strict(),
     z.object({ type: z.literal('custom_tool_call_output'), call_id: z.string(), output: z.union([z.string(), z.array(textContent)]), id: z.string().optional() }).strict(),
-    z.object({ type: z.literal('function_call_output'), call_id: z.string(), output: z.string(), id: z.string().optional() }).strict(),
-    z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
+    z.object({ type: z.literal('function_call_output'), call_id: z.string(),
+      output: z.union([z.string(), z.array(textContent)]), id: z.string().optional() }).strict(),
+    z.object({ type: z.literal('function_call'), call_id: z.string(), name: z.string(),
+      namespace: z.string().max(200).optional(), arguments: z.string(), id: z.string().optional() }).strict()]))]),
   instructions: z.string().optional(), max_output_tokens: z.int().min(16).max(2000), n: z.literal(1).optional(),
   tools: z.array(localTool).optional(),
   reasoning: z.object({ effort: z.enum(['minimal', 'low', 'medium', 'high']).optional(), summary: z.enum(['auto', 'concise', 'detailed']).optional(),
@@ -149,6 +151,18 @@ function requireConnectedClient(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+function requireMcpThread(call: ReturnType<typeof parseMcpCall>['call'], thread: string) {
+  // Check both request thread references against the signed turn before reading tool policy.
+  const metadata = call.params._meta;
+  const metadataThread = metadata['x-codex-turn-metadata']?.['thread_id'];
+  if (metadata.threadId !== thread) {
+    throw new Error('MCP thread refused');
+  }
+  if (metadataThread !== undefined && metadataThread !== thread) {
+    throw new Error('MCP metadata thread refused');
+  }
+}
+
 export async function startDecision(
   actor: BudgetActor, identity: { jwks: JSONWebKeySet; issuer: string },
   binding: Binding, port = 0, keys?: ReviewKeys, providers?: ProviderVerificationOptions,
@@ -161,11 +175,13 @@ export async function startDecision(
     let auditAttempted = false;
     const requestId = randomUUID(), route = req.url?.startsWith('/authorize/mcp/') ? 'mcp' : 'model';
     let contextDigest = createHash('sha256').update('unverified').digest('hex');
+    let callId: string | undefined;
     let correlation: { conversationId: string; turnId: string } | undefined;
     const audit = async (outcome: 'allow' | 'ask' | 'deny', reason: string, permitId?: string, approvalId?: string) => {
       auditAttempted = true;
       const event = envelope(actor.silo, `decision-${requestId}`, 'decision.recorded', {
         requestId, route, outcome, reason, contextDigest, ...correlation,
+        ...(callId ? { callId } : {}),
         ...(auditedContext ? { requesterId: auditedContext.requesterId, assistantId: auditedContext.assistantId } : {}),
         ...(permitId ? { permitId } : {}),
       });
@@ -208,11 +224,14 @@ export async function startDecision(
       if (turnToken.delegation[0] !== turnToken.requester) throw new Error('Delegation refused');
       const raw = await readBody(req);
       if (route === 'mcp') {
+        const parsed = parseMcpCall(raw);
+        callId = parsed.call.params._meta.callId;
+        requireMcpThread(parsed.call, turnToken.thread);
         const match = /^\/authorize\/mcp\/([\w-]+)\/([\w-]+)$/u.exec(req.url ?? '');
         if (!match) throw new Error('Unknown MCP route');
         fresh.include(`mcp-${match[1]!}`);
         const policy = await mcpPolicy(
-          actor.store, actor.silo, match[1]!, match[2]!, raw, req.headers, fresh.deadline);
+          actor.store, actor.silo, match[1]!, match[2]!, parsed, req.headers, fresh.deadline);
         needsApproval = policy.outcome === 'ask';
         const call = await context(actor, binding, computer, turnToken, checked.sequence,
           'mcp_server', match[1]!, fresh, conversation, turn);

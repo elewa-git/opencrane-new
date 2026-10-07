@@ -18,7 +18,7 @@ flowchart LR
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|builds scanner| clamav["infra/clamav<br/>virus scanner"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, screenshots and daily run"]
+  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, Codex call fixtures and daily run"]
   devbox["infra/devbox<br/>machine setup"] -->|creates cluster| cluster["k3d cluster<br/>local computers"]
   stack -->|uses cluster| cluster
 ```
@@ -30,7 +30,9 @@ flowchart LR
 - Set up sign-in for the development users.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
-- Run browser checks against real local services.
+- Run browser checks against real local services. The approval check sends Codex's
+  tool request shape. The thread id ties the call to its live chat turn. The call id
+  links the tool's attempts and progress reports.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.

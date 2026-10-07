@@ -63,10 +63,18 @@ it('keeps decisions below the egress and ext_authz bounds with 100,000 unrelated
             expect(response.status, await response.text()).toBe(200);
           },
           mcp: async () => {
-            const response = await fetch(`${f.options.decisionUrl}/authorize/mcp/fixture/installed`, { method: 'POST',
-              headers: { ...headers, 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call', 'mcp-tool-name': 'read' },
-              body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read', arguments: {} },
-                _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28', 'io.modelcontextprotocol/client-capabilities': {} } }) });
+            const metadata = {
+              'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+              'io.modelcontextprotocol/clientCapabilities': {},
+              threadId: 'thread', callId: 'call_probe_1',
+            };
+            const params = { name: 'read', arguments: {}, _meta: metadata };
+            const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params };
+            const requestHeaders = { ...headers, 'mcp-protocol-version': '2026-07-28',
+              'mcp-method': 'tools/call', 'mcp-name': 'read' };
+            const request = { method: 'POST', headers: requestHeaders, body: JSON.stringify(body) };
+            const response = await fetch(`${f.options.decisionUrl}/authorize/mcp/fixture/installed`,
+              request);
             expect(response.status, await response.text()).toBe(200);
           },
           destinationAuthority: () => currentAuthority(f.nats.store, f.binding, 'alice', 'assistant', 'conversation', 'destination', 'docs'),
