@@ -51,6 +51,9 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Lint
+        # Give typed ESLint room: the whole repo now needs more than the default heap.
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
         run: npm run lint
 
       - name: Typecheck
