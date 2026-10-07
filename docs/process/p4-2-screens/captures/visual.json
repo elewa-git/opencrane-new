@@ -1,0 +1,365 @@
+{
+  "generatedAt": "2026-10-07T04:39:45.974Z",
+  "captures": [
+    {
+      "state": "owners",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "owners-1280-normal.png"
+    },
+    {
+      "state": "owners",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "owners-1280-reduced.png"
+    },
+    {
+      "state": "owners",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "owners-390-normal.png"
+    },
+    {
+      "state": "owners",
+      "width": 390,
+      "motion": "reduce",
+      "file": "owners-390-reduced.png"
+    },
+    {
+      "state": "owners",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "owners-320-normal.png"
+    },
+    {
+      "state": "owners",
+      "width": 320,
+      "motion": "reduce",
+      "file": "owners-320-reduced.png"
+    },
+    {
+      "state": "successor-entry",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "successor-entry-1280-normal.png"
+    },
+    {
+      "state": "successor-entry",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "successor-entry-1280-reduced.png"
+    },
+    {
+      "state": "successor-entry",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "successor-entry-390-normal.png"
+    },
+    {
+      "state": "successor-entry",
+      "width": 390,
+      "motion": "reduce",
+      "file": "successor-entry-390-reduced.png"
+    },
+    {
+      "state": "successor-entry",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "successor-entry-320-normal.png"
+    },
+    {
+      "state": "successor-entry",
+      "width": 320,
+      "motion": "reduce",
+      "file": "successor-entry-320-reduced.png"
+    },
+    {
+      "state": "successor-review",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "successor-review-1280-normal.png"
+    },
+    {
+      "state": "successor-review",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "successor-review-1280-reduced.png"
+    },
+    {
+      "state": "successor-review",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "successor-review-390-normal.png"
+    },
+    {
+      "state": "successor-review",
+      "width": 390,
+      "motion": "reduce",
+      "file": "successor-review-390-reduced.png"
+    },
+    {
+      "state": "successor-review",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "successor-review-320-normal.png"
+    },
+    {
+      "state": "successor-review",
+      "width": 320,
+      "motion": "reduce",
+      "file": "successor-review-320-reduced.png"
+    },
+    {
+      "state": "transfer-applying",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "transfer-applying-1280-normal.png"
+    },
+    {
+      "state": "transfer-applying",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "transfer-applying-1280-reduced.png"
+    },
+    {
+      "state": "transfer-applying",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "transfer-applying-390-normal.png"
+    },
+    {
+      "state": "transfer-applying",
+      "width": 390,
+      "motion": "reduce",
+      "file": "transfer-applying-390-reduced.png"
+    },
+    {
+      "state": "transfer-applying",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "transfer-applying-320-normal.png"
+    },
+    {
+      "state": "transfer-applying",
+      "width": 320,
+      "motion": "reduce",
+      "file": "transfer-applying-320-reduced.png"
+    },
+    {
+      "state": "transfer-unknown",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "transfer-unknown-1280-normal.png"
+    },
+    {
+      "state": "transfer-unknown",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "transfer-unknown-1280-reduced.png"
+    },
+    {
+      "state": "transfer-unknown",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "transfer-unknown-390-normal.png"
+    },
+    {
+      "state": "transfer-unknown",
+      "width": 390,
+      "motion": "reduce",
+      "file": "transfer-unknown-390-reduced.png"
+    },
+    {
+      "state": "transfer-unknown",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "transfer-unknown-320-normal.png"
+    },
+    {
+      "state": "transfer-unknown",
+      "width": 320,
+      "motion": "reduce",
+      "file": "transfer-unknown-320-reduced.png"
+    },
+    {
+      "state": "two-owners-success",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "two-owners-success-1280-normal.png"
+    },
+    {
+      "state": "two-owners-success",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "two-owners-success-1280-reduced.png"
+    },
+    {
+      "state": "two-owners-success",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "two-owners-success-390-normal.png"
+    },
+    {
+      "state": "two-owners-success",
+      "width": 390,
+      "motion": "reduce",
+      "file": "two-owners-success-390-reduced.png"
+    },
+    {
+      "state": "two-owners-success",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "two-owners-success-320-normal.png"
+    },
+    {
+      "state": "two-owners-success",
+      "width": 320,
+      "motion": "reduce",
+      "file": "two-owners-success-320-reduced.png"
+    },
+    {
+      "state": "step-down-review",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "step-down-review-1280-normal.png"
+    },
+    {
+      "state": "step-down-review",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "step-down-review-1280-reduced.png"
+    },
+    {
+      "state": "step-down-review",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "step-down-review-390-normal.png"
+    },
+    {
+      "state": "step-down-review",
+      "width": 390,
+      "motion": "reduce",
+      "file": "step-down-review-390-reduced.png"
+    },
+    {
+      "state": "step-down-review",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "step-down-review-320-normal.png"
+    },
+    {
+      "state": "step-down-review",
+      "width": 320,
+      "motion": "reduce",
+      "file": "step-down-review-320-reduced.png"
+    },
+    {
+      "state": "last-owner-conflict",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "last-owner-conflict-1280-normal.png"
+    },
+    {
+      "state": "last-owner-conflict",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "last-owner-conflict-1280-reduced.png"
+    },
+    {
+      "state": "last-owner-conflict",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "last-owner-conflict-390-normal.png"
+    },
+    {
+      "state": "last-owner-conflict",
+      "width": 390,
+      "motion": "reduce",
+      "file": "last-owner-conflict-390-reduced.png"
+    },
+    {
+      "state": "last-owner-conflict",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "last-owner-conflict-320-normal.png"
+    },
+    {
+      "state": "last-owner-conflict",
+      "width": 320,
+      "motion": "reduce",
+      "file": "last-owner-conflict-320-reduced.png"
+    },
+    {
+      "state": "inactive-member-refusal",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "inactive-member-refusal-1280-normal.png"
+    },
+    {
+      "state": "inactive-member-refusal",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "inactive-member-refusal-1280-reduced.png"
+    },
+    {
+      "state": "inactive-member-refusal",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "inactive-member-refusal-390-normal.png"
+    },
+    {
+      "state": "inactive-member-refusal",
+      "width": 390,
+      "motion": "reduce",
+      "file": "inactive-member-refusal-390-reduced.png"
+    },
+    {
+      "state": "inactive-member-refusal",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "inactive-member-refusal-320-normal.png"
+    },
+    {
+      "state": "inactive-member-refusal",
+      "width": 320,
+      "motion": "reduce",
+      "file": "inactive-member-refusal-320-reduced.png"
+    },
+    {
+      "state": "role-refusal",
+      "width": 1280,
+      "motion": "no-preference",
+      "file": "role-refusal-1280-normal.png"
+    },
+    {
+      "state": "role-refusal",
+      "width": 1280,
+      "motion": "reduce",
+      "file": "role-refusal-1280-reduced.png"
+    },
+    {
+      "state": "role-refusal",
+      "width": 390,
+      "motion": "no-preference",
+      "file": "role-refusal-390-normal.png"
+    },
+    {
+      "state": "role-refusal",
+      "width": 390,
+      "motion": "reduce",
+      "file": "role-refusal-390-reduced.png"
+    },
+    {
+      "state": "role-refusal",
+      "width": 320,
+      "motion": "no-preference",
+      "file": "role-refusal-320-normal.png"
+    },
+    {
+      "state": "role-refusal",
+      "width": 320,
+      "motion": "reduce",
+      "file": "role-refusal-320-reduced.png"
+    }
+  ]
+}

@@ -7,9 +7,9 @@ import {
 } from '@opencrane/protocol';
 
 type OwnershipFailure = 'access_changed' | 'refused' | 'invalid' | 'conflict'
-  | 'not_found' | 'unavailable';
+  | 'last_owner' | 'not_found' | 'unavailable';
 export type OwnershipOutcome<T> = { kind: 'ok'; value: T }
-  | { kind: OwnershipFailure };
+  | { kind: OwnershipFailure; reason?: string };
 
 export async function fetchOwnership(signal: AbortSignal): Promise<OwnershipOutcome<OwnershipResponse>> {
   try {
@@ -54,12 +54,28 @@ export async function sendOwnershipCommand(
   }
 }
 
-function conflictFrom(_response: Response): Promise<OwnershipOutcome<never>> {
-  return Promise.resolve({ kind: 'conflict' });
+async function conflictFrom(response: Response): Promise<OwnershipOutcome<never>> {
+  const reason = await responseReason(response);
+  if (reason === 'last_owner') return { kind: 'last_owner', reason };
+  if (reason) return { kind: 'conflict', reason };
+  return { kind: 'conflict' };
 }
 
-function refusalFrom(_response: Response): Promise<OwnershipOutcome<never>> {
-  return Promise.resolve({ kind: 'refused' });
+async function refusalFrom(response: Response): Promise<OwnershipOutcome<never>> {
+  const reason = await responseReason(response);
+  if (reason) return { kind: 'refused', reason };
+  return { kind: 'refused' };
+}
+
+async function responseReason(response: Response): Promise<string | undefined> {
+  try {
+    const raw: unknown = await response.json();
+    if (typeof raw !== 'object' || raw === null || !('reason' in raw) ||
+        typeof raw.reason !== 'string') return undefined;
+    return raw.reason;
+  } catch {
+    return undefined;
+  }
 }
 
 function readFailure(status: number): OwnershipFailure {

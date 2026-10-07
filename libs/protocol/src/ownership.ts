@@ -23,6 +23,11 @@ export const ownershipCommandSchema = z.discriminatedUnion('action', [
     expectedSequence: z.number().int().nonnegative(),
     successorId: memberId,
   }).strict(),
+  z.object({
+    action: z.literal('step_down'),
+    commandId: memberId,
+    expectedSequence: z.number().int().nonnegative(),
+  }).strict(),
 ]);
 
 export const ownershipChangeSchema = z.object({
@@ -32,7 +37,7 @@ export const ownershipChangeSchema = z.object({
   sequence: z.number().int().nonnegative(),
   recordedAt: z.string().datetime({ offset: true }),
   actorId: memberId.optional(),
-  type: z.literal('ownership.transferred'),
+  type: z.enum(['ownership.transferred', 'ownership.stepped_down']),
   data: z.record(z.string(), z.unknown()),
   projection: z.object({
     content: z.enum(['current', 'applying']),

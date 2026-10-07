@@ -5,12 +5,16 @@
   </div>
   <div class="page-actions">
     <button class="button secondary" type="button"
-      [disabled]="reading() || state() === 'access'" [attr.aria-disabled]="reading()"
+      [disabled]="!canRefreshOwners()" [attr.aria-disabled]="reading()"
       (click)="refresh()">Refresh owners</button>
     @if (canManage()) {
       <button #appointButton id="appoint-owner" class="button primary" type="button"
         [disabled]="hasPendingChange()" (click)="openTransfer(appointButton)">
         Appoint an owner
+      </button>
+      <button #stepDownButton class="button secondary" type="button"
+        [disabled]="!canStepDown()" (click)="openStepDown(stepDownButton)">
+        Step down
       </button>
     }
   </div>
@@ -76,9 +80,9 @@
       </div>
     </section>
   } @else if (statusKind() === 'confirmed' || statusKind() === 'conflict'
-      || statusKind() === 'refused') {
+      || statusKind() === 'last_owner' || statusKind() === 'refused') {
     <section class="notice" [class.notice-success]="statusKind() === 'confirmed'"
-      [class.notice-warning]="statusKind() === 'conflict'"
+      [class.notice-warning]="statusKind() === 'conflict' || statusKind() === 'last_owner'"
       [class.notice-error]="statusKind() === 'refused'">
       <span class="state-mark" aria-hidden="true">
         {{ stateMark() }}
@@ -89,16 +93,28 @@
         @if (statusKind() === 'confirmed' && recordedChange()) {
           <small>{{ formattedRecordedAt(recordedChange()) }} · {{ recordedChange()?.commandId }}</small>
         }
-        @if (statusKind() === 'conflict') {
+        @if (statusKind() === 'conflict' || statusKind() === 'last_owner') {
           <button class="button secondary" type="button" (click)="refresh()">
             Refresh owners
           </button>
+        }
+        @if (statusKind() === 'refused' && refusedSuccessorId()) {
+          <button #chooseOwnerButton class="button primary" type="button"
+            (click)="chooseAnotherOwner(chooseOwnerButton)">Choose another owner</button>
         }
       </div>
     </section>
   }
 
-  @if (viewer()?.role === 'owner' && owners().length === 1) {
+  @if (viewer()?.role === 'admin') {
+    <section class="notice notice-neutral">
+      <span aria-hidden="true">🔒</span>
+      <div>
+        <strong>Changing owners needs the Owner role</strong>
+        <p>Your role is Admin. An Owner can appoint a successor or step down.</p>
+      </div>
+    </section>
+  } @else if (owners().length === 1) {
     <section class="notice notice-warning">
       <span class="state-mark" aria-hidden="true">!</span>
       <div>
@@ -131,9 +147,8 @@
       </article>
     }
   </section>
-  <p class="api-limit">Successor names and a list of eligible members aren't available yet.
-    Enter a member id you already know; the server checks that the person is active before it
-    records the change.</p>
+  <p class="api-limit">We can't show a list of people to appoint yet. Enter the member ID of
+    someone you know. The server checks that they are active before it records the change.</p>
   }
 }
 
@@ -142,14 +157,14 @@
   [returnFocusTo]="focusTarget()" (closed)="closeReview()">
   @if (review() === 'transfer_entry') {
     <div>
-      <label for="successor-id">Successor member id</label>
+      <label for="successor-id">Successor member ID</label>
       <input id="successor-id" autocomplete="off" autocapitalize="off" spellcheck="false"
         [value]="successorId()"
         (input)="successorIdChanged($event)" aria-describedby="successor-help successor-error"
         (keydown.enter)="reviewFromEnter($event)"
         [attr.aria-invalid]="showInvalidMemberId() ? 'true' : null" />
-      <p id="successor-help" class="api-limit">The API doesn't provide eligible member names.
-        The server checks the member id and refuses inactive or unknown members.</p>
+      <p id="successor-help" class="api-limit">Enter the member ID of someone you know.
+        The server checks that they are active.</p>
       @if (transferError()) {
         <p id="successor-error" class="field-error" role="alert">{{ transferError() }}</p>
       } @else if (showInvalidMemberId()) {
@@ -168,6 +183,12 @@
       </dl>
       <p class="rule-note">This doesn't remove you. Stepping down is a separate action.</p>
     </div>
+  } @else if (review() === 'step_down') {
+    <ul class="review-facts review-list">
+      <li><strong>You become an Admin</strong></li>
+      <li><strong>{{ otherOwnerSummary() }}</strong></li>
+      <li>The ownership record removes only your owner status.</li>
+    </ul>
   }
   @if (review() === 'transfer_entry') {
     <div overlayFooter class="overlay-actions">
@@ -182,6 +203,12 @@
       <button class="button secondary" type="button" (click)="backToTransferEntry()">Back</button>
       <button class="button primary" type="button" [disabled]="sending()"
         (click)="confirmTransfer()">Appoint this owner</button>
+    </div>
+  } @else if (review() === 'step_down') {
+    <div overlayFooter class="overlay-actions">
+      <button class="button destructive" type="button" [disabled]="sending()"
+        (click)="confirmStepDown()">Step down</button>
+      <button class="button secondary" type="button" (click)="closeReview()">Cancel</button>
     </div>
   }
 </oc-modal-sheet>

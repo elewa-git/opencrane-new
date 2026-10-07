@@ -11,6 +11,7 @@ p { color: var(--oc-ink-admin-muted); }
 .button.primary { background: var(--oc-accent); border-color: var(--oc-accent);
   color: var(--oc-ink); }
 .button.secondary { background: white; }
+.button.destructive { background: var(--oc-danger); border-color: var(--oc-danger); color: white; }
 .button:disabled { background: var(--oc-neutral-soft); border-color: var(--oc-border-row);
   color: var(--oc-ink-admin-muted); cursor: not-allowed; }
 .button:focus-visible, input:focus-visible { outline: 2px solid var(--oc-accent-dark);
@@ -35,6 +36,7 @@ code, small { font-family: var(--oc-font-mono); overflow-wrap: anywhere; }
 .notice-warning { background: var(--oc-warning-notice); border-color: var(--oc-warning-border); }
 .notice-error { background: var(--oc-danger-soft); border-color: var(--oc-danger-admin); }
 .notice-info { background: var(--oc-info-notice); border-color: var(--oc-accent-border); }
+.notice-neutral { background: var(--oc-neutral-soft); }
 .api-limit { max-width: 760px; }
 .review-facts { margin: 0; padding: 0; border: 1px solid var(--oc-border-default);
   border-radius: var(--oc-radius-card); list-style: none; }
@@ -42,6 +44,8 @@ code, small { font-family: var(--oc-font-mono); overflow-wrap: anywhere; }
 .review-facts > div:last-child { border-bottom: 0; }
 .review-facts dt { margin-bottom: 4px; color: var(--oc-ink-admin-muted); }
 .review-facts dd { margin: 0; overflow-wrap: anywhere; }
+.review-list li { padding: 12px; border-bottom: 1px solid var(--oc-border-row); }
+.review-list li:last-child { border-bottom: 0; }
 .rule-note { margin: 14px 0; padding: 12px; border: 1px dashed var(--oc-accent-border);
   border-radius: var(--oc-radius-card); background: var(--oc-info-notice); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
