@@ -317,15 +317,21 @@ it('fences changed authority before consumption, leaving no upstream effect or c
     await f.call(); await f.decide();
     const read = f.nats.store.readStream.bind(f.nats.store);
     let changed = false;
-    const race = vi.spyOn(f.nats.store, 'readStream').mockImplementation(async function* (subject) {
-      yield* read(subject);
+    async function* changeAfterApprovalRead(...args: Parameters<typeof read>) {
+      yield* read(...args);
+      const subject = args[0];
       if (subject.startsWith('approval-') && !changed) {
         changed = true;
-        await f.append('assistant-assistant', 'assistant.settings_changed', { assistantId: 'assistant', changedBy: 'alice', changedFields: ['active'], active: false });
+        const settings = { assistantId: 'assistant', changedBy: 'alice',
+          changedFields: ['active'], active: false };
+        await f.append('assistant-assistant', 'assistant.settings_changed', settings);
       }
-    });
+    }
+    const race = vi.spyOn(f.nats.store, 'readStream');
+    race.mockImplementation(changeAfterApprovalRead);
     try { expect((await f.call()).status).toBe(403); }
     finally { race.mockRestore(); }
+    expect(changed).toBe(true);
     expect(f.received()).toBe(0);
     expect((await f.read()).cards[0]?.state).toBe('approved');
   } finally { await f.close(); }

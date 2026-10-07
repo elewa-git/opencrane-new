@@ -15,7 +15,7 @@ built from that log and can be rebuilt from it. This package defines what each
 event looks like.
 This is shared code in the event core. The event store, background reactions,
 read-table builders and `apps/server` use its event definitions and checks.
-`libs/models` and `libs/authz` also use these definitions for AI rules and
+`libs/models`, `libs/auth` and `libs/authz` also use these definitions for AI rules and
 permissions. `apps/ops` uses them in its background workers. The event registry
 also uses Zod, a library that checks data shapes.
 
@@ -25,7 +25,7 @@ flowchart LR
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.-> events
-  others["libs/models and libs/authz<br/>AI rules and permissions"] -.-> events
+  others["libs/models, libs/auth and libs/authz<br/>AI rules and permissions"] -.-> events
   computer["apps/computer<br/>report text check"] -.-> events
   events -.-> zod["Zod<br/>data checks"]
 ```

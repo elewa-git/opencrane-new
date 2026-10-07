@@ -219,3 +219,77 @@ async function retriesRowRejectedByFold() {
 }
 it('retries a row rejected by add without changing its position or returning partial facts',
   retriesRowRejectedByFold);
+
+function size(summary: ReturnType<typeof empty>) {
+  return summary.ids.length;
+}
+const boundedKind = { ...kind, name: 'bounded-ids', keep: 10,
+  budget: { limit: 3, size } };
+
+async function boundsRetainedFactsAsStreamsGrow() {
+  fixture = await natsFixture();
+  await fixture.seed([event('alice-1'), event('alice-2'), event('bob', 'member-bob')]);
+  await readStreamSummary(fixture.store, 'test', 'member-alice', boundedKind, Infinity, take);
+  await readStreamSummary(fixture.store, 'test', 'member-bob', boundedKind, Infinity, take);
+  await fixture.seed([event('alice-3')]);
+  const reads = countReads(fixture.store);
+  const grown = await readStreamSummary(
+    fixture.store, 'test', 'member-alice', boundedKind, Infinity, take);
+  expect(grown.ids).toEqual(['alice-1', 'alice-2', 'alice-3']);
+  reads.clear();
+  await readStreamSummary(fixture.store, 'test', 'member-bob', boundedKind, Infinity, take);
+  expect(reads.calls).toEqual([{ subject: 'member-bob', fromSequence: 1, rows: 1 }]);
+}
+it('drops the least recently used summary when retained facts exceed the budget',
+  boundsRetainedFactsAsStreamsGrow);
+
+async function rebuildsAnOversizedStreamWithoutForgettingFacts() {
+  fixture = await natsFixture();
+  await fixture.seed([event('one'), event('two'), event('three'), event('four')]);
+  const expected = { ids: ['one', 'two', 'three', 'four'], sequence: 4 };
+  expect(await readStreamSummary(
+    fixture.store, 'test', 'member-alice', boundedKind, Infinity, take)).toEqual(expected);
+  const reads = countReads(fixture.store);
+  expect(await readStreamSummary(
+    fixture.store, 'test', 'member-alice', boundedKind, Infinity, take)).toEqual(expected);
+  expect(reads.calls).toEqual([{ subject: 'member-alice', fromSequence: 1, rows: 4 }]);
+}
+it('rebuilds an oversized summary rather than dropping facts used to refuse access',
+  rebuildsAnOversizedStreamWithoutForgettingFacts);
+
+async function keepsOtherStreamsWarmAfterOversizedRead() {
+  fixture = await natsFixture();
+  await fixture.seed([event('bob', 'member-bob')]);
+  await readStreamSummary(fixture.store, 'test', 'member-bob', boundedKind, Infinity, take);
+  await fixture.seed([event('one'), event('two'), event('three'), event('four')]);
+  await readStreamSummary(fixture.store, 'test', 'member-alice', boundedKind, Infinity, take);
+  const reads = countReads(fixture.store);
+  expect(await readStreamSummary(
+    fixture.store, 'test', 'member-bob', boundedKind, Infinity, take))
+    .toEqual({ ids: ['bob'], sequence: 1 });
+  expect(reads.calls).toEqual([{ subject: 'member-bob', fromSequence: 2, rows: 0 }]);
+}
+it('drops only the oversized summary and leaves other streams warm',
+  keepsOtherStreamsWarmAfterOversizedRead);
+
+async function boundsProgressAfterFailedRead() {
+  fixture = await natsFixture();
+  await fixture.seed([event('one'), event('bob', 'member-bob')]);
+  const checkedBudget = { ...boundedKind, name: 'failed-budget', add: rejectInvalid };
+  function rejectInvalid(summary: ReturnType<typeof empty>, row: StoredEvent) {
+    if (row.event.id === 'invalid') throw new Error('Invalid row');
+    add(summary, row);
+  }
+  await readStreamSummary(fixture.store, 'test', 'member-alice', checkedBudget, Infinity, take);
+  await readStreamSummary(fixture.store, 'test', 'member-bob', checkedBudget, Infinity, take);
+  await fixture.seed([event('two'), event('three'), event('invalid')]);
+  await expect(readStreamSummary(
+    fixture.store, 'test', 'member-alice', checkedBudget, Infinity, take))
+    .rejects.toThrow('Invalid row');
+  const reads = countReads(fixture.store);
+  expect(await readStreamSummary(
+    fixture.store, 'test', 'member-bob', checkedBudget, Infinity, take))
+    .toEqual({ ids: ['bob'], sequence: 2 });
+  expect(reads.calls).toEqual([{ subject: 'member-bob', fromSequence: 1, rows: 1 }]);
+}
+it('counts retained progress from failed reads towards the budget', boundsProgressAfterFailedRead);

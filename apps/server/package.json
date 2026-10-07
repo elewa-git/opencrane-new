@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start": "node --experimental-strip-types src/main.ts",
     "bootstrap-token": "node --experimental-strip-types src/bootstrap-token.ts",
-    "models": "node --experimental-strip-types src/models-main.ts"
+    "models": "node --experimental-strip-types src/models-main.ts",
+    "measure:chat:memory": "node --experimental-strip-types --expose-gc --max-old-space-size=256 test/chat-summary-memory.ts"
   },
   "dependencies": {
     "@opencrane/auth": "0.1.0",

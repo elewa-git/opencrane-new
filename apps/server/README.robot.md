@@ -734,16 +734,15 @@ its append. A start from another computer still writes its own start. A new writ
 checks the binding and id of the one event at the returned position; a missing or
 different event gives `Turn binding conflict`.
 
-PR #238 already shipped the start-repeat skip and turnCommand's `historyChecked`
-opt-in from spec section 2.9. PR 4 moves that check from the full computer history
-onto `startCommandKeys`; it does not introduce a second skip. The model decision's
-activity and conversation reads remain work for PR 5.
+PR #238 shipped the start-repeat skip and `turnCommand`'s `historyChecked` opt-in.
+PR #246 moved that check onto `startCommandKeys` in the shared computer summary.
+Model decisions now use that summary and their own chat summary too.
 
 `test/chat-summary.test.ts` uses real NATS to check warmed 500-event chats,
 report and turn repeats, old journals, changed payloads, user posts between reports,
 closed turns and missing or different events at an append's returned position.
 
-Local memory measurement used Node with `--expose-gc --max-old-space-size=256`.
+Before the retained-fact budget was added, a local memory measurement used Node with `--expose-gc --max-old-space-size=256`.
 A synthetic reader supplied all 64 cached chats with 3,000 events each: one creation,
 500 messages, 500 closed turns and 1,999 reply chunks. Message and chunk rows carried
 32,000-character text. After collection, the summaries retained 13,240,040 bytes
@@ -761,10 +760,12 @@ The recovered marker describes the computer. The browser shows the lost-request 
 only if this chat's last agent turn is lost or failed and ended at or after the last
 computer loss. A later completed turn removes that notice.
 
-Known follow-up: report positions grow with every stored reply. The 64-chat limit
-caps the number of chats, not each chat's report count. The measured mix above
-uses about 70 bytes per event; much longer chats can consume several MiB each.
-A follow-up should reduce per-report storage or cap total retained entries.
+Report positions grow with every stored reply because repeats must find and check
+their saved event. The chat summary now has a 32 MiB estimated memory budget as
+well as the 64-chat count limit. Compact report positions count separately from
+messages and closed turns. Larger active sets can still cause rebuilds (#256).
+Issue #253 concerns the whole-log `reportPosition` read for old journals and
+reconnection; it does not reduce this summary's storage.
 
 ## Turn admission read growth
 
@@ -799,3 +800,50 @@ refused report leaves the event log unchanged. The approvals GET regression in
 check. It expects 200 and returns 503 if that type leaves `outputReportTypes`.
 `test/bridge-channel.test.ts` checks that the computer skips invalid tool fields
 and keeps sending later reports through its open socket.
+
+## Retained chat summary budget
+
+The server chat kind keeps at most 64 chats and estimates up to 32 MiB across
+them. Each message counts as 256 bytes, each closed turn id as 128, each computer
+report tracker as 256 and each compact report position as 64. The counts are
+updated as events arrive, so checking the budget does not scan old reports.
+These allowances leave room above the UUID measurements below. The shared
+computer kind has a separate 48 MiB estimate. Together they allow 80 MiB, leaving
+176 MiB of the 256 MiB heap cap for other server work and active reads.
+
+Older whole summaries are dropped and rebuilt on their next use. A summary larger
+than the whole budget is dropped on its own, leaving other chats warm. Closed
+turns, report repeats and thread ownership checks still use complete facts.
+Reads in progress and caller copies are outside the retained-cache estimate.
+
+`test/chat-summary-memory.test.ts` checks that 600 replies of 300 chunks each
+stay warm. Recording and repeating the next report use only tail reads. It also
+checks that an oversized map is dropped and still finds its first saved report
+after rebuilding.
+
+`test/chat-summary-memory.ts` measures the real summary with rows created on
+demand. Ids are UUIDs and correlation fields contain request, conversation and
+turn ids. Messages carry 32,000-character placeholders; reply chunks carry 128.
+Node 22.23.3 runs with forced collection and a 256 MiB heap cap. Retained bytes
+compare collected heap before and after releasing the store. Heap is sampled
+every 100 positions and at the end of the build, before the final repeat read.
+The sampled peak can miss shorter peaks and does not measure a live server.
+
+| Shape | Retained cache bytes | Total heap bytes | Sampled peak heap bytes |
+| --- | ---: | ---: | ---: |
+| Two chats, 600 replies each, 300 chunks per reply | 15,073,288 | 30,393,552 | 47,563,336 |
+| 64 chats, 500 turns each, three chunks and a close per turn | 12,993,752 | 28,571,056 | 49,147,824 |
+
+The long-reply shape stays warm and uses about 41 bytes per kept fact. The
+64-chat mix uses about 68 bytes per fact. Report positions keep the smaller
+allowance because messages and closed turns have their own counts.
+
+```sh
+nice -n 10 npm run measure:chat:memory -w apps/server -- 2 600 300
+```
+
+The arguments are chats, turns per chat and reply chunks per turn.
+
+Rebuild cost for larger active working sets is tracked in #256. The remaining
+approval history and polling reads are tracked in #254 and #255. Fresh-install
+governed-work qualification remains tracked in #63.

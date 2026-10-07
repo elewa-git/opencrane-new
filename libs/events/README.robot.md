@@ -68,3 +68,8 @@ provider punctuation, and excludes Unicode control, format, surrogate,
 private-use and unassigned characters. This entrypoint has no dependencies.
 The computer checks it before saving a report; server event validation uses
 the same check.
+
+`computerTurnStartedDataSchema` and `computerTurnClosedDataSchema` are exported
+for the auth computer summary. It parses the full stored data with the same rules
+as the event registry and takes the close status type from the closed schema.
+Changing that schema therefore changes the summary's checked types too.

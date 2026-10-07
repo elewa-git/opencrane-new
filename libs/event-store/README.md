@@ -22,7 +22,7 @@ with `libs/events`.
 ```mermaid
 flowchart LR
   server["apps/server<br/>back end"] -->|saves changes| store["libs/event-store<br/>event log"]
-  models["libs/models<br/>AI rules and budgets"] -->|saves changes| store
+  models["libs/models<br/>AI rules and budgets"] -->|saves changes and updates saved facts| store
   ops["apps/ops<br/>background workers"] -->|reads and saves events| store
   store -->|saves and reads| nats["NATS JetStream<br/>event service"]
   store -.-> events["libs/events<br/>event definitions"]
@@ -40,7 +40,8 @@ flowchart LR
   log in order.
 - Keep a [stream summary](../../GLOSSARY.md#stream-summary), a few facts built from
   events in memory. Each use reads new events first. Older summaries are dropped
-  when the caller's memory limit is reached.
+  when the stream count or memory budget is reached. An oversized summary is
+  dropped on its own, so other streams keep their saved facts.
 - Check that the NATS event stream keeps its history and cannot be deleted.
 - Require encrypted NATS connections and the right credentials for each role.
 

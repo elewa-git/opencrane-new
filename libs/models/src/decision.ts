@@ -114,32 +114,17 @@ function digestContext(facts: unknown) {
   digest.update(encoded);
   return digest.digest('hex');
 }
-function activeTurn(turnToken: z.infer<typeof turnSchema>, rows: StoredEvent[],
+function activeTurn(turnToken: z.infer<typeof turnSchema>,
+  facts: Awaited<ReturnType<typeof decisionActivity>>['computer'],
   computerSequence: number) {
-  function isComputerLifecycle(row: StoredEvent) {
-    return !row.event.type.startsWith('computer.turn_');
-  }
-  const computer = rows.findLast(isComputerLifecycle);
+  const computer = facts.lifecycle;
   // Check the same ready computer that supplied the token's current identity.
   // Refuse a suspension or replacement saved between those two reads.
   if (computer?.event.type !== 'computer.ready' || computer.sequence !== computerSequence) {
     throw new Error('Computer changed');
   }
-  function matchesTurn(row: StoredEvent) {
-    return row.event.source === 'opencrane-server' &&
-      row.event.type.startsWith('computer.turn_') &&
-      data(row.event)['turnId'] === turnToken.turn;
-  }
-  function isStarted(row: StoredEvent) {
-    return row.event.type === 'computer.turn_started';
-  }
-  function isClosed(row: StoredEvent) {
-    return row.event.type === 'computer.turn_closed';
-  }
-  const lifecycle = rows.filter(matchesTurn);
-  const turn = lifecycle.find(isStarted);
-  const closed = lifecycle.some(isClosed);
-  if (!turn || closed) {
+  const turn = facts.firstStart;
+  if (!turn || facts.firstClose || turn.event.source !== 'opencrane-server') {
     throw new Error('Turn is not active');
   }
   const recorded = data(turn.event);
@@ -196,7 +181,7 @@ export async function startDecision(
       const computer = computerSchema.parse(checked.computer);
       const turnToken = turnSchema.parse(checked.turn);
       // Share two seconds between history and access because the gateway waits only that long.
-      // Read full histories before watching the small streams that decide access.
+      // Read new activity before watching the small streams that decide access.
       const activity = await decisionActivity(actor.store, actor.silo,
         computer.assistant, turnToken.conversation, turnToken.turn, decisionDeadline);
       const conversation = activity.conversation;

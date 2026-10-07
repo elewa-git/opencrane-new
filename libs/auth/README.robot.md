@@ -74,7 +74,8 @@ and rotated token id. The signed `thread` must match the actual Codex `session-i
 requires `threadId`, `task` and the model chosen by the server from its routing
 table. Model admission refuses a request whose model differs from the grant.
 An optional active turn token id further narrows `check`; model admission
-reads only server-owned `computer.turn_started` / `computer.turn_closed` authority
+requires a server-owned first `computer.turn_started` and refuses a
+`computer.turn_closed` from any source
 and checks live permissions before reserving money. A closed turn cannot reopen.
 `check(headers, activeTurnId, deadline)` also accepts an absolute `performance.now()`
 deadline so its event reads stop retrying with the caller's authority check.
@@ -101,6 +102,70 @@ Callers copy needed facts in `take`; they never keep the mutable summary itself.
 
 `test/computer-summary.test.ts` checks rebuilding at five cuts, first and newest
 facts, compact closed turns, bounded thread sets and checking before changes.
+`test/computer-summary-memory.test.ts` checks oversized turn/thread maps and
+open start-command keys, including correct old facts after rebuilding.
 `test/credentials.test.ts` checks warm reads on 500 earlier turns and suspension
 through another store connection. The gateway credentials test in `apps/ops`
 also covers races, expiry, resume, loss and generation changes.
+
+The computer kind has a 48 MiB estimated memory budget per store connection.
+It counts 256 bytes per turn, 768 per thread and 2,048 per open start-command key.
+The extra allowance for open keys covers the first saved start event as well as
+its command key. The closed-turn and thread estimates leave room above the
+UUID measurements below. Counts are updated as events arrive, so checking the
+budget does not scan old turns. A 10,000-turn team assistant with one private
+thread per turn uses about 9.8 MiB of this allowance. Four fit together.
+
+Least recently used summaries are dropped whole. A dropped computer rebuilds
+from the first event; old closed turns and thread owners cannot be forgotten.
+A computer above the entire budget is dropped on its own. Other computers stay
+warm. Catch-ups and caller copies can temporarily exceed the retained budget.
+More active computers than fit can still cause rebuilds and decision refusals.
+
+Turn data uses the full `computerTurnStartedDataSchema` and
+`computerTurnClosedDataSchema` from `@opencrane/events`, including the close status
+type. Auth depends on this existing local event package; it adds no third-party
+runtime component.
+
+The server and models processes must restart after an event-store restore before
+serving requests. Without that restart, the computer summary can skip a suspension
+or loss saved at a position reused after the restore, and keep that computer allowed.
+The restore drill must check the restarts as well as projection rebuilding.
+
+### Computer summary memory measurement
+
+The synthetic reader in `libs/models/test/summary-memory.ts` creates rows on demand
+and releases them after use. Ids are 36-character UUIDs. Events include request,
+conversation and turn correlation ids. Strings are copied as they would be when
+decoding a saved event. Node 22.23.3 runs with `--expose-gc` and a 256 MiB heap cap.
+Collected heap before and after releasing the store gives the retained-cache
+figure, excluding loaded packages. Heap is sampled every 100 rows and at the end
+of the read. The sampled peak covers the build before the final repeat read;
+it can miss shorter peaks. `unbounded` disables only the memory budget.
+
+| Shape | Retained cache bytes | Total heap bytes | Sampled peak heap bytes |
+| --- | ---: | ---: | ---: |
+| One computer, 10,000 closed turns, one thread per turn, unbounded | 9,159,728 | 42,820,736 | 58,870,208 |
+| One computer, 10,000 closed turns, five turns per thread, unbounded | 3,510,320 | 37,166,456 | 53,586,240 |
+| One computer, 10,000 open private turns, budget enabled | 23,962,760 | 57,500,160 | 67,411,984 |
+| Three computers, 10,000 private turns each, budget enabled | 27,479,448 | 61,142,320 | 77,451,912 |
+| One oversized computer, 60,000 private turns, budget enabled | 5,272 | 27,412,912 | 107,849,752 |
+
+The first two rows imply about 210 bytes per closed turn and 706 bytes per thread.
+String lengths and V8 versions change those costs. The last row keeps no computer
+summary: its estimate exceeds 48 MiB, and its next read starts at sequence 1.
+The remaining bytes are cache bookkeeping. The sampled peak includes the complete
+oversized summary before it is dropped. These measurements cover one kind at a
+time, not a live service or simultaneous rebuilds.
+The open-turn measurement includes saved first starts and command keys; its
+estimated allowance is 30,720,000 bytes, above the 23,962,760 bytes retained.
+
+A repeatable command from the repository root is:
+
+```sh
+nice -n 10 npm run measure:summaries:memory -w libs/models -- computer 3 10000 1
+```
+
+The last argument is turns per thread. Add `unbounded` to compare without the
+memory budget. Use `computer 1 60000 1` for the oversized rebuild.
+Use `computer-open 1 10000 1` to keep every turn open.

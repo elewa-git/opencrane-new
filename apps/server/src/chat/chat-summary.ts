@@ -9,6 +9,7 @@ type ChatSummary = {
   messages: Map<string, Message>;
   closedTurnIds: Set<string>;
   reports: Map<string, ComputerReports>;
+  reportCount: number;
 };
 export type ChatFacts = {
   created: Record<string, unknown> | undefined;
@@ -21,7 +22,8 @@ export type ChatFacts = {
 const closedTurn = z.object({ turnId: z.string() });
 
 function emptyChat(): ChatSummary {
-  return { created: undefined, messages: new Map(), closedTurnIds: new Set(), reports: new Map() };
+  return { created: undefined, messages: new Map(), closedTurnIds: new Set(),
+    reports: new Map(), reportCount: 0 };
 }
 function addChat(summary: ChatSummary, row: StoredEvent) {
   const event = row.event;
@@ -51,11 +53,20 @@ function addReport(summary: ChatSummary, report: NonNullable<StoredEvent['event'
     summary.reports.set(report.computerId, reports);
   }
   reports.lastSequence = report.sequence;
-  if (!reports.positions.has(report.sequence)) reports.positions.set(report.sequence, position);
+  if (!reports.positions.has(report.sequence)) {
+    reports.positions.set(report.sequence, position);
+    summary.reportCount++;
+  }
 }
 const chat: SummaryKind<ChatSummary> = {
   name: 'chat', keep: 64, empty: emptyChat, add: addChat,
+  budget: { limit: 32 * 1024 * 1024, size: chatSize },
 };
+function chatSize(summary: ChatSummary) {
+  // Count compact replay positions separately so many reply chunks can stay warm.
+  return summary.messages.size * 256 + summary.closedTurnIds.size * 128 +
+    summary.reports.size * 256 + summary.reportCount * 64;
+}
 
 export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo: string,
   conversationId: string, turnId: string, computerId?: string, reportSequence?: number) {

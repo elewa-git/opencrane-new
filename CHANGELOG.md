@@ -5,6 +5,7 @@
 ## Unreleased
 
 - Conversation feeds now carry tool start and finish records and tool access decisions, without tool arguments or results. Tool activity keeps approval reads and concurrent access checks working. Delivered uploads still load with their saved outcomes. Invalid tool names and call ids are skipped without stopping later reports.
+- Model and tool calls read only new chat and computer events while their summaries fit in memory.
 
 - Organisation admins can create a shared assistant for a group, choose its grants and
   fixed paying group, and check or safely repeat a create whose reply was lost.
