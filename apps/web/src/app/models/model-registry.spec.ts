@@ -134,13 +134,13 @@ it('refreshes a healthy list without announcing a failure', async () => {
   expect(screenElement(fixture).querySelector('[role="status"]')?.textContent)
     .toContain('Refreshing providers.');
   await settle(fixture);
-  await waitForText(fixture, 'Providers loaded.');
+  await waitForText(fixture, 'Providers and models loaded.');
 
   expect(reads).toBe(2);
   expect(screenElement(fixture).textContent).toContain('Primary');
   expect(screenElement(fixture).textContent).not.toContain('could not be loaded');
   expect(screenElement(fixture).querySelector('[role="status"]')?.textContent)
-    .toContain('Providers loaded.');
+    .toContain('Providers and models loaded.');
 });
 
 it('submits the provider name once when Enter is pressed in the field', async () => {
@@ -172,7 +172,7 @@ it('submits the provider name once when Enter is pressed in the field', async ()
   clickButton(fixture, 'Connect a provider');
   await submitNameWithEnter(fixture, 'Primary');
   await settle(fixture);
-  await waitForText(fixture, 'Save the provider key');
+  await waitForText(fixture, 'Step 2 of 6');
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('provider-step-title'));
 
   clickDialogButton(fixture, 'Back');
@@ -182,13 +182,13 @@ it('submits the provider name once when Enter is pressed in the field', async ()
   clickButton(fixture, 'Connect a provider');
   await submitNameWithEnter(fixture, 'Secondary');
   await settle(fixture);
-  await waitForText(fixture, 'Save the provider key');
+  await waitForText(fixture, 'Step 2 of 6');
 
   expect(commands).toHaveLength(2);
   expect(commands[0]).toMatchObject({ action: 'create', name: 'Primary' });
   expect(commands[1]).toMatchObject({ action: 'create', name: 'Secondary' });
   expect(commands[0]?.['commandId']).not.toBe(commands[1]?.['commandId']);
-  expect(screenElement(fixture).textContent).toContain('Save the provider key');
+  expect(screenElement(fixture).textContent).toContain('Step 2 of 6');
 });
 
 async function submitNameWithEnter(fixture: ComponentFixture<ModelsScreen>, value: string):
@@ -382,7 +382,7 @@ it('keeps one provider after Back, an attempted name edit and Next', async () =>
   await settle(fixture);
   expect(commands).toHaveLength(1);
   expect(screenElement(fixture).querySelector('dialog[open]')?.textContent)
-    .toContain('Save the provider key');
+    .toContain('Step 2 of 6');
 });
 
 const statusLabels = [
@@ -454,6 +454,522 @@ it('prevents a native key form submit from putting the key in a URL', async () =
   expect(event.defaultPrevented).toBe(true);
 });
 
+type Scenario = {
+  row: ProviderRow;
+  posts: RequestSeen[];
+  reads: RequestSeen[];
+  statusOutcome: string;
+  directOutcome: string;
+  responseStatus: number;
+  quoteStatus: number;
+  quoteReason: string;
+  reservedCents: number;
+};
+
+function scenario(): Scenario {
+  return { row: provider('one', 'Primary'), posts: [], reads: [], statusOutcome: 'pass',
+    directOutcome: 'pass', responseStatus: 200, quoteStatus: 200, quoteReason: '',
+    reservedCents: 1 };
+}
+
+function serveScenario(state: Scenario): RequestHandler {
+  return function serve(request: RequestSeen): Response {
+    if (request.method === 'POST') {
+      state.posts.push(request);
+      if (state.responseStatus !== 200) return reply({ status: 'refused' }, state.responseStatus);
+      const body = readRecord(request.body);
+      const fact = { changeId: String(body['commandId']), attemptId: String(body['commandId']),
+        time: '2026-10-07T09:02:00Z', revision: state.row.revision,
+        outcome: state.directOutcome, model: 'gpt-6.1-sol' };
+      if (body['action'] === 'reachability') state.row.reachable = fact;
+      if (body['action'] === 'test' || body['action'] === 'skip') state.row.modelAnswer = fact;
+      return reply({ status: 'appended', changeId: body['commandId'] });
+    }
+    state.reads.push(request);
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.url === '/api/org/providers') {
+      return reply({ ...emptyProviderRead, rows: [state.row] });
+    }
+    if (request.url.includes('/verify?')) {
+      if (state.quoteStatus !== 200) {
+        return reply({ status: 'refused', reason: state.quoteReason }, state.quoteStatus);
+      }
+      return reply({ providerId: state.row.providerId, revision: state.row.revision,
+        model: 'gpt-6.1-sol', priceTableId: 'price-one', reservedCents: state.reservedCents,
+        consentRequired: true });
+    }
+    if (request.url.includes('/changes/')) {
+      return reply({ status: 'appended', outcome: state.statusOutcome });
+    }
+    return reply({ rows: [state.row] });
+  };
+}
+
+async function openScenario(state: Scenario): Promise<ComponentFixture<ModelsScreen>> {
+  const fixture = await mount(serveScenario(state));
+  const opener = screenElement(fixture).querySelector('.provider-row-main');
+  if (!(opener instanceof HTMLButtonElement)) throw new Error('Missing provider opener');
+  await fixture.componentInstance['providerAction'](state.row, opener);
+  await settle(fixture);
+  return fixture;
+}
+
+function makeReachable(state: Scenario): void {
+  state.row.reachable = { changeId: 'reachable', time: '2026-10-07T08:30:00Z',
+    revision: state.row.revision, outcome: 'pass' };
+}
+
+function giveConsent(fixture: ComponentFixture<ModelsScreen>): void {
+  const checkbox = screenElement(fixture).querySelector('.consent-row input');
+  if (!(checkbox instanceof HTMLInputElement)) throw new Error('Missing consent');
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  fixture.detectChanges();
+}
+
+function runControl(fixture: ComponentFixture<ModelsScreen>): HTMLButtonElement | null {
+  return screenElement(fixture).querySelector<HTMLButtonElement>('.price-warning button.primary');
+}
+
+it.each(['reachability', 'skip', 'test'] as const)(
+  'sends exactly the real verify body for %s', async action => {
+    const state = scenario();
+    if (action !== 'reachability') makeReachable(state);
+    const fixture = await openScenario(state);
+    if (action === 'test') {
+      await fixture.componentInstance['loadQuote']();
+      await settle(fixture);
+      giveConsent(fixture);
+      await fixture.componentInstance['runModelTest']();
+    } else if (action === 'skip') {
+      await fixture.componentInstance['skipModelTest']();
+    } else {
+      await fixture.componentInstance['runReachability']();
+    }
+    expect(state.posts).toHaveLength(1);
+    const expected: Record<string, unknown> = { action, commandId: expect.any(String),
+      expectedRevision: state.row.revision };
+    if (action === 'test') {
+      expected['model'] = 'gpt-6.1-sol';
+      expected['priceTableId'] = 'price-one';
+      expected['reservedCents'] = 1;
+      expected['consent'] = true;
+    }
+    expect(readRecord(state.posts[0]?.body ?? '')).toEqual(expected);
+    expect(state.posts[0]?.url).toBe('/api/org/providers/one/verify');
+  });
+
+it.each(['pass', 'fail', 'budget_refused'])(
+  'consumes one consent after %s and requires a new tick before a further test', async outcome => {
+    const state = scenario();
+    makeReachable(state);
+    state.directOutcome = outcome;
+    const fixture = await openScenario(state);
+    await fixture.componentInstance['loadQuote']();
+    await settle(fixture);
+    giveConsent(fixture);
+    const first = fixture.componentInstance['runModelTest']();
+    const second = fixture.componentInstance['runModelTest']();
+    await Promise.all([first, second]);
+    await settle(fixture);
+    await fixture.componentInstance['runModelTest']();
+    expect(state.posts).toHaveLength(1);
+    expect(fixture.componentInstance['modelTestConsent']()).toBeUndefined();
+    expect(runControl(fixture)).toBeNull();
+    clickDialogButton(fixture, 'Test again');
+    await settle(fixture);
+    expect(runControl(fixture)?.disabled).toBe(true);
+    giveConsent(fixture);
+    await fixture.componentInstance['runModelTest']();
+    expect(state.posts).toHaveLength(2);
+  });
+
+it('clears consent when the quote changes or a different provider opens', async () => {
+  const state = scenario();
+  makeReachable(state);
+  const fixture = await openScenario(state);
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  giveConsent(fixture);
+  state.reservedCents = 40;
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  expect(runControl(fixture)?.disabled).toBe(true);
+  expect(fixture.componentInstance['modelTestConsent']()).toBeUndefined();
+  giveConsent(fixture);
+  fixture.componentInstance['closeSetup']();
+  await settle(fixture);
+  state.row = { ...state.row, providerId: 'two', name: 'Second' };
+  await fixture.componentInstance['load']();
+  await settle(fixture);
+  const opener = screenElement(fixture).querySelector('.provider-row-main');
+  if (!(opener instanceof HTMLButtonElement)) throw new Error('Missing opener');
+  await fixture.componentInstance['providerAction'](state.row, opener);
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  expect(runControl(fixture)?.disabled).toBe(true);
+});
+
+it.each(['outcome_unknown', 'unknown'])(
+  'keeps an unfinished %s test locked and Check status only reads', async outcome => {
+    const state = scenario();
+    makeReachable(state);
+    state.responseStatus = 503;
+    state.statusOutcome = outcome;
+    const fixture = await openScenario(state);
+    await fixture.componentInstance['loadQuote']();
+    await settle(fixture);
+    giveConsent(fixture);
+    await fixture.componentInstance['runModelTest']();
+    await fixture.componentInstance['checkVerificationStatus']('one');
+    await settle(fixture);
+    expect(fixture.componentInstance['resultKind']()).toBe('unknown');
+    expect(screenElement(fixture).querySelector('dialog[open]')?.textContent)
+      .toContain('The cost may be held');
+    expect(fixture.componentInstance['pendingChecks']()['one']?.commandId).toBeTruthy();
+    await fixture.componentInstance['runModelTest']();
+    await fixture.componentInstance['skipModelTest']();
+    await fixture.componentInstance['runReachability']();
+    expect(state.posts).toHaveLength(1);
+    expect(runControl(fixture)).toBeNull();
+    const back = screenElement(fixture).querySelector<HTMLButtonElement>(
+      'dialog[open] .sheet-actions .button.secondary');
+    expect(back?.disabled).toBe(true);
+    expect(state.reads.at(-1)?.method).toBe('GET');
+    state.statusOutcome = 'pass';
+    await fixture.componentInstance['checkVerificationStatus']('one');
+    expect(fixture.componentInstance['pendingChecks']()['one']).toBeUndefined();
+  });
+
+it('keeps the lock after a 200 receipt followed by an unknown provider fact', async () => {
+  const state = scenario();
+  makeReachable(state);
+  state.directOutcome = 'unknown';
+  const fixture = await openScenario(state);
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  giveConsent(fixture);
+  await fixture.componentInstance['runModelTest']();
+  await settle(fixture);
+  expect(fixture.componentInstance['resultKind']()).toBe('unknown');
+  expect(fixture.componentInstance['pendingChecks']()['one']).toBeDefined();
+  expect(runControl(fixture)).toBeNull();
+  await fixture.componentInstance['runModelTest']();
+  expect(state.posts).toHaveLength(1);
+});
+
+it.each(['anthropic', 'openai'] as const)(
+  'moves past unchanged models for %s without sending a command', async kind => {
+    const state = scenario();
+    state.row.provider = kind;
+    makeReachable(state);
+    const fixture = await openScenario(state);
+    fixture.componentInstance['nextStep']();
+    await settle(fixture);
+    clickDialogButton(fixture, 'Next');
+    await settle(fixture);
+    expect(state.posts).toHaveLength(0);
+    expect(fixture.componentInstance['step']()).toBe('access');
+    expect(screenElement(fixture).querySelector('.provider-list')?.textContent).toContain('Primary');
+  });
+
+it.each([400, 409, 403])('announces command refusal %s inside the modal and keeps data',
+  async status => {
+    const state = scenario();
+    state.responseStatus = status;
+    const fixture = await openScenario(state);
+    await fixture.componentInstance['runReachability']();
+    await settle(fixture);
+    expect(screenElement(fixture).querySelector('dialog[open] [role="status"]')?.textContent)
+      .toContain(status === 403 ? 'The server refused this change' : status === 409
+        ? 'Provider settings changed' : 'Provider check was refused');
+    expect(screenElement(fixture).querySelector('.provider-list')?.textContent).toContain('Primary');
+    expect(fixture.componentInstance['loadState']()).toBe('ready');
+    if (status === 403) expect(state.reads.some(isProviderListRead)).toBe(true);
+  });
+
+function isProviderListRead(request: RequestSeen): boolean {
+  return request.url === '/api/org/providers' && request.method === 'GET';
+}
+
+it.each([503, 400, 409])('does not claim no price when the price read fails with %s',
+  async status => {
+    const state = scenario();
+    makeReachable(state);
+    state.quoteStatus = status;
+    const fixture = await openScenario(state);
+    await fixture.componentInstance['loadQuote']();
+    await settle(fixture);
+    expect(screenElement(fixture).querySelector('dialog[open] [role="status"]')?.textContent)
+      .toContain("Couldn't read the price. Nothing was sent.");
+    expect(fixture.componentInstance['commandReference']()).toBe('');
+    expect(state.posts).toHaveLength(0);
+  });
+
+it('announces an unavailable price inside the modal without a command reference', async () => {
+  const state = scenario();
+  makeReachable(state);
+  state.quoteStatus = 403;
+  state.quoteReason = 'unknown_price';
+  const fixture = await openScenario(state);
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  expect(screenElement(fixture).querySelector('dialog[open] [role="status"]')?.textContent)
+    .toContain('No price is available');
+  expect(fixture.componentInstance['commandReference']()).toBe('');
+});
+
+it('clears old action messages and references on the next step', async () => {
+  const state = scenario();
+  const fixture = await openScenario(state);
+  await fixture.componentInstance['runReachability']();
+  await settle(fixture);
+  expect(fixture.componentInstance['commandReference']()).not.toBe('');
+  fixture.componentInstance['nextStep']();
+  await settle(fixture);
+  expect(fixture.componentInstance['commandReference']()).toBe('');
+  expect(fixture.componentInstance['resultText']()).toBe('');
+});
+
+it('moves focus to the changed facts when reachability removes its button', async () => {
+  const state = scenario();
+  const fixture = await openScenario(state);
+  const button = screenElement(fixture).querySelector<HTMLButtonElement>('.verify-step button');
+  button?.focus();
+  await fixture.componentInstance['runReachability']();
+  await settle(fixture);
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('provider-step-title'));
+});
+
+it('lets a lost create start over after Check status says it was not recorded', async () => {
+  let posts = 0;
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.method === 'POST') {
+      posts += 1;
+      return reply({ status: 'unavailable' }, 503);
+    }
+    if (request.url.includes('/changes/')) return reply({ status: 'not_found' }, 404);
+    return reply(emptyProviderRead);
+  });
+  clickButton(fixture, 'Connect a provider');
+  await submitNameWithEnter(fixture, 'First');
+  await fixture.componentInstance['checkCreateStatus'](fixture.componentInstance['providerIdDraft']());
+  await settle(fixture);
+  expect(screenElement(fixture).querySelector('dialog[open]')?.textContent).toContain('not recorded');
+  clickDialogButton(fixture, 'Start over');
+  await settle(fixture);
+  expect(fixture.componentInstance['providerIdDraft']()).toBe('');
+  expect(fixture.componentInstance['commandReference']()).toBe('');
+  await submitNameWithEnter(fixture, 'Second');
+  expect(posts).toBe(2);
+});
+
+it('opens a fresh draft after an uncertain create without changing its pending record', async () => {
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.method === 'POST') return reply({ status: 'unavailable' }, 503);
+    return reply(emptyProviderRead);
+  });
+  clickButton(fixture, 'Connect a provider');
+  await submitNameWithEnter(fixture, 'First');
+  const id = fixture.componentInstance['providerIdDraft']();
+  const pending = fixture.componentInstance['pendingCreates']()[id];
+  clickDialogButton(fixture, 'Cancel');
+  await settle(fixture);
+  clickButton(fixture, 'Connect a provider');
+  await settle(fixture);
+  expect(fixture.componentInstance['providerIdDraft']()).toBe('');
+  expect(fixture.componentInstance['pendingCreates']()[id]).toEqual(pending);
+  expect(screenElement(fixture).querySelector('dialog[open]')?.textContent).not.toContain('First');
+});
+
+it.each([401, 403])('clears all protected fields after a provider read returns %s', async status => {
+  const state = scenario();
+  makeReachable(state);
+  const fixture = await openScenario(state);
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  giveConsent(fixture);
+  fixture.componentInstance['keyDraft'].set('fixture-value');
+  fixture.componentInstance['replaceKeyDraft'].set('fixture-value');
+  const refusedRead = function refusedRead(): Promise<Response> {
+    return Promise.resolve(reply({ status: 'refused' }, status));
+  };
+  vi.stubGlobal('fetch', refusedRead);
+  await fixture.componentInstance['load']();
+  await settle(fixture);
+  expect(fixture.componentInstance['providers']()).toEqual([]);
+  expect(fixture.componentInstance['registry']()).toEqual([]);
+  expect(fixture.componentInstance['routing']()).toEqual({});
+  expect(fixture.componentInstance['selectedProvider']()).toBeUndefined();
+  expect(fixture.componentInstance['quote']()).toBeUndefined();
+  expect(fixture.componentInstance['modelTestConsent']()).toBeUndefined();
+  expect(fixture.componentInstance['keyDraft']()).toBe('');
+  expect(fixture.componentInstance['replaceKeyDraft']()).toBe('');
+  expect(screenElement(fixture).querySelector('dialog[open]')).toBeNull();
+});
+
+it('keeps stale rows after a failed refresh and announces the later successful refresh', async () => {
+  const state = scenario();
+  const fixture = await mount(serveScenario(state));
+  const refuseRead = function refuseRead(): Promise<Response> {
+    return Promise.resolve(reply({ status: 'unavailable' }, 503));
+  };
+  vi.stubGlobal('fetch', refuseRead);
+  await fixture.componentInstance['load']();
+  await settle(fixture);
+  expect(screenElement(fixture).querySelector('.provider-list')?.textContent).toContain('Primary');
+  expect(screenElement(fixture).querySelector('[role="status"]')?.textContent).toContain('Refresh failed');
+  const serve = serveScenario(state);
+  vi.stubGlobal('fetch', function healthyRead(input: RequestInfo | URL): Promise<Response> {
+    return Promise.resolve(serve({ url: requestUrl(input), method: 'GET', body: '' }));
+  });
+  await fixture.componentInstance['load']();
+  await settle(fixture);
+  expect(screenElement(fixture).querySelector('[role="status"]')?.textContent)
+    .toContain('Providers and models loaded');
+  expect(screenElement(fixture).querySelectorAll('.page-actions button')[0]?.textContent)
+    .toContain('Refresh');
+});
+
+it('keeps model choices as typed after a lost save and blocks another selection command', async () => {
+  const state = scenario();
+  makeReachable(state);
+  state.responseStatus = 503;
+  const fixture = await openScenario(state);
+  fixture.componentInstance['nextStep']();
+  await settle(fixture);
+  const checkbox = screenElement(fixture).querySelector('.model-choice input');
+  if (!(checkbox instanceof HTMLInputElement)) throw new Error('Missing model choice');
+  checkbox.checked = true;
+  checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+  await fixture.componentInstance['saveModels']();
+  await fixture.componentInstance['saveModels']();
+  await settle(fixture);
+  expect(checkbox.checked).toBe(true);
+  expect(fixture.componentInstance['selectedModels']()).toEqual(['gpt-6.1-sol']);
+  expect(fixture.componentInstance['pendingModels']()['one']).toBeDefined();
+  expect(state.posts).toHaveLength(1);
+});
+
+it('never shows an empty list before the first successful read', async () => {
+  const refuse = function refuse(): Promise<Response> {
+    return Promise.resolve(reply({ status: 'unavailable' }, 503));
+  };
+  vi.stubGlobal('fetch', refuse);
+  TestBed.configureTestingModule({ imports: [ModelsScreen] });
+  const fixture = TestBed.createComponent(ModelsScreen);
+  fixture.detectChanges();
+  await waitForText(fixture, 'Provider data is unavailable');
+  expect(screenElement(fixture).textContent).not.toContain('No providers saved');
+  expect(screenElement(fixture).querySelectorAll('button')
+    .length).toBeGreaterThan(0);
+});
+
+it('moves focus to the row action when a status receipt removes Check status', async () => {
+  const state = scenario();
+  const fixture = await mount(serveScenario(state));
+  const pending = { one: { commandId: 'check-one', expectedRevision: 2, operation: 'test' } };
+  fixture.componentInstance['pendingChecks'].set(pending);
+  fixture.detectChanges();
+  const status = screenElement(fixture).querySelector<HTMLButtonElement>('.row-pending button');
+  if (!status) throw new Error('Missing row status button');
+  status.focus();
+  status.click();
+  await settle(fixture);
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(document.activeElement).toBe(screenElement(fixture).querySelector('.row-action'));
+  });
+});
+
+it('lets an unrecorded key replacement start over only after the status read', async () => {
+  const state = scenario();
+  state.responseStatus = 503;
+  const serve = serveScenario(state);
+  const fixture = await mount(request => {
+    if (request.url.includes('/changes/')) return reply({ status: 'not_found' }, 404);
+    return serve(request);
+  });
+  clickButton(fixture, 'Replace key');
+  const key = field(fixture, 'replace-provider-key');
+  key.value = 'fixture-value';
+  key.dispatchEvent(new Event('input', { bubbles: true }));
+  await fixture.componentInstance['replaceKey']();
+  await fixture.componentInstance['checkKeyStatus']('one', true);
+  await settle(fixture);
+  expect(fixture.componentInstance['pendingKeys']()['one']?.notRecorded).toBe(true);
+  clickDialogButton(fixture, 'Start over');
+  await settle(fixture);
+  expect(fixture.componentInstance['pendingKeys']()['one']).toBeUndefined();
+  expect(field(fixture, 'replace-provider-key').value).toBe('');
+  expect(state.posts).toHaveLength(1);
+});
+
+it('saves a first key at the provider revision returned by the server', async () => {
+  const state = scenario();
+  delete state.row.saved;
+  state.row.revision = 8;
+  state.responseStatus = 503;
+  const fixture = await openScenario(state);
+  fixture.componentInstance['keyDraft'].set('fixture-value');
+  await fixture.componentInstance['saveKey']();
+  expect(state.posts).toHaveLength(1);
+  expect(readRecord(state.posts[0]?.body ?? '')['expectedRevision']).toBe(8);
+});
+
+it('keeps a recorded model selection locked until its records are current', async () => {
+  const state = scenario();
+  makeReachable(state);
+  let current = false;
+  const serve = serveScenario(state);
+  const fixture = await mount(request => {
+    if (request.url.includes('/changes/')) {
+      return reply({ status: 'appended', operation: 'provider.models_selected',
+        projection: { content: current ? 'current' : 'applying', iam: 'current' } });
+    }
+    return serve(request);
+  });
+  const opener = screenElement(fixture).querySelector('.provider-row-main');
+  if (!(opener instanceof HTMLButtonElement)) throw new Error('Missing opener');
+  await fixture.componentInstance['providerAction'](state.row, opener);
+  fixture.componentInstance['nextStep']();
+  fixture.componentInstance['selectedModels'].set(['gpt-6.1-sol']);
+  await fixture.componentInstance['saveModels']();
+  await settle(fixture);
+  expect(fixture.componentInstance['pendingModels']()['one']).toBeDefined();
+  expect(fixture.componentInstance['resultKind']()).toBe('applying');
+  fixture.componentInstance['previousStep']();
+  expect(fixture.componentInstance['step']()).toBe('models');
+  current = true;
+  await fixture.componentInstance['checkModelsStatus']('one');
+  await settle(fixture);
+  expect(fixture.componentInstance['pendingModels']()['one']).toBeUndefined();
+  expect(fixture.componentInstance['step']()).toBe('access');
+  fixture.componentInstance['nextStep']();
+  await settle(fixture);
+  expect(screenElement(fixture).querySelector('.completion')?.textContent).toContain('Enabled models');
+});
+
+it('restores an unknown test lock from the server row when this visit has no local command', async () => {
+  const state = scenario();
+  makeReachable(state);
+  state.statusOutcome = 'unknown';
+  state.row.modelAnswer = { changeId: 'recorded-result', attemptId: 'original-test',
+    time: '2026-10-07T09:00:00Z', revision: state.row.revision, outcome: 'unknown' };
+  state.row.status = 'model_test_unknown';
+  const fixture = await mount(serveScenario(state));
+  expect(fixture.componentInstance['pendingChecks']()['one']?.commandId).toBe('original-test');
+  const status = screenElement(fixture).querySelector<HTMLButtonElement>('.row-pending button');
+  if (!status) throw new Error('Missing status-only action');
+  status.click();
+  await settle(fixture);
+  expect(state.posts).toHaveLength(0);
+  expect(state.reads.at(-1)?.url).toContain('/changes/original-test');
+  expect(fixture.componentInstance['pendingChecks']()['one']).toBeDefined();
+});
+
 it('keeps the same provider open while a confirmed key change reads its updated row', async () => {
   const first = provider('one', 'Primary');
   const second = provider('two', 'Second');
@@ -504,3 +1020,73 @@ it('keeps the same provider open while a confirmed key change reads its updated 
     await settle(fixture);
   }
 });
+
+type PendingRequestAction = 'create' | 'key' | 'models' | 'quote';
+const pendingRequestMessages: Record<PendingRequestAction, string> = {
+  create: 'Sending provider name.',
+  key: 'Sending key save.',
+  models: 'Sending model choices.',
+  quote: 'Reading the current price.',
+};
+
+async function startPendingRequest(
+  action: PendingRequestAction, fixture: ComponentFixture<ModelsScreen>, row: ProviderRow,
+): Promise<void> {
+  const opener = screenElement(fixture).querySelector('.page-actions .button.primary');
+  if (!(opener instanceof HTMLButtonElement)) throw new Error('Missing provider opener');
+  if (action === 'create') {
+    fixture.componentInstance['openSetup'](opener);
+    const draft = { provider: 'openai' as const, name: 'New provider' };
+    fixture.componentInstance['draft'].set(draft);
+    fixture.detectChanges();
+    await fixture.componentInstance['createProvider']();
+    return;
+  }
+  await fixture.componentInstance['providerAction'](row, opener);
+  if (action === 'key') {
+    fixture.componentInstance['previousStep']();
+    fixture.componentInstance['keyDraft'].set('fixture-key');
+    await fixture.componentInstance['saveKey']();
+  } else if (action === 'models') {
+    fixture.componentInstance['nextStep']();
+    fixture.componentInstance['selectedModels'].set(['gpt-6.1-sol']);
+    await fixture.componentInstance['saveModels']();
+  } else {
+    await fixture.componentInstance['loadQuote']();
+  }
+}
+
+it.each(['create', 'key', 'models', 'quote'] as const)(
+  'announces the pending %s request inside the modal before its reply', async action => {
+    const state = scenario();
+    makeReachable(state);
+    const normalReply = serveScenario(state);
+    let sent = false;
+    let release: ((response: Response) => void) | undefined;
+    function storeRelease(resolve: (response: Response) => void): void {
+      release = resolve;
+    }
+    const pendingReply = new Promise<Response>(storeRelease);
+    function serve(request: RequestSeen): Response | Promise<Response> {
+      if (request.method === 'POST' || request.url.includes('/verify?')) {
+        sent = true;
+        return pendingReply;
+      }
+      return normalReply(request);
+    }
+    const fixture = await mount(serve);
+    const pending = startPendingRequest(action, fixture, state.row);
+    function requestWasSent(): void {
+      fixture.detectChanges();
+      expect(sent).toBe(true);
+    }
+    await vi.waitFor(requestWasSent);
+    try {
+      const status = screenElement(fixture).querySelector('dialog[open] [role="status"]');
+      expect(status?.textContent).toContain(pendingRequestMessages[action]);
+    } finally {
+      release?.(reply({ status: 'unavailable' }, 503));
+      await pending;
+      await settle(fixture);
+    }
+  });

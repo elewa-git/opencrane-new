@@ -1,0 +1,207 @@
+[
+  {
+    "guard": "verification-body",
+    "result": "PASS",
+    "failures": [
+      "sends exactly the real verify body for reachability",
+      "sends exactly the real verify body for skip",
+      "sends exactly the real verify body for test"
+    ],
+    "expected": 3
+  },
+  {
+    "guard": "consent",
+    "result": "PASS",
+    "failures": [
+      "consumes one consent after pass and requires a new tick before a further test",
+      "consumes one consent after fail and requires a new tick before a further test",
+      "consumes one consent after budget_refused and requires a new tick before a further test",
+      "clears consent when the quote changes or a different provider opens"
+    ],
+    "expected": 4
+  },
+  {
+    "guard": "unknown-lock",
+    "result": "PASS",
+    "failures": [
+      "keeps an unfinished outcome_unknown test locked and Check status only reads",
+      "keeps an unfinished unknown test locked and Check status only reads",
+      "keeps the lock after a 200 receipt followed by an unknown provider fact"
+    ],
+    "expected": 3
+  },
+  {
+    "guard": "unknown-state",
+    "result": "PASS",
+    "failures": [
+      "keeps an unfinished outcome_unknown test locked and Check status only reads",
+      "keeps an unfinished unknown test locked and Check status only reads",
+      "keeps the lock after a 200 receipt followed by an unknown provider fact"
+    ],
+    "expected": 3
+  },
+  {
+    "guard": "unchanged-models",
+    "result": "PASS",
+    "failures": [
+      "moves past unchanged models for anthropic without sending a command",
+      "moves past unchanged models for openai without sending a command"
+    ],
+    "expected": 2
+  },
+  {
+    "guard": "modal-announcements",
+    "result": "PASS",
+    "failures": [
+      "announces command refusal 400 inside the modal and keeps data",
+      "announces command refusal 409 inside the modal and keeps data",
+      "announces command refusal 403 inside the modal and keeps data",
+      "announces an unavailable price inside the modal without a command reference"
+    ],
+    "expected": 4
+  },
+  {
+    "guard": "command-access",
+    "result": "PASS",
+    "failures": [
+      "announces command refusal 403 inside the modal and keeps data"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "price-read",
+    "result": "PASS",
+    "failures": [
+      "does not claim no price when the price read fails with 503",
+      "does not claim no price when the price read fails with 400",
+      "does not claim no price when the price read fails with 409"
+    ],
+    "expected": 3
+  },
+  {
+    "guard": "step-reference",
+    "result": "PASS",
+    "failures": [
+      "clears old action messages and references on the next step"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "reachability-focus",
+    "result": "PASS",
+    "failures": [
+      "moves focus to the changed facts when reachability removes its button"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "unrecorded-change",
+    "result": "PASS",
+    "failures": [
+      "lets a lost create start over after Check status says it was not recorded",
+      "lets an unrecorded key replacement start over only after the status read"
+    ],
+    "expected": 2
+  },
+  {
+    "guard": "fresh-draft",
+    "result": "PASS",
+    "failures": [
+      "opens a fresh draft after an uncertain create without changing its pending record"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "access-clearing",
+    "result": "PASS",
+    "failures": [
+      "clears all protected fields after a provider read returns 401",
+      "clears all protected fields after a provider read returns 403"
+    ],
+    "expected": 2
+  },
+  {
+    "guard": "healthy-refresh",
+    "result": "PASS",
+    "failures": [
+      "keeps stale rows after a failed refresh and announces the later successful refresh"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "pending-models",
+    "result": "PASS",
+    "failures": [
+      "keeps model choices as typed after a lost save and blocks another selection command"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "first-load",
+    "result": "PASS",
+    "failures": [
+      "never shows an empty list before the first successful read"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "row-focus",
+    "result": "PASS",
+    "failures": [
+      "moves focus to the row action when a status receipt removes Check status"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "key-revision",
+    "result": "PASS",
+    "failures": [
+      "saves a first key at the provider revision returned by the server"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "applying-models",
+    "result": "PASS",
+    "failures": [
+      "keeps a recorded model selection locked until its records are current"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "restored-unknown",
+    "result": "PASS",
+    "failures": [
+      "restores an unknown test lock from the server row when this visit has no local command"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "back-control",
+    "result": "PASS",
+    "failures": [
+      "keeps an unfinished outcome_unknown test locked and Check status only reads",
+      "keeps an unfinished unknown test locked and Check status only reads"
+    ],
+    "expected": 2
+  },
+  {
+    "guard": "confirmed-provider-read",
+    "result": "PASS",
+    "failures": [
+      "keeps the same provider open while a confirmed key change reads its updated row"
+    ],
+    "expected": 1
+  },
+  {
+    "guard": "request-start-announcements",
+    "result": "PASS",
+    "failures": [
+      "announces the pending create request inside the modal before its reply",
+      "announces the pending key request inside the modal before its reply",
+      "announces the pending models request inside the modal before its reply",
+      "announces the pending quote request inside the modal before its reply"
+    ],
+    "expected": 4
+  }
+]

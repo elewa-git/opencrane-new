@@ -1,21 +1,27 @@
 <main class="provider-page">
+  @if (!setupOpen() && !replaceOpen()) {
   <div class="live-status" role="status" aria-live="polite" aria-atomic="true">
     {{ liveStatus() }}
   </div>
+  }
   <header class="page-heading">
     <div>
       <h1 tabindex="-1">Models &amp; providers</h1>
       <p>A saved key, a reachable provider, a model answer and access grants are separate facts.</p>
     </div>
     <div class="page-actions">
-      <button class="button secondary" type="button" [disabled]="!canRefresh() || loadState() === 'loading'"
+      <button class="button secondary" type="button"
+        [disabled]="!canRefresh() || loadState() === 'loading'"
         (click)="load()">{{ retryLabel() }}</button>
       <button #connectButton class="button primary" type="button"
-        [disabled]="loadState() !== 'ready'" (click)="openSetup(connectButton)">
+        [disabled]="loadState() !== 'ready' || busy()" (click)="openSetup(connectButton)">
         Connect a provider
       </button>
     </div>
   </header>
+
+  <p class="register-note">Model tariffs and task routing are fixed for this installation.
+    Manage budgets in <a class="button secondary" href="/org/spending">Spending</a>.</p>
 
   @if (loadState() === 'loading') {
     <oc-shared-state [kind]="statusKind()" [message]="statusMessage()" [detail]="statusDetail()"
@@ -25,8 +31,6 @@
     <section class="notice" [class.notice-error]="loadState() === 'failed'">
       <oc-shared-state [kind]="statusKind()" [message]="statusMessage()"
         [detail]="statusDetail()" [showAction]="false" />
-      <button class="button secondary" type="button" [disabled]="!canRefresh()"
-        (click)="load()">{{ retryLabel() }}</button>
     </section>
   }
 
@@ -36,8 +40,6 @@
   @if (hasRefreshError()) {
     <section class="notice notice-error">
       <p>Showing the last data loaded at {{ checkedWhen() }}.</p>
-      <button class="button secondary" type="button" [disabled]="!canRefresh()"
-        (click)="load()">Refresh</button>
     </section>
   }
 
@@ -46,7 +48,7 @@
       <oc-shared-state kind="not_configured" message="No providers saved"
         detail="Connect OpenAI or Anthropic to begin. A saved key does not grant model access."
         [showAction]="false" />
-      <button class="button primary" type="button" (click)="openSetup(connectButton)">
+      <button #emptyConnect class="button primary" type="button" (click)="openSetup(emptyConnect)">
         Connect a provider
       </button>
     </section>
@@ -58,17 +60,22 @@
         <span>Provider</span><span>Connection</span><span>Models</span><span>Verification</span>
       </div>
       @for (provider of providers(); track provider.providerId) {
-        <article class="provider-row">
-          <button class="provider-row-main" type="button" [disabled]="isActionLocked(provider)"
-            [attr.aria-label]="'Open ' + providerTitle(provider) + ' provider ' + provider.name"
-            (click)="providerAction(provider, connectButton)">
+        <article class="provider-row" [attr.data-provider-id]="provider.providerId">
+          <button #providerButton class="provider-row-main" type="button"
+            [disabled]="isActionLocked(provider) || busy()"
+            (click)="providerAction(provider, providerButton)">
             <span class="provider-name">
-              <span class="provider-mark" aria-hidden="true">{{ provider.provider === 'openai' ? 'OA' : 'AN' }}</span>
-              <span><strong>{{ providerTitle(provider) }}</strong><small>{{ provider.name }}</small></span>
+              <span class="provider-mark" aria-hidden="true">
+                {{ provider.provider === 'openai' ? 'OA' : 'AN' }}
+              </span>
+              <span>
+                <strong>{{ providerTitle(provider) }}</strong>
+                <small>{{ provider.name }}</small>
+              </span>
             </span>
             <span class="connection-fact">
               {{ provider.saved ? 'Key saved' : 'Needs a key' }}
-              @if (provider.saved) { <small>{{ checkedWhen() }}</small> }
+              @if (provider.saved) { <small>{{ savedWhen(provider) }}</small> }
             </span>
             <span class="model-fact">{{ modelCount(provider) }}</span>
             <span class="verification-fact">{{ statusFor(provider) }}</span>
@@ -76,15 +83,16 @@
           @if (isActionLocked(provider)) {
             <div class="row-pending">
               <p>Another change for this provider is still being checked.</p>
-              <button class="button secondary" type="button" [disabled]="busy()"
-                (click)="providerAction(provider, connectButton)">
+              <button #statusButton class="button secondary" type="button" [disabled]="busy()"
+                (click)="providerAction(provider, statusButton)">
                 {{ keyChangeLabel(provider) }}
               </button>
               <code>{{ pendingReference(provider) }}</code>
             </div>
           } @else if (provider.saved) {
-            <button class="button secondary row-action" type="button"
-              (click)="startReplacement(provider, connectButton)">Replace key</button>
+            <button #replaceButton class="button secondary row-action" type="button"
+              [disabled]="busy()"
+              (click)="startReplacement(provider, replaceButton)">Replace key</button>
           }
         </article>
       }
@@ -123,8 +131,12 @@
     [description]="activeProviderName() ? activeProviderName() : 'Provider setup'"
     [dismissDisabled]="busy()" [returnFocusTo]="focusedOpener" (closed)="setupClosed()">
     <div class="setup-content">
+      <div class="live-status" role="status" aria-live="polite" aria-atomic="true">
+        {{ resultText() || liveStatus() }}
+      </div>
       <nav class="steps" aria-label="Provider setup steps">
-        @for (item of ['provider', 'key', 'verify', 'models', 'access', 'done']; track item; let index = $index) {
+        @for (item of ['provider', 'key', 'verify', 'models', 'access', 'done'];
+          track item; let index = $index) {
           <span [class.current]="stepNumber() === index + 1"
             [class.complete]="stepNumber() > index + 1">
             <span aria-hidden="true">{{ index + 1 }}</span>{{ item }}
@@ -136,9 +148,11 @@
       </h3>
 
       @if (step() === 'provider') {
-        <form class="step-form" (ngSubmit)="createProvider()">
-          <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">Next</button>
-          <fieldset>
+        <form class="step-form" novalidate (submit)="$event.preventDefault()">
+          <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">
+            Next
+          </button>
+          <fieldset [disabled]="activeProviderExists()">
             <legend>Provider</legend>
             <label class="choice-card">
               <input type="radio" name="provider" value="openai" [checked]="isOpenAiDraft()"
@@ -149,9 +163,11 @@
                 (change)="providerChanged($event)" /> Anthropic
             </label>
           </fieldset>
-          <label class="field-label" for="provider-name">Connection name <span>Required</span></label>
+          <label class="field-label" for="provider-name">Connection name <span>Required</span>
+          </label>
           <input id="provider-name" class="text-field" name="providerName" required maxlength="200"
-            [value]="providerNameDraft()" (input)="nameChanged($event)"
+            [readonly]="activeProviderExists()" [value]="providerNameDraft()"
+            (input)="nameChanged($event)"
             (keydown.enter)="enterProviderName($event)" />
           @if (pendingCreates()[providerIdDraft()]; as pendingCreate) {
             <p class="unknown-copy">Provider creation is still being checked. Reference:
@@ -159,13 +175,20 @@
             </p>
             <button class="button secondary" type="button" [disabled]="busy()"
               (click)="checkCreateStatus(providerIdDraft())">Check status</button>
+            @if (pendingCreate.notRecorded) {
+              <button class="button secondary" type="button" (click)="startOver()">
+                Start over
+              </button>
+            }
           }
         </form>
       }
 
       @if (step() === 'key') {
-        <form class="step-form" (ngSubmit)="saveKey()">
-          <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">Save key</button>
+        <form class="step-form" novalidate (submit)="$event.preventDefault()">
+          <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">
+            Save key
+          </button>
           <label class="field-label" for="provider-key">API key <span>Required</span></label>
           <p class="field-help">Paste once. The secret service stores it. It is never read back.</p>
           <input id="provider-key" class="text-field" type="password" name="providerKey"
@@ -180,6 +203,11 @@
             </p>
             <button class="button secondary" type="button" [disabled]="busy()"
               (click)="checkKeyStatus(providerIdDraft(), false)">Check status</button>
+            @if (activePendingKey()?.notRecorded) {
+              <button class="button secondary" type="button" (click)="startOver()">
+                Start over
+              </button>
+            }
           }
         </form>
       }
@@ -199,7 +227,8 @@
               detail="A model answer is a separate priced request." [showAction]="false" />
           }
           @if (!activeProvider()?.reachable || activeProvider()?.reachable?.outcome !== 'pass') {
-            <button class="button primary" type="button" [disabled]="busy() || checkHasPending()"
+            <button class="button primary" type="button"
+                [disabled]="busy() || checkHasPending()"
               (click)="runReachability()">Check provider reachability</button>
           } @else if (showModelTest()) {
             <section class="price-warning" aria-labelledby="price-warning-title">
@@ -209,18 +238,26 @@
                 (click)="loadQuote()">Read current price</button>
               @if (quote(); as priced) {
                 <label class="consent-row">
-                  <input type="checkbox" [checked]="modelTestConsent()"
+                  <input type="checkbox" [checked]="!!modelTestConsent()"
                     (change)="modelConsentChanged($event)" />
                   I agree to one priced test request for {{ priced.model }}.
                 </label>
-                <button class="button primary" type="button" [disabled]="!canRunModelTest() || busy()"
+                <button class="button primary" type="button"
+                  [disabled]="!canRunModelTest() || busy() || checkHasPending()"
                   (click)="runModelTest()">Run priced test</button>
               }
-              <button class="button secondary" type="button" [disabled]="busy() || checkHasPending()"
+              <button class="button secondary" type="button"
+                [disabled]="busy() || checkHasPending()"
                 (click)="skipModelTest()">Skip — Connected, not tested</button>
             </section>
           }
+          @if (hasSettledModelTest()
+            && providerCanSelectModels() && !checkHasPending() && !testingAgain()) {
+            <button class="button secondary" type="button" [disabled]="busy()"
+              (click)="testAgain()">Test again</button>
+          }
           @if (checkHasPending()) {
+            <p>Another test cannot start until this check is settled. Check status only reads.</p>
             <button class="button secondary" type="button" [disabled]="busy()"
               (click)="checkVerificationStatus(providerIdDraft())">Check status</button>
           }
@@ -236,14 +273,17 @@
             <button class="button secondary" type="button" [disabled]="busy()"
               (click)="checkModelsStatus(providerIdDraft())">Check status</button>
           }
-          <fieldset class="model-options">
+          <fieldset class="model-options"
+            [disabled]="busy() || !!pendingModels()[providerIdDraft()]">
             <legend>Enable from the registry ({{ registry().length }})</legend>
             @for (model of registry(); track model) {
               <label class="model-choice">
                 <input type="checkbox" [checked]="isModelSelected(model)"
                   (change)="toggleModel(model, $event)" />
                 <span><strong>{{ model }}</strong>
-                  <small>{{ isModelSelected(model) ? 'Selected for this provider' : 'Stay disabled' }}</small>
+                  <small>
+                    {{ isModelSelected(model) ? 'Selected for this provider' : 'Stay disabled' }}
+                  </small>
                 </span>
               </label>
             }
@@ -274,6 +314,7 @@
             [showAction]="false" />
           @if (activeProvider(); as provider) {
             <oc-integration-facts [facts]="providerFacts(provider)" />
+            <p>Enabled models: {{ provider.enabledModels.length }}.</p>
           }
           <oc-shared-state kind="not_configured" message="Model access not available yet"
             [detail]="accessExplanation()" [showAction]="false" />
@@ -298,30 +339,34 @@
           Cancel
         </button>
       } @else if (step() === 'key') {
-        <button class="button primary" type="button" [disabled]="!hasKey() || busy() || keyHasPending()"
+        <button class="button primary" type="button"
+          [disabled]="!hasKey() || busy() || keyHasPending()"
           (click)="saveKey()">{{ busy() ? 'Saving key…' : 'Save key' }}</button>
-        <button class="button secondary" type="button" [disabled]="busy()" (click)="previousStep()">
+        <button class="button secondary" type="button"
+          [disabled]="busy() || hasUnresolvedActiveChange()" (click)="previousStep()">
           Back
         </button>
       } @else if (step() === 'verify') {
         <button class="button primary" type="button" [disabled]="!activeProvider()?.reachable
           || activeProvider()?.reachable?.outcome !== 'pass' || checkHasPending() || busy()"
           (click)="nextStep()">Next</button>
-        <button class="button secondary" type="button" [disabled]="busy()" (click)="previousStep()">
+        <button class="button secondary" type="button"
+          [disabled]="busy() || hasUnresolvedActiveChange()" (click)="previousStep()">
           Back
         </button>
       } @else if (step() === 'models') {
         <button class="button primary" type="button" [disabled]="busy() || !activeProviderExists()
           || pendingModels()[providerIdDraft()]"
           (click)="saveModels()">{{ busy() ? 'Saving models…' : 'Next' }}</button>
-        <button class="button secondary" type="button" [disabled]="busy()" (click)="previousStep()">
+        <button class="button secondary" type="button"
+          [disabled]="busy() || hasUnresolvedActiveChange()" (click)="previousStep()">
           Back
         </button>
       } @else if (step() === 'access') {
         <button class="button primary" type="button" (click)="nextStep()">Next</button>
         <button class="button secondary" type="button" (click)="previousStep()">Back</button>
       } @else {
-        <a class="button primary" href="/org/models">Go to Models</a>
+        <button class="button primary" type="button" (click)="closeSetup()">Go to Models</button>
         <button class="button secondary" type="button" (click)="closeSetup()">Close</button>
       }
     </div>
@@ -332,18 +377,22 @@
     description="The old key is not shown and is not revoked at the provider."
     [dismissDisabled]="busy()" [returnFocusTo]="focusedOpener" (closed)="replaceClosed()">
     <div class="replace-content">
+      <div class="live-status" role="status" aria-live="polite" aria-atomic="true">
+        {{ resultText() || liveStatus() }}
+      </div>
       <ul>
         <li>New calls use the new key once it is accepted.</li>
         <li>Existing verification evidence becomes invalid; verify again.</li>
         <li>The old key is not shown and is not revoked at the provider.</li>
       </ul>
-      <form (ngSubmit)="replaceKey()">
+      <form novalidate (submit)="$event.preventDefault()">
         <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">
           Replace key
         </button>
         <label class="field-label" for="replace-provider-key">API key <span>Required</span></label>
         <p class="field-help">The secret service stores it. It is never shown again.</p>
-        <input id="replace-provider-key" class="text-field" type="password" autocomplete="new-password"
+        <input id="replace-provider-key" class="text-field" type="password"
+          autocomplete="new-password"
           [value]="replaceKeyDraft()" (input)="replacementKeyChanged($event)"
           (keydown.enter)="enterKey($event, true)" />
         @if (replaceKeyError()) { <p class="field-error">{{ replaceKeyError() }}</p> }
@@ -363,6 +412,11 @@
       @if (replaceProviderId() && pendingKeys()[replaceProviderId()!]) {
         <button class="button secondary" type="button" [disabled]="busy()"
           (click)="checkKeyStatus(replaceProviderId()!, true)">Check status</button>
+      }
+      @if (pendingKeys()[replaceProviderId() ?? '']?.notRecorded) {
+        <button class="button secondary" type="button" (click)="startOver()">
+                Start over
+              </button>
       }
     </div>
   </oc-modal-sheet>

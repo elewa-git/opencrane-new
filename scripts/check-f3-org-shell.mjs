@@ -179,6 +179,8 @@ async function checkRowLabels(register, width) {
 }
 
 async function checkModelStatus(page) {
+  const spendingLink = page.locator('oc-models').getByRole('link', { name: 'Spending' });
+  assert((await spendingLink.boundingBox()).height >= 44, 'Spending target is at least 44px');
   await page.getByRole('heading', { name: 'Models & providers', exact: true }).waitFor();
   assert.equal(await page.locator('time').count(), 0, 'No invented evidence date');
   await page.getByText('pinned-model', { exact: true }).waitFor();

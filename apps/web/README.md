@@ -13,7 +13,7 @@ flowchart LR
   web["apps/web<br/>private and direct chat, recovery, shared sessions and admin pages"] -->|requests, status reads and live updates| server["apps/server<br/>the back end"]
   web -.->|uses| protocol["libs/protocol<br/>message rules"]
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
-  web -->|saves keys and reads facts| providers["Provider pages<br/>connections and keys"]
+  web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
 ```
 
@@ -64,7 +64,10 @@ flowchart LR
    identity provider manages the group's members. The assistant keeps one paying group
    for its private member sessions.
 10. **An admin reviews held spend.** The website shows settled spend separately from held spend. An Owner or Admin can read a hold's evidence and record a settlement or release. The existing budget editor remains available.
-11. **An admin connects a model provider.** The website records the connection name and saves a key without showing it again. A lost reply keeps the original reference and offers a status check before another save.
+11. **An admin connects a model provider.** The website records the connection name and saves
+    a key without showing it again. A lost reply keeps the original reference and offers a
+    status check before another save. A paid model test needs consent for one request. An
+    unknown outcome stays locked while the website checks its status.
 12. **A member starts a private shared session.** The website shows assistants they can use, confirms the fixed paying group, then opens their private conversation. Group membership does not give desktop access.
 
 ## How to run or test it

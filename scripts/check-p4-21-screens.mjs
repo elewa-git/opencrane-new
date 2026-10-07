@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
 import { chromium } from 'playwright';
+import { acceptsProviderVerification }
+  from '../apps/server/test/support/provider-verification-fixture.ts';
 
 const output = resolve('docs/process/p4-21-screens');
 const build = resolve('apps/web/dist/web/browser');
@@ -25,7 +27,8 @@ function provider(providerId, name, changes = {}) {
 
 function state() {
   return { providers: [], createdCommands: [], changes: new Map(), failReads: false,
-    forbidden: false, loseNextKeyReply: false, unknownPrice: false, failModelTest: false,
+    forbidden: false, loseNextKeyReply: false, unknownPrice: false,
+    modelOutcome: 'pass', verificationPosts: 0,
     delayNextKeyMs: 0 };
 }
 
@@ -113,6 +116,7 @@ async function providerApi(request, path, url, testState) {
       revision: row.revision, outcome: 'recorded' };
     row.reachable = undefined;
     row.modelAnswer = undefined;
+    row.status = 'saved_unverified';
     const savedReceipt = receipt(row.providerId, row.revision, 'provider.key_saved',
       body.commandId, row.position);
     testState.changes.set(body.commandId, change(savedReceipt));
@@ -134,18 +138,26 @@ async function providerApi(request, path, url, testState) {
   if (path.endsWith('/verify') && request.method() === 'POST') {
     const body = request.postDataJSON();
     const providerId = path.split('/')[4];
+    if (!acceptsProviderVerification(body, providerId)) {
+      return json({ status: 'refused' }, 400);
+    }
+    testState.verificationPosts += 1;
     const row = findProvider(testState, providerId);
     if (!row) return json({ status: 'refused' }, 409);
     row.position += 1;
     const isReachability = body.action === 'reachability';
     const kind = isReachability ? 'reachability' : 'model';
-    const outcome = body.action === 'skip' ? 'skipped'
-      : testState.failModelTest && body.action === 'test' ? 'fail' : 'pass';
-    const fact = { changeId: body.commandId, attemptId: body.commandId, time: '2026-10-07T09:02:00Z',
+    let outcome = 'pass';
+    if (body.action === 'skip') outcome = 'skipped';
+    if (body.action === 'test') outcome = testState.modelOutcome;
+    const fact = { changeId: body.commandId, attemptId: body.commandId,
+      time: '2026-10-07T09:02:00Z',
       revision: row.revision, outcome, kind, model: body.model,
-      reservedCents: body.reservedCents, settledCents: body.action === 'test' ? 1 : undefined };
+      reservedCents: body.reservedCents,
+      settledCents: body.action === 'test' && outcome === 'pass' ? 1 : undefined };
     if (isReachability) row.reachable = fact;
     else row.modelAnswer = fact;
+    row.status = rowStatus(row);
     const savedReceipt = receipt(providerId, row.revision, 'provider.verification_requested',
       body.commandId, row.position);
     testState.changes.set(body.commandId, change({ ...savedReceipt, outcome }));
@@ -180,7 +192,8 @@ function noOverflow() {
 }
 
 function smallTargets() {
-  const targets = [...document.querySelectorAll('main button, main a, main input, dialog[open] button, '
+  const targets = [...document.querySelectorAll(
+    'main button, main a, main input, dialog[open] button, '
     + 'dialog[open] a, dialog[open] input, main .choice-card, main .model-choice, '
     + 'main .consent-row, dialog[open] .choice-card, dialog[open] .model-choice, '
     + 'dialog[open] .consent-row')];
@@ -204,15 +217,19 @@ function buttonForegroundColors(buttons) {
 }
 
 async function capture(page, name, width, motion) {
-  assert.equal(await page.evaluate(noOverflow), true, `${name} has no horizontal overflow at ${width}`);
+  await page.waitForTimeout(500);
+  await page.evaluate(fontsReady);
+  assert.equal(await page.evaluate(noOverflow), true,
+    `${name} has no horizontal overflow at ${width}`);
   const targets = await page.evaluate(smallTargets);
   assert.deepEqual(targets, [], `${name} has touch targets at least 44px at ${width}`);
-  const liveRegions = await page.locator('[role="status"][aria-live="polite"]').count();
+  const liveRegions = await page.locator('[role="status"][aria-live="polite"]:visible').count();
   assert.equal(liveRegions, 1, `${name} has one live status region`);
-  const tealText = await page.locator('button.primary').evaluateAll(buttonForegroundColors);
-  assert.equal(tealText.some(color => color === 'rgb(255, 255, 255)'), false,
+  const tealText = await page.locator('.button.primary').evaluateAll(buttonForegroundColors);
+  assert.equal(tealText.some(isWhite), false,
     `${name} does not put white text on the teal accent`);
-  await page.screenshot({ path: resolve(output, `${name}-${width}-${motion}.png`), fullPage: true });
+  const screenshot = { path: resolve(output, `${name}-${width}-${motion}.png`), fullPage: true };
+  await page.screenshot(screenshot);
   captures.push({ name, width, motion });
 }
 
@@ -220,7 +237,10 @@ async function openPage(browser, width, motion, testState) {
   const page = await browser.newPage({ viewport: { width, height: 1000 } });
   const setting = motion === 'reduced' ? 'reduce' : 'no-preference';
   await page.emulateMedia({ reducedMotion: setting });
-  await page.route(`${origin}/**`, route => assetsAndApi(route, testState));
+  async function serveRoute(route) {
+    await assetsAndApi(route, testState);
+  }
+  await page.route(`${origin}/**`, serveRoute);
   await page.goto(`${origin}/org/models`);
   await page.locator('main h1').waitFor();
   await page.locator('.page-actions .button.primary').waitFor();
@@ -264,7 +284,7 @@ async function captureListStates(browser, width, motion) {
 
 async function captureSetup(browser, width, motion) {
   const testState = state();
-  testState.delayNextKeyMs = 550;
+  testState.delayNextKeyMs = 1500;
   const page = await openPage(browser, width, motion, testState);
   await page.locator('.page-actions .button.primary').click();
   await page.getByLabel('Connection name Required').fill('Primary');
@@ -306,7 +326,7 @@ async function captureRemainingStates(browser, width, motion) {
   const detailState = state();
   detailState.providers = [provider('detail', 'Primary')];
   let page = await openPage(browser, width, motion, detailState);
-  await page.getByRole('button', { name: 'Open OpenAI provider Primary' }).click();
+  await page.locator('.provider-row-main').filter({ hasText: 'Primary' }).click();
   await page.getByText('Step 3 of 6').waitFor();
   await capture(page, 'MOD-05-provider-facts', width, motion);
   await page.close();
@@ -324,9 +344,35 @@ async function captureRemainingStates(browser, width, motion) {
   await setupReachableProvider(page);
   refusedState.unknownPrice = true;
   await page.getByRole('button', { name: 'Read current price' }).click();
-  await page.getByText('No price is available for this model').waitFor();
+  await page.getByText('No price is available for this model').first().waitFor();
   await capture(page, 'MOD-17-test-refused', width, motion);
   await page.close();
+
+  for (const outcome of ['budget_refused', 'fail', 'unknown']) {
+    const resultState = state();
+    resultState.modelOutcome = outcome;
+    page = await openPage(browser, width, motion, resultState);
+    await setupReachableProvider(page);
+    await page.getByRole('button', { name: 'Read current price' }).click();
+    await page.getByLabel(/I agree to one priced test request/).check();
+    await page.getByRole('button', { name: 'Run priced test' }).click();
+    if (outcome === 'budget_refused') {
+      const refused = page.getByText('The test was refused by the budget. Nothing was charged.');
+      await refused.first().waitFor();
+    } else if (outcome === 'fail') {
+      await page.getByText('The test failed. Nothing else changed.').first().waitFor();
+    } else {
+      await page.getByRole('button', { name: 'Check status', exact: true }).last().waitFor();
+      const sent = resultState.verificationPosts;
+      const dialog = page.getByRole('dialog');
+      await dialog.getByRole('button', { name: 'Check status', exact: true }).click();
+      assert.equal(resultState.verificationPosts, sent, 'Check status only reads');
+      assert.equal(await page.getByRole('button', { name: 'Run priced test' }).count(), 0,
+        'An uncertain test cannot start another paid request');
+    }
+    await capture(page, `MOD-17-${outcome}`, width, motion);
+    await page.close();
+  }
 
   const pendingState = state();
   pendingState.providers = [provider('rotate', 'Primary')];
@@ -372,6 +418,23 @@ async function main() {
   const { writeFile } = await import('node:fs/promises');
   await writeFile(resolve(output, 'captures.json'), JSON.stringify(summary, null, 2) + '\n');
   process.stdout.write(`PASS ${captures.length} responsive screen captures\n`);
+}
+
+
+function rowStatus(row) {
+  if (!row.saved) return 'needs_key';
+  if (row.reachable?.outcome !== 'pass') return 'saved_unverified';
+  if (!row.modelAnswer || row.modelAnswer.outcome === 'skipped') return 'connected_not_tested';
+  if (row.modelAnswer.outcome === 'pass') return 'ready';
+  return `model_test_${row.modelAnswer.outcome}`;
+}
+
+function isWhite(colour) {
+  return colour === 'rgb(255, 255, 255)';
+}
+
+function fontsReady() {
+  return document.fonts.ready;
 }
 
 await main();
