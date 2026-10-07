@@ -91,6 +91,7 @@ function clickDialogButton(fixture: ComponentFixture<ModelsScreen>, name: string
 
 function matchesDialogButton(name: string): (candidate: HTMLButtonElement) => boolean {
   return candidate => !candidate.classList.contains('implicit-submit')
+    && !candidate.classList.contains('back')
     && candidate.textContent?.includes(name) === true;
 }
 
@@ -129,7 +130,10 @@ it('refreshes a healthy list without announcing a failure', async () => {
   });
 
   clickButton(fixture, 'Refresh');
+  expect(screenElement(fixture).querySelector('[role="status"]')?.textContent)
+    .toContain('Refreshing providers.');
   await settle(fixture);
+  await waitForText(fixture, 'Providers loaded.');
 
   expect(reads).toBe(2);
   expect(screenElement(fixture).textContent).toContain('Primary');
@@ -157,6 +161,10 @@ it('submits the provider name once when Enter is pressed in the field', async ()
         operation: 'provider.created', sequence: 1, changeId: created?.['commandId'],
         projection: { content: 'current', iam: 'current' } });
     }
+    if (request.url.startsWith('/api/org/providers/')) {
+      const created = commands.at(-1);
+      return reply({ rows: [provider(String(created?.['providerId']), String(created?.['name']))] });
+    }
     throw new Error(`Unexpected request: ${request.url}`);
   });
 
@@ -167,6 +175,8 @@ it('submits the provider name once when Enter is pressed in the field', async ()
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('provider-step-title'));
 
   clickDialogButton(fixture, 'Back');
+  await settle(fixture);
+  clickDialogButton(fixture, 'Cancel');
   await settle(fixture);
   clickButton(fixture, 'Connect a provider');
   await submitNameWithEnter(fixture, 'Secondary');
@@ -185,6 +195,8 @@ Promise<void> {
   const name = field(fixture, 'provider-name');
   name.value = value;
   name.dispatchEvent(new Event('input', { bubbles: true }));
+  name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true,
+    cancelable: true }));
   name.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true,
     cancelable: true }));
   await settle(fixture);
@@ -229,7 +241,12 @@ it('keeps typed key text after a lost reply and clears it after Check status con
     await settle(fixture);
     await waitForText(fixture, 'The key outcome is unknown');
 
-    expect(field(fixture, 'replace-provider-key').value).toBe(secret);
+    key.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true,
+      cancelable: true }));
+    await settle(fixture);
+    expect(keyPosts).toBe(1);
+    expect(field(fixture, 'replace-provider-key').type).toBe('password');
+    expect(field(fixture, 'replace-provider-key').value === secret).toBe(true);
     expect(screenElement(fixture).textContent).not.toContain(secret);
     expect(screenElement(fixture).querySelector('[role="status"]')?.textContent)
       .toContain('could not tell whether key save was recorded');
@@ -330,7 +347,108 @@ it('keeps typed key text when the server refuses a save', async () => {
   await settle(fixture);
   await waitForText(fixture, 'The key was refused. Check the value.');
 
-  expect(field(fixture, 'replace-provider-key').value).toBe(secret);
+  expect(field(fixture, 'replace-provider-key').type).toBe('password');
+  expect(field(fixture, 'replace-provider-key').value === secret).toBe(true);
   expect(screenElement(fixture).textContent).not.toContain(secret);
   expect(screenElement(fixture).textContent).toContain('The key was refused. Check the value.');
+});
+
+
+it('keeps one provider after Back, an attempted name edit and Next', async () => {
+  const commands: Record<string, unknown>[] = [];
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.method === 'POST') {
+      commands.push(readRecord(request.body));
+      return reply({ status: 'appended', revision: 1 });
+    }
+    if (request.url.includes('/changes/')) {
+      return reply({ status: 'appended', operation: 'provider.created',
+        projection: { content: 'current', iam: 'current' } });
+    }
+    if (request.url.startsWith('/api/org/providers/')) {
+      const created = commands.at(-1);
+      return reply({ rows: [provider(String(created?.['providerId']), 'Primary')] });
+    }
+    return reply(emptyProviderRead);
+  });
+  clickButton(fixture, 'Connect a provider');
+  await submitNameWithEnter(fixture, 'Primary');
+  clickDialogButton(fixture, 'Back');
+  await settle(fixture);
+  expect(field(fixture, 'provider-name').readOnly).toBe(true);
+  await submitNameWithEnter(fixture, 'Edited name');
+  await settle(fixture);
+  expect(commands).toHaveLength(1);
+  expect(screenElement(fixture).querySelector('dialog[open]')?.textContent)
+    .toContain('Save the provider key');
+});
+
+const statusLabels = [
+  ['needs_key', 'Needs a key'],
+  ['saved_unverified', 'Saved, not verified'],
+  ['connected_not_tested', 'Connected, not tested'],
+  ['ready', 'Model answered'],
+  ['model_test_fail', 'Model test failed'],
+  ['model_test_unknown', 'Model test outcome unknown'],
+  ['model_test_budget_refused', 'Model test refused by budget'],
+];
+
+it.each(statusLabels)('shows server status %s as %s', async (status, label) => {
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    return reply({ ...emptyProviderRead, rows: [{ ...provider('one', 'Primary'), status }] });
+  });
+  expect(screenElement(fixture).querySelector('.verification-fact')?.textContent).toBe(label);
+});
+
+it('keeps the key saved time after a refresh with a later load time', async () => {
+  let reads = 0;
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    reads += 1;
+    return reply({ ...emptyProviderRead, loadedAt: reads === 1
+      ? '2026-10-07T09:00:00.000Z' : '2026-10-07T10:00:00.000Z',
+      rows: [provider('one', 'Primary')] });
+  });
+  clickButton(fixture, 'Refresh');
+  await settle(fixture);
+  expect(reads).toBe(2);
+  expect(screenElement(fixture).querySelector('.connection-fact')?.textContent).toContain('08:00');
+  expect(screenElement(fixture).querySelector('.connection-fact')?.textContent).not.toContain('10:00');
+});
+
+it('returns focus to the row action after cancelling key replacement', async () => {
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    return reply({ ...emptyProviderRead, rows: [provider('one', 'Primary')] });
+  });
+  const action = screenElement(fixture).querySelector('.row-action');
+  if (!(action instanceof HTMLButtonElement)) throw new Error('Missing row action');
+  const bounds = [new DOMRect()];
+  function item(index: number): DOMRect | null {
+    return bounds[index] ?? null;
+  }
+  const rectangles = Object.assign(bounds, { item });
+  vi.spyOn(action, 'getClientRects').mockReturnValue(rectangles);
+  action.focus();
+  action.click();
+  await settle(fixture);
+  clickDialogButton(fixture, 'Cancel');
+  await settle(fixture);
+  expect(document.activeElement).toBe(action);
+});
+
+
+it('prevents a native key form submit from putting the key in a URL', async () => {
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    return reply({ ...emptyProviderRead, rows: [provider('one', 'Primary')] });
+  });
+  clickButton(fixture, 'Replace key');
+  const form = field(fixture, 'replace-provider-key').closest('form');
+  if (!form) throw new Error('Missing key form');
+  const event = new Event('submit', { bubbles: true, cancelable: true });
+  form.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(true);
 });

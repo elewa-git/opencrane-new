@@ -22,10 +22,26 @@ The browser never reads a saved key back.
 | MOD-25 | Replacement writes a new `provider.key_saved` event at the expected revision. | The API has no command to revoke the old key at the provider. |
 | MOD-26 | The original replacement command status and current revision. | The API does not report a competing editor's name. |
 
+## Differences kept in the screens
+
+The setup uses a centred modal on desktop. Key replacement shows an uncertain
+save inside that modal. The list uses separate saved, reachability and model-answer
+facts. Saved times come from the saved fact, not the time of the latest refresh.
+
 ## Checks
+
+All checks ran with `nice -n 10`. Captures use intercepted replies only.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Install | PASS | `nice -n 10 npm ci` completed. |
-| Provider list and key specs | PASS | Five specs passed, including two creates, Enter, a lost reply and a refused save. |
-| Angular build | PASS | `nice -n 10 npm run build -w apps/web` completed. |
+| Rebase onto main | PASS | Rebase completed; `origin/main` is an ancestor of the branch. |
+| Lint | NOT RUN | Final check is still running. |
+| Typecheck | PASS | All workspaces completed; the final web check also completed. |
+| Web suite | PASS | 453 tests passed; the final provider run passed all 16 specs. |
+| Failing-first and guard removal | PASS | Lost key reply then Enter, Back then Next, all seven status labels, saved time, healthy refresh, two quick Enters, focus return and native submit each failed with the matching protection removed. All protections were restored. |
+| Angular build | PASS | Build completed with existing bundle warnings. |
+| Provider routes | PASS | 56 tests passed with local fake upstreams. An earlier run had one timeout and one 503; the separate rerun passed. |
+| Event catalogue | PASS | All 98 registered event types match the catalogue. |
+| Phone and desktop captures | PASS | Nine list, replacement and connect captures at 1280, 390 and 320 pixels; no horizontal overflow. See `list-key-captures/`. |
+| F1–F5 | NOT RUN | These regression scripts run on the second branch. |
+| Fresh-install provider journey | NOT RUN | No owner credentials or paid provider request was used. |

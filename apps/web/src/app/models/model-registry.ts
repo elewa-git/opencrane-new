@@ -85,6 +85,7 @@ export class ModelsScreen implements OnInit, OnDestroy {
   protected async load(): Promise<void> {
     if (this.listReadInFlight || this.loadState() === 'access') return;
     this.listReadInFlight = true;
+    this.liveStatus.set('Refreshing providers.');
     const hadRows = this.loadedAt() !== undefined;
     this.loadState.set(hadRows ? 'retrying' : 'loading');
     const [providerResult, registryResult] = await Promise.all([
@@ -118,7 +119,7 @@ export class ModelsScreen implements OnInit, OnDestroy {
     this.loadedAt.set(providerResult.value.loadedAt);
     this.refreshError.set(false);
     this.loadState.set('ready');
-    if (!hadRows) this.liveStatus.set('Providers loaded.');
+    this.liveStatus.set('Providers loaded.');
   }
 
   protected openSetup(opener: HTMLElement): void {
@@ -187,7 +188,12 @@ export class ModelsScreen implements OnInit, OnDestroy {
 
   protected async createProvider(): Promise<void> {
     const name = this.draft().name.trim();
-    if (!name || this.busy()) return;
+    if (!name || this.busy() || this.pendingCreates()[this.providerIdDraft()]) return;
+    if (this.providerFor(this.providerIdDraft())) {
+      this.step.set('key');
+      this.focusStepHeading();
+      return;
+    }
     const id = providerId();
     const pending = { commandId: commandId(), expectedRevision: 0 };
     this.pendingCreates.update(current => ({ ...current, [id]: pending }));
@@ -218,6 +224,7 @@ export class ModelsScreen implements OnInit, OnDestroy {
     if (result.kind === 'ok' && result.value.operation === 'provider.created'
       && this.changeIsCurrent(result.value.projection)) {
       this.pendingCreates.update(current => without(current, id));
+      await this.refreshProvider(id);
       this.resultText.set('Provider name saved. Continue to enter its key.');
       this.result.set('confirmed');
       this.step.set('key');
@@ -234,11 +241,16 @@ export class ModelsScreen implements OnInit, OnDestroy {
   protected async saveKey(): Promise<void> {
     const id = this.providerIdDraft();
     const key = this.keyDraft();
+    // Keep the original reference until the server settles this save.
+    if (this.pendingKeys()[id]) {
+      this.keyError.set('Check this save before sending it again.');
+      return;
+    }
     if (!id || this.busy() || !key) {
       if (!key) this.keyError.set('Enter a key before saving.');
       return;
     }
-    const pending = { commandId: commandId(), expectedRevision: 1 };
+    const pending = { commandId: commandId(), expectedRevision: this.providerFor(id)?.revision ?? 1 };
     this.pendingKeys.update(current => ({ ...current, [id]: pending }));
     await this.sendKey(id, pending, key, false);
   }
@@ -247,6 +259,10 @@ export class ModelsScreen implements OnInit, OnDestroy {
     const id = this.replaceProviderId();
     const provider = this.providerFor(id);
     const key = this.replaceKeyDraft();
+    if (id && this.pendingKeys()[id]) {
+      this.replaceKeyError.set('Check this save before sending it again.');
+      return;
+    }
     if (!id || !provider || this.busy() || !key) {
       if (!key) this.replaceKeyError.set('Enter a key before saving.');
       return;
@@ -344,13 +360,11 @@ export class ModelsScreen implements OnInit, OnDestroy {
   }
 
   protected statusFor(provider: ProviderRow): string {
-    if (!provider.saved) return 'Needs a key';
-    if (provider.modelAnswer?.outcome === 'pass') return 'Model answered';
-    if (provider.reachable?.outcome === 'pass' || provider.modelAnswer?.outcome === 'skipped') {
-      return 'Connected, not tested';
-    }
-    if (provider.reachable) return `Reachability ${provider.reachable.outcome}`;
-    return 'Saved, not verified';
+    return providerStatusLabels[provider.status] ?? 'Status not supplied';
+  }
+
+  protected savedWhen(provider: ProviderRow): string {
+    return formatTime(provider.saved?.time);
   }
 
   protected setupTitle(): string {
@@ -376,7 +390,8 @@ export class ModelsScreen implements OnInit, OnDestroy {
   private async refreshProvider(id: string): Promise<void> {
     const result = await readProvider(id, this.request.signal);
     if (result.kind === 'ok') {
-      this.providers.update(rows => rows.map(replaceProvider(result.value)));
+      const remaining = this.providers().filter(isOtherProvider(id));
+      this.providers.set([...remaining, result.value]);
     }
   }
 
@@ -468,11 +483,21 @@ function matchesProvider(id: string | undefined): (provider: ProviderRow) => boo
   return provider => provider.providerId === id;
 }
 
-function replaceProvider(updated: ProviderRow): (provider: ProviderRow) => ProviderRow {
-  return provider => provider.providerId === updated.providerId ? updated : provider;
-}
-
 function focusProviderStepHeading(): void {
   const heading = document.getElementById('provider-step-title');
   heading?.focus();
 }
+
+function isOtherProvider(id: string): (provider: ProviderRow) => boolean {
+  return provider => provider.providerId !== id;
+}
+
+const providerStatusLabels: Record<string, string> = {
+  needs_key: 'Needs a key',
+  saved_unverified: 'Saved, not verified',
+  connected_not_tested: 'Connected, not tested',
+  ready: 'Model answered',
+  model_test_fail: 'Model test failed',
+  model_test_unknown: 'Model test outcome unknown',
+  model_test_budget_refused: 'Model test refused by budget',
+};

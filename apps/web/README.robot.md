@@ -164,8 +164,12 @@ aborts reads, clears the policy and focuses the shared access-lost heading. Publ
 grants and review marking wait for server support. The add flow offers remote URLs;
 catalogue and hosted packages remain unavailable.
 
-`/org/models` is Models & providers: the pinned registry remains here, with provider
-and routing editing explicitly unavailable. `/org/spending` shows the existing budget
+`/org/models` is Models & providers. Owners and admins can create provider connections
+and save or replace their keys. The browser keeps one pending command per provider
+and checks its original command id after a lost reply. Enter uses the same pending
+guard as the save button. Key fields stay as typed after refused or lost replies
+and clear after a 200 receipt. List status comes from the server status field.
+Key saved times come from the saved fact and stay unchanged during refresh. `/org/spending` shows the existing budget
 summary and editor, then lists held spend before the budget cards. It displays global
 and configured paying-group/assistant monthly ceilings, current charges and held
 reservations. It edits whole euro cents through `/api/org/models`. Running calls stay

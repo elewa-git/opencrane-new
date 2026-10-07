@@ -63,7 +63,9 @@
               </span>
               <span><strong>{{ providerTitle(provider) }}</strong><small>{{ provider.name }}</small></span>
             </span>
-            <span class="connection-fact">{{ provider.saved ? 'Key saved' : 'Needs a key' }}</span>
+            <span class="connection-fact">{{ provider.saved ? 'Key saved' : 'Needs a key' }}
+              @if (provider.saved) { <small>{{ savedWhen(provider) }}</small> }
+            </span>
             <span class="model-fact">{{ provider.enabledModels.length }} enabled of {{ modelCount() }}</span>
             <span class="verification-fact">{{ statusFor(provider) }}</span>
           </div>
@@ -102,7 +104,7 @@
         {{ step() === 'provider' ? 'Provider details' : 'Save the provider key' }}
       </h3>
       @if (step() === 'provider') {
-        <form class="step-form" (ngSubmit)="createProvider()">
+        <form class="step-form" novalidate (submit)="$event.preventDefault()">
           <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">Next</button>
           <fieldset>
             <legend>Provider</legend>
@@ -119,7 +121,7 @@
           </fieldset>
           <label class="field-label" for="provider-name">Connection name <span>Required</span></label>
           <input id="provider-name" class="text-field" name="providerName" required maxlength="200"
-            [value]="draft().name" (input)="nameChanged($event)"
+            [readonly]="!!providerFor(providerIdDraft())" [value]="draft().name" (input)="nameChanged($event)"
             (keydown.enter)="enterProviderName($event)" />
           @if (pendingCreates()[providerIdDraft()]; as pendingCreate) {
             <p class="unknown-copy">Provider creation is still being checked. Reference:
@@ -131,7 +133,7 @@
         </form>
       }
       @if (step() === 'key') {
-        <form class="step-form" (ngSubmit)="saveKey()">
+        <form class="step-form" novalidate (submit)="$event.preventDefault()">
           <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">Save key</button>
           <label class="field-label" for="provider-key">API key <span>Required</span></label>
           <p class="field-help">Paste once. The secret service stores it. It is never read back.</p>
@@ -179,7 +181,7 @@
     <div class="replace-content">
       <p>The old key is not shown. New calls use the new key once it is accepted.</p>
       <p>Existing verification evidence becomes invalid; verify again.</p>
-      <form (ngSubmit)="replaceKey()">
+      <form novalidate (submit)="$event.preventDefault()">
         <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">
           Replace key
         </button>
