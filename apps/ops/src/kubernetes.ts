@@ -1,9 +1,14 @@
 import { spawn, execFile as execFileCallback } from 'node:child_process';
 import type { IssuedToken } from '@opencrane/auth';
-import { promisify } from 'node:util';
+import { isDeepStrictEqual, promisify } from 'node:util';
+import { readFileSync } from 'node:fs';
 
 const execFile = promisify(execFileCallback);
 type Resource = object;
+const checkedTemplatePath = new URL('../../computer/sandbox-template.json', import.meta.url);
+const checkedTemplateJson = readFileSync(checkedTemplatePath, 'utf8');
+const checkedTemplate: unknown = JSON.parse(checkedTemplateJson);
+const checkedPodSpec = value(checkedTemplate, 'spec', 'podTemplate', 'spec');
 
 function value(object: unknown, ...path: string[]): unknown {
   let current = object;
@@ -18,6 +23,7 @@ export interface SandboxState {
   uid: string;
   ready: boolean;
   suspended: boolean;
+  outdated?: boolean;
   podUid?: string;
 }
 
@@ -66,7 +72,7 @@ export class SandboxClient {
     return parsed;
   }
 
-  async claim(name: string, assistantId: string): Promise<string> {
+  async claim(name: string, assistantId: string, replaceOutdated = false): Promise<string> {
     const existing = await this.get('sandboxclaim', name);
     if (!existing) {
       await this.input(['create', '-f', '-'], {
@@ -88,6 +94,10 @@ export class SandboxClient {
         const sandbox = await this.get('sandbox', sandboxName);
         const uid = value(sandbox, 'metadata', 'uid');
         if (typeof uid === 'string' && await this.get('pvc', `home-${sandboxName}`)) {
+          if (replaceOutdated && this.isOutdated(sandbox)) {
+            await this.replace(name, assistantId);
+            continue;
+          }
           await this.bindClaim(name, assistantId, claim, sandbox);
           return uid;
         }
@@ -95,6 +105,56 @@ export class SandboxClient {
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
     throw new Error('Timed out waiting for Sandbox and PVC');
+  }
+
+  private isOutdated(sandbox: unknown): boolean {
+    const app = value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels', 'app');
+    const checkedApp = value(checkedTemplate, 'spec', 'podTemplate', 'metadata', 'labels', 'app');
+    if (app !== checkedApp) {
+      return true;
+    }
+    const podSpec = value(sandbox, 'spec', 'podTemplate', 'spec');
+    return !isDeepStrictEqual(podSpec, checkedPodSpec);
+  }
+
+  async replace(name: string, assistantId: string): Promise<void> {
+    const sandbox = await this.get('sandbox', name);
+    if (!sandbox) {
+      return;
+    }
+    const labels = value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels');
+    if (value(labels, 'sandbox.users.io/assistant') !== assistantId
+      || value(labels, 'sandbox.users.io/computer') !== name) {
+      throw new Error('Retained Sandbox belongs to another computer or assistant');
+    }
+    const pvc = await this.get('pvc', `home-${name}`);
+    if (!pvc || value(pvc, 'metadata', 'labels', 'sandbox.users.io/computer') !== name) {
+      throw new Error('Retained computer has no matching home volume');
+    }
+    const sandboxUid = value(sandbox, 'metadata', 'uid');
+    const owners = value(pvc, 'metadata', 'ownerReferences');
+    const references: unknown[] = Array.isArray(owners) ? owners : [];
+    function belongsToSandbox(owner: unknown) {
+      return value(owner, 'uid') === sandboxUid && value(owner, 'kind') === 'Sandbox';
+    }
+    function belongsToAnotherResource(owner: unknown) {
+      return !belongsToSandbox(owner);
+    }
+    if (references.some(belongsToAnotherResource)) {
+      throw new Error('Retained home volume belongs to another resource');
+    }
+    if (references.length > 0) {
+      const patch = { metadata: {
+        resourceVersion: value(pvc, 'metadata', 'resourceVersion'), ownerReferences: [],
+      } };
+      // Detach the disk first. Orphan deletion would need an update to the old Sandbox,
+      // which the unchanged admission rules refuse even for Kubernetes itself.
+      await this.input(['patch', `pvc/home-${name}`, '--type=merge',
+        '-p', JSON.stringify(patch)], {});
+    }
+    await this.run('delete', `sandbox/${name}`, '--cascade=background', '--wait=true');
+    this.forgetMode(name);
+    this.delivered.delete(name);
   }
 
   private async bindClaim(name: string, assistantId: string, claim: unknown, sandbox: unknown) {
@@ -142,7 +202,9 @@ export class SandboxClient {
     const podUid = value(pod, 'metadata', 'uid');
     const podConditions = value(pod, 'status', 'conditions');
     const podReady = Array.isArray(podConditions) && podConditions.some((c: unknown) => value(c, 'type') === 'Ready' && value(c, 'status') === 'True');
-    return { uid, ready: value(ready, 'status') === 'True' && podReady,
+    return {
+      uid, outdated: this.isOutdated(sandbox),
+      ready: value(ready, 'status') === 'True' && podReady,
       suspended: value(condition('Suspended'), 'status') === 'True',
       ...(typeof podUid === 'string' ? { podUid } : {}) };
   }

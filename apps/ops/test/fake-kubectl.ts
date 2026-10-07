@@ -7,7 +7,10 @@ export async function fakeKubectl(script = '') {
   const calls = `${directory}/calls`;
   const executable = `#!/bin/sh
 printf '%s\\n' "$*" >> '${calls}'
-cat >/dev/null
+case "$*" in
+  *' get '*|*' delete '*) ;;
+  *) cat >/dev/null ;;
+esac
 ${script}
 `;
   await writeFile(`${directory}/kubectl`, executable, { mode: 0o700 });

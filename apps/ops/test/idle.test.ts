@@ -2,6 +2,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setTimeout as delay } from 'node:timers/promises';
+import * as observability from '@opencrane/observability';
 import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
 import { natsFixture } from '@opencrane/event-store/testing';
@@ -9,7 +10,7 @@ import { envelope } from '@opencrane/models';
 import { expect, it, vi } from 'vitest';
 import { fakeKubectl } from './fake-kubectl.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
-import { history, watchComputers } from '../src/lifecycle.ts';
+import { history, suspendComputer, watchComputers } from '../src/lifecycle.ts';
 
 async function computerFixture({ suspended = true } = {}) {
   const nats = await natsFixture();
@@ -57,6 +58,7 @@ async function leavesIdleComputerAlone() {
   try {
     await until(appliedSuspension);
     reads.mockClear();
+    state.mockClear();
     subscriptions.mockClear();
     mode.mockClear();
     await delay(550);
@@ -116,11 +118,10 @@ async function limitsIdleChecksDuringRetries() {
     state.mockRejectedValueOnce(new Error('Temporary Kubernetes failure'));
     now = initialTime + 2000;
     const previousAttempts = state.mock.calls.length;
-    async function threeMoreAttemptsFinishedOrSuspended() {
-      if (state.mock.calls.length >= previousAttempts + 3) return true;
-      return computerIsSuspended();
+    function nextAttemptFinished() {
+      return state.mock.calls.length >= previousAttempts + 1;
     }
-    await until(threeMoreAttemptsFinishedOrSuspended, 3000);
+    await until(nextAttemptFinished, 1500);
     expect(await computerIsSuspended()).toBe(false);
     now = initialTime + 30_000;
     await until(computerIsSuspended, 1000);
@@ -334,7 +335,7 @@ async function correctsSuspendedComputerDrift() {
       return commands.length >= 2;
     }
     await until(driftWasCorrected, 1500);
-    expect(state).toHaveBeenCalledTimes(1);
+    expect(state).toHaveBeenCalledTimes(2);
     expect(sink).not.toHaveBeenCalled();
   } finally {
     stop.abort();
@@ -348,3 +349,110 @@ async function correctsSuspendedComputerDrift() {
 
 it('corrects an outside mode change on a suspended computer after 60 seconds',
   correctsSuspendedComputerDrift);
+
+async function backsOffRefusedModePatches() {
+  const fixture = await computerFixture();
+  const { nats, directory, stop, tokens } = fixture;
+  let now = Date.now();
+  function clock() {
+    return now;
+  }
+  vi.spyOn(Date, 'now').mockImplementation(clock);
+  const logger = observability.createLogger('retry-test', { level: 'silent' });
+  const log = vi.spyOn(logger, 'error');
+  vi.spyOn(observability, 'createLogger').mockReturnValue(logger);
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const sandbox = { uid: 'sandbox', ready: false, suspended: true };
+  vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
+  const refusal = new Error('ValidatingAdmissionPolicy denied request');
+  const mode = vi.spyOn(kube, 'mode').mockRejectedValue(refusal);
+  const sink = vi.fn().mockResolvedValue(undefined);
+  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  function attemptedOnce() {
+    return log.mock.calls.length >= 1;
+  }
+  function attemptedTwice() {
+    return log.mock.calls.length >= 2;
+  }
+  function attemptedThreeTimes() {
+    return log.mock.calls.length >= 3;
+  }
+  try {
+    await until(attemptedOnce);
+    await delay(600);
+    expect(mode).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledTimes(1);
+    now += 1000;
+    await until(attemptedTwice, 1000);
+    now += 1999;
+    await delay(600);
+    expect(mode).toHaveBeenCalledTimes(2);
+    expect(log).toHaveBeenCalledTimes(2);
+    now += 1;
+    await until(attemptedThreeTimes, 1000);
+    expect(mode).toHaveBeenCalledTimes(3);
+    for (const call of log.mock.calls) {
+      expect(call[0]).toMatchObject({ computerId: 'computer', err: refusal });
+    }
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+it('backs off refused mode patches and logs the computer once for each retry',
+  backsOffRefusedModePatches);
+
+async function replacesRunningComputerAtNextSuspend() {
+  const fixture = await computerFixture({ suspended: false });
+  const { nats, directory, stop, tokens, subject, record } = fixture;
+  const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
+  const sandbox = { uid: 'sandbox', podUid: 'old-pod', ready: true,
+    suspended: false, outdated: true };
+  vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
+  const mode = vi.spyOn(kube, 'mode').mockResolvedValue();
+  const replace = vi.spyOn(kube, 'replace').mockResolvedValue();
+  vi.spyOn(kube, 'claim').mockResolvedValue('new-sandbox');
+  const sink = vi.fn().mockResolvedValue(undefined);
+  const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
+  function computerStillRunning() {
+    return sink.mock.calls.length > 0;
+  }
+  function computerReplaced() {
+    return mode.mock.calls.length > 0;
+  }
+  try {
+    await until(computerStillRunning);
+    expect(replace).not.toHaveBeenCalled();
+    expect(mode).not.toHaveBeenCalled();
+    const rows = await history(nats.store, subject);
+    const ready = rows.at(-1)!.event;
+    const turn = { conversationId: 'chat', turnId: 'turn', threadId: 'thread',
+      requesterId: 'alice', task: 'chat_turn' };
+    await record('computer.turn_started', turn);
+    const busy = await suspendComputer(nats.store, {
+      assistantId: 'assistant', computerId: 'computer', latest: ready, ready,
+    });
+    expect(busy.id).toBe(ready.id);
+    expect(replace).not.toHaveBeenCalled();
+    await record('computer.turn_closed', { ...turn, status: 'completed' });
+    await suspendComputer(nats.store, {
+      assistantId: 'assistant', computerId: 'computer', latest: ready, ready,
+    });
+    await until(computerReplaced, 1500);
+    expect(replace).toHaveBeenCalledExactlyOnceWith('computer', 'assistant');
+    expect(mode).toHaveBeenCalledExactlyOnceWith('computer', 'Suspended');
+  } finally {
+    stop.abort();
+    await work;
+    vi.restoreAllMocks();
+    await nats.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+it('keeps an outdated running computer until its next committed suspend',
+  replacesRunningComputerAtNextSuspend);

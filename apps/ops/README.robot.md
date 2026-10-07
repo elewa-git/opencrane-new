@@ -113,9 +113,9 @@ single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
 path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
 Run one active lifecycle reconciler per silo. Commands append intent before any
 Kubernetes effect; restart retries claims, modes and credential delivery from events.
-The Kubernetes identity can create/get claims, get/patch Sandboxes, get PVCs, list
-Pods and POST the Pod proxy subresource in its namespace. It cannot exec, read Secrets
-or mutate Pods, templates or pools. Install `node infra/dev-stack/computer-admission.mjs <NAMESPACE>` before claims: fail-closed CEL policies pin the computer image and
+The Kubernetes identity can create/get claims, get/patch/delete Sandboxes, get/patch
+PVCs, list Pods, exec in Pods and POST the Pod proxy subresource in its namespace.
+It cannot read Secrets or change Pod settings, templates or pools. Install `node infra/dev-stack/computer-admission.mjs <NAMESPACE>` before claims: fail-closed CEL policies pin the computer image and
 security fields and restrict worker Sandbox patches to `spec.operatingMode`.
 Kubernetes RBAC has no field-level patch permission or operating-mode subresource.
 The policies cover all Pods in the dedicated computer namespace without a bypassable
@@ -220,16 +220,44 @@ events after its last processed position. It keeps computer history and conversa
 activity in memory. These copies can be rebuilt from events.
 
 A successful mode patch is remembered by the Kubernetes client. The same mode is
-not patched again; a failed patch is retried. A reported suspension or a new claim
+not patched again; a failed change waits before retrying. Each computer retries after
+1, 2, 4, 8, 16, 32 and then 60 seconds. A successful check clears that delay. Each
+failed attempt logs the computer name and the wait time. Other computers keep running. A reported suspension or a new claim
 or loss event clears the remembered mode so outside changes cannot stop recovery.
 
 Ready computers check Pod identity and renew credentials at most every 30 seconds
 while the event log is unchanged. New events trigger a check on the next 250 ms
 poll. Suspended computers check for outside mode changes every 60 seconds and
 restore suspension when needed. Lost and retired computers wait for another
-lifecycle event. Claims and resumes keep retrying every 250 ms until ready.
+lifecycle event. Claims and resumes are checked every 250 ms until ready, unless a failed change
+requires a longer wait.
 
 Idle checks run at most once every 30 seconds, including during Kubernetes retries.
 They read any new events after the Pod check so a newly posted message prevents
 suspension. A pending message prevents suspension until a completed or failed turn
 is recorded.
+
+## Computer image updates
+
+The worker compares the retained Sandbox Pod settings with
+`apps/computer/sandbox-template.json`, the same checked template used by admission.
+A computer with older settings is replaced at a committed suspension or resume,
+or while repairing a claim. Open `computer.turn_started` events prevent replacement
+until their matching `computer.turn_closed` events arrive. A Ready computer keeps
+its Sandbox and Pod until its next committed suspension, even after worker restart.
+
+Replacement checks the computer and assistant labels and the named home PVC.
+It removes that PVC's Sandbox owner with a resource-version check before deleting
+the Sandbox. This keeps `home-<computer>` and its files. Kubernetes deletes the old
+Pod; the claim controller creates the new Sandbox from the installed checked template.
+A suspension stops any surviving old Pod before resume. Orphan deletion cannot be
+used here: Kubernetes would have to remove its finaliser with an update to the old
+Sandbox, and strict admission refuses that update too. The worker needs PVC patch
+and Sandbox delete permission for this sequence. Admission rules are unchanged.
+
+Run the live tests only after claiming a secondary slot with
+`infra/dev-stack/claim.sh`. Set `DEV_STACK_ID` to its returned id, 1 or 2. The tests
+use `opencrane-dev-<id>` and refuse any other id. Keep that namespace free for the
+tests and use the slot's PostgreSQL service for `PG_TEST_URL`.
+The image-change regression uses two references to the available image so it can
+exercise strict image matching without rebuilding or publishing an image.

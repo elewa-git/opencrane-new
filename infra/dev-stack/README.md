@@ -42,6 +42,7 @@ flowchart LR
 
 1. **A developer starts OpenCrane.** The scripts start the databases and services, then
    start the server, workers and website. The usual start also runs the core browser check.
+   Computers use the checked image after their next pause and keep their home files.
 2. **A developer checks a change.** A browser signs in, sends a chat message and checks
    that the reply remains after a reload. Other checks cover uploads, approvals, budgets
    and the computer screen. Budget checks restore the test limits even if a browser step fails.

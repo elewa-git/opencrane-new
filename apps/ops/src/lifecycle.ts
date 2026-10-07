@@ -141,16 +141,25 @@ async function updateComputers(store: EventStore, kube: SandboxClient,
   }
 }
 
+function hasOpenComputerTurns(events: StoredEvent[]): boolean {
+  const openTurns = new Set<string>();
+  for (const { event } of events) {
+    if (event.type === 'computer.turn_started') {
+      openTurns.add(field(event.data, 'turnId'));
+    }
+    if (event.type === 'computer.turn_closed') {
+      openTurns.delete(field(event.data, 'turnId'));
+    }
+  }
+  return openTurns.size > 0;
+}
+
 export async function suspendComputer(store: Store, state: ComputerState): Promise<EventEnvelope> {
   const subject = `computer-${state.assistantId}`;
   const events = await history(store, subject);
   const current = events.findLast(r => isLifecycleEvent(r.event))!.event;
-  const busy = new Set<string>();
-  for (const { event } of events) {
-    if (event.type === 'computer.turn_started') busy.add(field(event.data, 'turnId'));
-    if (event.type === 'computer.turn_closed') busy.delete(field(event.data, 'turnId'));
-  }
-  if (current.id !== state.latest.id || current.type !== 'computer.ready' || busy.size) return current;
+  if (current.id !== state.latest.id || current.type !== 'computer.ready'
+    || hasOpenComputerTurns(events)) return current;
   return append(store, current, events, 'computer.suspended', subject,
     { assistantId: state.assistantId, computerId: state.computerId });
 }
@@ -173,48 +182,88 @@ export async function resumeComputer(store: Store, tokens: Tokens,
     tokenId: field(grant.data, 'tokenId') });
 }
 
-async function suspendSandbox(kube: SandboxClient, computerId: string, checkDrift: boolean) {
-  if (checkDrift) {
-    const sandbox = await kube.state(computerId);
-    if (sandbox && !sandbox.suspended) kube.forgetMode(computerId);
+async function suspendSandbox(kube: SandboxClient, state: ComputerState,
+  allowReplacement: boolean, checkDrift: boolean) {
+  const sandbox = await kube.state(state.computerId);
+  if (sandbox?.outdated && allowReplacement) {
+    await kube.replace(state.computerId, state.assistantId);
   }
-  await kube.mode(computerId, 'Suspended');
+  if (!sandbox || (sandbox.outdated && allowReplacement)) {
+    await kube.claim(state.computerId, state.assistantId, allowReplacement);
+  }
+  if (checkDrift && sandbox && !sandbox.suspended) kube.forgetMode(state.computerId);
+  await kube.mode(state.computerId, 'Suspended');
 }
 
 async function reconcileComputer(store: EventStore, kube: SandboxClient,
   state: ComputerState, events: StoredEvent[], tokens: Tokens, sink: CredentialSink,
   checkIdle: IdleCheck, checkSuspended: boolean) {
-  const subject = `computer-${state.assistantId}`;
   if (events.findLast(r => isLifecycleEvent(r.event))?.event.id !== state.latest.id) return;
-  const data = { assistantId: state.assistantId, computerId: state.computerId };
+  const allowReplacement = !hasOpenComputerTurns(events);
   if (state.latest.type === 'computer.suspended') {
-    await suspendSandbox(kube, state.computerId, checkSuspended);
+    await suspendSandbox(kube, state, allowReplacement, checkSuspended);
     return;
   }
   if (['computer.lost', 'computer.retired'].includes(state.latest.type)) return;
-  if (state.latest.type === 'computer.claimed') await kube.claim(state.computerId, state.assistantId);
+  if (state.latest.type === 'computer.ready') {
+    await reconcileReadyComputer(store, kube, state, events, tokens, sink, checkIdle);
+    return;
+  }
+  await reconcileStartingComputer(store, kube, state, events, tokens, sink, checkIdle,
+    allowReplacement);
+}
+
+async function reconcileReadyComputer(store: EventStore, kube: SandboxClient,
+  state: ComputerState, events: StoredEvent[], tokens: Tokens, sink: CredentialSink,
+  checkIdle: IdleCheck) {
   const sandbox = await kube.state(state.computerId);
-  // Missing bindings follow the loss reaction, which re-claims and rotates the grant.
+  if (sandbox && !sandbox.outdated) {
+    if (sandbox.suspended) kube.forgetMode(state.computerId);
+    await kube.mode(state.computerId, 'Running');
+  }
+  // Keep a running computer until its next committed suspension.
+  await observeReady(store, state, events, sandbox, tokens, sink, checkIdle);
+}
+
+async function reconcileStartingComputer(store: EventStore, kube: SandboxClient,
+  state: ComputerState, events: StoredEvent[], tokens: Tokens, sink: CredentialSink,
+  checkIdle: IdleCheck, allowReplacement: boolean) {
+  if (state.latest.type === 'computer.claimed') {
+    await kube.claim(state.computerId, state.assistantId, allowReplacement);
+  }
+  const sandbox = await kube.state(state.computerId);
+  if (sandbox?.outdated && state.latest.type === 'computer.resumed' && allowReplacement) {
+    await kube.replace(state.computerId, state.assistantId);
+    await kube.claim(state.computerId, state.assistantId, allowReplacement);
+    // Stop any surviving old Pod before resuming from the retained home volume.
+    await kube.mode(state.computerId, 'Suspended');
+    return;
+  }
+  // Repair missing bindings through the loss reaction, which rotates the computer grant.
   if (!sandbox) {
     await observeReady(store, state, events, sandbox, tokens, sink, checkIdle);
     return;
   }
-  if (['computer.claimed', 'computer.resumed'].includes(state.latest.type) && sandbox.podUid && sandbox.podUid === readyPodUid(state)) {
+  if (sandbox.podUid && sandbox.podUid === readyPodUid(state)) {
     await kube.mode(state.computerId, 'Suspended');
     return;
   }
   if (sandbox.suspended) kube.forgetMode(state.computerId);
   await kube.mode(state.computerId, 'Running');
-  if (['computer.claimed', 'computer.resumed'].includes(state.latest.type)) {
-    if (sandbox.ready && sandbox.podUid) {
-      await sink(state.computerId, await tokens.computer({ silo: state.latest.silo, ...data, generation: generation(events),
-        tokenId: field(state.latest.data, 'tokenId') }));
-      await append(store, state.latest, events, 'computer.ready', subject,
-        { ...data, generation: generation(events), podUid: sandbox.podUid, sandboxUid: sandbox.uid });
-    }
-    return;
+  if (sandbox.ready && sandbox.podUid) {
+    const data = { assistantId: state.assistantId, computerId: state.computerId };
+    const credentialRequest = {
+      silo: state.latest.silo, ...data, generation: generation(events),
+      tokenId: field(state.latest.data, 'tokenId'),
+    };
+    const credential = await tokens.computer(credentialRequest);
+    await sink(state.computerId, credential);
+    const readyData = {
+      ...data, generation: generation(events), podUid: sandbox.podUid, sandboxUid: sandbox.uid,
+    };
+    await append(store, state.latest, events, 'computer.ready', `computer-${state.assistantId}`,
+      readyData);
   }
-  await observeReady(store, state, events, sandbox, tokens, sink, checkIdle);
 }
 
 async function observeReady(store: EventStore, state: ComputerState, events: StoredEvent[],
@@ -264,6 +313,7 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
   const applied = new Map<string, string>();
   const idleChecks = new Map<string, number>();
   const podChecks = new Map<string, number>();
+  const retries = new Map<string, { delayMs: number; nextAttemptAt: number }>();
   async function pollComputers() {
     while (!signal.aborted) {
       const previousPosition = snapshot.position;
@@ -273,6 +323,8 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
         const previous = applied.get(state.computerId);
         const stable = previous === state.latest.id;
         const checkedAt = Date.now();
+        const retry = retries.get(state.computerId);
+        if (retry && checkedAt < retry.nextAttemptAt) continue;
         const lastPodCheck = podChecks.get(state.computerId) ?? -Infinity;
         if (skipComputerCheck(state, stable, eventsMoved, lastPodCheck, checkedAt)) continue;
         async function checkIdleness() {
@@ -290,12 +342,17 @@ export function watchComputers(store: EventStore, kube: SandboxClient,
           const checkSuspended = stable && state.latest.type === 'computer.suspended';
           await reconcileComputer(store, kube, state, events, tokens, sink,
             checkIdleness, checkSuspended);
+          retries.delete(state.computerId);
           applied.set(state.computerId, state.latest.id);
           podChecks.set(state.computerId, checkedAt);
         } catch (error) {
           applied.delete(state.computerId);
-          logger.error({ err: error, computerId: state.computerId },
-            'Computer reconciliation failed; retrying next poll');
+          const delayMs = Math.min((retry?.delayMs ?? 500) * 2, 60_000);
+          const retryState = { delayMs, nextAttemptAt: Date.now() + delayMs };
+          retries.set(state.computerId, retryState);
+          const logFields = { err: error, computerId: state.computerId, retryInMs: delayMs };
+          logger.error(logFields,
+            'Computer reconciliation failed; waiting before retry');
         }
       }
       await delay(250, undefined, { signal }).catch(ignoreStoppedPoll);

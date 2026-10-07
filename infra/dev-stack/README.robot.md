@@ -520,3 +520,15 @@ and budget browser checks, whether they pass or fail. Cleanup uses the authentic
 budget API rather than loading the Spending page. It waits for the budget table to
 catch up before the next step. Monthly test limits are 20,000 cents; the daily global
 limit is 5,000 cents. It attempts every scope and reports any failed restoration.
+
+## Lifecycle image-update tests
+
+The lifecycle worker can delete Sandboxes and patch PVCs in its computer namespace.
+Before deleting a Sandbox with older Pod settings, it removes that Sandbox's ownership
+of the named home PVC. This preserves the disk while the claim controller creates
+from the checked template. Sandbox create and update admission checks stay unchanged.
+
+`apps/ops/test/lifecycle-k3d.test.ts` requires a claimed secondary `DEV_STACK_ID`
+of 1 or 2. It creates and removes that slot's computer namespace and uses disposable
+PostgreSQL databases through `PG_TEST_URL`. Run it while the rest of the slot is
+stopped; it must never use the owner namespace or PostgreSQL service.
