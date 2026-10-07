@@ -29,6 +29,8 @@ type AssistantRow = z.infer<typeof assistantRowSchema>;
 type PendingStage = 'sending' | 'recorded' | 'checking' | 'applying' | 'unknown';
 type PendingCreate = { commandId: string; assistantId: string; groupId: string;
   payingGroupId: string; name: string; grants: Grant[]; stage: PendingStage };
+type CreateCommand = { commandId: string; assistantId: string; groupId: string;
+  payingGroupId: string; name: string; grants: Grant[] };
 type AdminChoices = { group: GroupRow | undefined; groups: GroupRow[];
   assistants: AssistantRow[]; models: string[] };
 type AdminChoicesResult = { kind: 'ok'; value: AdminChoices }
@@ -232,9 +234,11 @@ export class SharedAssistantAdmin implements OnInit, OnDestroy {
 
   private async sendPendingCreate(pendingCreate: PendingCreate): Promise<void> {
     try {
+      const command = createCommand(pendingCreate);
+      const body = JSON.stringify(command);
       const response = await fetch('/api/assistants', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(pendingCreate), signal: this.request.signal,
+        body, signal: this.request.signal,
       });
       if (this.request.signal.aborted) return;
       const failureKind = classifyStatus(response.status, 'POST');
@@ -462,6 +466,12 @@ async function fetchJson(signal: AbortSignal, url: string): Promise<unknown> {
   const response = await fetch(url, { headers: { accept: 'application/json' }, signal });
   if (!response.ok) return { httpStatus: response.status };
   return response.json();
+}
+
+function createCommand(pending: PendingCreate): CreateCommand {
+  return { commandId: pending.commandId, assistantId: pending.assistantId,
+    groupId: pending.groupId, payingGroupId: pending.payingGroupId, name: pending.name,
+    grants: pending.grants };
 }
 
 function isAccessReply(reply: unknown): boolean {

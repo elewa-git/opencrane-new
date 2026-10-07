@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { AssertionError } from 'node:assert';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium, type Browser, type BrowserContext, type Page, type Request as BrowserRequest } from 'playwright';
+import { chromium, type Browser, type BrowserContext, type ConsoleMessage,
+  type Page, type Request as BrowserRequest, type Response as BrowserResponse } from 'playwright';
 import { z } from 'zod';
 import { decodeSession, type AuthConfig } from '@opencrane/auth';
 import { buildServer } from '../../apps/server/src/server.ts';
@@ -30,11 +31,31 @@ export async function enterLoginName(page: Page, name: string) {
 }
 async function login(page: Page, origin: string, user: User, selectRememberedAccount = false, attempt = 0): Promise<void> {
   let step = 'home', transport = '';
-  const failed = (request: BrowserRequest) => {
+  const pageErrors: string[] = [];
+  const failedPaths: string[] = [];
+  const consoleErrors: string[] = [];
+  const badResponses: string[] = [];
+  function failed(request: BrowserRequest): void {
     const code = request.failure()?.errorText ?? '';
     if (/^net::[A-Z_]+$/.test(code)) transport = code;
-  };
+    if (code) failedPaths.push(`${new URL(request.url()).pathname}: ${code}`);
+  }
+  function pageFailed(error: Error): void {
+    pageErrors.push(error.message);
+  }
+  function browserConsole(message: ConsoleMessage): void {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  }
+  function responseFailed(response: BrowserResponse): void {
+    if (response.status() < 400) return;
+    const requestType = response.request().resourceType();
+    if (!['document', 'script', 'stylesheet'].includes(requestType)) return;
+    badResponses.push(`${new URL(response.url()).pathname}: HTTP ${response.status()}`);
+  }
   page.on('requestfailed', failed);
+  page.on('pageerror', pageFailed);
+  page.on('console', browserConsole);
+  page.on('response', responseFailed);
   try {
     await page.bringToFront();
     await page.goto(origin);
@@ -73,12 +94,27 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
       // Credentials may have succeeded before the browser lost the return navigation.
       if (step === 'return' && me.authenticated) { await page.goto(origin); return; }
       page.off('requestfailed', failed);
+      page.off('pageerror', pageFailed);
+      page.off('console', browserConsole);
+      page.off('response', responseFailed);
       return login(page, origin, user, selectRememberedAccount, attempt + 1);
     }
     await page.screenshot({ path: `${directory}/signin-failure.png` });
     const location = new URL(page.url());
-    throw new Error(`Login did not complete at ${step} (${location.origin}${location.pathname}; ${transport})`);
-  } finally { page.off('requestfailed', failed); }
+    const errors = pageErrors.slice(0, 3).join(' | ') || 'none';
+    const failedRequests = failedPaths.slice(0, 5).join(' | ') || 'none';
+    const consoleMessages = consoleErrors.slice(0, 5).join(' | ') || 'none';
+    const errorResponses = badResponses.slice(0, 5).join(' | ') || 'none';
+    throw new Error(`Login did not complete at ${step} `
+      + `(${location.origin}${location.pathname}; ${transport}; `
+      + `page errors: ${errors}; console errors: ${consoleMessages}; `
+      + `failed paths: ${failedRequests}; error responses: ${errorResponses})`);
+  } finally {
+    page.off('requestfailed', failed);
+    page.off('pageerror', pageFailed);
+    page.off('console', browserConsole);
+    page.off('response', responseFailed);
+  }
 }
 async function cookie(context: BrowserContext, config: AuthConfig, origin: string) {
   const session = (await context.cookies(origin)).find((item) => item.name === config.cookieName);

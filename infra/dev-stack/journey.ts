@@ -20,6 +20,7 @@ import { browserChatJourney } from './browser-chat.ts';
 import { browserBudgetJourney, restoreBudgetCeilings } from './browser-budgets.ts';
 import { auditPrompt, browserAuditJourney } from './browser-audit.ts';
 import { browserLiveViewJourney } from './browser-live-view.ts';
+import { browserPhase4, type Phase4Assertion } from './browser-phase4.ts';
 import { chatJourney } from './chat-journey.ts';
 import { browserSessions } from './browser-signin.ts';
 import { namespace, secondary } from './identity.ts';
@@ -42,6 +43,41 @@ let ws: WebSocket | undefined;
 let chat: Awaited<ReturnType<typeof chatJourney>> | undefined;
 let browser: Awaited<ReturnType<typeof browserSessions>> | undefined;
 const identities = new Map<string, { sub: string; cookie: string }>();
+const phase4Assertions: Phase4Assertion[] = [];
+const phase4Attempt = process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual';
+
+async function writePhase4Receipt() {
+  const receiptPath = `${root}/docs/process/p4-journey/run-${phase4Attempt}.json`;
+  await writeFile(receiptPath, JSON.stringify({
+    commit: (await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim(),
+    attempt: phase4Attempt,
+    viewportWidths: [1280, 390],
+    assertions: phase4Assertions,
+  }, null, 2) + '\n', { mode: 0o644 });
+}
+
+async function runPhase4Journey() {
+  assert(browser, 'The Phase 4 journey needs real signed-in browser sessions');
+  try {
+    await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
+      origin, directory, attempt: phase4Attempt, silo, modelStubPort: settings['MODEL_STUB_PORT']!,
+      ownershipMerged: process.env['P4_OWNERSHIP_MERGED'] === 'true',
+      store: events.store, append, assertions: phase4Assertions });
+  } catch (error) {
+    phase4Assertions.push({ id: 'journey.execution', status: 'FAIL',
+      statement: 'The browser checks did not all finish.',
+      evidence: { reason: errorMessage(error) }, screenshots: [] });
+    throw error;
+  } finally {
+    await writePhase4Receipt();
+  }
+  console.log(`PASS Phase 4 browser journey; receipt run-${phase4Attempt}.json`);
+}
+
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return 'The browser journey returned an unknown error.';
+}
 async function until(check: () => Promise<boolean> | boolean, label: string) {
   const deadline = Date.now() + 120_000;
   while (!(await check())) {
@@ -288,6 +324,7 @@ try {
         computer!.assistant_id);
     }
   }
+  await runPhase4Journey();
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });

@@ -4,7 +4,13 @@ import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 const calls: Array<{ body: string; requestId: string }> = [];
+let modelRequests = 0;
 const server = createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/journey-counts') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ modelRequests }));
+    return;
+  }
   if (req.method === 'GET' && req.url === '/approval-calls') {
     res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(calls)); return;
   }
@@ -25,6 +31,7 @@ const server = createServer((req, res) => {
   req.on('data', (chunk: Buffer) => chunks.push(chunk));
   if (req.method !== 'POST' || req.url !== '/v1/responses') { res.writeHead(404); res.end(); return; }
   req.on('end', () => { void (async () => {
+    modelRequests += 1;
     if (process.env['MODEL_STUB_CAPTURE']) appendFileSync(process.env['MODEL_STUB_CAPTURE'], Buffer.concat(chunks).toString() + '\n', { mode: 0o600 });
     const body = JSON.parse(Buffer.concat(chunks).toString()) as { input?: Array<{ type?: string; role?: string; content?: unknown; output?: unknown }> };
     const input = body.input ?? [];

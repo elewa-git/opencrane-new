@@ -222,8 +222,20 @@ async function provisionComputers(settings: Record<string, string>) {
     await run('kubectl', ['create', 'namespace', namespace]);
   }
   if (secondary) {
-    await save('quota.json', JSON.stringify({ apiVersion: 'v1', kind: 'ResourceQuota', metadata: { name: 'journey-limit', namespace },
-      spec: { hard: { pods: '4', 'limits.memory': '2Gi', persistentvolumeclaims: '4', 'requests.storage': '4Gi' } } }));
+    const quota = {
+      apiVersion: 'v1',
+      kind: 'ResourceQuota',
+      metadata: { name: 'journey-limit', namespace },
+      spec: {
+        hard: {
+          pods: '5',
+          'limits.memory': '3Gi',
+          persistentvolumeclaims: '5',
+          'requests.storage': '5Gi',
+        },
+      },
+    };
+    await save('quota.json', JSON.stringify(quota));
     await run('kubectl', ['apply', '-f', `${directory}/quota.json`]);
   }
   await run('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
@@ -402,7 +414,9 @@ async function up(fresh: boolean) {
       ...(tokenBootstrap ? { BOOTSTRAP_TOKEN_FILE: `${directory}/bootstrap-token.json` } : {}),
       MODEL_DECISION_URL: `http://127.0.0.1:${settings['MODEL_DECISION_PORT']}`,
       MINIO_URL: `http://127.0.0.1:${settings['MINIO_PORT']}`, MINIO_CREDENTIALS_FILE: `${directory}/minio-lease.json`, CLAMD_PORT: settings['CLAMD_PORT'] ?? '43310',
-      CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`, KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
+      CONVERSATION_KEYS_DIR: `${directory}/conversation-keys`,
+      PROVIDER_SECRETS_DIR: `${directory}/provider-secrets`,
+      KUBECONFIG: computer.kubeconfig, KUBE_NAMESPACE: computer.namespace,
       TOKEN_SIGNING_KEY_FILE: `${directory}/token-signing-key.pem`, TOKEN_ISSUER: `${settings['ORIGIN']}/` });
   await wait(() => healthy(`http://127.0.0.1:${settings['SERVER_PORT']}/healthz`), 'server');
   await start('web', [`${root}/node_modules/@angular/cli/bin/ng.js`, 'serve', '--project', 'web', '--host', '127.0.0.1',
@@ -442,7 +456,9 @@ async function up(fresh: boolean) {
 }
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
-    { ...base, DEV_STACK_DIR: directory }, 900_000);
+    { ...base, DEV_STACK_DIR: directory,
+      P4_JOURNEY_ATTEMPT: process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual',
+      P4_OWNERSHIP_MERGED: process.env['P4_OWNERSHIP_MERGED'] ?? 'false' }, 900_000);
   console.log(output.trim());
 }
 async function status() {
