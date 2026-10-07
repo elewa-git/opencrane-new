@@ -65,6 +65,18 @@ function waitForAnimationFrame() {
   return new Promise(finishAtNextFrame);
 }
 
+async function checkDirectChatLink(page, width) {
+  if (width < 700) {
+    await page.getByRole('button', { name: 'Open session navigation' }).click();
+  }
+  const links = page.locator('a[href="/workspace/direct"]:visible');
+  await links.first().waitFor({ state: 'visible' });
+  assert.equal(await links.count(), 1, 'Show one direct chat entry in the visible navigation');
+  const bounds = await links.first().boundingBox();
+  assert(bounds && bounds.height >= 44, 'The direct chat entry needs a 44px target');
+  if (width < 700) await page.keyboard.press('Escape');
+}
+
 async function capture(page, name, width, motion) {
   assert(await page.locator('html').evaluate(pageHasNoOverflow), 'No horizontal overflow');
   const filename = `${name}-${width}-${motion}.png`;
@@ -211,6 +223,7 @@ try {
       await chatFixture(page, 'empty-selected');
       await page.goto(`${origin}/workspace?conversation=chat`);
       await page.locator('oc-chat-composer').waitFor();
+      await checkDirectChatLink(page, width);
       await page.evaluate(waitForFonts);
       if (width === 390) {
         const emptyMessage = page.getByText('No messages yet', { exact: true });

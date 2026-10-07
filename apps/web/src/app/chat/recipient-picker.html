@@ -1,0 +1,39 @@
+@if (selected(); as colleague) {
+  <section class="recipient-card" aria-label="Conversation recipient">
+    <span class="to-label">To</span>
+    <span class="recipient-name">{{ displayName(colleague) }}</span>
+    <button type="button" class="change-recipient" [disabled]="disabled()"
+      (click)="change()">{{ draft() ? 'Change' : 'New chat' }}</button>
+    @if (draft()) {
+      <p class="draft-note">Showing up to 20 colleagues. Narrow the search to find others.</p>
+    <p class="draft-note">Draft — nothing is sent or created until your first message.</p>
+    }
+  </section>
+} @else {
+  <section class="draft" aria-label="Direct conversation recipients">
+    <div class="to-label">To</div>
+    <p class="draft-note">One colleague → direct conversation between two people.</p>
+    <label class="sr-only" for="colleague-search">Search colleagues</label>
+    <input #searchField id="colleague-search" type="search" autocomplete="off"
+      [value]="query()" [disabled]="disabled()" (input)="queryChanged($event)" />
+    @if (searchState() === 'loading') {
+      <p>Loading colleagues…</p>
+    } @else if (searchState() === 'failed') {
+      <p>Could not search colleagues. Try again.</p>
+    } @else if (colleagues().length) {
+      <div class="colleague-options" role="group" aria-label="Colleagues">
+        @for (colleague of colleagues(); track colleague.memberId) {
+          <button type="button" class="colleague-option" [disabled]="disabled()"
+            (click)="select(colleague)">
+            <span>{{ displayName(colleague) }}</span>
+            <small>Direct conversation</small>
+          </button>
+        }
+      </div>
+    } @else if (query().trim()) {
+      <p class="empty-search">No colleagues match this search.</p>
+    }
+    <p class="draft-note">Showing up to 20 colleagues. Narrow the search to find others.</p>
+    <p class="draft-note">Draft — nothing is sent or created until your first message.</p>
+  </section>
+}

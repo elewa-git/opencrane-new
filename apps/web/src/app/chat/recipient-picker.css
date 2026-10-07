@@ -1,0 +1,28 @@
+:host { display: block; }
+.draft,.recipient-card { margin-bottom: 24px; padding: 12px; border: 1px solid #9fdde8;
+  border-radius: 9px; background: #fbfdfd; }
+.to-label { display: block; color: #16191a; font-size: 12px; font-weight: 600; }
+.draft-note { display: block; margin: 5px 0 10px; color: #4f575a; font-size: 12px; }
+.draft input { width: 100%; min-height: 44px; padding: 8px 10px; border: 1px solid #9fdde8;
+  border-radius: 6px; background: white; font: inherit; }
+.draft input:focus-visible { outline: 2px solid var(--oc-focus-ring); outline-offset: 2px; }
+.colleague-options { display: grid; gap: 4px; margin-top: 8px; }
+.colleague-option { display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  width: 100%; min-height: 48px; padding: 7px 10px; border: 1px solid #dee3e4;
+  border-radius: 6px; background: white; color: #2b3133; text-align: left; cursor: pointer; }
+.colleague-option:hover { background: #eefafc; }
+.colleague-option small,.empty-search { color: #4f575a; font-size: 11px; }
+.empty-search { margin: 10px 0; }
+.recipient-card { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.recipient-name { padding: 7px 10px; border: 1px solid #9fdde8; border-radius: 6px;
+  background: #eefafc; }
+.recipient-card .draft-note { flex-basis: 100%; margin: 0; }
+.change-recipient { min-width: 44px; min-height: 44px; margin-left: auto; color: #086c7b; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+button:focus-visible,input:focus-visible {
+  outline: 2px solid var(--oc-focus-ring); outline-offset: 2px;
+}
+@media (max-width: 700px) {
+  .recipient-card { align-items: flex-start; }
+}

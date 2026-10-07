@@ -1,41 +1,162 @@
-<main class="direct-start">
-  <header class="start-header">
-    <a href="/workspace" aria-label="Back to workspace">‹</a>
-    <h1>New direct conversation</h1>
-  </header>
-  <span class="sr-only" role="status" aria-live="polite">{{ status() }}</span>
-  <section class="recipient-panel" aria-label="Direct conversation recipient">
-    <p class="intro">Choose one colleague. This conversation is between two people.</p>
-    @if (selected(); as colleague) {
-      <div class="to-row">
-        <span class="to-label">To</span>
-        <span class="recipient-chip">{{ displayName(colleague) }}</span>
-        <button #changeButton type="button" class="change-button" (click)="changeRecipient()">
-          Change
-        </button>
-      </div>
-      <p class="draft-note">Draft — your message has not been sent.</p>
-    } @else {
-      <label for="colleague-search">To</label>
-      <input #searchField id="colleague-search" type="search" autocomplete="off"
-        [value]="query()" (input)="queryChanged($event)" placeholder="Search colleagues" />
-      @if (searchState() === 'loading') {
-        <p>Loading colleagues…</p>
-      } @else if (searchState() === 'failed') {
-        <p>Could not search colleagues. Try again.</p>
-      } @else if (colleagues().length > 0) {
-        <div class="colleague-list" role="group" aria-label="Colleagues">
-          @for (colleague of colleagues(); track colleague.memberId) {
-            <button type="button" class="colleague-row" (click)="selectColleague(colleague)">
-              {{ displayName(colleague) }}
-              <small>Direct conversation</small>
+<div class="workspace direct-workspace">
+  <aside class="rail" aria-label="Workspace navigation">
+    <a class="brand" href="/workspace"><strong>Open<span>Crane</span></strong></a>
+    <nav class="rail-content" aria-label="Workspace">
+      <a class="rail-action" href="/workspace">Ask your assistant</a>
+      <h2>People</h2>
+      <a class="rail-action active" href="/workspace/direct" [attr.aria-disabled]="composerBusy()"
+        (click)="protectPendingNavigation($event)">New direct chat</a>
+      <h2>Direct conversations</h2>
+      @if (listState() === 'loading' && conversations().length === 0) {
+        <p class="empty-rail">Loading direct conversations…</p>
+      } @else if (listState() === 'failed' && conversations().length === 0) {
+        <p class="empty-rail">Direct conversations could not be loaded.</p>
+      } @else if (listState() === 'ready' && conversations().length === 0) {
+        <p class="empty-rail">No direct conversations yet.</p>
+      } @else {
+        @for (conversation of conversations(); track conversation.conversationId) {
+          @if (conversation.mode === 'direct') {
+            <button class="conversation-row" type="button"
+              [attr.aria-disabled]="composerBusy()"
+              [attr.title]="composerBusy() ? 'Wait until this message is confirmed.' : null"
+              [class.selected]="selectedConversationId() === conversation.conversationId"
+              [attr.aria-current]="selectedConversationId() === conversation.conversationId ? 'page' : null"
+              (click)="selectConversation(conversation.conversationId)">
+              {{ titleForConversation(conversation) }}
             </button>
           }
-        </div>
-      } @else if (query().trim()) {
-        <p class="empty-search">No colleagues match this search.</p>
+        }
       }
-      <p class="draft-note">Nothing is created until you send your first message.</p>
+    </nav>
+    <footer class="rail-footer"><a href="/org/people">People &amp; groups</a></footer>
+  </aside>
+
+  <main class="main" ocPaperSurface="main">
+    <header class="workspace-header">
+      <button #navigationOpener class="navigation-toggle" type="button"
+        aria-label="Open direct conversations" [attr.aria-expanded]="navigationOpen()"
+        [disabled]="composerBusy()" (click)="openNavigation()">☰</button>
+      <a class="back-link" href="/workspace" aria-label="Back to workspace">‹</a>
+      <h1 tabindex="-1" #accessHeading>
+        @if (pageState() === 'access_changed') { Unavailable }
+        @else if (selectedConversationId()) { {{ recipientName() }} }
+        @else { New conversation }
+      </h1>
+      @if (colleague()) { <span class="header-status">Direct · 2 people</span> }
+      @if (pageState() === 'ready') {
+        <button class="refresh-button" type="button" [attr.aria-disabled]="composerBusy() || refreshing()"
+          (click)="refresh()">Refresh</button>
+      }
+    </header>
+
+    <span class="sr-only" role="status" aria-live="polite">{{ statusText() }}</span>
+    <section #transcript class="transcript" (scroll)="transcriptScrolled()" aria-label="Direct conversation" [attr.aria-busy]="pageState() === 'loading'">
+      <div class="transcript-inner">
+        @if (pageError() && pageState() === 'ready') {
+          <div class="refresh-error"><span>{{ pageError() }} Previously loaded conversations are kept.</span>
+            <button class="button secondary" type="button" [attr.aria-disabled]="refreshing()"
+              (click)="refresh()">Refresh</button>
+          </div>
+        }
+        @if (pageState() === 'loading') {
+          <oc-shared-state kind="checking" message="Loading direct conversations…" />
+        } @else if (pageState() === 'access_changed') {
+          <oc-shared-state kind="access_changed" message="You no longer have access"
+            detail="Transcript, drafts and names were cleared. Late results will not appear."
+            [showAction]="false" />
+        } @else if (pageState() === 'failed') {
+          <oc-shared-state kind="failed" message="Direct conversations are unavailable right now"
+            detail="Reading again is safe." [showAction]="false" />
+          <button class="button secondary retry-page" type="button"
+            [attr.aria-disabled]="refreshing()" (click)="load()">Try again</button>
+        } @else {
+          <oc-recipient-picker [colleagues]="colleagues()" [query]="colleagueQuery()"
+            [searchState]="colleagueState()"
+            [selected]="colleague()" [draft]="!selectedConversationId()"
+            [disabled]="composerBusy()" (queryEdited)="colleagueQueryChanged($event)"
+            (recipientSelected)="selectColleague($event)"
+            (recipientChanged)="clearColleague()" />
+          @if (colleague()) {
+          @if (historyState() === 'loading') {
+            <p class="empty-transcript">Loading messages…</p>
+          } @else if (historyState() === 'failed') {
+            <p class="empty-transcript">Messages could not be loaded. Try Refresh.</p>
+          } @else if (historyState() === 'ready' && messages().length === 0) {
+            <p class="empty-transcript">No messages yet.</p>
+          }
+          @for (row of messages(); track row.id) {
+            @if (row.type === 'message.posted' && directDisplayText(row).length > 0) {
+              <article class="message" [class.own]="isOwnMessage(row)">
+                @if (!isOwnMessage(row)) {
+                  <span class="avatar" aria-hidden="true">{{ directAvatar(recipientName()) }}</span>
+                }
+                <div class="message-content">
+                  @if (!isOwnMessage(row)) {
+                    <header><strong>{{ authorName(row) }}</strong><time>{{ directTime(row.time) }}</time></header>
+                  }
+                  <p>{{ directDisplayText(row) }}</p>
+                  @if (isOwnMessage(row)) {
+                    <span class="message-receipt">{{ directTime(row.time) }}</span>
+                  }
+                </div>
+              </article>
+            }
+          }
+          }
+        }
+      </div>
+    </section>
+
+    @if (pageState() === 'ready' && colleague()) {
+      <footer class="composer-dock">
+        <div class="send-feedback">
+          @if (sendState() === 'applying') {
+            <oc-shared-state kind="applying" [message]="applyingMessage()"
+              detail="Wait until this message is confirmed before changing chats."
+              [showAction]="false" />
+          } @else if (sendState() === 'unknown') {
+            <oc-shared-state kind="unknown" [message]="unknownMessage()"
+              detail="Check or finish this message before changing chats. Keep this page open."
+              [changeReference]="pending()?.commandId"
+              [hideReferenceFromAnnouncement]="true" [showAction]="false" />
+            <button type="button" class="button secondary"
+              [attr.aria-disabled]="statusChecking()" (click)="checkStatus()">
+              {{ statusChecking() ? 'Checking status…' : 'Check status' }}</button>
+            @if (pending()?.state === 'not_found') {
+              <button type="button" class="button secondary" (click)="retryPending()">
+                {{ pending()?.phase === 'creating' ? 'Try again' : 'Send again' }}
+              </button>
+            }
+          } @else if (failure()) {
+            <oc-shared-state kind="failed" [message]="failure()" [showAction]="false" />
+          }
+          @if (recordedMessage()) {
+            <p class="recorded-receipt">Message recorded. Refresh to read it in the transcript.</p>
+          }
+        </div>
+        <div #composer class="composer-wrap">
+          <oc-chat-composer [directMode]="true" [draft]="draft()"
+            [placeholder]="'Message'" [busy]="composerBusy()"
+            (draftChange)="changeDraft($event)" (submitted)="submitMessage($event)" />
+        </div>
+      </footer>
     }
-  </section>
-</main>
+  </main>
+</div>
+<oc-navigation-menu [open]="navigationOpen()" label="Direct conversations"
+  [returnFocusTo]="navigationOpener" (closed)="navigationClosed()">
+  <a href="/workspace">Ask your assistant</a>
+  <a href="/workspace/direct" [attr.aria-disabled]="composerBusy()"
+        (click)="protectPendingNavigation($event)">New direct chat</a>
+  @for (conversation of conversations(); track conversation.conversationId) {
+    @if (conversation.mode === 'direct') {
+      <button class="conversation-row" type="button"
+              [attr.aria-disabled]="composerBusy()"
+              [attr.title]="composerBusy() ? 'Wait until this message is confirmed.' : null"
+        [class.selected]="selectedConversationId() === conversation.conversationId"
+        (click)="selectConversation(conversation.conversationId)">
+        {{ titleForConversation(conversation) }}
+      </button>
+    }
+  }
+</oc-navigation-menu>

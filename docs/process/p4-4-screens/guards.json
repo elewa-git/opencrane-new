@@ -1,0 +1,332 @@
+{
+  "result": "PASS",
+  "note": "Each removed guard caused an assertion failure. All guards were restored.",
+  "checks": [
+    {
+      "guard": "second-submit",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps the composer locked after create while the first permission read is held"
+      ]
+    },
+    {
+      "guard": "whole-first-send",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps the composer locked after create while the first permission read is held"
+      ]
+    },
+    {
+      "guard": "preserve-edit",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps create and first send locked as one change and preserves an edit in the gap"
+      ]
+    },
+    {
+      "guard": "temporary-access",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps the draft through access applying and retries the first read and post"
+      ]
+    },
+    {
+      "guard": "bounded-backoff",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > bounds access applying retries and keeps a retryable first message"
+      ]
+    },
+    {
+      "guard": "missing-create",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > says a lost create was not created on a 403 check and retries the same ids"
+      ]
+    },
+    {
+      "guard": "missing-message",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > offers a same-command resend after a 503 and a missing message status"
+      ]
+    },
+    {
+      "guard": "keep-refused-draft",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 400 send and keeps its failure through refresh",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 403 send and keeps its failure through refresh",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 409 send and keeps its failure through refresh"
+      ]
+    },
+    {
+      "guard": "cached-names",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps conversation names when a different colleague is searched"
+      ]
+    },
+    {
+      "guard": "late-history",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > does not paint late history under a new recipient"
+      ]
+    },
+    {
+      "guard": "honest-empty-history",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > shows a loading history rather than an empty transcript and a failure rather than no messages"
+      ]
+    },
+    {
+      "guard": "own-failure-message",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 400 send and keeps its failure through refresh",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 403 send and keeps its failure through refresh",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 409 send and keeps its failure through refresh"
+      ]
+    },
+    {
+      "guard": "clear-failure-on-edit",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 400 send and keeps its failure through refresh",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 403 send and keeps its failure through refresh",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps typed text after a 409 send and keeps its failure through refresh"
+      ]
+    },
+    {
+      "guard": "banner-focus",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps refresh-banner focus until the result is known"
+      ]
+    },
+    {
+      "guard": "first-retry-focus",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps first-load retry focus and avoids false empty-list messages"
+      ]
+    },
+    {
+      "guard": "ignore-access-late-results",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > clears protected data and ignores a held refresh after real access loss"
+      ]
+    },
+    {
+      "guard": "search-focus",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > returns focus to colleague search when the selected person is changed"
+      ]
+    },
+    {
+      "guard": "received-announcement",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > announces received messages and preserves the recorded receipt when history fails"
+      ]
+    },
+    {
+      "guard": "confirmed-announcement",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > announces received messages and preserves the recorded receipt when history fails"
+      ]
+    },
+    {
+      "guard": "follow-newest",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > scrolls loaded and new messages to the end unless the person has scrolled up"
+      ]
+    },
+    {
+      "guard": "respect-scroll-up",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > scrolls loaded and new messages to the end unless the person has scrolled up"
+      ]
+    },
+    {
+      "guard": "separate-drafts",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps separate drafts for a conversation and a new recipient"
+      ]
+    },
+    {
+      "guard": "honest-search-failure",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > shows a visible search failure after a 503",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > shows search failures honestly and refreshes the typed query"
+      ]
+    },
+    {
+      "guard": "refresh-query",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > shows search failures honestly and refreshes the typed query"
+      ]
+    },
+    {
+      "guard": "turn-request",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > counts zero turn and model requests on the real API paths and shows only direct controls"
+      ]
+    },
+    {
+      "guard": "model-request",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > counts zero turn and model requests on the real API paths and shows only direct controls"
+      ]
+    },
+    {
+      "guard": "assistant-controls",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > counts zero turn and model requests on the real API paths and shows only direct controls"
+      ]
+    },
+    {
+      "guard": "detector-real-paths",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > detects a turn on the messages path and a model call on the responses path"
+      ]
+    },
+    {
+      "guard": "late-search",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > ignores an older search reply that arrives after the newer reply",
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > ignores older recipient results while the query changes"
+      ]
+    },
+    {
+      "guard": "permission-status-read-only",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > checks ready permissions without posting until Send again is chosen"
+      ]
+    },
+    {
+      "guard": "permission-read-wording",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps an unsent draft after an unavailable permission read without claiming a delay"
+      ]
+    },
+    {
+      "guard": "pending-new-chat-link",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps create and first send locked as one change and preserves an edit in the gap"
+      ]
+    },
+    {
+      "guard": "pending-conversation-switch",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps create and first send locked as one change and preserves an edit in the gap"
+      ]
+    },
+    {
+      "guard": "successful-refresh-focus",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > restores focus to the composer after a successful banner refresh"
+      ]
+    },
+    {
+      "guard": "follow-forty-rows",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > scrolls loaded and new messages to the end unless the person has scrolled up"
+      ]
+    },
+    {
+      "guard": "respect-scroll-forty-rows",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > scrolls loaded and new messages to the end unless the person has scrolled up"
+      ]
+    },
+    {
+      "guard": "wait-for-fonts",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > waits for the fonts before scrolling the loaded transcript to the newest message"
+      ]
+    },
+    {
+      "guard": "follow-scroll-after-fonts",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > scrolls loaded and new messages to the end unless the person has scrolled up"
+      ]
+    },
+    {
+      "guard": "cached-name-title",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > keeps conversation names when a different colleague is searched"
+      ]
+    },
+    {
+      "guard": "non-message-announcement",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > does not announce a non-message event as a received message"
+      ]
+    },
+    {
+      "guard": "move-recipient-draft",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  |web| src/app/chat/direct-chat.spec.ts > does not restore a sent recipient draft when starting another chat with the same person"
+      ]
+    },
+    {
+      "guard": "applying-refusal",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  apps/server/test/direct-chat-http.test.ts > reports direct access still applying separately from a real refusal"
+      ]
+    },
+    {
+      "guard": "participant-refusal",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  apps/server/test/direct-chat-http.test.ts > reports direct access still applying separately from a real refusal"
+      ]
+    },
+    {
+      "guard": "member-refusal",
+      "result": "PASS",
+      "failedSpecs": [
+        " FAIL  apps/server/test/direct-chat-http.test.ts > still refuses a removed member while creation permissions are applying"
+      ]
+    },
+    {
+      "guard": "320-layout",
+      "result": "PASS",
+      "exitCode": 1
+    },
+    {
+      "guard": "workspace-link-height",
+      "result": "PASS",
+      "exitCode": 1
+    }
+  ]
+}

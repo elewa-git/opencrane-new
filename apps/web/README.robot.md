@@ -55,6 +55,19 @@ including `/auth/callback`. Local HTTP development requires local-only cookie se
 as described in the [server README](../server/README.md).
 The browser uses same-origin auth and WebSocket URLs; no credentials are built into assets.
 
+`/workspace/direct` is the direct-chat screen. It reads `/api/chat` only for the
+current member id, `/api/chat/colleagues` for joined-colleague search, and
+`/api/conversations` for direct conversation rows. It creates a direct conversation
+with `{ id, conversationId, mode: "direct", colleagueId }`, then sends text with
+`{ id, text }` to `/api/conversations/:id/messages`. The server encrypts the text
+and records it as a human message. The screen never sends a turn, stop, assistant,
+memory or model request. A lost reply keeps its command id and uses
+`/api/conversations/:id/changes/:commandId` for a status read. Unknown status never
+causes an automatic resend. A 401 or refused history read clears names, the draft
+and transcript, then focuses the access message. The screen subscribes to the
+conversation feed after loading history and resumes from its event position after
+the existing WebSocket service reconnects. Repeated positions are ignored.
+
 ## Contract and verification
 
 The client validates the register response and incoming messages with
@@ -214,6 +227,11 @@ tokens or full tool output. A stored review that fails the review schema makes t
 GET return 400. The browser shows the read-failed state and pauses decisions.
 Chromium captures use intercepted fixtures and do not prove a live governed turn.
 
+Run `nice -n 10 npm run visual:p4-4-screens` to capture direct-chat states at
+1280px, 390px and 320px, with normal and reduced motion. The sample checks count
+turn and model requests and do not qualify a fresh installation. See the
+[direct-chat screen receipt](../../docs/process/p4-4-screens/README.md).
+
 ## Desktop view
 
 Admission uses `POST /api/conversations/:id/view`; the viewer socket uses
@@ -288,16 +306,34 @@ The visual script captures both the choice and selected memory-free states at th
 widths with both motion settings, after finite animations finish. It checks 44px phone
 buttons, overlap and overflow. Fresh-install live qualification remains NOT RUN.
 
-## Direct conversation recipient screen
+## Direct conversations
 
-`/workspace/direct` searches `GET /api/chat/colleagues?q=&limit=20`. The screen shows
-only colleagues returned by that route. A selected person stays in the To line until
-Change is used. Selection is held in the browser and does not create a conversation.
+`/workspace/direct` reads the context, authorised conversation list and colleague
+search. Search states distinguish loading, failure and successful empty results.
+A newer request cancels the previous search and ignores its late reply. Refresh
+uses the typed query. Search returns at most 20 people; the screen asks for a narrower
+query. Names already read are kept separately from the current search choices.
 
-The complete chat view is in the next part of this stacked change. The present screen
-only chooses the person; it does not send a message or create a conversation.
+`direct-chat-sending.ts` owns one pending record for create, permission checks and
+sending. The record keeps the conversation, colleague, original text and stable
+create/message references. The composer and chat changes stay locked until a receipt
+confirms the message. Only that submitted text clears; a later edit stays in the box.
+The screen keeps separate in-memory drafts for each conversation or new recipient.
+Reload discards them. No message is called recorded without a 200 receipt.
 
-Colleague searches have visible loading, failure and successful empty states.
-A newer search cancels the older request and ignores any late reply. Failed searches
-remove stale choices. The list shows at most 20 people; a narrower search finds others.
-The [recipient checks](../../docs/process/p4-4-start-evidence.md) record validation.
+HTTP 425 `access_applying` means a recorded participant is waiting for the creation
+permissions. First reads and sends retry with waits of 100, 200, 400, 800, 1600 and
+1600 ms. A 403 read remains a refusal and clears protected information. A creation
+status GET with 403 says that no creation record is available, keeps the message and
+offers Try again with the same ids. A message status GET with 404 says no record yet
+and offers Send again with the original id and text. Neither status check sends a POST.
+
+History loads before socket subscription. Replies from a former conversation or
+access state cannot replace the current view. New rows follow the bottom unless the
+person has scrolled up. One live status line announces received messages and recorded
+sends. A visible recorded notice stays until the transcript contains that message.
+Send errors have their own text; refresh does not change it. Editing clears it.
+
+The [screen checks](../../docs/process/p4-4-screens/README.robot.md) record API details,
+captures, intentional design differences, guard removals and remaining live checks.
+The [recipient checks](../../docs/process/p4-4-start-evidence.md) cover the first draft PR.

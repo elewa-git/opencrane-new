@@ -10,7 +10,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat access and live updates"]
+  web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
   server -.->|checks access and reads spending| libs["libs/*<br/>shared code"]
   server -->|records changes and updates chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
@@ -39,6 +39,7 @@ flowchart LR
   Both summaries drop older entries when their memory budget is reached. A
   summary that is too large is dropped on its own, leaving other chats warm.
 - Lets two silo members exchange private messages without starting assistant work.
+  Tells the browser when a new chat is waiting for its permissions, so it can keep the draft.
 - Runs a separate models process. It keeps AI budgets, approves or refuses each AI request,
   and starts [agentgateway](../../GLOSSARY.md#agentgateway-ai-gateway), the AI gateway that
   every model request passes through.

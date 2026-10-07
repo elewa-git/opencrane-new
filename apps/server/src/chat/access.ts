@@ -19,6 +19,7 @@ export interface ChatOptions {
 }
 
 export class ChatRefused extends Error {}
+export class ChatAccessApplying extends Error {}
 type Fence = Awaited<ReturnType<typeof conversationAccessFence>>;
 interface AccessRequest {
   memberId: string;
@@ -124,11 +125,24 @@ async function conversationAccess(options: ChatOptions, request: AccessRequest, 
     } else {
       const permission = await auth.conversation(memberId, conversationId, relation);
       if (permission.status === 'unavailable') throw new Error('IAM unavailable');
-      if (!permission.allowed) throw new ChatRefused('Conversation refused');
+      if (!permission.allowed) {
+        await refuseConversationAccess(options, created.mode, row.event.id);
+      }
     }
     if (mode === 'agent_session') await readPrivateSession(options, memberId, conversationId);
   }
   return { mode, colleagueId };
+}
+
+async function refuseConversationAccess(
+  options: ChatOptions, mode: 'direct' | 'agent_session', eventId: string,
+): Promise<never> {
+  const auth = memberAuthorisation(options.binding);
+  // Distinguish a new participant waiting for creation permissions from a refusal.
+  if (mode === 'direct' && !await auth.applied(eventId)) {
+    throw new ChatAccessApplying('Conversation access still applying');
+  }
+  throw new ChatRefused('Conversation refused');
 }
 
 /** Check current membership without waiting for role or owner changes to reach OpenFGA.

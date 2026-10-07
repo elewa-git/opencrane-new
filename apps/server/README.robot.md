@@ -334,6 +334,10 @@ recorded report refusal stops automatic recovery.
 
 The [direct chat API](../../docs/api/direct-chats.md) supplies two-person creation,
 messages, history, status and live updates. Direct messages never start assistant work.
+Direct reads and posts return 425 `access_applying` when a recorded participant is
+waiting for creation permissions. Current membership and recorded participants are
+checked first. Applied permissions, missing chats and nonparticipants keep their
+normal 403 refusal. Status reads keep their existing `allowApplying` behaviour.
 History and status check access once before reading content. The list checks each
 row's participants and OpenFGA permission once, with eight rows at a time.
 Readers do not use an authority fence, the short check that detects access changes

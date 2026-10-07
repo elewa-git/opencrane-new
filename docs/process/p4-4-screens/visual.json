@@ -1,0 +1,697 @@
+{
+  "date": "2026-10-07T03:48:28.824Z",
+  "result": "PASS",
+  "note": "Sample browser data only; this does not qualify a fresh installation.",
+  "captures": [
+    {
+      "frame": "THR-05",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-05-1280-normal.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-10-1280-normal.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-11-1280-normal.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "thr-16-1280-normal.png"
+    },
+    {
+      "frame": "directory",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "directory-1280-normal.png"
+    },
+    {
+      "frame": "no-match",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "no-match-1280-normal.png"
+    },
+    {
+      "frame": "directory-loading",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "directory-loading-1280-normal.png"
+    },
+    {
+      "frame": "first-load-failed",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "first-load-failed-1280-normal.png"
+    },
+    {
+      "frame": "refresh-failed",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "refresh-failed-1280-normal.png"
+    },
+    {
+      "frame": "sending",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "sending-1280-normal.png"
+    },
+    {
+      "frame": "send-failed",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "send-failed-1280-normal.png"
+    },
+    {
+      "frame": "lost-create",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "lost-create-1280-normal.png"
+    },
+    {
+      "frame": "access-applying",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "access-applying-1280-normal.png"
+    },
+    {
+      "frame": "missing-message",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "missing-message-1280-normal.png"
+    },
+    {
+      "frame": "missing-create",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "missing-create-1280-normal.png"
+    },
+    {
+      "frame": "literal-agent",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "literal-agent-1280-normal.png"
+    },
+    {
+      "frame": "long-chat",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "long-chat-1280-normal.png"
+    },
+    {
+      "frame": "waiting-access",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "waiting-access-1280-normal.png"
+    },
+    {
+      "frame": "permissions-ready",
+      "width": 1280,
+      "reducedMotion": false,
+      "file": "permissions-ready-1280-normal.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-05-1280-reduced.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-10-1280-reduced.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-11-1280-reduced.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "thr-16-1280-reduced.png"
+    },
+    {
+      "frame": "directory",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "directory-1280-reduced.png"
+    },
+    {
+      "frame": "no-match",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "no-match-1280-reduced.png"
+    },
+    {
+      "frame": "directory-loading",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "directory-loading-1280-reduced.png"
+    },
+    {
+      "frame": "first-load-failed",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "first-load-failed-1280-reduced.png"
+    },
+    {
+      "frame": "refresh-failed",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "refresh-failed-1280-reduced.png"
+    },
+    {
+      "frame": "sending",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "sending-1280-reduced.png"
+    },
+    {
+      "frame": "send-failed",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "send-failed-1280-reduced.png"
+    },
+    {
+      "frame": "lost-create",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "lost-create-1280-reduced.png"
+    },
+    {
+      "frame": "access-applying",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "access-applying-1280-reduced.png"
+    },
+    {
+      "frame": "missing-message",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "missing-message-1280-reduced.png"
+    },
+    {
+      "frame": "missing-create",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "missing-create-1280-reduced.png"
+    },
+    {
+      "frame": "literal-agent",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "literal-agent-1280-reduced.png"
+    },
+    {
+      "frame": "long-chat",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "long-chat-1280-reduced.png"
+    },
+    {
+      "frame": "waiting-access",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "waiting-access-1280-reduced.png"
+    },
+    {
+      "frame": "permissions-ready",
+      "width": 1280,
+      "reducedMotion": true,
+      "file": "permissions-ready-1280-reduced.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-05-390-normal.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-10-390-normal.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-11-390-normal.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "thr-16-390-normal.png"
+    },
+    {
+      "frame": "directory",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "directory-390-normal.png"
+    },
+    {
+      "frame": "no-match",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "no-match-390-normal.png"
+    },
+    {
+      "frame": "directory-loading",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "directory-loading-390-normal.png"
+    },
+    {
+      "frame": "first-load-failed",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "first-load-failed-390-normal.png"
+    },
+    {
+      "frame": "refresh-failed",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "refresh-failed-390-normal.png"
+    },
+    {
+      "frame": "sending",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "sending-390-normal.png"
+    },
+    {
+      "frame": "send-failed",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "send-failed-390-normal.png"
+    },
+    {
+      "frame": "lost-create",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "lost-create-390-normal.png"
+    },
+    {
+      "frame": "access-applying",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "access-applying-390-normal.png"
+    },
+    {
+      "frame": "missing-message",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "missing-message-390-normal.png"
+    },
+    {
+      "frame": "missing-create",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "missing-create-390-normal.png"
+    },
+    {
+      "frame": "literal-agent",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "literal-agent-390-normal.png"
+    },
+    {
+      "frame": "long-chat",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "long-chat-390-normal.png"
+    },
+    {
+      "frame": "waiting-access",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "waiting-access-390-normal.png"
+    },
+    {
+      "frame": "permissions-ready",
+      "width": 390,
+      "reducedMotion": false,
+      "file": "permissions-ready-390-normal.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-05-390-reduced.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-10-390-reduced.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-11-390-reduced.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "thr-16-390-reduced.png"
+    },
+    {
+      "frame": "directory",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "directory-390-reduced.png"
+    },
+    {
+      "frame": "no-match",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "no-match-390-reduced.png"
+    },
+    {
+      "frame": "directory-loading",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "directory-loading-390-reduced.png"
+    },
+    {
+      "frame": "first-load-failed",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "first-load-failed-390-reduced.png"
+    },
+    {
+      "frame": "refresh-failed",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "refresh-failed-390-reduced.png"
+    },
+    {
+      "frame": "sending",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "sending-390-reduced.png"
+    },
+    {
+      "frame": "send-failed",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "send-failed-390-reduced.png"
+    },
+    {
+      "frame": "lost-create",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "lost-create-390-reduced.png"
+    },
+    {
+      "frame": "access-applying",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "access-applying-390-reduced.png"
+    },
+    {
+      "frame": "missing-message",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "missing-message-390-reduced.png"
+    },
+    {
+      "frame": "missing-create",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "missing-create-390-reduced.png"
+    },
+    {
+      "frame": "literal-agent",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "literal-agent-390-reduced.png"
+    },
+    {
+      "frame": "long-chat",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "long-chat-390-reduced.png"
+    },
+    {
+      "frame": "waiting-access",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "waiting-access-390-reduced.png"
+    },
+    {
+      "frame": "permissions-ready",
+      "width": 390,
+      "reducedMotion": true,
+      "file": "permissions-ready-390-reduced.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-05-320-normal.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-10-320-normal.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-11-320-normal.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "thr-16-320-normal.png"
+    },
+    {
+      "frame": "directory",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "directory-320-normal.png"
+    },
+    {
+      "frame": "no-match",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "no-match-320-normal.png"
+    },
+    {
+      "frame": "directory-loading",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "directory-loading-320-normal.png"
+    },
+    {
+      "frame": "first-load-failed",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "first-load-failed-320-normal.png"
+    },
+    {
+      "frame": "refresh-failed",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "refresh-failed-320-normal.png"
+    },
+    {
+      "frame": "sending",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "sending-320-normal.png"
+    },
+    {
+      "frame": "send-failed",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "send-failed-320-normal.png"
+    },
+    {
+      "frame": "lost-create",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "lost-create-320-normal.png"
+    },
+    {
+      "frame": "access-applying",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "access-applying-320-normal.png"
+    },
+    {
+      "frame": "missing-message",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "missing-message-320-normal.png"
+    },
+    {
+      "frame": "missing-create",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "missing-create-320-normal.png"
+    },
+    {
+      "frame": "literal-agent",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "literal-agent-320-normal.png"
+    },
+    {
+      "frame": "long-chat",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "long-chat-320-normal.png"
+    },
+    {
+      "frame": "waiting-access",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "waiting-access-320-normal.png"
+    },
+    {
+      "frame": "permissions-ready",
+      "width": 320,
+      "reducedMotion": false,
+      "file": "permissions-ready-320-normal.png"
+    },
+    {
+      "frame": "THR-05",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-05-320-reduced.png"
+    },
+    {
+      "frame": "THR-10",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-10-320-reduced.png"
+    },
+    {
+      "frame": "THR-11",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-11-320-reduced.png"
+    },
+    {
+      "frame": "THR-16",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "thr-16-320-reduced.png"
+    },
+    {
+      "frame": "directory",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "directory-320-reduced.png"
+    },
+    {
+      "frame": "no-match",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "no-match-320-reduced.png"
+    },
+    {
+      "frame": "directory-loading",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "directory-loading-320-reduced.png"
+    },
+    {
+      "frame": "first-load-failed",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "first-load-failed-320-reduced.png"
+    },
+    {
+      "frame": "refresh-failed",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "refresh-failed-320-reduced.png"
+    },
+    {
+      "frame": "sending",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "sending-320-reduced.png"
+    },
+    {
+      "frame": "send-failed",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "send-failed-320-reduced.png"
+    },
+    {
+      "frame": "lost-create",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "lost-create-320-reduced.png"
+    },
+    {
+      "frame": "access-applying",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "access-applying-320-reduced.png"
+    },
+    {
+      "frame": "missing-message",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "missing-message-320-reduced.png"
+    },
+    {
+      "frame": "missing-create",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "missing-create-320-reduced.png"
+    },
+    {
+      "frame": "literal-agent",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "literal-agent-320-reduced.png"
+    },
+    {
+      "frame": "long-chat",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "long-chat-320-reduced.png"
+    },
+    {
+      "frame": "waiting-access",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "waiting-access-320-reduced.png"
+    },
+    {
+      "frame": "permissions-ready",
+      "width": 320,
+      "reducedMotion": true,
+      "file": "permissions-ready-320-reduced.png"
+    }
+  ],
+  "requestCounts": {
+    "turns": 0,
+    "models": 0,
+    "directCreates": 30,
+    "directMessages": 30
+  }
+}
