@@ -31,6 +31,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check shipped npm dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high
+          audit_dir="$(mktemp -d)"
+          trap 'rm -rf "$audit_dir"' EXIT
+          cp apps/computer/runtime-package.json "$audit_dir/package.json"
+          cp apps/computer/runtime-package-lock.json "$audit_dir/package-lock.json"
+          npm audit --omit=dev --audit-level=high --prefix "$audit_dir"
+
       - name: Install pinned Lychee
         run: sh scripts/fetch-lychee.sh && .tools/lychee --version
 
