@@ -1,0 +1,68 @@
+.setup-content, .replace-content { display: grid; gap: 18px; min-width: 0; }
+.steps { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--oc-ink-admin-muted);
+  font-size: 12px; }
+.steps > span { display: inline-flex; align-items: center; gap: 5px; text-transform: capitalize; }
+.steps > span > span { display: grid; width: 22px; height: 22px; place-items: center;
+  border: 1px solid var(--oc-border-default); border-radius: 50%; background: var(--oc-surface-subtle); }
+.steps .current { color: var(--oc-ink-strong); font-weight: 600; }
+.steps .current > span { border-color: var(--oc-accent); }
+.steps .complete > span { background: #2a7d4f; border-color: #2a7d4f; color: #fff; }
+.step-title { font-size: 14px; font-weight: 600; }
+.step-form, .verify-step, .completion { display: grid; gap: 15px; min-width: 0; }
+fieldset { display: grid; gap: 9px; min-width: 0; margin: 0; padding: 0; border: 0; }
+legend, .field-label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 600; }
+.field-label span { margin-left: 5px; color: var(--oc-ink-admin-muted); font-weight: 400; }
+.choice-card, .model-choice { display: flex; align-items: center; gap: 10px; min-height: 48px;
+  padding: 10px 12px; border: 1px solid var(--oc-border-default); border-radius: 9px;
+  background: var(--oc-surface-raised); cursor: pointer; }
+.choice-card:has(input:checked), .model-choice:has(input:checked) {
+  border-color: var(--oc-accent); background: #f0fafb; }
+.choice-card input, .model-choice input, .consent-row input { width: 18px; height: 18px; accent-color: #087f91; }
+.text-field { box-sizing: border-box; width: 100%; min-height: 48px; padding: 10px 12px;
+  border: 1px solid var(--oc-border-input); border-radius: 9px; background: var(--oc-surface-raised);
+  color: var(--oc-ink-strong); font: inherit; }
+.field-help { color: var(--oc-ink-admin-muted); font-size: 12px; line-height: 1.5; }
+.field-error { color: #a52c22; font-size: 12px; }
+.implicit-submit { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.unknown-copy { padding: 12px; border: 1px solid #b57714; border-radius: 8px; background: #fff8ec;
+  line-height: 1.5; overflow-wrap: anywhere; }
+.price-warning { display: grid; gap: 12px; padding: 14px; border: 1px solid #f0b36b;
+  border-radius: 9px; background: #fff8ef; }
+.price-warning h3, .access-unavailable h3, .completion h3 { font-size: 14px; }
+.price-warning p, .evidence-note { color: var(--oc-ink-admin-muted); font-size: 13px; line-height: 1.55; }
+.consent-row { display: flex; align-items: center; gap: 10px; min-height: 44px; line-height: 1.5; }
+.model-options { gap: 9px; }
+.model-options legend { margin-bottom: 4px; }
+.model-choice { align-items: flex-start; min-height: 56px; }
+.model-choice input { flex: 0 0 18px; margin-top: 2px; }
+.model-choice span { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.model-choice small { color: var(--oc-ink-admin-muted); }
+.access-unavailable { display: grid; gap: 12px; }
+.completion { padding: 14px; border: 1px solid var(--oc-border-default); border-radius: 9px; }
+.evidence-note { padding: 12px; border: 1px dashed #8dcbd4; border-radius: 8px; }
+.result-message { padding: 12px; border: 1px solid var(--oc-border-default); border-radius: 8px;
+  overflow-wrap: anywhere; }
+.result-message p + p { margin-top: 6px; }
+.result-unknown { border-color: #b57714; background: #fff8ec; }
+.sheet-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.replace-content ul { display: grid; gap: 8px; margin: 0; padding: 14px 18px 14px 34px;
+  border: 1px solid var(--oc-border-default); border-radius: 9px; line-height: 1.5; }
+
+@media (max-width: 700px) {
+  .steps { gap: 5px; }
+  .steps > span { gap: 3px; font-size: 11px; }
+  .steps > span > span { width: 20px; height: 20px; }
+  .sheet-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+  .sheet-actions .button { width: 100%; }
+}
+
+@media (max-width: 360px) {
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .steps > span { white-space: nowrap; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

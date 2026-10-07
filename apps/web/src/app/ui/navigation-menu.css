@@ -39,3 +39,4 @@ dialog::before {
   pointer-events: none;
   z-index: 1;
 }
+.close { width: 48px; min-height: 48px; }
