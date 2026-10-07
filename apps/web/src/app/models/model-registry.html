@@ -260,6 +260,10 @@
             <p>Another test cannot start until this check is settled. Check status only reads.</p>
             <button class="button secondary" type="button" [disabled]="busy()"
               (click)="checkVerificationStatus(providerIdDraft())">Check status</button>
+            @if (activePendingCheck()?.notRecorded && activePendingCheck()?.operation !== 'test') {
+              <button class="button secondary" type="button" [disabled]="busy()"
+                (click)="startOverCheck()">Start over</button>
+            }
           }
         </section>
       }

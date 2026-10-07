@@ -30,6 +30,14 @@ export class ModelsScreen extends ProviderKeyChanges {
     if (!result) {
       return;
     }
+    if (result.kind === 'not_found' && pending.operation !== 'test') {
+      const notRecorded = { ...pending, notRecorded: true };
+      this.pendingChecks.set({ ...this.pendingChecks(), [providerIdValue]: notRecorded });
+      this.commandReference.set(pending.commandId);
+      this.resultText.set('This free check was not recorded. Start over to try again.');
+      this.resultKind.set('refused');
+      return;
+    }
     const outcome = result.kind === 'ok' ? result.value.outcome : undefined;
     this.applyCheckOutcome(providerIdValue, pending, outcome ?? 'outcome_unknown');
     if (isSettledOutcome(outcome ?? '')) {
@@ -83,6 +91,17 @@ export class ModelsScreen extends ProviderKeyChanges {
 
   protected async skipModelTest(): Promise<void> {
     await this.runCheck('skip');
+  }
+
+  protected startOverCheck(): void {
+    const providerIdValue = this.providerIdDraft();
+    const pending = this.pendingChecks()[providerIdValue];
+    if (!pending?.notRecorded || pending.operation === 'test' || this.busy()) {
+      return;
+    }
+    this.pendingChecks.set(without(this.pendingChecks(), providerIdValue));
+    this.clearActionMessage();
+    this.focusStepHeadingAfterRender();
   }
 
   private async runCheck(

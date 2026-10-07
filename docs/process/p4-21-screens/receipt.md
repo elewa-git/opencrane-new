@@ -68,18 +68,27 @@ never make a paid request.
 
 | Check | Result | Evidence |
 | --- | --- | --- |
-| Rebase onto the first branch | PASS | Rebase completed and the pushed first branch is an ancestor. |
-| Provider screen specs | PASS | All 54 specs passed. They cover exact verification bodies, fresh consent, unknown locks, Anthropic setup, refusals, focus, modal announcements, stale reads, secret clearing and model choices. |
-| Failing-first and guard removal | PASS | All 37 new screen cases failed with their matching protections removed in 22 separate checks. The confirmed-key read also failed with its lock removed on both branches. See [guard checks](guard-checks.json). All protections were restored; all 54 specs passed. |
+| Rebase onto main | PASS | After #259 merged, both #260 commits were rebased onto `origin/main`; the rebase completed and main is an ancestor. |
+| Provider screen specs | PASS | All 59 provider screen specs passed. They cover exact verification bodies, fresh consent, unknown locks, free-check recovery, key refusal wording, Anthropic setup, refusals, focus, modal announcements, stale reads, secret clearing and model choices. |
+| Failing-first and guard removal | PASS | The added consent spec failed when the clear-at-send line was removed, then passed after the line was restored. Earlier guard checks remain in [guard checks](guard-checks.json). |
 | Strict visual contract | PASS | Nine invalid request shapes failed against a permissive stub. Three valid shapes failed when refused. Restoring the real-schema checks returned all 12 to green. No request is made by these specs. |
-| Web suite | PASS | 38 files and 497 tests passed. |
+| Web suite | PASS | 38 files and 502 tests passed. |
 | Provider routes and visual contract | PASS | 68 tests passed, including the 56 real-route cases with local fake upstreams. Reachability and skip exercise the real route without a paid provider. |
-| Lint | PASS | Every root lint stage completed, with nine existing function-size warnings. The final code uses the normal file and complexity limits. |
-| Typecheck | PASS | All workspace checks passed. The final web check also passed after the file split. |
+| Lint | PASS | Every root lint stage completed, with nine existing function-size warnings. |
+| Typecheck | PASS | All workspace typechecks passed, including the web app, specs and live-view fixture. |
 | Event catalogue | PASS | All 98 registered event types match the catalogue. |
 | Angular build | PASS | The final production build completed. Existing CSS budget and noVNC CommonJS warnings remain. |
 | Responsive visual captures | PASS | 130 captures at 1280, 390 and 320 pixels with both motion settings. Overflow, 44px targets, button contrast and one live status region were checked. Budget refusal, failure and unknown each have six captures. Unknown status checks send no POST. |
 | F1–F5 | PASS | F1: 56, F2: 38, F3: 22, F4: 20 and F5: 18 captures passed. F2 initially matched the new direct-chat link as well as Ask; selecting the Ask button kept the original focus check and passed. |
+| Focused consent spec after guard restoration | PASS | The 409 refusal spec failed when the clear-before-send line was removed. All 59 provider screen specs passed after it was restored. |
 | Screen reader journey | NOT RUN | Specs check modal status regions and browser captures check their placement. No assistive-technology session was run. |
 | Fresh-install provider journey | NOT RUN | No owner credentials were used. These checks do not qualify a fresh installation. |
 | Real key and paid model answer | NOT RUN | No real key was entered and no paid upstream was called. |
+
+## Review notes still open
+
+| Note | Status | Detail |
+| --- | --- | --- |
+| Shared verification parser | NOT DONE | The visual fixture uses the real body schema, but it still repeats the route's provider-id rule. A shared parser could keep the fixture and route in step. |
+| Projection timing | NOT DONE | A provider list read can arrive before a verification result reaches the projection. The screen then shows an unknown result until Check status is used. |
+| Real free checks | NOT RUN | An owner still needs to try reachability and Skip against a real provider route. No real key or paid model test is part of that check. |

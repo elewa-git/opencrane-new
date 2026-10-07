@@ -8,6 +8,7 @@ const statusLabels: Record<string, string> = {
   ready: 'Model answered',
   model_test_fail: 'Model test failed',
   model_test_unknown: 'Model test outcome unknown',
+  model_test_outcome_unknown: 'Model test outcome unknown; cost may be held',
   model_test_budget_refused: 'Model test refused by budget',
 };
 

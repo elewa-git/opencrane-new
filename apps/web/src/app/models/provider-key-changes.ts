@@ -228,8 +228,14 @@ export class ProviderKeyChanges extends ProviderPageState {
       }
       await this.showCommandFailure(result.kind, pending.commandId, 'Key save');
       if (result.kind !== 'failed') {
-        const message = result.kind === 'invalid' ? 'The key was refused. Check the value.'
-          : 'Provider settings changed. Refresh before replacing the key.';
+        let message = 'The key save was refused. Refresh the provider before trying again.';
+        if (result.kind === 'invalid') {
+          message = 'The key was refused. Check the value.';
+        } else if (result.kind === 'not_found') {
+          message = 'The server could not find this provider. Refresh before saving the key.';
+        } else if (result.kind === 'forbidden') {
+          message = 'The server refused this key save. The provider list is still shown.';
+        }
         if (replacing) {
           this.replaceKeyError.set(message);
         } else {

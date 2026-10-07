@@ -279,6 +279,12 @@ export class ProviderPageState implements OnInit, OnDestroy {
       this.resultKind.set('refused');
       return;
     }
+    if (kind === 'not_found') {
+      this.commandReference.set(reference);
+      this.resultText.set('The server could not find this provider. Refresh before trying again.');
+      this.resultKind.set('refused');
+      return;
+    }
     this.commandReference.set(reference);
     const action = label.toLowerCase();
     const lostReply = `${label} reply was lost. We could not tell whether ${action} was recorded. `;
@@ -440,4 +446,3 @@ function replaceProvider(rows: ProviderRow[], updated: ProviderRow): ProviderRow
   }
   return next;
 }
-

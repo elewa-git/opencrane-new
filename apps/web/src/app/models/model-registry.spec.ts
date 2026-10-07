@@ -354,6 +354,27 @@ it('keeps typed key text when the server refuses a save', async () => {
   expect(screenElement(fixture).textContent).toContain('The key was refused. Check the value.');
 });
 
+it.each([403, 404])('uses clear key-save wording for server response %s', async status => {
+  const state = scenario();
+  state.responseStatus = status;
+  const fixture = await openScenario(state);
+  clickButton(fixture, 'Replace key');
+  const secret = 'fixture-key-kept-after-refusal';
+  const key = field(fixture, 'replace-provider-key');
+  key.value = secret;
+  key.dispatchEvent(new Event('input', { bubbles: true }));
+  await fixture.componentInstance['replaceKey']();
+  await settle(fixture);
+  const message = status === 403 ? 'The server refused this key save'
+    : 'The server could not find this provider';
+  const statusMessage = status === 403 ? 'The server refused this change' : message;
+  expect(fixture.componentInstance['replaceKeyError']()).toContain(message);
+  expect(screenElement(fixture).querySelector('dialog[open] [role="status"]')?.textContent)
+    .toContain(statusMessage);
+  expect(field(fixture, 'replace-provider-key').value).toBe(secret);
+  expect(screenElement(fixture).textContent).not.toContain(secret);
+});
+
 
 it('keeps one provider after Back, an attempted name edit and Next', async () => {
   const commands: Record<string, unknown>[] = [];
@@ -392,6 +413,7 @@ const statusLabels = [
   ['ready', 'Model answered'],
   ['model_test_fail', 'Model test failed'],
   ['model_test_unknown', 'Model test outcome unknown'],
+  ['model_test_outcome_unknown', 'Model test outcome unknown; cost may be held'],
   ['model_test_budget_refused', 'Model test refused by budget'],
 ];
 
@@ -583,6 +605,21 @@ it.each(['pass', 'fail', 'budget_refused'])(
     await fixture.componentInstance['runModelTest']();
     expect(state.posts).toHaveLength(2);
   });
+
+it('clears consent before a priced test refused because the price changed', async () => {
+  const state = scenario();
+  makeReachable(state);
+  state.responseStatus = 409;
+  const fixture = await openScenario(state);
+  await fixture.componentInstance['loadQuote']();
+  await settle(fixture);
+  giveConsent(fixture);
+  await fixture.componentInstance['runModelTest']();
+  await settle(fixture);
+  expect(state.posts).toHaveLength(1);
+  expect(fixture.componentInstance['modelTestConsent']()).toBeUndefined();
+  expect(runControl(fixture)?.disabled).toBe(true);
+});
 
 it('clears consent when the quote changes or a different provider opens', async () => {
   const state = scenario();
@@ -905,6 +942,39 @@ it('lets an unrecorded key replacement start over only after the status read', a
   expect(fixture.componentInstance['pendingKeys']()['one']).toBeUndefined();
   expect(field(fixture, 'replace-provider-key').value).toBe('');
   expect(state.posts).toHaveLength(1);
+});
+
+it('lets a free check start over after its status was not found', async () => {
+  let verificationRequests = 0;
+  const fixture = await mount(request => {
+    if (request.url === '/api/org/models') return reply(registryRead);
+    if (request.method === 'POST' && request.url.endsWith('/verify')) {
+      verificationRequests += 1;
+      if (verificationRequests === 1) return reply({ status: 'unavailable' }, 503);
+      return reply({ status: 'appended', changeId: 'second-check' });
+    }
+    if (request.url.includes('/changes/')) return reply({ status: 'not_found' }, 404);
+    if (request.url === '/api/org/providers') {
+      return reply({ ...emptyProviderRead, rows: [provider('one', 'Primary')] });
+    }
+    if (request.method === 'GET' && request.url.endsWith('/verify')) {
+      return reply({ status: 'pass', attemptId: 'second-check', revision: 2 });
+    }
+    throw new Error(`Unexpected request: ${request.method} ${request.url}`);
+  });
+  const row = fixture.componentInstance['providers']()[0];
+  if (!row) throw new Error('Missing provider');
+  const opener = screenElement(fixture).querySelector('.provider-row-main');
+  if (!(opener instanceof HTMLButtonElement)) throw new Error('Missing provider opener');
+  await fixture.componentInstance['providerAction'](row, opener);
+  await fixture.componentInstance['runReachability']();
+  await fixture.componentInstance['checkVerificationStatus']('one');
+  await settle(fixture);
+  expect(fixture.componentInstance['pendingChecks']()['one']?.notRecorded).toBe(true);
+  clickDialogButton(fixture, 'Start over');
+  expect(fixture.componentInstance['pendingChecks']()['one']).toBeUndefined();
+  await fixture.componentInstance['runReachability']();
+  expect(verificationRequests).toBe(2);
 });
 
 it('saves a first key at the provider revision returned by the server', async () => {
