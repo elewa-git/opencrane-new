@@ -31,6 +31,7 @@ const budget = {
   todayCents: 1, monthCents: 1, reservedCents: 25, ceilingCents: 20000,
   dailyCeilingCents: 2000, ceilings: [],
 };
+
 async function interceptAssets(route) {
   const url = new URL(route.request().url());
   let filename = resolve(build, `.${url.pathname}`);
@@ -207,7 +208,7 @@ async function checkPages(page, width, motion) {
     }
   }
   await page.goto(`${origin}/org/models`);
-  await page.getByText('0 enabled of 1', { exact: true }).waitFor();
+  await page.getByText('pinned-model', { exact: true }).waitFor();
   assert.equal(await page.locator('#monthly-ceiling').count(), 0);
   assert.equal(await page.getByText('retired-model', { exact: true }).count(), 0);
   await checkModelStatus(page);
