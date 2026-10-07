@@ -10,6 +10,12 @@ import { sessionFor } from './routes.ts';
 
 const parameters = z.object({ memberId: z.string().regex(/^[\w-]{1,200}$/u).optional() });
 
+class InvalidMemberRequest extends Error {
+  constructor(error: z.ZodError) {
+    super('Invalid member request', { cause: error });
+  }
+}
+
 export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
   options?: GroupOptions) {
   app.get('/api/members', handler);
@@ -27,17 +33,19 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
     }
     const watchdog = setTimeout(expire, 10_000);
     try {
+      const { memberId } = parseRequest(parameters, request.params);
+      let query: z.infer<typeof memberPageQuerySchema> | undefined;
+      if (!memberId) query = parseRequest(memberPageQuerySchema, request.query);
       const caller = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!caller) throw new MemberAccessRefused('Active membership required');
       const membership = await currentMembership(options.store, options.silo, caller);
       const management = isManager(membership.role);
-      const { memberId } = parameters.parse(request.params);
       requireDirectoryRole(memberId, management);
       let requiredRole: 'member' | 'admin' = 'member';
       if (management) requiredRole = 'admin';
       await readActiveMember(options.store, options.binding, caller, requiredRole);
       if (!memberId) {
-        const directory = await readDirectory(options, request.query);
+        const directory = await readDirectory(options, query);
         if (reply.sent) return reply;
         return reply.send(memberDirectorySchema.parse(directory));
       }
@@ -47,12 +55,21 @@ export function registerMemberReads(app: FastifyInstance, config: AuthConfig,
     } catch (error) {
       if (reply.sent) return reply;
       let code = 503;
-      if (error instanceof z.ZodError) code = 400;
+      if (error instanceof InvalidMemberRequest) code = 400;
       if (error instanceof MemberAccessRefused) code = 403;
       return reply.code(code).send({ status: code === 503 ? 'unavailable' : 'refused' });
     } finally {
       clearTimeout(watchdog);
     }
+  }
+}
+
+function parseRequest<T>(schema: z.ZodType<T>, input: unknown) {
+  try {
+    return schema.parse(input);
+  } catch (error) {
+    if (error instanceof z.ZodError) throw new InvalidMemberRequest(error);
+    throw error;
   }
 }
 
@@ -79,8 +96,9 @@ async function directoryRow(options: GroupOptions, memberId: string,
     role: membership.role, status: 'joined' as const, joinedAt, groups: groups.rows };
 }
 
-async function readDirectory(options: GroupOptions, query: unknown) {
-  const input = memberPageQuerySchema.parse(query);
+async function readDirectory(options: GroupOptions,
+  input: z.infer<typeof memberPageQuerySchema> | undefined) {
+  if (!input) throw new Error('Directory query was not parsed');
   const result = await options.db.query<{ member_id: string }>(
     `SELECT member_id FROM members WHERE silo = $1 AND status = 'joined' AND member_id > $2
       AND ($3 = '' OR strpos(lower(coalesce(display_name, '')), lower($3)) > 0

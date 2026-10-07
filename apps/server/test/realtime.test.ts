@@ -85,6 +85,7 @@ async function connect(sub = 'oidc-alice', org = 'org-acme', autoPong = true) {
     ws.send(JSON.stringify({ type: 'subscribe', topic: 'members', since, ...(generation === undefined ? {} : { generation }) }));
   } };
 }
+
 it.each(['cookie', 'origin', 'missing-origin', 'organisation'])('refuses an upgrade with bad %s in the real process', async (kind) => {
   const h: Record<string, string> = kind === 'organisation' ? headers('oidc-alice', 'other') : headers();
   if (kind === 'cookie') delete h['cookie'];
@@ -282,6 +283,7 @@ it('terminates a peer that does not answer heartbeats', async () => {
 }, 35_000);
 
 async function refusesStaleAuthority(change: 'member.role_changed' | 'member.removed') {
+  await append('bob');
   let data = {};
   if (change === 'member.role_changed') {
     data = { previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
@@ -297,11 +299,69 @@ async function refusesStaleAuthority(change: 'member.role_changed' | 'member.rem
   const directory = await memberRead('/api/members');
   expect(directory.status).toBe(403);
   expect(await directory.json()).toEqual({ status: 'refused' });
+  if (change === 'member.removed') {
+    const header = await memberRead('/api/members/bob');
+    expect(header.status).toBe(403);
+    expect(await header.json()).toEqual({ status: 'refused' });
+  }
 }
 it.each(['member.role_changed', 'member.removed'] as const)(
   'sends no protected records after %s while SQL and IAM still grant admin',
   refusesStaleAuthority,
 );
+
+it('refuses member reads when OpenFGA has revoked access but membership events are current', async () => {
+  const removed = parseEventByType(event('permission-removed-http', 'member-alice', 'member.removed'));
+  if (!removed.success) throw new Error('Invalid fixture');
+  await authz.handler.handle(removed.event, pgDb(dbs.queue));
+
+  const directory = await memberRead('/api/members');
+  expect(directory.status).toBe(403);
+  expect(await directory.json()).toEqual({ status: 'refused' });
+  const header = await memberRead('/api/members/bob');
+  expect(header.status).toBe(403);
+  expect(await header.json()).toEqual({ status: 'refused' });
+});
+
+it('refuses member reads from a different organisation', async () => {
+  const directory = await fetch(`http://127.0.0.1:${server.port}/api/members`,
+    { headers: headers('oidc-alice', 'other') });
+  expect(directory.status).toBe(403);
+  expect(await directory.json()).toEqual({ status: 'refused' });
+  const header = await fetch(`http://127.0.0.1:${server.port}/api/members/bob`,
+    { headers: headers('oidc-alice', 'other') });
+  expect(header.status).toBe(403);
+  expect(await header.json()).toEqual({ status: 'refused' });
+});
+
+it('returns not found for removed and pending member headers', async () => {
+  await append('bob', 'member.invited', { invitationId: 'invite-bob',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } });
+  await append('bob', 'member.joined', { invitationId: 'invite-bob' });
+  await append('bob', 'member.removed');
+  await append('pending', 'member.invited', { invitationId: 'invite-pending' });
+  await append('carol', 'member.invited', { invitationId: 'invite-carol',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-carol' } });
+  await append('carol', 'member.joined', { invitationId: 'invite-carol' });
+
+  const removed = await memberRead('/api/members/bob', 'oidc-carol');
+  expect(removed.status).toBe(404);
+  expect(await removed.json()).toEqual({ status: 'not_found' });
+  const pending = await memberRead('/api/members/pending', 'oidc-carol');
+  expect(pending.status).toBe(404);
+  expect(await pending.json()).toEqual({ status: 'not_found' });
+});
+
+it('returns unavailable when a stored membership event has an invalid role', async () => {
+  const malformed = event('malformed-member-role', 'member-bob', 'member.joined');
+  const invalidMembership = { ...malformed,
+    data: { ...malformed.data, role: 42 } };
+  await nats.seed([invalidMembership]);
+
+  const response = await memberRead('/api/members/bob');
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ status: 'unavailable' });
+});
 
 async function refusesOrdinaryMember() {
   await append('bob', 'member.invited', { invitationId: 'invite-bob',
