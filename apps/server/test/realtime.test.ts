@@ -8,8 +8,8 @@ import { databases, openfga, until } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { parseEventByType } from '@opencrane/events';
 import { createLogger } from '@opencrane/observability';
-import { members, pgDb, ProjectionRunner, rebuildMemberProjection, type EventSource } from '@opencrane/projections';
-import { realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
+import { groups, members, pgDb, ProjectionRunner, rebuildMemberProjection, type EventSource } from '@opencrane/projections';
+import { memberDirectorySchema, memberDetailSchema, realtimeMessageSchema, type RealtimeMessage } from '@opencrane/protocol';
 import { startServer, TEST_OIDC_ENV, type RunningServer } from './support/process.ts';
 
 const env = { ...TEST_OIDC_ENV, OIDC_EXPECTED_ORG_ID: 'org-acme', SILO_ID: 'test' };
@@ -30,10 +30,11 @@ beforeEach(async () => {
   sequence = 0;
   runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader, createLogger('realtime-test'));
   await runner.initialise(members);
+  await runner.initialise(groups);
   authz = memberAuthorisation(await createStore(fga.apiUrl, 'test'));
   await append('alice', 'member.invited', { invitationId: 'invite-alice',
     invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } });
-  await append('alice', 'member.joined', { invitationId: 'invite-alice' });
+  await append('alice', 'member.joined', { invitationId: 'invite-alice', role: 'admin' });
   const binding = authz.binding;
   server = await startServer({ ...env, ...nats.env(), DATABASE_URL: dbs.queue.options.connectionString,
     OPENFGA_API_URL: binding.apiUrl, OPENFGA_STORE_ID: binding.storeId, OPENFGA_MODEL_ID: binding.authorizationModelId });
@@ -55,7 +56,7 @@ afterEach(async () => {
     }
   }
 });
-async function append(id: string, type = 'member.joined', data = {}, project = true) {
+async function append(id: string, type = 'member.joined', data = {}, project = true, iam = true) {
   const raw = event(`realtime-${++sequence}`, `member-${id}`, type);
   const parsed = parseEventByType({ ...raw, principal: { kind: 'human', id: `oidc-${id}` }, data: { ...raw.data, ...data } });
   if (!parsed.success) throw new Error('Invalid fixture');
@@ -63,8 +64,11 @@ async function append(id: string, type = 'member.joined', data = {}, project = t
   for await (const stored of nats.store.readStream(raw.subject)) expectedSequence = stored.sequence;
   const result = await nats.store.append({ expectedSequence, event: parsed.event });
   expect(result.status).toBe('appended');
-  if (type !== 'member.invited') await authz.handler.handle(parsed.event, pgDb(dbs.queue));
-  if (project) await runner.run(members);
+  if (iam && type !== 'member.invited') await authz.handler.handle(parsed.event, pgDb(dbs.queue));
+  if (project) {
+    await runner.run(members);
+    await runner.run(groups);
+  }
 }
 function headers(sub = 'oidc-alice', orgId = 'org-acme') {
   const now = Math.floor(Date.now() / 1000);
@@ -224,12 +228,12 @@ it('fails closed when OpenFGA is unavailable, and closes an existing socket on r
     // Restore the SQL identity from events so this exercises the actual unavailable check.
     await append('alice', 'member.invited', { invitationId: 'again', invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-alice' } });
     const raw = event(`realtime-${++sequence}`, 'member-alice');
-    await nats.store.append({ expectedSequence: 4, event: { ...raw, principal: { kind: 'human', id: 'oidc-alice' }, data: { ...raw.data, invitationId: 'again' } } });
+    await nats.store.append({ expectedSequence: 4, event: { ...raw, principal: { kind: 'human', id: 'oidc-alice' }, data: { ...raw.data, role: 'admin', invitationId: 'again' } } });
     await runner.run(members);
     const refused = await connect();
     const closed = once(refused.ws, 'close');
     refused.subscribe();
-    expect((await closed)[0]).toBe(1008);
+    expect((await closed)[0]).toBe(1011);
   } finally { await fga.resume(); }
 }, 15_000);
 it('limits each connection to 20 messages per second', async () => {
@@ -276,3 +280,168 @@ it('terminates a peer that does not answer heartbeats', async () => {
   const closed = once(client.ws, 'close');
   expect((await closed)[0]).toBe(1006);
 }, 35_000);
+
+async function refusesStaleAuthority(change: 'member.role_changed' | 'member.removed') {
+  let data = {};
+  if (change === 'member.role_changed') {
+    data = { previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
+  }
+  await append('alice', change, data, false, false);
+  expect((await authz.check('alice', 'admin')).allowed).toBe(true);
+  const client = await connect();
+  const closed = once(client.ws, 'close');
+  client.subscribe();
+  await until(() => client.messages.length > 0);
+  expect(client.messages).toEqual([expect.objectContaining({ type: 'refused' })]);
+  expect((await closed)[0]).toBe(1008);
+  const directory = await memberRead('/api/members');
+  expect(directory.status).toBe(403);
+  expect(await directory.json()).toEqual({ status: 'refused' });
+}
+it.each(['member.role_changed', 'member.removed'] as const)(
+  'sends no protected records after %s while SQL and IAM still grant admin',
+  refusesStaleAuthority,
+);
+
+async function refusesOrdinaryMember() {
+  await append('bob', 'member.invited', { invitationId: 'invite-bob',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } });
+  await append('bob', 'member.joined', { invitationId: 'invite-bob' });
+  const client = await connect('oidc-bob');
+  const closed = once(client.ws, 'close');
+  client.subscribe();
+  await until(() => client.messages.length > 0);
+  expect(client.messages).toEqual([expect.objectContaining({ type: 'refused' })]);
+  expect((await closed)[0]).toBe(1008);
+}
+it('sends no member email, name, role or status to a Member with an owner cookie',
+  refusesOrdinaryMember);
+
+async function memberRead(path: string, sub = 'oidc-alice') {
+  return fetch(`http://127.0.0.1:${server.port}${path}`, { headers: headers(sub) });
+}
+async function readsMinimalHeader() {
+  await append('bob', 'member.invited', { invitationId: 'invite-bob',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'oidc-bob' } });
+  await append('bob', 'member.joined', { invitationId: 'invite-bob' });
+  const before = await nats.store.head();
+  const response = await memberRead('/api/members/alice', 'oidc-bob');
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ memberId: 'alice', displayName: 'Alice', role: 'admin',
+    permissions: { changeRole: false, remove: false, manageOwnership: false } });
+  const directory = await memberRead('/api/members', 'oidc-bob');
+  expect(directory.status).toBe(403);
+  expect(await directory.json()).toEqual({ status: 'refused' });
+  expect(await nats.store.head()).toBe(before);
+}
+it('gives a Member only the header and false management flags, never the directory',
+  readsMinimalHeader);
+
+async function readsBoundedDirectory() {
+  await append('pending', 'member.invited', { expiresAt: '2099-01-01T00:00:00Z' });
+  await append('pending', 'member.invited', { invitationId: 'latest',
+    expiresAt: '2099-01-01T00:00:00Z' });
+  await append('expired', 'member.invited', { expiresAt: new Date().toISOString() });
+  await append('bob', 'member.joined', { email: 'bob@example.test' });
+  await append('carol', 'member.joined', { email: 'carol@example.test' });
+  const before = await nats.store.head();
+  const response = await memberRead('/api/members?after=&limit=1');
+  expect(response.status).toBe(200);
+  const page = memberDirectorySchema.parse(await response.json());
+  expect(page).toMatchObject({ rows: [{ memberId: 'alice', role: 'admin', groups: [] }],
+    next: 'alice', counts: { members: { status: 'current', value: 3 },
+      pendingInvitations: { status: 'current', value: 1 },
+      acceptedInvitations: { status: 'current', value: 1 } } });
+  const detailResponse = await memberRead('/api/members/alice');
+  const detail = memberDetailSchema.parse(await detailResponse.json());
+  expect(detail).toMatchObject({ email: 'alice@example.com', role: 'admin',
+    joinedAt: '2026-10-01T00:00:00Z', personalAssistant: { status: 'unavailable' } });
+  const next = await memberRead('/api/members?after=alice&limit=1');
+  expect(await next.json()).toMatchObject({ rows: [{ memberId: 'bob' }], next: 'bob' });
+  const searched = await memberRead('/api/members?q=alice%40example.com');
+  expect(await searched.json()).toMatchObject({ rows: [{ memberId: 'alice' }], next: null });
+  for (const query of ['limit=51', 'q=' + 'x'.repeat(101), 'after=*']) {
+    expect((await memberRead('/api/members?' + query)).status).toBe(400);
+  }
+  await append('bob', 'member.removed', {}, false, false);
+  const delayed = await memberRead('/api/members');
+  expect(await delayed.json()).toMatchObject({ rows: [
+    { memberId: 'alice' }, { memberId: 'carol' },
+  ], counts: { members: { status: 'applying', value: null } },
+  projection: { content: 'applying' } });
+  expect(await nats.store.head()).toBe(before + 1);
+}
+it('pages the member projection, searches contact email and never calls page length a total',
+  readsBoundedDirectory);
+
+async function closesWithDelayedContent(change: 'member.role_changed' | 'member.removed') {
+  const client = await connect();
+  client.subscribe();
+  await until(() => client.messages.some(isReady));
+  const connection = await dbs.queue.connect();
+  try {
+    await connection.query('BEGIN');
+    await connection.query('LOCK TABLE member_changes IN ACCESS EXCLUSIVE MODE');
+    await delay(300);
+    let data = {};
+    if (change === 'member.role_changed') {
+      data = { previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
+    }
+    await append('alice', change, data, false, false);
+    const recordedAt = performance.now();
+    await until(() => client.ws.readyState === WebSocket.CLOSED, 2100);
+    expect(performance.now() - recordedAt).toBeLessThanOrEqual(2000);
+    expect(client.messages.at(-1)?.type).toBe('refused');
+    expect(client.messages.filter(isMember)).toHaveLength(2);
+  } finally {
+    await connection.query('ROLLBACK');
+    connection.release();
+  }
+}
+function isReady(message: RealtimeMessage) {
+  return message.type === 'ready';
+}
+function isMember(message: RealtimeMessage) {
+  return message.type === 'member';
+}
+it.each(['member.role_changed', 'member.removed'] as const)(
+  'closes within two seconds of %s while SQL content and IAM are delayed',
+  closesWithDelayedContent,
+);
+
+async function countsUnavailableBeyondBound() {
+  const records = [];
+  for (let index = 0; index < 500; index++) {
+    records.push(event(`bounded-${index}`, `member-counted-${index}`, 'member.joined'));
+  }
+  await nats.seed(records);
+  await runner.run(members);
+  await runner.run(groups);
+  const response = await memberRead('/api/members?limit=1');
+  expect(response.status).toBe(200);
+  const directory = memberDirectorySchema.parse(await response.json());
+  expect(directory.counts.members).toEqual({ status: 'unavailable', value: null });
+  expect(directory.rows).toHaveLength(1);
+}
+it('marks totals unavailable when member history exceeds the read budget',
+  countsUnavailableBeyondBound, 120_000);
+
+async function expiresHungAuthority() {
+  const client = await connect();
+  client.subscribe();
+  await until(() => client.messages.some(isReady));
+  nats.pauseResponses(true);
+  const started = performance.now();
+  try {
+    await until(() => client.ws.readyState === WebSocket.CLOSED, 2100);
+    expect(performance.now() - started).toBeLessThanOrEqual(2000);
+    expect(client.messages.filter(isMember)).toHaveLength(2);
+  } finally {
+    nats.pauseResponses(false);
+  }
+  await delay(300);
+  expect(client.ws.readyState).toBe(WebSocket.CLOSED);
+  expect(client.messages.filter(isMember)).toHaveLength(2);
+}
+it('closes on an event-store outage and keeps late transport replies off the socket',
+  expiresHungAuthority);

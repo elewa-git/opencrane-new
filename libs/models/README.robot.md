@@ -629,3 +629,8 @@ sets the decision request's `mcp-name` to all supplied values, joined with comma
 The existing comparison with the body then refuses duplicates, including repeated
 identical names. No refused request reaches the tool server. Valid single-header
 requests still keep their original body bytes and public headers.
+
+## Member reads
+
+`readActiveMember(..., requiredRole = 'member')` checks events, ownership and IAM once.
+`'admin'` requires Owner/Admin; reads use no `authorityFence` or conversation activity.

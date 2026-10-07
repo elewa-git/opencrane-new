@@ -200,11 +200,15 @@ Without configuration or permission, subscriptions fail closed.
 Send `{"type":"subscribe","topic":"members","since":0}` on the tab's existing
 `/ws` connection. Only one subscription per connection is supported. The server
 resolves the session's issuer/subject to a joined member through the projection,
-then checks the silo's `member` permission through OpenFGA. Cookie roles are ignored.
+then checks current Owner/Admin events and the silo's `admin` permission through OpenFGA.
+Cookie roles are ignored.
 Ambiguous or absent identity bindings are refused. Old unbound joins need a bound
-invitation before they can subscribe. Permissions are checked on reads and at
-one-second intervals (plus dependency latency); failures stop delivery. Session
-expiry is checked there too. This is bounded revocation, not instantaneous logout.
+invitation before they can subscribe. Permissions are checked on each drain and
+independently every 250 ms. A 1.5-second watchdog stops hung checks. Delivery
+requires an unexpired access check, even while content is slow. Event-based
+demotion or removal sends `refused` and closes; dependency failures close with
+1013 during polling. Session expiry is checked there too. Members use the narrow
+colleague read, which has no emails.
 
 Version 1 replies are `member`, `ready`, `resync` or `refused`; every reply has
 `topic`, `version`, `generation` and a safe integer `position`. A `member` contains the full row
@@ -883,3 +887,8 @@ The arguments are chats, turns per chat and reply chunks per turn.
 Rebuild cost for larger active working sets is tracked in #256. The remaining
 approval history and polling reads are tracked in #254 and #255. Fresh-install
 governed-work qualification remains tracked in #63.
+
+## Member reads
+
+The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
+`test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.

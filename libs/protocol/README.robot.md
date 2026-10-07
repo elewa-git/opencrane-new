@@ -88,3 +88,8 @@ and live delivery messages.
 The browser receives these fields through the existing feed and live messages.
 Running tool lines and attempt lists are not rendered yet. Tests are in
 `test/chat-mode.test.ts`.
+
+## Member reads
+
+Strict header, detail, directory and query schemas follow the
+[member API](../../docs/api/members.md), including separate pages and silo counts.

@@ -2,13 +2,16 @@ import { setImmediate as yieldIo } from 'node:timers/promises';
 import type { WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
 import { isIdentityAllowed, type AuthConfig, type SessionData } from '@opencrane/auth';
-import { memberAuthorisation, type Binding } from '@opencrane/authz';
+import type { Binding } from '@opencrane/authz';
+import type { EventStore } from '@opencrane/event-store';
+import { readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import type { connectMemberFeed } from '@opencrane/projections';
 import type { RealtimeMessage } from '@opencrane/protocol';
 
 import type { ChatOptions } from './chat/routes.ts';
 export interface RealtimeOptions {
   chat?: ChatOptions;
+  store?: EventStore | undefined;
   feed: Awaited<ReturnType<typeof connectMemberFeed>>;
   binding: Binding;
 }
@@ -20,13 +23,44 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
   let active = false, running = false, dirty = false, subscribed = false, ready = false;
   const send = (message: RealtimeMessage) => socket.send(JSON.stringify(message));
   const envelope = () => ({ version: 1 as const, topic: 'members' as const, position, generation });
-  const authz = options && memberAuthorisation(options.binding);
+  let memberId: string | undefined;
+  let checking = false;
+  let leaseUntil = 0;
   async function allowed() {
-    if (!options || !authz || !config.expectedOrgId
-      || !isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })
-      || session.exp * 1000 <= Date.now()) return false;
-    const id = await options.feed.memberId(options.binding.silo, config.issuerUrl, session.sub);
-    return Boolean(id && (await authz.check(id, 'member')).allowed);
+    if (!options?.store || !config.expectedOrgId || session.orgId !== config.expectedOrgId
+      || !isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub,
+        orgId: session.orgId }) || session.exp * 1000 <= Date.now()) return false;
+    const deadline = performance.now() + 1500;
+    function expire() {
+      active = false;
+      socket.close(1013, 'members access unavailable');
+    }
+    const watchdog = setTimeout(expire, 1500);
+    try {
+      memberId ??= await options.feed.memberId(options.binding.silo, config.issuerUrl, session.sub);
+      if (!memberId) return false;
+      await readActiveMember(options.store, options.binding, memberId, 'admin');
+      if (performance.now() >= deadline || socket.readyState !== socket.OPEN) return false;
+      leaseUntil = deadline;
+      return true;
+    } catch (error) {
+      if (error instanceof MemberAccessRefused) return false;
+      throw error;
+    } finally {
+      clearTimeout(watchdog);
+    }
+  }
+  async function pollAccess() {
+    if (!active || checking) return;
+    checking = true;
+    try {
+      if (!await allowed()) refuse();
+    } catch {
+      active = false;
+      socket.close(1013, 'members access unavailable');
+    } finally {
+      checking = false;
+    }
   }
   function refuse() {
     active = false;
@@ -48,7 +82,8 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
     send({ ...envelope(), type: 'resync' });
     socket.close(1013, 'restart from position 0');
   }
-  const connected = () => active && socket.readyState === socket.OPEN;
+  const connected = () => active && socket.readyState === socket.OPEN
+    && performance.now() < leaseUntil;
   async function drain() {
     if (!options || running || !active) return;
     running = true;
@@ -81,8 +116,12 @@ export function memberSubscription(socket: WebSocket, session: SessionData, conf
     });
   }
   const unlisten = options?.feed.listen(wake);
-  // Also recheck permissions when the OpenFGA projection advances without a SQL wake-up.
-  const permissions = setInterval(wake, 1000);
+  // Keep access checks running while a content read waits for PostgreSQL.
+  function poll() {
+    void pollAccess();
+    wake();
+  }
+  const permissions = setInterval(poll, 250);
   permissions.unref();
   socket.once('close', () => { active = false; unlisten?.(); clearInterval(permissions); });
   return async (since: number, requestedGeneration?: number) => {
