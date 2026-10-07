@@ -132,22 +132,29 @@ to offer a directory search. The server checks that the successor is an active m
 The review shows the names returned by the owners read and the entered id.
 
 Transfer sends one command with action `transfer`, a fresh command id, the sequence
-from the read, and the successor id. Each pending change is one record kept separate
-from the review draft.
+from the read, and the successor id. Step-down sends one command with action `step_down`
+and the same sequence check. Confirmed events are `ownership.transferred` and
+`ownership.stepped_down`. Each pending change is one record kept separate from the review draft.
 While a command is applying or its reply is unknown, the screen disables another
 ownership change. A 200 receipt is followed by read-only status and owner reads before
-the screen shows the confirmed owners. A lost or unusable reply says the change may or
-may not have been recorded, shows the command id, and only offers GET status checks.
-It never repeats the POST. The server prevents transfer from removing the last owner.
+the screen shows the confirmed owners. A lost reply says that the change may or may not
+have been recorded, shows the command id and offers GET-only status checks. A 404 says the
+server has no record yet; the first request may still arrive. Refreshing the owner list is
+safe while the result is unknown. A 401 clears the owner details. A 400 says that nothing
+was sent. The screen never repeats an uncertain POST. The server prevents transfer or
+step-down from removing the last Owner.
 
 The API does not report other pending ownership changes with actor names or start times.
 It also does not expose group grants for comparing the successor's access. The screen
-does not invent either detail. This screen shows a general conflict or refusal. The next
-stacked change adds the specific last-owner conflict, inactive-member refusal and Admin
-explanation. Admins can read the owner list but cannot start an ownership change.
+does not invent either detail. The screen explains all ownership conflict and refusal
+reasons returned by the server. It names an inactive successor and keeps the typed ID in
+**Choose another owner**. If the viewer is no longer an Owner, it refreshes the owner list
+and removes the Owner controls. Other access refusals clear protected owner details.
+Admins can read the owner list but cannot start an ownership change.
 
-The second ownership screen change adds step-down review, last-owner conflict and
-Admin refusal details.
+`npm run visual:p4-2-screens` captures the ownership frames at 1280, 390 and 320 pixels,
+with reduced motion on and off. It checks overflow, live status count, target size and
+text contrast. The receipt records the visible differences from PPL-30 to PPL-35.
 
 ## Sign-in
 

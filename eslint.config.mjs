@@ -73,7 +73,10 @@ export default tseslint.config(
   {
     // Plain Node scripts and root config files: none of these belong to a
     // package tsconfig, so they get no type-aware rules.
-    files: ['scripts/**/*.mjs', 'apps/computer/test/*.mjs', '*.mjs', '*.cjs', 'vitest.config.ts'],
+    files: [
+      'scripts/**/*.mjs', 'docs/process/**/*.mjs', 'apps/computer/test/*.mjs',
+      '*.mjs', '*.cjs', 'vitest.config.ts',
+    ],
     extends: [tseslint.configs.disableTypeChecked],
     languageOptions: {
       globals: {
