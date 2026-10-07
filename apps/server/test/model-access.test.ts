@@ -4,7 +4,8 @@ import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz'
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { modelAccessResponseSchema } from '@opencrane/protocol';
+import { modelAccessCandidatesResponseSchema, modelAccessResponseSchema } from '@opencrane/protocol';
+import { models } from '@opencrane/models';
 import { groups, members, modelAccess, pgDb, ProjectionRunner,
   rebuildModelAccessProjection } from '@opencrane/projections';
 import { buildServer } from '../src/server.ts';
@@ -18,6 +19,7 @@ let app: ReturnType<typeof buildServer>;
 let auth: ReturnType<typeof memberAuthorisation>;
 let runner: ProjectionRunner;
 let database: ReturnType<typeof pgDb>;
+let binding: Awaited<ReturnType<typeof createStore>>;
 let directGrantId = '';
 let historicalRevokeId = '';
 let sequence = 0;
@@ -35,7 +37,7 @@ async function append(subject: string, type: string, data: unknown, silo = 'acme
     expectedSequence: await nats.store.head(subject),
   });
   expect(result.status).toBe('appended');
-  if (auth.handler.eventTypes.includes(type)) {
+  if (silo === 'acme' && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, pgDb(dbs.queue));
   }
   return record;
@@ -58,7 +60,7 @@ async function initialise() {
   nats = await natsFixture();
   fga = await openfga();
   dbs = await databases();
-  const binding = await createStore(fga.apiUrl, 'acme');
+  binding = await createStore(fga.apiUrl, 'acme');
   auth = memberAuthorisation(binding);
   database = pgDb(dbs.queue);
   runner = new ProjectionRunner(database, nats.reader,
@@ -67,7 +69,8 @@ async function initialise() {
   await runner.initialise(groups);
   await runner.initialise(modelAccess);
 
-  for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member']] as const) {
+  for (const [memberId, role] of [['owner', 'owner'], ['bob', 'member'],
+    ['admin', 'admin'], ['unapplied', 'admin']] as const) {
     const joined = {
       ...event(`model-access-member-${memberId}`, `member-${memberId}`, 'member.joined'),
       silo: 'acme',
@@ -76,7 +79,7 @@ async function initialise() {
       data: {
         memberId,
         email: `${memberId}@example.test`,
-        displayName: memberId === 'owner' ? 'Owner Name' : 'Bob Name',
+        displayName: memberDisplayName(memberId),
         role,
         invitationId: `invite-${memberId}`,
       },
@@ -88,8 +91,40 @@ async function initialise() {
   await append('team-sales', 'team.created', {
     teamId: 'sales', name: 'Sales team', createdBy: 'owner',
   });
+  await append('team-support', 'team.created', {
+    teamId: 'support', name: 'Support team', createdBy: 'owner',
+  });
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'owner', addedBy: 'owner',
+  });
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'bob', addedBy: 'owner',
+  });
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'removed', addedBy: 'owner',
+  });
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'invited', addedBy: 'owner',
+  });
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'invited', addedBy: 'owner',
+  });
+  await append('member-invited', 'member.invited', {
+    memberId: 'invited', role: 'member', invitationId: 'invite-invited',
+    email: 'invited@example.test', invitedBy: 'owner',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'idp-invited' },
+    expiresAt: '2026-10-08T00:00:00Z',
+  });
+  await append('member-removed', 'member.joined', {
+    memberId: 'removed', email: 'removed@example.test', displayName: 'Removed Name',
+    role: 'member', invitationId: 'invite-removed',
+  });
+  await append('member-removed', 'member.removed', { memberId: 'removed', removedBy: 'owner' });
   await append('assistant-bob-assistant', 'assistant.created', {
-    assistantId: 'bob-assistant', ownerId: 'bob', kind: 'personal', name: 'Bob helper',
+    assistantId: 'bob-assistant', ownerId: 'bob', kind: 'personal',
+  });
+  await append('assistant-shared-helper', 'assistant.created', {
+    assistantId: 'shared-helper', ownerId: 'owner', kind: 'team', name: 'Shared helper',
   });
   const directGrant = await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
     resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'owner',
@@ -113,6 +148,41 @@ async function initialise() {
     revokedBy: 'owner',
   });
   historicalRevokeId = historicalRevoke.id;
+  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'sales',
+    granteeKind: 'team', grantedBy: 'owner',
+  }, 'other-silo');
+  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'foreign-team',
+    granteeKind: 'team', grantedBy: 'owner',
+  });
+  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'foreign',
+    granteeKind: 'member', grantedBy: 'owner',
+  });
+  await append(grantStream('model', 'gpt-6-luna'), 'grant.given', {
+    resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'foreign-assistant',
+    granteeKind: 'assistant', grantedBy: 'owner',
+  });
+  await append('team-sales', 'team.created', {
+    teamId: 'sales', name: 'Foreign sales team', createdBy: 'owner',
+  }, 'other-silo');
+  await append('team-sales', 'team.member_added', {
+    teamId: 'sales', memberId: 'foreign', addedBy: 'owner',
+  }, 'other-silo');
+  await append('team-foreign-team', 'team.created', {
+    teamId: 'foreign-team', name: 'Leaked foreign team', createdBy: 'owner',
+  }, 'other-silo');
+  await append('assistant-bob-assistant', 'assistant.created', {
+    assistantId: 'bob-assistant', ownerId: 'bob', kind: 'personal',
+  }, 'other-silo');
+  await append('assistant-foreign-assistant', 'assistant.created', {
+    assistantId: 'foreign-assistant', ownerId: 'foreign', kind: 'personal',
+  }, 'other-silo');
+  await append('member-foreign', 'member.joined', {
+    memberId: 'foreign', email: 'foreign@example.test', displayName: 'Foreign Name',
+    role: 'member', invitationId: 'invite-foreign',
+  }, 'other-silo');
   await runner.run(members);
   await runner.run(groups);
   await runner.run(modelAccess);
@@ -125,30 +195,51 @@ async function initialise() {
 }
 
 beforeAll(initialise, 120_000);
-afterAll(async () => {
+afterAll(closeFixture);
+
+async function closeFixture() {
   await app?.close();
   await dbs?.close();
   await fga?.close();
   await nats?.close();
-});
+}
+
+function grantId(grant: { granteeId: string }) {
+  return grant.granteeId;
+}
+
+function grantDisplayName(grant: { displayName: string }) {
+  return grant.displayName;
+}
 
 async function ownerReadsModelAccessAndPagedCandidates() {
   const access = await request('/api/org/models/gpt-6-luna/access');
   expect(access.statusCode).toBe(200);
   expect(access.headers['cache-control']).toBe('no-store');
   const accessBody = modelAccessResponseSchema.parse(access.json());
+  expect(access.body).not.toContain('@');
+  expect(access.body).not.toContain('secret:');
   expect(accessBody).toMatchObject({
     modelId: 'gpt-6-luna',
     canManage: true,
     grants: [{
-      granteeKind: 'assistant', granteeId: 'bob-assistant', displayName: 'Bob helper',
+      granteeKind: 'assistant', granteeId: 'bob-assistant', displayName: 'Bob Name personal assistant',
       source: 'assistant', state: 'granted',
+    }, {
+      granteeKind: 'assistant', granteeId: 'foreign-assistant',
+      displayName: 'foreign-assistant', source: 'assistant', state: 'granted',
+    }, {
+      granteeKind: 'member', granteeId: 'foreign', displayName: 'foreign',
+      source: 'direct', state: 'granted',
     }, {
       granteeKind: 'member', granteeId: 'former-member', displayName: 'former-member',
       source: 'direct', state: 'revoked', eventId: historicalRevokeId,
     }, {
       granteeKind: 'member', granteeId: 'owner', displayName: 'Owner Name',
       source: 'direct', state: 'granted', eventId: directGrantId,
+    }, {
+      granteeKind: 'team', granteeId: 'foreign-team', displayName: 'foreign-team',
+      source: 'group', state: 'granted',
     }, {
       granteeKind: 'team', granteeId: 'sales', displayName: 'Sales team',
       source: 'group', state: 'granted',
@@ -158,22 +249,41 @@ async function ownerReadsModelAccessAndPagedCandidates() {
       selectedConnection: { status: 'not_available_yet' },
     },
     explanations: { configuredUses: { status: 'not_available_yet' } },
+    grantTotal: 7,
   });
 
   const firstPage = await request('/api/org/models/gpt-6-luna/access/candidates?kind=member&limit=1');
   expect(firstPage.statusCode).toBe(200);
-  expect(firstPage.json()).toMatchObject({
-    rows: [{ id: 'bob', displayName: 'Bob Name' }],
-    next: 'bob',
-  });
+  expect(firstPage.json()).toMatchObject({ rows: [{ id: 'admin', displayName: 'admin Name' }],
+    next: 'admin' });
   const nextPage = await request(
-    '/api/org/models/gpt-6-luna/access/candidates?kind=member&limit=1&after=bob',
+    '/api/org/models/gpt-6-luna/access/candidates?kind=member&limit=1&after=admin',
   );
-  expect(nextPage.json()).toMatchObject({ rows: [{ id: 'owner', displayName: 'Owner Name' }] });
+  expect(nextPage.json()).toMatchObject({ rows: [{ id: 'bob', displayName: 'Bob Name' }], next: 'bob' });
   const teams = await request('/api/org/models/gpt-6-luna/access/candidates?kind=team');
-  expect(teams.json()).toMatchObject({ rows: [{ id: 'sales', memberCount: 0 }] });
-  const assistants = await request('/api/org/models/gpt-6-luna/access/candidates?kind=assistant');
-  expect(assistants.json()).toMatchObject({ rows: [{ id: 'bob-assistant', displayName: 'Bob helper' }] });
+  const firstTeamPage = await request(
+    '/api/org/models/gpt-6-luna/access/candidates?kind=team&limit=1',
+  );
+  expect(firstTeamPage.json()).toMatchObject({ rows: [{ id: 'sales', memberCount: 2 }], next: 'sales' });
+  const finalTeamPage = await request(
+    '/api/org/models/gpt-6-luna/access/candidates?kind=team&limit=1&after=sales',
+  );
+  expect(finalTeamPage.json()).toMatchObject({ rows: [{ id: 'support', memberCount: 0 }], next: null });
+  const allTeamCandidates = modelAccessCandidatesResponseSchema.parse(teams.json());
+  expect(allTeamCandidates.rows).toHaveLength(2);
+  const assistants = await request(
+    '/api/org/models/gpt-6-luna/access/candidates?kind=assistant&limit=1',
+  );
+  expect(assistants.json()).toMatchObject({
+    rows: [{ id: 'bob-assistant', displayName: 'Bob Name personal assistant' }],
+    next: 'bob-assistant',
+  });
+  const finalAssistantPage = await request(
+    '/api/org/models/gpt-6-luna/access/candidates?kind=assistant&limit=1&after=bob-assistant',
+  );
+  expect(finalAssistantPage.json()).toMatchObject({
+    rows: [{ id: 'shared-helper', displayName: 'Shared helper' }], next: null,
+  });
   const replay = await rebuildModelAccessProjection(database, nats.reader,
     createLogger('model-access-replay-test', { level: 'silent' }), { verify: true });
   expect(replay.verified).toBe(true);
@@ -182,6 +292,208 @@ async function ownerReadsModelAccessAndPagedCandidates() {
   expect(replayedBody.grants).toEqual(accessBody.grants);
 }
 it('an owner reads model access and bounded same-silo candidates', ownerReadsModelAccessAndPagedCandidates);
+
+async function everyRegisteredModelIdPassesTheSharedResponseSchema() {
+  for (const model of models) {
+    if (model.retired) {
+      const retiredResponse = await request(`/api/org/models/${model.id}/access`);
+      expect(retiredResponse.statusCode).toBe(200);
+      expect(modelAccessResponseSchema.parse(retiredResponse.json()).availability.registrySupported)
+        .toBe(false);
+      continue;
+    }
+    const response = await request(`/api/org/models/${model.id}/access`);
+    expect(response.statusCode).toBe(200);
+    expect(modelAccessResponseSchema.parse(response.json()).modelId).toBe(model.id);
+  }
+  const unknown = await request('/api/org/models/gpt-999/access');
+  expect(modelAccessResponseSchema.parse(unknown.json()).availability.registrySupported).toBe(false);
+}
+it('accepts every active model id in the shared response schema',
+  everyRegisteredModelIdPassesTheSharedResponseSchema);
+
+async function grantsHaveAnExactTotalAndAOneHundredRowLimit() {
+  for (let index = 0; index < 101; index++) {
+    await append(grantStream('model', 'gpt-6-sol'), 'grant.given', {
+      resourceType: 'model', resourceId: 'gpt-6-sol', granteeId: `person-${index}`,
+      granteeKind: 'member', grantedBy: 'owner',
+    });
+  }
+  await runner.run(modelAccess);
+  const response = await request('/api/org/models/gpt-6-sol/access');
+  const body = modelAccessResponseSchema.parse(response.json());
+  expect(body.grants).toHaveLength(100);
+  expect(body.grantTotal).toBe(101);
+  expect(body.explanations).not.toHaveProperty('grants');
+}
+it('limits grant rows and reports the exact number available',
+  grantsHaveAnExactTotalAndAOneHundredRowLimit);
+
+async function modelAccessReadsOnlyTheRequestedSiloAndJoinedMembers() {
+  const response = await request('/api/org/models/gpt-6-luna/access');
+  const body = modelAccessResponseSchema.parse(response.json());
+  expect(body.grants.map(grantId)).toEqual([
+    'bob-assistant', 'foreign-assistant', 'foreign', 'former-member', 'owner',
+    'foreign-team', 'sales',
+  ]);
+  expect(body.grants.map(grantDisplayName)).not.toContain('Leaked foreign team');
+
+  const membersPage = await request(
+    '/api/org/models/gpt-6-luna/access/candidates?kind=member&limit=100',
+  );
+  const memberCandidates = modelAccessCandidatesResponseSchema.parse(membersPage.json());
+  expect(memberCandidates.rows.map(candidateId)).toEqual([
+    'admin', 'bob', 'owner', 'unapplied',
+  ]);
+  const teamsPage = await request('/api/org/models/gpt-6-luna/access/candidates?kind=team');
+  const teamCandidates = modelAccessCandidatesResponseSchema.parse(teamsPage.json());
+  expect(teamCandidates.rows).toEqual([
+    { id: 'sales', displayName: 'Sales team', memberCount: 2 },
+    { id: 'support', displayName: 'Support team', memberCount: 0 },
+  ]);
+  const assistantsPage = await request('/api/org/models/gpt-6-luna/access/candidates?kind=assistant');
+  const assistantCandidates = modelAccessCandidatesResponseSchema.parse(assistantsPage.json());
+  expect(assistantCandidates.rows).toEqual([
+    { id: 'bob-assistant', displayName: 'Bob Name personal assistant' },
+    { id: 'shared-helper', displayName: 'Shared helper' },
+  ]);
+}
+it('keeps reads in the silo and offers joined members only',
+  modelAccessReadsOnlyTheRequestedSiloAndJoinedMembers);
+
+async function adminsMayReadButRemovedAndDemotedCallersMayNot() {
+  const adminResponse = await request('/api/org/models/gpt-6-luna/access', 'idp-admin');
+  expect(adminResponse.statusCode).toBe(200);
+
+  await append('member-admin', 'member.role_changed', {
+    memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+  });
+  const demotedResponse = await request('/api/org/models/gpt-6-luna/access', 'idp-admin');
+  expect(demotedResponse.statusCode).toBe(403);
+  expect(demotedResponse.json()).toEqual({ status: 'refused' });
+
+  const removedResponse = await request('/api/org/models/gpt-6-luna/access', 'idp-removed');
+  expect(removedResponse.statusCode).toBe(403);
+  expect(removedResponse.json()).toEqual({ status: 'refused' });
+}
+it('allows an admin and refuses removed or demoted callers',
+  adminsMayReadButRemovedAndDemotedCallersMayNot);
+
+async function unauthenticatedUnknownAndUnwiredReadsFailClosed() {
+  const missingCookie = await app.inject({
+    method: 'GET', url: '/api/org/models/gpt-6-luna/access',
+  });
+  expect(missingCookie.statusCode).toBe(401);
+
+  const unknownIdentity = await request('/api/org/models/gpt-6-luna/access', 'idp-unknown');
+  expect(unknownIdentity.statusCode).toBe(403);
+
+  const unconfiguredApp = buildServer(config);
+  const unconfigured = await unconfiguredApp.inject({
+    method: 'GET', url: '/api/org/models/gpt-6-luna/access',
+    headers: { cookie: `${config.cookieName}=${encodeSession(config, {
+      sub: 'idp-owner', orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000,
+    })}` },
+  });
+  await unconfiguredApp.close();
+  expect(unconfigured.statusCode).toBe(503);
+  expect(unconfigured.json()).toEqual({ status: 'unavailable' });
+}
+it('refuses missing sessions and unknown identities and fails closed when unwired',
+  unauthenticatedUnknownAndUnwiredReadsFailClosed);
+
+async function iamFailureAndUnappliedMembershipReturn503() {
+  const unavailableBinding = { ...binding, apiUrl: 'http://127.0.0.1:1' };
+  const unavailableApp = buildServer(config, {
+    modelAccess: {
+      silo: 'acme', store: nats.store, db: database, binding: unavailableBinding,
+      feed: { memberId: resolveMemberId },
+    },
+  });
+  const unavailable = await unavailableApp.inject({
+    method: 'GET', url: '/api/org/models/gpt-6-luna/access',
+    headers: { cookie: `${config.cookieName}=${encodeSession(config, {
+      sub: 'idp-owner', orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000,
+    })}` },
+  });
+  await unavailableApp.close();
+  expect(unavailable.statusCode).toBe(503);
+  expect(unavailable.json()).toEqual({ status: 'unavailable' });
+
+  const changed = {
+    ...event('unapplied-role-change', 'member-unapplied', 'member.role_changed'),
+    silo: 'acme',
+    data: { memberId: 'unapplied', previousRole: 'admin', newRole: 'owner', changedBy: 'owner' },
+  };
+  const result = await nats.store.append({ event: changed,
+    expectedSequence: await nats.store.head('member-unapplied') });
+  expect(result.status).toBe('appended');
+  const applying = await request('/api/org/models/gpt-6-luna/access', 'idp-unapplied');
+  expect(applying.statusCode).toBe(503);
+  expect(applying.json()).toEqual({ status: 'unavailable' });
+}
+it('returns no data when IAM is unavailable or a membership change is unapplied',
+  iamFailureAndUnappliedMembershipReturn503);
+
+async function badModelAndCandidateInputReturns400() {
+  const badModel = await request('/api/org/models/%21/access');
+  expect(badModel.statusCode).toBe(400);
+  const invalidKind = await request('/api/org/models/gpt-6-luna/access/candidates?kind=person');
+  const zeroLimit = await request('/api/org/models/gpt-6-luna/access/candidates?kind=member&limit=0');
+  const largeLimit = await request('/api/org/models/gpt-6-luna/access/candidates?kind=member&limit=101');
+  const extraField = await request('/api/org/models/gpt-6-luna/access/candidates?kind=member&extra=x');
+  for (const response of [invalidKind, zeroLimit, largeLimit, extraField]) {
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({ status: 'refused' });
+  }
+}
+it('returns 400 for invalid model ids and candidate queries', badModelAndCandidateInputReturns400);
+
+async function grantRowsShowWhetherTheProjectionHasAppliedThem() {
+  const modelId = 'gpt-6-astra';
+  await append(grantStream('model', modelId), 'grant.given', {
+    resourceType: 'model', resourceId: modelId, granteeId: 'unprojected-member',
+    granteeKind: 'member', grantedBy: 'owner',
+  });
+  const applying = await request(`/api/org/models/${modelId}/access`);
+  expect(applying.statusCode).toBe(200);
+  const applyingBody = modelAccessResponseSchema.parse(applying.json());
+  expect(applyingBody.projection.content).toBe('applying');
+  expect(applyingBody.grants).toHaveLength(0);
+
+  await runner.run(members);
+  await runner.run(groups);
+  await runner.run(modelAccess);
+  const current = await request(`/api/org/models/${modelId}/access`);
+  const currentBody = modelAccessResponseSchema.parse(current.json());
+  expect(currentBody.projection.content).toBe('current');
+  expect(currentBody.grants).toMatchObject([
+    { granteeId: 'unprojected-member', projection: 'current' },
+  ]);
+
+  const groupsCheckpoint = await database.query<{ sequence: string | number }>(
+    'SELECT sequence FROM projection_checkpoints WHERE name = $1', ['groups']);
+  const savedSequence = groupsCheckpoint.rows[0]?.sequence;
+  expect(savedSequence).toBeDefined();
+  await database.query('DELETE FROM projection_checkpoints WHERE name = $1', ['groups']);
+  const missingCheckpoint = await request(`/api/org/models/${modelId}/access`);
+  const missingCheckpointBody = modelAccessResponseSchema.parse(missingCheckpoint.json());
+  expect(missingCheckpointBody.projection).toEqual({ content: 'applying', sequence: 0 });
+  await database.query(`INSERT INTO projection_checkpoints VALUES ($1, $2)
+    ON CONFLICT (name) DO UPDATE SET sequence = EXCLUDED.sequence`, ['groups', savedSequence]);
+}
+it('marks grant rows applying until the projection has caught up',
+  grantRowsShowWhetherTheProjectionHasAppliedThem);
+
+function candidateId(candidate: { id: string }) {
+  return candidate.id;
+}
+
+function memberDisplayName(memberId: string) {
+  if (memberId === 'owner') return 'Owner Name';
+  if (memberId === 'bob') return 'Bob Name';
+  return `${memberId} Name`;
+}
 
 async function ordinaryMemberCannotReadModelAccessOrCandidates() {
   const access = await request('/api/org/models/gpt-6-luna/access', 'idp-bob', 'org-acme', ['owner']);
@@ -204,8 +516,14 @@ it('a member cannot read model access by spoofing an owner session role',
 async function aReadUsesTheAuthorityCheckedWhenItStarted() {
   let startGrantRead!: () => void;
   let releaseGrantRead!: () => void;
-  const grantReadStarted = new Promise<void>(resolve => { startGrantRead = resolve; });
-  const grantReadGate = new Promise<void>(resolve => { releaseGrantRead = resolve; });
+  function resolveGrantReadStarted(resolve: () => void) {
+    startGrantRead = resolve;
+  }
+  function resolveGrantReadGate(resolve: () => void) {
+    releaseGrantRead = resolve;
+  }
+  const grantReadStarted = new Promise<void>(resolveGrantReadStarted);
+  const grantReadGate = new Promise<void>(resolveGrantReadGate);
   const originalQuery = database.query.bind(database);
   database.query = async function query<Row extends Record<string, unknown>>(
     sql: string, values?: unknown[],

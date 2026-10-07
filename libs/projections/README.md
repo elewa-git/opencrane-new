@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, model grants and computer state"]
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, model grants, tool attempts and computer state"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -33,7 +33,7 @@ flowchart LR
 
 - Turn ordered events into tables that the server can read.
 - Keep the latest model grant for each person, group or assistant, including revoked history.
-- Keep assistant names for access choices without reading chat content.
+- Keep assistant names and personal owners' display names for access choices.
 - Copy tool progress and tool access decisions into each conversation's feed.
   Keep the call id so the page can match a decision to its tool call.
 - Save table changes and each worker's position together in one database step.

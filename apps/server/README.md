@@ -49,7 +49,8 @@ flowchart LR
   every model request passes through.
 - Lets admins connect a model provider, store its key safely and check that the key works.
 - Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
-- Lets owners and admins read model grants and choose same-silo people, groups or assistants.
+- Lets owners and admins read model grants and list same-silo people, groups or assistants
+  that a grant could name. Grant changes are not available yet.
   Provider choices and configured uses say “Not available yet” until those records exist.
 - Lets admins create a group assistant with selected tools and a fixed paying group.
 - Keeps each member's group chat private while they share the assistant's computer.

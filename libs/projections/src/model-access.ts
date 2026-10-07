@@ -13,6 +13,8 @@ export type ModelGrantState = {
   position: number;
 };
 
+const MODEL_GRANT_LIMIT = 100;
+
 function projection(name: string, suffix: string): Projection {
   const grants = `model_access_grants${suffix}`;
   const assistants = `model_access_assistants${suffix}`;
@@ -25,6 +27,7 @@ function projection(name: string, suffix: string): Projection {
       PRIMARY KEY (silo, model_id, grantee_kind, grantee_id))`);
     await db.query(`CREATE TABLE IF NOT EXISTS ${assistants} (
       silo TEXT NOT NULL, assistant_id TEXT NOT NULL, name TEXT,
+      kind TEXT NOT NULL, owner_id TEXT,
       PRIMARY KEY (silo, assistant_id))`);
   }
 
@@ -39,9 +42,10 @@ function projection(name: string, suffix: string): Projection {
       if (event.subject !== `assistant-${data.assistantId}`) {
         throw new Error('Assistant subject mismatch');
       }
-      await db.query(`INSERT INTO ${assistants} VALUES ($1, $2, $3)
-        ON CONFLICT (silo, assistant_id) DO UPDATE SET name = EXCLUDED.name`,
-      [event.silo, data.assistantId, data.name ?? null]);
+      await db.query(`INSERT INTO ${assistants} VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (silo, assistant_id) DO UPDATE SET name = EXCLUDED.name,
+          kind = EXCLUDED.kind, owner_id = EXCLUDED.owner_id`,
+      [event.silo, data.assistantId, data.name ?? null, data.kind, data.ownerId ?? null]);
       return;
     }
     if (event.type !== 'grant.given' && event.type !== 'grant.revoked') return;
@@ -95,12 +99,15 @@ export const modelAccess = projection('model-access', '');
 export const replayModelAccess = projection('model-access-replay', '_replay');
 
 export async function readModelGrantRows(db: Query, silo: string, modelId: string) {
-  const result = await db.query<ModelGrantState>(
+  const result = await db.query<ModelGrantState & { total: number }>(
     `SELECT a.grantee_kind AS "granteeKind", a.grantee_id AS "granteeId",
+      COUNT(*) OVER()::int AS total,
       CASE a.grantee_kind
         WHEN 'member' THEN COALESCE(m.display_name, a.grantee_id)
         WHEN 'team' THEN COALESCE(g.name, a.grantee_id)
-        ELSE COALESCE(x.name, a.grantee_id)
+        ELSE CASE WHEN x.kind = 'personal'
+          THEN COALESCE(m_owner.display_name, x.owner_id, a.grantee_id) || ' personal assistant'
+          ELSE COALESCE(x.name, a.grantee_id) END
       END AS "displayName",
       a.state, a.event_id AS "eventId", a.event_time AS "eventTime", a.position
       FROM model_access_grants a
@@ -110,16 +117,25 @@ export async function readModelGrantRows(db: Query, silo: string, modelId: strin
         AND g.silo = a.silo AND g.group_id = a.grantee_id
       LEFT JOIN model_access_assistants x ON a.grantee_kind = 'assistant'
         AND x.silo = a.silo AND x.assistant_id = a.grantee_id
+      LEFT JOIN members m_owner ON x.kind = 'personal'
+        AND m_owner.silo = x.silo AND m_owner.member_id = x.owner_id
       WHERE a.silo = $1 AND a.model_id = $2
-      ORDER BY a.grantee_kind, a.grantee_id`, [silo, modelId]);
+      ORDER BY a.grantee_kind, a.grantee_id LIMIT $3`, [silo, modelId, MODEL_GRANT_LIMIT]);
   function toPublicRow(row: ModelGrantState): ModelGrantState {
     return {
-      ...row,
+      granteeKind: row.granteeKind,
+      granteeId: row.granteeId,
+      displayName: row.displayName,
+      state: row.state,
+      eventId: row.eventId,
       eventTime: new Date(row.eventTime).toISOString(),
       position: Number(row.position),
     };
   }
-  return result.rows.map(toPublicRow);
+  return {
+    rows: result.rows.map(toPublicRow),
+    total: result.rows[0]?.total ?? 0,
+  };
 }
 
 export async function readModelAccessCandidates(db: Query, silo: string,
@@ -155,8 +171,13 @@ async function teamCandidates(db: Query, silo: string, after: string | undefined
 
 async function assistantCandidates(db: Query, silo: string, after: string | undefined, limit: number) {
   const result = await db.query<{ id: string; displayName: string }>(
-    `SELECT assistant_id AS id, COALESCE(name, assistant_id) AS "displayName"
-      FROM model_access_assistants WHERE silo = $1 AND assistant_id > $2
-      ORDER BY assistant_id LIMIT $3`, [silo, after ?? '', limit + 1]);
+    `SELECT a.assistant_id AS id,
+        CASE WHEN a.kind = 'personal'
+          THEN COALESCE(m.display_name, a.owner_id, a.assistant_id) || ' personal assistant'
+          ELSE COALESCE(a.name, a.assistant_id) END AS "displayName"
+      FROM model_access_assistants a LEFT JOIN members m
+        ON a.kind = 'personal' AND m.silo = a.silo AND m.member_id = a.owner_id
+      WHERE a.silo = $1 AND a.assistant_id > $2
+      ORDER BY a.assistant_id LIMIT $3`, [silo, after ?? '', limit + 1]);
   return result.rows;
 }

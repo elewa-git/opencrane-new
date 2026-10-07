@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const id = z.string().regex(/^[\w-]{1,200}$/u);
+const modelId = z.string().regex(/^[\w.-]{1,200}$/u);
 const kind = z.enum(['member', 'team', 'assistant']);
 const projectionState = z.object({
   content: z.enum(['current', 'applying']),
@@ -20,13 +21,13 @@ export const modelAccessGrantSchema = z.object({
 }).strict();
 
 export const modelAccessResponseSchema = z.object({
-  modelId: id,
+  modelId,
   expectedSequence: z.int().nonnegative(),
   loadedAt: z.iso.datetime(),
   canManage: z.boolean(),
-  grants: z.array(modelAccessGrantSchema),
+  grants: z.array(modelAccessGrantSchema).max(100),
+  grantTotal: z.int().nonnegative(),
   explanations: z.object({
-    grants: z.array(modelAccessGrantSchema),
     configuredUses: z.object({ status: z.literal('not_available_yet') }).strict(),
   }).strict(),
   availability: z.object({

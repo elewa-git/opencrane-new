@@ -911,7 +911,10 @@ Owner or Admin. Session role claims do not grant access. Both replies use
 
 The access response uses the `modelAccessResponseSchema` from
 `@opencrane/protocol`. It includes the model-grant stream position, current grant
-facts, direct/group/assistant source labels and registry support. It reports
+facts, direct/group/assistant source labels and registry support. It returns at
+most 100 grant rows and an exact `grantTotal`; the explanation section does not
+repeat those rows. A personal assistant uses its owner's display name followed by
+`personal assistant`. It reports
 provider binding, enabled-model, key and verification facts as not available yet.
 Configured assistant uses also remain not available yet until binding records
 exist. It does not read provider secrets or conversation history.

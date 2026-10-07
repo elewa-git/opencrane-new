@@ -4,10 +4,10 @@ import type { EventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
 import { models, providerAuthority, ProviderRefused } from '@opencrane/models';
 import { providerModelIdSchema } from '@opencrane/events';
-import { modelAccessCandidatesQuerySchema as candidatesQuery,
+import { modelAccessCandidatesQuerySchema,
   modelAccessCandidatesResponseSchema, modelAccessResponseSchema } from '@opencrane/protocol';
 import { readModelAccessCandidates, readModelGrantRows, type Query,
-  type connectMemberFeed } from '@opencrane/projections';
+  type connectMemberFeed, type ModelGrantState } from '@opencrane/projections';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
 import { sessionFor } from '../members/routes.ts';
@@ -47,6 +47,7 @@ export function registerModelAccessRoutes(app: FastifyInstance, config: AuthConf
     try {
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) throw new ProviderRefused();
+      // Check once before reading. A later membership change applies to the next request.
       await providerAuthority(options.store, options.binding, memberId);
       return await read(request, reply, options);
     } catch (error) {
@@ -67,17 +68,15 @@ function trustedRequest(config: AuthConfig, options: ModelAccessOptions,
 
 async function readAccess(request: FastifyRequest, reply: FastifyReply,
   options: ModelAccessOptions) {
-  const { modelId } = parameters.parse(request.params);
+  const { modelId } = parseInput(parameters, request.params);
   const subject = grantStream('model', modelId);
-  const [grants, expectedSequence, position, checkpoint] = await Promise.all([
-    readModelGrantRows(options.db, options.silo, modelId),
-    options.store.head(subject),
-    options.store.head(),
-    projectionCheckpoint(options.db),
-  ]);
+  const expectedSequence = await options.store.head(subject);
+  const position = await options.store.head();
+  const checkpoint = await projectionCheckpoint(options.db);
+  const grants = await readModelGrantRows(options.db, options.silo, modelId);
   const projection = projectionStatus(checkpoint, position);
   const grantRows: ReturnType<typeof publicGrantRow>[] = [];
-  for (const row of grants) {
+  for (const row of grants.rows) {
     grantRows.push(publicGrantRow(row, checkpoint));
   }
   function supportsModel(model: (typeof models)[number]) {
@@ -88,9 +87,11 @@ async function readAccess(request: FastifyRequest, reply: FastifyReply,
     modelId,
     expectedSequence,
     loadedAt: new Date().toISOString(),
+    // This route admits only Owners and Admins, so every successful response can manage grants.
     canManage: true,
     grants: grantRows,
-    explanations: { grants: grantRows, configuredUses: { status: 'not_available_yet' } },
+    grantTotal: grants.total,
+    explanations: { configuredUses: { status: 'not_available_yet' } },
     availability: {
       registrySupported: supported,
       selectedConnection: { status: 'not_available_yet' },
@@ -106,8 +107,8 @@ async function readAccess(request: FastifyRequest, reply: FastifyReply,
 
 async function readCandidates(request: FastifyRequest, reply: FastifyReply,
   options: ModelAccessOptions) {
-  parameters.parse(request.params);
-  const query = candidatesQuery.parse(request.query);
+  parseInput(parameters, request.params);
+  const query = parseInput(modelAccessCandidatesQuerySchema, request.query);
   const position = await options.store.head();
   const checkpoint = await projectionCheckpoint(options.db);
   const candidates = await readModelAccessCandidates(options.db, options.silo,
@@ -130,8 +131,7 @@ function sourceFor(kind: 'member' | 'team' | 'assistant') {
   return 'assistant' as const;
 }
 
-function publicGrantRow(row: Awaited<ReturnType<typeof readModelGrantRows>>[number],
-  checkpoint: number) {
+function publicGrantRow(row: ModelGrantState, checkpoint: number) {
   let projection: 'current' | 'applying';
   if (checkpoint >= row.position) {
     projection = 'current';
@@ -152,9 +152,20 @@ function publicGrantRow(row: Awaited<ReturnType<typeof readModelGrantRows>>[numb
 }
 
 function readErrorStatus(error: unknown) {
-  if (error instanceof z.ZodError) return 400;
+  if (error instanceof BadReadInput) return 400;
   if (error instanceof ProviderRefused) return 403;
   return 503;
+}
+
+class BadReadInput extends Error {}
+
+function parseInput<Schema extends z.ZodType>(schema: Schema, input: unknown): z.infer<Schema> {
+  try {
+    return schema.parse(input);
+  } catch (error) {
+    if (error instanceof z.ZodError) throw new BadReadInput();
+    throw error;
+  }
 }
 
 function readErrorBody(status: number) {
@@ -163,6 +174,7 @@ function readErrorBody(status: number) {
 }
 
 async function projectionCheckpoint(db: Query) {
+  // Use the slowest table. Show zero if a checkpoint is missing so the response stays applying.
   const result = await db.query<{ sequence: string | number; count: number }>(
     `SELECT MIN(sequence) AS sequence, COUNT(*)::int AS count FROM projection_checkpoints
       WHERE name = ANY($1::text[])`, [['members', 'groups', 'model-access']]);

@@ -134,8 +134,10 @@ without reactions. See the [group contract](../../docs/api/groups.md).
 The members worker also fills `model_access_grants` and
 `model_access_assistants`. `readModelGrantRows` returns the latest saved grant event
 for each model and grantee. A revoke stays in the table so old access can still be
-explained. An old untyped revoke updates each matching grantee kind. New typed
-revocations update only the named kind when that event shape is introduced.
+explained. The `granted` state means a grant event was saved; it does not mean the
+person is still a joined member. An old untyped revoke updates each matching
+grantee kind. New typed revocations update only the named kind when that event
+shape is introduced.
 
 `readModelAccessCandidates` uses keyset pages of at most 100 rows. It reads active
 members from `members`, groups and their current joined-member count from
