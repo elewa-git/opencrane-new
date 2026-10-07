@@ -25,7 +25,7 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@angular/build": "21.2.24",
+    "@angular/build": "21.2.25",
     "@angular/cli": "21.2.24",
     "@angular/compiler-cli": "21.2.24",
     "jsdom": "28.1.0",
