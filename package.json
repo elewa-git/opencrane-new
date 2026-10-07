@@ -11,13 +11,14 @@
     "libs/*"
   ],
   "scripts": {
-    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures",
+    "lint": "npm run lint:code && npm run lint:deps && npm run lint:unused && npm run lint:docs && npm run lint:links && npm run lint:fixtures && npm run lint:changelog",
     "typecheck": "npm run typecheck --workspaces",
     "pretest": "sh scripts/fetch-nats.sh && bash spikes/s0-1c-real-model-smoke/scripts/fetch-tools.sh",
     "test": "vitest run",
     "replay": "npm run start -w apps/ops --",
     "check:events": "node --experimental-strip-types scripts/check-event-catalogue.mjs",
     "check:docker-volume-cleanup": "node --experimental-strip-types scripts/check-docker-volume-cleanup.mjs",
+    "changelog:gather": "node scripts/changelog-gather.mjs",
     "visual:org-admin": "node scripts/capture-org-admin.mjs",
     "lint:code": "eslint .",
     "lint:deps": "depcruise apps/computer/src apps/ops/src apps/server/src apps/web/src libs --config .dependency-cruiser.cjs",
@@ -28,6 +29,7 @@
     "visual:fold-loader": "node scripts/check-fold-loader.mjs --capture",
     "visual:signin": "node scripts/capture-signin.mjs",
     "lint:fixtures": "python3 infra/odoo/boundary.py",
+    "lint:changelog": "node scripts/changelog-gather.mjs --check",
     "visual:chat": "NO_COLOR=1 node scripts/check-chat-browser.mjs --capture",
     "test:chat:production": "NO_COLOR=1 node scripts/check-chat-production.mjs",
     "visual:f1-foundation": "node scripts/check-f1-foundation.mjs",
