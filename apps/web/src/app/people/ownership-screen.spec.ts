@@ -233,6 +233,7 @@ it('clears the page when the send says the session has expired', async () => {
     expect(rootElement(fixture).textContent).toContain('Your access changed');
   });
   expect(rootElement(fixture).textContent).not.toContain('may or may not');
+  expect(rootElement(fixture).textContent).toContain('Sign in again');
   expect(rootElement(fixture).querySelector('#appoint-owner')).toBeNull();
 });
 

@@ -401,7 +401,7 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     this.review.set(undefined);
     this.state.set('access');
     this.statusMessage.set('Your access changed');
-    this.statusDetail.set('Owner details have been cleared.');
+    this.statusDetail.set('Sign in again, or ask an Owner to restore your access.');
   }
 
   private returnFocus(): void {
