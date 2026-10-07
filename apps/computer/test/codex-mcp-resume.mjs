@@ -6,10 +6,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 
-const home = mkdtempSync(join(tmpdir(), 'codex-resume-'));
+const homePrefix = join(tmpdir(), 'codex-resume-');
+const probeHome = mkdtempSync(homePrefix);
 const startedAt = Date.now();
-const versionOutput = execFileSync('codex', ['--version'], { encoding: 'utf8' });
-const capture = { measuredAt: new Date(startedAt).toISOString(), version: versionOutput.trim(),
+const versionOptions = { encoding: 'utf8' };
+const versionOutput = execFileSync('codex', ['--version'], versionOptions);
+const version = versionOutput.trim();
+const measurementDate = new Date(startedAt);
+const measuredAt = measurementDate.toISOString();
+const capture = { measuredAt, version,
   requests: [], modelTools: [], rpc: [], replies: [], completedTurns: [], stderr: [] };
 let stage = 'start';
 let activeClient;
@@ -17,12 +22,17 @@ let activeClient;
 async function readBody(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
-  return JSON.parse(Buffer.concat(chunks).toString());
+  const bytes = Buffer.concat(chunks);
+  const text = bytes.toString();
+  return JSON.parse(text);
 }
 
 function reply(response, id, result) {
-  response.writeHead(200, { 'content-type': 'application/json' });
-  response.end(JSON.stringify({ jsonrpc: '2.0', id, result }));
+  const headers = { 'content-type': 'application/json' };
+  response.writeHead(200, headers);
+  const message = { jsonrpc: '2.0', id, result };
+  const text = JSON.stringify(message);
+  response.end(text);
 }
 
 async function handleMcp(request, response) {
@@ -41,7 +51,8 @@ async function handleMcp(request, response) {
     let name = 'read_before';
     if (request.url === '/after') name = 'read_after';
     const definition = { name, description: name, inputSchema: { type: 'object' } };
-    reply(response, body.id, { tools: [definition] });
+    const result = { tools: [definition] };
+    reply(response, body.id, result);
     return;
   }
   response.writeHead(400);
@@ -49,7 +60,8 @@ async function handleMcp(request, response) {
 }
 
 function sendEvent(response, event) {
-  response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  const text = JSON.stringify(event);
+  response.write(`event: ${event.type}\ndata: ${text}\n\n`);
 }
 
 async function handleModel(request, response) {
@@ -58,8 +70,10 @@ async function handleModel(request, response) {
   for (const tool of body.tools ?? []) {
     if (tool.type === 'namespace' && tool.name.startsWith('mcp__')) namespaces.push(tool);
   }
-  capture.modelTools.push({ stage, namespaces });
-  response.writeHead(200, { 'content-type': 'text/event-stream' });
+  const observedTools = { stage, namespaces };
+  capture.modelTools.push(observedTools);
+  const headers = { 'content-type': 'text/event-stream' };
+  response.writeHead(200, headers);
   const created = { type: 'response.created', response: { id: `response_${stage}` } };
   const message = { type: 'response.output_item.done', item: { type: 'message',
     id: `message_${stage}`, role: 'assistant',
@@ -81,17 +95,20 @@ async function listen(server) {
 }
 
 function startClient() {
-  const environment = { PATH: process.env.PATH, HOME: home, CODEX_HOME: home,
+  const environment = { PATH: process.env.PATH, HOME: probeHome, CODEX_HOME: probeHome,
     PROXY_CALLER_TOKEN: 'local-fixture-only' };
   const options = { env: environment, stdio: ['pipe', 'pipe', 'pipe'] };
-  const child = spawn('codex', ['app-server', '--stdio', '--strict-config'], options);
+  const argumentsList = ['app-server', '--stdio', '--strict-config'];
+  const child = spawn('codex', argumentsList, options);
   const pending = new Map();
   const turns = new Map();
   let nextId = 0;
-  const lines = createInterface({ input: child.stdout });
+  const lineOptions = { input: child.stdout };
+  const lines = createInterface(lineOptions);
 
   function send(message) {
-    child.stdin.write(`${JSON.stringify(message)}\n`);
+    const text = JSON.stringify(message);
+    child.stdin.write(`${text}\n`);
   }
 
   function receive(line) {
@@ -104,13 +121,19 @@ function startClient() {
       if (!waiting) return;
       clearTimeout(waiting.timeout);
       pending.delete(message.id);
-      if (message.error) waiting.reject(new Error(JSON.stringify(message.error)));
-      else waiting.resolve(message.result);
+      if (message.error) {
+        const errorText = JSON.stringify(message.error);
+        const error = new Error(errorText);
+        waiting.reject(error);
+      } else {
+        waiting.resolve(message.result);
+      }
       return;
     }
     if (message.id !== undefined) {
       const error = { code: -32601, message: 'Not supported by the local fixture' };
-      send({ id: message.id, error });
+      const refused = { id: message.id, error };
+      send(refused);
     }
     if (message.method === 'turn/completed') {
       const threadId = message.params.threadId;
@@ -122,22 +145,27 @@ function startClient() {
   }
 
   function recordStderr(chunk) {
-    capture.stderr.push({ stage, text: chunk.toString() });
+    const entry = { stage, text: chunk.toString() };
+    capture.stderr.push(entry);
   }
   lines.on('line', receive);
   child.stderr.on('data', recordStderr);
 
   function rpc(method, params) {
     const id = ++nextId;
-    capture.rpc.push({ stage, method, params });
+    const entry = { stage, method, params };
+    capture.rpc.push(entry);
     function wait(resolve, reject) {
       function expired() {
         pending.delete(id);
-        reject(new Error(`Timed out: ${method}`));
+        const error = new Error(`Timed out: ${method}`);
+        reject(error);
       }
       const timeout = setTimeout(expired, 20000);
-      pending.set(id, { resolve, reject, timeout });
-      send({ id, method, params });
+      const waiting = { resolve, reject, timeout };
+      pending.set(id, waiting);
+      const request = { id, method, params };
+      send(request);
     }
     return new Promise(wait);
   }
@@ -148,15 +176,18 @@ function startClient() {
     }
     const finished = new Promise(wait);
     const input = [{ type: 'text', text: `Local probe: ${stage}`, text_elements: [] }];
-    await rpc('turn/start', { threadId, input });
+    const turnParams = { threadId, input };
+    await rpc('turn/start', turnParams);
     const result = await finished;
     assert.equal(result.status, 'completed');
   }
 
   async function initialise() {
     const clientInfo = { name: 'resume_probe', version: '1' };
-    await rpc('initialize', { clientInfo, capabilities: { experimentalApi: true } });
-    send({ method: 'initialized', params: {} });
+    const initialiseParams = { clientInfo, capabilities: { experimentalApi: true } };
+    await rpc('initialize', initialiseParams);
+    const notification = { method: 'initialized', params: {} };
+    send(notification);
   }
 
   async function close() {
@@ -206,24 +237,27 @@ memories = false
 apps = false
 plugins = false
 `;
-  writeFileSync(join(home, 'config.toml'), config);
+  const configPath = join(probeHome, 'config.toml');
+  writeFileSync(configPath, config);
   assert.equal(capture.version, 'codex-cli 0.159.2');
   activeClient = startClient();
   await activeClient.initialise();
   const before = threadConfig(mcpPort, 'oc_aaaaaaaaaa', 'before');
   const after = threadConfig(mcpPort, 'oc_bbbbbbbbbb', 'after');
-  const started = await activeClient.rpc('thread/start', { cwd: '/tmp', config: before });
+  const startParams = { cwd: '/tmp', config: before };
+  const started = await activeClient.rpc('thread/start', startParams);
   const threadId = started.thread.id;
   await activeClient.turn(threadId);
   stage = 'loaded_resume';
-  await activeClient.rpc('thread/resume', { threadId, config: after });
+  const resumeParams = { threadId, config: after };
+  await activeClient.rpc('thread/resume', resumeParams);
   await activeClient.turn(threadId);
   await activeClient.close();
   activeClient = undefined;
   stage = 'unloaded_resume';
   activeClient = startClient();
   await activeClient.initialise();
-  await activeClient.rpc('thread/resume', { threadId, config: after });
+  await activeClient.rpc('thread/resume', resumeParams);
   await activeClient.turn(threadId);
   capture.threadId = threadId;
   const checks = [];
@@ -233,7 +267,8 @@ plugins = false
     let expected = 'mcp__oc_bbbbbbbbbb';
     if (observed.stage === 'start') expected = 'mcp__oc_aaaaaaaaaa';
     const passed = names.length === 1 && names[0] === expected;
-    checks.push({ stage: observed.stage, expected: [expected], actual: names, passed });
+    const check = { stage: observed.stage, expected: [expected], actual: names, passed };
+    checks.push(check);
   }
   capture.checks = checks;
   assert.equal(checks.length, 3, 'Each turn must reach the local model stub');
@@ -247,10 +282,12 @@ plugins = false
   process.exitCode = 1;
 } finally {
   capture.elapsedMs = Date.now() - startedAt;
-  console.log(JSON.stringify(capture, null, 2));
+  const text = JSON.stringify(capture, null, 2);
+  console.log(text);
   clearTimeout(deadline);
   if (activeClient) await activeClient.close();
   mcp.close();
   model.close();
-  rmSync(home, { recursive: true, force: true });
+  const removalOptions = { recursive: true, force: true };
+  rmSync(probeHome, removalOptions);
 }

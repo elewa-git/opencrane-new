@@ -59,6 +59,23 @@ The new proxy routes, thread grant isolation, shell-user refusal, decision marke
 protection and image drift build check are **NOT RUN**. Implementation stopped at
 the failed prerequisite. This evidence does not qualify governed tool calls.
 
+Source checks ran under `nice -n 10`. Typecheck and `check:events` passed
+(98 event types). Code, dependency and unused-code lint passed. Markdown first
+failed because a wrapped PR number looked like a heading; after correction,
+Markdown, links and fixture checks passed. Probe syntax and lint passed too.
+
+The existing computer, proxy/bridge, turns, decision, gateway and MCP tests ran
+with `--maxWorkers=2`: **FAIL**, 330 passed, 2 failed and 2 skipped in 20 files.
+The failures were a NATS timeout while creating the decision-fence test fixture
+and the gateway's 40-second readiness test timeout. No application code changed.
+The failed decision-fence test then passed alone (`--maxWorkers=1`). The three
+gateway readiness cases passed alone too. These isolated reruns do not make the
+original batch pass.
+
+The full root suite and image build are **NOT RUN** after the failed prerequisite.
+An active fresh-stack journey also included live-view checks, so no root batch
+was started alongside it. The remaining repeated baseline files are **NOT RUN**.
+
 Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
 accepts 384/384 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
