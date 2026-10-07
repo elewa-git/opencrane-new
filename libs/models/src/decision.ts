@@ -248,6 +248,7 @@ export async function startDecision(
         await audit(outcome, reason, approvalId && outcome === 'allow' ? requestId : undefined, approvalId);
         await fresh();
         res.setHeader('x-request-id', requestId);
+        markRefusedDecision(res, outcome === 'allow');
         res.writeHead(outcome === 'allow' ? 200 : 403); res.end(JSON.stringify({ reason, requestId, approvalId })); return;
       }
       const parsed = requestSchema.safeParse(JSON.parse(raw));
@@ -277,6 +278,7 @@ export async function startDecision(
       }
       catch { res.writeHead(503); res.end('{"error":"Decision audit unavailable"}'); return; }
       res.setHeader('x-request-id', requestId);
+      res.setHeader('x-opencrane-decision', 'refused');
       res.writeHead(capped ? 402 : 403);
       res.end(JSON.stringify({ requestId, error: capped || error instanceof RequestRefused || error instanceof PayingGroupRefused || error instanceof AuthorityApplying ? error.message : 'Request refused or decision service unavailable' }));
     });
@@ -380,4 +382,8 @@ async function providerRoutes(req: IncomingMessage, res: ServerResponse, actor: 
     res.end(JSON.stringify(result));
   }
   return true;
+}
+
+function markRefusedDecision(response: ServerResponse, allowed: boolean) {
+  if (!allowed) response.setHeader('x-opencrane-decision', 'refused');
 }

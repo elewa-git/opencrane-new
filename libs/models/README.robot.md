@@ -616,9 +616,12 @@ from choosing another live thread or call id before the browser relies on the
 `turnId` + `callId` join. It needs a test where one call is refused and a forged
 Allow request in the same turn reuses its id: the forged request must not add an
 Allow row to that call. Legitimate Ask retries must still keep several decision
-rows for the same call. This protection is NOT RUN here and remains a PR 4 gate.
+rows for the same call. The computer image wire check now runs this refusal as UID 1001 against the real proxy.
+It gets 401 before reaching the gateway and cannot read the caller file or use its
+control socket. The caller check must stay in place for this join to be trusted.
 
-Spec risk 6 also leaves stripping or rewriting `_meta` to PR 4 before Odoo.
+The credential-free computer route keeps `_meta` unchanged. Odoo metadata handling
+remains a separate decision before #53.
 The session, window and nested session ids do not decide OpenCrane access here.
 
 ### Repeated tool-name headers
@@ -634,3 +637,15 @@ requests still keep their original body bytes and public headers.
 
 `readActiveMember(..., requiredRole = 'member')` checks events, ownership and IAM once.
 `'admin'` requires Owner/Admin; reads use no `authorityFence` or conversation activity.
+
+## Confirmed tool refusals
+
+The decision service adds `x-opencrane-decision: refused` to its 402 and 403
+answers, including the error path. MCP backend reply policies remove this header
+from tool-server replies. They do not run for an authorisation refusal, which
+never reaches a backend. The computer proxy forwards no caller-supplied marker.
+`test/gateway.test.ts` checks both paths with the real agentgateway: a refused call
+keeps the marker with no upstream call; an allowed call whose tool server forges
+the marker loses it, while its status and body stay unchanged. A malformed tool
+call checks the decision error path too. The marker proves refusal before sending;
+a body or `x-request-id` alone does not.

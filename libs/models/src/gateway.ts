@@ -58,7 +58,10 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
           includeResponseHeaders: ['x-request-id'] } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },
-    }, backends: [{ host: route.upstream }] };
+    }, backends: [{ host: route.upstream, policies: {
+      // Strip this only from tool replies. An authorisation refusal never reaches the backend.
+      responseHeaderModifier: { remove: ['x-opencrane-decision'] },
+    } }] };
 }
 function gatewayConfig(
   port: number, readinessPort: number, decisionUrl: string, keyFile: string,
