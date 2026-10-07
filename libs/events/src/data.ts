@@ -585,7 +585,7 @@ export const computerTurnClosedDataSchema = computerTurnStartedDataSchema.extend
 
 // Admission is separate from the later observed outcome. Unverified callers have no asserted identity.
 export const decisionRecordedDataSchema = z.object({
-  callId: z.string().min(1).max(200).optional(),
+  callId: z.string().refine(isToolCallText).optional(),
   requestId: id, requesterId: id.optional(), assistantId: id.optional(),
   conversationId: id.optional(), turnId: id.optional(), permitId: id.optional(),
   route: z.enum(['model', 'mcp', 'egress']), outcome: z.enum(['allow', 'ask', 'deny']),

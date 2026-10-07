@@ -20,6 +20,9 @@ const MCP_UPSTREAM_HEADERS = [
   '"mcp-name":request.headers["mcp-name"]',
   '"x-request-id":request.headers["x-request-id"]',
 ];
+// Send all tool-name header values, because agentgateway's HTTP check otherwise
+// sends only the first one and hides duplicates from the decision service.
+const MCP_DECISION_TOOL_NAME = 'default(request.headers.join()["mcp-name"], "")';
 // The model provider receives no caller headers or turn token after authz checks the request.
 const MODEL_UPSTREAM_HEADERS = [
   '"content-type":"application/json"',
@@ -50,7 +53,9 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
       extAuthz: { host: new URL(decisionUrl).host,
         includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-name'],
         includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
-        protocol: { http: { path: JSON.stringify(`/authorize${path}`), includeResponseHeaders: ['x-request-id'] } },
+        protocol: { http: { path: JSON.stringify(`/authorize${path}`),
+          addRequestHeaders: { 'mcp-name': MCP_DECISION_TOOL_NAME },
+          includeResponseHeaders: ['x-request-id'] } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },
     }, backends: [{ host: route.upstream }] };

@@ -570,12 +570,16 @@ sites are outside this change. Fresh-install qualification remains in #63.
 ## Codex tool request fixtures
 
 The MCP schema uses Codex 0.159.2's camelCase metadata keys inside `params`.
-It requires `threadId` and `callId` (1–200 characters). The thread must match the
-signed turn; an optional `x-codex-turn-metadata.thread_id` must match too. Unknown
-metadata fields are refused. Client capabilities are an object with at most 32
+It requires `threadId` (1–200 characters) and `callId`, checked with
+`isToolCallText` from the events package. The call id has 1–200 characters and
+contains no Unicode control, format, surrogate, private-use or unassigned
+characters. Unsafe ids are refused before they can enter a decision event.
+The thread must match the signed turn. When present,
+`x-codex-turn-metadata.thread_id` must match too. Unknown metadata fields are refused. Client capabilities are an object with at most 32
 entries and 16,384 JSON characters. Turn metadata allows at most 32 scalar entries.
-Client info, session, item and progress strings are at most 200 characters; window
-ids are at most 402. Turn metadata strings are at most 2,000 characters.
+Client info and progress strings are at most 200 characters. Session and item ids
+have 1–200 characters; window ids have 1–402. Turn metadata strings are at most
+2,000 characters.
 Argument numbers keep their original text. Duplicate keys are refused.
 History catches up before the two-second access check.
 
@@ -598,3 +602,30 @@ was called. The model-route test changes only `probe-model` to the signed model
 and adds the required output cap. The fixture itself is the complete captured body.
 It proves the optional function-call `namespace` (at most 200 characters) and
 string or text-array function output. Extra item fields remain refused.
+
+### Caller-supplied call ids and the computer proxy
+
+The signed turn token identifies the thread and turn. It has no call id or tool
+name claim. The decision service therefore cannot prove that a call id belongs
+to a particular Codex call. Adding a tool name to a decision would still let a
+forged request reuse the id with the same tool.
+
+The backend spec, section 3.4 steps 1 and 4–5, assigns caller authentication and
+forwarding to the computer proxy in PR 4. That work must prevent a shell process
+from choosing another live thread or call id before the browser relies on the
+`turnId` + `callId` join. It needs a test where one call is refused and a forged
+Allow request in the same turn reuses its id: the forged request must not add an
+Allow row to that call. Legitimate Ask retries must still keep several decision
+rows for the same call. This protection is NOT RUN here and remains a PR 4 gate.
+
+Spec risk 6 also leaves stripping or rewriting `_meta` to PR 4 before Odoo.
+The session, window and nested session ids do not decide OpenCrane access here.
+
+### Repeated tool-name headers
+
+The MCP route uses HTTP `extAuthz`. agentgateway v1.5.0 copies only the first
+value of each listed request header in that protocol. `addRequestHeaders` therefore
+sets the decision request's `mcp-name` to all supplied values, joined with commas.
+The existing comparison with the body then refuses duplicates, including repeated
+identical names. No refused request reaches the tool server. Valid single-header
+requests still keep their original body bytes and public headers.

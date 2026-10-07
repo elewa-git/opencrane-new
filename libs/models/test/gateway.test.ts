@@ -918,9 +918,12 @@ it('enforces reviewed tool modes at the real gateway, including the first automa
       expect((await call('write', extra)).status).toBeGreaterThanOrEqual(400);
       if (!('mcp-method' in extra)) expect((await f.call(extra)).status).toBeGreaterThanOrEqual(400);
     }
-    for (const patch of [{ _meta: {} }, { method: 'Tools/Call' }, { method: 'resources/read' }, { params: { name: 'read', arguments: {} } }]) {
+    for (const patch of [{ _meta: {} }, { method: 'Tools/Call' }, { method: 'resources/read' }]) {
       expect((await call('write', {}, patch)).status).toBe(403);
     }
+    const mismatchedHeader = { 'mcp-name': 'read' };
+    const mismatchedResponse = await call('write', mismatchedHeader);
+    expect(mismatchedResponse.status).toBe(403);
     expect(f.received()).toBe(1);
     for (const [resourceType, resourceId, granteeId] of [['model', 'gpt-6-luna', 'alice'], ['model', 'gpt-6-luna', 'assistant'],
       ['mcp_server', 'fixture', 'alice'], ['mcp_server', 'fixture', 'assistant']]) {

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IncomingHttpHeaders } from 'node:http';
 import type { EventStore } from '@opencrane/event-store';
+import { isToolCallText } from '@opencrane/events/tool-call';
 import { mcpServerDiscoveredDataSchema } from '@opencrane/events';
 import { history } from './actor.ts';
 import { losslessJson, type JsonValue } from './lossless-json.ts';
@@ -23,10 +24,10 @@ const metadataSchema = z.object({
     z.record(z.string(), z.unknown()).refine(boundedCapabilities),
   'io.modelcontextprotocol/clientInfo': clientInfoSchema.optional(),
   threadId: boundedText.min(1),
-  callId: boundedText.min(1),
-  sessionId: boundedText.optional(),
-  windowId: z.string().max(402).optional(),
-  itemId: boundedText.optional(),
+  callId: z.string().refine(isToolCallText),
+  sessionId: boundedText.min(1).optional(),
+  windowId: z.string().min(1).max(402).optional(),
+  itemId: boundedText.min(1).optional(),
   progressToken: z.union([z.int(), boundedText]).optional(),
   'x-codex-turn-metadata': z.record(z.string().max(200),
     z.union([z.string().max(2000), z.number(), z.boolean()])).refine(boundedMetadataEntries).optional(),
