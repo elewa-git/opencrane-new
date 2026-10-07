@@ -10,12 +10,12 @@ This shared library is used by the server, background workers and personal compu
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end and models process"] -.->|checks calls, tool activity and spending holds| models["libs/models<br/>AI access and spending"]
+  server["apps/server<br/>back end and models process"] -.->|checks Codex calls, tool activity and spending holds| models["libs/models<br/>AI access and spending"]
   ops["apps/ops<br/>background workers"] -.-> models
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models <-->|starts gateway and checks calls within two seconds| gateway["agentgateway<br/>AI gateway"]
+  models <-->|checks call ids and access within two seconds| gateway["agentgateway<br/>AI gateway"]
   gateway -->|new usage lines| models
   models -->|saves changes, reads new activity and checks history positions| store["libs/event-store<br/>event log"]
 ```
@@ -43,9 +43,13 @@ flowchart LR
   are dropped when their memory budget is reached and rebuilt on their next use.
   A summary that is too large is dropped on its own. Calls also refuse saved
   facts beyond the current history, which can happen after a backup restore.
+- Refuse unsafe tool call ids before saving a decision.
 - Refuse callers who have disconnected before holding money.
 - Keep calls working when another chat, a file or someone else's access changes during the check.
 - Treat tool start and finish reports as activity that grants no access.
+- Check that each Codex tool call belongs to the chat turn that received its access pass.
+  Keep its call id, which links the tool's attempts and progress reports.
+  Accept the model request that follows a tool result under the same spending limits.
 - Start agentgateway without giving its provider key to the server or computer.
 - Record what the AI provider used. When the result of a call is unknown, keep the held money in place until an owner or admin settles it.
 - Give new members and assistants access to the active models ([grants](../../GLOSSARY.md#grant)), record the silo's first owner, store the AI provider settings that admins enter, and show spending history without private details.

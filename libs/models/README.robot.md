@@ -265,7 +265,8 @@ Tools & access screen, using the authenticated GET/POST
 fixed, operator-reviewed fixture route `/mcp/:serverId/:connectionId`. This is
 not an installer or arbitrary remote-URL interface. ext_authz accepts only bounded
 MCP `tools/call` for 2026-07-28 with matching method/tool/version headers and
-required `_meta` version and empty client capabilities. The route strips caller
+required `params._meta` version, thread id, call id and bounded client capabilities.
+The tool-name header is `mcp-name`. The route strips caller
 headers and never injects an invented credential. Only explicitly credential-free,
 non-metered reviewed fixtures priced at zero can run until the credential/budget tickets land.
 Ask records `approval_required` without dispatch; approval creation/consumption
@@ -565,3 +566,66 @@ Use `chat 1 23000 1` for the oversized rebuild.
 working sets remain tracked in #256. The remaining
 whole-log report and approval reads are tracked in #253, #254 and #255. These
 sites are outside this change. Fresh-install qualification remains in #63.
+
+## Codex tool request fixtures
+
+The MCP schema uses Codex 0.159.2's camelCase metadata keys inside `params`.
+It requires `threadId` (1–200 characters) and `callId`, checked with
+`isToolCallText` from the events package. The call id has 1–200 characters and
+contains no Unicode control, format, surrogate, private-use or unassigned
+characters. Unsafe ids are refused before they can enter a decision event.
+The thread must match the signed turn. When present,
+`x-codex-turn-metadata.thread_id` must match too. Unknown metadata fields are refused. Client capabilities are an object with at most 32
+entries and 16,384 JSON characters. Turn metadata allows at most 32 scalar entries.
+Client info and progress strings are at most 200 characters. Session and item ids
+have 1–200 characters; window ids have 1–402. Turn metadata strings are at most
+2,000 characters.
+Argument numbers keep their original text. Duplicate keys are refused.
+History catches up before the two-second access check.
+
+`test/fixtures/codex-0.159.2-tools-call.json` copies the saved 6 October 2026
+wire capture. Its bearer presence marker was removed; it contains no credential.
+`codex-0.159.2-follow-up.json` is the full follow-up body captured on the same date
+from computer image `127.0.0.1:5001/opencrane/computer:p317` (image id `sha256:5cfe0d46972df36f2a2b3d2a6b09b78c10944ba8f6233b687a9501ed1dc58e1c`).
+The image reported `codex-cli 0.159.2`. The saved probe was changed only to retain
+each model body rather than shorten its input, then run with:
+
+```sh
+docker run --rm --network none --entrypoint sh \
+  -v /tmp/p3-5-pr2-probe.mjs:/tmp/probe.mjs:ro \
+  127.0.0.1:5001/opencrane/computer:p317 \
+  -c 'codex --version >&2; node /tmp/probe.mjs flag never'
+```
+
+Both servers were local stubs inside this disposable container. No paid model
+was called. The model-route test changes only `probe-model` to the signed model
+and adds the required output cap. The fixture itself is the complete captured body.
+It proves the optional function-call `namespace` (at most 200 characters) and
+string or text-array function output. Extra item fields remain refused.
+
+### Caller-supplied call ids and the computer proxy
+
+The signed turn token identifies the thread and turn. It has no call id or tool
+name claim. The decision service therefore cannot prove that a call id belongs
+to a particular Codex call. Adding a tool name to a decision would still let a
+forged request reuse the id with the same tool.
+
+The backend spec, section 3.4 steps 1 and 4–5, assigns caller authentication and
+forwarding to the computer proxy in PR 4. That work must prevent a shell process
+from choosing another live thread or call id before the browser relies on the
+`turnId` + `callId` join. It needs a test where one call is refused and a forged
+Allow request in the same turn reuses its id: the forged request must not add an
+Allow row to that call. Legitimate Ask retries must still keep several decision
+rows for the same call. This protection is NOT RUN here and remains a PR 4 gate.
+
+Spec risk 6 also leaves stripping or rewriting `_meta` to PR 4 before Odoo.
+The session, window and nested session ids do not decide OpenCrane access here.
+
+### Repeated tool-name headers
+
+The MCP route uses HTTP `extAuthz`. agentgateway v1.5.0 copies only the first
+value of each listed request header in that protocol. `addRequestHeaders` therefore
+sets the decision request's `mcp-name` to all supplied values, joined with commas.
+The existing comparison with the body then refuses duplicates, including repeated
+identical names. No refused request reaches the tool server. Valid single-header
+requests still keep their original body bytes and public headers.

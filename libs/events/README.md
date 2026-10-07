@@ -21,7 +21,7 @@ also uses Zod, a library that checks data shapes.
 
 ```mermaid
 flowchart LR
-  server["apps/server<br/>back end"] -.-> events["libs/events<br/>event and tool report definitions"]
+  server["apps/server<br/>back end"] -.-> events["libs/events<br/>events and checked tool call ids"]
   store["libs/event-store<br/>saved event log"] -.-> events
   projections["libs/projections<br/>read tables"] -.-> events
   workers["libs/handlers and apps/ops<br/>background workers"] -.-> events
@@ -40,6 +40,8 @@ flowchart LR
 
 It defines tool start and finish records that exclude arguments, results and error text.
 The computer and server share its check for call ids and tool names.
+Tool access decisions can carry a call id. The shared text check refuses hidden
+control characters before saving the id.
 It also records when part of a private reply was lost before the server could save it.
 
 ## Processes it handles

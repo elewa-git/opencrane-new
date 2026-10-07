@@ -22,7 +22,7 @@ async function replaysToolFeed() {
       conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session',
     });
     const decision = { requestId: 'request', requesterId: 'alice', assistantId: 'assistant',
-      conversationId: 'chat', turnId: 'turn', route: 'mcp', outcome: 'ask',
+      conversationId: 'chat', turnId: 'turn', callId: 'call_1', route: 'mcp', outcome: 'ask',
       reason: 'approval_requested', contextDigest: 'a'.repeat(64) };
     await append('decision.recorded', 'decision-request', decision, { approval: 'approval' });
     await append('decision.recorded', 'decision-allow', { ...decision,
@@ -46,9 +46,9 @@ async function replaysToolFeed() {
     function rowData(row: (typeof before.rows)[number]) { return row.data; }
     expect(before.rows.map(rowData)).toEqual([
       { conversationId: 'chat', assistantId: 'assistant', createdBy: 'alice', mode: 'agent_session' },
-      { turnId: 'turn', outcome: 'ask', reason: 'approval_requested',
+      { turnId: 'turn', callId: 'call_1', outcome: 'ask', reason: 'approval_requested',
         requestId: 'request', approvalId: 'approval' },
-      { turnId: 'turn', outcome: 'allow', reason: 'policy_allow', requestId: 'allow' },
+      { turnId: 'turn', callId: 'call_1', outcome: 'allow', reason: 'policy_allow', requestId: 'allow' },
       { turnId: 'turn', reason: 'budget_exhausted' }, started, finished,
     ]);
     expect(before.rows[1]).toMatchObject({ id: 'event-1', position: 2,

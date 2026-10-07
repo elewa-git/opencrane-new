@@ -73,3 +73,11 @@ the same check.
 for the auth computer summary. It parses the full stored data with the same rules
 as the event registry and takes the close status type from the closed schema.
 Changing that schema therefore changes the summary's checked types too.
+
+`decision.recorded.callId` is optional and uses `isToolCallText`, like tool reports.
+It accepts 1–200 characters and refuses Unicode control, format, surrogate,
+private-use and unassigned characters. Parsed MCP requests supply it, including
+policy and thread refusals. A request with an unsafe call id is refused and its
+decision omits the id. Older events without a call id still parse. The conversation
+feed keeps a checked id without storing arguments or results. The id is supplied
+by the caller; the turn token does not sign it.

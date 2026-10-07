@@ -25,11 +25,14 @@ async function decide(setup: Fixture, route: 'model' | 'mcp') {
   if (route === 'mcp') {
     url += '/mcp/fixture/installed';
     headers = { ...headers, 'mcp-protocol-version': '2026-07-28',
-      'mcp-method': 'tools/call', 'mcp-tool-name': 'write' };
+      'mcp-method': 'tools/call', 'mcp-name': 'write' };
+    const metadata = {
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientCapabilities': {},
+      threadId: 'thread', callId: 'call_probe_1',
+    };
     body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
-      params: { name: 'write', arguments: { note: 'x' } },
-      _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28',
-        'io.modelcontextprotocol/client-capabilities': {} } };
+      params: { name: 'write', arguments: { note: 'x' }, _meta: metadata } };
   }
   const request = { method: 'POST', headers, body: JSON.stringify(body) };
   const response = await fetch(url, request);
@@ -366,11 +369,14 @@ async function callGatewayRoute(setup: Fixture, route: 'model' | 'mcp') {
     return setup.call();
   }
   const headers = { 'mcp-protocol-version': '2026-07-28',
-    'mcp-method': 'tools/call', 'mcp-tool-name': 'write' };
+    'mcp-method': 'tools/call', 'mcp-name': 'write' };
+  const metadata = {
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+    'io.modelcontextprotocol/clientCapabilities': {},
+    threadId: 'thread', callId: 'call_probe_1',
+  };
   const body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
-    params: { name: 'write', arguments: { note: 'x' } },
-    _meta: { 'io.modelcontextprotocol/protocol-version': '2026-07-28',
-      'io.modelcontextprotocol/client-capabilities': {} } };
+    params: { name: 'write', arguments: { note: 'x' }, _meta: metadata } };
   return setup.call(headers, body, '/mcp/fixture/installed');
 }
 
