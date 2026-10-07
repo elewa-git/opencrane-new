@@ -305,6 +305,95 @@ async function rejectsUntrustedRequests() {
 }
 it('refuses stale elevated cookies, absent membership, foreign organisation and Origin',
   rejectsUntrustedRequests);
+
+async function refusesMissingOrigin() {
+  const cookie = encodeSession(config, { sub: 'idp-identity-owner', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  const response = await app.inject({ method: 'POST', url: '/api/invitations/identity',
+    payload: { email: 'invitee@example.test' }, headers: {
+      cookie: `${config.cookieName}=${cookie}`,
+    } });
+  expect(response.statusCode).toBe(403);
+}
+it('refuses the invitation email request when Origin is missing', refusesMissingOrigin);
+
+async function refusesWhenOrganisationIsNotConfigured() {
+  const unconfigured = testAuthConfig({ expectedOrgId: undefined });
+  const invitationEmail = { silo: 'acme', store: nats.store, binding: auth.binding,
+    feed: { memberId: resolveMemberId } };
+  const unconfiguredApp = buildServer(unconfigured, { invitationEmail });
+  const cookie = encodeSession(unconfigured, { sub: 'idp-identity-owner', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  try {
+    const response = await unconfiguredApp.inject({ method: 'POST', url: '/api/invitations/identity',
+      payload: { email: 'invitee@example.test' }, headers: {
+        origin: 'https://app.example.test',
+        cookie: `${unconfigured.cookieName}=${cookie}`,
+      } });
+    expect(response.statusCode).toBe(403);
+  } finally {
+    await unconfiguredApp.close();
+  }
+}
+it('refuses the invitation email request when no organisation is configured',
+  refusesWhenOrganisationIsNotConfigured);
+
+async function refusesCallerWithoutMemberId() {
+  const originalReadStream = nats.store.readStream.bind(nats.store);
+  async function* readStreamWithoutMissingMemberId(
+    subject: string,
+    fromSequence?: number,
+    deadline?: number,
+  ) {
+    if (subject === 'member-undefined') {
+      throw new Error('A missing member id must not be used as a stream id');
+    }
+    yield* originalReadStream(subject, fromSequence, deadline);
+  }
+  const readStreamSpy = vi.spyOn(nats.store, 'readStream')
+    .mockImplementation(readStreamWithoutMissingMemberId);
+  function noMemberId() {
+    return Promise.resolve(undefined);
+  }
+  const invitationEmail = { silo: 'acme', store: nats.store,
+    binding: auth.binding, feed: { memberId: noMemberId } };
+  const noMemberApp = buildServer(config, { invitationEmail });
+  const cookie = encodeSession(config, { sub: 'unbound-person', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  try {
+    const response = await noMemberApp.inject({ method: 'POST', url: '/api/invitations/identity',
+      payload: { email: 'invitee@example.test' }, headers: {
+        origin: 'https://app.example.test',
+        cookie: `${config.cookieName}=${cookie}`,
+      } });
+    expect(response.statusCode).toBe(403);
+  } finally {
+    readStreamSpy.mockRestore();
+    await noMemberApp.close();
+  }
+}
+it('refuses a signed-in person without a member id', refusesCallerWithoutMemberId);
+
+async function refusesWhenOpenFgaDeniesAnEventAdmin() {
+  const emptyBinding = await createStore(fga.apiUrl, 'acme', 'invitation-email-empty');
+  const invitationEmail = { silo: 'acme', store: nats.store, binding: emptyBinding,
+    feed: { memberId: resolveMemberId } };
+  const deniedApp = buildServer(config, { invitationEmail });
+  const cookie = encodeSession(config, { sub: 'idp-identity-owner', orgId: 'org-acme',
+    roles: ['admin'], authTime: 1790856000, exp: 2000000000 });
+  try {
+    const response = await deniedApp.inject({ method: 'POST', url: '/api/invitations/identity',
+      payload: { email: 'invitee@example.test' }, headers: {
+        origin: 'https://app.example.test',
+        cookie: `${config.cookieName}=${cookie}`,
+      } });
+    expect(response.statusCode).toBe(403);
+  } finally {
+    await deniedApp.close();
+  }
+}
+it('refuses an event Admin when OpenFGA denies the admin relation',
+  refusesWhenOpenFgaDeniesAnEventAdmin);
 function admissionForInvitee() {
   return deriveAdmission(nats.store, 'acme', config.issuerUrl, 'invitee',
     new Date(), performance.now() + 10_000);

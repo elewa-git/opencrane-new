@@ -1,4 +1,3 @@
-import { removeDirectory } from './directory-cleanup.ts';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import { homedir } from 'node:os';
@@ -134,12 +133,6 @@ async function secondarySetup() {
 }
 try {
   if (process.argv[2] === '--restore-owner-app') { await restoreOwnerApp(); process.exit(0); }
-  if (process.argv[2] === '--remove-directory') {
-    orgId = '393311211338337681';
-    const receipt = await removeDirectory(api, stackId, homedir());
-    console.log(JSON.stringify(receipt));
-    process.exit(0);
-  }
   assert(process.argv[2] === undefined, 'Unknown Zitadel setup option');
   await prepareDirectory();
   if (secondary) { await secondarySetup(); process.exit(0); }

@@ -1,1 +1,1 @@
-- Admins can check an invitation email; the person is confirmed when they accept. The server no longer uses a Zitadel directory key.
+- Owners and Admins can submit an invitation email. The person is confirmed when they accept.

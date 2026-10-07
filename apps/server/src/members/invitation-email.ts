@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { readActiveMember, MemberAccessRefused } from '@opencrane/models';
 import { invitationEmailInputSchema, invitationEmailSchema } from '@opencrane/protocol';
 import type { GroupOptions } from './group-routes.ts';
@@ -16,7 +16,7 @@ export function registerInvitationEmail(app: FastifyInstance, config: AuthConfig
     const session = sessionFor(request, config, now);
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (request.headers.origin !== new URL(config.redirectUri).origin
-      || !config.expectedOrgId || session.orgId !== config.expectedOrgId) {
+      || !isOrganisationSession(config, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
     const input = invitationEmailInputSchema.safeParse(request.body);

@@ -24,7 +24,8 @@ It did not access another organisation, the owner's user, the owner app or
 instance settings.
 
 The earlier 403 probe did not establish whether its organisation id existed.
-Organisation isolation by that probe: NOT RUN. The directory key has now been removed.
+Organisation isolation by that probe: NOT RUN.
+The cleanup script was removed after use.
 
 ## Source checks
 

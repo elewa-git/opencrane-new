@@ -17,10 +17,11 @@ flowchart LR
   infra["infra<br/>infrastructure"] --> stack["infra/dev-stack<br/>local OpenCrane"]
   stack -->|starts in Docker| services["Services<br/>PostgreSQL, NATS, OpenFGA, MinIO"]
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
+  stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
   stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, Codex call fixtures and daily run"]
-  devbox["infra/devbox<br/>machine setup"] -->|creates cluster| cluster["k3d cluster<br/>local computers"]
-  stack -->|uses cluster| cluster
+  infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
+  stack -->|uses local cluster| devbox
 ```
 
 ## What it is responsible for

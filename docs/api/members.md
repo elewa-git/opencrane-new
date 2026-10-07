@@ -28,8 +28,8 @@ receive no protected rows. Members use `/api/chat/colleagues`. No conversation s
 
 ## Invitation email
 
-`POST /api/invitations/identity` accepts an email for the invitation form.
-The URL is retained, but it no longer looks up a person in Zitadel.
+`POST /api/invitations/identity` accepts an email for an invitation. The response
+says the person is confirmed when they accept.
 Only current Owners and Admins may use it. It checks the signed-in session,
 the exact Origin, the configured organisation, current member events and OpenFGA.
 Cookie roles do not grant access. Its strict body is `{ email }`, at most 1 KiB,
@@ -54,10 +54,13 @@ Missing sessions return 401, access refusals return 403 and invalid input return
 503 with `{ status: unavailable }`. Errors never become claims about a person.
 This read checks access once and uses no write freshness check.
 
-The invitation creation and acceptance changes are still to come. They must check
-the accepting person's authenticated identity before granting membership. The
-existing `/members/join` command still requires an invitation bound to a sign-in
-identity; this email response creates no invitation and does not change that rule.
+At acceptance, the server checks the signed-in identity using its issuer and subject.
+The ID token must have `email_verified=true`, and its email must match the invited
+email after trimming and ignoring case. The organisation check must pass. The server
+derives the member id at acceptance from the silo, issuer, subject and admission
+number. These acceptance checks are planned for PR 3; this route does not create an
+invitation or grant membership. The existing `/members/join` command still requires
+an invitation bound to a sign-in identity.
 
 ## Admission member ids
 
@@ -72,7 +75,5 @@ Twenty removed admissions return `admission_limit`.
 The caller supplies a read deadline. More than 10,000 member events or any event
 from another silo makes the search unavailable. It appends nothing.
 
-The [rework receipt](../process/p4-3-pr2-rework.md) records checks and the removal
-of the former directory accounts. The earlier 403 probe used an organisation id
-whose existence was not established. It did not prove organisation isolation.
+The [rework receipt](../process/p4-3-pr2-rework.md) records the checks run for this route.
 The complete fresh-install invitation journey is NOT RUN.
