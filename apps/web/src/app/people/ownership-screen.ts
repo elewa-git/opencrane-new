@@ -14,7 +14,6 @@ import { fetchOwnership, fetchOwnershipChange, sendOwnershipCommand } from './ow
 type ScreenState = 'loading' | 'ready' | 'failed' | 'access';
 type ReviewKind = 'transfer_entry' | 'transfer_review' | undefined;
 type PendingOwnershipChange = {
-  key: string;
   commandId: string;
   action: 'transfer';
   successorId: string;
@@ -44,7 +43,9 @@ export class OwnershipScreen implements OnInit, OnDestroy {
   protected readonly statusDetail = signal('');
   protected readonly recordedChange = signal<OwnershipChange | undefined>(undefined);
   protected readonly checking = signal(false);
+  protected readonly reading = signal(false);
   protected readonly sending = signal(false);
+  protected readonly transferError = signal('');
   protected readonly focusTarget = signal<HTMLElement | undefined>(undefined);
   private readonly request = new AbortController();
   private pendingChange: PendingOwnershipChange | undefined;
@@ -59,7 +60,7 @@ export class OwnershipScreen implements OnInit, OnDestroy {
   }
 
   protected async refresh(): Promise<void> {
-    if (this.hasPendingChange() || this.state() === 'access') return;
+    if (this.state() === 'access' || this.reading()) return;
     await this.readOwnership(false);
   }
 
@@ -68,19 +69,27 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     this.openedBy = button;
     this.focusTarget.set(button);
     this.successorId.set('');
+    this.transferError.set('');
+    this.statusKind.set('none');
+    this.statusMessage.set('');
+    this.statusDetail.set('');
     this.review.set('transfer_entry');
   }
 
   protected prepareTransfer(): void {
     const successorId = this.successorId().trim();
     if (!this.validMemberId(successorId) || this.hasPendingChange()) return;
-    if (this.owners().some(matchesMemberId.bind(null, successorId))) {
+    if (this.owners().some(ownerMatchesMemberId(successorId))) {
+      this.transferError.set('This person is already an owner. Choose someone else.');
+      this.recordedChange.set(undefined);
       this.statusKind.set('conflict');
       this.statusMessage.set('This person is already an owner');
       this.statusDetail.set('Choose an active member who is not already an owner.');
       return;
     }
+    this.transferError.set('');
     this.review.set('transfer_review');
+    this.focusReviewTitle();
   }
 
   protected closeReview(): void {
@@ -95,15 +104,22 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     this.successorId.set(inputField.value);
   }
 
+  protected reviewFromEnter(event: Event): void {
+    event.preventDefault();
+    this.prepareTransfer();
+  }
+
   protected async confirmTransfer(): Promise<void> {
     const successorId = this.successorId().trim();
     if (!this.validMemberId(successorId) || this.hasPendingChange()) return;
     const pendingChange = this.createPendingChange(successorId);
+    // Close the review before sending so the person cannot confirm the same draft twice.
     this.review.set(undefined);
     await this.sendChange(pendingChange);
   }
 
   protected async checkStatus(): Promise<void> {
+    // Check status is a GET. It must never repeat the ownership command.
     const pendingChange = this.pendingChange;
     if (!pendingChange || this.checking()) return;
     this.checking.set(true);
@@ -115,6 +131,13 @@ export class OwnershipScreen implements OnInit, OnDestroy {
       return;
     }
     if (result.kind !== 'ok') {
+      if (result.kind === 'not_found') {
+        this.statusKind.set('unknown');
+        this.statusMessage.set('The server has no record of this change yet');
+        this.statusDetail.set('The first request may still arrive. Check again, or reload to see ' +
+          'the current owners before sending anything again.');
+        return;
+      }
       if (pendingChange.receiptSeen) {
         this.statusKind.set('applying');
         this.statusMessage.set('The change was recorded, but its status is unavailable');
@@ -184,6 +207,8 @@ export class OwnershipScreen implements OnInit, OnDestroy {
 
   protected backToTransferEntry(): void {
     this.review.set('transfer_entry');
+    this.transferError.set('');
+    this.focusReviewTitle();
   }
 
   protected stateMark(): string {
@@ -215,9 +240,7 @@ export class OwnershipScreen implements OnInit, OnDestroy {
   }
 
   private createPendingChange(successorId: string): PendingOwnershipChange {
-    const key = `transfer:${successorId}`;
     const pendingChange: PendingOwnershipChange = {
-      key,
       commandId: crypto.randomUUID(),
       action: 'transfer',
       successorId,
@@ -225,6 +248,7 @@ export class OwnershipScreen implements OnInit, OnDestroy {
       receiptSeen: false,
     };
     this.pendingChange = pendingChange;
+    // Keep this record until a current status read and owner list prove the change is complete.
     this.recordedChange.set(undefined);
     this.statusKind.set('none');
     this.statusMessage.set('');
@@ -252,6 +276,13 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     if (result.kind === 'refused') {
       this.pendingChange = undefined;
       this.showRefusal();
+      return;
+    }
+    if (result.kind === 'invalid') {
+      this.pendingChange = undefined;
+      this.statusKind.set('refused');
+      this.statusMessage.set('The ownership change was not sent');
+      this.statusDetail.set('Nothing was recorded. Check the details and try again.');
       return;
     }
     if (result.kind !== 'ok') {
@@ -301,7 +332,10 @@ export class OwnershipScreen implements OnInit, OnDestroy {
   }
 
   private async readOwnership(initialLoad: boolean): Promise<void> {
+    const retryingFailedRead = this.state() === 'failed';
+    this.reading.set(true);
     const result = await fetchOwnership(this.request.signal);
+    this.reading.set(false);
     if (this.request.signal.aborted) return;
     if (result.kind === 'access_changed') {
       this.clearForAccessChange();
@@ -316,6 +350,10 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     }
     this.applyOwnership(result.value);
     this.state.set('ready');
+    if (retryingFailedRead && document.activeElement instanceof HTMLButtonElement) {
+      document.getElementById('ownership-heading')?.focus();
+      this.statusMessage.set('Owners loaded');
+    }
     if (!initialLoad && this.statusKind() === 'conflict') {
       this.statusKind.set('none');
     }
@@ -332,6 +370,10 @@ export class OwnershipScreen implements OnInit, OnDestroy {
     this.statusKind.set('unknown');
     this.statusMessage.set('We could not tell whether this change was recorded');
     this.statusDetail.set(this.unknownDetail());
+  }
+
+  private focusReviewTitle(): void {
+    globalThis.setTimeout(focusDialogTitle, 0);
   }
 
   private unknownDetail(): string {
@@ -379,6 +421,10 @@ export class OwnershipScreen implements OnInit, OnDestroy {
 
 }
 
-function matchesMemberId(memberId: string, owner: OwnershipOwner): boolean {
-  return owner.memberId === memberId;
+function ownerMatchesMemberId(memberId: string): (owner: OwnershipOwner) => boolean {
+  return (owner) => owner.memberId === memberId;
+}
+
+function focusDialogTitle(): void {
+  document.querySelector<HTMLDialogElement>('dialog[open] h2')?.focus();
 }

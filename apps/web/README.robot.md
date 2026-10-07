@@ -129,9 +129,9 @@ ids and display names, the ownership sequence, the viewer id and role, and wheth
 screen is ready. Owners can enter a known member id as a proposed successor. The API
 does not provide a member directory or candidate names, so the screen does not pretend
 to offer a directory search. The server checks that the successor is an active member.
-The review shows the name and id returned by the owners read, and the entered id.
+The review shows the names returned by the owners read and the entered id.
 
-Transfer sends one `ownership.transfer` command with a fresh command id, the sequence
+Transfer sends one command with action `transfer`, a fresh command id, the sequence
 from the read, and the successor id. Each pending change is one record kept separate
 from the review draft.
 While a command is applying or its reply is unknown, the screen disables another

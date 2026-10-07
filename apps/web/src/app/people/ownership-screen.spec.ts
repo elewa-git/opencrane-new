@@ -27,8 +27,7 @@ it('shows the API owner list and does not invent a successor directory', async (
   expect(root.textContent).toContain("You're the last owner");
 });
 
-it('does not submit an ownership command when Enter is pressed in the member id field',
-  async () => {
+it('moves to review on Enter without sending until the owner confirms', async () => {
     const requests: SeenRequest[] = [];
   const fixture = await mount(requests, ownerHandler(owners));
   clickButton(rootElement(fixture), 'Appoint an owner');
@@ -39,7 +38,8 @@ it('does not submit an ownership command when Enter is pressed in the member id 
     memberId.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     fixture.detectChanges();
     expect(requests.filter(isPost)).toHaveLength(0);
-    expect(rootElement(fixture).textContent).toContain('Appoint an owner');
+    expect(rootElement(fixture).textContent).toContain('Review successor');
+    expect(rootElement(fixture).textContent).toContain('Appoint member-2 as an owner?');
   });
 
 it('keeps the proposed successor when the owner list refreshes', async () => {
@@ -89,6 +89,7 @@ it('keeps the second ownership change disabled while the first reply is pending'
   await vi.waitFor(() => expect(requests.filter(isPost)).toHaveLength(1));
   fixture.detectChanges();
   expect(buttonByLabel(rootElement(fixture), 'Appoint an owner').disabled).toBe(true);
+  expect(rootElement(fixture).textContent).toContain('Sending the ownership change');
   expect(rootElement(fixture).textContent).toContain('Another ownership change cannot start');
   expect(rootElement(fixture).textContent).not.toContain('The change was recorded');
 
@@ -97,6 +98,157 @@ it('keeps the second ownership change disabled while the first reply is pending'
     fixture.detectChanges();
     expect(rootElement(fixture).textContent).toContain('could not tell whether');
   });
+});
+
+it('shows an existing-owner error inside the open appointment dialog', async () => {
+  const fixture = await mount([], ownerHandler(twoOwners));
+  clickButton(rootElement(fixture), 'Appoint an owner');
+  fixture.detectChanges();
+  const field = inputByLabel(rootElement(fixture), 'Successor member id');
+  field.value = 'member-2';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  fixture.detectChanges();
+  clickButton(rootElement(fixture), 'Review appointment');
+  fixture.detectChanges();
+
+  const dialog = rootElement(fixture).querySelector('dialog');
+  expect(dialog?.textContent).toContain('This person is already an owner');
+  expect(dialog?.querySelector('[aria-describedby]')).not.toBeNull();
+});
+
+it('keeps focus on the dialog title as the appointment steps change', async () => {
+  const fixture = await mount([], ownerHandler(owners));
+  clickButton(rootElement(fixture), 'Appoint an owner');
+  fixture.detectChanges();
+  const field = inputByLabel(rootElement(fixture), 'Successor member id');
+  field.value = 'member-2';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  fixture.detectChanges();
+  clickButton(rootElement(fixture), 'Review appointment');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(document.activeElement?.textContent).toBe('Review successor');
+  });
+  clickButton(rootElement(fixture), 'Back');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(document.activeElement?.textContent).toBe('Appoint an owner');
+  });
+});
+
+it('does not show an earlier receipt on an existing-owner conflict', async () => {
+  const fixture = await mount([], successfulTransfer(twoOwners));
+  await enterTransferReview(fixture, 'member-3');
+  clickButton(rootElement(fixture), 'Appoint this owner');
+  await waitForConfirmed(fixture, 'member-3 is now an owner');
+  clickButton(rootElement(fixture), 'Appoint an owner');
+  fixture.detectChanges();
+  const field = inputByLabel(rootElement(fixture), 'Successor member id');
+  field.value = 'member-2';
+  field.dispatchEvent(new Event('input', { bubbles: true }));
+  fixture.detectChanges();
+  clickButton(rootElement(fixture), 'Review appointment');
+  clickButton(rootElement(fixture), 'Cancel');
+  fixture.detectChanges();
+  expect(rootElement(fixture).textContent).toContain('This person is already an owner');
+  expect(rootElement(fixture).textContent).not.toContain('event-');
+  expect(rootElement(fixture).textContent).not.toContain('10:50 UTC');
+});
+
+it('does not confirm while either ownership projection is still applying', async () => {
+  const requests: SeenRequest[] = [];
+  const fixture = await mount(requests, applyingTransfer);
+  await enterTransferReview(fixture, 'member-2');
+  clickButton(rootElement(fixture), 'Appoint this owner');
+  await vi.waitFor(() => expect(requests.some(isStatusGet)).toBe(true));
+  fixture.detectChanges();
+  expect(rootElement(fixture).textContent).toContain('Waiting for ownership records');
+  expect(rootElement(fixture).textContent).not.toContain('member-2 is now an owner');
+  expect(buttonByLabel(rootElement(fixture), 'Check status')).toBeDefined();
+});
+
+it('announces a failed first owner read', async () => {
+  const fixture = await mount([], failedOwnerRead);
+  fixture.detectChanges();
+  expect(rootElement(fixture).querySelector('[role="status"]')?.textContent)
+    .toContain('Owners are unavailable right now');
+});
+
+it('moves focus to Owners and announces success after retrying a failed read', async () => {
+  const requests: SeenRequest[] = [];
+  let ownerReads = 0;
+  const fixture = await mount(requests, (request) => {
+    if (request.url === '/api/ownership') {
+      ownerReads += 1;
+      if (ownerReads === 1) return Promise.resolve(jsonResponse({}, 503));
+      return Promise.resolve(jsonResponse(ownershipResponse(owners)));
+    }
+    return Promise.resolve(jsonResponse({}, 503));
+  });
+  const retryButton = buttonByLabel(rootElement(fixture), 'Try again');
+  makeVisible(retryButton);
+  retryButton.focus();
+  retryButton.click();
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(document.activeElement?.id).toBe('ownership-heading');
+  });
+  expect(rootElement(fixture).querySelector('[role="status"]')?.textContent)
+    .toContain('Owners loaded');
+});
+
+it('keeps an applying message when the owner list cannot be read after a current receipt', async () => {
+  const requests: SeenRequest[] = [];
+  let ownerReads = 0;
+  const fixture = await mount(requests, (request) => {
+    if (request.method === 'POST') {
+      return Promise.resolve(jsonResponse(changeReceipt(postCommandId(request))));
+    }
+    if (request.url.includes('/changes/')) {
+      return Promise.resolve(jsonResponse(changeReceipt(commandFromUrl(request.url), true)));
+    }
+    ownerReads += 1;
+    if (ownerReads === 1) return Promise.resolve(jsonResponse(ownershipResponse(owners)));
+    return Promise.resolve(jsonResponse({}, 503));
+  });
+  await enterTransferReview(fixture, 'member-2');
+  clickButton(rootElement(fixture), 'Appoint this owner');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(rootElement(fixture).textContent).toContain('owner list is not available yet');
+  });
+  expect(rootElement(fixture).textContent).not.toContain('member-2 is now an owner');
+  expect(buttonByLabel(rootElement(fixture), 'Check status')).toBeDefined();
+});
+
+it('clears the page when the send says the session has expired', async () => {
+  const fixture = await mount([], (request) => {
+    if (request.method === 'POST') return Promise.resolve(jsonResponse({}, 401));
+    return Promise.resolve(jsonResponse(ownershipResponse(owners)));
+  });
+  await enterTransferReview(fixture, 'member-2');
+  clickButton(rootElement(fixture), 'Appoint this owner');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(rootElement(fixture).textContent).toContain('Your access changed');
+  });
+  expect(rootElement(fixture).textContent).not.toContain('may or may not');
+  expect(rootElement(fixture).querySelector('#appoint-owner')).toBeNull();
+});
+
+it('reports a missing change record and lets the owner refresh the list', async () => {
+  const fixture = await mount([], loseTransferThenNotFound);
+  await enterTransferReview(fixture, 'member-2');
+  clickButton(rootElement(fixture), 'Appoint this owner');
+  await vi.waitFor(() => expect(rootElement(fixture).textContent).toContain('could not tell'));
+  clickButton(rootElement(fixture), 'Check status');
+  await vi.waitFor(() => {
+    fixture.detectChanges();
+    expect(rootElement(fixture).textContent).toContain('The server has no record of this change');
+  });
+  expect(buttonByLabel(rootElement(fixture), 'Refresh owners').disabled).toBe(false);
+  clickButton(rootElement(fixture), 'Refresh owners');
+  await vi.waitFor(() => expect(rootElement(fixture).textContent).toContain('Another ownership'));
 });
 
 it('checks a lost reply with GET and says it may or may not have been recorded', async () => {
@@ -183,6 +335,10 @@ function ownerHandler(rows: ReturnType<typeof owner>[]) {
   };
 }
 
+function failedOwnerRead(): Promise<Response> {
+  return Promise.resolve(jsonResponse({ status: 'unavailable' }, 503));
+}
+
 function singleOwnerHandler() {
   return ownerHandler(owners);
 }
@@ -225,6 +381,18 @@ function successfulTransfer(nextOwners: ReturnType<typeof owner>[]): RequestHand
     if (ownerReads === 1) return Promise.resolve(jsonResponse(ownershipResponse(owners)));
     return Promise.resolve(jsonResponse(ownershipResponse(nextOwners)));
   };
+}
+
+function applyingTransfer(request: SeenRequest): Promise<Response> {
+  if (request.method === 'POST') {
+    return Promise.resolve(jsonResponse(changeReceipt(postCommandId(request))));
+  }
+  if (request.url.includes('/changes/')) {
+    const receipt = changeReceipt(commandFromUrl(request.url));
+    return Promise.resolve(jsonResponse({ ...receipt,
+      projection: { content: 'applying', iam: 'current' } }));
+  }
+  return Promise.resolve(jsonResponse(ownershipResponse(owners)));
 }
 
 function sequentialTransfers(

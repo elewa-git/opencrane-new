@@ -41,6 +41,22 @@ it('keeps a lost reply as an unknown result', async () => {
   expect(result).toEqual({ kind: 'unavailable' });
 });
 
+it('reports an expired session separately from an unknown send result', async () => {
+  vi.stubGlobal('fetch', returnStatus(401));
+  const result = await sendOwnershipCommand({
+    action: 'transfer', commandId: 'command-4', expectedSequence: 7, successorId: 'member-2',
+  }, new AbortController().signal);
+  expect(result).toEqual({ kind: 'access_changed' });
+});
+
+it('reports a command rejected with 400 as not recorded', async () => {
+  vi.stubGlobal('fetch', returnStatus(400));
+  const result = await sendOwnershipCommand({
+    action: 'transfer', commandId: 'command-5', expectedSequence: 7, successorId: 'member-2',
+  }, new AbortController().signal);
+  expect(result).toEqual({ kind: 'invalid' });
+});
+
 function captureRequest(requests: RequestInit[], body: unknown): typeof fetch {
   return function returnReceipt(_input: RequestInfo | URL, options?: RequestInit) {
     requests.push(options ?? {});
@@ -54,6 +70,10 @@ function rejectRequest(): Promise<Response> {
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status });
+}
+
+function returnStatus(status: number): typeof fetch {
+  return () => Promise.resolve(jsonResponse({}, status));
 }
 
 function receipt(type: 'ownership.transferred' | 'ownership.stepped_down') {

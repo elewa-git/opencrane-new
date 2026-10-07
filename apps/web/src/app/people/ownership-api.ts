@@ -40,6 +40,7 @@ export async function sendOwnershipCommand(
       body: JSON.stringify(command.data),
       signal,
     });
+    if (response.status === 401) return { kind: 'access_changed' };
     if (response.status === 400) return { kind: 'invalid' };
     if (response.status === 403) return await refusalFrom(response);
     if (response.status === 409) return await conflictFrom(response);

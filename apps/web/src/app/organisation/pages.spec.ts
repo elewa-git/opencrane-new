@@ -11,6 +11,7 @@ const destinations = [
   '/org', '/org/integrations', '/org/integrations/new',
   '/org/integrations/server/tools', '/org/spending', '/org/models', '/org/people',
   '/org/people/groups/sales-team',
+  '/org/people/owners',
 ];
 it.each(destinations)(
   'retains the destination with a trailing slash at %s', checkTrailingSlash,

@@ -4,7 +4,8 @@
     <p>{{ ownerSummary() }}</p>
   </div>
   <div class="page-actions">
-    <button class="button secondary" type="button" [disabled]="hasPendingChange()"
+    <button class="button secondary" type="button"
+      [disabled]="reading() || state() === 'access'" [attr.aria-disabled]="reading()"
       (click)="refresh()">Refresh owners</button>
     @if (canManage()) {
       <button #appointButton id="appoint-owner" class="button primary" type="button"
@@ -20,8 +21,14 @@
     Loading owners…
   } @else if (state() === 'access') {
     {{ statusMessage() }}. {{ statusDetail() }}
+  } @else if (sending()) {
+    Sending the ownership change…
+  } @else if (state() === 'failed') {
+    {{ statusMessage() }}. Reading again is safe.
   } @else if (statusKind() !== 'none') {
     {{ statusMessage() }}. {{ statusDetail() }}
+  } @else if (statusMessage() === 'Owners loaded') {
+    Owners loaded.
   }
 </p>
 
@@ -34,7 +41,8 @@
   <section class="notice notice-error">
     <strong>Owners are unavailable right now</strong>
     <p>Reading again is safe.</p>
-    <button class="button secondary" type="button" (click)="refresh()">Try again</button>
+    <button class="button secondary" type="button" [attr.aria-disabled]="reading()"
+      (click)="refresh()">Try again</button>
   </section>
 } @else {
   @if (!ownershipReady()) {
@@ -49,7 +57,8 @@
         <strong>We couldn't refresh the owner list</strong>
         <p>The last owner list remains on screen. Nothing changed because of this read.</p>
       </div>
-      <button class="button secondary" type="button" (click)="refresh()">Refresh owners</button>
+      <button class="button secondary" type="button" [attr.aria-disabled]="reading()"
+        (click)="refresh()">Refresh owners</button>
     </section>
   }
 
@@ -77,7 +86,7 @@
       <div>
         <strong>{{ statusMessage() }}</strong>
         <p>{{ statusDetail() }}</p>
-        @if (recordedChange()) {
+        @if (statusKind() === 'confirmed' && recordedChange()) {
           <small>{{ formattedRecordedAt(recordedChange()) }} · {{ recordedChange()?.commandId }}</small>
         }
         @if (statusKind() === 'conflict') {
@@ -97,6 +106,10 @@
         <p>Appoint another owner before stepping down.</p>
       </div>
     </section>
+  }
+
+  @if (sending()) {
+    <p>Sending the ownership change…</p>
   }
 
   @if (hasPendingChange()) {
@@ -130,12 +143,16 @@
   @if (review() === 'transfer_entry') {
     <div>
       <label for="successor-id">Successor member id</label>
-      <input id="successor-id" autocomplete="off" [value]="successorId()"
+      <input id="successor-id" autocomplete="off" autocapitalize="off" spellcheck="false"
+        [value]="successorId()"
         (input)="successorIdChanged($event)" aria-describedby="successor-help successor-error"
+        (keydown.enter)="reviewFromEnter($event)"
         [attr.aria-invalid]="showInvalidMemberId() ? 'true' : null" />
       <p id="successor-help" class="api-limit">The API doesn't provide eligible member names.
         The server checks the member id and refuses inactive or unknown members.</p>
-      @if (showInvalidMemberId()) {
+      @if (transferError()) {
+        <p id="successor-error" class="field-error" role="alert">{{ transferError() }}</p>
+      } @else if (showInvalidMemberId()) {
         <p id="successor-error" class="field-error">
           Use 1 to 200 letters, numbers, underscores or hyphens.
         </p>
