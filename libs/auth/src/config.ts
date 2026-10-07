@@ -1,10 +1,4 @@
-// Copied from OpenCrane 1 (10abd0ef6)
-// libs/backend/server/infra/auth/src/configuration/oidc-config.ts; changed:
-// dropped per-organisation clients, allowlists and the platform-operator
-// bootstrap (none of that belongs in this slice), read the client secret
-// through an env-var-name indirection instead of a direct value, and
-// dropped the "OIDC not configured" development mode, since this slice
-// always requires real OIDC settings.
+// Copied from OpenCrane 1 (10abd0ef6); this package requires real OIDC settings.
 import { z } from 'zod';
 
 const configSchema = z
@@ -20,21 +14,18 @@ const configSchema = z
     flowCookieName: z.string().min(1),
     cookieSecure: z.boolean(),
     sessionMaxAgeSeconds: z.number().int().positive(),
-    // Where the organisation and roles live in the ID token. Zitadel does not
-    // use these defaults: its organisation is `urn:zitadel:iam:user:resourceowner:id`
-    // and its roles are an object keyed by role name under
-    // `urn:zitadel:iam:org:project:roles`. Set OIDC_ORG_CLAIM and
-    // OIDC_ROLES_CLAIM to those names (and ask for the matching scopes in
-    // OIDC_SCOPES) when pointing this at Zitadel.
+    // These names locate the organisation and roles in the ID token. Zitadel
+    // uses `urn:zitadel:iam:user:resourceowner:id` for the organisation and
+    // `urn:zitadel:iam:org:project:roles` for roles. Set OIDC_ORG_CLAIM,
+    // OIDC_ROLES_CLAIM and the matching OIDC_SCOPES when using Zitadel.
     orgClaim: z.string().min(1),
     rolesClaim: z.string().min(1),
-    // When set, only people from this organisation can sign in. A silo shares
-    // one Zitadel with other silos, so a production start-up must set it
-    // (loadAuthConfig refuses to start without OIDC_EXPECTED_ORG_ID). It is
-    // optional here only so local development and tests can leave it out.
+    // When set, only people from this organisation can sign in. Production
+    // silos share Zitadel, so OIDC_EXPECTED_ORG_ID is required there. Local
+    // development and tests may leave it out.
     expectedOrgId: z.string().min(1).optional(),
-    // Matched exactly against token claims, so refuse whitespace that could be
-    // trimmed away between configuration and comparison.
+    // Match token claims exactly. Reject whitespace that could be trimmed
+    // from the configured value but not from the claim.
     extraIdentities: z.array(z.object({
       issuer: z.string().regex(/^\S+$/).url(),
       subject: z.string().regex(/^\S+$/),
@@ -50,20 +41,18 @@ export type AuthConfig = z.infer<typeof configSchema>;
 
 const REQUIRED_VARS = ['OIDC_ISSUER_URL', 'OIDC_CLIENT_ID', 'OIDC_REDIRECT_URI', 'OIDC_COOKIE_SECRET'] as const;
 
-// Production also needs the organisation pin. Without it, anyone from any
-// organisation on the shared Zitadel could sign in to this silo.
+// Require an organisation id in production. Otherwise any organisation on
+// the shared Zitadel could sign in to this silo.
 const PRODUCTION_ONLY_VARS = ['OIDC_EXPECTED_ORG_ID'] as const;
 
 /**
- * Reads the OIDC login configuration from environment variables.
+ * Reads OIDC login settings from environment variables.
  *
- * The client secret is never read directly from an env var this function
- * names itself: `OIDC_CLIENT_SECRET_ENV_VAR` holds the NAME of another
- * variable that holds the actual secret, so the secret's value lives only
- * wherever the secret store injects it, never spelled out in this config.
+ * `OIDC_CLIENT_SECRET_ENV_VAR` names the variable that contains the client
+ * secret. This keeps the secret value in the secret store, not in this config.
  *
- * When `NODE_ENV` is `production`, `OIDC_EXPECTED_ORG_ID` is required too, so
- * a silo can only be started with sign-in pinned to its own organisation.
+ * Production also requires `OIDC_EXPECTED_ORG_ID`, so sign-in is limited to
+ * the silo's own organisation.
  */
 export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig {
   // Case and spaces are ignored on purpose: " Production " must not quietly
@@ -115,7 +104,7 @@ function readExtraIdentities(raw: string | undefined): unknown {
   }
 }
 
-/** Applies the organisation pin, with exact issuer-and-subject exceptions. */
+/** Checks the organisation id, allowing exact issuer and subject exceptions. */
 export function isIdentityAllowed(
   config: AuthConfig,
   identity: { issuer: string; subject: string; orgId: string },

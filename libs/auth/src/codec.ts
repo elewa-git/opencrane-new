@@ -1,17 +1,12 @@
-// Copied from OpenCrane 1 (10abd0ef6)
-// libs/backend/server/infra/auth/src/sessions/oidc-session-codec.ts; changed:
-// pulled the encrypt/decrypt core out into a small reusable codec (shared by
-// the session cookie and the short-lived login-flow cookie below), and
-// dropped the server-side session store entirely — the whole envelope now
-// lives in the browser's cookie, nowhere else.
+// Copied from OpenCrane 1 (10abd0ef6); shared by the session and login-flow cookies.
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from 'node:crypto';
 import type { ZodType } from 'zod';
 
 const ENVELOPE_VERSION = '1';
 
-// AES-256-GCM sizes in bytes. The tag must be the full 128 bits: Node accepts
-// a shorter tag unless told otherwise, and a short tag is cheap to forge (and
-// leaks the GHASH key). Both lengths are pinned and checked before decrypting.
+// Keep the AES-GCM nonce and 128-bit tag lengths fixed. Node accepts shorter
+// tags by default, but they are easier to forge and can expose the GHASH key.
+// Check both lengths before decrypting.
 const NONCE_LENGTH_BYTES = 12;
 const TAG_LENGTH_BYTES = 16;
 
@@ -19,16 +14,14 @@ const TAG_LENGTH_BYTES = 16;
 export class EnvelopeError extends Error {}
 
 /**
- * Builds an encode/decode pair for turning a typed value into a cookie value
- * that is both encrypted and signed, and back again.
+ * Builds functions that turn a typed value into an encrypted cookie and back.
  *
- * AES-256-GCM does both jobs with one primitive: it hides the payload AND
- * produces a 16-byte authentication tag, so changing a byte of the payload,
- * or cutting the tag short, makes decryption fail. That is what "encrypted
- * and signed" means here: there is no separate HMAC step.
+ * AES-256-GCM hides the payload and adds a 16-byte authentication tag.
+ * Changing the payload or shortening the tag makes decryption fail. There is
+ * no separate HMAC step.
  *
- * `purpose` keys the derived encryption key so a session cookie and a
- * login-flow cookie built from the same secret use different keys.
+ * Use `purpose` when deriving the key so session and login-flow cookies use
+ * different keys, even when they start with the same secret.
  */
 export function createEnvelopeCodec<T>(secret: string, purpose: string, schema: ZodType<T>): { encode: (value: T) => string; decode: (cookieValue: string) => T } {
   const key = Buffer.from(hkdfSync('sha256', secret, purpose, 'opencrane/auth/envelope/v1', 32));

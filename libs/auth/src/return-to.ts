@@ -1,23 +1,16 @@
 import { URL } from 'node:url';
 
-// Copied from OpenCrane 1 (10abd0ef6)
-// libs/backend/server/infra/auth/src/sessions/session.ts (`_sanitizeReturnTo`);
-// changed: the old version only looked at the raw string for a leading "/"
-// and "//". Browsers read "\" as "/" and ignore tabs and newlines, so
-// "/\evil.example" and "/<tab>/evil.example" got through. This version
-// resolves the value the way a browser would (`new URL`), keeps it only if
-// it stays on our own origin, and then checks the resolved path itself.
+// Copied from OpenCrane 1 (10abd0ef6); checks return paths as browsers read them.
 
 // Only used as the base a relative `returnTo` is resolved against.
 const SANITIZE_BASE_ORIGIN = 'http://opencrane-auth.invalid';
 
 /**
- * Reduces a post-login return target to something safe to redirect to.
+ * Keeps a safe same-origin path to use after login.
  *
- * Only a same-origin path is kept (as `pathname + search + hash`). Anything
- * else becomes `/`: an absolute URL, `//evil.example`, a backslash or
- * control-character trick, or nothing at all. Without this, a crafted
- * `returnTo` could send a person to another site right after a real login.
+ * Return `/` for an outside URL, a path that looks like another host, unsafe
+ * characters or an empty value. Otherwise keep the path, query and fragment.
+ * This stops a crafted `returnTo` value sending someone to another site.
  */
 export function sanitizeReturnTo(returnTo: string | undefined): string {
   if (!returnTo) {
@@ -32,9 +25,8 @@ export function sanitizeReturnTo(returnTo: string | undefined): string {
   if (resolved.origin !== SANITIZE_BASE_ORIGIN) {
     return '/';
   }
-  // Tidying dot-segments can leave a path that starts with "//": "/.//evil.example"
-  // resolves to the path "//evil.example", which a browser then reads as a
-  // different host. Refuse it.
+  // Removing dot segments can turn `/.//evil.example` into `//evil.example`.
+  // Browsers read that as another host, so reject it.
   if (resolved.pathname.startsWith('//')) {
     return '/';
   }

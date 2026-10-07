@@ -1,10 +1,4 @@
-// Copied from OpenCrane 1 (10abd0ef6)
-// libs/backend/server/infra/auth/src/login/oidc-service.ts and
-// oidc-logout.ts; changed: dropped the Express `Request`-shaped API, the
-// per-organisation client resolution (Kubernetes-backed, out of scope
-// here), the UserInfo merge and the email allowlists — this is just the
-// standards-only authorisation-code-with-PKCE exchange plus RP-initiated
-// logout, built around the plain {@link AuthConfig} from ./config.ts.
+// Copied from OpenCrane 1 (10abd0ef6); this package uses PKCE login and provider logout.
 import { URL } from 'node:url';
 import * as client from 'openid-client';
 import { isIdentityAllowed, type AuthConfig } from './config.ts';
@@ -13,10 +7,8 @@ import type { SessionData } from './session.ts';
 /** Thrown when the identity provider rejects or cannot complete a login. */
 export class OidcLoginError extends Error {}
 
-// One discovered client configuration per AuthConfig instance. A server
-// process builds its config once and keeps it for the process lifetime;
-// tests that build several configs (e.g. one per mock provider) each get
-// their own cache entry because the key is the object itself.
+// Keep one discovered client configuration for each AuthConfig object. A
+// server reuses its config, while tests with different providers stay separate.
 const discoveredByConfig = new WeakMap<AuthConfig, Promise<client.Configuration>>();
 
 async function discover(config: AuthConfig): Promise<client.Configuration> {
@@ -68,8 +60,8 @@ export async function buildLoginRedirect(config: AuthConfig, stepUp = false): Pr
   return { url: url.href, state, nonce, codeVerifier };
 }
 
-// Roles arrive as a list of names, or (Zitadel) as an object whose keys are
-// the role names. Anything else means no roles.
+// Roles may be a list of names or, with Zitadel, an object keyed by role name.
+// Treat every other shape as having no roles.
 function readRoles(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.filter((role): role is string => typeof role === 'string');
@@ -80,7 +72,7 @@ function readRoles(raw: unknown): string[] {
   return [];
 }
 
-/** Finishes a login: exchanges the code and turns the ID-token claims into a {@link SessionData}. */
+/** Finishes login by exchanging the code and reading the ID-token claims. */
 export async function completeLogin(
   config: AuthConfig,
   currentUrl: URL,
@@ -115,25 +107,23 @@ export async function completeLogin(
     throw new OidcLoginError('this account belongs to a different organisation');
   }
 
-  // `auth_time` is when the person last really signed in. It is not "now":
-  // a silent SSO login can finish this whole flow with nobody typing a
-  // password. So a missing value becomes 0 (as old as it can be), and the
-  // step-up check then says "not recent" instead of trusting the login.
+  // `auth_time` records when the person last signed in, not when this flow
+  // ended. Silent SSO may need no password. Treat a missing value as 0 so a
+  // step-up check will not mistake this login for a recent sign-in.
   const authTime = typeof claims.auth_time === 'number' ? Math.floor(claims.auth_time) : 0;
 
   const roles = readRoles(claims[config.rolesClaim]);
 
-  // The session cannot outlive the ID token, but it is also capped at the
-  // deployment's configured maximum, whichever is sooner.
+  // Expire the session when the ID token expires or the configured limit is
+  // reached, whichever comes first.
   const exp = Math.min(claims.exp, Math.floor(Date.now() / 1000) + config.sessionMaxAgeSeconds);
 
   return { session: { sub: claims.sub, orgId, roles, authTime, exp, ...(typeof claims['name'] === 'string' ? { name: claims['name'] } : {}), idToken: tokens.id_token! } };
 }
 
 /**
- * Builds the provider's RP-initiated-logout URL, or null when there is
- * nothing to redirect to (no `end_session_endpoint`, or discovery failed).
- * A provider problem must never block logging out of this server.
+ * Builds the provider logout URL, or returns null when discovery gives no
+ * logout endpoint. A provider problem must not block logout from this server.
  */
 export async function buildLogoutUrl(config: AuthConfig, idToken: string | undefined): Promise<string | null> {
   if (!idToken) return null;
