@@ -1,19 +1,15 @@
-// Copied from OpenCrane 1 (10abd0ef6)
-// libs/backend/server/infra/auth/src/sessions/session.types.ts (the
-// `oidcFlow` shape); changed: split into its own short-lived cookie instead
-// of living inside an `express-session`, since this slice has no
-// server-side session store to hold it in.
+// Copied from OpenCrane 1 (10abd0ef6); login state uses its own short-lived cookie.
 import { z } from 'zod';
 import { createEnvelopeCodec, EnvelopeError } from './codec.ts';
 import type { AuthConfig } from './config.ts';
 
 export const flowSchema = z
   .object({
-    /** Replay-protection value echoed back by the provider. */
+    /** Value the provider returns to show this login was not replayed. */
     state: z.string().min(1),
-    /** Replay-protection value checked against the returned ID token. */
+    /** Value checked against the returned ID token to prevent replay. */
     nonce: z.string().min(1),
-    /** PKCE verifier the token exchange must present. */
+    /** PKCE verifier sent when exchanging the code for tokens. */
     codeVerifier: z.string().min(1),
     /** Sanitised local path to return to after login. */
     returnTo: z.string(),
@@ -31,7 +27,7 @@ export class FlowInvalidError extends Error {}
 /** A login must complete within this long, or it is discarded. */
 export const FLOW_MAX_AGE_SECONDS = 600;
 
-// Keyed like the session cookie: see codecFor in session.ts.
+// Use a different key purpose from the session cookie; see codecFor in session.ts.
 function codecFor(config: AuthConfig) {
   const purpose = ['flow', config.issuerUrl, config.clientId, config.redirectUri, config.flowCookieName].join('|');
   return createEnvelopeCodec(config.cookieSecret, purpose, flowSchema);

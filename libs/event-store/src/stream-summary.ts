@@ -5,10 +5,10 @@ import { readBeforeDeadline, type EventStore } from './jetstream.ts';
 export interface SummaryKind<Summary> {
   name: string;
   keep: number;
-  /** Limit the combined size of this kind's cached streams, as well as stream count. */
+  /** Limit the total size of cached streams of this kind, as well as their count. */
   budget?: { limit: number; size(summary: Summary): number };
   empty(): Summary;
-  /** Check the row before changing the summary; leave it unchanged if this throws. */
+  /** Check each row before changing the summary; leave it unchanged on error. */
   add(summary: Summary, row: StoredEvent): void;
 }
 
@@ -53,7 +53,7 @@ function entryFor<Summary>(store: object, silo: string, subject: string,
   if (!entry) {
     entry = { summary: kind.empty(), sequence: 0, queue: Promise.resolve(), size: 0 };
   }
-  // Move this entry to the end so the first key is always the least recently used.
+  // Move this entry to the end; the first key is then the least recently used.
   entries.delete(key);
   entries.set(key, entry);
   while (entries.size > kind.keep) {
@@ -70,7 +70,7 @@ function applyBudget<Summary>(store: object, kind: SummaryKind<Summary>, entry: 
   entry.size = kind.budget.size(entry.summary);
   const entries = entriesFor(store, kind.name);
   if (entry.size > kind.budget.limit) {
-    // Drop only this entry: removing other streams cannot make an oversized entry fit.
+      // Drop this entry alone; removing others cannot make it smaller.
     for (const [key, cached] of entries) {
       if (cached === entry) {
         entries.delete(key);
@@ -88,7 +88,7 @@ function applyBudget<Summary>(store: object, kind: SummaryKind<Summary>, entry: 
 }
 
 function finished(): void {
-  // Release the queue after success or failure; the caller receives the original error.
+  // Always release the queue, and let the caller receive the original error.
 }
 
 export function readStreamSummary<Summary, Result>(
@@ -109,10 +109,10 @@ export function readStreamSummary<Summary, Result>(
         kind.add(entry.summary, row);
         entry.sequence = row.sequence;
       }
-      // Copy facts only after this call's own read reaches the head. Keep both in one slot.
+      // Copy facts only after this read reaches the head, in the same queue slot.
       return take(entry.summary, entry.sequence);
     } finally {
-      // Drop whole summaries, including partial reads, rather than forgetting refusal facts.
+      // Drop whole summaries, even after a partial read, so refusal facts stay together.
       applyBudget(store, kind, entry);
     }
   }

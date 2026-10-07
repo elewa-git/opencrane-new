@@ -38,7 +38,7 @@ const streamName = "EVENTS";
 const requestMs = 250;
 const readMs = 1_000;
 const appendMs = 10_000;
-// The server omits some defaults from StreamInfo. Absence means these values.
+// StreamInfo leaves out some default settings. Treat a missing setting as its default.
 const defaults = {
   sealed: false,
   no_ack: false,
@@ -75,7 +75,7 @@ function eventsConfig(replicas: number) {
   } satisfies Partial<StreamConfig>;
 }
 
-// Require a decision here when the SDK adds a configuration field.
+// Make this list fail type checking when the SDK adds a configuration field.
 type OtherChecks = {
   [Key in Exclude<keyof StreamConfig, keyof ReturnType<typeof eventsConfig>>]-?:
     (config: StreamConfig) => boolean;
@@ -113,7 +113,7 @@ function verifyEventsConfig(config: StreamConfig, replicas: number): void {
   }
 }
 
-// JetStreamNotEnabled is not in the SDK public exports; check its name and typed cause.
+// The SDK does not export JetStreamNotEnabled, so check its name and cause instead.
 export function isEventStoreUnavailable(error: unknown): boolean {
   return (
     error instanceof TimeoutError ||
@@ -128,7 +128,7 @@ export function isEventStoreUnavailable(error: unknown): boolean {
   );
 }
 
-// Retry only transient failures: each read has a one-second cap and an earlier caller deadline wins.
+// Retry temporary failures for at most one second, or until the caller's earlier deadline.
 async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Infinity,
   signal?: AbortSignal) {
   const deadline = Math.min(callerDeadline, performance.now() + readMs);
@@ -148,7 +148,7 @@ async function retryRead<Value>(read: () => Promise<Value>, callerDeadline = Inf
         break;
       }
       const options = signal ? { signal } : undefined;
-      // Spread concurrent read retries so an outage does not produce synchronised bursts.
+      // Jitter retry times so many reads do not all retry together during an outage.
       const jitteredBackoff = backoff / 2 + Math.random() * backoff / 2;
       await delay(Math.min(jitteredBackoff, remaining), undefined, options);
       backoff = Math.min(backoff * 2, 500);
@@ -175,10 +175,10 @@ export async function readBeforeDeadline<Value>(read: () => Promise<Value>, dead
   const listenerOptions = { once: true };
   signal?.addEventListener("abort", abort, listenerOptions);
   try {
-    // Keep the SDK's 250 ms timeout; the outer bound also stops its final in-flight read.
+    // Keep the SDK's 250 ms timeout. The outer limit also stops its last pending read.
     const pendingRead = read();
     const value = await Promise.race([pendingRead, expired.promise]);
-    // A stalled event loop may deliver the reply before it runs the expired timer.
+    // A stalled event loop can deliver a reply before it runs an expired timer.
     if (performance.now() >= deadline) {
       throw new TimeoutError();
     }
@@ -189,13 +189,13 @@ export async function readBeforeDeadline<Value>(read: () => Promise<Value>, dead
   }
 }
 
-/** The caller owns the authenticated TLS connection and its lifecycle. */
+/** The caller opens and closes this authenticated TLS connection. */
 export async function createEventStore(connection: NatsConnection) {
   const manager = await jetstreamManager(connection, { timeout: requestMs });
   return new EventStore(jetstream(connection, { timeout: requestMs }), manager);
 }
 
-/** TLS is mandatory, including before the NATS protocol handshake. */
+/** Require TLS before starting the NATS connection. */
 export async function connectNats(env: NodeJS.ProcessEnv = process.env) {
   function required(name: string): string {
     const value = env[name]?.trim();
@@ -223,7 +223,7 @@ export async function connectNats(env: NodeJS.ProcessEnv = process.env) {
   });
 }
 
-/** Process entrypoints use this adapter; the EVENTS stream is provisioned separately. */
+/** Processes use this adapter; operators create the EVENTS stream separately. */
 export async function connectEventStore(env: NodeJS.ProcessEnv = process.env) {
   const connection = await connectNats(env);
   try {
@@ -353,7 +353,7 @@ export class EventStore {
     }
   }
 
-  /** Finite entity/category history (for example team-*); fromSequence is inclusive and global. */
+  /** Read finite entity or category history; fromSequence is an inclusive global position. */
   async *readStream(
     subject: string,
     fromSequence = 1,
@@ -366,7 +366,7 @@ export class EventStore {
       if (performance.now() >= deadline) {
         throw new TimeoutError();
       }
-      // The server supports next_by_subj on MSG.GET; the SDK types omit it.
+      // NATS accepts next_by_subj for MSG.GET, though the SDK types omit it.
       const query = { next_by_subj: wire, seq: sequence };
       const message = await this.readMessage(query, deadline);
       if (!message || message.seq > head) {
@@ -397,7 +397,7 @@ export class EventStore {
     return info.state.last_seq;
   }
 
-  /** Read from the caller's SQL checkpoint; no server-side delivery cursor survives a restart. */
+  /** Read from the caller's SQL checkpoint; NATS does not keep a cursor across restarts. */
   async *subscribe(
     fromSequence = 1,
     signal?: AbortSignal,
@@ -411,11 +411,11 @@ export class EventStore {
           head = await this.readHead(Infinity, signal);
         }
         if (sequence > head) {
-          // Poll only at the live tail. Historical reads have no delay or shared cursor.
+          // Wait only at the live end. Earlier reads have no delay or shared cursor.
           await delay(100);
           continue;
         }
-        // Bound read-ahead and keep log order even when replies arrive out of order.
+        // Limit how far reads run ahead and keep event order if replies arrive out of order.
         const count = Math.min(64, head - sequence + 1);
         const messages = await this.readBatch(sequence, count, signal);
         for (const message of messages) {
@@ -454,12 +454,12 @@ export class EventStore {
     try {
       return await Promise.all(reads);
     } finally {
-      // A failed batch cannot yield, so its sibling reads must stop retrying too.
+      // Stop sibling reads after a batch fails; none of their results can be used.
       controller.abort();
     }
   }
 
-  /** Latest global sequence, or latest entity/category sequence (for example team-*). */
+  /** Return the latest global position, or latest position for an entity or category. */
   async head(subject?: string, deadline = Infinity): Promise<number> {
     const manager = this.manager;
     if (subject !== undefined) {

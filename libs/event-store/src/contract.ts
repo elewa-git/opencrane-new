@@ -11,12 +11,11 @@ export interface StoredEvent {
 export interface AppendCommand {
   event: unknown;
   expectedSequence: number;
-  /** Check every event on this subject up to expectedSequence before opting in.
-   * Find no earlier copy with the same commandId, principal and subject. */
+  /** Check this subject through expectedSequence and find no earlier matching command. */
   historyChecked?: true;
-  /** Check the whole event category (for example member-*) instead of only this entity. */
+  /** Check the whole category, such as member-*, instead of one entity. */
   expectedSubject?: string;
-  /** Only ownership migration may fence the complete captured event history. */
+  /** Use the full saved history only while changing event ownership. */
   expectedGlobalSequence?: number;
 }
 export type AppendResult =
@@ -25,7 +24,7 @@ export type AppendResult =
   | { status: "unavailable"; cause: unknown }
   | { status: "rejected"; reason: "invalid_event" | "duplicate_id" };
 
-/** Envelope subjects use the catalogue's member-alice form; NATS uses ev.member.alice. */
+/** Events use names like member-alice; NATS changes that to ev.member.alice. */
 export function wireSubject(subject: string): string {
   const parts = /^([a-z]+)-([^.*>\s]+)$/.exec(subject);
   if (!parts) {
