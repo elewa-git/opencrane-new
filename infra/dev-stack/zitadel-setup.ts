@@ -101,7 +101,7 @@ async function secondarySetup() {
     clientId = app.clientId;
   }
   const users: Record<string, { id: string; login: string; passwordFile: string }> = {};
-  for (const role of ['owner', 'member']) {
+  for (const role of ['owner', 'member', 'without-assistant', 'wrong-account']) {
     const userName = `opencrane2-dev-ci-${stackId}-${role}`;
     const file = `zitadel-${role}-password`;
     const found = await list('/management/v1/users/_search', [{ userNameQuery: { userName, method: 'TEXT_QUERY_METHOD_EQUALS' } }]);
@@ -121,7 +121,8 @@ async function secondarySetup() {
       .parse(await api(`/management/v1/users/${userId}`)).user;
     users[role] = { id: userId, login: user.preferredLoginName, passwordFile: `${directory}/${file}` };
   }
-  for (const file of ['zitadel-client-secret', 'zitadel-owner-password', 'zitadel-member-password']) {
+  for (const file of ['zitadel-client-secret', 'zitadel-owner-password', 'zitadel-member-password',
+    'zitadel-without-assistant-password', 'zitadel-wrong-account-password']) {
     await save(file, await readFile(`${credentials}/${file}`, 'utf8'));
     await chmod(`${directory}/${file}`, 0o600);
   }
@@ -132,6 +133,7 @@ async function secondarySetup() {
 }
 try {
   if (process.argv[2] === '--restore-owner-app') { await restoreOwnerApp(); process.exit(0); }
+  assert(process.argv[2] === undefined, 'Unknown Zitadel setup option');
   await prepareDirectory();
   if (secondary) { await secondarySetup(); process.exit(0); }
   const pinned = z.object({ orgId: z.string().optional(), extraIdentities: z.array(identity).length(1) })

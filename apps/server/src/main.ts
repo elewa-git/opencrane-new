@@ -86,6 +86,10 @@ const app = buildServer(authConfig, {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
   } } : {}),
+  ...(realtime && events ? { invitationEmail: {
+    silo: realtime.binding.silo, store: events.store,
+    feed: realtime.feed, binding: realtime.binding,
+  } } : {}),
   ...(realtime && events && modelDb ? { ownership: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,

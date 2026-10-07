@@ -49,3 +49,10 @@ export const memberDirectorySchema = z.object({
   projection: z.object({ content: z.enum(['current', 'applying']) }).strict(),
   permissions: z.object({ invite: z.literal(false) }).strict(),
 }).strict();
+
+export const invitationEmailInputSchema = z.object({ email: z.email().max(254) }).strict();
+export const invitationEmailSchema = z.object({
+  status: z.literal('confirmation_on_acceptance'),
+  email: z.email().max(254),
+  message: z.literal('The person is confirmed when they accept the invitation.'),
+}).strict();

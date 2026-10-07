@@ -297,7 +297,8 @@ prints **FAIL sign-in** and exits non-zero even if the service checks pass.
 For secondary bring-up, `zitadel-setup.ts` checks organisation
 `393311211338337681` and existing project `393311211539664273`. Under a shared
 setup lock, each id creates or reuses its own app, `OpenCrane 2 Dev CI <id>`, and
-users `opencrane2-dev-ci-<id>-owner` and `opencrane2-dev-ci-<id>-member`.
+four users named `opencrane2-dev-ci-<id>-<role>`. The roles in the names are
+owner, member, without-assistant and wrong-account.
 The owner app and users are never modified, and no owner credentials are read.
 Secondary users need no Zitadel administration role; product roles come from events.
 Each secondary app permits only its id's exact callback and logout URIs from the

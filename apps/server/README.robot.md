@@ -892,3 +892,12 @@ governed-work qualification remains tracked in #63.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
+
+The [invitation email API](../../docs/api/members.md#invitation-email) accepts an
+Admin's email input after checking the signed-in session, Origin, organisation,
+current membership events and OpenFGA. Its response makes no claim about the
+invited person's account. Acceptance checks are described in the API contract.
+`src/members/admission.ts` selects a member id from the silo, issuer, subject and
+admission number. The member-history limit is 10,000 events. `test/groups.test.ts`
+covers existing ids, removed admissions, conflicting identities, duplicate bindings
+and both limits.

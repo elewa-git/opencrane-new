@@ -1,0 +1,1 @@
+- Owners and Admins can submit an invitation email. The person is confirmed when they accept.

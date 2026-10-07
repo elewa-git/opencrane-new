@@ -82,13 +82,17 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     assert.deepEqual(state.apps[config.appId].oidcConfig.postLogoutRedirectUris, ['http://127.0.0.1:25106/']);
     assert.equal(state.apps[config.appId].oidcConfig.devMode, true);
     const credentials: Record<string, string> = {};
-    for (const name of ['client-secret', 'owner-password', 'member-password']) {
+    for (const name of ['client-secret', 'owner-password', 'member-password', 'without-assistant-password',
+      'wrong-account-password']) {
       const path = `${directory}/zitadel-${name}`;
       credentials[name] = await readFile(path, 'utf8');
       assert.equal((await stat(path)).mode & 0o777, 0o600);
       assert.ok(!`${first.stdout}${first.stderr}`.includes(credentials[name]!));
     }
-    for (const role of ['owner', 'member']) {
+    assert.equal(state.directoryRoles, undefined);
+    await assert.rejects(stat(`${directory}/zitadel-directory-key`));
+    await assert.rejects(stat(`${home}/.config/opencrane/dev-stack-ci-1/zitadel-directory-key`));
+    for (const role of ['owner', 'member', 'without-assistant', 'wrong-account']) {
       assert.equal(config.users[role].login, `opencrane2-dev-ci-1-${role}`);
       assert.equal(state.users[config.users[role].id].password, credentials[`${role}-password`]);
     }

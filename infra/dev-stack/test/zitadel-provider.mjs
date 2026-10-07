@@ -13,7 +13,7 @@ globalThis.fetch = async (url, options) => {
   const appBase = `/management/v1/projects/${projectId}/apps`;
   let result;
   if (path === '/management/v1/orgs/me') {
-    result = { org: { id: orgId, name: 'OpenCrane 2 Dev' } };
+    result = { org: state.org ?? { id: orgId, name: 'OpenCrane 2 Dev' } };
   } else if (path === `/management/v1/projects/${projectId}`) {
     result = { project: { id: projectId, name: 'OpenCrane 2 Dev', details: { resourceOwner: orgId } } };
   } else if (path === `${appBase}/_search`) {
@@ -36,9 +36,32 @@ globalThis.fetch = async (url, options) => {
   } else if (path === '/management/v1/users/_search') {
     const userName = body.queries[0].userNameQuery.userName;
     result = { result: Object.values(state.users).filter(user => user.userName === userName) };
+  } else if (path === '/management/v1/orgs/me/members/_search') {
+    const userId = body.queries[0].userIdQuery.userId;
+    result = { result: state.members?.[userId] ?? [] };
+  } else if (path.startsWith('/management/v1/orgs/me/members/') && options.method === 'DELETE') {
+    delete state.members[path.split('/').at(-1)];
+    result = {};
+  } else if (path.endsWith('/keys/_search')) {
+    const userId = path.split('/').at(-3);
+    const keys = state.keys?.[userId] ?? [];
+    const totalResult = state.keyCount ?? keys.length;
+    const details = totalResult === 0 ? {} : { totalResult };
+    result = { result: keys, details };
+  } else if (path.includes('/keys/') && options.method === 'DELETE') {
+    const userId = path.split('/').at(-3);
+    const keyId = path.split('/').at(-1);
+    function keepOtherKey(key) {
+      return key.id !== keyId;
+    }
+    state.keys[userId] = state.keys[userId].filter(keepOtherKey);
+    result = {};
+  } else if (path.startsWith('/management/v1/users/') && options.method === 'DELETE') {
+    delete state.users[path.split('/').at(-1)];
+    result = {};
   } else if (path === '/management/v1/users/human/_import') {
     const userId = body.userName;
-    assert.match(userId, /^opencrane2-dev-ci-[12]-(owner|member)$/u);
+    assert.match(userId, /^opencrane2-dev-ci-[12]-(owner|member|without-assistant|wrong-account)$/u);
     assert.ok(!state.users[userId], 'Existing users must be reused');
     state.users[userId] = { id: userId, userName: body.userName,
       preferredLoginName: body.userName, details: { resourceOwner: orgId }, password: body.password };
