@@ -8,6 +8,7 @@ import { IntegrationRegister } from './integrations/integration-register';
 import { IntegrationDetail } from './integrations/integration-detail';
 import { ToolPolicyScreen } from './tool-policy/tool-policy';
 import { Workspace } from './chat/workspace';
+import { DirectChat } from './chat/direct-chat';
 import { SignIn } from './sign-in/sign-in';
 import { SharedState } from './shared-state/shared-state';
 import { StateSpecimen } from './shared-state/state-specimen';
@@ -29,7 +30,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
-    AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
+    AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen, DirectChat,
     SharedAssistantAdmin,
     SharedAssistantPicker,
   ],
@@ -44,7 +45,9 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
 export class App {
   private readonly pathname = normalisePathname(globalThis.location.pathname);
   protected readonly claimPage = this.pathname === '/claim';
-  protected readonly workspacePage = this.pathname === '/workspace';
+  protected readonly workspacePage = this.pathname === '/workspace'
+    || this.pathname === '/workspace/direct';
+  protected readonly directChatPage = this.pathname === '/workspace/direct';
   protected readonly sharedAssistantPickerPage = this.pathname === '/workspace/shared';
   protected readonly orgPage = this.pathname === '/org' || this.pathname.startsWith('/org/');
   protected readonly settingsPage = personalSettingsPage(this.pathname);

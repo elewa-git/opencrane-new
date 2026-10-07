@@ -295,7 +295,10 @@ async function checkNavigation(page, motion) {
   for (const status of ['Working', 'Done', 'Closed', 'Failed']) {
     assert(await menu.getByText(status, { exact: true }).count() > 0);
   }
-  assert.equal(await menu.getByRole('link').count(), 2, 'Only Settings and Account are links');
+  assert.equal(await menu.getByRole('link').count(), 3,
+    'Direct chats, Settings and Account use links');
+  assert.equal(await menu.getByRole('link', { name: 'New direct chat' }).getAttribute('href'),
+    '/workspace/direct');
   const bounds = await close.boundingBox();
   assert(bounds.width >= 44 && bounds.height >= 44, '44px close');
   const menuBounds = await menu.boundingBox();

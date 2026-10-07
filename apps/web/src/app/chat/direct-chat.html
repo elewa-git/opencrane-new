@@ -1,0 +1,41 @@
+<main class="direct-start">
+  <header class="start-header">
+    <a href="/workspace" aria-label="Back to workspace">‹</a>
+    <h1>New direct conversation</h1>
+  </header>
+  <span class="sr-only" role="status" aria-live="polite">{{ status() }}</span>
+  <section class="recipient-panel" aria-label="Direct conversation recipient">
+    <p class="intro">Choose one colleague. This conversation is between two people.</p>
+    @if (selected(); as colleague) {
+      <div class="to-row">
+        <span class="to-label">To</span>
+        <span class="recipient-chip">{{ displayName(colleague) }}</span>
+        <button #changeButton type="button" class="change-button" (click)="changeRecipient()">
+          Change
+        </button>
+      </div>
+      <p class="draft-note">Draft — your message has not been sent.</p>
+    } @else {
+      <label for="colleague-search">To</label>
+      <input #searchField id="colleague-search" type="search" autocomplete="off"
+        [value]="query()" (input)="queryChanged($event)" placeholder="Search colleagues" />
+      @if (searchState() === 'loading') {
+        <p>Loading colleagues…</p>
+      } @else if (searchState() === 'failed') {
+        <p>Could not search colleagues. Try again.</p>
+      } @else if (colleagues().length > 0) {
+        <div class="colleague-list" role="group" aria-label="Colleagues">
+          @for (colleague of colleagues(); track colleague.memberId) {
+            <button type="button" class="colleague-row" (click)="selectColleague(colleague)">
+              {{ displayName(colleague) }}
+              <small>Direct conversation</small>
+            </button>
+          }
+        </div>
+      } @else if (query().trim()) {
+        <p class="empty-search">No colleagues match this search.</p>
+      }
+      <p class="draft-note">Nothing is created until you send your first message.</p>
+    }
+  </section>
+</main>
