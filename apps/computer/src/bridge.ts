@@ -2,13 +2,14 @@ import { receiveFile } from './files.ts';
 // Codex process supervision and the authenticated server event channel.
 import { spawn } from 'node:child_process';
 import { createServer as netServer, connect, type Socket } from 'node:net';
-import { createServer, request } from 'node:http';
+import { createServer } from 'node:http';
 import { writeFileSync, chmodSync, renameSync, readFileSync } from 'node:fs';
 import { once } from 'node:events';
 import { codexConnection } from './codex-connection.ts';
 import { memoryFreeConfig, memoryFreeEnvironments } from './codex-config.ts';
 import { bridgeChannel } from './channel.ts';
 import { proxy } from './proxy.ts';
+import { proxyControl } from './proxy-control.ts';
 import { body, json, record } from './http.ts';
 function stopped(error: unknown) {
   const name = error instanceof Error ? error.name : 'Error';
@@ -141,14 +142,16 @@ const channel = bridgeChannel(server, {
   },
   rpc: persistent.rpc,
   privateSession,
+  catalogue(loadKey, conversation, tools, thread) {
+    return proxyControl('/catalogue', { loadKey, conversation, tools, thread });
+  },
+  dropCatalogue(loadKey) {
+    return proxyControl('/catalogue/drop', { loadKey });
+  },
   grant(thread, conversation, token, expiresAt) {
-    return new Promise<void>((resolve, reject) => {
-      const computer = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
-      const req = request({ socketPath: '/run/codex/control.sock', path: token ? '/grant' : '/drop', method: 'POST' }, res => {
-        res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(new Error('Grant refused')));
-      });
-      req.on('error', reject); req.setTimeout(5000, () => req.destroy(new Error('Grant timeout')));
-      req.end(JSON.stringify({ thread, conversation, computer: computer['value'], token, expires: expiresAt }));
-    });
+    const computer = record(JSON.parse(readFileSync('/run/codex/computer.json', 'utf8')) as unknown);
+    const path = token ? '/grant' : '/drop';
+    const input = { thread, conversation, computer: computer['value'], token, expires: expiresAt };
+    return proxyControl(path, input);
   },
 });

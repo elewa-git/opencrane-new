@@ -10,6 +10,10 @@ tar -xzf .state/syft.tar.gz -C .state syft
 curl -fsSL https://raw.githubusercontent.com/spdx/license-list-data/v3.28.0/json/licenses.json -o .state/osi.json
 printf '%s\n' 'f728c534d8bd1044fc515a2ddb2292be99559021d830bfa3281be0bcd36302ee  .state/osi.json' | sha256sum -c -
 docker build --build-context project=../.. --target runtime -t ocn-computer-runtime .
+docker run --rm --network none \
+  -v "$PWD/test:/app/test:ro" \
+  --entrypoint node ocn-computer-runtime \
+  --experimental-strip-types /app/test/codex-mcp-wire.mjs > .state/codex-mcp-wire.json
 docker run --rm -i \
   -v "$PWD/src:/expected/src:ro" \
   -v "$PWD/../../libs/models/src/routing.ts:/expected/routing.ts:ro" \

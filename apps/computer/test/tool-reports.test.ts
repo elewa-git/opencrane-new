@@ -25,8 +25,9 @@ async function fixture(executionMode = 'memory_free') {
   function credential() { return { value: 'computer', expiresAt: Date.now() + 60_000 }; }
   function send(report: BridgeReport) { reports.push(wireReport(report)); }
   function closeSocket() { throw new Error('Unexpected socket closure'); }
+  function catalogue() { return Promise.resolve(); }
   const driver: TurnDriver = { journal: `${directory}/reports`, rpc: transport,
-    privateSession, grant, credential };
+    privateSession, grant, credential, catalogue };
   const runner = turnRunner(driver, journal, send, closeSocket);
   const frame = { id: 'turn', conversationId: 'chat', assistantId: 'assistant',
     text: 'Use a tool', token: 'token', expiresAt: Date.now() + 60_000, executionMode,

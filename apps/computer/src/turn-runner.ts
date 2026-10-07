@@ -7,6 +7,7 @@ export { parseTurn } from './turn-frame.ts';
 export type { Turn } from './turn-frame.ts';
 import { itemReport } from './item-reports.ts';
 import { turnInput, privateTurnInput } from './turn-input.ts';
+import { threadLoads, ThreadLoadFailed, type ThreadLoadDriver } from './thread-loads.ts';
 
 const MAX_PRIVATE_TURNS = 2;
 const PRIVATE_ITEM_TYPES = new Set(['userMessage', 'agentMessage', 'reasoning', 'contextCompaction']);
@@ -17,10 +18,9 @@ export interface PrivateSession {
   closed: Promise<void>;
 }
 
-export interface TurnDriver {
+export interface TurnDriver extends ThreadLoadDriver {
   privateSession?(): Promise<PrivateSession>;
   file?(file: WorkspaceFile, bytes: Buffer): Promise<void | 'kept_existing'>;
-  rpc(method: string, params: Record<string, unknown>): Promise<unknown>;
   grant(thread: string, conversation: string, token: string, expiresAt: number): Promise<void>;
   credential(): { value: string; expiresAt: number };
   journal: string;
@@ -74,6 +74,7 @@ function deleteTurn(state: TurnRunnerState, turnId: string) {
 
 class TurnRunner {
   private readonly driver: TurnDriver;
+  private readonly loads: ReturnType<typeof threadLoads>;
   private readonly journal: ReturnType<typeof reportJournal>;
   private readonly send: (report: BridgeReport) => void;
   private readonly closeCurrentSocket: (code: number, reason: string) => void;
@@ -94,6 +95,7 @@ class TurnRunner {
     closeCurrentSocket: (code: number, reason: string) => void,
   ) {
     this.driver = driver;
+    this.loads = threadLoads(driver);
     this.journal = journal;
     this.send = send;
     this.closeCurrentSocket = closeCurrentSocket;
@@ -218,7 +220,12 @@ class TurnRunner {
     this.state.preparing.set(input.conversationId, input);
     try {
       await this.prepareAndRun(input);
-    } catch {
+    } catch (error) {
+      if (error instanceof ThreadLoadFailed) {
+        const text = 'The tools for this conversation could not be reloaded. '
+          + 'Send your message again.';
+        this.appendReport(input, 'agent.message_completed', { messageId: input.id, text });
+      }
       this.failTurn(input);
     }
   }
@@ -311,22 +318,9 @@ class TurnRunner {
   private async prepareMemoryFreeThread(input: Turn) {
     const previousReport = this.lastThreadReport(input);
     const previousThread = previousReport?.threadId;
-    let method: string;
-    let params: Record<string, unknown>;
-    if (previousThread) {
-      method = 'thread/resume';
-      params = { threadId: previousThread };
-    } else {
-      method = 'thread/start';
-      params = {
-        cwd: '/workspace',
-        model: modelForTask(input.taskKind),
-        approvalPolicy: 'never',
-        sandbox: 'danger-full-access',
-      };
-    }
-
-    return record(await this.driver.rpc(method, params));
+    const params = { cwd: '/workspace', model: modelForTask(input.taskKind),
+      approvalPolicy: 'never', sandbox: 'danger-full-access' };
+    return this.loads.load(input, previousThread, params);
   }
 
   private async runThread(input: Turn, threadId: string) {

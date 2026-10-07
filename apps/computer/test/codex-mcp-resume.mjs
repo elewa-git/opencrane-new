@@ -1,57 +1,76 @@
 import assert from 'node:assert/strict';
 import { spawn, execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:http';
+import { createServer, request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { setTimeout as pause } from 'node:timers/promises';
+import { randomBytes } from 'node:crypto';
 
-const homePrefix = join(tmpdir(), 'codex-resume-');
-const probeHome = mkdtempSync(homePrefix);
+const probeHome = mkdtempSync(join(tmpdir(), 'codex-resume-'));
 const startedAt = Date.now();
 const versionOptions = { encoding: 'utf8' };
 const versionOutput = execFileSync('codex', ['--version'], versionOptions);
-const version = versionOutput.trim();
-const measurementDate = new Date(startedAt);
-const measuredAt = measurementDate.toISOString();
-const capture = { measuredAt, version,
-  requests: [], modelTools: [], rpc: [], replies: [], completedTurns: [], stderr: [] };
+const capture = {
+  measuredAt: new Date(startedAt).toISOString(), version: versionOutput.trim(),
+  requests: [], modelTools: [], rpc: [], replies: [], notifications: [],
+  completedTurns: [], stderr: [], checks: [],
+};
 let stage = 'start';
 let activeClient;
+let modelHoldStarted;
+let nextRpc = 0;
+const wireMode = process.argv.includes('--wire');
+let runtimeProxy;
+let productionConfig;
+let productionThreadConfig;
+let control;
+const wireLoads = new Map();
+const wireConversations = new Map();
+const plans = new Map();
 
 async function readBody(request) {
   const chunks = [];
   for await (const chunk of request) chunks.push(chunk);
-  const bytes = Buffer.concat(chunks);
-  const text = bytes.toString();
-  return JSON.parse(text);
+  return JSON.parse(Buffer.concat(chunks).toString());
 }
 
 function reply(response, id, result) {
   const headers = { 'content-type': 'application/json' };
   response.writeHead(200, headers);
   const message = { jsonrpc: '2.0', id, result };
-  const text = JSON.stringify(message);
-  response.end(text);
+  response.end(JSON.stringify(message));
+  capture.requests.at(-1).finishedAtMs = Date.now() - startedAt;
+}
+
+function toolName(path) {
+  if (path.includes('after')) return 'read_after';
+  if (path.includes('other')) return 'read_other';
+  return 'read_before';
 }
 
 async function handleMcp(request, response) {
   const body = await readBody(request);
-  const entry = { stage, method: request.method, url: request.url,
-    headers: request.headers, body };
+  const entry = { stage, atMs: Date.now() - startedAt, method: request.method,
+    url: request.url, headers: request.headers, body };
   capture.requests.push(entry);
   if (body.method === 'server/discover') {
     const discovery = { resultType: 'complete', supportedVersions: ['2026-07-28'],
-      capabilities: { tools: {} }, serverInfo: { name: 'resume fixture', version: '1' },
-      ttlMs: 60000, cacheScope: 'public' };
+      capabilities: { tools: {} }, serverInfo: { name: 'reload fixture', version: '1' },
+      ttlMs: 1000, cacheScope: 'private' };
     reply(response, body.id, discovery);
     return;
   }
   if (body.method === 'tools/list') {
-    let name = 'read_before';
-    if (request.url === '/after') name = 'read_after';
+    const name = toolName(request.url);
     const definition = { name, description: name, inputSchema: { type: 'object' } };
     const result = { tools: [definition] };
+    reply(response, body.id, result);
+    return;
+  }
+  if (body.method === 'tools/call') {
+    const result = { content: [{ type: 'text', text: 'Local tool finished.' }] };
     reply(response, body.id, result);
     return;
   }
@@ -60,8 +79,37 @@ async function handleMcp(request, response) {
 }
 
 function sendEvent(response, event) {
-  const text = JSON.stringify(event);
-  response.write(`event: ${event.type}\ndata: ${text}\n\n`);
+  response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+}
+
+function latestPrompt(body) {
+  let prompt = '';
+  for (const item of body.input ?? []) {
+    if (item.role !== 'user') continue;
+    for (const part of item.content ?? []) {
+      if (typeof part.text === 'string') prompt = part.text;
+    }
+  }
+  return prompt;
+}
+
+function hasOutput(body, callId) {
+  for (const item of body.input ?? []) {
+    if (item.type === 'function_call_output' && item.call_id === callId) return true;
+  }
+  return false;
+}
+
+function plannedCall(plan, namespaces) {
+  if (plan.kind === 'background') {
+    const argumentsText = JSON.stringify({ cmd: 'sleep 60', yield_time_ms: 1000 });
+    return { type: 'function_call', id: plan.itemId, call_id: plan.callId,
+      name: 'exec_command', arguments: argumentsText };
+  }
+  const namespace = namespaces[0];
+  const tool = namespace.tools[0];
+  return { type: 'function_call', id: plan.itemId, call_id: plan.callId,
+    name: tool.name, namespace: namespace.name, arguments: '{}' };
 }
 
 async function handleModel(request, response) {
@@ -70,17 +118,33 @@ async function handleModel(request, response) {
   for (const tool of body.tools ?? []) {
     if (tool.type === 'namespace' && tool.name.startsWith('mcp__')) namespaces.push(tool);
   }
-  const observedTools = { stage, namespaces };
+  const prompt = latestPrompt(body);
+  const observedTools = { stage, prompt, atMs: Date.now() - startedAt,
+    namespaces, input: body.input };
+  if (stage !== 'R2' && stage !== 'R7') {
+    observedTools.input = JSON.stringify(body.input);
+  }
   capture.modelTools.push(observedTools);
+  const plan = plans.get(prompt);
+  if (plan?.kind === 'hold') {
+    modelHoldStarted?.();
+    await pause(3000);
+  }
   const headers = { 'content-type': 'text/event-stream' };
   response.writeHead(200, headers);
-  const created = { type: 'response.created', response: { id: `response_${stage}` } };
-  const message = { type: 'response.output_item.done', item: { type: 'message',
-    id: `message_${stage}`, role: 'assistant',
-    content: [{ type: 'output_text', text: 'Local stub finished.' }] } };
-  const completed = { type: 'response.completed', response: { id: `response_${stage}`,
-    status: 'completed', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } } };
+  const responseId = `response_${capture.modelTools.length}`;
+  const created = { type: 'response.created', response: { id: responseId } };
   sendEvent(response, created);
+  let item;
+  if (plan?.callId && !hasOutput(body, plan.callId)) {
+    item = plannedCall(plan, namespaces);
+  } else {
+    item = { type: 'message', id: `message_${capture.modelTools.length}`, role: 'assistant',
+      content: [{ type: 'output_text', text: `Local stub finished: ${prompt}` }] };
+  }
+  const message = { type: 'response.output_item.done', item };
+  const completed = { type: 'response.completed', response: { id: responseId,
+    status: 'completed', usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 } } };
   sendEvent(response, message);
   sendEvent(response, completed);
   response.end();
@@ -88,7 +152,9 @@ async function handleModel(request, response) {
 
 async function listen(server) {
   function start(resolve) {
-    server.listen(0, '127.0.0.1', resolve);
+    let port = 0;
+    if (wireMode && server === mcp) port = 8080;
+    server.listen(port, '127.0.0.1', resolve);
   }
   await new Promise(start);
   return server.address().port;
@@ -102,32 +168,25 @@ function startClient() {
   const child = spawn('codex', argumentsList, options);
   const pending = new Map();
   const turns = new Map();
-  let nextId = 0;
   const lineOptions = { input: child.stdout };
   const lines = createInterface(lineOptions);
 
-  function send(message) {
-    const text = JSON.stringify(message);
-    child.stdin.write(`${text}\n`);
-  }
+  function send(message) { child.stdin.write(`${JSON.stringify(message)}\n`); }
 
   function receive(line) {
     const message = JSON.parse(line);
+    const atMs = Date.now() - startedAt;
     if (message.id !== undefined && message.method === undefined) {
-      const accepted = { stage, id: message.id, error: message.error ?? null,
-        threadId: message.result?.thread?.id };
+      let result = message.result;
+      if (result?.thread) result = { threadId: result.thread.id };
+      const accepted = { stage, atMs, id: message.id, result, error: message.error ?? null };
       capture.replies.push(accepted);
       const waiting = pending.get(message.id);
       if (!waiting) return;
       clearTimeout(waiting.timeout);
       pending.delete(message.id);
-      if (message.error) {
-        const errorText = JSON.stringify(message.error);
-        const error = new Error(errorText);
-        waiting.reject(error);
-      } else {
-        waiting.resolve(message.result);
-      }
+      if (message.error) waiting.reject(new Error(JSON.stringify(message.error)));
+      else waiting.resolve(message.result);
       return;
     }
     if (message.id !== undefined) {
@@ -135,47 +194,80 @@ function startClient() {
       const refused = { id: message.id, error };
       send(refused);
     }
+    capture.notifications.push({ stage, atMs, ...message });
     if (message.method === 'turn/completed') {
       const threadId = message.params.threadId;
-      const completed = { stage, threadId, status: message.params.turn.status };
+      const completed = { stage, atMs, threadId, status: message.params.turn.status };
       capture.completedTurns.push(completed);
       turns.get(threadId)?.(message.params.turn);
       turns.delete(threadId);
     }
   }
 
-  function recordStderr(chunk) {
-    const entry = { stage, text: chunk.toString() };
-    capture.stderr.push(entry);
-  }
+  function recordStderr(chunk) { capture.stderr.push({ stage, text: chunk.toString() }); }
   lines.on('line', receive);
   child.stderr.on('data', recordStderr);
 
-  function rpc(method, params) {
-    const id = ++nextId;
-    const entry = { stage, method, params };
+  function sendRpc(method, params) {
+    const id = ++nextRpc;
+    const entry = { stage, atMs: Date.now() - startedAt, id, method, params };
     capture.rpc.push(entry);
     function wait(resolve, reject) {
       function expired() {
         pending.delete(id);
-        const error = new Error(`Timed out: ${method}`);
-        reject(error);
+        reject(new Error(`Timed out: ${method}`));
       }
       const timeout = setTimeout(expired, 20000);
-      const waiting = { resolve, reject, timeout };
-      pending.set(id, waiting);
+      pending.set(id, { resolve, reject, timeout });
       const request = { id, method, params };
       send(request);
     }
     return new Promise(wait);
   }
 
-  async function turn(threadId) {
-    function wait(resolve) {
-      turns.set(threadId, resolve);
+  async function rpc(method, params) {
+    if (!wireMode) return sendRpc(method, params);
+    if (method === 'thread/start' || method === 'thread/resume') {
+      if (!params.config) return sendRpc(method, params);
+      const tools = [];
+      for (const [key, server] of Object.entries(params.config.mcp_servers)) {
+        const name = toolName(new URL(server.url).pathname);
+        const definition = { name, inputSchema: { type: 'object' } };
+        const serverId = new URL(server.url).pathname.slice(1);
+        tools.push({ key, serverId, connectionId: 'installed',
+          definitions: [JSON.stringify(definition)] });
+      }
+      const loadKey = randomBytes(16).toString('hex');
+      const conversation = wireConversations.get(params.threadId) ?? `chat-${loadKey}`;
+      const input = { loadKey, conversation, tools, thread: params.threadId };
+      await control('/catalogue', input);
+      const config = productionThreadConfig({ tools }, loadKey,
+        `http://127.0.0.1:${mcp.address().port}`);
+      const configured = { ...params, config };
+      if (method === 'thread/start') configured.approvalPolicy = 'never';
+      const result = await sendRpc(method, configured);
+      input.thread = result.thread.id;
+      wireLoads.set(input.thread, loadKey);
+      wireConversations.set(input.thread, conversation);
+      await control('/catalogue', input);
+      return result;
     }
+    if (method === 'thread/unsubscribe') {
+      const loadKey = wireLoads.get(params.threadId);
+      if (loadKey) await control('/catalogue/drop', { loadKey });
+    }
+    if (method === 'turn/start') {
+      const input = { thread: params.threadId, conversation: wireConversations.get(params.threadId),
+        token: 'local-turn', computer: 'local-computer', expires: Date.now() + 60_000 };
+      await control('/grant', input);
+    }
+    return sendRpc(method, params);
+  }
+
+  async function turn(threadId, prompt = stage) {
+    function wait(resolve) { turns.set(threadId, resolve); }
     const finished = new Promise(wait);
-    const input = [{ type: 'text', text: `Local probe: ${stage}`, text_elements: [] }];
+    const input = [{ type: 'text', text: prompt, text_elements: [] }];
     const turnParams = { threadId, input };
     await rpc('turn/start', turnParams);
     const result = await finished;
@@ -183,7 +275,7 @@ function startClient() {
   }
 
   async function initialise() {
-    const clientInfo = { name: 'resume_probe', version: '1' };
+    const clientInfo = { name: 'reload_probe', version: '1' };
     const initialiseParams = { clientInfo, capabilities: { experimentalApi: true } };
     await rpc('initialize', initialiseParams);
     const notification = { method: 'initialized', params: {} };
@@ -208,18 +300,189 @@ function threadConfig(port, key, path) {
   return { mcp_servers: { [key]: server } };
 }
 
-const mcp = createServer(handleMcp);
-const model = createServer(handleModel);
-const deadline = setTimeout(expireProbe, 60000);
+async function unload(threadId, timeoutMs = 10000) {
+  const beganAt = Date.now();
+  const result = await activeClient.rpc('thread/unsubscribe', { threadId });
+  let loaded;
+  do {
+    loaded = await activeClient.rpc('thread/loaded/list', {});
+    if (!loaded.data.includes(threadId)) break;
+    await pause(100);
+  } while (Date.now() - beganAt < timeoutMs);
+  let closed = false;
+  for (const notification of capture.notifications) {
+    if (notification.method === 'thread/closed' &&
+        notification.params.threadId === threadId) closed = true;
+  }
+  return { result, unloaded: !loaded.data.includes(threadId), closed,
+    elapsedMs: Date.now() - beganAt };
+}
+
+function namespacesFor(prompt) {
+  for (const observed of capture.modelTools) {
+    if (observed.prompt === prompt) return observed.namespaces;
+  }
+  throw new Error(`No model request for ${prompt}`);
+}
+
+function checkNamespaces(prompt, expectedName, expectedTool) {
+  const namespaces = namespacesFor(prompt);
+  if (!expectedName) {
+    assert.deepEqual(namespaces, []);
+    return;
+  }
+  assert.equal(namespaces.length, 1);
+  assert.equal(namespaces[0].name, expectedName);
+  assert.equal(namespaces[0].tools.length, 1);
+  assert.equal(namespaces[0].tools[0].name, expectedTool);
+}
+
+async function checkShellCaller(threadId, serverKey) {
+  const callsBefore = capture.requests.filter(isGatewayCall).length;
+  const loadKey = wireLoads.get(threadId);
+  const toolUrl = `${runtimeProxy.url}/mcp/${loadKey}/${serverKey}`;
+  const callerPath = join(probeHome, 'caller');
+  const socketPath = join(probeHome, 'control.sock');
+  const metadata = { threadId, callId: 'call_A',
+    'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
+  const body = { jsonrpc: '2.0', id: 99, method: 'tools/call',
+    params: { name: 'read_before', arguments: {}, _meta: metadata } };
+  const source = `
+    const fs = await import('node:fs');
+    const http = await import('node:http');
+    let credentialDenied = false;
+    try { fs.readFileSync(process.argv[1]); }
+    catch (error) { credentialDenied = error.code === 'EACCES'; }
+    const options = { method: 'POST', body: process.argv[4], headers: {
+      'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/call',
+      'mcp-name': 'read_before', 'x-opencrane-decision': 'refused' } };
+    const response = await fetch(process.argv[2], options);
+    const result = { uid: process.getuid(), credentialDenied, status: response.status };
+    function attempt(resolve) {
+      const request = http.request({ socketPath: process.argv[3], path: '/catalogue',
+        method: 'POST' });
+      request.on('error', error => resolve(error.code));
+      request.on('response', reply => resolve(reply.statusCode));
+      request.end('{}');
+    }
+    result.control = await new Promise(attempt);
+    console.log(JSON.stringify(result));
+  `;
+  const args = ['--input-type=module', '-e', source, callerPath, toolUrl, socketPath,
+    JSON.stringify(body)];
+  const environment = { PATH: process.env.PATH };
+  const child = spawn('node', args, { uid: 1001, gid: 1001, env: environment });
+  const chunks = [];
+  function collect(chunk) { chunks.push(chunk); }
+  child.stdout.on('data', collect);
+  function wait(resolve, reject) {
+    child.on('error', reject);
+    function exited(code) {
+      if (code !== 0) reject(new Error('Shell caller check could not run'));
+      else resolve();
+    }
+    child.on('exit', exited);
+  }
+  await new Promise(wait);
+  const result = JSON.parse(Buffer.concat(chunks).toString());
+  assert.equal(result.uid, 1001);
+  assert.equal(result.credentialDenied, true);
+  assert.equal(result.status, 401);
+  assert.equal(result.control, 'EACCES');
+  assert.equal(capture.requests.filter(isGatewayCall).length, callsBefore);
+  return { ...result, gatewayCallsAdded: 0 };
+}
+
+function isGatewayCall(entry) {
+  return entry.body.method === 'tools/call' && entry.url.endsWith('/installed');
+}
+
+async function check(name, run) {
+  stage = name;
+  console.error(`Running ${name}`);
+  try {
+    const detail = await run();
+    capture.checks.push({ name, result: 'PASS', detail });
+    return true;
+  } catch (error) {
+    capture.checks.push({ name, result: 'FAIL', error: String(error) });
+    return false;
+  }
+}
+
+function sleepProcesses() {
+  const options = { encoding: 'utf8' };
+  const output = execFileSync('ps', ['-eo', 'pid,args'], options);
+  const matching = [];
+  for (const line of output.split('\n')) {
+    if (/^\s*\d+ sleep 60$/u.test(line)) matching.push(line.trim());
+  }
+  return matching;
+}
+
+async function wireRequest(incoming, response) {
+  if (!wireMode) return handleMcp(incoming, response);
+  const chunks = [];
+  for await (const chunk of incoming) chunks.push(chunk);
+  const raw = Buffer.concat(chunks);
+  if (incoming.url.startsWith('/mcp/')) {
+    const body = JSON.parse(raw.toString());
+    capture.requests.push({ stage, atMs: Date.now() - startedAt, method: incoming.method,
+      url: incoming.url, headers: incoming.headers, body });
+  }
+  function receive(upstream) {
+    response.writeHead(upstream.statusCode, upstream.headers);
+    function finished() {
+      if (incoming.url.startsWith('/mcp/')) {
+        for (const entry of capture.requests) {
+          if (entry.url === incoming.url && entry.finishedAtMs === undefined) {
+            entry.finishedAtMs = Date.now() - startedAt;
+          }
+        }
+      }
+    }
+    upstream.on('end', finished);
+    upstream.pipe(response);
+  }
+  const outgoing = httpRequest(`${runtimeProxy.url}${incoming.url}`,
+    { method: incoming.method, headers: incoming.headers }, receive);
+  function failed() { response.writeHead(502); response.end(); }
+  outgoing.on('error', failed);
+  outgoing.end(raw);
+}
+function acceptWireRequest(incoming, response) { void wireRequest(incoming, response); }
+function gatewayRequest(incoming, response) {
+  if (incoming.url.startsWith('/mcp/')) void handleMcp(incoming, response);
+  else void handleModel(incoming, response);
+}
+const mcp = createServer(acceptWireRequest);
+const model = createServer(gatewayRequest);
+const deadline = setTimeout(expireProbe, 110000);
 function expireProbe() {
-  console.error('Resume probe exceeded 60 seconds');
+  console.error('Reload probe exceeded 110 seconds');
   process.exit(2);
 }
 
 try {
-  const mcpPort = await listen(mcp);
   const modelPort = await listen(model);
-  const config = `model = "probe-model"
+  if (wireMode) {
+    const { memoryFreeConfig } = await import('../src/codex-config.ts');
+    const { threadToolsConfig } = await import('../src/thread-loads.ts');
+    const proxyModule = await import('../src/proxy.ts');
+    const controlModule = await import('../src/proxy-control.ts');
+    productionConfig = memoryFreeConfig;
+    productionThreadConfig = threadToolsConfig;
+    const socketPath = join(probeHome, 'control.sock');
+    const options = { port: 0, callerPath: join(probeHome, 'caller'), controlSocket: socketPath };
+    runtimeProxy = await proxyModule.proxy(`http://127.0.0.1:${modelPort}`, options,
+      'local-fixture-only');
+    function sendControl(path, input) {
+      return controlModule.proxyControl(path, input, socketPath);
+    }
+    control = sendControl;
+  }
+  const mcpPort = await listen(mcp);
+  let config = `model = "probe-model"
 model_provider = "local"
 approval_policy = "never"
 sandbox_mode = "danger-full-access"
@@ -237,6 +500,7 @@ memories = false
 apps = false
 plugins = false
 `;
+  if (wireMode) config = productionConfig('probe-model');
   const configPath = join(probeHome, 'config.toml');
   writeFileSync(configPath, config);
   assert.equal(capture.version, 'codex-cli 0.159.2');
@@ -244,50 +508,211 @@ plugins = false
   await activeClient.initialise();
   const before = threadConfig(mcpPort, 'oc_aaaaaaaaaa', 'before');
   const after = threadConfig(mcpPort, 'oc_bbbbbbbbbb', 'after');
-  const startParams = { cwd: '/tmp', config: before };
-  const started = await activeClient.rpc('thread/start', startParams);
-  const threadId = started.thread.id;
-  await activeClient.turn(threadId);
-  stage = 'loaded_resume';
-  const resumeParams = { threadId, config: after };
-  await activeClient.rpc('thread/resume', resumeParams);
-  await activeClient.turn(threadId);
+  const other = threadConfig(mcpPort, 'oc_aaaaaaaaaa', 'other');
+  const started = await activeClient.rpc('thread/start', { cwd: '/tmp', config: before });
+  let threadA = started.thread.id;
+  await activeClient.turn(threadA, 'HISTORY_MARKER_A');
+
+  async function defaultUnload() {
+    const result = await unload(threadA, 70000);
+    capture.defaultUnload = result;
+    assert.equal(result.result.status, 'unsubscribed');
+    return result;
+  }
+  if (!wireMode) await check('R1_default', defaultUnload);
   await activeClient.close();
-  activeClient = undefined;
-  stage = 'unloaded_resume';
+  let reloadConfig = `thread_unload_delay_secs = 0\n${config}`;
+  if (wireMode) reloadConfig = config;
+  writeFileSync(configPath, reloadConfig);
   activeClient = startClient();
   await activeClient.initialise();
-  await activeClient.rpc('thread/resume', resumeParams);
-  await activeClient.turn(threadId);
-  capture.threadId = threadId;
-  const checks = [];
-  for (const observed of capture.modelTools) {
-    const names = [];
-    for (const namespace of observed.namespaces) names.push(namespace.name);
-    let expected = 'mcp__oc_bbbbbbbbbb';
-    if (observed.stage === 'start') expected = 'mcp__oc_aaaaaaaaaa';
-    const passed = names.length === 1 && names[0] === expected;
-    const check = { stage: observed.stage, expected: [expected], actual: names, passed };
-    checks.push(check);
+  await activeClient.rpc('thread/resume', { threadId: threadA, config: before });
+
+  async function zeroUnload() {
+    const result = await unload(threadA);
+    capture.zeroUnload = result;
+    assert.equal(result.result.status, 'unsubscribed');
+    assert.equal(result.unloaded, true);
+    assert.equal(result.closed, true);
+    return result;
   }
-  capture.checks = checks;
-  assert.equal(checks.length, 3, 'Each turn must reach the local model stub');
-  for (const check of checks) {
-    assert.deepEqual(check.actual, check.expected, `${check.stage}: next model request tools`);
+  const r1 = await check('R1_zero', zeroUnload);
+
+  async function reload() {
+    const resumed = await activeClient.rpc('thread/resume', { threadId: threadA, config: after });
+    assert.equal(resumed.thread.id, threadA);
+    await activeClient.turn(threadA);
+    checkNamespaces(stage, 'mcp__oc_bbbbbbbbbb', 'read_after');
+    const input = JSON.stringify(capture.modelTools.at(-1).input);
+    assert.match(input, /HISTORY_MARKER_A/u);
+    assert.doesNotMatch(input, /mcp__oc_aaaaaaaaaa|read_before/u);
   }
+  const r2 = await check('R2', reload);
+
+  async function removal() {
+    const result = await unload(threadA);
+    assert.equal(result.unloaded, true);
+    await activeClient.rpc('thread/resume', { threadId: threadA, config: { mcp_servers: {} } });
+    await activeClient.turn(threadA);
+    checkNamespaces(stage);
+  }
+  const r3 = await check('R3', removal);
+
+  const startedB = await activeClient.rpc('thread/start', { cwd: '/tmp', config: other });
+  const threadB = startedB.thread.id;
+  async function otherBusyThread() {
+    function holdStarted(resolve) { modelHoldStarted = resolve; }
+    const holding = new Promise(holdStarted);
+    plans.set('BUSY_B', { kind: 'hold' });
+    const busyTurn = activeClient.turn(threadB, 'BUSY_B');
+    await holding;
+    const result = await unload(threadA);
+    assert.equal(result.unloaded, true);
+    await activeClient.rpc('thread/resume', { threadId: threadA, config: before });
+    await activeClient.turn(threadA, 'RELOADED_A_WHILE_B_BUSY');
+    await busyTurn;
+    const loaded = await activeClient.rpc('thread/loaded/list', {});
+    assert.equal(loaded.data.includes(threadB), true);
+    checkNamespaces('BUSY_B', 'mcp__oc_aaaaaaaaaa', 'read_other');
+    checkNamespaces('RELOADED_A_WHILE_B_BUSY', 'mcp__oc_aaaaaaaaaa', 'read_before');
+    return { threadA, threadB, loaded: loaded.data };
+  }
+  const r4 = await check('R4', otherBusyThread);
+
+  async function sharedKey() {
+    const planA = { kind: 'tool', callId: 'call_A', itemId: 'fc_A' };
+    const planB = { kind: 'tool', callId: 'call_B', itemId: 'fc_B' };
+    plans.set('CALL_A', planA);
+    plans.set('CALL_B', planB);
+    await activeClient.turn(threadA, 'CALL_A');
+    await activeClient.turn(threadB, 'CALL_B');
+    const calls = [];
+    for (const request of capture.requests) {
+      if (request.body.method === 'tools/call' && request.url.includes('/oc_')) {
+        calls.push(request);
+      } else if (!wireMode && request.body.method === 'tools/call') calls.push(request);
+    }
+    assert.equal(calls.length, 2);
+    if (wireMode) assert.match(calls[0].url, /\/mcp\/[a-f0-9]{32}\/oc_aaaaaaaaaa/u);
+    else assert.equal(calls[0].url, '/before');
+    assert.equal(calls[0].body.params._meta.threadId, threadA);
+    if (wireMode) assert.notEqual(calls[0].url, calls[1].url);
+    else assert.equal(calls[1].url, '/other');
+    assert.equal(calls[1].body.params._meta.threadId, threadB);
+    return { threadA, threadB, urls: [calls[0].url, calls[1].url] };
+  }
+  await check('R5', sharedKey);
+
+  async function discoveryTiming() {
+    const timing = [];
+    for (const rpc of capture.rpc) {
+      if (rpc.method !== 'thread/start' && rpc.method !== 'thread/resume') continue;
+      let nextLoadAtMs = Infinity;
+      for (const next of capture.rpc) {
+        if ((next.method === 'thread/start' || next.method === 'thread/resume') &&
+            next.atMs > rpc.atMs) {
+          nextLoadAtMs = next.atMs;
+          break;
+        }
+      }
+      const requests = [];
+      for (const request of capture.requests) {
+        if (request.stage === rpc.stage && request.atMs >= rpc.atMs &&
+            request.atMs < nextLoadAtMs &&
+            request.body.method !== 'tools/call') requests.push(request);
+      }
+      function matchesReply(reply) { return reply.id === rpc.id; }
+      const accepted = capture.replies.find(matchesReply);
+      for (const request of requests) {
+        timing.push({ method: rpc.method, stage: rpc.stage, request: request.body.method,
+          requestAtMs: request.atMs, finishedAtMs: request.finishedAtMs,
+          returnedAtMs: accepted.atMs, beforeReturn: request.finishedAtMs <= accepted.atMs });
+      }
+    }
+    return timing;
+  }
+  await check('R6', discoveryTiming);
+
+  if (!r1 || !r2 || !r3 || !r4) {
+    async function fork() {
+      const result = await activeClient.rpc('thread/fork', { threadId: threadA, config: after });
+      const forkId = result.thread.id;
+      assert.notEqual(forkId, threadA);
+      await activeClient.turn(forkId);
+      checkNamespaces(stage, 'mcp__oc_bbbbbbbbbb', 'read_after');
+      assert.match(JSON.stringify(capture.modelTools.at(-1).input), /HISTORY_MARKER_A/u);
+      capture.forkId = forkId;
+    }
+    await check('R7', fork);
+  } else {
+    capture.checks.push({ name: 'R7', result: 'NOT RUN', detail: 'Reload checks passed.' });
+  }
+
+  async function ttl() {
+    const countBefore = capture.requests.length;
+    await pause(2000);
+    await activeClient.rpc('thread/resume', { threadId: threadB, config: after });
+    await activeClient.turn(threadB);
+    const requests = capture.requests.slice(countBefore);
+    checkNamespaces(stage, 'mcp__oc_aaaaaaaaaa', 'read_other');
+    return { pauseMs: 2000, ttlMs: 1000, requests };
+  }
+  if (!wireMode) await check('R8', ttl);
+  else {
+    capture.checks.push({ name: 'R8', result: 'NOT RUN',
+      detail: 'The standalone probe checks expiry; the real proxy uses a 60-second TTL.' });
+  }
+
+  async function backgroundTerminal() {
+    const plan = { kind: 'background', callId: 'call_background', itemId: 'fc_background' };
+    plans.set('BACKGROUND', plan);
+    await activeClient.turn(threadB, 'BACKGROUND');
+    const beforeUnload = sleepProcesses();
+    const result = await unload(threadB);
+    await pause(300);
+    const afterUnload = sleepProcesses();
+    assert.notEqual(beforeUnload.length, 0, 'The fixture must start a real background terminal');
+    return { beforeUnload, afterUnload, unload: result };
+  }
+  if (!wireMode) await check('background_terminal', backgroundTerminal);
+  else {
+    const first = capture.requests[0];
+    assert.equal(first.body.method, 'server/discover');
+    for (const entry of capture.requests) {
+      assert.equal(entry.method, 'POST');
+      assert.equal(entry.headers['mcp-protocol-version'], '2026-07-28');
+      assert.equal(entry.headers['mcp-session-id'], undefined);
+      assert.notEqual(entry.body.method, 'initialize');
+      if (entry.url.includes('/oc_')) {
+        assert.equal(entry.headers.authorization, 'Bearer local-fixture-only');
+      }
+      if (entry.body.method === 'tools/call') {
+        assert.equal(entry.headers['mcp-name'], entry.body.params.name);
+      }
+    }
+    async function shellCaller() { return checkShellCaller(threadA, 'oc_aaaaaaaaaa'); }
+    await check('shell_caller', shellCaller);
+    const featureOutput = execFileSync('codex', ['features', 'list'], versionOptions);
+    assert.match(featureOutput, /mcp_2026_07_28/u);
+  }
+  capture.threadId = threadA;
   capture.result = 'PASS';
+  for (const check of capture.checks) {
+    if (check.result === 'FAIL') capture.result = 'FAIL';
+  }
+  if (capture.result === 'FAIL') process.exitCode = 1;
 } catch (error) {
   capture.result = 'FAIL';
   capture.error = String(error);
   process.exitCode = 1;
 } finally {
   capture.elapsedMs = Date.now() - startedAt;
-  const text = JSON.stringify(capture, null, 2);
-  console.log(text);
+  console.log(JSON.stringify(capture, null, 2));
   clearTimeout(deadline);
   if (activeClient) await activeClient.close();
   mcp.close();
   model.close();
+  if (runtimeProxy) await runtimeProxy.close();
   const removalOptions = { recursive: true, force: true };
   rmSync(probeHome, removalOptions);
 }

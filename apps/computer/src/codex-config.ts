@@ -12,6 +12,7 @@ cwd = "/workspace"
 export function memoryFreeConfig(model: string) {
   return `model = ${JSON.stringify(model)}
 model_provider = "local"
+thread_unload_delay_secs = 0
 approval_policy = "on-request"
 sandbox_mode = "danger-full-access"
 web_search = "disabled"
@@ -27,6 +28,7 @@ stream_max_retries = 0
 [shell_environment_policy]
 inherit = "none"
 [features]
+mcp_2026_07_28 = true
 multi_agent = false
 memories = false
 apps = false

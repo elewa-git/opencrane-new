@@ -1,7 +1,7 @@
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 
-interface ToolServer {
+export interface ToolServer {
   key: string;
   serverId: string;
   connectionId: string;
@@ -75,7 +75,7 @@ function parseExecutionMode(value: unknown) {
   throw new Error('Invalid execution mode');
 }
 
-function parseTools(value: unknown): ToolServer[] {
+export function parseTools(value: unknown): ToolServer[] {
   if (!Array.isArray(value) || value.length > 20) throw new Error('Invalid tool list');
   const bytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
   if (bytes > 48 * 1024) throw new Error('Tool list too large');
