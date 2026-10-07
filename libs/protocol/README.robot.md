@@ -98,3 +98,11 @@ Strict header, detail, directory and query schemas follow the
 `invitationEmailSchema` checks the [reply](../../docs/api/members.md#invitation-email),
 which says that the person is confirmed when they accept. It carries no account
 existence, verification or organisation claims.
+
+Model access reads use `modelAccessResponseSchema` and
+`modelAccessCandidatesResponseSchema`. Grant rows name the grantee kind, safe
+display name, source, latest event and whether the content table has applied it.
+The response keeps provider binding, enabled-model, key and verification facts as
+`not_available_yet` until those event-backed records are available.
+Candidate reads require a kind and use an optional id cursor and a limit from 1 to
+100. Group candidates include only the count of current joined members.

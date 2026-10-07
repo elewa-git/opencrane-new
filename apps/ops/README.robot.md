@@ -2,7 +2,7 @@
 
 For people, read [README.md](README.md) first.
 
-`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `mcp-catalogue`, `computers`, `budgets` and `audit` PostgreSQL
+`@opencrane/ops` rebuilds the `members`, `groups`, `providers`, `model-access`, `mcp-catalogue`, `computers`, `budgets` and `audit` PostgreSQL
 projections or the `openfga` authorisation projection from the silo's complete
 `EVENTS` stream. The replay entrypoint never publishes events or runs reactions. Run it from the
 repository root on Node 22.
@@ -16,6 +16,7 @@ that every global sequence through the reported stream head can be read:
 ```sh
 npm run replay -- members --dry-run
 npm run replay -- mcp-catalogue --dry-run
+npm run replay -- model-access --dry-run
 npm run replay -- computers --dry-run
 npm run replay -- budgets --dry-run
 npm run replay -- audit --dry-run
@@ -34,6 +35,7 @@ Set the same NATS reader settings and `DATABASE_URL`, then run:
 ```sh
 npm run replay -- members --verify
 npm run replay -- mcp-catalogue --verify
+npm run replay -- model-access --verify
 npm run replay -- computers --verify
 npm run replay -- budgets --verify
 npm run replay -- audit --verify

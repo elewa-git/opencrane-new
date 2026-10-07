@@ -18,6 +18,8 @@ never contain key values, upstream error bodies or model answer text.
 | Same verification POST | `action: "test"` plus `model, priceTableId, reservedCents, consent: true` | Original attempt receipt; reservation precedes gateway dispatch |
 | `POST /api/org/providers` | `{ action: "models", commandId, providerId, expectedRevision, models }` | Selected registry model ids, without granting access |
 | `GET /api/org/providers/:providerId/changes/:commandId` | Original ids | Receipt, content and IAM projection status, current revision, verification validity and recorded attempt outcome |
+| `GET /api/org/models/:modelId/access` | Registry model id | Current grant rows and direct, group or assistant source labels |
+| `GET /api/org/models/:modelId/access/candidates?kind=member\|team\|assistant` | Optional `after` id and `limit` from 1 to 100 | Bounded same-silo choices; group rows include current joined-member count |
 
 Provider is `openai` or `anthropic`. Names are trimmed, required, at most 200
 characters and cannot contain NUL. Entity and command ids contain 1–200 letters,
@@ -124,11 +126,13 @@ model (`reason: "unknown_price"`); 409 stale revision, changed quote or command
 conflict; 503 unavailable infrastructure. Status reads use 404 for an absent command. Accepted asynchronous
 work can still have a refused, failed or unknown recorded outcome.
 
-`access.grantsAvailable` is false with `reason: "p4_22_required"`. Access grants,
-requester/assistant intersection explanations, ordinary model route replacement
-and retirement/dependency review belong to P4-22. Do not show invented users,
-assistant counts, retirement consequences or access completion. The Claude Design
-screens and fresh-install qualification remain pending on the UI foundation.
+`access.grantsAvailable` stays false with `reason: "p4_22_required"` until the
+grant edit and receipt routes are available. The two read routes above are
+available to HTTP clients now. Their response says not available yet for provider
+bindings, enabled-model state, key facts, verification facts and configured
+assistant uses. Do not show invented users, assistant counts, retirement
+consequences or access completion. The Claude Design screens and fresh-install
+qualification remain pending on the UI foundation.
 
 ## Known design and dev-stack gaps
 

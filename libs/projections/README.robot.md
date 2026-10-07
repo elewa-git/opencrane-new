@@ -129,6 +129,26 @@ The members worker also maintains the flat-group view (`groups`, `group_members`
 `group_access`). `readGroups` reads it; `rebuildGroupProjection` restores it online
 without reactions. See the [group contract](../../docs/api/groups.md).
 
+## Model access reads
+
+The members worker also fills `model_access_grants` and
+`model_access_assistants`. `readModelGrantRows` returns the latest saved grant event
+for each model and grantee. A revoke stays in the table so old access can still be
+explained. An old untyped revoke updates each matching grantee kind. New typed
+revocations update only the named kind when that event shape is introduced.
+
+`readModelAccessCandidates` uses keyset pages of at most 100 rows. It reads active
+members from `members`, groups and their current joined-member count from
+`groups`/`group_members`, and assistant ids and names from
+`model_access_assistants`. It never reads conversations. The model access API
+reports the oldest checkpoint among these tables so a lagging source is not shown
+as current.
+
+Run `npm run replay -- model-access --verify` to rebuild grants and assistant names
+beside the live tables and switch them under the projection lock. Replay reads only
+events and performs no reactions or outside calls. `apps/server/test/model-access.test.ts`
+checks grant sources, revoked history, candidate pages, access refusal and replay.
+
 ## Computer state for chat
 
 The `computers` projection stores `chat_state`, `recovered` and `lost_at` alongside

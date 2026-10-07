@@ -15,6 +15,7 @@ import {
   rebuildMemberProjection,
   rebuildGroupProjection,
   rebuildProviderProjection,
+  rebuildModelAccessProjection,
   rebuildMcpCatalogueProjection,
   rebuildComputersProjection,
   type EventSource,
@@ -22,7 +23,7 @@ import {
 
 const usage =
   "Usage: npm run replay -- " +
-  "<members|groups|providers|mcp-catalogue|computers|budgets|audit|openfga> " +
+  "<members|groups|providers|model-access|mcp-catalogue|computers|budgets|audit|openfga> " +
   "[--dry-run] [--verify] [--confirm-openfga-stopped] " +
   "[--list-stores | --delete-store <id>]";
 const replayOptions = {
@@ -36,6 +37,7 @@ const postgresRebuilds = new Map([
   ['members', rebuildMemberProjection],
   ['groups', rebuildGroupProjection],
   ['providers', rebuildProviderProjection],
+  ['model-access', rebuildModelAccessProjection],
   ['mcp-catalogue', rebuildMcpCatalogueProjection],
   ['computers', rebuildComputersProjection],
   ['budgets', rebuildBudgetProjection],

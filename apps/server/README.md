@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes and updates chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads members, chat rows and computer state| postgres
+  server -->|reads members, chat rows, model access and computer state| postgres
   server -->|sends turns and optional tool offers; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -49,6 +49,8 @@ flowchart LR
   every model request passes through.
 - Lets admins connect a model provider, store its key safely and check that the key works.
 - Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
+- Lets owners and admins read model grants and choose same-silo people, groups or assistants.
+  Provider choices and configured uses say “Not available yet” until those records exist.
 - Lets admins create a group assistant with selected tools and a fixed paying group.
 - Keeps each member's group chat private while they share the assistant's computer.
 - Provides the one-time command used to claim a new installation.
