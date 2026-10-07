@@ -25,3 +25,23 @@ Essential errors or the ten-second route deadline return 503. Unavailable counts
 The socket checks current Owner/Admin events and IAM on every drain and every 250 ms while content waits.
 A 1.5-second watchdog and delivery expiry stop late delivery. Members, demoted Admins and removed people
 receive no protected rows. Members use `/api/chat/colleagues`. No conversation stream is checked here.
+
+## Identity lookup
+
+`POST /api/invitations/identity` is an Owner/Admin read with exact same-origin and organisation checks.
+Its strict body is `{ email }`, at most 1 KiB; email length ≤254. It appends nothing and uses no write fence.
+A match returns only `status: match`, `subject`, `displayName`, `email`, `memberId`, `memberSequence`,
+`membership: none|pending|joined`, and `defaults: { role: member, personalAssistant: provision, expiresAfterDays: 7 }`.
+Other results contain only `status`: not_found, unverified, inactive, not_human, ambiguous,
+other_organisation, identity_mismatch or admission_limit. Timeouts/errors return 503/unavailable.
+Active/pending event bindings keep older ids. Otherwise SHA-256 of JSON `[silo, issuer, subject, admissionNumber]`
+selects `admission-<hash>`, starting at zero and skipping removed streams, with a limit of 20 admissions.
+Earlier conflicting identity events refuse lookup. Multiple active/pending bindings return ambiguous.
+The ten-second read stops at 10,000 member events; an incomplete search returns unavailable.
+Zitadel uses exact two-row email search, checks organisation id/name and each user's owner,
+and bounds responses to 64 KiB. Its only directory operations are search/get. Machine JWTs last one minute.
+
+Live evidence, 7 October 2026, base `871c40d9`, slot 2 (existing, not fresh): PASS scoped
+verified user search and mode 0600; PASS 403 for an ungranted organisation context without reading its body.
+The foreign context id was a sentinel; access to another known existing organisation is NOT RUN.
+The complete fresh-install journey is NOT RUN. No owner user, owner app or instance settings were changed.

@@ -72,3 +72,4 @@ export { auditReasons, auditRecordSchema, auditRowSchema, auditResponseSchema, a
 export { approvalReviewSchema, approvalCardsSchema, type ApprovalCard } from './approvals.ts';
 export { memberPageQuerySchema, memberHeaderSchema, memberDirectoryRowSchema,
   memberDetailSchema, memberDirectorySchema } from './members.ts';
+export { identityLookupInputSchema, identityLookupSchema } from './members.ts';

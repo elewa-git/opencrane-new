@@ -17,12 +17,12 @@ flowchart LR
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, chat rows and computer state| postgres
   server -->|sends turns and optional tool offers; receives reports| computer["apps/computer<br/>personal or group assistant"]
-  server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
+  server -->|sign-in and directory reads| zitadel["Zitadel<br/>sign-in service"]
 ```
 
 ## What it is responsible for
 
-- Signs people in and keeps their browser session.
+- Signs people in, keeps their browser session and checks invite identities in their organisation.
 - Checks permissions before returning private information or changing data.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.

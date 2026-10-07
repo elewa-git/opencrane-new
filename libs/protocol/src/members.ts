@@ -49,3 +49,14 @@ export const memberDirectorySchema = z.object({
   projection: z.object({ content: z.enum(['current', 'applying']) }).strict(),
   permissions: z.object({ invite: z.literal(false) }).strict(),
 }).strict();
+
+export const identityLookupInputSchema = z.object({ email: z.email().max(254) }).strict();
+export const identityLookupSchema = z.union([
+  z.object({ status: z.enum(['not_found', 'unverified', 'inactive', 'ambiguous',
+    'other_organisation', 'not_human', 'unavailable', 'identity_mismatch', 'admission_limit']) }).strict(),
+  z.object({ status: z.literal('match'), subject: z.string().min(1).max(200),
+    displayName: z.string(), email: z.email(), memberId,
+    memberSequence: z.int().nonnegative(), membership: z.enum(['none', 'pending', 'joined']),
+    defaults: z.object({ role: z.literal('member'), personalAssistant: z.literal('provision'),
+      expiresAfterDays: z.literal(7) }).strict() }).strict(),
+]);

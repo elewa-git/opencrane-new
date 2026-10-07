@@ -1,3 +1,4 @@
+import { registerIdentityLookup, type IdentityOptions } from './members/identity.ts';
 import { registerOwnershipRoutes } from './members/ownership-routes.ts';
 import { registerMemberReads } from './members/read-routes.ts';
 import { registerProviderRoutes, type ProviderOptions } from './providers/routes.ts';
@@ -29,6 +30,7 @@ export interface BuildServerOptions {
   membership?: MembershipOptions;
   groups?: GroupOptions;
   memberReads?: GroupOptions;
+  identity?: IdentityOptions;
   ownership?: GroupOptions;
   providers?: ProviderOptions;
   audit?: AuditOptions;
@@ -69,6 +71,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerMemberRoutes(app, authConfig, options.membership);
   registerGroupRoutes(app, authConfig, options.groups);
   registerMemberReads(app, authConfig, options.memberReads);
+  registerIdentityLookup(app, authConfig, options.identity);
   registerOwnershipRoutes(app, authConfig, options.ownership);
   registerProviderRoutes(app, authConfig, options.providers);
 

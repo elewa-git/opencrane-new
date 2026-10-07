@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+import type { IdentityOptions } from '../src/members/identity.ts';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, memberAuthorisation, rebuildMembers } from '@opencrane/authz';
@@ -46,8 +48,12 @@ const initialiseGroupsFixture = async () => {
     expect((await nats.store.append({ event: joined, expectedSequence: await nats.store.head(joined.subject) })).status).toBe('appended');
     await auth.handler.handle(joined, db);
   }
+  await append('member-identity-owner', 'member.joined', { memberId: 'identity-owner',
+    email: 'identity-owner@example.test', displayName: 'Directory admin', role: 'admin' });
   await runner.run(members);
-  app = buildServer(config, { groups: { silo: 'acme', store: nats.store, db, binding,
+  const identity = { silo: 'acme', store: nats.store, binding,
+    feed: { memberId: resolveMemberId }, directory: { search } };
+  app = buildServer(config, { identity, groups: { silo: 'acme', store: nats.store, db, binding,
     feed: { memberId: resolveMemberId } } });
 };
 beforeAll(initialiseGroupsFixture, 120_000);
@@ -246,3 +252,129 @@ function resolveMemberId(_silo: string, _issuer: string, subject: string) {
   const memberId = subject.replace('idp-', '');
   return Promise.resolve(memberId);
 }
+
+const person = { id: 'invitee', state: 'USER_STATE_ACTIVE',
+  details: { resourceOwner: 'org-acme' }, human: {
+    profile: { displayName: 'Invitee' },
+    email: { email: 'invitee@example.test', isEmailVerified: true },
+  } };
+type ProviderPerson = Awaited<ReturnType<IdentityOptions['directory']['search']>>[number];
+let people: ProviderPerson[] = [person];
+let hung = false;
+async function search(_email: string, signal: AbortSignal): Promise<ProviderPerson[]> {
+  if (hung) {
+    await delay(30_000, undefined, { signal });
+  }
+  return people;
+}
+function appendIdentity(memberId: string, type: string, data: unknown, apply = false) {
+  return append(`member-${memberId}`, type, data, apply);
+}
+
+function lookup(sub = 'idp-identity-owner', orgId = 'org-acme', origin = 'https://app.example.test',
+  payload: unknown = { email: 'invitee@example.test' }) {
+  const cookie = encodeSession(config, { sub, orgId, roles: ['admin'],
+    authTime: 1790856000, exp: 2000000000 });
+  return app.inject({ method: 'POST', url: '/api/invitations/identity',
+    payload: JSON.stringify(payload), headers: {
+      'content-type': 'application/json', origin, cookie: `${config.cookieName}=${cookie}`,
+    } });
+}
+async function findsIdentityWithoutWriting() {
+  const before = await nats.store.head();
+  const response = await lookup();
+  expect(response.statusCode).toBe(200);
+  expect(response.headers['cache-control']).toBe('no-store');
+  expect(response.json()).toMatchObject({ status: 'match', subject: 'invitee',
+    displayName: 'Invitee', email: 'invitee@example.test', memberSequence: 0,
+    membership: 'none', defaults: { role: 'member', personalAssistant: 'provision',
+      expiresAfterDays: 7 } });
+  expect(response.json<{ memberId: string }>().memberId).toMatch(/^admission-[a-f0-9]{64}$/u);
+  expect(await nats.store.head()).toBe(before);
+}
+it('an admin looks up a verified human and gets a derived admission without an append',
+  findsIdentityWithoutWriting);
+
+const cases = [
+  ['not_found', []],
+  ['not_human', [{ id: person.id, state: person.state, details: person.details }]],
+  ['unverified', [{ ...person, human: { ...person.human,
+    email: { ...person.human.email, isEmailVerified: false } } }]],
+  ['inactive', [{ ...person, state: 'USER_STATE_INACTIVE' }]],
+  ['ambiguous', [person, person]],
+  ['other_organisation', [{ ...person, details: { resourceOwner: 'another-org' } }]],
+] as const;
+async function refusesUnsafeMatch(status: string, result: readonly ProviderPerson[]) {
+  people = [...result];
+  const before = await nats.store.head();
+  expect((await lookup()).json()).toEqual({ status });
+  expect(await nats.store.head()).toBe(before);
+  people = [person];
+}
+it.each(cases)('returns only %s for an unsafe provider match', refusesUnsafeMatch);
+async function refusesTimeout() {
+  hung = true;
+  const before = await nats.store.head();
+  const response = await lookup();
+  expect(response.statusCode).toBe(503);
+  expect(response.json()).toEqual({ status: 'unavailable' });
+  expect(await nats.store.head()).toBe(before);
+  hung = false;
+}
+it('a hung provider times out without an append or identity data', refusesTimeout);
+async function rejectsUntrustedRequests() {
+  await appendIdentity('member', 'member.joined', { memberId: 'member', email: 'member@example.test',
+    displayName: 'Member', role: 'member' }, true);
+  for (const args of [['idp-member'], ['pending'], ['idp-identity-owner', 'another-org'],
+    ['idp-identity-owner', 'org-acme', 'https://foreign.test']] as const) {
+    expect((await lookup(...args)).statusCode).toBe(403);
+  }
+  expect((await lookup('idp-identity-owner', 'org-acme', 'https://app.example.test',
+    { email: 'invitee@example.test', memberId: 'client-choice' })).statusCode).toBe(400);
+  const anonymous = await app.inject({ method: 'POST', url: '/api/invitations/identity',
+    payload: { email: 'invitee@example.test' } });
+  expect(anonymous.statusCode).toBe(401);
+}
+it('refuses stale elevated cookies, absent membership, foreign organisation and Origin',
+  rejectsUntrustedRequests);
+async function keepsAdmissionsSeparate() {
+  const first = (await lookup()).json<{ memberId: string }>().memberId;
+  const invited = { memberId: 'legacy', email: 'invitee@example.test', role: 'member',
+    invitedBy: 'owner', invitationId: 'legacy-invite',
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'invitee' },
+    expiresAt: '2099-01-01T00:00:00Z' };
+  for (const subjects of [['different-person', 'invitee'], ['invitee', 'different-person']]) {
+    const memberId = subjects.join('-');
+    for (const sub of subjects) {
+      await appendIdentity(memberId, 'member.invited', { ...invited, memberId,
+        invitedIdentity: { issuer: config.issuerUrl, sub } });
+    }
+    expect((await lookup()).json()).toEqual({ status: 'identity_mismatch' });
+    await appendIdentity(memberId, 'member.removed', { memberId, removedBy: 'owner' });
+  }
+  await appendIdentity('legacy', 'member.invited', invited);
+  expect((await lookup()).json()).toMatchObject({ memberId: 'legacy', membership: 'pending' });
+  await appendIdentity('legacy', 'member.joined', { memberId: 'legacy', email: invited.email,
+    displayName: 'Invitee', role: 'member' });
+  expect((await lookup()).json()).toMatchObject({ memberId: 'legacy', membership: 'joined' });
+  await appendIdentity('legacy', 'member.removed', { memberId: 'legacy', removedBy: 'owner' });
+  expect((await lookup()).json()).toMatchObject({ memberId: first, memberSequence: 0 });
+  await appendIdentity(first, 'member.invited', { ...invited, memberId: first });
+  await appendIdentity(first, 'member.removed', { memberId: first, removedBy: 'owner' });
+  const next = (await lookup()).json<{ memberId: string }>().memberId;
+  expect(next).not.toBe(first);
+  expect((await lookup()).json()).toMatchObject({ memberId: next, memberSequence: 0 });
+  await appendIdentity(next, 'member.invited', { ...invited, memberId: next,
+    invitedIdentity: { issuer: config.issuerUrl, sub: 'different-person' } });
+  expect((await lookup()).json()).toEqual({ status: 'identity_mismatch' });
+}
+it('uses older bound ids and skips removed admissions when deriving the next id',
+  keepsAdmissionsSeparate);
+async function deniesRemovedManager() {
+  await appendIdentity('identity-owner', 'member.removed', { memberId: 'identity-owner', removedBy: 'admin' });
+  const response = await lookup();
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused' });
+}
+it('removal refuses lookup while the identity mapping and IAM still grant admin access',
+  deniesRemovedManager);

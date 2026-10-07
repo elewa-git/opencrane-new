@@ -892,3 +892,6 @@ governed-work qualification remains tracked in #63.
 
 The [API contract](../../docs/api/members.md) defines member header/directory access and limits.
 `test/realtime.test.ts` covers real HTTP, privacy, paging, counts and delayed socket access.
+
+Identity lookup uses `ZITADEL_DIRECTORY_KEY_FILE`, a machine key file; it never uses the management PAT.
+The [member API](../../docs/api/members.md#identity-lookup) defines its response and limits.

@@ -519,3 +519,8 @@ and budget browser checks, whether they pass or fail. Cleanup uses the authentic
 budget API rather than loading the Spending page. It waits for the budget table to
 catch up before the next step. Monthly test limits are 20,000 cents; the daily global
 limit is 5,000 cents. It attempts every scope and reports any failed restoration.
+
+Secondary setup retains a mode-0600 `zitadel-directory-key` for an org-owned machine with only
+`ORG_OWNER_VIEWER`. It refuses broader roles and missing retained keys. The server gets its path
+in `ZITADEL_DIRECTORY_KEY_FILE`. `--directory-only` sets up only this credential on a claimed slot.
+The four slot users are owner, member, without-assistant and wrong-account; passwords stay private.

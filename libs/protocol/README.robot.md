@@ -93,3 +93,5 @@ Running tool lines and attempt lists are not rendered yet. Tests are in
 
 Strict header, detail, directory and query schemas follow the
 [member API](../../docs/api/members.md), including separate pages and silo counts.
+
+`identityLookupInputSchema` and `identityLookupSchema` check the [identity lookup](../../docs/api/members.md#identity-lookup).

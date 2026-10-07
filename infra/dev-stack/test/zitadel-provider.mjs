@@ -36,9 +36,28 @@ globalThis.fetch = async (url, options) => {
   } else if (path === '/management/v1/users/_search') {
     const userName = body.queries[0].userNameQuery.userName;
     result = { result: Object.values(state.users).filter(user => user.userName === userName) };
+  } else if (path === '/management/v1/orgs/members/roles/_search') {
+    result = { result: ['ORG_OWNER', 'ORG_OWNER_VIEWER', 'ORG_USER_MANAGER'] };
+  } else if (path === '/management/v1/users/machine') {
+    assert.match(body.userName, /^opencrane2-dev-ci-[12]-directory$/u);
+    state.users[body.userName] = { id: body.userName, userName: body.userName,
+      details: { resourceOwner: orgId }, machine: {} };
+    result = { userId: body.userName };
+  } else if (path === '/management/v1/orgs/me/members/_search') {
+    result = { result: state.directoryRoles ? [{ userId: body.queries[0].userIdQuery.userId,
+      roles: state.directoryRoles }] : [] };
+  } else if (path === '/management/v1/orgs/me/members') {
+    assert.deepEqual(body.roles, ['ORG_OWNER_VIEWER']);
+    state.directoryRoles = body.roles;
+    result = {};
+  } else if (path.endsWith('/keys/_search')) {
+    result = { result: state.directoryKey ? [{}] : [] };
+  } else if (path.endsWith('/keys')) {
+    state.directoryKey = true;
+    result = { keyDetails: Buffer.from('fake-directory-private-key').toString('base64') };
   } else if (path === '/management/v1/users/human/_import') {
     const userId = body.userName;
-    assert.match(userId, /^opencrane2-dev-ci-[12]-(owner|member)$/u);
+    assert.match(userId, /^opencrane2-dev-ci-[12]-(owner|member|without-assistant|wrong-account)$/u);
     assert.ok(!state.users[userId], 'Existing users must be reused');
     state.users[userId] = { id: userId, userName: body.userName,
       preferredLoginName: body.userName, details: { resourceOwner: orgId }, password: body.password };

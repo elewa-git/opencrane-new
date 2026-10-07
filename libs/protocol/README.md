@@ -10,7 +10,7 @@ This shared library is used by the browser app (`apps/web`), the back end (`apps
 
 ```mermaid
 flowchart LR
-  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, members, uploads and computer state"]
+  web["apps/web<br/>browser app"] -.-> protocol["libs/protocol<br/>chat, members, identity lookup and computer state"]
   server["apps/server<br/>back end"] -.-> protocol
   projections["libs/projections<br/>read tables"] -.-> protocol
   models["libs/models<br/>AI access and spending"] -.-> protocol
@@ -24,7 +24,7 @@ flowchart LR
   on decision rows, so delivered uploads keep their own outcome values.
 - Reject messages with missing or wrongly typed fields. Live-connection messages also reject fields they do not know; some page data allows extra fields so that newer data still loads.
 - Provide the same schemas and types to browser and Node.js code.
-- Keep the small member header separate from the admin email directory.
+- Check identity lookup requests and replies. Keep member headers separate from the admin directory.
 - Check flat group rows and create or remove commands for the People & groups screen.
 
 ## Processes it handles
