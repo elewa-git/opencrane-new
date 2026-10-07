@@ -1,13 +1,209 @@
-<h1>Models & providers</h1>
-<div role="status" aria-live="polite">
-  <oc-shared-state [kind]="kind()" [message]="message()" [showAction]="false" />
-</div>
-@if (kind() !== 'access_changed') {
-  <button type="button" (click)="load()" [disabled]="kind() === 'checking'">Check status</button>
-  <section aria-label="Pinned models">
-    @for (model of models(); track model.id) { <p>{{ model.id }}</p> }
-  </section>
-}
-<p>Model tariffs and task routing are fixed for this installation.</p>
-<p>Provider and routing editing is not available yet.
-  Manage budgets in <a href="/org/spending">Spending</a>.</p>
+<main class="provider-page">
+  <div class="live-status" role="status" aria-live="polite" aria-atomic="true">
+    {{ liveStatus() }}
+  </div>
+  <header class="page-heading">
+    <div>
+      <h1 tabindex="-1">Models &amp; providers</h1>
+      <p>A saved key, provider reachability and a model answer are separate facts.</p>
+    </div>
+    <div class="page-actions">
+      <button class="button secondary" type="button" [disabled]="!canRefresh()"
+        (click)="load()">{{ retryLabel() }}</button>
+      <button #connectButton class="button primary" type="button"
+        [disabled]="loadState() !== 'ready'" (click)="openSetup(connectButton)">
+        Connect a provider
+      </button>
+    </div>
+  </header>
+
+  @if (loadState() === 'loading') {
+    <oc-shared-state kind="checking" message="Loading providers…" [showAction]="false" />
+  } @else if (loadState() === 'failed' || loadState() === 'access'
+    || loadState() === 'forbidden') {
+    <section class="notice" [class.notice-error]="loadState() === 'failed'">
+      <oc-shared-state [kind]="loadState() === 'failed' ? 'failed'
+        : loadState() === 'access' ? 'access_changed' : 'refused'"
+        [message]="loadState() === 'failed' ? 'Providers could not be loaded'
+          : loadState() === 'access' ? 'Access changed' : 'Owner or Admin role required'"
+        [showAction]="false" />
+      <button class="button secondary" type="button" (click)="load()">Refresh</button>
+    </section>
+  }
+
+  @if (hasRefreshError()) {
+    <section class="notice notice-error">
+      <p>Showing the last provider data loaded at {{ loadedAt() }}.</p>
+      <button class="button secondary" type="button" (click)="load()">Refresh</button>
+    </section>
+  }
+
+  @if (showEmptyProviders()) {
+    <section class="empty-card">
+      <oc-shared-state kind="not_configured" message="No providers saved"
+        detail="Connect OpenAI or Anthropic to save a provider key. A saved key does not grant access."
+        [showAction]="false" />
+      <button class="button primary" type="button" (click)="openSetup(connectButton)">
+        Connect a provider
+      </button>
+    </section>
+  }
+
+  @if (showProviderList()) {
+    <section class="provider-list" aria-label="Model providers">
+      <div class="list-heading" aria-hidden="true">
+        <span>Provider</span><span>Key</span><span>Models</span><span>Verification</span>
+      </div>
+      @for (provider of providers(); track provider.providerId) {
+        <article class="provider-row">
+          <div class="provider-row-main">
+            <span class="provider-name">
+              <span class="provider-mark" aria-hidden="true">
+                {{ provider.provider === 'openai' ? 'OA' : 'AN' }}
+              </span>
+              <span><strong>{{ providerTitle(provider) }}</strong><small>{{ provider.name }}</small></span>
+            </span>
+            <span class="connection-fact">{{ provider.saved ? 'Key saved' : 'Needs a key' }}</span>
+            <span class="model-fact">{{ provider.enabledModels.length }} enabled of {{ modelCount() }}</span>
+            <span class="verification-fact">{{ statusFor(provider) }}</span>
+          </div>
+          <oc-integration-facts [facts]="providerFacts(provider)" />
+          @if (providerActionLocked(provider)) {
+            <div class="row-pending">
+              <p>A change for this provider is still being checked.</p>
+              <code>{{ pendingReference(provider.providerId) }}</code>
+              <button class="button secondary" type="button" [disabled]="busy()"
+                (click)="checkKeyStatus(provider.providerId, true)">Check status</button>
+            </div>
+          } @else if (provider.saved) {
+            <button #replaceButton class="button secondary row-action" type="button"
+              [disabled]="busy()" (click)="startReplacement(provider, replaceButton)">
+              Replace key
+            </button>
+          }
+        </article>
+      }
+    </section>
+    <section class="grants-gap" aria-labelledby="grant-gap-title">
+      <h2 id="grant-gap-title">Model access</h2>
+      <oc-shared-state kind="not_configured" message="Not available yet"
+        [detail]="accessExplanation()" [showAction]="false" />
+    </section>
+  }
+
+  <oc-modal-sheet [open]="setupOpen()" [title]="setupTitle()"
+    [dismissDisabled]="busy()" [returnFocusTo]="focusedOpener" (closed)="setupClosed()">
+    <div class="setup-content">
+      <nav class="steps" aria-label="Provider setup steps">
+        <span [class.current]="step() === 'provider'">1 · Provider</span>
+        <span [class.current]="step() === 'key'">2 · Key</span>
+      </nav>
+      <h3 id="provider-step-title" class="step-title" tabindex="-1">
+        {{ step() === 'provider' ? 'Provider details' : 'Save the provider key' }}
+      </h3>
+      @if (step() === 'provider') {
+        <form class="step-form" (ngSubmit)="createProvider()">
+          <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">Next</button>
+          <fieldset>
+            <legend>Provider</legend>
+            <label class="choice-card">
+              <input type="radio" name="provider" value="openai"
+                [checked]="draft().provider === 'openai'" (change)="providerChanged($event)" />
+              OpenAI
+            </label>
+            <label class="choice-card">
+              <input type="radio" name="provider" value="anthropic"
+                [checked]="draft().provider === 'anthropic'" (change)="providerChanged($event)" />
+              Anthropic
+            </label>
+          </fieldset>
+          <label class="field-label" for="provider-name">Connection name <span>Required</span></label>
+          <input id="provider-name" class="text-field" name="providerName" required maxlength="200"
+            [value]="draft().name" (input)="nameChanged($event)"
+            (keydown.enter)="enterProviderName($event)" />
+          @if (pendingCreates()[providerIdDraft()]; as pendingCreate) {
+            <p class="unknown-copy">Provider creation is still being checked. Reference:
+              <code>{{ pendingCreate.commandId }}</code>
+            </p>
+            <button class="button secondary" type="button" [disabled]="busy()"
+              (click)="checkCreateStatus(providerIdDraft())">Check status</button>
+          }
+        </form>
+      }
+      @if (step() === 'key') {
+        <form class="step-form" (ngSubmit)="saveKey()">
+          <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">Save key</button>
+          <label class="field-label" for="provider-key">API key <span>Required</span></label>
+          <p class="field-help">Paste once. The secret service stores it. It is never read back.</p>
+          <input id="provider-key" class="text-field" type="password" name="providerKey"
+            autocomplete="new-password" [value]="keyDraft()" (input)="keyChanged($event)"
+            (keydown.enter)="enterKey($event, false)" />
+          @if (keyError()) { <p class="field-error">{{ keyError() }}</p> }
+          @if (pendingKeys()[providerIdDraft()]; as pendingKey) {
+            <p class="unknown-copy">Check this save before sending it again. Reference:
+              <code>{{ pendingKey.commandId }}</code>
+            </p>
+            <button class="button secondary" type="button" [disabled]="busy()"
+              (click)="checkKeyStatus(providerIdDraft(), false)">Check status</button>
+          }
+        </form>
+      }
+      @if (resultText()) {
+        <section class="result-message" [class.result-unknown]="result() === 'unknown'">
+          <p>{{ resultText() }}</p>
+          @if (commandReference()) { <p>Reference: <code>{{ commandReference() }}</code></p> }
+        </section>
+      }
+    </div>
+    <div overlayFooter class="sheet-actions">
+      @if (step() === 'provider') {
+        <button class="button primary" type="button" [disabled]="!hasProviderName() || busy()
+          || pendingCreates()[providerIdDraft()]"
+          (click)="createProvider()">{{ busy() ? 'Saving provider…' : 'Next' }}</button>
+        <button class="button secondary" type="button" [disabled]="busy()"
+          (click)="closeSetup()">Cancel</button>
+      } @else {
+        <button class="button primary" type="button"
+          [disabled]="!hasKey() || busy() || pendingKeys()[providerIdDraft()]"
+          (click)="saveKey()">{{ busy() ? 'Saving key…' : 'Save key' }}</button>
+        <button class="button secondary" type="button" [disabled]="busy()"
+          (click)="previousStep()">Back</button>
+      }
+    </div>
+  </oc-modal-sheet>
+
+  <oc-modal-sheet [open]="replacing()" [title]="'Replace the key for '
+    + (providerFor(replaceProviderId())?.name ?? 'provider') + '?'"
+    description="The old key is not shown and is not revoked at the provider."
+    [dismissDisabled]="busy()" [returnFocusTo]="focusedOpener" (closed)="closeReplacement()">
+    <div class="replace-content">
+      <p>The old key is not shown. New calls use the new key once it is accepted.</p>
+      <p>Existing verification evidence becomes invalid; verify again.</p>
+      <form (ngSubmit)="replaceKey()">
+        <button class="implicit-submit" type="submit" aria-hidden="true" tabindex="-1">
+          Replace key
+        </button>
+        <label class="field-label" for="replace-provider-key">API key <span>Required</span></label>
+        <p class="field-help">The secret service stores it. It is never shown again.</p>
+        <input id="replace-provider-key" class="text-field" type="password" autocomplete="new-password"
+          [value]="replaceKeyDraft()" (input)="replacementKeyChanged($event)"
+          (keydown.enter)="enterKey($event, true)" />
+        @if (replaceKeyError()) { <p class="field-error">{{ replaceKeyError() }}</p> }
+        @if (replaceProviderId() && pendingKeys()[replaceProviderId()!]; as pendingKey) {
+          <p class="unknown-copy">Reference: <code>{{ pendingKey.commandId }}</code></p>
+        }
+      </form>
+    </div>
+    <div overlayFooter class="sheet-actions">
+      <button class="button primary" type="button"
+        [disabled]="!hasReplacementKey() || busy() || pendingKeys()[replaceProviderId() ?? '']"
+        (click)="replaceKey()">{{ busy() ? 'Replacing key…' : 'Replace key' }}</button>
+      <button class="button secondary" type="button" [disabled]="busy()"
+        (click)="closeReplacement()">Cancel</button>
+      @if (replaceProviderId() && pendingKeys()[replaceProviderId()!]) {
+        <button class="button secondary" type="button" [disabled]="busy()"
+          (click)="checkKeyStatus(replaceProviderId()!, true)">Check status</button>
+      }
+    </div>
+  </oc-modal-sheet>
+</main>
