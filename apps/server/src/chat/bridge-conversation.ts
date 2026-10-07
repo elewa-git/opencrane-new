@@ -4,7 +4,9 @@ import { fileDeliveredDataSchema, fileUploadedDataSchema,
 import type { WebSocket } from 'ws';
 import type { connectMcpCatalogue, listConversations } from '@opencrane/projections';
 import { memberAuthorisation } from '@opencrane/authz';
-import { history as modelHistory, readToolPolicy } from '@opencrane/models';
+import { history as modelHistory } from '@opencrane/models';
+import { applyToolPolicy, emptyToolPolicy } from '@opencrane/projections';
+import { createLogger } from '@opencrane/observability';
 import { z } from 'zod';
 import { history, resumeComputer } from '../../../ops/src/lifecycle.ts';
 import { turnCommand, requiredExecutionMode, type ExecutionMode } from './turns.ts';
@@ -40,6 +42,8 @@ export type ConversationProgress = {
 };
 const turnIdData = z.object({ turnId: z.string() });
 const computerData = z.object({ computerId: z.string() });
+const logger = createLogger('bridge');
+const toolBuildLimitMs = 1000;
 
 function pendingMessage(rows: ChatRows) {
   const completed = new Set<string>();
@@ -90,7 +94,7 @@ function attachmentsBefore(rows: ChatRows, uploads: Upload[], sequence: number) 
   return attachments;
 }
 
-function turnMessage(options: WatchOptions, conversation: AgentSession,
+export function turnMessage(options: WatchOptions, conversation: AgentSession,
   rows: ChatRows, uploads: Upload[], message: ChatRows[number], executionMode: ExecutionMode) {
   const attachments = executionMode === 'restricted'
     ? [] : attachmentsBefore(rows, uploads, message.sequence);
@@ -188,7 +192,7 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
   async function buildTools() {
     return toolsForTurn(options, conversation, turn, kind, mode);
   }
-  const tools = await toolsForMessage(link.sentTurns, conversation.conversationId,
+  const tools = await toolsForMessageOrEmpty(link.sentTurns, conversation.conversationId,
     message.event.id, buildTools);
   if (tools.length) turn.tools = tools;
   const delivery = link.sentTurns.get(conversation.conversationId);
@@ -199,6 +203,42 @@ async function sendWaitingTurn(options: WatchOptions, link: BridgeLink,
     });
   }
   link.socket.send(JSON.stringify(turn));
+}
+
+async function toolsForMessageOrEmpty(sentTurns: Map<string, TurnDelivery>,
+  conversationId: string, turnId: string,
+  build: () => Promise<Awaited<ReturnType<typeof buildTurnTools>>>) {
+  try {
+    return await toolsForMessage(sentTurns, conversationId, turnId,
+      () => withToolBuildLimit(build));
+  } catch {
+    logger.error({ operation: 'chat.turn_tools', reason: 'build_failed' },
+      'Tool list unavailable; sending turn without tools');
+    return toolsForMessage(sentTurns, conversationId, turnId, emptyTools);
+  }
+}
+
+async function withToolBuildLimit<T>(build: () => Promise<T>) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(toolBuildDeadline(reject), toolBuildLimitMs);
+  });
+  try {
+    return await Promise.race([build(), deadline]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function toolBuildDeadline(reject: (reason: Error) => void) {
+  function rejectToolBuildDeadline() {
+    reject(new Error('Tool list build deadline exceeded'));
+  }
+  return rejectToolBuildDeadline;
+}
+
+function emptyTools() {
+  return Promise.resolve([]);
 }
 
 async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
@@ -213,10 +253,12 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     return { serverId: row.serverId };
   }
   async function readServer(serverId: string) {
-    const [policy, rows] = await Promise.all([
-      readToolPolicy(options.store, options.silo, serverId),
-      modelHistory(options.store, `mcp-${serverId}`, options.silo),
-    ]);
+    const rows = await modelHistory(options.store, `mcp-${serverId}`, options.silo,
+      performance.now() + toolBuildLimitMs);
+    let policy = emptyToolPolicy();
+    for (const row of rows) {
+      policy = applyToolPolicy(policy, row.event, row.sequence);
+    }
     const discoveredRow = rows.findLast(isDiscoveryEvent);
     if (!discoveredRow) return undefined;
     const discovered = mcpServerDiscoveredDataSchema.parse(discoveredRow.event.data);
@@ -256,7 +298,8 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     const permission = await auth.use(subjectKind, subjectId, 'mcp_server', serverId);
     return permission.allowed;
   }
-  const serverRows = catalogueRows.map(serverReference);
+  const readyRows = catalogueRows.filter(isPublishedServer);
+  const serverRows = readyRows.map(serverReference);
   return buildTurnTools({
     rows: serverRows,
     requesterId: turn.requesterId,
@@ -265,6 +308,12 @@ async function toolsForTurn(options: WatchOptions, conversation: AgentSession,
     readServer,
     canUse: canUseServer,
   });
+}
+
+function isPublishedServer(
+  row: Awaited<ReturnType<NonNullable<WatchOptions['catalogue']>['rows']>>[number],
+) {
+  return row.status.kind === 'ready';
 }
 
 function conversationUploads(rows: ChatRows, assistantKind: string) {

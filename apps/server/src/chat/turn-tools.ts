@@ -61,19 +61,26 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
   }
 
   const tools: TurnToolServer[] = [];
+  const keys = new Set<string>();
   let omittedServers = 0;
   for (const row of input.rows) {
     const state = await input.readServer(row.serverId);
     if (!state || !isAvailableServer(state)) continue;
+    if (!hasComputerCompatibleFields(state)) {
+      omittedServers += 1;
+      continue;
+    }
     const definitions = reviewedAllowDefinitions(state);
     if (!definitions.length) continue;
     if (!await canUseServer(input, state.serverId)) continue;
     const entry = makeTurnToolServer(state, definitions);
-    if (tools.length >= maximumServers || !fitsBudget(tools, entry, availableBytes)) {
+    if (keys.has(entry.key) || tools.length >= maximumServers ||
+        !fitsBudget(tools, entry, availableBytes)) {
       omittedServers += 1;
       continue;
     }
     tools.push(entry);
+    keys.add(entry.key);
   }
 
   logOmittedServers(omittedServers);
@@ -106,6 +113,19 @@ function logOmittedServers(omittedServers: number) {
 
 function isAvailableServer(state: TurnToolServerState) {
   return state.published && state.accountMode === 'none' && state.connectionId !== null;
+}
+
+function hasComputerCompatibleFields(state: TurnToolServerState) {
+  const validId = /^[\w-]{1,200}$/u;
+  if (!validId.test(state.serverId) || !state.connectionId ||
+      !validId.test(state.connectionId)) return false;
+  if (state.serverInfo && (state.serverInfo.name.length > 200 ||
+      state.serverInfo.version.length > 200)) return false;
+  return state.discoveryTools.every(hasValidDefinitionLength);
+}
+
+function hasValidDefinitionLength(tool: TurnToolServerState['discoveryTools'][number]) {
+  return tool.definition === undefined || tool.definition.length <= 32_768;
 }
 
 async function canUseServer(input: TurnToolInput, serverId: string) {

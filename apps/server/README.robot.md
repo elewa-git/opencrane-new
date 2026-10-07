@@ -320,9 +320,11 @@ server closure, recovered by the watcher if the server stops between those comma
 
 ## Tools offered with a chat turn
 
-The bridge reads server ids from the MCP catalogue projection. For each server it
-reads only that server's `mcp-<id>` stream, then keeps it only when it is published,
-uses `accountMode: none`, and both the requester and assistant have the `use` grant.
+The bridge reads server ids from the MCP catalogue projection. It considers only
+published rows, then reads each server's `mcp-<id>` stream once. It builds the current
+policy and finds the latest discovery from those same saved events. It keeps a server
+only when it is published, uses `accountMode: none`, and both the requester and
+assistant have the `use` grant.
 The tool list is sent only for a personal assistant's memory-free turn. Team turns,
 private turns and turns without a binding get no list.
 
@@ -333,16 +335,20 @@ results are left out. In particular, `discoverResult` is never sent because it m
 contain instructions that nobody reviewed.
 
 Each server is named `oc_` followed by the first ten hex digits of its SHA-256 id.
-The bridge adds whole servers only. The tool list is capped at 48 KiB and at 20
-servers. It is also capped so the JSON turn stays below 120 KiB, leaving room below
-the computer socket's 128 KiB limit. The bridge counts the encoded turn, including
-its text and attachments, before choosing tools. It logs how many servers did not fit.
+The bridge adds whole servers only. It skips ids that the computer would refuse,
+server information over 200 characters, definitions over 32 KiB and duplicate keys.
+The tool list is capped at 48 KiB and at 20 servers. It is also capped so the JSON
+turn stays below 120 KiB, leaving room below the computer socket's 128 KiB limit.
+The bridge counts the encoded turn, including its text and attachments, before
+choosing tools. It logs how many servers did not fit.
 
-The bridge saves the selected list beside that message's sent-turn record. One-second
-resends reuse it, so a waiting turn does not repeat catalogue, event-stream or
-OpenFGA reads. The list is an offer to Codex only. The gateway checks every call
-again against current grants and tool rules, so a grant removal or a change to Block
-still refuses a call after the turn starts.
+The bridge saves the selected list beside that message's sent-turn record. A build
+has a one-second limit. If the catalogue, event log or OpenFGA cannot answer, the
+bridge logs one fixed reason, saves an empty list and sends the turn without `tools`.
+One-second resends reuse that result, so a waiting turn does not repeat catalogue,
+event-stream or OpenFGA reads. The list is an offer to Codex only. The gateway checks
+every call again against current grants and tool rules, so a grant removal or a
+change to Block still refuses a call after the turn starts.
 
 A digest-matching start replay for an already closed turn is acknowledged without
 new admission or a turn grant, including recovery after a terminal report but
