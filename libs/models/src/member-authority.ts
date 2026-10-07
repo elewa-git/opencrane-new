@@ -16,8 +16,10 @@ export async function activeMember(
   await fresh();
 }
 
-export async function readActiveMember(store: EventStore, binding: Binding, memberId: string) {
-  await requireMember(store, binding, memberId, false);
+export async function readActiveMember(store: EventStore, binding: Binding, memberId: string,
+  requiredRole: 'member' | 'admin' = 'member',
+) {
+  await requireMember(store, binding, memberId, requiredRole === 'admin');
 }
 
 async function requireMember(

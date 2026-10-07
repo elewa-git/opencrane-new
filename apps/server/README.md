@@ -15,7 +15,7 @@ flowchart LR
   server -->|records changes and updates chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
-  server -->|reads chat rows and computer state| postgres
+  server -->|reads members, chat rows and computer state| postgres
   server -->|sends turns and optional tool offers; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in requests| zitadel["Zitadel<br/>sign-in service"]
 ```
@@ -24,6 +24,8 @@ flowchart LR
 
 - Signs people in and keeps their browser session.
 - Checks permissions before returning private information or changing data.
+- Returns member headers to members and the email directory to current owners and admins.
+  Keeps checking their access while a live member connection is open.
 - Records changes as events and reads the current state from PostgreSQL.
 - Handles conversations, approvals, file uploads, computer access and organisation history.
 - Offers a personal assistant only reviewed, free tools that both the person and assistant can use.

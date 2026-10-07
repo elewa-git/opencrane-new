@@ -48,7 +48,7 @@ if (databaseUrl) {
   if (!silo || !authConfig.expectedOrgId || !apiUrl || !storeId || !authorizationModelId) {
     throw new Error('DATABASE_URL requires silo, organisation and OpenFGA binding');
   }
-  realtime = { feed: await connectMemberFeed(databaseUrl), binding: { apiUrl, storeId, authorizationModelId, silo } };
+  realtime = { store: events?.store, feed: await connectMemberFeed(databaseUrl), binding: { apiUrl, storeId, authorizationModelId, silo } };
   catalogue = connectMcpCatalogue(databaseUrl);
   computers = connectComputers(databaseUrl);
   modelDb = connectProjectionDb(databaseUrl, () => undefined);
@@ -82,6 +82,10 @@ const app = buildServer(authConfig, {
     ...(budget ? { verification: budget } : {}),
   } } : {}),
   ...(realtime && events && modelDb ? { groups: { silo: realtime.binding.silo, store: events.store, db: modelDb.db, feed: realtime.feed, binding: realtime.binding } } : {}),
+  ...(realtime && events && modelDb ? { memberReads: {
+    silo: realtime.binding.silo, store: events.store, db: modelDb.db,
+    feed: realtime.feed, binding: realtime.binding,
+  } } : {}),
   ...(realtime && events && modelDb ? { ownership: {
     silo: realtime.binding.silo, store: events.store, db: modelDb.db,
     feed: realtime.feed, binding: realtime.binding,
