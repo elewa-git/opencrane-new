@@ -19,20 +19,29 @@ export async function decisionActivity(store: EventStore, silo: string, assistan
   function capturedBeforeCheck(row: StoredEvent) {
     return row.sequence <= head;
   }
-  function takeConversation(rows: StoredEvent[]) {
-    return rows.filter(capturedBeforeCheck);
+  function takeConversation(rows: StoredEvent[], sequence: number) {
+    const conversation = rows.filter(capturedBeforeCheck);
+    return { conversation, sequence };
   }
-  function takeComputer(summary: ComputerSummary) {
+  function takeComputer(summary: ComputerSummary, sequence: number) {
     const turn = summary.turns.get(turnId);
     const firstClose = turn?.firstClose;
-    return { lifecycle: summary.lifecycle, firstStart: turn?.firstStart,
+    return { sequence, lifecycle: summary.lifecycle, firstStart: turn?.firstStart,
       firstClose: firstClose === undefined ? undefined : { ...firstClose } };
   }
   const conversationRead = readStreamSummary(store, silo, conversationSubject,
     decisionChatSummary, deadline, takeConversation);
   const computerRead = readStreamSummary(store, silo, computerSubject,
     computerSummary, deadline, takeComputer);
-  const [conversation, computer] = await Promise.all([conversationRead, computerRead]);
+  const [chat, computer] = await Promise.all([conversationRead, computerRead]);
+  const subjectHeads = [store.head(conversationSubject, deadline),
+    store.head(computerSubject, deadline)] as const;
+  const [conversationHead, computerHead] = await Promise.all(subjectHeads);
+  // Refuse saved facts beyond restored history. Keep the original shared deadline.
+  if (conversationHead < chat.sequence || computerHead < computer.sequence) {
+    throw new Error('Authority changed');
+  }
+  const conversation = chat.conversation;
   const positions = new Map<string, number>();
   const subjects = [conversationSubject, computerSubject];
 

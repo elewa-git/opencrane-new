@@ -487,27 +487,41 @@ unchanged `confirm()` checks later activity, including approval invalidation.
 The shared two-second budget, disconnect check before reservation, watched access
 streams and all existing refusal rules remain in place.
 
-The kind keeps at most 64 chats and 30,000 retained rows across those chats.
-The shared computer kind has its own 30,000-fact budget. Whole summaries are
+The kind keeps at most 64 chats with a 72 MiB estimated memory budget. Each kept
+row counts as 1,152 bytes, above the measured UUID row cost of about 1,009 bytes.
+This allows 65,536 kept rows: two 10,000-turn chats with creation, message, start
+and completion events fit together. Reply chunks do not count because this
+summary does not keep them. The shared computer kind has a separate 48 MiB
+estimate. Together these allowances use 120 MiB of the 256 MiB heap cap.
+They leave 136 MiB for other service work, caller copies and active reads.
+Whole summaries are
 dropped in least-recently-used order; individual refusal facts are never removed.
 A dropped summary rebuilds from sequence 1. A summary larger than its whole budget
-is not kept after use, so later calls may time out rebuilding it. These are bounds
-on retained caches, not peak memory during concurrent reads or complete service
+is dropped on its own, leaving other chats warm. Later calls may time out rebuilding
+that summary. These are estimates for retained caches, not limits on peak memory
+during concurrent reads or complete service
 memory. More active streams than the cache can hold can cause repeated rebuilds.
 No permissions check skips a catch-up to avoid a rebuild.
 
 After an event-store restore, the server and models processes must restart before
-serving requests. Skipping the restart can leave a suspended or lost computer
-allowed by facts from before the restore. The restart is part of the restore drill.
+serving requests. Each decision also reads both subjects' latest positions after
+copying summary facts, within the original shared two seconds. A position below
+its summary's position refuses the call before reserving money. This catches a
+restore only while the stream remains below its old position. New events can
+pass that position again, so the guard cannot replace the restart. The restart
+is part of the restore drill. `confirm()` and its watched subjects are unchanged.
 
 `test/decision-cost.test.ts` drives real HTTP model admission at 10, 100 and 500
 older turns with 10 and 3,000 chat events. It counts credentials, activity, access,
 reservation and audit reads together. The 500-turn count and long-chat count may
 exceed their short equivalents by at most two rows. It also checks cold catch-up,
 fresh suspension or closure, start source and all turn bindings without new holds.
+It also checks that restoring either subject below its summary refuses another
+call without holding more money.
 `test/decision-activity.test.ts` checks warm reads, removed output/text, saved order
 and the captured position. It also checks that an oversized decision summary is
-dropped and retains old approval activity when rebuilt. Existing fence, authority,
+dropped and retains old approval activity when rebuilt. Two 10,000-turn chats
+with 600 replies of 300 chunks each stay on tail reads. Existing fence, authority,
 gateway and shared-assistant
 tests retain their original security checks.
 
@@ -516,31 +530,38 @@ tests retain their original security checks.
 The synthetic reader in `test/summary-memory.ts` supplies a posted message, a turn
 start and a turn completion for every turn. Each message carries a distinct
 32,000-character ciphertext placeholder. Source rows are not kept by the reader.
-Node uses `--expose-gc` and a 256 MiB heap cap. The retained-cache figure compares
-collected heap with and without the store; it excludes the loaded packages.
+Ids are 36-character UUIDs. Events include request, conversation and turn
+correlation ids, with strings copied as on decoding. Node 22.23.3 uses `--expose-gc`
+and a 256 MiB heap cap. Collected heap with and without the store gives retained
+cache bytes, excluding loaded packages. Heap is sampled every 100 rows and at the
+end of the build, before the final repeat read. Shorter peaks can be missed.
 
-| Shape | Retained cache bytes | Total heap bytes |
-| --- | ---: | ---: |
-| 1,000 chats, 200 turns each, 64-chat limit without a fact budget | 14,491,880 | 43,843,608 |
-| 1,000 chats, 200 turns each, 64-chat limit and fact budget | 11,328,472 | 40,692,296 |
-| 64 chats, 3,000 kept events each, fact budget | 11,432,432 | 39,789,080 |
+| Shape | Retained cache bytes | Total heap bytes | Sampled peak heap bytes |
+| --- | ---: | ---: | ---: |
+| One chat, 10,000 turns, unbounded | 30,275,336 | 64,426,712 | 89,749,528 |
+| Two chats, 10,000 turns each, budget enabled | 60,547,128 | 89,576,120 | 113,902,064 |
+| 64 chats, 10,000 turns each, budget enabled | 60,546,592 | 89,011,352 | 191,209,456 |
+| One oversized chat, 23,000 turns, budget enabled | 3,248 | 27,929,664 | 129,964,440 |
 
-The budget limits retained rows to 30,000 even when individual chats keep growing.
-These figures measure one kind at a time, without simultaneous catch-ups or a
-live models service. The computer measurements are in the auth README.robot.md.
-The server chat kind uses the same whole-entry budget, including every report
-position, to bound its previously growing cache too.
+The two 10,000-turn chats stay warm. The 64-chat run keeps two chats; older ones
+are dropped. The oversized chat keeps no summary and rebuilds next time; its peak
+includes that full build before dropping it. These figures measure one kind at a
+time, without simultaneous catch-ups or a live models service. The computer
+measurements are in the auth README.robot.md. The server chat kind uses its own
+32 MiB estimate and counts compact report positions separately.
 
 A repeatable command from the repository root is:
 
 ```sh
-nice -n 10 npm run measure:summaries:memory -w libs/models -- chat 1000 200 1
+nice -n 10 npm run measure:summaries:memory -w libs/models -- chat 2 10000 1
 ```
 
 Arguments are kind, number of streams, turns per stream and turns per thread.
-The last number matters only for computers. Add `unbounded` to disable the fact
+The last number matters only for computers. Add `unbounded` to disable the memory
 budget in this measurement; it does not change a running service's settings.
+Use `chat 1 23000 1` for the oversized rebuild.
 
-Larger active working sets and rebuild counts are tracked in #256. The remaining
+`NODE_DEBUG=opencrane-summary` logs each rebuild from sequence 1. Larger active
+working sets remain tracked in #256. The remaining
 whole-log report and approval reads are tracked in #253, #254 and #255. These
 sites are outside this change. Fresh-install qualification remains in #63.

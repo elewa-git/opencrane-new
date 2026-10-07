@@ -94,12 +94,74 @@ async function honoursCapturedPositionAndConfirmsLaterChanges() {
 it('cuts chat facts at the captured position and refuses a later close',
   honoursCapturedPositionAndConfirmsLaterChanges);
 
+async function keepsLongChatsWarm() {
+  const nats = await natsFixture();
+  const fromPositions: { subject: string; from: number }[] = [];
+  const chatHead = 210001;
+  function head() {
+    return Promise.resolve(chatHead);
+  }
+  async function* readStream(subject: string, from = 1) {
+    fromPositions.push({ subject, from });
+    await Promise.resolve();
+    if (!subject.startsWith('conversation-')) return;
+    let sequence = 1;
+    const created = activityEvent('created', subject, 'conversation.created');
+    if (sequence >= from) yield { sequence, event: created };
+    for (let turn = 0; turn < 10000; turn++) {
+      const types = ['message.posted', 'agent.turn_started', 'agent.turn_completed'];
+      for (const type of types) {
+        sequence++;
+        if (sequence < from) continue;
+        const event = activityEvent(`${type}-${turn}`, subject, type);
+        yield { sequence, event };
+      }
+      if (turn >= 600) continue;
+      for (let chunk = 0; chunk < 300; chunk++) {
+        sequence++;
+        if (sequence < from) continue;
+        const event = activityEvent(`reply-${turn}-${chunk}`, subject, 'agent.message_delta');
+        yield { sequence, event };
+      }
+    }
+  }
+  const store = nats.store;
+  store.head = head;
+  store.readStream = readStream;
+  try {
+    for (const chat of ['first', 'second']) {
+      const activity = await decisionActivity(store, 'test', 'assistant', chat, 'turn', Infinity);
+      expect(activity.conversation).toHaveLength(30001);
+    }
+    fromPositions.length = 0;
+    for (const chat of ['first', 'second']) {
+      const activity = await decisionActivity(store, 'test', 'assistant', chat, 'turn',
+        performance.now() + 2000);
+      expect(activity.conversation).toHaveLength(30001);
+      expect(activity.conversation[0]?.event.id).toBe('created');
+      expect(activity.conversation.at(-1)?.event.id).toBe('agent.turn_completed-9999');
+    }
+    function isConversationRead(call: (typeof fromPositions)[number]) {
+      return call.subject.startsWith('conversation-');
+    }
+    const chatReads = fromPositions.filter(isConversationRead);
+    expect(chatReads).toEqual([
+      { subject: 'conversation-first', from: 210002 },
+      { subject: 'conversation-second', from: 210002 },
+    ]);
+  } finally {
+    await nats.close();
+  }
+}
+it('keeps two 10,000-turn chats with 600 long replies each on the decision tail-read path',
+  keepsLongChatsWarm);
+
 async function boundsRetainedDecisionRows() {
   const fromPositions: number[] = [];
   async function* readStream(_subject: string, from = 1) {
     fromPositions.push(from);
     await Promise.resolve();
-    for (let index = 0; index < 30001; index++) {
+    for (let index = 0; index < 70000; index++) {
       const event = activityEvent(`message-${index}`, 'conversation-chat', 'message.posted');
       if (index + 1 >= from) yield { sequence: index + 1, event };
     }
@@ -108,7 +170,7 @@ async function boundsRetainedDecisionRows() {
   function decisionFacts(rows: StoredEvent[]) {
     return { count: rows.length, first: rows[0]?.event.id, last: rows.at(-1)?.event.id };
   }
-  const expected = { count: 30001, first: 'message-0', last: 'message-30000' };
+  const expected = { count: 70000, first: 'message-0', last: 'message-69999' };
   expect(await readStreamSummary(store, 'test', 'conversation-chat',
     decisionChatSummary, Infinity, decisionFacts)).toEqual(expected);
   expect(await readStreamSummary(store, 'test', 'conversation-chat',

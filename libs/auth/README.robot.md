@@ -108,14 +108,19 @@ open start-command keys, including correct old facts after rebuilding.
 through another store connection. The gateway credentials test in `apps/ops`
 also covers races, expiry, resume, loss and generation changes.
 
-The computer kind also limits all retained turn entries, thread entries and open
-start-command keys to 30,000 facts per store connection. Counts are updated as
-events are added, so checking the budget does not scan the turn history. Least recently
-used summaries are dropped whole. A dropped computer rebuilds from the first
-event; its old closed turns and thread owners cannot be forgotten. An individual
-computer above the entire budget is not retained after use. Catch-ups and caller
-copies can temporarily exceed the retained budget. More busy computers than the
-cache holds can cause repeated rebuilds and refusals within the decision limit.
+The computer kind has a 48 MiB estimated memory budget per store connection.
+It counts 256 bytes per turn, 768 per thread and 2,048 per open start-command key.
+The extra allowance for open keys covers the first saved start event as well as
+its command key. The closed-turn and thread estimates leave room above the
+UUID measurements below. Counts are updated as events arrive, so checking the
+budget does not scan old turns. A 10,000-turn team assistant with one private
+thread per turn uses about 9.8 MiB of this allowance. Four fit together.
+
+Least recently used summaries are dropped whole. A dropped computer rebuilds
+from the first event; old closed turns and thread owners cannot be forgotten.
+A computer above the entire budget is dropped on its own. Other computers stay
+warm. Catch-ups and caller copies can temporarily exceed the retained budget.
+More active computers than fit can still cause rebuilds and decision refusals.
 
 Turn data uses the full `computerTurnStartedDataSchema` and
 `computerTurnClosedDataSchema` from `@opencrane/events`, including the close status
@@ -130,31 +135,37 @@ The restore drill must check the restarts as well as projection rebuilding.
 ### Computer summary memory measurement
 
 The synthetic reader in `libs/models/test/summary-memory.ts` creates rows on demand
-and releases them after use. Node runs with `--expose-gc` and a 256 MiB heap cap.
-It measures collected heap before and after releasing the store, so loaded packages
-are outside the retained-cache figure. `unbounded` disables only the fact budget
-for comparison; the 64-computer count limit still applies.
+and releases them after use. Ids are 36-character UUIDs. Events include request,
+conversation and turn correlation ids. Strings are copied as they would be when
+decoding a saved event. Node 22.23.3 runs with `--expose-gc` and a 256 MiB heap cap.
+Collected heap before and after releasing the store gives the retained-cache
+figure, excluding loaded packages. Heap is sampled every 100 rows and at the end
+of the read. The sampled peak covers the build before the final repeat read;
+it can miss shorter peaks. `unbounded` disables only the memory budget.
 
-| Shape | Retained cache bytes | Total heap bytes |
-| --- | ---: | ---: |
-| One computer, 10,000 closed turns, one thread per turn, no fact budget | 8,519,632 | 42,032,272 |
-| One computer, 10,000 closed turns, five turns per thread, no fact budget | 3,391,952 | 36,907,984 |
-| One computer, 1,000 chats with 200 closed turns each, no fact budget | 41,559,032 | 70,940,864 |
-| 64 computers, 10,000 closed turns each, one thread per turn, budget enabled | 8,640,680 | 35,901,344 |
-| 64 computers, 10,000 closed turns each, five turns per thread, budget enabled | 6,636,376 | 33,895,312 |
-| One computer, 1,000 chats with 200 closed turns each, budget enabled | 3,032 | 28,371,752 |
+| Shape | Retained cache bytes | Total heap bytes | Sampled peak heap bytes |
+| --- | ---: | ---: | ---: |
+| One computer, 10,000 closed turns, one thread per turn, unbounded | 9,159,728 | 42,820,736 | 58,870,208 |
+| One computer, 10,000 closed turns, five turns per thread, unbounded | 3,510,320 | 37,166,456 | 53,586,240 |
+| One computer, 10,000 open private turns, budget enabled | 23,962,760 | 57,500,160 | 67,411,984 |
+| Three computers, 10,000 private turns each, budget enabled | 27,479,448 | 61,142,320 | 77,451,912 |
+| One oversized computer, 60,000 private turns, budget enabled | 5,272 | 27,412,912 | 107,849,752 |
 
-The first two rows imply about 211 bytes per closed turn and 641 bytes per thread
-in this fixture. String lengths and V8 versions change those costs. The last row
-has no retained computer summary: its 201,000 facts exceed the budget, and its
-next read starts at sequence 1. The remaining bytes are cache bookkeeping.
-This is a retained-cache measurement, not a complete running service or peak heap.
+The first two rows imply about 210 bytes per closed turn and 706 bytes per thread.
+String lengths and V8 versions change those costs. The last row keeps no computer
+summary: its estimate exceeds 48 MiB, and its next read starts at sequence 1.
+The remaining bytes are cache bookkeeping. The sampled peak includes the complete
+oversized summary before it is dropped. These measurements cover one kind at a
+time, not a live service or simultaneous rebuilds.
+The open-turn measurement includes saved first starts and command keys; its
+estimated allowance is 30,720,000 bytes, above the 23,962,760 bytes retained.
 
 A repeatable command from the repository root is:
 
 ```sh
-nice -n 10 npm run measure:summaries:memory -w libs/models -- computer 64 10000 1
+nice -n 10 npm run measure:summaries:memory -w libs/models -- computer 3 10000 1
 ```
 
-The last argument is turns per thread. Add `unbounded` to compare without the fact
-budget. Use `computer 1 200000 200` for the 1,000-chat shape.
+The last argument is turns per thread. Add `unbounded` to compare without the
+memory budget. Use `computer 1 60000 1` for the oversized rebuild.
+Use `computer-open 1 10000 1` to keep every turn open.

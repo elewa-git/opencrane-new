@@ -17,7 +17,7 @@ flowchart LR
   models -.-> authz["libs/authz<br/>permission checks"]
   models <-->|starts gateway and checks calls within two seconds| gateway["agentgateway<br/>AI gateway"]
   gateway -->|new usage lines| models
-  models -->|saves changes and reads new activity| store["libs/event-store<br/>event log"]
+  models -->|saves changes, reads new activity and checks history positions| store["libs/event-store<br/>event log"]
 ```
 
 ## What it is responsible for
@@ -41,6 +41,8 @@ flowchart LR
   Check those facts before watching the streams that decide access. These checks
   share two seconds because the gateway waits only that long. Older summaries
   are dropped when their memory budget is reached and rebuilt on their next use.
+  A summary that is too large is dropped on its own. Calls also refuse saved
+  facts beyond the current history, which can happen after a backup restore.
 - Refuse callers who have disconnected before holding money.
 - Keep calls working when another chat, a file or someone else's access changes during the check.
 - Treat tool start and finish reports as activity that grants no access.

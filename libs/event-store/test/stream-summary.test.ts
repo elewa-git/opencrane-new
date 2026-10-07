@@ -257,6 +257,21 @@ async function rebuildsAnOversizedStreamWithoutForgettingFacts() {
 it('rebuilds an oversized summary rather than dropping facts used to refuse access',
   rebuildsAnOversizedStreamWithoutForgettingFacts);
 
+async function keepsOtherStreamsWarmAfterOversizedRead() {
+  fixture = await natsFixture();
+  await fixture.seed([event('bob', 'member-bob')]);
+  await readStreamSummary(fixture.store, 'test', 'member-bob', boundedKind, Infinity, take);
+  await fixture.seed([event('one'), event('two'), event('three'), event('four')]);
+  await readStreamSummary(fixture.store, 'test', 'member-alice', boundedKind, Infinity, take);
+  const reads = countReads(fixture.store);
+  expect(await readStreamSummary(
+    fixture.store, 'test', 'member-bob', boundedKind, Infinity, take))
+    .toEqual({ ids: ['bob'], sequence: 1 });
+  expect(reads.calls).toEqual([{ subject: 'member-bob', fromSequence: 2, rows: 0 }]);
+}
+it('drops only the oversized summary and leaves other streams warm',
+  keepsOtherStreamsWarmAfterOversizedRead);
+
 async function boundsProgressAfterFailedRead() {
   fixture = await natsFixture();
   await fixture.seed([event('one'), event('bob', 'member-bob')]);

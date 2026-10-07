@@ -60,11 +60,12 @@ function addReport(summary: ChatSummary, report: NonNullable<StoredEvent['event'
 }
 const chat: SummaryKind<ChatSummary> = {
   name: 'chat', keep: 64, empty: emptyChat, add: addChat,
-  budget: { limit: 30_000, size: chatSize },
+  budget: { limit: 32 * 1024 * 1024, size: chatSize },
 };
 function chatSize(summary: ChatSummary) {
-  return summary.messages.size + summary.closedTurnIds.size + summary.reports.size +
-    summary.reportCount;
+  // Count compact replay positions separately so many reply chunks can stay warm.
+  return summary.messages.size * 256 + summary.closedTurnIds.size * 128 +
+    summary.reports.size * 256 + summary.reportCount * 64;
 }
 
 export async function readChatFacts(store: Pick<EventStore, 'readStream'>, silo: string,

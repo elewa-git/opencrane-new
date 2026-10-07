@@ -1,10 +1,11 @@
 import type { StoredEvent } from './contract.ts';
+import { debuglog } from 'node:util';
 import { readBeforeDeadline, type EventStore } from './jetstream.ts';
 
 export interface SummaryKind<Summary> {
   name: string;
   keep: number;
-  /** Limit retained facts across this kind's cached streams, as well as stream count. */
+  /** Limit the combined size of this kind's cached streams, as well as stream count. */
   budget?: { limit: number; size(summary: Summary): number };
   empty(): Summary;
   /** Check the row before changing the summary; leave it unchanged if this throws. */
@@ -27,6 +28,7 @@ interface Entry<Summary> {
 
 type KindEntries = Map<string, Entry<unknown>>;
 const stores = new WeakMap<object, Map<string, KindEntries>>();
+const logRebuild = debuglog('opencrane-summary');
 
 function entriesFor(store: object, name: string): KindEntries {
   let kinds = stores.get(store);
@@ -67,6 +69,15 @@ function applyBudget<Summary>(store: object, kind: SummaryKind<Summary>, entry: 
   if (!kind.budget) return;
   entry.size = kind.budget.size(entry.summary);
   const entries = entriesFor(store, kind.name);
+  if (entry.size > kind.budget.limit) {
+    // Drop only this entry: removing other streams cannot make an oversized entry fit.
+    for (const [key, cached] of entries) {
+      if (cached === entry) {
+        entries.delete(key);
+      }
+    }
+    return;
+  }
   let retainedSize = 0;
   for (const cached of entries.values()) retainedSize += cached.size;
   for (const [key, cached] of entries) {
@@ -87,6 +98,9 @@ export function readStreamSummary<Summary, Result>(
 ): Promise<Result> {
   const entry = entryFor(store, silo, subject, kind);
   async function catchUp() {
+    if (entry.sequence === 0) {
+      logRebuild('Rebuilding %s summary for %s in silo %s', kind.name, subject, silo);
+    }
     const catchUpDeadline = Math.max(deadline, performance.now() + 10_000);
     const rows = store.readStream(subject, entry.sequence + 1, catchUpDeadline);
     try {

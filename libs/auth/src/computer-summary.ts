@@ -85,8 +85,10 @@ function addDistinct(values: Set<string>, value: string) {
 }
 export const computerSummary: SummaryKind<ComputerSummary> = {
   name: 'computer', keep: 64, empty: emptyComputer, add: addComputer,
-  budget: { limit: 30_000, size: computerSize },
+  budget: { limit: 48 * 1024 * 1024, size: computerSize },
 };
 function computerSize(summary: ComputerSummary) {
-  return summary.turns.size + summary.threads.size + summary.startCommandCount;
+  // Allow room above measured UUID costs without scanning old turns on every use.
+  return summary.turns.size * 256 + summary.threads.size * 768 +
+    summary.startCommandCount * 2048;
 }

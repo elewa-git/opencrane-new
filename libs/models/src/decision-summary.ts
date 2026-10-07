@@ -21,8 +21,9 @@ function addChat(summary: StoredEvent[], row: StoredEvent) {
 
 export const decisionChatSummary: SummaryKind<StoredEvent[]> = {
   name: 'decision-chat', keep: 64, empty: emptyChat, add: addChat,
-  budget: { limit: 30_000, size: chatSize },
+  budget: { limit: 72 * 1024 * 1024, size: chatSize },
 };
 function chatSize(summary: StoredEvent[]) {
-  return summary.length;
+  // Allow room above measured row costs, including UUIDs and call correlation ids.
+  return summary.length * 1152;
 }

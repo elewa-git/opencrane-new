@@ -234,3 +234,36 @@ async function refusesAReadyPositionChangedAfterCredentials() {
 }
 it('refuses a Ready position changed after credentials without reserving money',
   refusesAReadyPositionChangedAfterCredentials, 40_000);
+
+async function refusesRestoredHistory(subject: string) {
+  const setup = await fixture();
+  try {
+    const warmed = await decide(setup);
+    expect(warmed.status, warmed.text).toBe(200);
+    const store = setup.nats.store;
+    const restoredPosition = await store.head(subject) - 1;
+    const head = store.head.bind(store);
+    const readStream = store.readStream.bind(store);
+    async function restoredHead(name?: string, deadline?: number) {
+      if (name === subject) return restoredPosition;
+      return head(name, deadline);
+    }
+    async function* restoredRead(name: string, from = 1, deadline = Infinity) {
+      for await (const row of readStream(name, from, deadline)) {
+        if (name === subject && row.sequence > restoredPosition) break;
+        yield row;
+      }
+    }
+    vi.spyOn(store, 'head').mockImplementation(restoredHead);
+    vi.spyOn(store, 'readStream').mockImplementation(restoredRead);
+    const result = await decide(setup);
+    expect(result.status, result.text).toBe(403);
+    expect(setup.actor.state.reservations).toHaveLength(1);
+  } finally {
+    vi.restoreAllMocks();
+    await setup.close();
+  }
+}
+it.each(['computer-assistant', 'conversation-conversation'])(
+  'refuses %s history restored below its summary without reserving more money',
+  refusesRestoredHistory, 40_000);
