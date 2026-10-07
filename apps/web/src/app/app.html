@@ -59,7 +59,9 @@
     } @else if (activePage === 'history') {
       <oc-audit />
     } @else if (activePage === 'people') {
-      @if (peopleGroupId) {
+      @if (ownershipPage) {
+        <oc-ownership-screen [organisationName]="organisation" />
+      } @else if (peopleGroupId) {
         <oc-group-detail-screen [groupId]="peopleGroupId" />
       } @else {
         <oc-people-screen [organisationName]="organisation" />

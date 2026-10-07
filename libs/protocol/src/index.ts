@@ -45,6 +45,17 @@ export {
 
 export { toolPolicySchema, type ToolPolicy } from './integrations.ts';
 
+export {
+  ownershipCommandSchema,
+  ownershipChangeSchema,
+  ownershipOwnerSchema,
+  ownershipResponseSchema,
+  type OwnershipChange,
+  type OwnershipCommand,
+  type OwnershipOwner,
+  type OwnershipResponse,
+} from './ownership.ts';
+
 export { budgetCommandSchema, budgetSummarySchema, type BudgetSummary } from './budgets.ts';
 export { groupRowSchema, groupsResponseSchema, groupReceiptSchema, groupChangeSchema,
   createGroupCommandSchema, removeMemberCommandSchema, type GroupRow } from './groups.ts';

@@ -32,7 +32,8 @@ export function organisationPage(pathname: string): OrganisationPage | undefined
       return page.id;
     }
   }
-  if (pathname === '/org/people' || peopleGroupId(pathname) !== undefined ||
+  if (pathname === '/org/people' || pathname === '/org/people/owners' ||
+      peopleGroupId(pathname) !== undefined ||
       assistantCreateGroupId(pathname) !== undefined) {
     return 'people';
   }

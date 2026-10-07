@@ -111,6 +111,12 @@ it('shows typed rows with one link per group and one status region', async () =>
   vi.unstubAllGlobals();
 });
 
+it('links from People & groups to the ownership screen', async () => {
+  const root = await mount({ rows: [sampleGroup] });
+  const ownersLink = root.querySelector<HTMLAnchorElement>('a[href="/org/people/owners"]');
+  expect(ownersLink?.textContent?.trim()).toBe('Owners');
+});
+
 it('rejects a group that claims access to private conversations', async () => {
   const unsafe = { ...sampleGroup, access: { ...sampleGroup.access, conversationAccess: true } };
   const root = await mount({ rows: [unsafe] });

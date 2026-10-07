@@ -1,0 +1,187 @@
+<header class="page-heading">
+  <div>
+    <h1 id="ownership-heading" tabindex="-1">Owners</h1>
+    <p>{{ ownerSummary() }}</p>
+  </div>
+  <div class="page-actions">
+    <button class="button secondary" type="button"
+      [disabled]="reading() || state() === 'access'" [attr.aria-disabled]="reading()"
+      (click)="refresh()">Refresh owners</button>
+    @if (canManage()) {
+      <button #appointButton id="appoint-owner" class="button primary" type="button"
+        [disabled]="hasPendingChange()" (click)="openTransfer(appointButton)">
+        Appoint an owner
+      </button>
+    }
+  </div>
+</header>
+
+<p class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  @if (state() === 'loading') {
+    Loading owners…
+  } @else if (state() === 'access') {
+    {{ statusMessage() }}. {{ statusDetail() }}
+  } @else if (sending()) {
+    Sending the ownership change…
+  } @else if (state() === 'failed') {
+    {{ statusMessage() }}. Reading again is safe.
+  } @else if (statusKind() !== 'none') {
+    {{ statusMessage() }}. {{ statusDetail() }}
+  } @else if (statusMessage() === 'Owners loaded') {
+    Owners loaded.
+  }
+</p>
+
+@if (state() === 'loading') {
+  <oc-shared-state kind="checking" message="Loading owners…" [announce]="false" />
+} @else if (state() === 'access') {
+  <oc-shared-state kind="access_changed" [message]="statusMessage()"
+    [detail]="statusDetail()" [showAction]="false" [announce]="false" />
+} @else if (state() === 'failed' && owners().length === 0) {
+  <section class="notice notice-error">
+    <strong>Owners are unavailable right now</strong>
+    <p>Reading again is safe.</p>
+    <button class="button secondary" type="button" [attr.aria-disabled]="reading()"
+      (click)="refresh()">Try again</button>
+  </section>
+} @else {
+  @if (!ownershipReady()) {
+    <section class="notice notice-neutral">
+      <strong>Ownership is not ready</strong>
+      <p>The server has not confirmed the ownership record for this organisation.</p>
+    </section>
+  } @else {
+  @if (state() === 'failed') {
+    <section class="notice notice-error">
+      <div>
+        <strong>We couldn't refresh the owner list</strong>
+        <p>The last owner list remains on screen. Nothing changed because of this read.</p>
+      </div>
+      <button class="button secondary" type="button" [attr.aria-disabled]="reading()"
+        (click)="refresh()">Refresh owners</button>
+    </section>
+  }
+
+  @if (statusKind() === 'applying' || statusKind() === 'unknown') {
+    <section class="notice notice-info" aria-label="Ownership change status">
+      <span class="state-mark" aria-hidden="true">◌</span>
+      <div>
+        <strong>{{ statusMessage() }}</strong>
+        <p>{{ statusDetail() }}</p>
+        @if (hasPendingChange()) {
+          <p>Reference: <code>{{ pendingReference() }}</code></p>
+          <button class="button secondary" type="button" [disabled]="checking()"
+            (click)="checkStatus()">{{ checking() ? 'Checking…' : 'Check status' }}</button>
+        }
+      </div>
+    </section>
+  } @else if (statusKind() === 'confirmed' || statusKind() === 'conflict'
+      || statusKind() === 'refused') {
+    <section class="notice" [class.notice-success]="statusKind() === 'confirmed'"
+      [class.notice-warning]="statusKind() === 'conflict'"
+      [class.notice-error]="statusKind() === 'refused'">
+      <span class="state-mark" aria-hidden="true">
+        {{ stateMark() }}
+      </span>
+      <div>
+        <strong>{{ statusMessage() }}</strong>
+        <p>{{ statusDetail() }}</p>
+        @if (statusKind() === 'confirmed' && recordedChange()) {
+          <small>{{ formattedRecordedAt(recordedChange()) }} · {{ recordedChange()?.commandId }}</small>
+        }
+        @if (statusKind() === 'conflict') {
+          <button class="button secondary" type="button" (click)="refresh()">
+            Refresh owners
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  @if (viewer()?.role === 'owner' && owners().length === 1) {
+    <section class="notice notice-warning">
+      <span class="state-mark" aria-hidden="true">!</span>
+      <div>
+        <strong>You're the last owner</strong>
+        <p>Appoint another owner before stepping down.</p>
+      </div>
+    </section>
+  }
+
+  @if (sending()) {
+    <p>Sending the ownership change…</p>
+  }
+
+  @if (hasPendingChange()) {
+    <p>Another ownership change cannot start until this one is confirmed.
+    </p>
+  }
+
+  <section class="owner-list" aria-label="Current owners" [attr.aria-busy]="checking()">
+    <div class="owner-list-header" aria-hidden="true">
+      <span>Owner</span><span>Member id</span><span>Status</span>
+    </div>
+    @for (owner of owners(); track owner.memberId) {
+      <article class="owner-row">
+        <strong>{{ owner.displayName }}</strong>
+        <code>{{ owner.memberId }}</code>
+        <span class="owner-status"><span aria-hidden="true">✓</span> Owner
+          @if (ownerMatchesViewer(owner)) { <span class="you-label">You</span> }
+        </span>
+      </article>
+    }
+  </section>
+  <p class="api-limit">Successor names and a list of eligible members aren't available yet.
+    Enter a member id you already know; the server checks that the person is active before it
+    records the change.</p>
+  }
+}
+
+<oc-modal-sheet [open]="review() !== undefined" [title]="reviewTitle()"
+  [description]="reviewDescription()" backLabel="Cancel" [dismissDisabled]="sending()"
+  [returnFocusTo]="focusTarget()" (closed)="closeReview()">
+  @if (review() === 'transfer_entry') {
+    <div>
+      <label for="successor-id">Successor member id</label>
+      <input id="successor-id" autocomplete="off" autocapitalize="off" spellcheck="false"
+        [value]="successorId()"
+        (input)="successorIdChanged($event)" aria-describedby="successor-help successor-error"
+        (keydown.enter)="reviewFromEnter($event)"
+        [attr.aria-invalid]="showInvalidMemberId() ? 'true' : null" />
+      <p id="successor-help" class="api-limit">The API doesn't provide eligible member names.
+        The server checks the member id and refuses inactive or unknown members.</p>
+      @if (transferError()) {
+        <p id="successor-error" class="field-error" role="alert">{{ transferError() }}</p>
+      } @else if (showInvalidMemberId()) {
+        <p id="successor-error" class="field-error">
+          Use 1 to 200 letters, numbers, underscores or hyphens.
+        </p>
+      }
+    </div>
+  } @else if (review() === 'transfer_review') {
+    <div>
+      <dl class="review-facts">
+        <div><dt>Successor member id</dt><dd><code>{{ successorId().trim() }}</code></dd></div>
+      <div><dt>Current owners</dt><dd>{{ ownerNames() }}</dd></div>
+      <div><dt>Result</dt><dd>You and this person will both be Owners.</dd></div>
+      <div><dt>Member status</dt><dd>Not available before submission. The server checks membership.</dd></div>
+      </dl>
+      <p class="rule-note">This doesn't remove you. Stepping down is a separate action.</p>
+    </div>
+  }
+  @if (review() === 'transfer_entry') {
+    <div overlayFooter class="overlay-actions">
+      <button class="button secondary" type="button" (click)="closeReview()">Cancel</button>
+      <button class="button primary" type="button"
+        [disabled]="!validMemberId(successorId().trim())" (click)="prepareTransfer()">
+        Review appointment
+      </button>
+    </div>
+  } @else if (review() === 'transfer_review') {
+    <div overlayFooter class="overlay-actions">
+      <button class="button secondary" type="button" (click)="backToTransferEntry()">Back</button>
+      <button class="button primary" type="button" [disabled]="sending()"
+        (click)="confirmTransfer()">Appoint this owner</button>
+    </div>
+  }
+</oc-modal-sheet>
