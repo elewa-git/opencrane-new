@@ -20,7 +20,7 @@ flowchart LR
   events["libs/events<br/>report text check"] -.-> computer
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
-  computer -->|sends model requests| gateway["agentgateway<br/>model gateway"]
+  computer -->|sends model and reviewed tool calls| gateway["agentgateway<br/>AI gateway"]
 ```
 
 ## What it is responsible for
@@ -35,14 +35,17 @@ flowchart LR
 - Supplies the Kubernetes files that restrict network access.
 - Checks the image's licences before publishing it.
 
-Chat turns can carry a reviewed tool list, but Codex is not connected to those
-tools yet. A check found that an existing Codex thread keeps its old tools when
-resumed with new settings. The saved result is in README.robot.md.
+Codex sees only the reviewed, free tools allowed for that chat turn. Each tool
+call goes through a local proxy and the gateway's current access checks. When
+the list changes, the bridge reloads only that conversation's Codex thread.
+It keeps the conversation history. Reloading stops any background terminals
+from that thread. If reload cannot be confirmed, the reply fails with a clear
+message and the person can send it again. Ask tools are not offered yet.
 
 ## Processes it handles
 
 1. **A computer starts.** It prepares private folders and starts Codex, the desktop and the bridge. It reports that it is ready when the required services respond.
-2. **A person sends a message.** The server sends the turn to the bridge. The bridge runs it in Codex and sends progress reports back.
+2. **A person sends a message.** The server sends the turn to the bridge. The bridge loads its reviewed tools, runs it in Codex and sends progress reports back.
 3. **A person uploads a file.** The server passes the scanned file to the bridge. The bridge puts it in the workspace for Codex to read.
 4. **A computer resumes.** Its files remain on its disk. The bridge sends any reports that the server has not confirmed yet.
 

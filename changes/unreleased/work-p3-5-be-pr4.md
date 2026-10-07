@@ -1,0 +1,1 @@
+- Codex can call reviewed Allow tools through its computer proxy. Changed tools reload only that conversation, keeping its history. Calls use that thread's own tool list and turn pass; an unconfirmed reload fails with a clear message.
