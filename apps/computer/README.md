@@ -35,6 +35,10 @@ flowchart LR
 - Supplies the Kubernetes files that restrict network access.
 - Checks the image's licences before publishing it.
 
+Chat turns can carry a reviewed tool list, but Codex is not connected to those
+tools yet. A check found that an existing Codex thread keeps its old tools when
+resumed with new settings. The saved result is in README.robot.md.
+
 ## Processes it handles
 
 1. **A computer starts.** It prepares private folders and starts Codex, the desktop and the bridge. It reports that it is ready when the required services respond.

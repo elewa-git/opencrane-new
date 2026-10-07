@@ -2,6 +2,63 @@
 
 For people, read [README.md](README.md) first.
 
+## Governed tools prerequisite — 7 October 2026
+
+The first PR 4 check for #46 failed. No proxy or thread-runner change was built.
+Codex 0.159.2 accepts new `mcp_servers` in `thread/resume`, but ignores them while
+the thread is still loaded. Its next model request keeps the original tools.
+After restarting Codex, resuming the same saved thread applies the new servers.
+Later chat turns normally resume a loaded thread, so this blocks the proposed build.
+
+The check uses Codex from the Dockerfile's pinned base image, with Docker networking
+disabled. Two HTTP servers inside the container answer discovery and model requests.
+The model server returns a fixed text reply. No paid model call is possible.
+The config file has no MCP servers. Only `thread/start` and `thread/resume` supply them.
+
+The [probe](test/codex-mcp-resume.mjs) exits 1 when a model request still has the
+old tools. The [saved capture](test/fixtures/codex-0.159.2-loaded-resume.json) records
+the request config, accepted replies, completed turns, model tool lists and MCP HTTP
+requests. Its bearer is a public, local-only fixture value. Reproduce with:
+
+```sh
+nice -n 10 docker run --rm --network none --entrypoint node \
+  -v "$PWD/apps/computer/test/codex-mcp-resume.mjs:/tmp/probe.mjs:ro" \
+  127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47 \
+  /tmp/probe.mjs > /tmp/codex-resume.json
+```
+
+Base: `origin/main` at `871c40d9`. Merge commits for #250 (`da1d25be`),
+PR #258 (`4afbe854`) and #265 (`5b50d82d`) are all its ancestors.
+
+| Check | Result | Observed behaviour |
+| --- | --- | --- |
+| Start with `oc_aaaaaaaaaa` | PASS | Model sees `read_before` in `mcp__oc_aaaaaaaaaa`. |
+| Loaded resume with only `oc_bbbbbbbbbb` | FAIL | Model still sees `read_before`; no new discovery happens. |
+| Restart, then resume the same thread with `oc_bbbbbbbbbb` | PASS | Model sees `read_after` in `mcp__oc_bbbbbbbbbb`. |
+| Repeat measurement | FAIL | The loaded resume keeps the old tools again. |
+
+The saved run began at `2026-10-07T10:08:24.665Z` and took 1,407 ms.
+The repeat began at `2026-10-07T10:09:35.763Z` and took 2,501 ms. Both exit 1
+on the loaded-thread assertion. Starting and resuming an unloaded thread pass
+in both runs. The stderr warning about helper aliases under `/tmp` occurs on
+both process starts; all RPCs succeed and all turns still complete.
+
+All three turns complete. MCP discovery uses POST `server/discover`, then
+`tools/list`, with version `2026-07-28`, no session header and no `initialize`.
+The probe enables `mcp_2026_07_28`; this corrects the earlier stateless-protocol
+finding in ADR 0003 for this packaged version. It does not test `tools/call`.
+
+An owner decision is needed before implementation resumes: use a new Codex thread
+when the tool list changes and lose its in-thread history, or accept stale tool lists.
+Neither option is implemented here. Ask tools and approval waits remain out of scope.
+The planned credential-free fixture keeps `_meta` unchanged, so the decision service
+and tool server receive identical bytes. This is a planned choice, not exercised
+by this probe; metadata handling for Odoo still needs a separate decision.
+
+The new proxy routes, thread grant isolation, shell-user refusal, decision marker
+protection and image drift build check are **NOT RUN**. Implementation stopped at
+the failed prerequisite. This evidence does not qualify governed tool calls.
+
 Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
 accepts 384/384 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets

@@ -1,0 +1,449 @@
+{
+  "measuredAt": "2026-10-07T10:08:24.665Z",
+  "version": "codex-cli 0.159.2",
+  "requests": [
+    {
+      "stage": "start",
+      "method": "POST",
+      "url": "/before",
+      "headers": {
+        "user-agent": "codex-mcp-client/0.159.2",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "server/discover",
+        "accept": "text/event-stream, application/json",
+        "content-type": "application/json",
+        "authorization": "Bearer local-fixture-only",
+        "host": "127.0.0.1:39187",
+        "content-length": "310"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "server/discover",
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "codex-mcp-client",
+              "title": "Codex",
+              "version": "0.159.2"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "elicitation": {
+                "form": {},
+                "url": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "stage": "start",
+      "method": "POST",
+      "url": "/before",
+      "headers": {
+        "user-agent": "codex-mcp-client/0.159.2",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "tools/list",
+        "accept": "text/event-stream, application/json",
+        "content-type": "application/json",
+        "authorization": "Bearer local-fixture-only",
+        "host": "127.0.0.1:39187",
+        "content-length": "323"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "codex-mcp-client",
+              "title": "Codex",
+              "version": "0.159.2"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "elicitation": {
+                "form": {},
+                "url": {}
+              }
+            },
+            "progressToken": 0
+          }
+        }
+      }
+    },
+    {
+      "stage": "unloaded_resume",
+      "method": "POST",
+      "url": "/after",
+      "headers": {
+        "user-agent": "codex-mcp-client/0.159.2",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "server/discover",
+        "accept": "text/event-stream, application/json",
+        "content-type": "application/json",
+        "authorization": "Bearer local-fixture-only",
+        "host": "127.0.0.1:39187",
+        "content-length": "310"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 0,
+        "method": "server/discover",
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "codex-mcp-client",
+              "title": "Codex",
+              "version": "0.159.2"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "elicitation": {
+                "form": {},
+                "url": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "stage": "unloaded_resume",
+      "method": "POST",
+      "url": "/after",
+      "headers": {
+        "user-agent": "codex-mcp-client/0.159.2",
+        "mcp-protocol-version": "2026-07-28",
+        "mcp-method": "tools/list",
+        "accept": "text/event-stream, application/json",
+        "content-type": "application/json",
+        "authorization": "Bearer local-fixture-only",
+        "host": "127.0.0.1:39187",
+        "content-length": "323"
+      },
+      "body": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/list",
+        "params": {
+          "_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientInfo": {
+              "name": "codex-mcp-client",
+              "title": "Codex",
+              "version": "0.159.2"
+            },
+            "io.modelcontextprotocol/clientCapabilities": {
+              "elicitation": {
+                "form": {},
+                "url": {}
+              }
+            },
+            "progressToken": 0
+          }
+        }
+      }
+    }
+  ],
+  "modelTools": [
+    {
+      "stage": "start",
+      "namespaces": [
+        {
+          "type": "namespace",
+          "name": "mcp__oc_aaaaaaaaaa",
+          "description": "Tools in the mcp__oc_aaaaaaaaaa namespace.",
+          "tools": [
+            {
+              "type": "function",
+              "name": "read_before",
+              "description": "read_before",
+              "strict": false,
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage": "loaded_resume",
+      "namespaces": [
+        {
+          "type": "namespace",
+          "name": "mcp__oc_aaaaaaaaaa",
+          "description": "Tools in the mcp__oc_aaaaaaaaaa namespace.",
+          "tools": [
+            {
+              "type": "function",
+              "name": "read_before",
+              "description": "read_before",
+              "strict": false,
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "stage": "unloaded_resume",
+      "namespaces": [
+        {
+          "type": "namespace",
+          "name": "mcp__oc_bbbbbbbbbb",
+          "description": "Tools in the mcp__oc_bbbbbbbbbb namespace.",
+          "tools": [
+            {
+              "type": "function",
+              "name": "read_after",
+              "description": "read_after",
+              "strict": false,
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "rpc": [
+    {
+      "stage": "start",
+      "method": "initialize",
+      "params": {
+        "clientInfo": {
+          "name": "resume_probe",
+          "version": "1"
+        },
+        "capabilities": {
+          "experimentalApi": true
+        }
+      }
+    },
+    {
+      "stage": "start",
+      "method": "thread/start",
+      "params": {
+        "cwd": "/tmp",
+        "config": {
+          "mcp_servers": {
+            "oc_aaaaaaaaaa": {
+              "url": "http://127.0.0.1:39187/before",
+              "bearer_token_env_var": "PROXY_CALLER_TOKEN",
+              "tool_timeout_sec": 1200,
+              "startup_timeout_sec": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "stage": "start",
+      "method": "turn/start",
+      "params": {
+        "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+        "input": [
+          {
+            "type": "text",
+            "text": "Local probe: start",
+            "text_elements": []
+          }
+        ]
+      }
+    },
+    {
+      "stage": "loaded_resume",
+      "method": "thread/resume",
+      "params": {
+        "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+        "config": {
+          "mcp_servers": {
+            "oc_bbbbbbbbbb": {
+              "url": "http://127.0.0.1:39187/after",
+              "bearer_token_env_var": "PROXY_CALLER_TOKEN",
+              "tool_timeout_sec": 1200,
+              "startup_timeout_sec": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "stage": "loaded_resume",
+      "method": "turn/start",
+      "params": {
+        "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+        "input": [
+          {
+            "type": "text",
+            "text": "Local probe: loaded_resume",
+            "text_elements": []
+          }
+        ]
+      }
+    },
+    {
+      "stage": "unloaded_resume",
+      "method": "initialize",
+      "params": {
+        "clientInfo": {
+          "name": "resume_probe",
+          "version": "1"
+        },
+        "capabilities": {
+          "experimentalApi": true
+        }
+      }
+    },
+    {
+      "stage": "unloaded_resume",
+      "method": "thread/resume",
+      "params": {
+        "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+        "config": {
+          "mcp_servers": {
+            "oc_bbbbbbbbbb": {
+              "url": "http://127.0.0.1:39187/after",
+              "bearer_token_env_var": "PROXY_CALLER_TOKEN",
+              "tool_timeout_sec": 1200,
+              "startup_timeout_sec": 10
+            }
+          }
+        }
+      }
+    },
+    {
+      "stage": "unloaded_resume",
+      "method": "turn/start",
+      "params": {
+        "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+        "input": [
+          {
+            "type": "text",
+            "text": "Local probe: unloaded_resume",
+            "text_elements": []
+          }
+        ]
+      }
+    }
+  ],
+  "replies": [
+    {
+      "stage": "start",
+      "id": 1,
+      "error": null
+    },
+    {
+      "stage": "start",
+      "id": 2,
+      "error": null,
+      "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36"
+    },
+    {
+      "stage": "start",
+      "id": 3,
+      "error": null
+    },
+    {
+      "stage": "loaded_resume",
+      "id": 4,
+      "error": null,
+      "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36"
+    },
+    {
+      "stage": "loaded_resume",
+      "id": 5,
+      "error": null
+    },
+    {
+      "stage": "unloaded_resume",
+      "id": 1,
+      "error": null
+    },
+    {
+      "stage": "unloaded_resume",
+      "id": 2,
+      "error": null,
+      "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36"
+    },
+    {
+      "stage": "unloaded_resume",
+      "id": 3,
+      "error": null
+    }
+  ],
+  "completedTurns": [
+    {
+      "stage": "start",
+      "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+      "status": "completed"
+    },
+    {
+      "stage": "loaded_resume",
+      "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+      "status": "completed"
+    },
+    {
+      "stage": "unloaded_resume",
+      "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+      "status": "completed"
+    }
+  ],
+  "stderr": [
+    {
+      "stage": "start",
+      "text": "WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"/tmp/codex-resume-DPZurK\"))\n"
+    },
+    {
+      "stage": "unloaded_resume",
+      "text": "WARNING: proceeding, even though we could not create PATH aliases: Refusing to create helper binaries under temporary dir \"/tmp\" (codex_home: AbsolutePathBuf(\"/tmp/codex-resume-DPZurK\"))\n"
+    }
+  ],
+  "threadId": "01a115d5-f2a2-74c0-a7ce-01d5bca2de36",
+  "checks": [
+    {
+      "stage": "start",
+      "expected": [
+        "mcp__oc_aaaaaaaaaa"
+      ],
+      "actual": [
+        "mcp__oc_aaaaaaaaaa"
+      ],
+      "passed": true
+    },
+    {
+      "stage": "loaded_resume",
+      "expected": [
+        "mcp__oc_bbbbbbbbbb"
+      ],
+      "actual": [
+        "mcp__oc_aaaaaaaaaa"
+      ],
+      "passed": false
+    },
+    {
+      "stage": "unloaded_resume",
+      "expected": [
+        "mcp__oc_bbbbbbbbbb"
+      ],
+      "actual": [
+        "mcp__oc_bbbbbbbbbb"
+      ],
+      "passed": true
+    }
+  ],
+  "result": "FAIL",
+  "error": "AssertionError [ERR_ASSERTION]: loaded_resume: next model request tools\n+ actual - expected\n\n  [\n+   'mcp__oc_aaaaaaaaaa'\n-   'mcp__oc_bbbbbbbbbb'\n  ]\n",
+  "elapsedMs": 1407
+}

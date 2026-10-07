@@ -147,6 +147,19 @@ condensed here:
   needs actual network-level instrumentation, which is squarely S0.1b's
   "gateway-enforced egress" territory.
 
+## Later check — 7 October 2026
+
+The packaged Codex 0.159.2 does use stateless MCP discovery when
+`mcp_2026_07_28` is enabled. It sends POST `server/discover` and `tools/list`
+with version `2026-07-28`, without `initialize` or a session header.
+This corrects the earlier blocker above for that packaged version.
+
+A separate blocker was measured: `thread/resume` accepts new MCP server config
+but keeps the old tools when the thread is still loaded. After restarting Codex,
+the same saved thread receives the new tools. Application implementation stopped
+at this check. The [computer check record](../../apps/computer/README.robot.md#governed-tools-prerequisite--7-october-2026)
+links the offline probe and saved capture. No paid model was called.
+
 ## Open questions for the owner
 
 See the spike's README for the full list; the ones that matter for this
