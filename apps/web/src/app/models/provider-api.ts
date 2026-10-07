@@ -12,8 +12,6 @@ const providersSchema = z.object({ rows: z.array(providerSchema), loadedAt: z.st
   access: z.object({ grantsAvailable: z.boolean(), reason: z.string() }) });
 const registrySchema = z.object({ models: z.array(z.object({ id, retired: z.boolean().optional() })),
   taskRouting: z.record(z.string(), z.object({ model: id, reason: z.string() })) });
-const quoteSchema = z.object({ providerId: id, revision: z.number().int(), model: id,
-  priceTableId: id, reservedCents: z.number().int(), consentRequired: z.literal(true) });
 const receiptSchema = z.object({ status: z.literal('appended'), providerId: id.optional(),
   revision: z.number().int().optional(), operation: z.string().optional(),
   sequence: z.number().int().optional(), changeId: id.optional(), clearKey: z.boolean().optional(),
@@ -23,7 +21,6 @@ const receiptSchema = z.object({ status: z.literal('appended'), providerId: id.o
 const responseSchema = z.object({ rows: z.array(providerSchema) });
 
 export type ProviderRow = z.infer<typeof providerSchema>;
-export type ModelQuote = z.infer<typeof quoteSchema>;
 export type ProviderReceipt = z.infer<typeof receiptSchema>;
 export type TaskRouting = z.infer<typeof registrySchema>['taskRouting'];
 export type ApiResult<T> = { kind: 'ok'; value: T } | { kind: 'access' | 'forbidden' | 'unpriced' }
@@ -79,13 +76,6 @@ function activeModelIds(result: ApiResult<z.infer<typeof registrySchema>>): ApiR
 
 function isActiveModel(model: { retired?: boolean | undefined }): boolean { return !model.retired; }
 function modelId(model: { id: string }): string { return model.id; }
-
-export function readQuote(providerId: string, model: string, signal: AbortSignal):
-Promise<ApiResult<ModelQuote>> {
-  const query = new URLSearchParams({ model });
-  return readJson(`/api/org/providers/${encodeURIComponent(providerId)}/verify?${query}`,
-    quoteSchema, signal);
-}
 
 export async function sendProviderCommand(url: string, body: unknown, signal: AbortSignal):
 Promise<ApiResult<ProviderReceipt>> {

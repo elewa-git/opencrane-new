@@ -35,9 +35,9 @@ All checks ran with `nice -n 10`. Captures use intercepted replies only.
 | Check | Result | Evidence |
 | --- | --- | --- |
 | Rebase onto main | PASS | Rebase completed; `origin/main` is an ancestor of the branch. |
-| Lint | NOT RUN | Final check is still running. |
+| Lint | PASS | All lint stages completed, with existing function-size warnings. |
 | Typecheck | PASS | All workspaces completed; the final web check also completed. |
-| Web suite | PASS | 453 tests passed; the final provider run passed all 16 specs. |
+| Web suite | PASS | 454 tests passed after the rebase; the provider run passed all 16 specs. |
 | Failing-first and guard removal | PASS | Lost key reply then Enter, Back then Next, all seven status labels, saved time, healthy refresh, two quick Enters, focus return and native submit each failed with the matching protection removed. All protections were restored. |
 | Angular build | PASS | Build completed with existing bundle warnings. |
 | Provider routes | PASS | 56 tests passed with local fake upstreams. An earlier run had one timeout and one 503; the separate rerun passed. |
