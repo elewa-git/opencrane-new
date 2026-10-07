@@ -318,6 +318,32 @@ server lifecycle command has acquired the computer-stream suspend fence. Each
 command still makes one conditional append. Terminal reports trigger permanent
 server closure, recovered by the watcher if the server stops between those commands.
 
+## Tools offered with a chat turn
+
+The bridge reads server ids from the MCP catalogue projection. For each server it
+reads only that server's `mcp-<id>` stream, then keeps it only when it is published,
+uses `accountMode: none`, and both the requester and assistant have the `use` grant.
+The tool list is sent only for a personal assistant's memory-free turn. Team turns,
+private turns and turns without a binding get no list.
+
+The bridge joins the saved discovery definitions to the current tool policy by name
+and revision. It sends only reviewed tools in Allow mode with `costCents: 0` and a
+stored definition. Ask and Block tools, missing definitions and server discovery
+results are left out. In particular, `discoverResult` is never sent because it may
+contain instructions that nobody reviewed.
+
+Each server is named `oc_` followed by the first ten hex digits of its SHA-256 id.
+The bridge adds whole servers only. The tool list is capped at 48 KiB and at 20
+servers. It is also capped so the JSON turn stays below 120 KiB, leaving room below
+the computer socket's 128 KiB limit. The bridge counts the encoded turn, including
+its text and attachments, before choosing tools. It logs how many servers did not fit.
+
+The bridge saves the selected list beside that message's sent-turn record. One-second
+resends reuse it, so a waiting turn does not repeat catalogue, event-stream or
+OpenFGA reads. The list is an offer to Codex only. The gateway checks every call
+again against current grants and tool rules, so a grant removal or a change to Block
+still refuses a call after the turn starts.
+
 A digest-matching start replay for an already closed turn is acknowledged without
 new admission or a turn grant, including recovery after a terminal report but
 before its lifecycle closure. Older journals without `previousSequence` replay
