@@ -30,7 +30,6 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
     Claim, StateSpecimen, McpInstall, SharedState, SignIn, Workspace, DirectChat, ToolPolicyScreen,
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
-<<<<<<< HEAD
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
     SharedAssistantAdmin, SharedAssistantPicker,
   ],
