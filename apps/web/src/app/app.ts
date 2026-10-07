@@ -21,6 +21,7 @@ import { PersonalSettingsShell } from './settings/personal-settings-shell';
 import { PeopleScreen } from './people/people-screen';
 import { GroupDetailScreen } from './people/group-detail-screen';
 import { SharedAssistantAdmin } from './people/shared-assistant-admin';
+import { OwnershipScreen } from './people/ownership-screen';
 import { SharedAssistantPicker } from './chat/shared-assistant-picker';
 import { personalSettingsPage, personalSettingsPageLabel } from './settings/pages';
 
@@ -31,7 +32,7 @@ import { personalSettingsPage, personalSettingsPageLabel } from './settings/page
     ModelsScreen, SpendingScreen, AuditScreen, IntegrationRegister, IntegrationDetail,
     OrganisationShell,
     AccountScreen, PersonalSettingsShell, PeopleScreen, GroupDetailScreen,
-    SharedAssistantAdmin, SharedAssistantPicker,
+    SharedAssistantAdmin, SharedAssistantPicker, OwnershipScreen,
   ],
   templateUrl: './app.html',
   styleUrl: './app.css',
@@ -53,6 +54,7 @@ export class App {
     || this.pathname.startsWith('/account/');
   protected readonly activePage = organisationPage(this.pathname);
   protected readonly peopleGroupId = peopleGroupId(this.pathname);
+  protected readonly ownershipPage = this.pathname === '/org/people/owners';
   protected readonly assistantCreateGroupId = assistantCreateGroupId(this.pathname);
   protected readonly installPage = this.pathname === '/org/integrations/new';
   protected readonly toolServer = /^\/org\/integrations\/([\w-]+)\/tools$/u.exec(this.pathname)?.[1];

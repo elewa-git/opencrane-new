@@ -15,6 +15,7 @@ flowchart LR
   web -->|shows one shared status| capture["Screenshot status<br/>viewer and chat"]
   web -->|saves keys and reads facts| providers["Provider pages<br/>keys, checks and model choices"]
   web -->|opens| integrations["Integrations pages<br/>register, add and tools"]
+  web -->|opens| people["People pages<br/>members, groups and owners"]
 ```
 
 ## What it is responsible for
@@ -26,8 +27,8 @@ flowchart LR
 - Lets someone choose one colleague for a direct conversation between two people.
   Direct chats send human text and never start assistant work.
 - Shows reviewed tool approvals, sanitised tool details, uploaded files and the assistant's desktop.
-- Gives admins pages for People & groups at `/org/people` and
-  `/org/people/groups/<id>`, an integration register and detail at
+- Gives admins pages for People & groups at `/org/people`,
+  `/org/people/groups/<id>` and `/org/people/owners`, an integration register and detail at
   `/org/integrations` and `/org/integrations/<id>`, adding a remote server, and setting
   modes for each tool, as well as models, spending and change history.
 - Lets organisation admins create a shared assistant for a group with selected grants
@@ -69,6 +70,7 @@ flowchart LR
     status check before another save. A paid model test needs consent for one request. An
     unknown outcome stays locked while the website checks its status.
 12. **A member starts a private shared session.** The website shows assistants they can use, confirms the fixed paying group, then opens their private conversation. Group membership does not give desktop access.
+13. **An Owner transfers ownership.** The website reviews the proposed successor and asks the server to record the transfer. It shows success only after the server confirms it. A lost reply keeps its command reference and offers a read-only status check.
 
 ## How to run or test it
 
@@ -85,3 +87,4 @@ npm run typecheck -w apps/web
 - [Who may watch a computer's live desktop, and why](../../docs/adr/0006-computer-disk-and-live-view.md).
 - [The shared words used in these guides](../../GLOSSARY.md).
 - [Screenshot screens and browser checks](../../docs/process/p3-18-screens/README.md).
+- [Ownership screen binding and receipt](../../docs/process/p4-2-screens/README.md).

@@ -122,6 +122,33 @@ create route does not accept them. Child delegation and child start status are n
 these routes. Browser captures use intercepted replies and do not prove live access or
 computer provisioning. [P4-7 screen receipt](../../docs/process/p4-7-screens/receipt.md).
 
+## Ownership
+
+`/org/people/owners` reads `/api/ownership`. The response lists current owner member
+ids and display names, the ownership sequence, the viewer id and role, and whether the
+screen is ready. Owners can enter a known member id as a proposed successor. The API
+does not provide a member directory or candidate names, so the screen does not pretend
+to offer a directory search. The server checks that the successor is an active member.
+The review shows the name and id returned by the owners read, and the entered id.
+
+Transfer sends one `ownership.transfer` command with a fresh command id, the sequence
+from the read, and the successor id. Each pending change is one record kept separate
+from the review draft.
+While a command is applying or its reply is unknown, the screen disables another
+ownership change. A 200 receipt is followed by read-only status and owner reads before
+the screen shows the confirmed owners. A lost or unusable reply says the change may or
+may not have been recorded, shows the command id, and only offers GET status checks.
+It never repeats the POST. The server prevents transfer from removing the last owner.
+
+The API does not report other pending ownership changes with actor names or start times.
+It also does not expose group grants for comparing the successor's access. The screen
+does not invent either detail. This screen shows a general conflict or refusal. The next
+stacked change adds the specific last-owner conflict, inactive-member refusal and Admin
+explanation. Admins can read the owner list but cannot start an ownership change.
+
+The second ownership screen change adds step-down review, last-owner conflict and
+Admin refusal details.
+
 ## Sign-in
 
 `/` shows the SSO-first sign-in screen or the current session and sign-out action.

@@ -3,6 +3,7 @@
     <p>Flat groups for {{ organisationName() }}. A group grants only what is attached to it.
       It never reveals private conversations or memory.</p></div>
   <div class="page-actions">
+    <a class="button secondary" href="/org/people/owners">Owners</a>
     <button type="button" class="button secondary" (click)="load()"
       [disabled]="state() === 'loading' || state() === 'retrying' || state() === 'access'">
       {{ state() === 'retrying' ? 'Refreshing…' : 'Refresh list' }}</button>
