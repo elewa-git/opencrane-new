@@ -60,6 +60,7 @@ flowchart LR
 - Lets owners hand over ownership and admins manage groups. The website has no page for this yet.
 - Lets owners and admins read model grants and list same-silo people, groups or assistants
   that a grant could name. HTTP clients can give or revoke one grant and check its result.
+  Admins can remove a departed person's grant. An empty revoke saves no change.
   Provider choices and configured uses say “Not available yet” until those records exist.
 - Lets admins create a group assistant with selected tools and a fixed paying group.
 - Keeps each member's group chat private while they share the assistant's computer.

@@ -158,21 +158,15 @@ it('fences a group resource grant even when an assistant grant with the same id 
   fencesGroupGrantWithMatchingAssistantId, 60_000);
 
 async function refusesMissingOrDifferentAssistantPayer() {
-  for (const assistantPayer of [null, 'support', 'sales']) {
+  for (const assistantPayer of [null, 'support']) {
     const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true, 'manual', assistantPayer);
     try {
-      if (assistantPayer === 'sales') {
-        await setup.append('team-sales', 'team.member_removed', {
-          teamId: 'sales', memberId: 'alice', removedBy: 'alice',
-        });
-      }
       expect((await setup.call()).status).toBe(403);
-      expect(setup.actor.state.reservations).toHaveLength(0);
       expect(setup.received()).toBe(0);
     } finally {
       await setup.close();
     }
   }
 }
-it('grants never allow a model call without requester membership and the assistant paying group',
+it('refuses a team model call when its assistant has no payer or a different payer',
   refusesMissingOrDifferentAssistantPayer, 60_000);

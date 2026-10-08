@@ -55,8 +55,7 @@ export function validateCommand(
     !parsed.success ||
     !Number.isSafeInteger(command.expectedSequence) ||
     command.expectedSequence < 0 ||
-    !validHistoryChecked(command.historyChecked) ||
-    !validDeadline(command.deadline)
+    !validHistoryCheck(command)
   ) {
     return undefined;
   }
@@ -115,13 +114,11 @@ function validCurrentMemoryWrite(event: EventEnvelope): boolean {
   return written.data.keyId === expectedKeyId;
 }
 
-function validDeadline(deadline: number | undefined): boolean {
+function validHistoryCheck(command: AppendCommand): boolean {
+  if (command.historyChecked !== undefined && command.historyChecked !== true) return false;
+  const deadline = command.deadline;
   if (deadline === undefined) return true;
   return Number.isFinite(deadline) && deadline >= 0;
-}
-
-function validHistoryChecked(value: unknown): boolean {
-  return value === undefined || value === true;
 }
 
 function validMigrationFence(command: AppendCommand, event: EventEnvelope) {

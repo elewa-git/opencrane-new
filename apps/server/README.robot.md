@@ -1029,15 +1029,24 @@ restored. [Check record](../../docs/process/approval-watcher-review-fixes.md).
 `POST /api/org/models/:modelId/access` accepts only `{commandId, expectedSequence,
 action: "grant" | "revoke", granteeKind, granteeId}` in at most 2 KiB. It requires
 an organisation session, exact Origin and current Owner/Admin events plus OpenFGA.
-Targets must exist in this silo; people must be active members. Grants require an
-active registry model. Historical revocation remains possible. A grant changes
+Targets for grants must exist in this silo; people must be active members. Revokes
+can remove a departed person's grant. Grants require an active registry model;
+retired models stay revocable and unknown model ids are refused. A grant changes
 neither provider selection nor paying-group membership. The browser editor stays unavailable.
 
-History has a ten-second limit before the two-second check on caller, ownership
-and target streams. One conditional append uses `historyChecked` and the original
-access deadline. A saved `appended` receipt names the original command, event and position.
+POST and status GET check current Owner/Admin access before reading grant history.
+History has a ten-second limit before the two-second check on caller and ownership.
+Person and assistant targets are checked for changes separately. Team grants read
+only the creation event before the check and do not watch membership activity.
+An empty team revoke reads assistant selections before that check, with a ten-second
+limit, to find a selected starting grant that has not been saved yet.
+One conditional append uses `historyChecked` and the original access deadline.
+A saved `appended` receipt names the original command, event and position.
 Identical repeats return it; changed payloads or stale positions give 409 `refused`
-without a new event. Invalid or unauthorised requests give 400/401/403 `refused`.
+without a new event. Empty revokes return `no_effect`, except an unseeded starting
+grant revoke, which is saved so the worker cannot restore it. The full rules and
+409 target reasons are in the [model grant API](../../docs/api/providers.md#changing-model-grants).
+Invalid or unauthorised requests give 400/401/403 `refused`.
 503 `unavailable` means checks failed before append; 503 `unknown` means append
 or its reply is uncertain. Recovery uses only
 `GET /api/org/models/:modelId/access/changes/:commandId`, with current authority.

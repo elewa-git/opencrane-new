@@ -11,7 +11,7 @@ import { readModelAccessCandidates, readModelGrantRows, type Query,
   type connectMemberFeed, type ModelGrantState } from '@opencrane/projections';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
-import { writeAccess, readChange, ChangeUnknown } from './access-changes.ts';
+import { writeAccess, readChange, ChangeUnknown, TargetConflict } from './access-changes.ts';
 import { sessionFor } from '../members/routes.ts';
 
 export interface ModelAccessOptions {
@@ -169,7 +169,7 @@ function readErrorStatus(error: unknown) {
   if (error instanceof Error && ['Wrong silo', 'Authority changed'].includes(error.message)) {
     return 403;
   }
-  if (error instanceof ProviderConflict) return 409;
+  if (error instanceof ProviderConflict || error instanceof TargetConflict) return 409;
   return 503;
 }
 
@@ -185,6 +185,7 @@ function parseInput<Schema extends z.ZodType>(schema: Schema, input: unknown): z
 }
 
 function readErrorBody(status: number, error: unknown) {
+  if (error instanceof TargetConflict) return { status: 'refused' as const, reason: error.reason };
   if (error instanceof ChangeUnknown) return { status: 'unknown' as const };
   if (status === 503) return { status: 'unavailable' as const };
   return { status: 'refused' as const };

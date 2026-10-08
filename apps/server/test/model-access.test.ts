@@ -528,8 +528,8 @@ function changeBody(commandId: string, action = 'grant', granteeKind = 'member',
 }
 
 function writeAccess(body: Record<string, unknown>, sub = 'idp-owner',
-  orgId = 'org-acme', origin = 'https://app.example.test', modelId = 'gpt-6-sol') {
-  return app.inject({ method: 'POST', url: `/api/org/models/${modelId}/access`, payload: body,
+  orgId = 'org-acme', origin = 'https://app.example.test', modelId = 'gpt-6-sol', server = app) {
+  return server.inject({ method: 'POST', url: `/api/org/models/${modelId}/access`, payload: body,
     headers: { origin, cookie: `${config.cookieName}=${encodeSession(config, {
       sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000,
     })}` } });
@@ -921,31 +921,50 @@ async function keepsUnseededStartingGrantsRevoked() {
     memberId: 'invited', email: 'invited@example.test', displayName: 'New member',
     role: 'member', invitationId: 'invite-invited',
   });
-  await append('team-unseeded-team', 'team.created', {
+  const teamCreated = await append('team-unseeded-team', 'team.created', {
     teamId: 'unseeded-team', name: 'Unseeded team', createdBy: 'owner',
   });
   const sharedCreated = await append('assistant-unseeded-shared', 'assistant.created', {
     assistantId: 'unseeded-shared', ownerId: 'unseeded-team', kind: 'team',
     grants: [{ resourceType: 'model', resourceId: modelId }],
   });
-  const grantees = [['member', 'invited'], ['assistant', 'unseeded-shared'],
-    ['team', 'unseeded-team']] as const;
-  const subject = grantStream('model', modelId);
-  for (const [kind, id] of grantees) {
-    const expected = await nats.store.head(subject);
-    const body = changeBody(`unseeded-${kind}`, 'revoke', kind, id, expected);
-    const response = await writeAccess(body, 'idp-owner', 'org-acme',
-      'https://app.example.test', modelId);
-    expect(response.json()).toMatchObject({ status: 'appended' });
+  const startingNats = await natsFixture();
+  const startingApp = buildServer(config, {
+    modelAccess: {
+      silo: 'acme', store: startingNats.store, db: database, binding,
+      feed: { memberId: resolveMemberId },
+    },
+  });
+  try {
+    const ownerRows = await history(nats.store, 'member-owner', 'acme');
+    const records = [ownerRows[0]!.event, memberJoined, teamCreated, sharedCreated];
+    for (const record of records) {
+      const result = await startingNats.store.append({ event: record, expectedSequence: 0 });
+      expect(result.status).toBe('appended');
+    }
+    const grantees = [['member', 'invited'], ['assistant', 'unseeded-shared'],
+      ['team', 'unseeded-team']] as const;
+    const subject = grantStream('model', modelId);
+    for (const [kind, id] of grantees) {
+      const expected = await startingNats.store.head(subject);
+      const body = changeBody(`unseeded-${kind}`, 'revoke', kind, id, expected);
+      const response = await writeAccess(body, 'idp-owner', 'org-acme',
+        'https://app.example.test', modelId, startingApp);
+      expect(response.json()).toMatchObject({ status: 'appended' });
+    }
+    const before = await startingNats.store.head(subject);
+    const handler = modelGrantHandler(startingNats.store);
+    await handler.handle(memberJoined, database);
+    await handler.handle(sharedCreated, database);
+    expect(await startingNats.store.head(subject)).toBe(before);
+    const rows = await history(startingNats.store, subject, 'acme');
+    expect(rows).toHaveLength(3);
+  } finally {
+    await startingApp.close();
+    await startingNats.close();
   }
-  const before = await nats.store.head(subject);
-  const handler = modelGrantHandler(nats.store);
-  await handler.handle(memberJoined, database);
-  await handler.handle(sharedCreated, database);
-  expect(await nats.store.head(subject)).toBe(before);
-  const rows = await history(nats.store, subject, 'acme');
-  expect(rows).toHaveLength(3);
 }
+
 it('keeps unseeded person, shared assistant and team starting grants revoked',
   keepsUnseededStartingGrantsRevoked);
 
