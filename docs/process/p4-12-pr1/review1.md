@@ -32,3 +32,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **decrypt refuses a different key id**. Mutation: `libs/projections/src/memory-keys.ts`, replace `if (value.keyId !== `key:${reference(identity)}`)` with `if (false)`. Expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "decrypt refuses a different key id"`.
+
+- **a damaged key file stops provision**. Mutation: `libs/projections/src/memory-keys.ts`, replace `if (bytes.length !== 32)` with `if (false)`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "a damaged key file stops provision"`.

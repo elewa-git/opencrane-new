@@ -282,3 +282,19 @@ function mismatchedKeyId() {
   withKeys(check);
 }
 it('decrypt refuses a different key id', mismatchedKeyId);
+
+function damagedKeyFile() {
+  function check(keys: ReturnType<typeof memoryKeys>, directory: string) {
+    const current = currentIdentity();
+    const keyId = keys.provision(current);
+    const path = join(directory, keyId.slice(4));
+    writeFileSync(path, Buffer.alloc(31));
+    function provision() {
+      keys.provision(current);
+    }
+    expect(provision).toThrow('Memory key store damaged');
+    expect(readFileSync(path)).toHaveLength(31);
+  }
+  withKeys(check);
+}
+it('a damaged key file stops provision', damagedKeyFile);
