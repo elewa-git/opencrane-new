@@ -240,3 +240,12 @@ function commandIdFormat() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('memory command ids use the allowed format', commandIdFormat);
+
+function principalIdFormat() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const principal = { kind: 'human' as const, id: 'member:invalid' };
+  const invalid = { ...event, principal };
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('memory principal ids use the allowed format', principalIdFormat);
