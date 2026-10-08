@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -112,7 +112,6 @@ function isolation() {
     }
     expect(keys.provision(current)).toBe(encrypted.keyId);
     expect(keys.decrypt(current, encrypted)).toBe('Delivery instructions');
-    expect(statSync(directory).mode & 0o777).toBe(0o700);
     expect(statSync(join(directory, encrypted.keyId.slice(4))).mode & 0o777).toBe(0o600);
   }
   withKeys(check);
@@ -378,3 +377,15 @@ function neverProvisionedKey() {
   withKeys(check);
 }
 it('a never provisioned key is a store error', neverProvisionedKey);
+
+function wrongDirectoryMode() {
+  function check(_keys: ReturnType<typeof memoryKeys>, directory: string) {
+    chmodSync(directory, 0o755);
+    function openStore() {
+      memoryKeys(directory);
+    }
+    expect(openStore).toThrow('Memory key store requires mode 0700');
+  }
+  withKeys(check);
+}
+it('a key store with the wrong mode is refused', wrongDirectoryMode);
