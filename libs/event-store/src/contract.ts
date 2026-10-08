@@ -55,11 +55,13 @@ export function validateCommand(
     return undefined;
   }
   const event = parsed.event;
+  if (!validCurrentMemoryWrite(event)) {
+    return undefined;
+  }
   if (!validMigrationFence(command, event)) {
     return undefined;
   }
-  if (command.expectedSubject !== undefined && command.expectedSubject !== event.subject
-    && command.expectedSubject !== `${getEventDefinition(event.type)?.stream}-*`) {
+  if (!validExpectedSubject(command, event)) {
     return undefined;
   }
   if (
@@ -72,6 +74,23 @@ export function validateCommand(
   return event.subject.startsWith(`${getEventDefinition(event.type)?.stream}-`)
     ? event
     : undefined;
+}
+
+function validExpectedSubject(command: AppendCommand, event: EventEnvelope): boolean {
+  const expected = command.expectedSubject;
+  if (expected === undefined || expected === event.subject) {
+    return true;
+  }
+  const category = `${getEventDefinition(event.type)?.stream}-*`;
+  return expected === category;
+}
+
+function validCurrentMemoryWrite(event: EventEnvelope): boolean {
+  if (event.type !== 'memory.written') {
+    return true;
+  }
+  const definition = getEventDefinition(event.type);
+  return definition?.dataSchema.safeParse(event.data).success === true;
 }
 
 function validHistoryChecked(value: unknown): boolean {

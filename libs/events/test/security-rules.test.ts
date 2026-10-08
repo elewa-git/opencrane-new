@@ -110,8 +110,9 @@ describe('no plaintext conversation content', () => {
       expect(rejectedFields(type, { ciphertext })).toEqual(['ciphertext']);
     });
 
-    it.each(['YmFzZTY0LWxvb2tpbmctdGV4dA==', 'YmFzZTY0LWxvb2s=' /* exactly 16 */])('accepts "%s"', (ciphertext) => {
-      expect(rejectedFields(type, { ciphertext })).toEqual([]);
+    it.each(['YmFzZTY0LWxvb2tpbmctdGV4dA==', 'YmFzZTY0LWxvb2s=' /* exactly 16 */])('checks "%s" against its version limit', (ciphertext) => {
+      const expected = type === 'memory.written' ? ['ciphertext'] : [];
+      expect(rejectedFields(type, { ciphertext })).toEqual(expected);
     });
   });
 
@@ -120,8 +121,9 @@ describe('no plaintext conversation content', () => {
       expect(rejectedFields(type, { keyId })).toEqual(['keyId']);
     });
 
-    it.each(['key:1', 'key:abc_DEF-123'])('accepts "%s"', (keyId) => {
-      expect(rejectedFields(type, { keyId })).toEqual([]);
+    it.each(['key:1', 'key:abc_DEF-123'])('checks "%s" against its version format', (keyId) => {
+      const expected = type === 'memory.written' ? ['keyId'] : [];
+      expect(rejectedFields(type, { keyId })).toEqual(expected);
     });
   });
 
@@ -350,7 +352,7 @@ const RISKY_FIELD_NAME = new RegExp(
 // The risky-looking names that are approved: encrypted text and its key id, a
 // secret reference, and a message's id. Any `...Digest` is approved too (a
 // hash of a value, not the value). Matching is exact, so `Ciphertext` is not.
-const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens']);
+const APPROVED_FIELD_NAMES = new Set(['ciphertext', 'contentType', 'keyId', 'secretRef', 'messageId', 'tokenId', 'commandId', 'inputTokens', 'outputTokens', 'cachedInputTokens', 'cacheWriteTokens']);
 
 // Declared field names, at any depth, that are risky and not approved. This is a
 // net for accidents, not proof: a field with an innocent name still passes by

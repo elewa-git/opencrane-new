@@ -22,11 +22,12 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, model grants, tool attempts and computer state"]
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables and server content keys"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
+  projections -->|stores content keys| keys["Server files<br/>private revision keys"]
 ```
 
 ## What it is responsible for
@@ -42,11 +43,13 @@ flowchart LR
   history table while the system runs.
 - Store the per-conversation encryption keys used on the dev stack, so chat text
   is only saved in encrypted form.
+- Keep each memory revision key separately, with a permanent marker when it is deleted.
 - Send member-change notices after the table update commits.
 - Keep private conversation content out of the event-history table.
 - Avoid outside actions while rebuilding tables.
 
-Not built yet: storing those keys safely for real customers.
+Memory encryption runs only on the server. Memory read tables and their rebuild command
+are not built yet. Customer deployment and backup recovery still need testing.
 
 ## Processes it handles
 

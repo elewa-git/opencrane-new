@@ -176,3 +176,29 @@ Conversation tool reports are copied as events in order.
 `test/conversations.test.ts` uses real PostgreSQL and NATS. Dropping and
 replaying `conversation_feed` returns identical rows. No backfill command is
 added; the operator replay command has no conversations target.
+
+## Memory key custody
+
+`memoryScopeId` derives scope ids; `memoryIdentity` checks saved ownership or
+returns null for legacy events. `memoryKeys(directory)` provisions, encrypts,
+decrypts and deletes revision keys
+without returning key bytes. Its server-only file adapter uses a private directory
+and 0600 files. AES-256-GCM uses a fresh 12-byte nonce. Additional authenticated
+data binds silo, scope id/kind/owner, memory id and positive safe-integer revision.
+Ciphertext stores nonce, 16-byte tag and encrypted UTF-8 bytes, in that order.
+
+Provision publishes a synced complete key by an exclusive hard link. Delete
+atomically replaces it with a synced empty file; that permanent marker cannot be
+overwritten by provision. Delete also removes temporary hard links left by an
+interrupted provision. Missing/deleted keys decrypt to null; other file errors
+and failed authentication throw. Decrypt never provisions or deletes anything.
+Retain deletion markers through backup and restore. The adapter requires a local
+filesystem with atomic link/rename and file/directory fsync. Power-loss and customer
+secret-store qualification are NOT RUN.
+
+This is the first of two landable storage changes for row 1 of the
+[memory design](../../docs/specs/phase-4/p4-12-memory.md). The next change adds
+`memory_facts`, `memory_dependencies`, payload-free `memory_changes`, preparation
+before the ProjectionRunner transaction, and operator rebuild with real PostgreSQL
+rollback/index equality tests. No memory worker, route, MCP tool or UI is enabled.
+Focused proof: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts`.

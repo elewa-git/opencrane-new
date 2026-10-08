@@ -509,12 +509,7 @@ export const budgetExhaustedDataSchema = z.discriminatedUnion('scope', [
 
 // --- Company brain -------------------------------------------------------
 
-// Risky type: a memory's own text is never carried in the event, only its
-// ciphertext and the key that encrypted it (so "forget" only has to
-// delete the key).
-export const memoryWrittenDataSchema = z
-  .object({ scopeId: id, memoryId: id, ...encryptedText })
-  .strict();
+export { memoryWrittenDataSchema } from './memory.ts';
 
 export const memoryCorrectedDataSchema = z
   .object({ scopeId: id, memoryId: id, ...encryptedText })

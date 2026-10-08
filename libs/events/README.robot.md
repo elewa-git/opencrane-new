@@ -81,3 +81,19 @@ policy and thread refusals. A request with an unsafe call id is refused and its
 decision omits the id. Older events without a call id still parse. The conversation
 feed keeps a checked id without storing arguments or results. The id is supplied
 by the caller; the turn token does not sign it.
+
+## Memory revisions
+
+`memory.written` now uses a strict version-1 registry schema. `parseEventByType`
+also reads the exact old unversioned shape. `memoryWrittenIdentity` returns null for
+that shape: its ownership is unknown, so callers must quarantine it. No default
+audience or offline mapping is supplied. The other old memory schemas remain.
+
+Server custody hashes JSON `[silo, scopeKind, ownerId]` with SHA-256 and checks
+the derived id before using any key. Version-1 event parsing checks identity field
+shapes, the subject, command/principal ids, personal-only
+preferences, same-scope dependencies and the 16,384-byte event limit. Expiry
+must follow the recorded event time, so replay does not depend on today's clock.
+Text validation limits UTF-8 to 1–4,096 bytes and refuses NUL and lone surrogates.
+Source/dependency limits are 8/32; ids use 1–200 ASCII letters, digits, `_` or `-`.
+Storage commands and their whole-command size limit are not implemented yet.

@@ -1,3 +1,4 @@
+import { memoryWrittenExample } from './memory.ts';
 import { ownershipEvents } from './ownership-events.ts';
 import { providerEvents } from './provider-events.ts';
 import { auditEvents } from './audit-events.ts';
@@ -354,7 +355,7 @@ export const eventRegistry: readonly EventDefinition[] = [
     'scope',
     'The brain MCP wrote a memory into a permission scope.',
     data.memoryWrittenDataSchema,
-    { scopeId: 'scope_1', memoryId: 'memory_1', ciphertext: 'ZmFrZS1jaXBoZXJ0ZXh0', keyId: 'key:1' },
+    memoryWrittenExample,
   ),
   event(
     'memory.corrected',
@@ -366,7 +367,7 @@ export const eventRegistry: readonly EventDefinition[] = [
   event(
     'memory.forgotten',
     'scope',
-    "A memory's key was deleted and a tombstone appended.",
+    "A memory was hidden by a tombstone before its revision keys are deleted.",
     data.memoryForgottenDataSchema,
     { scopeId: 'scope_1', memoryId: 'memory_1' },
   ),

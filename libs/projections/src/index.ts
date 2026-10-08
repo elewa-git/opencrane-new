@@ -42,3 +42,5 @@ export { modelAccess, readModelGrantRows, readModelAccessCandidates,
 export { rebuildModelAccessProjection } from './model-access-rebuild.ts';
 
 export { lifecycleComputerState } from './computer-chat-state.ts';
+
+export { memoryKeys, memoryScopeId, memoryIdentity } from './memory-keys.ts';
