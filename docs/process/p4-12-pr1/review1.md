@@ -35,3 +35,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **a damaged key file stops provision**. Mutation: `libs/projections/src/memory-keys.ts`, replace `if (bytes.length !== 32)` with `if (false)`. Expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "a damaged key file stops provision"`.
+
+- **decrypt refuses a flipped ciphertext bit**. Mutation: `libs/projections/src/memory-keys.ts`, replace `decipher.final()` with `Buffer.alloc(0)`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "decrypt refuses a flipped ciphertext bit"`.

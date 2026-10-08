@@ -298,3 +298,28 @@ function damagedKeyFile() {
   withKeys(check);
 }
 it('a damaged key file stops provision', damagedKeyFile);
+
+function checkAlteredByte(offset: number) {
+  function check(keys: ReturnType<typeof memoryKeys>) {
+    const current = currentIdentity();
+    keys.provision(current);
+    const encrypted = keys.encrypt(current, 'Delivery instructions');
+    const bytes = Buffer.from(encrypted.ciphertext, 'base64');
+    const originalByte = bytes[offset];
+    if (originalByte === undefined) {
+      throw new Error('Test byte is missing');
+    }
+    bytes[offset] = originalByte ^ 1;
+    const altered = { ...encrypted, ciphertext: bytes.toString('base64') };
+    function decrypt() {
+      keys.decrypt(current, altered);
+    }
+    expect(decrypt).toThrow();
+    expect(keys.decrypt(current, encrypted)).toBe('Delivery instructions');
+  }
+  withKeys(check);
+}
+function flippedCiphertextBit() {
+  checkAlteredByte(28);
+}
+it('decrypt refuses a flipped ciphertext bit', flippedCiphertextBit);
