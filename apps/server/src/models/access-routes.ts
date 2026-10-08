@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import type { AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
 import { models, providerAuthority, ProviderRefused } from '@opencrane/models';
@@ -41,7 +41,7 @@ export function registerModelAccessRoutes(app: FastifyInstance, config: AuthConf
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!trustedRequest(config, options, session.orgId)) {
+    if (!trustedRequest(config, options, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
     try {
@@ -61,9 +61,8 @@ type ModelAccessReader = (request: FastifyRequest, reply: FastifyReply,
   options: ModelAccessOptions) => Promise<unknown>;
 
 function trustedRequest(config: AuthConfig, options: ModelAccessOptions,
-  orgId: string | undefined) {
-  return Boolean(config.expectedOrgId && orgId === config.expectedOrgId &&
-    options.silo === options.binding.silo);
+  session: { sub: string; orgId: string }) {
+  return isOrganisationSession(config, session) && options.silo === options.binding.silo;
 }
 
 async function readAccess(request: FastifyRequest, reply: FastifyReply,
