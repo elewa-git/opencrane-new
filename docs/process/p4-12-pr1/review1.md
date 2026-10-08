@@ -53,3 +53,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **provision never creates a missing key store**. Original source: expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "provision never creates a missing key store"`.
+
+- **an opened key store cannot recreate a lost volume**. Original source: expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "an opened key store cannot recreate a lost volume"`.

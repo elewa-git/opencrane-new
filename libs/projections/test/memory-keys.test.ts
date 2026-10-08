@@ -402,3 +402,16 @@ function missingDirectoryProvision() {
   withKeys(check);
 }
 it('provision never creates a missing key store', missingDirectoryProvision);
+
+function lostDirectoryProvision() {
+  function check(keys: ReturnType<typeof memoryKeys>, directory: string) {
+    rmSync(directory, { recursive: true });
+    function provision() {
+      keys.provision(currentIdentity());
+    }
+    expect(provision).toThrow('Memory key store unavailable');
+    expect(existsSync(directory)).toBe(false);
+  }
+  withKeys(check);
+}
+it('an opened key store cannot recreate a lost volume', lostDirectoryProvision);
