@@ -231,6 +231,14 @@ async function acceptsSocketSignals() {
   const { conversationKeys } = await import('../src/chat/keys.ts');
   const server = createServer();
   const wss = new WebSocketServer({ server });
+  const resume = Promise.withResolvers<unknown>();
+  function receiveResume(raw: unknown) {
+    resume.resolve(raw);
+  }
+  function captureResume(socket: WebSocket) {
+    socket.once('message', receiveResume);
+  }
+  wss.once('connection', captureResume);
   const connected = once(wss, 'connection');
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -245,6 +253,11 @@ async function acceptsSocketSignals() {
   if (!(socketValue instanceof WebSocket)) throw new Error('No computer socket');
   const socket = socketValue;
   try {
+    const first = await resume.promise;
+    if (!Buffer.isBuffer(first)) throw new Error('Expected a resume message');
+    const frame: unknown = JSON.parse(first.toString());
+    const expectedResume = { type: 'resume', since: 0, approvalWaiting: true };
+    expect(frame).toEqual(expectedResume);
     await seedRequest();
     await append(`approval-${approvalId}`, 'approval.cancelled', { approvalId });
     const head = await nats.store.head();

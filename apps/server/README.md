@@ -41,7 +41,8 @@ flowchart LR
 - Starts personal turns using the latest default paying group. It keeps a small
   summary and reads only new spending events after the first use.
 - Records tool starts and finishes as events and returns them in the conversation feed.
-- Tells a computer when a waiting approval has been decided or ended.
+- Tells a computer whether it supports approval messages and when a waiting
+  approval has been decided or ended.
   Reads each approval separately, so a slow read leaves other chats free to continue.
 - Records streamed replies using a chat summary. After its first use, it reads only
   new events and checks one saved event. It handles repeats without saving them again.

@@ -221,7 +221,8 @@ export async function connectBridge(options: BridgeOptions, input: BridgeInput, 
   const reports = reportReceiver(options, input, tokens, socket, refuse, approvals);
   socket.on('message', reports.receiveReport);
   const position = await reportPosition(options.store, options.silo, input.computerId);
-  socket.send(JSON.stringify({ type: 'resume', since: position }));
+  const resume = { type: 'resume', since: position, approvalWaiting: true };
+  socket.send(JSON.stringify(resume));
   const delivered = new Set<string>();
   let transfers = Promise.resolve();
   function deliver(file: Upload, bytes: Buffer) {

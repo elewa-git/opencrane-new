@@ -967,6 +967,9 @@ than 320 characters, also fails sign-in before a session cookie is written.
 
 ## Approval signals from computers
 
+The bridge advertises `approvalWaiting: true` in `resume`. Older computers ignore
+this extra field. A new computer can treat its absence as no approval-signal
+support, so it never sends an unknown message to an older server.
 The bridge accepts a strict `approval_waiting` message before parsing stored reports.
 It has a lower-case 64-hex `approvalId`, plus `conversationId` and `turnId` of
 1–200 characters. A socket keeps at most 64 waiting approvals. Repeated messages

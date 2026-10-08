@@ -76,7 +76,8 @@ it.each([true, false])('acknowledges completed-start duplicates and keeps other 
     if (closed) await turnCommand(fixture.store, fixture.context, { ...completed, status: 'completed' });
     link = await fixture.connect();
     await until(() => fixture.messages.length > 0, 1000);
-    expect(fixture.messages).toEqual([{ type: 'resume', since: 0 }]);
+    const expectedResume = { type: 'resume', since: 0, approvalWaiting: true };
+    expect(fixture.messages).toEqual([expectedResume]);
     for (const report of [alice, start, completed]) link.peer.send(JSON.stringify(report));
     await until(() => fixture.messages.length === 4 || link?.socket.readyState === 3, 2000);
     expect(link.socket.readyState).toBe(link.socket.OPEN);

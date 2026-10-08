@@ -564,7 +564,8 @@ early, so there is no need to reduce that default.
 The server must be deployed before an image sends `approval_waiting`. Older
 servers reject unknown messages and stop recovery for that computer. This part
 keeps the computer Allow-only and sends no new socket messages. The follow-up
-must confirm server support before sending a wait signal, and answer a plain
+must require `approvalWaiting: true` in the server's `resume` before sending a
+wait signal, and answer a plain
 tool refusal with no send when support is absent. It must also renew the grant
 through `waitForGrant`, send approved held bytes once, and end holds before
 `turn/interrupt` and on release. Those behaviours are not claimed here.
