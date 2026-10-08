@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import type { EventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
-import { models, providerAuthority, ProviderRefused } from '@opencrane/models';
+import { models, providerAuthority, ProviderRefused, ProviderConflict,
+  MemberAccessRefused } from '@opencrane/models';
 import { providerModelIdSchema } from '@opencrane/events';
 import { modelAccessCandidatesQuerySchema,
   modelAccessCandidatesResponseSchema, modelAccessResponseSchema } from '@opencrane/protocol';
@@ -10,6 +11,7 @@ import { readModelAccessCandidates, readModelGrantRows, type Query,
   type connectMemberFeed, type ModelGrantState } from '@opencrane/projections';
 import { z } from 'zod';
 import type { Binding } from '@opencrane/authz';
+import { writeAccess, readChange, ChangeUnknown } from './access-changes.ts';
 import { sessionFor } from '../members/routes.ts';
 
 export interface ModelAccessOptions {
@@ -26,6 +28,16 @@ export function registerModelAccessRoutes(app: FastifyInstance, config: AuthConf
   options?: ModelAccessOptions) {
   app.get('/api/org/models/:modelId/access', handleAccess);
   app.get('/api/org/models/:modelId/access/candidates', handleCandidates);
+  app.post('/api/org/models/:modelId/access', { bodyLimit: 2048 }, handleWrite);
+  app.get('/api/org/models/:modelId/access/changes/:commandId', handleChange);
+
+  async function handleWrite(request: FastifyRequest, reply: FastifyReply) {
+    return handleRead(request, reply, writeAccess);
+  }
+
+  async function handleChange(request: FastifyRequest, reply: FastifyReply) {
+    return handleRead(request, reply, readChange);
+  }
 
   async function handleAccess(request: FastifyRequest, reply: FastifyReply) {
     return handleRead(request, reply, readAccess);
@@ -41,32 +53,32 @@ export function registerModelAccessRoutes(app: FastifyInstance, config: AuthConf
     const session = sessionFor(request, config, new Date());
     if (!session) return reply.code(401).send({ status: 'refused' });
     if (!options) return reply.code(503).send({ status: 'unavailable' });
-    if (!trustedRequest(config, options, session)) {
+    if (!trustedRequest(request, config, options, session)) {
       return reply.code(403).send({ status: 'refused' });
     }
     try {
       const memberId = await options.feed.memberId(options.silo, config.issuerUrl, session.sub);
       if (!memberId) throw new ProviderRefused();
-      // Check once before reading. A later membership change applies to the next request.
-      await providerAuthority(options.store, options.binding, memberId);
-      return await read(request, reply, options);
+      return await read(request, reply, options, memberId);
     } catch (error) {
       const status = readErrorStatus(error);
-      return reply.code(status).send(readErrorBody(status));
+      return reply.code(status).send(readErrorBody(status, error));
     }
   }
 }
 
 type ModelAccessReader = (request: FastifyRequest, reply: FastifyReply,
-  options: ModelAccessOptions) => Promise<unknown>;
+  options: ModelAccessOptions, memberId: string) => Promise<unknown>;
 
-function trustedRequest(config: AuthConfig, options: ModelAccessOptions,
+function trustedRequest(request: FastifyRequest, config: AuthConfig, options: ModelAccessOptions,
   session: { sub: string; orgId: string }) {
-  return isOrganisationSession(config, session) && options.silo === options.binding.silo;
+  return isOrganisationSession(config, session) && options.silo === options.binding.silo &&
+    (request.method !== 'POST' || request.headers.origin === new URL(config.redirectUri).origin);
 }
 
 async function readAccess(request: FastifyRequest, reply: FastifyReply,
-  options: ModelAccessOptions) {
+  options: ModelAccessOptions, memberId: string) {
+  await providerAuthority(options.store, options.binding, memberId);
   const { modelId } = parseInput(parameters, request.params);
   const subject = grantStream('model', modelId);
   const expectedSequence = await options.store.head(subject);
@@ -105,7 +117,8 @@ async function readAccess(request: FastifyRequest, reply: FastifyReply,
 }
 
 async function readCandidates(request: FastifyRequest, reply: FastifyReply,
-  options: ModelAccessOptions) {
+  options: ModelAccessOptions, memberId: string) {
+  await providerAuthority(options.store, options.binding, memberId);
   parseInput(parameters, request.params);
   const query = parseInput(modelAccessCandidatesQuerySchema, request.query);
   const position = await options.store.head();
@@ -151,8 +164,12 @@ function publicGrantRow(row: ModelGrantState, checkpoint: number) {
 }
 
 function readErrorStatus(error: unknown) {
-  if (error instanceof BadReadInput) return 400;
-  if (error instanceof ProviderRefused) return 403;
+  if (error instanceof BadReadInput || error instanceof z.ZodError) return 400;
+  if (error instanceof ProviderRefused || error instanceof MemberAccessRefused) return 403;
+  if (error instanceof Error && ['Wrong silo', 'Authority changed'].includes(error.message)) {
+    return 403;
+  }
+  if (error instanceof ProviderConflict) return 409;
   return 503;
 }
 
@@ -167,7 +184,8 @@ function parseInput<Schema extends z.ZodType>(schema: Schema, input: unknown): z
   }
 }
 
-function readErrorBody(status: number) {
+function readErrorBody(status: number, error: unknown) {
+  if (error instanceof ChangeUnknown) return { status: 'unknown' as const };
   if (status === 503) return { status: 'unavailable' as const };
   return { status: 'refused' as const };
 }

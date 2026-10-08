@@ -453,7 +453,8 @@ export const grantGivenDataSchema = z
   .strict();
 
 export const grantRevokedDataSchema = z
-  .object({ resourceType: id, resourceId: id, granteeId: id, revokedBy: id })
+  .object({ resourceType: id, resourceId: id, granteeId: id,
+    granteeKind: z.enum(['member', 'team', 'assistant']).optional(), revokedBy: id })
   .strict();
 
 // Risky type: the secret itself never appears here, only a reference id

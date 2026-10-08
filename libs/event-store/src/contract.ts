@@ -14,6 +14,8 @@ export interface StoredEvent {
 export interface AppendCommand {
   event: unknown;
   expectedSequence: number;
+  /** Stop retries when the caller's access check expires. Use performance.now(). */
+  deadline?: number;
   /** Check this subject through expectedSequence and find no earlier matching command. */
   historyChecked?: true;
   /** Check the whole category, such as member-*, instead of one entity. */
@@ -53,7 +55,8 @@ export function validateCommand(
     !parsed.success ||
     !Number.isSafeInteger(command.expectedSequence) ||
     command.expectedSequence < 0 ||
-    !validHistoryChecked(command.historyChecked)
+    !validHistoryChecked(command.historyChecked) ||
+    !validDeadline(command.deadline)
   ) {
     return undefined;
   }
@@ -110,6 +113,11 @@ function validCurrentMemoryWrite(event: EventEnvelope): boolean {
   const expectedKeyId = `key:${keyHash.digest('hex')}`;
   const written = memoryWrittenEventSchema.parse(event);
   return written.data.keyId === expectedKeyId;
+}
+
+function validDeadline(deadline: number | undefined): boolean {
+  if (deadline === undefined) return true;
+  return Number.isFinite(deadline) && deadline >= 0;
 }
 
 function validHistoryChecked(value: unknown): boolean {

@@ -74,6 +74,9 @@ export { memberPageQuerySchema, memberHeaderSchema, memberDirectoryRowSchema,
   memberDetailSchema, memberDirectorySchema } from './members.ts';
 export { invitationEmailInputSchema, invitationEmailSchema } from './members.ts';
 export {
+  modelAccessCommandSchema,
+  modelAccessReceiptSchema,
+  modelAccessChangeSchema,
   modelAccessGrantSchema,
   modelAccessResponseSchema,
   modelAccessCandidatesQuerySchema,

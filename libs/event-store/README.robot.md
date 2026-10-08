@@ -45,6 +45,8 @@ memory events so their unknown ownership can stay quarantined during replay.
 expected subject sequence, `rejected` for invalid input or an unrelated
 duplicate id, or `unavailable` after bounded backoff. Timeouts and server
 unavailability retry for ten seconds; its history reads share that deadline.
+An optional append `deadline` uses `performance.now()` and can shorten that limit.
+An expired deadline stops further attempts and returns unavailable.
 It preserves the original expectation: callers reload and revalidate on
 conflict. Unexpected configuration/permission/corruption errors throw with
 the original cause. The `unavailable.cause` is internal diagnostic data;

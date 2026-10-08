@@ -1,10 +1,11 @@
+import { z } from 'zod';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import { createLogger } from '@opencrane/observability';
-import { modelAccessCandidatesResponseSchema, modelAccessResponseSchema } from '@opencrane/protocol';
+import { modelAccessCandidatesResponseSchema, modelAccessResponseSchema, modelAccessReceiptSchema } from '@opencrane/protocol';
 import { models } from '@opencrane/models';
 import { groups, members, modelAccess, pgDb, ProjectionRunner,
   rebuildModelAccessProjection } from '@opencrane/projections';
@@ -364,6 +365,9 @@ it('keeps reads in the silo and offers joined members only',
 async function adminsMayReadButRemovedAndDemotedCallersMayNot() {
   const adminResponse = await request('/api/org/models/gpt-6-luna/access', 'idp-admin');
   expect(adminResponse.statusCode).toBe(200);
+  const saved = await writeAccess(changeBody('admin-allowed'), 'idp-admin', 'org-acme',
+    'https://app.example.test', 'gpt-5.6-sol');
+  expect(saved.statusCode).toBe(200);
 
   await append('member-admin', 'member.role_changed', {
     memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
@@ -411,8 +415,9 @@ async function iamFailureAndUnappliedMembershipReturn503() {
     },
   });
   const unavailable = await unavailableApp.inject({
-    method: 'GET', url: '/api/org/models/gpt-6-luna/access',
-    headers: { cookie: `${config.cookieName}=${encodeSession(config, {
+    method: 'POST', url: '/api/org/models/gpt-6-sol/access',
+    payload: changeBody('iam-unavailable'),
+    headers: { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(config, {
       sub: 'idp-owner', orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000,
     })}` },
   });
@@ -431,6 +436,10 @@ async function iamFailureAndUnappliedMembershipReturn503() {
   const applying = await request('/api/org/models/gpt-6-luna/access', 'idp-unapplied');
   expect(applying.statusCode).toBe(503);
   expect(applying.json()).toEqual({ status: 'unavailable' });
+  const before = await nats.store.head();
+  const applyingWrite = await writeAccess(changeBody('unapplied-write'), 'idp-unapplied');
+  expect(applyingWrite.statusCode).toBe(503);
+  expect(await nats.store.head()).toBe(before);
 }
 it('returns no data when IAM is unavailable or a membership change is unapplied',
   iamFailureAndUnappliedMembershipReturn503);
@@ -512,6 +521,218 @@ async function ordinaryMemberCannotReadModelAccessOrCandidates() {
 }
 it('a member cannot read model access by spoofing an owner session role',
   ordinaryMemberCannotReadModelAccessOrCandidates);
+
+function changeBody(commandId: string, action = 'grant', granteeKind = 'member',
+  granteeId = 'bob', expectedSequence = 0) {
+  return { commandId, action, granteeKind, granteeId, expectedSequence };
+}
+
+function writeAccess(body: Record<string, unknown>, sub = 'idp-owner',
+  orgId = 'org-acme', origin = 'https://app.example.test', modelId = 'gpt-6-sol') {
+  return app.inject({ method: 'POST', url: `/api/org/models/${modelId}/access`, payload: body,
+    headers: { origin, cookie: `${config.cookieName}=${encodeSession(config, {
+      sub, orgId, roles: ['owner'], authTime: 1790856000, exp: 2000000000,
+    })}` } });
+}
+
+async function savesOneGrantAndRecoversTheOriginalReceipt() {
+  const before = await nats.store.head(grantStream('model', 'gpt-6-sol'));
+  const body = changeBody('save-one', 'grant', 'member', 'bob', before);
+  const saved = await writeAccess(body);
+  expect(saved.statusCode).toBe(200);
+  const savedReceipt = modelAccessReceiptSchema.parse(saved.json());
+  expect(saved.json()).toMatchObject({ status: 'appended', commandId: 'save-one',
+    modelId: 'gpt-6-sol', operation: 'grant.given' });
+  const repeated = await writeAccess(body);
+  expect(repeated.json()).toEqual(saved.json());
+  const status = await request('/api/org/models/gpt-6-sol/access/changes/save-one');
+  expect(status.json()).toMatchObject({ ...saved.json(),
+    projection: { content: 'applying', iam: 'applying' } });
+  for await (const row of nats.store.readStream(grantStream('model', 'gpt-6-sol'))) {
+    await auth.handler.handle(row.event, database);
+  }
+  await runner.run(modelAccess);
+  const current = await request('/api/org/models/gpt-6-sol/access/changes/save-one');
+  expect(current.json()).toMatchObject({ projection: { content: 'current', iam: 'current' } });
+  expect((await auth.use('person', 'bob', 'model', 'gpt-6-sol')).allowed).toBe(true);
+  const foreignBinding = await createStore(fga.apiUrl, 'other-silo');
+  const foreignAuth = memberAuthorisation(foreignBinding);
+  expect((await foreignAuth.use('person', 'bob', 'model', 'gpt-6-sol')).allowed).toBe(false);
+  expect((await auth.use('assistant', 'bob-assistant', 'model', 'gpt-6-luna')).allowed).toBe(true);
+  expect((await foreignAuth.use('assistant', 'bob-assistant', 'model', 'gpt-6-luna')).allowed)
+    .toBe(false);
+  const moved = await writeAccess({ ...body, expectedSequence: savedReceipt.sequence });
+  expect(moved.statusCode).toBe(409);
+  const changed = await writeAccess({ ...body, granteeId: 'owner' });
+  expect(changed.statusCode).toBe(409);
+  expect(await nats.store.head(grantStream('model', 'gpt-6-sol'))).toBe(savedReceipt.sequence);
+}
+it('saves one grant and recovers its original receipt without another write',
+  savesOneGrantAndRecoversTheOriginalReceipt);
+
+const refusedChanges = [
+  ['wrong role', 'idp-bob', 'org-acme', 'https://app.example.test', {}, 403],
+  ['departed admin', 'idp-removed', 'org-acme', 'https://app.example.test', {}, 403],
+  ['other organisation', 'idp-owner', 'org-other', 'https://app.example.test', {}, 403],
+  ['wrong Origin', 'idp-owner', 'org-acme', 'https://app.example.test.evil', {}, 403],
+  ['missing Origin', 'idp-owner', 'org-acme', '', {}, 403],
+  ['body id mismatch', 'idp-owner', 'org-acme', 'https://app.example.test',
+    { modelId: 'gpt-6-luna' }, 400],
+  ['other silo member', 'idp-owner', 'org-acme', 'https://app.example.test',
+    { granteeId: 'foreign' }, 403],
+  ['other silo group', 'idp-owner', 'org-acme', 'https://app.example.test',
+    { granteeKind: 'team', granteeId: 'foreign-team' }, 403],
+  ['other silo assistant', 'idp-owner', 'org-acme', 'https://app.example.test',
+    { granteeKind: 'assistant', granteeId: 'foreign-assistant' }, 403],
+  ['oversized body', 'idp-owner', 'org-acme', 'https://app.example.test',
+    { granteeId: 'x'.repeat(2048) }, 413],
+  ['removed target', 'idp-owner', 'org-acme', 'https://app.example.test',
+    { granteeId: 'removed' }, 403],
+] as const;
+async function refusesChange(name: string, sub: string, org: string, origin: string,
+  extra: Record<string, unknown>, code: number) {
+  const before = await nats.store.head();
+  const expected = await nats.store.head(grantStream('model', 'gpt-6-sol'));
+  const body = { ...changeBody(`refuse-${name.replaceAll(' ', '-')}`, 'grant', 'member', 'bob', expected), ...extra };
+  const response = await writeAccess(body, sub, org, origin);
+  expect(response.statusCode).toBe(code);
+  if (code !== 413) expect(response.json()).toEqual({ status: 'refused' });
+  expect(await nats.store.head()).toBe(before);
+  const hidden = await request('/api/org/models/gpt-6-sol/access/changes/save-one', sub, org);
+  if (sub !== 'idp-owner' || org !== 'org-acme') expect(hidden.statusCode).toBe(403);
+}
+it.each(refusedChanges)('refuses %s without writing', refusesChange);
+
+async function refusesDemotionDuringTheWrite() {
+  await append('member-admin', 'member.role_changed', {
+    memberId: 'admin', previousRole: 'member', newRole: 'admin', changedBy: 'owner',
+  });
+  const read = nats.store.readStream.bind(nats.store);
+  nats.store.readStream = async function* readWithDemotion(subject, from, deadline) {
+    if (subject === 'member-bob') {
+      await append('member-admin', 'member.role_changed', {
+        memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner',
+      });
+    }
+    yield* read(subject, from, deadline);
+  };
+  try {
+    const expected = await nats.store.head(grantStream('model', 'gpt-6-sol'));
+    const response = await writeAccess(changeBody('demoted', 'grant', 'member', 'bob', expected),
+      'idp-admin');
+    expect(await nats.store.head(grantStream('model', 'gpt-6-sol'))).toBe(expected);
+    expect(response.statusCode).toBe(403);
+  } finally {
+    nats.store.readStream = read;
+  }
+}
+it('refuses an admin demoted during a write', refusesDemotionDuringTheWrite);
+
+async function revokesOnlyTheChosenKindAndKeepsDefaultRevocation() {
+  await append('team-bob', 'team.created', { teamId: 'bob', name: 'Bob group', createdBy: 'owner' });
+  await append('team-bob', 'team.member_added', { teamId: 'bob', memberId: 'owner', addedBy: 'owner' });
+  await append('assistant-bob', 'assistant.created', {
+    assistantId: 'bob', ownerId: 'owner', kind: 'personal',
+  });
+  for (const granteeKind of ['member', 'team', 'assistant']) {
+    await append(grantStream('model', 'gpt-6-astra'), 'grant.given', {
+      resourceType: 'model', resourceId: 'gpt-6-astra', granteeId: 'bob',
+      granteeKind, grantedBy: 'installation',
+    });
+  }
+  const expected = await nats.store.head(grantStream('model', 'gpt-6-astra'));
+  const body = changeBody('revoke-default', 'revoke', 'member', 'bob', expected);
+  const saved = await writeAccess(body, 'idp-owner', 'org-acme', 'https://app.example.test',
+    'gpt-6-astra');
+  expect(saved.statusCode).toBe(200);
+  for await (const row of nats.store.readStream(grantStream('model', 'gpt-6-astra'))) {
+    await auth.handler.handle(row.event, database);
+  }
+  expect((await auth.use('person', 'bob', 'model', 'gpt-6-astra')).allowed).toBe(false);
+  expect((await auth.use('person', 'owner', 'model', 'gpt-6-astra')).allowed).toBe(true);
+  expect((await auth.use('assistant', 'bob', 'model', 'gpt-6-astra')).allowed).toBe(true);
+  await runner.run(groups);
+  await runner.run(modelAccess);
+  const access = await request('/api/org/models/gpt-6-astra/access');
+  const result = modelAccessResponseSchema.parse(access.json());
+  expect(result.grants).toContainEqual(expect.objectContaining({
+    granteeKind: 'team', granteeId: 'bob', state: 'granted',
+  }));
+  await append(grantStream('model', 'gpt-6-astra'), 'grant.revoked', {
+    resourceType: 'model', resourceId: 'gpt-6-astra', granteeId: 'bob', revokedBy: 'owner',
+  });
+  expect((await auth.use('person', 'owner', 'model', 'gpt-6-astra')).allowed).toBe(false);
+  expect((await auth.use('assistant', 'bob', 'model', 'gpt-6-astra')).allowed).toBe(false);
+}
+it('revokes a starting grant without removing matching group and assistant grants',
+  revokesOnlyTheChosenKindAndKeepsDefaultRevocation);
+
+async function concurrentGrantAndRevokeHaveOneResult(mode: string) {
+  const original = nats.store.append.bind(nats.store);
+  let arrive = 0;
+  const bothArrived = Promise.withResolvers<void>();
+  nats.store.append = async function appendTogether(command) {
+    const parsed = z.object({ subject: z.string() }).parse(command.event);
+    if (parsed.subject === grantStream('model', 'gpt-6-sol')) {
+      expect(command.historyChecked).toBe(true);
+      arrive++;
+      if (arrive === 2) bothArrived.resolve();
+      await bothArrived.promise;
+    }
+    return original(command);
+  };
+  try {
+    const expected = await nats.store.head(grantStream('model', 'gpt-6-sol'));
+    const commandId = `concurrent-${mode}`;
+    const first = changeBody(commandId, 'grant', 'member', 'bob', expected);
+    const secondId = mode === 'separate' ? 'concurrent-revoke' : commandId;
+    const action = mode === 'repeat' ? 'grant' : 'revoke';
+    const second = changeBody(secondId, action, 'member', 'bob', expected);
+    const grant = writeAccess(first);
+    const revoke = writeAccess(second);
+    const replies = await Promise.all([grant, revoke]);
+    const codes = replies.map(responseCode);
+    codes.sort();
+    expect(codes).toEqual(mode === 'repeat' ? [200, 200] : [200, 409]);
+    if (mode === 'repeat') expect(replies[0]?.json()).toEqual(replies[1]?.json());
+    const statusGrant = await request(`/api/org/models/gpt-6-sol/access/changes/${commandId}`);
+    const statusRevoke = await request(`/api/org/models/gpt-6-sol/access/changes/${secondId}`);
+    const statuses = [statusGrant.statusCode, statusRevoke.statusCode];
+    statuses.sort();
+    expect(statuses).toEqual(mode === 'separate' ? [200, 404] : [200, 200]);
+  } finally {
+    nats.store.append = original;
+  }
+}
+function responseCode(response: { statusCode: number }) {
+  return response.statusCode;
+}
+it.each(['separate', 'repeat', 'changed'])('concurrent commands keep one original receipt (%s)',
+  concurrentGrantAndRevokeHaveOneResult);
+
+async function aLostReplyStaysUnknownUntilGetFindsTheChange() {
+  const original = nats.store.append.bind(nats.store);
+  const expected = await nats.store.head(grantStream('model', 'gpt-6-sol'));
+  nats.store.append = async function loseReply(command) {
+    await original(command);
+    throw new Error('Reply lost after append');
+  };
+  try {
+    const body = changeBody('lost-reply', 'grant', 'member', 'bob', expected);
+    const unknown = await writeAccess(body);
+    expect(unknown.statusCode).toBe(503);
+    expect(unknown.json()).toEqual({ status: 'unknown' });
+    const status = await request('/api/org/models/gpt-6-sol/access/changes/lost-reply');
+    expect(status.json()).toMatchObject({ status: 'appended', commandId: 'lost-reply' });
+    const missing = await request('/api/org/models/gpt-6-sol/access/changes/not-saved');
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ status: 'unknown' });
+  } finally {
+    nats.store.append = original;
+  }
+}
+it('a lost append reply is unknown and GET finds the original change',
+  aLostReplyStaysUnknownUntilGetFindsTheChange);
 
 async function aReadUsesTheAuthorityCheckedWhenItStarted() {
   let startGrantRead!: () => void;

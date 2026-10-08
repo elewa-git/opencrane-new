@@ -1,6 +1,8 @@
-import { afterEach, expect, it } from "vitest";
+import { TimeoutError } from '@nats-io/transport-node';
+import { EventStore } from '../src/index.ts';
+import { afterEach, expect, it, vi } from "vitest";
 import { setTimeout as delay } from "node:timers/promises";
-import { JetStreamApiError, jetstreamManager } from "@nats-io/jetstream";
+import { JetStreamApiError, jetstream, jetstreamManager } from "@nats-io/jetstream";
 import { event, natsFixture } from "./testing.ts";
 
 let fixture: Awaited<ReturnType<typeof natsFixture>>;
@@ -304,3 +306,29 @@ it("retries no-responder failures through recovery and the full deadline", async
 // The checks above keep the retry window strict. This limit also covers fixture
 // setup and three real NATS process starts on a busy machine.
 }, 45_000);
+
+async function stopsRetriesAtTheCallerDeadline() {
+  fixture = await natsFixture();
+  const client = jetstream(fixture.connection);
+  const manager = await jetstreamManager(fixture.connection);
+  const store = new EventStore(client, manager);
+  const started = performance.now();
+  const clock = vi.spyOn(performance, 'now').mockReturnValue(started);
+  let attempts = 0;
+  function failPublish(): Promise<never> {
+    attempts++;
+    clock.mockReturnValue(started + attempts * 2001);
+    return Promise.reject(new TimeoutError());
+  }
+  client.publish = failPublish;
+  try {
+    const result = await store.append({ event: event('expired-grant'), expectedSequence: 0,
+      historyChecked: true, deadline: started + 2000 });
+    expect(result.status).toBe('unavailable');
+    expect(attempts).toBe(1);
+  } finally {
+    clock.mockRestore();
+  }
+  expect(await fixture.store.head()).toBe(0);
+}
+it('stops append retries at the caller access deadline', stopsRetriesAtTheCallerDeadline);

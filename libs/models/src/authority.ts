@@ -75,7 +75,10 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
     if (event.type === 'grant.given' && d['granteeKind'] === 'team') {
       grants.set(String(d['granteeId']), d);
     }
-    if (event.type === 'grant.revoked') grants.delete(String(d['granteeId']));
+    if (event.type === 'grant.revoked' &&
+        (d['granteeKind'] === undefined || d['granteeKind'] === 'team')) {
+      grants.delete(String(d['granteeId']));
+    }
   }
   for (const d of grants.values()) if (d['granteeKind'] === 'team') teams.add(`team-${String(d['granteeId'])}`);
   return teams;
@@ -84,13 +87,13 @@ function authorityTeams(rows: StoredEvent[], silo: string) {
 function grantReceiptGrantees(rows: StoredEvent[], requester: string, assistant: string,
   forDecision: boolean) {
   if (!forDecision) return undefined;
-  const grantees = new Set([requester, assistant]);
+  const grantees = new Set([`member-${requester}`, `assistant-${assistant}`]);
   for (const { event } of rows) {
     const fields = data(event);
     // Keep teams whose grants were revoked too. The permissions service may
     // still allow the old grant until it applies the revocation.
     if (event.type === 'grant.given' && fields['granteeKind'] === 'team') {
-      grantees.add(String(fields['granteeId']));
+      grantees.add(`team-${String(fields['granteeId'])}`);
     }
   }
   return grantees;
@@ -120,7 +123,7 @@ function relevantGrant(event: EventEnvelope, resourceType: string, resourceId: s
   if (!event.type.startsWith('grant.')) return false;
   const fields = data(event);
   if (fields['resourceType'] !== resourceType || fields['resourceId'] !== resourceId) return false;
-  if (decisionGrantees && !decisionGrantees.has(String(fields['granteeId']))) return false;
+  if (decisionGrantees && !matchesGrantKind(fields, decisionGrantees)) return false;
   return true;
 }
 
@@ -241,7 +244,7 @@ function changesChatAccess(subject: string, type: string) {
 /** Keep other callers strict; only decisions can ignore unrelated access events. */
 export async function decisionAuthorityFence(store: EventStore, started: number,
   subjects: string[], requesterId: string, assistantId: string) {
-  const grantees = new Set([requesterId, assistantId]);
+  const grantees = new Set([`member-${requesterId}`, `assistant-${assistantId}`]);
   async function checkDecisionChanges(store: Pick<EventStore, 'readStream'>, subject: string, from: number,
     to: number, deadline: number) {
     for await (const row of store.readStream(subject, from, deadline)) {
@@ -258,7 +261,7 @@ export async function decisionAuthorityFence(store: EventStore, started: number,
     includeSubjects(...subjects);
     for (const subject of subjects) {
       // Remember team ids so revocations without granteeKind still refuse this call.
-      if (subject.startsWith('team-')) grantees.add(subject.slice('team-'.length));
+      if (subject.startsWith('team-')) grantees.add(subject);
     }
   }
   const snapshot = { include, head: authority.fresh.head, deadline: authority.fresh.deadline };
@@ -270,7 +273,7 @@ function unrelatedDecisionEvent(event: EventEnvelope, requesterId: string,
   const fields = data(event);
   if (event.type === 'grant.given' || event.type === 'grant.revoked') {
     // Refuse team grant changes because they may alter this person's access.
-    return fields['granteeKind'] !== 'team' && !grantees.has(String(fields['granteeId']));
+    return fields['granteeKind'] !== 'team' && !matchesGrantKind(fields, grantees);
   }
   if (event.subject.startsWith('ownership-')) {
     const changesOwner = ['ownership.transferred', 'ownership.stepped_down'].includes(event.type);
@@ -282,6 +285,19 @@ function unrelatedDecisionEvent(event: EventEnvelope, requesterId: string,
   if (event.subject.startsWith('team-')) {
     const changesMembership = ['team.member_added', 'team.member_removed'].includes(event.type);
     return changesMembership && fields['memberId'] !== requesterId;
+  }
+  return false;
+}
+
+function matchesGrantKind(fields: Record<string, unknown>, grantees: Set<string>) {
+  const id = String(fields['granteeId']);
+  const kind = fields['granteeKind'];
+  if (typeof kind === 'string') {
+    return grantees.has(`${kind}-${id}`);
+  }
+  if (kind !== undefined) return false;
+  for (const kind of ['member', 'team', 'assistant']) {
+    if (grantees.has(`${kind}-${id}`)) return true;
   }
   return false;
 }

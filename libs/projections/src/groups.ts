@@ -77,7 +77,7 @@ async function applyAccess(db: Query, table: string, event: EventEnvelope) {
     resourceType: z.string(), resourceId: z.string(),
   });
   const data = schema.parse(event.data);
-  if (event.type === 'grant.given' && data.granteeKind !== 'team') return;
+  if (data.granteeKind !== undefined && data.granteeKind !== 'team') return;
   const parameters = [event.silo, data.granteeId, data.resourceType, data.resourceId];
   await db.query(`DELETE FROM ${table} WHERE silo = $1 AND group_id = $2
     AND resource_type = $3 AND resource_id = $4 AND relation = 'use'`, parameters);

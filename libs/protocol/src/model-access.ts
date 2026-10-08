@@ -62,3 +62,28 @@ export const modelAccessCandidatesResponseSchema = z.object({
 
 export type ModelAccessResponse = z.infer<typeof modelAccessResponseSchema>;
 export type ModelAccessCandidatesResponse = z.infer<typeof modelAccessCandidatesResponseSchema>;
+
+export const modelAccessCommandSchema = z.object({
+  commandId: id,
+  expectedSequence: z.int().nonnegative(),
+  action: z.enum(['grant', 'revoke']),
+  granteeKind: kind,
+  granteeId: id,
+}).strict();
+
+export const modelAccessReceiptSchema = z.object({
+  status: z.literal('appended'),
+  modelId,
+  commandId: id,
+  operation: z.enum(['grant.given', 'grant.revoked']),
+  sequence: z.int().positive(),
+  changeId: id,
+}).strict();
+
+export const modelAccessChangeSchema = modelAccessReceiptSchema.extend({
+  currentSequence: z.int().nonnegative(),
+  projection: z.object({
+    content: z.enum(['current', 'applying']),
+    iam: z.enum(['current', 'applying']),
+  }).strict(),
+}).strict();

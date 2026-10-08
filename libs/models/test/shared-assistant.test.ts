@@ -1,6 +1,7 @@
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { grantStream } from '@opencrane/authz';
+import { history, modelGrantHandler } from '../src/index.ts';
 import { fixture } from './fixture.ts';
 
 async function keepsConcurrentTokensSeparate() {
@@ -94,9 +95,23 @@ async function fencesGroupGrantWithMatchingAssistantId() {
   const originalAppend = setup.nats.store.append.bind(setup.nats.store);
   try {
     const revoked = await setup.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
-      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'alice',
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice',
+      granteeKind: 'member', revokedBy: 'alice',
     });
     await setup.auth.handler.handle(revoked, setup.db);
+    const trigger = await setup.append('assistant-alice', 'assistant.created', {
+      assistantId: 'alice', ownerId: 'alice', kind: 'personal',
+    });
+    await modelGrantHandler(setup.nats.store).handle(trigger, setup.db);
+    const grantRows = await history(setup.nats.store, grantStream('model', 'gpt-6-luna'), 'test');
+    for (const row of grantRows) {
+      await setup.auth.handler.handle(row.event, setup.db);
+    }
+    expect((await setup.auth.use('assistant', 'alice', 'model', 'gpt-6-luna')).allowed).toBe(true);
+    const members = await history(setup.nats.store, 'member-alice', 'test');
+    await modelGrantHandler(setup.nats.store).handle(members[0]!.event, setup.db);
+    expect(await setup.nats.store.head(grantStream('model', 'gpt-6-luna')))
+      .toBe(grantRows.at(-1)?.sequence);
     await setup.append('team-assistant', 'team.created', {
       teamId: 'assistant', name: 'Model users', createdBy: 'alice',
     });
@@ -110,6 +125,11 @@ async function fencesGroupGrantWithMatchingAssistantId() {
       });
       await setup.auth.handler.handle(given, setup.db);
     }
+    const revokePerson = await setup.append(grantStream('model', 'gpt-6-luna'), 'grant.revoked', {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'assistant',
+      granteeKind: 'member', revokedBy: 'alice',
+    });
+    await setup.auth.handler.handle(revokePerson, setup.db);
     async function removeAfterAllow(command: Parameters<typeof originalAppend>[0]) {
       const result = await originalAppend(command);
       const allowAudit = z.object({
@@ -138,15 +158,21 @@ it('fences a group resource grant even when an assistant grant with the same id 
   fencesGroupGrantWithMatchingAssistantId, 60_000);
 
 async function refusesMissingOrDifferentAssistantPayer() {
-  for (const assistantPayer of [null, 'support']) {
+  for (const assistantPayer of [null, 'support', 'sales']) {
     const setup = await fixture(2000, 20000, false, 'gpt-6-luna', true, 'manual', assistantPayer);
     try {
+      if (assistantPayer === 'sales') {
+        await setup.append('team-sales', 'team.member_removed', {
+          teamId: 'sales', memberId: 'alice', removedBy: 'alice',
+        });
+      }
       expect((await setup.call()).status).toBe(403);
+      expect(setup.actor.state.reservations).toHaveLength(0);
       expect(setup.received()).toBe(0);
     } finally {
       await setup.close();
     }
   }
 }
-it('refuses a team model call when its assistant has no payer or a different payer',
+it('grants never allow a model call without requester membership and the assistant paying group',
   refusesMissingOrDifferentAssistantPayer, 60_000);
