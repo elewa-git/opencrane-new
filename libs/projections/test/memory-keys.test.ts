@@ -232,3 +232,11 @@ function eventIdFormat() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('memory event ids use the allowed format', eventIdFormat);
+
+function commandIdFormat() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const invalid = { ...event, commandId: 'command:invalid' };
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('memory command ids use the allowed format', commandIdFormat);
