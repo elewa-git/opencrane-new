@@ -1,0 +1,22 @@
+{
+  "result": "PASS",
+  "measuredAt": "2026-10-08T22:13:13.944Z",
+  "version": "codex-cli 0.159.2",
+  "image": "ocn-p3-5-pr5-computer",
+  "imageDigest": "sha256:fcfd63950adfa171dc33db4525b4d035748dd9e5032af9f075001f65156c5875",
+  "network": "none",
+  "model": "local stub",
+  "toolTimeoutSeconds": 1200,
+  "requestTimeoutMs": 1020000,
+  "holdMs": 960001,
+  "closedBeforeReply": false,
+  "completedTurns": [
+    {
+      "stage": "start",
+      "atMs": 962453,
+      "threadId": "01a11d93-e826-7c93-9335-0d237a53b487",
+      "status": "completed"
+    }
+  ],
+  "probeElapsedMs": 962454
+}

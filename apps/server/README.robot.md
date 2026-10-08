@@ -964,3 +964,36 @@ The sign-in callback limits the complete session cookie header to 3,800 bytes.
 Larger sessions return a clear 400 error and clear both cookies. Browser requests
 receive plain text for this error. Invalid session data, including an email longer
 than 320 characters, also fails sign-in before a session cookie is written.
+
+## Approval signals from computers
+
+The bridge accepts a strict `approval_waiting` message before parsing stored reports.
+It has a lower-case 64-hex `approvalId`, plus `conversationId` and `turnId` of
+1–200 characters. A socket keeps at most 64 waiting approvals. Repeated messages
+reuse the existing entry. Invalid messages and mismatched bindings are ignored.
+The saved request must name the link's assistant, the supplied approval id,
+conversation and turn before `readApproval` can expire or cancel it.
+
+The bridge polls each waiting entry independently, with a ten-second read limit.
+It reads the approval again when its approval stream or conversation stream moves,
+and when the saved expiry time arrives. A failed read retries next pass. An
+`approval_settled` message returns `approved`, `denied`, `expired`, `cancelled` or
+`outcome_unknown`, then removes the entry. Socket messages are never stored and
+never grant permission to send a tool call. The decision service checks each call.
+A reconnect starts with an empty map; the computer must announce its waits again.
+
+Deploy this server before a computer image sends `approval_waiting`. Older servers
+reject unknown messages and stop recovery for that computer. This first part of #46
+keeps the computer Allow-only and sends no approval signals. The next part
+adds held calls, server support checks, grant renewal and Ask tools with a review.
+
+Tests: `test/bridge-approvals.test.ts` uses real NATS and a real socket for the
+message route. It covers request bindings, saved states, reconnects, duplicate
+messages, changed conversations, expiry, failed reads and independent work.
+
+Local guard checks on 8 October 2026: PASS. The inert handler failed all 17
+initial tests before implementation. Sixteen separate mutations then failed
+their owning tests: the four saved request bindings, approval-id format, duplicate
+registration, duplicate reads, capacity, closed sockets, changed conversation and
+approval positions, quiet-read caching, expiry, saved state, strict message fields
+and the socket message route. Each mutation was restored before final checks.

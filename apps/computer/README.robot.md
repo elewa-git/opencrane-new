@@ -531,3 +531,40 @@ The image copies only the dependency-free tool text check from `libs/events`,
 under the repository's AGPL-3.0-or-later licence. It adds no third-party package.
 The bridge channel test checks that bad tool fields leave the socket open and
 later reports still arrive in order.
+
+## Approval hold measurement and deployment order
+
+On 8 October 2026, pinned Codex 0.159.2 kept a local MCP tool request open for
+**960,001 ms** (16 minutes), accepted the reply and completed the same turn.
+The computer image ran with `docker run --network none`; its model was a local
+stub. No paid model call was made. The local MCP listener used a 17-minute
+`requestTimeout` and Codex used `tool_timeout_sec: 1200`. The production proxy
+listener now also sets `requestTimeout` explicitly to 17 minutes.
+The [saved measurement](test/fixtures/codex-0.159.2-approval-hold.json) records
+the image digest, timing and completed turn. This measures Codex waiting for a
+stub MCP reply; the production proxy's approval-hold and release path is not
+built in this first part of #46. Its wire checks remain NOT RUN.
+
+The one-off probe used the local model and MCP handlers from
+`test/codex-mcp-resume.mjs`, with a single tool call and a 960,000 ms delayed
+reply. `--approval-hold` now repeats that delay in the standalone probe's
+`call_A` case. It does not run on each build and does not use `--wire`:
+
+```sh
+docker run --rm --network none \
+  -v "$PWD/apps/computer/test:/app/test:ro" \
+  --entrypoint node ocn-p3-5-pr5-computer \
+  --experimental-strip-types /app/test/codex-mcp-resume.mjs --approval-hold
+```
+
+The owner-changeable default for the follow-up is
+`APPROVAL_WAIT_LIMIT_MS = 900000` (15 minutes). The measured call did not end
+early, so there is no need to reduce that default.
+
+The server must be deployed before an image sends `approval_waiting`. Older
+servers reject unknown messages and stop recovery for that computer. This part
+keeps the computer Allow-only and sends no new socket messages. The follow-up
+must confirm server support before sending a wait signal, and answer a plain
+tool refusal with no send when support is absent. It must also renew the grant
+through `waitForGrant`, send approved held bytes once, and end holds before
+`turn/interrupt` and on release. Those behaviours are not claimed here.
