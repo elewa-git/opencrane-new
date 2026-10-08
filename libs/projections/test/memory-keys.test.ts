@@ -214,3 +214,13 @@ function subjectMismatch() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('a memory subject must match its scope', subjectMismatch);
+
+function foreignDependency() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const dependency = { scopeId: 'b'.repeat(64), memoryId: 'parent', revision: 1 };
+  const data = { ...event.data, dependsOn: [dependency] };
+  const invalid = { ...event, data };
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('memory dependencies stay in their scope', foreignDependency);
