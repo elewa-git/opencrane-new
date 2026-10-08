@@ -22,7 +22,7 @@ PostgreSQL, the database for the read tables.
 
 ```mermaid
 flowchart LR
-  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, tool attempts and computer state"]
+  ops["apps/ops<br/>workers"] -->|fills tables| projections["libs/projections<br/>read tables, model grants, tool attempts and computer state"]
   server["apps/server<br/>back end"] -->|reads tables| pg["PostgreSQL<br/>database"]
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
@@ -32,11 +32,13 @@ flowchart LR
 ## What it is responsible for
 
 - Turn ordered events into tables that the server can read.
+- Keep the latest model grant for each person, group or assistant, including revoked history.
+- Keep assistant names and personal owners' display names for access choices.
 - Copy tool progress and tool access decisions into each conversation's feed.
   Keep the call id so the page can match a decision to its tool call.
 - Save table changes and each worker's position together in one database step.
 - Rebuild tables from the event log. The replay command rebuilds members,
-  groups, model providers, budgets, the tool catalogue, computers and the
+  groups, model grants, model providers, budgets, the tool catalogue, computers and the
   history table while the system runs.
 - Store the per-conversation encryption keys used on the dev stack, so chat text
   is only saved in encrypted form.
@@ -54,7 +56,10 @@ Not built yet: storing those keys safely for real customers.
 2. **A computer starts, sleeps or recovers.** The worker saves its current state
    and the time of its last loss. Chat pages read this small record instead of reading
    all of the computer's past events.
-3. **An operator rebuilds a table.** They run `npm run replay -- members`. The
+3. **An admin reads model access.** The server reads grant facts and bounded
+   member, group or assistant choices from these tables. Missing provider choices
+   stay marked as not available yet.
+4. **An operator rebuilds a table.** They run `npm run replay -- members`. The
    command reads the whole event log again, builds fresh tables on the side and
    swaps them in. It does not run reactions or make outside calls.
 

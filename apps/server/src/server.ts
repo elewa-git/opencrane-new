@@ -3,6 +3,7 @@ import { registerInvitationEmail,
 import { registerOwnershipRoutes } from './members/ownership-routes.ts';
 import { registerMemberReads } from './members/read-routes.ts';
 import { registerProviderRoutes, type ProviderOptions } from './providers/routes.ts';
+import { registerModelAccessRoutes, type ModelAccessOptions } from './models/access-routes.ts';
 import { registerAssistantRoutes } from './assistants/routes.ts';
 import { registerScreenshots } from './computers/screenshots.ts';
 import { registerEffectRoutes } from './effects/routes.ts';
@@ -34,6 +35,7 @@ export interface BuildServerOptions {
   invitationEmail?: InvitationEmailOptions;
   ownership?: GroupOptions;
   providers?: ProviderOptions;
+  modelAccess?: ModelAccessOptions;
   audit?: AuditOptions;
   chat?: ChatOptions;
   files?: FileOptions;
@@ -75,6 +77,7 @@ export function buildServer(authConfig: AuthConfig, options: BuildServerOptions 
   registerInvitationEmail(app, authConfig, options.invitationEmail);
   registerOwnershipRoutes(app, authConfig, options.ownership);
   registerProviderRoutes(app, authConfig, options.providers);
+  registerModelAccessRoutes(app, authConfig, options.modelAccess);
 
   registerBootstrapRoutes(app, authConfig, options.membership);
   registerIntegrationRoutes(app, authConfig, options.integrations);

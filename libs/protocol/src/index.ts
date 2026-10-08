@@ -73,3 +73,12 @@ export { approvalReviewSchema, approvalCardsSchema, type ApprovalCard } from './
 export { memberPageQuerySchema, memberHeaderSchema, memberDirectoryRowSchema,
   memberDetailSchema, memberDirectorySchema } from './members.ts';
 export { invitationEmailInputSchema, invitationEmailSchema } from './members.ts';
+export {
+  modelAccessGrantSchema,
+  modelAccessResponseSchema,
+  modelAccessCandidatesQuerySchema,
+  modelAccessCandidateSchema,
+  modelAccessCandidatesResponseSchema,
+  type ModelAccessResponse,
+  type ModelAccessCandidatesResponse,
+} from './model-access.ts';

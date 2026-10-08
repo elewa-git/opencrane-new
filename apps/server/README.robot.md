@@ -901,3 +901,29 @@ invited person's account. Acceptance checks are described in the API contract.
 admission number. The member-history limit is 10,000 events. `test/groups.test.ts`
 covers existing ids, removed admissions, conflicting identities, duplicate bindings
 and both limits.
+
+## Model access reads
+
+`GET /api/org/models/:modelId/access` and
+`GET /api/org/models/:modelId/access/candidates` require a verified same-silo
+Owner or Admin. Session role claims do not grant access. Both replies use
+`cache-control: no-store`; denied reads contain no model or candidate data.
+
+The access response uses the `modelAccessResponseSchema` from
+`@opencrane/protocol`. It includes the model-grant stream position, current grant
+facts, direct/group/assistant source labels and registry support. It returns at
+most 100 grant rows and an exact `grantTotal`; the explanation section does not
+repeat those rows. A personal assistant uses its owner's display name followed by
+`personal assistant`. It reports
+provider binding, enabled-model, key and verification facts as not available yet.
+Configured assistant uses also remain not available yet until binding records
+exist. It does not read provider secrets or conversation history.
+
+Candidates require `kind=member|team|assistant`, accept `limit` from 1 to 100 and
+use the last returned id as the optional `after` cursor. Member choices include
+active members only. Group counts use current joined membership rows. Assistant
+choices use assistant creation events and contain no private conversation data.
+The response reports the oldest checkpoint among the member, group and model
+access tables. A lagging table is marked applying instead of being presented as
+current. Reads check authority once before loading their result; they do not keep
+a change watcher open while the result is assembled.
