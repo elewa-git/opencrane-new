@@ -258,3 +258,12 @@ function missingPrincipal() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('memory events require a principal', missingPrincipal);
+
+function ciphertextLimit() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const data = { ...event.data, ciphertext: 'A'.repeat(5504) };
+  const invalid = { ...event, data };
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('memory ciphertext cannot exceed 5500 characters', ciphertextLimit);
