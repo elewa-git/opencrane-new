@@ -19,7 +19,7 @@ flowchart LR
   stack -->|sets up test sign-in| zitadel["Zitadel<br/>development organisation"]
   stack -->|scans uploaded files| clamav["ClamAV<br/>file scanner"]
   stack -->|runs processes| apps["apps/server, ops, web<br/>OpenCrane programs"]
-  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>checks, Codex call fixtures and daily run"]
+  stack -->|runs checks, restores test budgets and runs daily| journeys["Journeys and timer<br/>browser checks, saved-data repeats and daily run"]
   infra --> devbox["infra/devbox<br/>machine setup and k3d cluster"]
   stack -->|uses local cluster| devbox
 ```
@@ -35,7 +35,7 @@ flowchart LR
   tool request shape. The thread id ties the call to its live chat turn. The call id
   links the tool's attempts and progress reports.
 - Check group management, direct chats, shared assistants and provider key saving in a fresh stack.
-- Give a spare journey stack room for one shared assistant computer alongside the existing checks.
+- Keep one extra computer place so a saved-data repeat can start a new shared assistant.
 - Measure reply arrival, process memory and open files during live-view checks.
 - Keep up to three separate development stacks on one machine.
 - Run a fresh stub-based check each day in a secondary stack and save its result outside the repository.

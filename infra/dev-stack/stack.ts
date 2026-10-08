@@ -231,16 +231,17 @@ async function provisionComputers(settings: Record<string, string>) {
     await run('kubectl', ['create', 'namespace', namespace]);
   }
   if (secondary) {
+    // Keep one extra disk so a repeat can retain saved data and start a new shared assistant.
     const quota = {
       apiVersion: 'v1',
       kind: 'ResourceQuota',
       metadata: { name: 'journey-limit', namespace },
       spec: {
         hard: {
-          pods: '5',
+          pods: '6',
           'limits.memory': '3Gi',
-          persistentvolumeclaims: '5',
-          'requests.storage': '5Gi',
+          persistentvolumeclaims: '6',
+          'requests.storage': '6Gi',
         },
       },
     };

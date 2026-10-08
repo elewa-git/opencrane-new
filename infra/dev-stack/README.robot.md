@@ -348,9 +348,9 @@ to answer. Each assertion is written to
 `docs/process/p4-journey/run-<attempt>.json`; screenshots sit beside this receipt in
 `run-<attempt>/`. Set `P4_JOURNEY_ATTEMPT` to keep the two fresh run receipts apart.
 
-The spare stack allows five computer pods and disks, with up to 3 GiB of memory
-and 5 GiB of disk requests. Its fifth place lets this journey start the shared
-assistant computer alongside the existing checks.
+The spare stack allows six computer pods and disks, with up to 3 GiB of memory
+and 6 GiB of disk requests. The sixth place lets a saved-data repeat start a new
+shared assistant computer while keeping the previous run's data.
 
 The ownership transfer check runs only when PR #262 is merged. A development event
 gives the signed-in test account the Owner role before the ownership screen opens.
