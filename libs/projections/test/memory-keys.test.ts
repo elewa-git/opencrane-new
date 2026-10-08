@@ -328,3 +328,32 @@ function flippedTagBit() {
   checkAlteredByte(12);
 }
 it('decrypt refuses a flipped tag bit', flippedTagBit);
+
+function scopeKindMismatch() {
+  function check(keys: ReturnType<typeof memoryKeys>) {
+    const current = currentIdentity();
+    const keyId = keys.provision(current);
+    const encrypted = keys.encrypt(current, 'Delivery instructions');
+    const altered = { ...current, scopeKind: 'group' as const };
+    function provision() {
+      keys.provision(altered);
+    }
+    function encrypt() {
+      keys.encrypt(altered, 'Delivery instructions');
+    }
+    function decrypt() {
+      keys.decrypt(altered, encrypted);
+    }
+    function remove() {
+      keys.delete(altered);
+    }
+    expect(provision).toThrow('Memory scope identity mismatch');
+    expect(encrypt).toThrow('Memory scope identity mismatch');
+    expect(decrypt).toThrow('Memory scope identity mismatch');
+    expect(remove).toThrow('Memory scope identity mismatch');
+    expect(keys.provision(current)).toBe(keyId);
+    expect(keys.decrypt(current, encrypted)).toBe('Delivery instructions');
+  }
+  withKeys(check);
+}
+it('changing only scopeKind refuses key operations', scopeKindMismatch);

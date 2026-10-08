@@ -41,3 +41,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **decrypt refuses a flipped tag bit**. Mutation: `libs/projections/src/memory-keys.ts`, replace `decipher.final()` with `Buffer.alloc(0)`. Expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "decrypt refuses a flipped tag bit"`.
+
+- **changing only scopeKind refuses key operations**. Mutation: `libs/projections/src/memory-keys.ts`, replace `if (checked.scopeId !== memoryScopeId(checked.silo, checked.scopeKind, checked.ownerId))` with `if (false)`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "changing only scopeKind refuses key operations"`.
