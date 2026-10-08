@@ -79,7 +79,7 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     step = 'password';
     await page.locator('input[type=password]').waitFor();
     if (selectRememberedAccount) {
-      const me = z.object({ authenticated: z.boolean() }).parse(await (await page.request.get(`${origin}/auth/me`)).json());
+      const me = await readAuthenticationState(page, origin);
       assert.equal(me.authenticated, false, 'Remembered account selection must not create a session without credentials');
     }
     await page.locator('input[type=password]').fill(await readFile(user.passwordFile, 'utf8'));
@@ -90,7 +90,7 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     if (transport === 'net::ERR_NETWORK_CHANGED' && attempt < 2) {
       console.log('Retry sign-in after browser network change');
       await delay(1000);
-      const me = z.object({ authenticated: z.boolean() }).parse(await (await page.request.get(`${origin}/auth/me`)).json());
+      const me = await readAuthenticationState(page, origin);
       // Credentials may have succeeded before the browser lost the return navigation.
       if (step === 'return' && me.authenticated) { await page.goto(origin); return; }
       page.off('requestfailed', failed);
@@ -115,6 +115,11 @@ async function login(page: Page, origin: string, user: User, selectRememberedAcc
     page.off('console', browserConsole);
     page.off('response', responseFailed);
   }
+}
+async function readAuthenticationState(page: Page, origin: string) {
+  const response = await page.request.get(`${origin}/auth/me`);
+  const body: unknown = await response.json();
+  return z.object({ authenticated: z.boolean() }).parse(body);
 }
 async function cookie(context: BrowserContext, config: AuthConfig, origin: string) {
   const session = (await context.cookies(origin)).find((item) => item.name === config.cookieName);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { once } from 'node:events';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { WebSocket } from 'ws';
@@ -46,31 +46,50 @@ const identities = new Map<string, { sub: string; cookie: string }>();
 const phase4Assertions: Phase4Assertion[] = [];
 const phase4Attempt = process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual';
 
-async function writePhase4Receipt() {
-  const receiptPath = `${root}/docs/process/p4-journey/run-${phase4Attempt}.json`;
-  await writeFile(receiptPath, JSON.stringify({
-    commit: (await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: root })).stdout.trim(),
+async function writePhase4Receipt(durationMs: number) {
+  const receiptDirectory = `${directory}/p4-journey/${phase4Attempt}`;
+  await mkdir(receiptDirectory, { recursive: true });
+  const receiptPath = `${receiptDirectory}/receipt.json`;
+  const commit = await currentCommit();
+  const receipt = {
+    commit,
     attempt: phase4Attempt,
     viewportWidths: [1280, 390],
+    durationMs,
     assertions: phase4Assertions,
-  }, null, 2) + '\n', { mode: 0o644 });
+  };
+  await writeFile(receiptPath, JSON.stringify(receipt, null, 2) + '\n', { mode: 0o600 });
 }
 
+async function currentCommit(): Promise<string> {
+  const result = await promisify(execFile)('git', ['rev-parse', 'HEAD'], { cwd: root });
+  return result.stdout.trim();
+}
 async function runPhase4Journey() {
   assert(browser, 'The Phase 4 journey needs real signed-in browser sessions');
+  const startedAt = performance.now();
+  let journeyFailure: unknown;
   try {
     await browserPhase4({ ownerPage: browser.ownerPage, memberPages: browser.memberPages,
       origin, directory, attempt: phase4Attempt, silo, modelStubPort: settings['MODEL_STUB_PORT']!,
-      ownershipMerged: process.env['P4_OWNERSHIP_MERGED'] === 'true',
+      secondaryStack: secondary,
       store: events.store, append, assertions: phase4Assertions });
   } catch (error) {
+    journeyFailure = error;
     phase4Assertions.push({ id: 'journey.execution', status: 'FAIL',
       statement: 'The browser checks did not all finish.',
       evidence: { reason: errorMessage(error) }, screenshots: [] });
-    throw error;
-  } finally {
-    await writePhase4Receipt();
   }
+  try {
+    await writePhase4Receipt(Math.round(performance.now() - startedAt));
+  } catch (receiptError) {
+    if (journeyFailure) {
+      throw new AggregateError([journeyFailure, receiptError],
+        'The journey failed and its private receipt could not be written.');
+    }
+    throw receiptError;
+  }
+  if (journeyFailure) throw journeyFailure;
   console.log(`PASS Phase 4 browser journey; receipt run-${phase4Attempt}.json`);
 }
 
@@ -324,7 +343,8 @@ try {
         computer!.assistant_id);
     }
   }
-  await runPhase4Journey();
+  const phase4Requested = process.env['P4_JOURNEY_ATTEMPT'] !== undefined;
+  if (secondary && browser && phase4Requested) await runPhase4Journey();
   for (const projection of ['members', 'mcp-catalogue']) {
     const result = await promisify(execFile)('npm', ['run', 'replay', '--', projection, '--verify'], {
       cwd: root, env: { ...base, ...await readEnv('projection') }, timeout: 60_000 });

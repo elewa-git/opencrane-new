@@ -2,12 +2,14 @@
 import assert from 'node:assert/strict';
 import { mkdir, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import type { Locator, Page, Request as BrowserRequest, Response as BrowserResponse }
   from 'playwright';
 import type { EventStore } from '@opencrane/event-store';
 import { grantStream } from '@opencrane/authz';
 import { models, ownershipSubject } from '@opencrane/models';
+import { modelForTask } from '@opencrane/models/routing';
 import { readEvents } from '@opencrane/projections';
 
 export type Phase4Status = 'PASS' | 'FAIL' | 'NOT PROVEN' | 'PAID / NOT RUN';
@@ -32,7 +34,7 @@ type BrowserPhase4Options = {
   attempt: string;
   silo: string;
   modelStubPort: string;
-  ownershipMerged: boolean;
+  secondaryStack: boolean;
   store: EventStore;
   append: AppendFixture;
   assertions: Phase4Assertion[];
@@ -49,7 +51,6 @@ type DirectConversation = {
   participantIds: string[];
 };
 
-const screenshotRoot = resolve('docs/process/p4-journey');
 const ownerId = 'zitadel-owner';
 const memberId = 'zitadel-member';
 const placeholderKey = 'journey-placeholder-not-a-provider-key';
@@ -58,18 +59,19 @@ export async function browserPhase4(options: BrowserPhase4Options): Promise<void
   const ownerPage = options.ownerPage;
   const memberMobile = findPage(options.memberPages, 390);
   const memberDesktop = findPage(options.memberPages, 1280);
-  const attemptDirectory = resolve(screenshotRoot, `run-${options.attempt}`);
+  const attemptDirectory = resolve(options.directory, 'p4-journey', options.attempt);
   await mkdir(attemptDirectory, { recursive: true });
-  addNonRunRows(options.assertions, options.attempt, options.ownershipMerged);
+  addNonRunRows(options.assertions, options.attempt);
 
   const group = await qualifyGroups(options, ownerPage, attemptDirectory);
-  await qualifySharedAssistant(options, ownerPage, memberMobile, memberDesktop,
+  const assistantId = await qualifySharedAssistant(options, ownerPage, memberMobile, memberDesktop,
     attemptDirectory, group);
-  await qualifyGroupRemoval(options, ownerPage, attemptDirectory, group);
+  await qualifyGroupRemoval(options, ownerPage, memberMobile, attemptDirectory, group,
+    assistantId);
   await qualifyDirectChat(options, ownerPage, memberMobile, memberDesktop,
     attemptDirectory);
   await qualifyProvider(options, ownerPage, attemptDirectory);
-  if (options.ownershipMerged) {
+  if (options.secondaryStack) {
     await qualifyOwnershipTransfer(options, ownerPage, attemptDirectory);
   }
 
@@ -90,15 +92,20 @@ async function qualifyGroups(
   page: Page,
   output: string,
 ): Promise<{ groupId: string; groupName: string; modelId: string }> {
-  const groupId = `journey-${crypto.randomUUID().replaceAll('-', '')}`;
-  const groupName = `Journey group ${options.attempt}`;
+  const uniqueName = randomUUID();
+  const groupName = `Journey group ${uniqueName}`;
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${options.origin}/org/people`);
   await page.getByRole('tab', { name: /Groups/ }).click();
   await page.locator('#group-search').waitFor();
+  const groupResponse = await page.request.get(`${options.origin}/api/groups`);
+  assert.equal(groupResponse.status(), 200);
+  const groupBody = await groupResponse.json() as { rows: GroupRow[] };
+  const groupListLoaded = await groupListMatchesServer(page, groupBody.rows);
   const listScreens = await captureAtBothWidths(page, output, 'groups-list');
-  record(options.assertions, 'groups.list', true,
-    'The Owner can open the groups list at 1280px and 390px.', {}, listScreens);
+  const groupListEvidence = { groupCount: groupBody.rows.length };
+  record(options.assertions, 'groups.list', groupListLoaded,
+    'The group page shows the names returned by the server.', groupListEvidence, listScreens);
 
   await page.locator('#group-search').fill('no group has this name');
   await page.getByRole('heading', { name: /No groups match/ }).waitFor();
@@ -113,16 +120,19 @@ async function qualifyGroups(
   const groupIdFromUrl = detailUrl.split('/').at(-1);
   assert(groupIdFromUrl);
   const createdScreens = await captureAtBothWidths(page, output, 'groups-created');
-  record(options.assertions, 'groups.create', true,
+  const createdEvidence = { groupId: groupIdFromUrl, groupName };
+  record(options.assertions, 'groups.create', await createdLink.isVisible(),
     'The Owner creates a local group and can open its detail page.',
-    { groupId: groupIdFromUrl, groupName }, createdScreens);
+    createdEvidence, createdScreens);
 
   await addMember(options, page, groupIdFromUrl);
   const modelId = currentModelId();
-  await options.append('grant.given', grantStream('model', modelId), {
+  // Keep this fixture: the server has no command for granting a model to a group.
+  const groupGrant = {
     resourceType: 'model', resourceId: modelId, granteeKind: 'team',
     granteeId: groupIdFromUrl, grantedBy: ownerId,
-  });
+  };
+  await options.append('grant.given', grantStream('model', modelId), groupGrant);
   await waitForGroup(page, groupIdFromUrl, hasGroupGrant.bind(null, modelId));
 
   await page.goto(`${options.origin}/org/people`);
@@ -131,27 +141,44 @@ async function qualifyGroups(
   const matchingGroupRow = page.locator('.group-row').filter({ hasText: groupName });
   await matchingGroupRow.waitFor();
   const searchScreens = await captureAtBothWidths(page, output, 'groups-search');
-  record(options.assertions, 'groups.search', true,
+  const searchEvidence = { groupName };
+  record(options.assertions, 'groups.search', await matchingGroupRow.isVisible(),
     'Searching by the new group name finds its row at 1280px and 390px.',
-    { groupName }, searchScreens);
+    searchEvidence, searchScreens);
 
   await page.goto(`${options.origin}${detailUrl}`);
   await page.getByRole('heading', { name: groupName, exact: true }).waitFor();
   const detailScreens = await captureAtBothWidths(page, output, 'groups-detail');
   const detailText = await page.locator('main').innerText();
+  const detailEvidence = { memberId, modelId };
   record(options.assertions, 'groups.detail',
     detailText.includes(memberId) && detailText.includes(modelId),
-    'Group detail shows the member and model grant.',
-    { memberId, modelId }, detailScreens);
+    'Group detail shows the member and model grant.', detailEvidence, detailScreens);
 
   return { groupId: groupIdFromUrl, groupName, modelId };
+}
+
+async function groupListMatchesServer(page: Page, groups: GroupRow[]): Promise<boolean> {
+  if (groups.length === 0) {
+    const emptyState = page.getByRole('heading', { name: 'No groups yet', exact: true });
+    await emptyState.waitFor({ state: 'visible' });
+    return await emptyState.isVisible();
+  }
+  for (const group of groups) {
+    const row = page.locator('.group-row').filter({ hasText: group.name });
+    await row.waitFor({ state: 'visible' });
+    if (!await row.isVisible()) return false;
+  }
+  return true;
 }
 
 async function qualifyGroupRemoval(
   options: BrowserPhase4Options,
   page: Page,
+  memberPage: Page,
   output: string,
   group: { groupId: string; groupName: string; modelId: string },
+  assistantId: string,
 ): Promise<void> {
   const groupId = group.groupId;
   const groupName = group.groupName;
@@ -161,16 +188,45 @@ async function qualifyGroupRemoval(
   const reviewText = await review.innerText();
   const reviewCopyIsClear = reviewText.includes('private conversations and memory')
     && reviewText.includes('within two seconds');
+  const reviewEvidence = {};
   record(options.assertions, 'groups.removal_review', reviewCopyIsClear,
-    'Removal review explains what access ends and when.', {}, reviewScreens);
+    'Removal review explains what access ends and when.', reviewEvidence, reviewScreens);
   await review.getByRole('button', { name: `Remove ${memberId} from ${groupName}` }).click();
   await page.getByText(`Removed ${memberId} from ${groupName}`).waitFor();
   await waitForGroup(page, groupId, memberIsAbsent);
+  const assistantIsHidden = await waitForAssistantToBeHidden(
+    memberPage, options.origin, assistantId,
+  );
   const removedScreens = await captureAtBothWidths(page, output, 'groups-removed');
-  record(options.assertions, 'groups.remove_member', true,
-    'The reviewed removal completes and the member is gone from the current group record.',
-    { removedMemberId: memberId }, removedScreens);
+  const removalEvidence = { removedMemberId: memberId,
+    sharedAssistantHidden: assistantIsHidden };
+  record(options.assertions, 'groups.remove_member', assistantIsHidden,
+    'The removed member no longer sees the shared assistant through the server.',
+    removalEvidence, removedScreens);
 
+}
+
+async function waitForAssistantToBeHidden(
+  page: Page,
+  origin: string,
+  assistantId: string,
+): Promise<boolean> {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    const response = await page.request.get(`${origin}/api/assistants`);
+    assert.equal(response.status(), 200);
+    const body = await response.json() as { rows: AssistantRow[] };
+    if (!body.rows.some(hasAssistantId.bind(null, assistantId))) return true;
+    await delay(250);
+  }
+  return false;
+}
+
+function hasAssistantId(
+  assistantId: string,
+  assistant: AssistantRow,
+): boolean {
+  return assistant.assistantId === assistantId;
 }
 
 async function addMember(
@@ -180,10 +236,14 @@ async function addMember(
 ): Promise<void> {
   const response = await page.request.post(`${options.origin}/api/groups/${groupId}`, {
     headers: { origin: options.origin },
-    data: { action: 'add', commandId: `journey-add-${crypto.randomUUID()}`, memberId },
+    data: addMemberCommand(),
   });
   assert.equal(response.status(), 200, 'The existing group command must add the seeded member');
   await waitForGroup(page, groupId, memberIsPresent);
+}
+
+function addMemberCommand(): Record<string, string> {
+  return { action: 'add', commandId: `journey-add-${randomUUID()}`, memberId };
 }
 
 async function waitForGroup(
@@ -225,13 +285,17 @@ function hasModelGrant(modelId: string, grant: GroupRow['access']['grants'][numb
 }
 
 function currentModelId(): string {
-  const activeModel = models.find(isActiveModel);
-  assert(activeModel, 'The model registry must contain an active model');
-  return activeModel.id;
+  const modelId = modelForTask('chat_turn');
+  const activeModel = models.find(matchesActiveModel.bind(null, modelId));
+  assert(activeModel, 'The chat turn model must be active in the model registry');
+  return modelId;
 }
 
-function isActiveModel(model: (typeof models)[number]): boolean {
-  return !model.retired;
+function matchesActiveModel(
+  modelId: string,
+  model: (typeof models)[number],
+): boolean {
+  return model.id === modelId && !model.retired;
 }
 
 async function openRemovalReviewAtBothWidths(
@@ -266,11 +330,11 @@ async function qualifySharedAssistant(
   memberDesktop: Page,
   output: string,
   group: { groupId: string; groupName: string; modelId: string },
-): Promise<void> {
+): Promise<string> {
   await ownerPage.setViewportSize({ width: 1280, height: 900 });
   await ownerPage.goto(`${options.origin}/org/people/groups/${group.groupId}/assistants/new`);
   await ownerPage.getByRole('heading', { name: 'Create a shared assistant' }).waitFor();
-  const assistantName = `Shared journey ${options.attempt}`;
+  const assistantName = `Shared journey ${randomUUID()}`;
   await ownerPage.locator('#assistant-name').fill(assistantName);
   const modelChoice = ownerPage.getByRole('checkbox', {
     name: `Model ${group.modelId}`,
@@ -279,20 +343,23 @@ async function qualifySharedAssistant(
   await modelChoice.check();
   const setupScreens = await captureAtBothWidths(ownerPage, output, 'shared-assistant-create');
   const setupText = await ownerPage.locator('main').innerText();
+  const setupEvidence = { groupName: group.groupName, payerGroup: group.groupId,
+    modelId: group.modelId };
   record(options.assertions, 'shared_assistant.admin_create',
     setupText.includes(group.groupName) && setupText.includes('Paying group')
       && setupText.includes('Memory is not included'),
     'The admin can choose this group, its payer and its model grant.',
-    { groupName: group.groupName, payerGroup: group.groupId, modelId: group.modelId }, setupScreens);
+    setupEvidence, setupScreens);
 
   await ownerPage.getByRole('button', { name: 'Review assistant' }).click();
   const review = ownerPage.getByRole('dialog');
   const reviewScreens = await captureAtBothWidths(ownerPage, output, 'shared-assistant-review');
   const reviewText = await review.innerText();
+  const assistantReviewEvidence = { payerGroup: group.groupId };
   record(options.assertions, 'shared_assistant.review',
     reviewText.includes('Fixed payer') && reviewText.includes(group.groupName),
     'The review names the fixed paying group before the assistant is created.',
-    { payerGroup: group.groupId }, reviewScreens);
+    assistantReviewEvidence, reviewScreens);
   const createRequestPromise = ownerPage.waitForRequest(isAssistantCreateRequest);
   const createResponsePromise = ownerPage.waitForResponse(isAssistantCreateResponse);
   await review.getByRole('button', { name: 'Create assistant', exact: true }).click();
@@ -301,13 +368,14 @@ async function qualifySharedAssistant(
   const createResponse = await createResponsePromise;
   const responseScreens = await captureAtBothWidths(ownerPage, output,
     'shared-assistant-create-response');
+  const createEvidence = { responseStatus: createResponse.status(),
+    assistantId: createCommand.assistantId, commandKeys: createCommand.keys,
+    hasStage: createCommand.keys.includes('stage'), groupId: createCommand.groupId,
+    payingGroupId: createCommand.payingGroupId, name: createCommand.name,
+    grantIds: createCommand.grantIds };
   record(options.assertions, 'shared_assistant.create_request', createResponse.status() === 200,
     'The server accepts the assistant create request from the review.',
-    { responseStatus: createResponse.status(), assistantId: createCommand.assistantId,
-      commandKeys: createCommand.keys, hasStage: createCommand.keys.includes('stage'),
-      groupId: createCommand.groupId, payingGroupId: createCommand.payingGroupId,
-      name: createCommand.name, grantIds: createCommand.grantIds },
-    responseScreens);
+    createEvidence, responseScreens);
   await waitForAssistantChangeToApply(ownerPage);
   const created = await waitForReadyAssistant(ownerPage, assistantName,
     createCommand.assistantId, options.store);
@@ -318,25 +386,32 @@ async function qualifySharedAssistant(
     && createdData.payingGroupId === group.groupId
     && createdData.name === assistantName
     && createdData.grants.some(hasSelectedModel.bind(null, group.modelId));
+  const createdEvidence = { assistantId: createCommand.assistantId,
+    payerGroup: createdData.payingGroupId, ownerGroup: createdData.ownerId,
+    creationMatchesReview: createdMatchesReview };
   record(options.assertions, 'shared_assistant.created', createdMatchesReview,
     'The saved assistant event names the owner group, payer, model and display name.',
-    { assistantId: createCommand.assistantId, payerGroup: createdData.payingGroupId,
-      ownerGroup: createdData.ownerId, creationMatchesReview: createdMatchesReview },
-    createdScreens);
-  record(options.assertions, 'shared_assistant.computer_ready_for_selection', true,
+    createdEvidence, createdScreens);
+  const readyEvidence = { assistantId: created.assistantId,
+    status: created.status ?? 'unknown' };
+  record(options.assertions, 'shared_assistant.computer_ready_for_selection',
+    created.status === 'ready',
     'The assistant appears in the member selection list after its computer record is ready.',
-    { assistantId: created.assistantId, status: created.status ?? 'unknown' }, createdScreens);
+    readyEvidence, createdScreens);
 
   await memberMobile.goto(`${options.origin}/workspace/shared`);
   await memberMobile.getByRole('button', {
     name: new RegExp(`Choose ${escapeRegExp(assistantName)}`),
   }).waitFor();
-  const eligibleScreens = await captureAtBothWidths(memberMobile, output, 'shared-assistant-choice');
+  const eligibleScreens = await captureAtBothWidths(
+    memberMobile, output, 'shared-assistant-choice',
+  );
   const pickerText = await memberMobile.locator('main').innerText();
+  const choiceEvidence = { assistantId: created.assistantId, assistantName };
   record(options.assertions, 'shared_assistant.member_choice',
     pickerText.includes('Private to you') && pickerText.includes('transcript is private'),
     'The member can choose the shared assistant for a private session.',
-    { assistantId: created.assistantId, assistantName }, eligibleScreens);
+    choiceEvidence, eligibleScreens);
 
   await memberMobile.getByRole('button', {
     name: new RegExp(`Choose ${escapeRegExp(assistantName)}`),
@@ -349,29 +424,52 @@ async function qualifySharedAssistant(
   const sessionCommand = readPrivateSessionCommand(sessionRequest);
   const sessionResponse = await sessionResponsePromise;
   const sessionStatus = sessionResponse.status();
+  const sessionEvidence = { assistantId: sessionCommand.assistantId,
+    payingGroupId: sessionCommand.payingGroupId,
+    conversationId: sessionCommand.conversationId, responseStatus: sessionStatus };
+  assert.equal(sessionStatus, 200, 'The server must record the private session');
+  await waitForPrivateSessionToApply(memberMobile);
   const sessionScreens = await captureAtBothWidths(memberMobile, output,
     'shared-assistant-session-response');
   record(options.assertions, 'shared_assistant.session_recorded', sessionStatus === 200,
     'The server records the member’s private session with this shared assistant.',
-    { assistantId: sessionCommand.assistantId, payingGroupId: sessionCommand.payingGroupId,
-      conversationId: sessionCommand.conversationId, responseStatus: sessionStatus },
-    sessionScreens);
-  assert.equal(sessionStatus, 200, 'The server must record the private session');
-  await waitForPrivateSessionToApply(memberMobile);
+    sessionEvidence, sessionScreens);
   const privateUrl = memberMobile.url();
-  const privateScreens = await captureAtBothWidths(memberMobile, output, 'shared-assistant-private-chat');
+  const prompt = `Private shared reply ${randomUUID()}`;
+  await memberMobile.getByRole('textbox', { name: 'Message your agent' }).fill(prompt);
+  await memberMobile.getByRole('button', { name: 'Send message', exact: true }).click();
+  await memberMobile.getByText(prompt, { exact: true }).waitFor();
+  await waitForSharedAssistantReply(memberMobile, output);
+  const privateScreens = await captureAtBothWidths(memberMobile, output,
+    'shared-assistant-private-chat');
   const privateText = await memberMobile.locator('main').innerText();
   const savedSession = await privateSessionEvent(options.store, options.silo,
     sessionCommand.conversationId);
   const savedSessionMatchesChoice = savedSession.createdBy === memberId
     && savedSession.assistantId === created.assistantId
     && savedSession.payingGroupId === group.groupId;
+  const privateChatEvidence = { assistantId: savedSession.assistantId,
+    payingGroupId: savedSession.payingGroupId, createdBy: savedSession.createdBy,
+    privateUrl };
   record(options.assertions, 'shared_assistant.private_chat',
-    privateText.includes('Private session') && savedSessionMatchesChoice,
-    'The selected assistant opens a private chat with the fixed paying group recorded.',
-    { assistantId: savedSession.assistantId, payingGroupId: savedSession.payingGroupId,
-      createdBy: savedSession.createdBy, privateUrl }, privateScreens);
+    privateText.includes('Private session') && privateText.includes(prompt)
+      && savedSessionMatchesChoice,
+    'The member loads a private chat, sends a prompt and sees a reply.',
+    privateChatEvidence, privateScreens);
+  return created.assistantId;
+}
 
+async function waitForSharedAssistantReply(page: Page, output: string): Promise<void> {
+  const reply = page.getByText('Hello from your computer.', { exact: true });
+  try {
+    await reply.waitFor({ timeout: 120_000 });
+  } catch (error) {
+    const failureScreenshot = resolve(output, 'shared-assistant-private-chat-failure.png');
+    await page.screenshot({ path: failureScreenshot, fullPage: false });
+    const mainText = await page.locator('main').innerText();
+    throw new Error(`The private chat did not show the stub reply. Screen text: `
+      + mainText.slice(0, 500), { cause: error });
+  }
 }
 
 type AssistantRow = {
@@ -577,10 +675,11 @@ async function qualifyDirectChat(
   await memberMobile.getByRole('button', { name: ownerId }).click();
   const recipientText = await memberMobile.locator('main').innerText();
   const mobileDraft = await screenshot(memberMobile, output, 'direct-chat-recipient-390');
+  const mobileDraftEvidence = { colleague: ownerId };
   record(options.assertions, 'direct_chat.start_390',
     recipientText.includes(ownerId) && recipientText.includes('Draft — nothing is sent'),
     'The direct chat names only the chosen colleague before the first message.',
-    { colleague: ownerId }, [mobileDraft]);
+    mobileDraftEvidence, [mobileDraft]);
 
   await memberDesktop.setViewportSize({ width: 1280, height: 900 });
   await memberDesktop.goto(`${options.origin}/workspace/direct`);
@@ -590,31 +689,44 @@ async function qualifyDirectChat(
   const desktopDraftText = await memberDesktop.locator('main').innerText();
   const desktopRecipientIsClear = desktopDraftText.includes(ownerId)
     && desktopDraftText.includes('Draft — nothing is sent');
+  const desktopDraftEvidence = { colleague: ownerId };
   record(options.assertions, 'direct_chat.start_1280', desktopRecipientIsClear,
-    'The direct chat recipient screen fits at 1280px.', { colleague: ownerId }, [desktopDraft]);
+    'The direct chat recipient screen fits at 1280px.',
+    desktopDraftEvidence, [desktopDraft]);
 
-  await memberMobile.locator('#message').fill('Direct message from the member.');
+  const memberMessage = `Direct message ${randomUUID()}`;
+  const conversationsBeforeSend = await directConversations(memberMobile);
+  const previousConversationIds = new Set(conversationsBeforeSend.map(conversationId));
+  await memberMobile.locator('#message').fill(memberMessage);
   await memberMobile.getByRole('button', { name: 'Send message' }).click();
-  await memberMobile.getByText('Direct message from the member.', { exact: true }).waitFor();
+  await memberMobile.getByText(memberMessage, { exact: true }).waitFor();
   const directList = await directConversations(memberMobile);
-  const conversation = directList.find(matchesParticipants.bind(null, ownerId, memberId));
+  const conversation = directList.find(matchesNewParticipants.bind(
+    null, previousConversationIds, ownerId, memberId,
+  ));
   assert(conversation, 'The member and colleague must have one direct conversation');
 
   await ownerPage.setViewportSize({ width: 390, height: 844 });
   await ownerPage.goto(`${options.origin}/workspace/direct?conversation=`
     + encodeURIComponent(conversation.conversationId));
-  await ownerPage.getByText('Direct message from the member.', { exact: true }).waitFor();
+  await ownerPage.getByText(memberMessage, { exact: true }).waitFor();
   const receivedScreens = await captureAtBothWidths(ownerPage, output, 'direct-chat-received');
-  record(options.assertions, 'direct_chat.receive', true,
+  const receivedMessageIsVisible = await ownerPage.getByText(
+    memberMessage, { exact: true },
+  ).isVisible();
+  const receivedEvidence = { conversationId: conversation.conversationId,
+    author: memberId };
+  record(options.assertions, 'direct_chat.receive', receivedMessageIsVisible,
     'The colleague receives the member message at 1280px and 390px.',
-    { conversationId: conversation.conversationId, author: memberId }, receivedScreens);
+    receivedEvidence, receivedScreens);
 
-  await ownerPage.locator('#message').fill('Reply from the colleague.');
+  const ownerMessage = `Reply from the colleague ${randomUUID()}`;
+  await ownerPage.locator('#message').fill(ownerMessage);
   await ownerPage.getByRole('button', { name: 'Send message' }).click();
-  await ownerPage.getByText('Reply from the colleague.', { exact: true }).waitFor();
+  await ownerPage.getByText(ownerMessage, { exact: true }).waitFor();
   await memberDesktop.goto(`${options.origin}/workspace/direct?conversation=`
     + encodeURIComponent(conversation.conversationId));
-  await memberDesktop.getByText('Reply from the colleague.', { exact: true }).waitFor();
+  await memberDesktop.getByText(ownerMessage, { exact: true }).waitFor();
   const history = await conversationHistory(options.store, conversation.conversationId);
   const posted = history.filter(isMessagePosted);
   const orderIsCorrect = posted.length === 2
@@ -627,11 +739,13 @@ async function qualifyDirectChat(
   const agentEventCount = history.filter(isAgentEvent).length;
   const countsAreZero = requestDelta === 0 && agentEventCount === 0 && !hasAgentControls;
   const memberScreens = await captureAtBothWidths(memberDesktop, output, 'direct-chat-exchange');
+  const exchangeEvidence = { memberMessages: posted.length, modelRequests: requestDelta,
+    assistantRequests: agentEventCount, messageOrder: orderIsCorrect };
+  const exchangeStatement = 'Both people exchange ordered messages. No assistant turn, '
+    + 'model request or agent control appears.';
   record(options.assertions, 'direct_chat.exchange_and_no_agent',
     orderIsCorrect && countsAreZero,
-    'Both people exchange ordered messages; no assistant turn, model request, or agent control appears.',
-    { memberMessages: posted.length, modelRequests: requestDelta, assistantRequests: agentEventCount,
-      messageOrder: orderIsCorrect }, memberScreens);
+    exchangeStatement, exchangeEvidence, memberScreens);
 }
 
 async function directConversations(page: Page): Promise<DirectConversation[]> {
@@ -644,6 +758,19 @@ async function directConversations(page: Page): Promise<DirectConversation[]> {
 function matchesParticipants(first: string, second: string, row: DirectConversation): boolean {
   return row.mode === 'direct' && row.participantIds.includes(first)
     && row.participantIds.includes(second);
+}
+
+function conversationId(conversation: DirectConversation): string {
+  return conversation.conversationId;
+}
+
+function matchesNewParticipants(
+  previousIds: Set<string>,
+  first: string,
+  second: string,
+  row: DirectConversation,
+): boolean {
+  return !previousIds.has(row.conversationId) && matchesParticipants(first, second, row);
 }
 
 async function conversationHistory(
@@ -682,15 +809,29 @@ async function qualifyProvider(
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${options.origin}/org/models`);
   await page.getByRole('heading', { name: 'Models & providers' }).waitFor();
-  const emptyState = page.getByText('No providers saved', { exact: true });
-  await emptyState.waitFor({ state: 'visible' });
-  const empty = await emptyState.isVisible();
+  const providerResponse = await page.request.get(`${options.origin}/api/org/providers`);
+  assert.equal(providerResponse.status(), 200);
+  const providerBody = await providerResponse.json() as { rows: Array<{ name: string }> };
+  if (providerBody.rows.length === 0) {
+    await page.getByText('No providers saved', { exact: true }).waitFor();
+  } else {
+    for (const provider of providerBody.rows) {
+      await page.getByText(provider.name, { exact: true }).waitFor();
+    }
+  }
+  const mainText = await page.locator('oc-models main').innerText();
+  const providerNamesAreVisible = providerBody.rows.length === 0
+    ? mainText.includes('No providers saved')
+    : providerBody.rows.every(providerNameIsVisible.bind(null, mainText));
   const listScreens = await captureAtBothWidths(page, output, 'provider-list');
-  record(options.assertions, 'providers.list', empty,
-    'The fresh stack shows an empty provider list at 1280px and 390px.', {}, listScreens);
+  const providerListEvidence = { providerCount: providerBody.rows.length };
+  record(options.assertions, 'providers.list', providerNamesAreVisible,
+    'The provider page shows the names returned by the server.',
+    providerListEvidence, listScreens);
 
   await page.getByRole('button', { name: 'Connect a provider' }).first().click();
-  await page.locator('#provider-name').fill(`Journey stub ${options.attempt}`);
+  const providerName = `Journey stub ${randomUUID()}`;
+  await page.locator('#provider-name').fill(providerName);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await waitForProviderKeyField(page);
   await page.locator('#provider-key').fill(placeholderKey);
@@ -698,21 +839,29 @@ async function qualifyProvider(
   assert.equal(await keyField.getAttribute('type'), 'password');
   await page.getByRole('button', { name: 'Save key', exact: true }).click();
   const provider = await waitForProviderKeySave(page, options.origin,
-    `Journey stub ${options.attempt}`);
-  const keyInputIsClear = await page.evaluate(providerKeyInputIsClear);
+    providerName);
+  const keyInputState = await page.evaluate(providerKeyInputState);
   const pageHasNoKey = await page.evaluate(checkPlaceholderAbsent, placeholderKey);
   const eventHasNoKey = await providerEventsHaveNoKey(options.store, provider.providerId);
   const logsHaveNoKey = await processLogsHaveNoKey(options.directory);
   const noKeyLeak = pageHasNoKey && eventHasNoKey && logsHaveNoKey;
   const statusFactsAreSeparate = !provider.reachable && !provider.modelAnswer;
   const keyScreens = await captureAtBothWidths(page, output, 'provider-key-saved');
-  record(options.assertions, 'providers.key_save', noKeyLeak && statusFactsAreSeparate
-      && keyInputIsClear,
-    'The fake key is saved and cleared; the page does not claim reachability or a model answer.',
-    { providerId: provider.providerId, saved: true, reachable: false, modelAnswer: false,
-      inputIsClear: keyInputIsClear, placeholderInPage: !pageHasNoKey,
-      placeholderInEvents: !eventHasNoKey,
-      placeholderInLogs: !logsHaveNoKey }, keyScreens);
+  const keySaveEvidence = { providerId: provider.providerId, saved: true,
+    reachable: false, modelAnswer: false, placeholderInPage: !pageHasNoKey,
+    placeholderInEvents: !eventHasNoKey, placeholderInLogs: !logsHaveNoKey };
+  record(options.assertions, 'providers.key_save', noKeyLeak && statusFactsAreSeparate,
+    'The fake key is saved without a leak or a claim that it works.',
+    keySaveEvidence, keyScreens);
+  const keyInputEvidence = { inputState: keyInputState };
+  options.assertions.push({ id: 'providers.key_input_cleared',
+    status: keyInputState === 'clear' ? 'PASS' : 'NOT PROVEN',
+    statement: 'The key input is empty after the save, when it remains on screen.',
+    evidence: keyInputEvidence, screenshots: keyScreens });
+}
+
+function providerNameIsVisible(text: string, provider: { name: string }): boolean {
+  return text.includes(provider.name);
 }
 
 async function waitForProviderKeyField(page: Page): Promise<void> {
@@ -769,15 +918,25 @@ async function qualifyOwnershipTransfer(
   page: Page,
   output: string,
 ): Promise<void> {
-  await prepareOwnerBrowserAccount(options, page);
+  const initial = await ownershipView(page);
+  if (initial.viewer.role !== 'owner') {
+    const ownershipEvidence = { viewerRole: initial.viewer.role };
+    options.assertions.push({ id: 'ownership.transfer', status: 'NOT PROVEN',
+      statement: 'The signed-in test account is an admin, so it cannot appoint an owner.',
+      evidence: ownershipEvidence, screenshots: [] });
+    return;
+  }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${options.origin}/org/people/owners`);
   await page.getByRole('heading', { name: 'Owners', exact: true }).waitFor();
   await page.locator('.owner-row code').getByText(ownerId, { exact: true }).waitFor();
   const actorScreens = await captureAtBothWidths(page, output, 'ownership-actor-ready');
-  record(options.assertions, 'ownership.actor_ready', true,
+  const actorIsOwner = initial.viewer.memberId === ownerId
+    && initial.viewer.role === 'owner';
+  const actorEvidence = { memberId: ownerId, role: 'owner' };
+  record(options.assertions, 'ownership.actor_ready', actorIsOwner,
     'The signed-in browser account has the Owner role before opening the transfer screen.',
-    { memberId: ownerId, role: 'owner' }, actorScreens);
+    actorEvidence, actorScreens);
 
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.getByRole('button', { name: 'Appoint an owner', exact: true }).click();
@@ -791,9 +950,10 @@ async function qualifyOwnershipTransfer(
   const reviewIsClear = reviewText.includes(memberId)
     && reviewText.includes('You and this person will both be Owners')
     && reviewText.includes("This doesn't remove you");
+  const ownershipReviewEvidence = { successorId: memberId };
   record(options.assertions, 'ownership.review', reviewIsClear,
     'The owner reviews the named successor and sees that both people will remain owners.',
-    { successorId: memberId }, reviewScreens);
+    ownershipReviewEvidence, reviewScreens);
 
   const requestPromise = page.waitForRequest(isOwnershipTransferRequest);
   const responsePromise = page.waitForResponse(isOwnershipTransferResponse);
@@ -802,10 +962,11 @@ async function qualifyOwnershipTransfer(
   const command = readOwnershipTransferCommand(request);
   const response = await responsePromise;
   const responseScreens = await captureAtBothWidths(page, output, 'ownership-transfer-response');
+  const transferRequestEvidence = { successorId: command.successorId,
+    expectedSequence: command.expectedSequence, responseStatus: response.status() };
   record(options.assertions, 'ownership.transfer_request', response.status() === 200,
     'The server accepts the reviewed transfer command.',
-    { successorId: command.successorId, expectedSequence: command.expectedSequence,
-      responseStatus: response.status() }, responseScreens);
+    transferRequestEvidence, responseScreens);
   assert.equal(response.status(), 200, 'The ownership transfer must be recorded');
 
   await waitForOwnershipTransfer(page, memberId);
@@ -815,34 +976,17 @@ async function qualifyOwnershipTransfer(
   const bothPeopleAreOwners = resultText.includes(ownerId) && resultText.includes(memberId)
     && resultText.includes('You remain an owner');
   const transferMatchesReview = event.successorId === memberId && event.transferredBy === ownerId;
+  const transferEvidence = { successorId: event.successorId,
+    transferredBy: event.transferredBy, ownerIds: [ownerId, memberId] };
   record(options.assertions, 'ownership.transfer', bothPeopleAreOwners && transferMatchesReview,
     'The saved change makes the reviewed member an owner and leaves the first owner in place.',
-    { successorId: event.successorId, transferredBy: event.transferredBy,
-      ownerIds: [ownerId, memberId] }, resultScreens);
+    transferEvidence, resultScreens);
 }
 
 type OwnershipView = {
   owners: Array<{ memberId: string; role: string }>;
   viewer: { memberId: string; role: string };
 };
-
-async function prepareOwnerBrowserAccount(
-  options: BrowserPhase4Options,
-  page: Page,
-): Promise<void> {
-  const initial = await ownershipView(page);
-  assert(initial.viewer.memberId === ownerId,
-    'The signed-in owner page must belong to the seeded organisation admin');
-  assert(initial.owners.some(matchesOwnerId.bind(null, 'jente-rosseel')),
-    'The real development owner must be present before preparing the browser account');
-  if (initial.owners.some(matchesOwnerId.bind(null, ownerId))) return;
-
-  await options.append('ownership.transferred', ownershipSubject(options.silo), {
-    memberId: ownerId,
-    transferredBy: 'jente-rosseel',
-  }, 'dev-stack-ownership-fixture');
-  await waitForOwnershipRole(page, ownerId);
-}
 
 async function ownershipView(page: Page): Promise<OwnershipView> {
   const response = await page.request.get(`${new URL(page.url()).origin}/api/ownership`);
@@ -974,9 +1118,11 @@ function checkPlaceholderAbsent(key: string): boolean {
   return !pageText.includes(key) && !savedText.includes(key);
 }
 
-function providerKeyInputIsClear(): boolean {
+function providerKeyInputState(): 'clear' | 'filled' | 'missing' {
   const keyInput = document.querySelector<HTMLInputElement>('#provider-key');
-  return !keyInput || keyInput.value === '';
+  if (!keyInput) return 'missing';
+  if (keyInput.value === '') return 'clear';
+  return 'filled';
 }
 
 async function captureAtBothWidths(
@@ -999,7 +1145,7 @@ async function screenshot(page: Page, output: string, name: string): Promise<str
   const destination = resolve(output, `${name}.png`);
   await page.screenshot({ path: destination, fullPage: false,
     animations: 'disabled', timeout: 90_000 });
-  return destination.replace(`${resolve('.')}/`, '');
+  return destination;
 }
 
 function record(
@@ -1014,16 +1160,7 @@ function record(
   assert(passed, `Phase 4 assertion failed: ${id}`);
 }
 
-function addNonRunRows(
-  assertions: Phase4Assertion[],
-  attempt: string,
-  ownershipMerged: boolean,
-): void {
-  if (!ownershipMerged) {
-    assertions.push({ id: 'ownership.transfer', status: 'NOT PROVEN',
-      statement: 'Ownership transfer was not run because its change was not merged.',
-      evidence: { merged: false }, screenshots: [] });
-  }
+function addNonRunRows(assertions: Phase4Assertion[], attempt: string): void {
   assertions.push({ id: 'providers.paid_model_answer', status: 'PAID / NOT RUN',
     statement: 'The real provider answer check needs a paid call and was not run.',
     evidence: { paidCallMade: false, attempt }, screenshots: [] });

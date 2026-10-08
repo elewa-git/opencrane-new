@@ -27,6 +27,8 @@ export async function browserBudgetJourney(owner: Page, members: Page[], origin:
   async function summary() {
     return readBudgetSummary(owner, origin);
   }
+  await owner.goto(`${origin}/org/spending`);
+  await owner.getByText('Spending loaded', { exact: true }).waitFor();
   const starting = await summary();
   const groupId = starting.defaultPayingGroupId;
   assert(groupId);

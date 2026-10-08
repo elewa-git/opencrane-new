@@ -52,6 +52,11 @@ async function fingerprint(pid: number) {
     return undefined;
   }
 }
+async function processNiceValue(pid: number): Promise<number> {
+  const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+  const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+  return Number(fields[16]);
+}
 async function processId(name: string) {
   const file = `${directory}/${name}.pid`;
   if (!(await exists(file))) return undefined;
@@ -145,7 +150,11 @@ async function start(name: string, args: string[], env: Record<string, string>) 
       stdio: ['ignore', log.fd, log.fd] });
     await once(child, 'spawn');
     const pid = child.pid!;
-    if (name === 'web') setPriority(pid, 10);
+    if (name === 'web') {
+      const niceValue = await processNiceValue(pid);
+      // Avoid changing a priority the parent already lowered for this web process.
+      if (niceValue < 10) setPriority(pid, 10);
+    }
     await save(`${name}.pid`, `${pid} ${await fingerprint(pid)}`);
     child.unref();
   } finally { await log.close(); }
@@ -457,8 +466,8 @@ async function up(fresh: boolean) {
 async function journey() {
   const output = await run(process.execPath, ['--experimental-strip-types', 'infra/dev-stack/journey.ts'],
     { ...base, DEV_STACK_DIR: directory,
-      P4_JOURNEY_ATTEMPT: process.env['P4_JOURNEY_ATTEMPT'] ?? 'manual',
-      P4_OWNERSHIP_MERGED: process.env['P4_OWNERSHIP_MERGED'] ?? 'false' }, 900_000);
+      ...(process.env['P4_JOURNEY_ATTEMPT']
+        ? { P4_JOURNEY_ATTEMPT: process.env['P4_JOURNEY_ATTEMPT'] } : {}) }, 1_200_000);
   console.log(output.trim());
 }
 async function status() {
