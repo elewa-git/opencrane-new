@@ -1,0 +1,2 @@
+- Codex can call reviewed Allow tools through its computer proxy. Changed tools reload only that conversation, keeping its history. Calls use that thread's own tool list and turn pass; an unconfirmed reload fails with a clear message.
+- Oversized tool replies fail at once. Missing discovery after a late reload fails the turn before it starts. Finished turns release their tool lists, and a tool changed from Allow to Ask is refused without creating an approval card.

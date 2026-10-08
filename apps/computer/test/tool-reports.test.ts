@@ -25,13 +25,15 @@ async function fixture(executionMode = 'memory_free') {
   function credential() { return { value: 'computer', expiresAt: Date.now() + 60_000 }; }
   function send(report: BridgeReport) { reports.push(wireReport(report)); }
   function closeSocket() { throw new Error('Unexpected socket closure'); }
+  function catalogue() { return Promise.resolve(); }
+  function discovered() { return Promise.resolve(); }
   const driver: TurnDriver = { journal: `${directory}/reports`, rpc: transport,
-    privateSession, grant, credential };
+    privateSession, grant, credential, catalogue, discovered };
   const runner = turnRunner(driver, journal, send, closeSocket);
   const frame = { id: 'turn', conversationId: 'chat', assistantId: 'assistant',
     text: 'Use a tool', token: 'token', expiresAt: Date.now() + 60_000, executionMode,
     tools: [{ key: 'oc_0123456789', serverId: 'fixture', connectionId: 'installed',
-      definitions: [] }] };
+      definitions: [], modes: {} }] };
   const starting = runner.start(parseTurn(frame));
   function hasStarted() { expect(reports).toHaveLength(1); }
   await vi.waitFor(hasStarted);

@@ -2,6 +2,165 @@
 
 For people, read [README.md](README.md) first.
 
+## Review fixes — 8 October 2026
+
+Findings 1 and 2 were confirmed with failing tests before changing production code.
+A reply exceeding 1 MiB left its call waiting. A timed-out resume followed by a
+late old load let the new load succeed without discovering its URL. Both tests now
+pass. The reply returns the existing “may have received” failure at once. A missing
+list discovery fails the turn before `turn/start` and leaves no confirmed fingerprint.
+
+The final changed-test checks passed twice: 135 computer/server tests and the one
+real-gateway regression on each pass. They cover the next turn after a stuck unload,
+wrong resumed ids, failed binding and drop, 200 finished conversations, catalogue
+limits and Allow changing to Ask without creating an approval card.
+The offline image check uses real `threadLoads()` to unload a loaded thread in
+Codex 0.159.2. Codex confirmed unload in 250 ms. It passed
+reload, removal, history, busy-thread isolation, shared keys and UID 1001 refusal.
+Docker networking was disabled. Both the model and MCP servers were local fixtures.
+No paid model was called. Publishing and a fresh-install chat journey remain untested.
+The current gate results and checked commit are recorded in the draft pull request.
+
+## Governed tools — 7 October 2026
+
+The owner authorised reloading only the conversation whose tool list changed.
+Codex 0.159.2 ignores changed config on a loaded thread, as the
+[earlier capture](test/fixtures/codex-0.159.2-loaded-resume.json) shows.
+The [expanded probe](test/codex-mcp-resume.mjs) checks unload, reload, removal,
+other busy threads, shared server keys and discovery timing. The
+[saved capture](test/fixtures/codex-0.159.2-thread-reload.json) records the results,
+HTTP requests and the full model input after reload.
+
+Rebase base: `origin/main` at `1da32468`. Rebase completed and the base is an ancestor
+of the branch. The probe uses the pinned Dockerfile base, `--network none` and
+local model and MCP stubs. No paid model call is possible. Reproduce from the root:
+
+```sh
+nice -n 10 docker run --rm --network none --entrypoint node \
+  -v "$PWD/apps/computer/test:/app/test:ro" \
+  127.0.0.1:5001/opencrane/s035@sha256:6fe29bfc4455f19601bbca9e3cffa998fed57632484bb3a624a8da69beecee47 \
+  /app/test/codex-mcp-resume.mjs > /tmp/codex-reload.json
+```
+
+| Check | Result | Observed behaviour |
+| --- | --- | --- |
+| R1, default delay | PASS | Unsubscribe and closed were confirmed; loaded-list no longer lists A after 60058 ms. |
+| R1, zero delay under strict config | PASS | `unsubscribed`, then `thread/closed`; loaded-list no longer includes A. 120 ms in the saved run. |
+| R2, reload | PASS | Same thread id, earlier text retained, only replacement tools in the model request. |
+| R3, removal | PASS | Resuming with an empty list leaves no MCP namespace. |
+| R4, busy B | PASS | B's model reply waits three seconds while A reloads. B finishes, keeps its tools and stays loaded. |
+| R5, shared key | PASS | Each thread discovers and calls through its own URL, with its own thread id. |
+| R6, timing | PASS | Start can return before discovery; resume discovery finished before return in the saved run. |
+| R7, fork | NOT RUN | Reload works, so the fallback is not needed. |
+| R8, expiry | PASS | A one-second discovery TTL and two-second pause caused no new discovery on a loaded resume. |
+| Earlier background terminal | PASS | The `sleep 60` process disappears when its thread unloads. |
+
+Two shorter corrected runs took 19,127 ms and 19,315 ms. The longer saved run began
+at `2026-10-07T12:21:25.484Z` and took 69102 ms. It confirms the default
+unload delay is about 60 seconds. Zero delay unloads in 120 ms.
+The initial run found the same reload behaviour; its timing bookkeeping was then
+corrected and repeated. It is not the saved result. Runtime reloads use zero delay.
+
+`memoryFreeConfig` enables `mcp_2026_07_28` and `thread_unload_delay_secs = 0`.
+The runner hashes the turn's tool list exactly as received. It remembers a confirmed
+fingerprint and random 32-hex-character load key while that turn uses the thread.
+Before unloading, it removes the fingerprint. It unsubscribes only that thread and
+checks `thread/loaded/list` for at most ten seconds. A paged or malformed list cannot
+confirm unload. The old proxy address is dropped before resuming with new config.
+No reload restarts Codex.
+
+The proxy records the first `tools/list` for each server at the new load key.
+The bridge waits up to ten seconds for every listed server before starting a turn.
+Binding the returned thread id keeps that discovery record. A late old resume can
+cause Codex to ignore the new URL; missing discovery then fails the turn with the
+existing plain message. Failed loads keep no confirmed fingerprint. A successful
+`thread/start` whose binding fails is unsubscribed to release the orphan thread.
+
+Turn completion, failure and `thread/closed` release local load state and its proxy
+catalogue. The next turn confirms unload and resumes with a fresh list, preserving
+saved conversation history. A drop removes local state before waiting for its reply.
+Revoking a turn grant also removes that thread's catalogues. Replacing a conversation's
+list removes its previous catalogue. If the control socket cannot be reached,
+abandoned catalogues expire after two minutes; a live grant sets their expiry to its
+own deadline. The proxy keeps at most 64 catalogues and refuses further registrations
+until space is available. It never evicts another thread's active list.
+
+The owner-only control socket accepts `POST /catalogue` with `{loadKey, conversation,
+thread?, tools}`, `POST /catalogue/drop` with `{loadKey}` and
+`POST /catalogue/ready` with `{loadKey}`. The last route waits for list discovery.
+Registration resets the ten-minute caller deadline. Register before loading so early
+discovery can succeed; bind the returned thread id before granting access or starting
+a turn. The caller file and control socket are mode 0600. Shell tools run as UID 1001
+and receive no caller token.
+
+`POST /mcp/<loadKey>/<serverKey>` accepts only authenticated stateless 2026-07-28
+requests. Discovery is a fixed private reply with the reviewed server information;
+list uses only that load's stored definitions. Neither reaches the gateway. Replaced
+or dropped keys are refused. Calls require the load's exact thread, its conversation's
+live grant and a listed tool name. The proxy then forwards unchanged bytes and only
+its listed headers to `/mcp/<serverId>/<connectionId>` at the gateway. `_meta` stays
+unchanged for these credential-free tools. Odoo metadata handling remains in #53.
+Requests and buffered tool replies are limited to 1 MiB. No automatic retry is made.
+
+Only 402/403 replies marked `x-opencrane-decision: refused` say that nothing was sent.
+The real gateway test proves the decision marker survives a refusal and is removed
+from tool-server replies. Unmarked failures and lost replies say the tool may have
+received the request. Each tool carries its `allow` mode in the turn list. The proxy sets
+`x-opencrane-tool-mode: allow` itself. The gateway passes it to the decision service,
+which refuses an Allow tool changed to Ask before creating an approval card.
+Approval waits are later work.
+
+`test/codex-mcp-wire.mjs` runs from `build.sh` against the built image with Docker
+networking disabled. It imports the real memory-free config and `threadLoads()`,
+and uses the real proxy. It asserts the production order: unsubscribe, confirm the
+thread is absent, drop the old catalogue, then resume. It checks the Codex version,
+feature, reload history, busy-thread isolation, shared server keys, stateless wire headers and UID 1001 refusal.
+Its shell check tries to reuse a real fixture call id and forge the decision header;
+it gets 401, cannot read the caller file and cannot reach the control socket.
+Removing the caller check in a disposable source copy makes that check fail (200
+instead of 401). The original application source is never changed for this test.
+
+Own checks on 7 October 2026 use `nice -n 10`. Model fixtures run locally;
+`MODELS_REAL_CALL=0` disables the opt-in paid-call test. The throwaway PostgreSQL
+17.6 database supplies `PG_TEST_URL` for projection checks.
+
+| Check | Result | Detail |
+| --- | --- | --- |
+| Lint | PASS | All root stages after extracting the same-list resume helper; 10 warnings, no errors. |
+| Typecheck | PASS | All workspaces. |
+| Event catalogue | PASS | 98 event types agree. |
+| Knip | PASS | Standalone run; two existing configuration hints. |
+| Proxy and thread-load tests | PASS | 36 tests passed before and after the lint fix. |
+| Access timing | PARTIAL | Slow-history gateway test passed twice. Cold-model catch-up failed once, then passed alone. |
+| Gateway timeout rerun | PASS | Both daily/monthly cap cases passed alone after one timed out in the full file. |
+| Gateway file alone | PARTIAL | 81 passed, one cap case timed out, one paid-call test skipped. The cap cases passed alone. |
+| Full root suite | FAIL | 150 files passed, 4 failed and 4 skipped; 2,261 tests passed, 4 failed and 15 skipped. |
+| Root failure reruns | PARTIAL | Decision-fence, long-chat timing and OpenFGA migration cases passed alone. The cold-model case failed once, then passed. |
+| Earlier bridge batch | FAIL, then PASS | First batch lacked a catalogue callback in its fake; the corrected bridge file passed alone. |
+| Docker runtime build | PASS | Isolated local image; no publishing or owner-stack changes. |
+| Offline image wire check | PASS | Codex 0.159.2 passed reload, removal, busy-thread, per-load URL and shell refusal checks in 6,397 ms. |
+| Image contents | PASS | Packaged source matches the checkout; no fixture credentials or compiler caches. |
+| Full publishing and Kubernetes image qualification | NOT RUN | This check does not publish the image or change a running stack. |
+| Fresh-install governed chat journey | NOT RUN | Remains in PR 6; the live capability is not claimed complete. |
+
+The isolated image id is recorded by Docker; this check never tags or publishes it.
+Build and check it from the root without publishing:
+
+```sh
+nice -n 10 docker build --build-context project=. --target runtime \
+  -t ocn-p3-5-pr4-computer apps/computer
+nice -n 10 docker run --rm --network none \
+  -v "$PWD/apps/computer/test:/app/test:ro" --entrypoint node \
+  ocn-p3-5-pr4-computer --experimental-strip-types /app/test/codex-mcp-wire.mjs
+```
+
+The image check does not repeat the one-second expiry measurement: the real proxy
+has a fixed 60-second discovery TTL. The standalone capture above records R8.
+The source checks run with `nice -n 10 npm run lint`, `nice -n 10 npm run typecheck`
+and `nice -n 10 npm run check:events`. The targeted batch includes all
+`apps/computer/test` files; server bridge, turn, tool-report and MCP-discovery files;
+and model Codex-MCP, decision-fence, decision-activity, decision-cost and gateway files.
+
 Product runtime promoted from S0.1b, S0.3 and S0.5. The complete notice gate
 accepts 384/384 packages. ONNX Runtime is retained: its wheel contains no
 Intel MKL component. The two unlicensed lxml Schematron extraction stylesheets
@@ -187,10 +346,10 @@ Its Windows-only Visual C++ paragraph does not describe this Linux bundle.
   `/home/desktop` are separate memory-backed volumes. Caller capabilities,
   per-thread grants and Kasm passwords never enter the persistent volume.
 
-The proxy supports the existing Responses route. Its private control socket
+The proxy supports the Responses and reviewed MCP routes. Its private control socket
 accepts grants of at most two minutes and explicit drops. Calls without a live
 thread grant or the ten-minute caller capability, renewed by a trusted turn grant, fail closed. The bridge installs a grant before each turn and drops it on completion.
-MCP and browser egress brokering remain later work. No provider key is embedded.
+Browser egress brokering remains later work. No provider key is embedded.
 
 ## Kubernetes and checks
 
@@ -354,7 +513,7 @@ optional `serverInfo` (`name`, `version`) and string `definitions`. Entries reje
 unknown fields. IDs match `^[\w-]{1,200}$`; keys match `^oc_[a-f0-9]{10}$`.
 The list allows 20 servers and 48 KiB of JSON encoded as UTF-8. Each server
 allows 1,000 definitions of at most 32,768 characters each. Server name and
-version allow 200 characters each. No entry carries `discoverResult`. The server does not fill this list yet.
+version allow 200 characters each. No entry carries `discoverResult`. The server fills the list once per message with Allow tools only.
 
 Memory-free `mcpToolCall` notifications report call id, mapped server id and tool
 name. Finished reports add completed/failed status and optional duration in whole
@@ -366,8 +525,7 @@ Invalid values and unknown server keys produce no report and use no sequence
 number. Later notifications continue normally. Notifications for a completed
 turn produce no report. Arguments, results and
 error text are excluded. The journal retains these fields across reloads.
-Private turns still refuse tools. Tool discovery and calls through the proxy
-are not built yet. Tests: `test/turn-tools.test.ts`, `test/tool-reports.test.ts`.
+Private turns still refuse tools. Memory-free discovery and calls use the proxy described above. Tests: `test/turn-tools.test.ts`, `test/tool-reports.test.ts`.
 
 The image copies only the dependency-free tool text check from `libs/events`,
 under the repository's AGPL-3.0-or-later licence. It adds no third-party package.

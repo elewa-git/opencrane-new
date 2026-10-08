@@ -131,10 +131,12 @@
       "entry": [
         "src/entrypoint.ts",
         "src/bridge.ts",
-        "src/desktop.ts"
+        "src/desktop.ts",
+        "test/codex-mcp-wire.mjs"
       ],
       "project": [
-        "src/**/*.ts"
+        "src/**/*.ts",
+        "test/codex-mcp*.mjs"
       ],
       "ignoreBinaries": [
         "codex",

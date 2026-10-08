@@ -1,12 +1,13 @@
 import { modelForTask } from '@opencrane/models/routing';
 import { record } from './http.ts';
 
-interface ToolServer {
+export interface ToolServer {
   key: string;
   serverId: string;
   connectionId: string;
   serverInfo?: { name: string; version: string };
   definitions: string[];
+  modes: Record<string, 'allow'>;
 }
 
 export interface Turn {
@@ -75,7 +76,7 @@ function parseExecutionMode(value: unknown) {
   throw new Error('Invalid execution mode');
 }
 
-function parseTools(value: unknown): ToolServer[] {
+export function parseTools(value: unknown): ToolServer[] {
   if (!Array.isArray(value) || value.length > 20) throw new Error('Invalid tool list');
   const bytes = Buffer.byteLength(JSON.stringify(value), 'utf8');
   if (bytes > 48 * 1024) throw new Error('Tool list too large');
@@ -84,7 +85,7 @@ function parseTools(value: unknown): ToolServer[] {
 
 function parseToolServer(value: unknown): ToolServer {
   const server = record(value);
-  checkFields(server, ['key', 'serverId', 'connectionId', 'serverInfo', 'definitions']);
+  checkFields(server, ['key', 'serverId', 'connectionId', 'serverInfo', 'definitions', 'modes']);
   const key = requiredString(server, 'key');
   const serverId = requiredString(server, 'serverId');
   const connectionId = requiredString(server, 'connectionId');
@@ -97,7 +98,13 @@ function parseToolServer(value: unknown): ToolServer {
     || !definitions.every(isDefinition)) {
     throw new Error('Invalid tool definitions');
   }
-  const toolServer: ToolServer = { key, serverId, connectionId, definitions };
+  const modes: Record<string, 'allow'> = {};
+  const suppliedModes = record(server['modes']);
+  for (const [name, mode] of Object.entries(suppliedModes)) {
+    if (!name || name.length > 200 || mode !== 'allow') throw new Error('Invalid tool mode');
+    modes[name] = mode;
+  }
+  const toolServer: ToolServer = { key, serverId, connectionId, definitions, modes };
   if (server['serverInfo'] !== undefined) {
     const info = record(server['serverInfo']);
     checkFields(info, ['name', 'version']);

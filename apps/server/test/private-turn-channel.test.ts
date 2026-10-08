@@ -35,6 +35,7 @@ async function fixture(options: { path?: string; ephemeral?: boolean; context?: 
   const starting = deferred<unknown>();
   const granting = deferred<void>();
   const persistentRpc = vi.fn(function rpc(method: string) {
+    if (method === 'thread/loaded/list') return Promise.resolve({ data: [] });
     if (method.startsWith('thread/')) return Promise.resolve({ thread: { id: 'persistent-thread' } });
     return Promise.resolve({ turn: { id: 'persistent-turn' } });
   });
@@ -478,8 +479,14 @@ const resumesOnlyEarlierMemoryFreeWorkAfterA = async () => {
     test.finish();
     await until(() => test.terminals('alice-private').length === 1);
     test.send('alice-next', 'memory_free');
-    await until(() => test.persistentRpc.mock.calls.length === 4);
-    expect(test.persistentRpc).toHaveBeenCalledWith('thread/resume', { threadId: 'persistent-thread' });
+    function resumedMemoryFreeTurn() {
+      return test.persistentRpc.mock.calls.length === 6;
+    }
+    await until(resumedMemoryFreeTurn);
+    expect(test.persistentRpc).toHaveBeenCalledWith('thread/unsubscribe', {
+      threadId: 'persistent-thread' });
+    expect(test.persistentRpc).toHaveBeenCalledWith('thread/resume', {
+      threadId: 'persistent-thread', config: { mcp_servers: {} } });
   } finally {
     await test.close();
   }

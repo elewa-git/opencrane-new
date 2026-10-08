@@ -34,8 +34,16 @@ it.each(process.env['BRIDGE_SUSPEND_K3D'] === '1' ? ['local', 'k3d'] : ['local']
   expect(await nats.store.head()).toBe(3); // The idle scan saw no message.
   await chatCommand(nats.store, keys, { silo: 'test', memberId: 'alice' }, { id: 'message', conversationId: 'conversation', text: 'Run once' });
   let runs = 0;
-  const driver = { journal: `${directory}/reports`, credential: () => ({ value: 'computer', expiresAt: Date.now()+600_000 }),
-    grant: () => Promise.resolve(), rpc: (method: string) => { if (method === 'turn/start') runs++; return Promise.resolve({ thread: { id: 'thread' } }); } };
+  function credential() {
+    return { value: 'computer', expiresAt: Date.now() + 600_000 };
+  }
+  function grant() { return Promise.resolve(); }
+  function rpc(method: string) {
+    if (method === 'turn/start') runs++;
+    if (method === 'thread/loaded/list') return Promise.resolve({ data: [] });
+    return Promise.resolve({ thread: { id: 'thread' } });
+  }
+  const driver = { journal: `${directory}/reports`, credential, grant, rpc };
   const pod = environment === 'k3d' ? await bridgePod() : undefined;
   let channel = bridgeChannel(server, driver);
   const executions = async () => pod ? pod.runs() : runs;

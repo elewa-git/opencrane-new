@@ -333,7 +333,8 @@ The tool list is sent only for a personal assistant's memory-free turn. Team tur
 private turns and turns without a binding get no list.
 
 The bridge joins the saved discovery definitions to the current tool policy by name
-and revision. It sends only reviewed tools in Allow mode with `costCents: 0` and a
+and revision. It sends each tool's `allow` mode alongside its definition. It sends only reviewed
+tools in Allow mode with `costCents: 0` and a
 stored definition. Ask and Block tools, missing definitions and server discovery
 results are left out. In particular, `discoverResult` is never sent because it may
 contain instructions that nobody reviewed.

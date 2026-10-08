@@ -691,7 +691,10 @@ async function keepsBridgeOpenAfterInvalidToolNotification() {
     return Promise.resolve({ turn: { id: 'codex-turn' } });
   }
   async function grant() {}
-  const driver = { rpc, grant, credential: testCredential, journal: `${directory}/reports` };
+  async function catalogue() {}
+  async function discovered() {}
+  const driver = { rpc, grant, catalogue, discovered, credential: testCredential,
+    journal: `${directory}/reports` };
   const channel = bridgeChannel(server, driver);
   const socket = await openBridgeSocket(server);
   const reports: BridgeReportSummary[] = [];
@@ -699,7 +702,7 @@ async function keepsBridgeOpenAfterInvalidToolNotification() {
   try {
     const resume = { type: 'resume', since: 0 };
     const tool = { key: 'oc_0123456789', serverId: 'fixture', connectionId: 'installed',
-      definitions: [] };
+      definitions: [], modes: {} };
     const turn = { ...testTurn, tools: [tool] };
     socket.send(JSON.stringify(resume));
     socket.send(JSON.stringify(turn));

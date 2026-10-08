@@ -147,6 +147,19 @@ condensed here:
   needs actual network-level instrumentation, which is squarely S0.1b's
   "gateway-enforced egress" territory.
 
+## Later check — 7 October 2026
+
+The packaged Codex 0.159.2 does use stateless MCP discovery when
+`mcp_2026_07_28` is enabled. It sends POST `server/discover` and `tools/list`
+with version `2026-07-28`, without `initialize` or a session header.
+This corrects the earlier blocker above for that packaged version.
+
+A separate blocker was measured: `thread/resume` accepts new MCP server config
+but keeps the old tools when the thread is still loaded. After restarting Codex,
+the same saved thread receives the new tools. The later reload check below shows
+how to apply a new list without restarting Codex. The [computer check record](../../apps/computer/README.robot.md#governed-tools--7-october-2026)
+links the offline probe and saved capture. No paid model was called.
+
 ## Open questions for the owner
 
 See the spike's README for the full list; the ones that matter for this
@@ -238,3 +251,19 @@ authenticated egress broker through agentgateway, with destination allowlists,
 SSRF controls and DNS controls. Access needs either a pre-opened or brokered
 channel, or a separately confined process allowed to connect only to the
 gateway.
+
+## 7 October 2026: reload one conversation's tools
+
+The packaged Codex 0.159.2 does speak stateless 2026-07-28 when
+`mcp_2026_07_28 = true`. The offline computer image check now asserts discovery,
+list and call headers against the real proxy. This corrects the earlier strict
+handshake blocker for this flag and package; it does not qualify other versions.
+
+A loaded resume ignores changed MCP config. With `thread_unload_delay_secs = 0`,
+unsubscribe closes only that thread and loaded-list confirms its removal. Resume
+then keeps its id and history and replaces its tools. Another busy thread finishes
+normally. Two threads using the same server key use separate load URLs. Unloading
+also stops earlier background terminals for that conversation. The owner authorised
+reload-on-change and failing the turn when unload cannot be confirmed. Codex is
+never restarted for a tool-list change. The computer README.robot.md records R1–R8
+and links the saved capture. The image build repeats the relied-on checks offline.

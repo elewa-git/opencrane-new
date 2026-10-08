@@ -51,14 +51,20 @@ function mcpRoute(route: McpRoute, decisionUrl: string, issuer: string) {
       jwtAuth: { mode: 'strict', preserveToken: true, issuer, audiences: ['agentgateway'],
         location: { header: { name: 'authorization', prefix: 'Bearer ' } }, jwks: { url: `${decisionUrl}/jwks.json` } },
       extAuthz: { host: new URL(decisionUrl).host,
-        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id', 'mcp-protocol-version', 'mcp-method', 'mcp-name'],
+        includeRequestHeaders: ['authorization', 'x-turn-token', 'session-id',
+          'mcp-protocol-version', 'mcp-method', 'mcp-name', 'x-opencrane-tool-mode'],
         includeRequestBody: { maxRequestBytes: 1_048_576, allowPartialMessage: false },
         protocol: { http: { path: JSON.stringify(`/authorize${path}`),
-          addRequestHeaders: { 'mcp-name': MCP_DECISION_TOOL_NAME },
+          addRequestHeaders: { 'mcp-name': MCP_DECISION_TOOL_NAME,
+            'x-opencrane-tool-mode':
+              'default(request.headers.join()["x-opencrane-tool-mode"], "")' },
           includeResponseHeaders: ['x-request-id'] } },
         failureMode: { denyWithStatus: 503 } },
       transformations: { request: { replace: `{${MCP_UPSTREAM_HEADERS.join(', ')}}` } },
-    }, backends: [{ host: route.upstream }] };
+    }, backends: [{ host: route.upstream, policies: {
+      // Strip this only from tool replies. An authorisation refusal never reaches the backend.
+      responseHeaderModifier: { remove: ['x-opencrane-decision'] },
+    } }] };
 }
 function gatewayConfig(
   port: number, readinessPort: number, decisionUrl: string, keyFile: string,

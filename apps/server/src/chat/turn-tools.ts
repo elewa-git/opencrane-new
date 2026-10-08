@@ -42,6 +42,7 @@ interface TurnToolServer {
   connectionId: string;
   serverInfo?: { name: string; version: string };
   definitions: string[];
+  modes: Record<string, 'allow'>;
 }
 
 export interface TurnDelivery {
@@ -70,10 +71,10 @@ export async function buildTurnTools(input: TurnToolInput): Promise<TurnToolServ
       omittedServers += 1;
       continue;
     }
-    const definitions = reviewedAllowDefinitions(state);
-    if (!definitions.length) continue;
+    const selected = reviewedAllowDefinitions(state);
+    if (!selected.definitions.length) continue;
     if (!await canUseServer(input, state.serverId)) continue;
-    const entry = makeTurnToolServer(state, definitions);
+    const entry = makeTurnToolServer(state, selected);
     if (keys.has(entry.key) || tools.length >= maximumServers ||
         !fitsBudget(tools, entry, availableBytes)) {
       omittedServers += 1;
@@ -135,7 +136,8 @@ async function canUseServer(input: TurnToolInput, serverId: string) {
 }
 
 function reviewedAllowDefinitions(state: TurnToolServerState) {
-  const tools: string[] = [];
+  const definitions: string[] = [];
+  const modes: Record<string, 'allow'> = {};
   for (const policyTool of state.policyTools) {
     if (!policyTool.reviewed || policyTool.costCents !== 0 || policyTool.mode !== 'allow') {
       continue;
@@ -145,9 +147,10 @@ function reviewedAllowDefinitions(state: TurnToolServerState) {
     }
     const discovered = state.discoveryTools.find(matchesPolicy);
     if (!discovered?.definition || !isValidDefinition(discovered.definition)) continue;
-    tools.push(discovered.definition);
+    definitions.push(discovered.definition);
+    modes[policyTool.name] = 'allow';
   }
-  return tools;
+  return { definitions, modes };
 }
 
 function isValidDefinition(definition: string) {
@@ -159,13 +162,15 @@ function isValidDefinition(definition: string) {
   }
 }
 
-function makeTurnToolServer(state: TurnToolServerState, definitions: string[]): TurnToolServer {
+function makeTurnToolServer(state: TurnToolServerState,
+  selected: ReturnType<typeof reviewedAllowDefinitions>): TurnToolServer {
   if (!state.connectionId) throw new Error('Tool server connection is unavailable');
   const result: TurnToolServer = {
     key: `oc_${createHash('sha256').update(state.serverId).digest('hex').slice(0, 10)}`,
     serverId: state.serverId,
     connectionId: state.connectionId,
-    definitions,
+    definitions: selected.definitions,
+    modes: selected.modes,
   };
   if (state.serverInfo) result.serverInfo = state.serverInfo;
   return result;

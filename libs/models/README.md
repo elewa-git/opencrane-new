@@ -15,7 +15,7 @@ flowchart LR
   computer["apps/computer<br/>personal computers"] -.->|chooses task model| models
   models -.-> auth["libs/auth<br/>access passes"]
   models -.-> authz["libs/authz<br/>permission checks"]
-  models <-->|checks call ids and access within two seconds| gateway["agentgateway<br/>AI gateway"]
+  models <-->|checks tool mode, call ids and access| gateway["agentgateway<br/>AI gateway and reply checks"]
   gateway -->|new usage lines| models
   models -->|saves changes, reads new activity and checks history positions| store["libs/event-store<br/>event log"]
 ```
@@ -44,6 +44,8 @@ flowchart LR
   are dropped when their memory budget is reached and rebuilt on their next use.
   A summary that is too large is dropped on its own. Calls also refuse saved
   facts beyond the current history, which can happen after a backup restore.
+- Mark refused tool calls so the computer can say when nothing was sent.
+  Remove that marker from tool-server replies, which cannot prove this.
 - Refuse unsafe tool call ids before saving a decision.
 - Refuse callers who have disconnected before holding money.
 - Keep calls working when another chat, a file or someone else's access changes during the check.
@@ -54,6 +56,9 @@ flowchart LR
 - Start agentgateway without giving its provider key to the server or computer.
 - Record what the AI provider used. When the result of a call is unknown, keep the held money in place until an owner or admin settles it.
 - Give new members and assistants access to the active models ([grants](../../GLOSSARY.md#grant)), record the silo's first owner, store the AI provider settings that admins enter, and show spending history without private details.
+
+A tool offered in Allow mode is refused if its policy changes to Ask during that
+turn. This keeps the computer from creating an approval it cannot handle yet.
 
 ## Processes it handles
 

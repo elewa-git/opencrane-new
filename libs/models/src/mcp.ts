@@ -58,7 +58,15 @@ export async function mcpPolicy(store: EventStore, silo: string, server: string,
     return tool.name === call.params.name;
   }
   const tool = policy.tools.find(hasRequestedName);
-  const decision = toolDecision(tool);
+  let decision = toolDecision(tool);
+  const offeredMode = headers['x-opencrane-tool-mode'];
+  if (offeredMode !== undefined && offeredMode !== '' && offeredMode !== 'allow') {
+    throw new Error('MCP turn mode refused');
+  }
+  // Refuse changed Allow tools before creating an approval nobody can answer yet.
+  if (offeredMode === 'allow' && decision.outcome === 'ask') {
+    decision = { outcome: 'deny', reason: 'policy_block' };
+  }
   const review = await reviewMetadata(store, silo, server, call.params.name, deadline);
   return { ...decision, policy, revision: tool?.revision, name: call.params.name, args, ...review };
 }

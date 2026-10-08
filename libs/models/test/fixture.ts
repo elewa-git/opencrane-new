@@ -121,6 +121,7 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
   let usage = { input_tokens: 1000, output_tokens: 120, total_tokens: 1120, input_tokens_details: { cached_tokens: 0, cache_write_tokens: 0 } };
   const admitted: string[] = [], observations: Promise<void>[] = [];
   let upstreamBody = '';
+  let mcpResponse = { status: 200, marker: false, body: '{"jsonrpc":"2.0","id":1,"result":{"content":[]}}' };
   let received = 0, hold = false, rejection = 0, providerHeaders: string[] = [], providerAuthHash = '';
   const providerRequests: {
     time: string;
@@ -145,7 +146,13 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
       mcpName: req.headers['mcp-name'],
       bodyDigest: createHash('sha256').update(Buffer.concat(body)).digest('hex') }));
     req.resume();
-    if (req.url?.startsWith('/mcp/')) { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"jsonrpc":"2.0","id":1,"result":{"content":[]}}'); return; }
+    if (req.url?.startsWith('/mcp/')) {
+      res.setHeader('content-type', 'application/json');
+      if (mcpResponse.marker) res.setHeader('x-opencrane-decision', 'refused');
+      res.writeHead(mcpResponse.status);
+      res.end(mcpResponse.body);
+      return;
+    }
     if (rejection === -1) { req.socket.destroy(); return; }
     if (rejection) {
       res.writeHead(rejection, { 'content-type': 'application/json' });
@@ -199,6 +206,9 @@ export async function fixture(daily = 2000, monthly = 20000, real = false, allow
     credentialTime: (offset: number) => { credentialClock += offset; }, options, runner, db, nats, runtime, auth,
     decisionDown: () => decision.close(), providerAuthHash: () => providerAuthHash,
     usage: (input: number, cached: number, output: number, writes = 0) => { usage = { input_tokens: input, output_tokens: output, total_tokens: input + output, input_tokens_details: { cached_tokens: cached, cache_write_tokens: writes } }; },
+    mcpReply(status: number, marker: boolean, body: string) {
+      mcpResponse = { status, marker, body };
+    },
     reject: (status: number) => { rejection = status; },
     admitted, received: () => received, providerRequests: () => providerRequests, providerHeaders: () => providerHeaders, hold: () => { hold = true; }, advance: (ms = 181_000) => { clock += ms; },
     async call(extra = {}, patch: Record<string, unknown> = {}, path = '/v1/responses') {

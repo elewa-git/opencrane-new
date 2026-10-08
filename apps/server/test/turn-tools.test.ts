@@ -66,7 +66,7 @@ it('offers only reviewed, zero-cost Allow tools on published credential-free ser
     serverId: 'allow',
     connectionId: 'connection',
     serverInfo: { name: 'Reviewed server', version: '1' },
-    definitions: [toolDefinition],
+    definitions: [toolDefinition], modes: { read: 'allow' as const },
   });
   expect(JSON.stringify(tools)).not.toContain('discoverResult');
   expect(JSON.stringify(tools)).not.toContain('review text');
@@ -192,7 +192,7 @@ it('fits the largest ordinary turn and attachments below the socket limit', asyn
 it('keeps the first tool list for a message when a waiting turn is retried', async () => {
   const sentTurns = new Map<string, TurnDelivery>();
   const build = vi.fn(() => Promise.resolve([{ key: 'oc_4100837357', serverId: 'allow',
-    connectionId: 'connection', definitions: [toolDefinition] }]));
+    connectionId: 'connection', definitions: [toolDefinition], modes: { read: 'allow' as const } }]));
 
   const first = await toolsForMessage(sentTurns, 'conversation', 'message', build);
   const retry = await toolsForMessage(sentTurns, 'conversation', 'message', build);
