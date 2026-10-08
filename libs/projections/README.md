@@ -27,7 +27,7 @@ flowchart LR
   projections -->|writes tables| pg
   store["libs/event-store<br/>saved events"] -->|events in order| projections
   projections -.-> events["libs/events<br/>event definitions"]
-  projections -->|stores content keys| keys["Server files<br/>private revision keys"]
+  projections -->|stores content keys| keys["Server files<br/>existing private key store"]
 ```
 
 ## What it is responsible for
@@ -44,6 +44,7 @@ flowchart LR
 - Store the per-conversation encryption keys used on the dev stack, so chat text
   is only saved in encrypted form.
 - Keep each memory revision key separately, with a permanent marker when it is deleted.
+  Refuse a missing store or key, so a storage failure cannot look like deliberate deletion.
 - Send member-change notices after the table update commits.
 - Keep private conversation content out of the event-history table.
 - Avoid outside actions while rebuilding tables.
@@ -62,7 +63,10 @@ are not built yet. Customer deployment and backup recovery still need testing.
 3. **An admin reads model access.** The server reads grant facts and bounded
    member, group or assistant choices from these tables. Missing provider choices
    stay marked as not available yet.
-4. **An operator rebuilds a table.** They run `npm run replay -- members`. The
+4. **Memory text is encrypted.** The internal helper uses an existing private key
+   directory on the server. An empty deletion marker means the text was forgotten;
+   a missing key means storage failed. The application does not expose memory yet.
+5. **An operator rebuilds a table.** They run `npm run replay -- members`. The
    command reads the whole event log again, builds fresh tables on the side and
    swaps them in. It does not run reactions or make outside calls.
 

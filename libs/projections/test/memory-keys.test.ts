@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -126,7 +128,7 @@ function destruction() {
     const encrypted = keys.encrypt(current, 'first');
     keys.provision(second);
     const neighbour = keys.encrypt(second, 'second');
-    const abandoned = join(directory, `${encrypted.keyId.slice(4)}-pending-crashed`);
+    const abandoned = join(directory, `${encrypted.keyId.slice(4)}-pending`);
     writeFileSync(abandoned, readFileSync(join(directory, encrypted.keyId.slice(4))));
     keys.delete(current);
     function abandonedKey() {
@@ -394,7 +396,8 @@ function missingDirectoryProvision() {
   function check(_keys: ReturnType<typeof memoryKeys>, directory: string) {
     const absent = join(directory, 'absent');
     function provision() {
-      memoryKeys(absent).provision(currentIdentity());
+      const store = memoryKeys(absent);
+      store.provision(currentIdentity());
     }
     expect(provision).toThrow('Memory key store unavailable');
     expect(existsSync(absent)).toBe(false);

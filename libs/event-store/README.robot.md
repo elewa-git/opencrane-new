@@ -33,7 +33,9 @@ maps the first hyphen to `ev.member.alice`; ids may contain further hyphens,
 but no dots, whitespace or NATS wildcards. Event types must use their
 registered stream prefix. `commandId` and `principal` are required for
 appends, including an explicit system principal for system commands.
-New `memory.written` appends require version 1. Reads still parse unversioned
+New `memory.written` appends require version 1 and a scope id equal to SHA-256
+of JSON `[silo, scopeKind, ownerId]`. A mismatched owner, kind or silo is rejected
+before writing. Reads still parse unversioned
 memory events so their unknown ownership can stay quarantined during replay.
 
 `append` returns `appended` with the global sequence, `conflict` for a stale

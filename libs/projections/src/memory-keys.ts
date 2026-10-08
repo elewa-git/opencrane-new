@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import {
-  closeSync, fsyncSync, linkSync, mkdirSync, openSync, readFileSync, renameSync,
-  readdirSync, rmSync, statSync, writeFileSync,
+  closeSync, existsSync, fsyncSync, linkSync, openSync, readFileSync, renameSync,
+  rmSync, statSync, writeFileSync,
 } from 'node:fs';
 import {
   memoryWrittenIdentity, memoryRevisionIdentitySchema, memoryTextSchema,
@@ -50,21 +50,31 @@ function reference(identity: MemoryIdentity): string {
   hash.update(binding(identity));
   return hash.digest('hex');
 }
-function readKey(directory: string, identity: MemoryIdentity): Buffer | null {
+function requireDirectory(directory: string): void {
+  let details: ReturnType<typeof statSync>;
+  try {
+    details = statSync(directory);
+  } catch (error) {
+    throw new Error('Memory key store unavailable', { cause: error });
+  }
+  if (!details.isDirectory()) {
+    throw new Error('Memory key store unavailable');
+  }
+  if ((details.mode & 0o777) !== 0o700) {
+    throw new Error('Memory key store requires mode 0700');
+  }
+}
+function readKey(directory: string, identity: MemoryIdentity): Buffer | 'destroyed' {
+  const path = `${directory}/${reference(identity)}`;
+  requireDirectory(directory);
   let bytes: Buffer;
   try {
-    bytes = readFileSync(`${directory}/${reference(identity)}`);
+    bytes = readFileSync(path);
   } catch (error) {
-    if (hasCode(error, 'ENOENT')) {
-      if (!statSync(directory).isDirectory()) {
-        throw new Error('Memory key store unavailable', { cause: error });
-      }
-      return null;
-    }
-    throw error;
+    throw new Error('Memory key store unavailable', { cause: error });
   }
   if (bytes.length === 0) {
-    return null;
+    return 'destroyed';
   }
   if (bytes.length !== 32) {
     throw new Error('Memory key store damaged');
@@ -73,11 +83,20 @@ function readKey(directory: string, identity: MemoryIdentity): Buffer | null {
 }
 function publishKey(directory: string, identity: MemoryIdentity, bytes: Buffer, remove: boolean): void {
   const destination = `${directory}/${reference(identity)}`;
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const temporary = `${destination}-pending-${randomUUID()}`;
+  requireDirectory(directory);
+  // Keep one known temporary key name so deletion needs no directory scan.
+  let temporary = `${destination}-pending`;
+  if (remove) {
+    temporary = `${destination}-deleting-${randomUUID()}`;
+  }
+  const descriptor = openSync(temporary, 'wx', 0o600);
   try {
-    writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 });
-    syncPath(temporary);
+    try {
+      writeFileSync(descriptor, bytes);
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
     if (remove) {
       // Replace the key atomically with an empty permanent marker, including during provision.
       renameSync(temporary, destination);
@@ -97,32 +116,33 @@ function publishKey(directory: string, identity: MemoryIdentity, bytes: Buffer, 
 }
 /** Keep revision keys on the server. Never return key bytes to callers. */
 export function memoryKeys(directory: string) {
+  requireDirectory(directory);
   function provision(identity: MemoryIdentity): string {
-    publishKey(directory, identity, randomBytes(32), false);
-    if (readKey(directory, identity) === null) {
+    const keyReference = reference(identity);
+    requireDirectory(directory);
+    if (!existsSync(`${directory}/${keyReference}`)) {
+      publishKey(directory, identity, randomBytes(32), false);
+    }
+    if (readKey(directory, identity) === 'destroyed') {
       throw new Error('Memory key destroyed');
     }
-    return `key:${reference(identity)}`;
+    return `key:${keyReference}`;
   }
   function remove(identity: MemoryIdentity): void {
     publishKey(directory, identity, Buffer.alloc(0), true);
-    const prefix = `${reference(identity)}-pending-`;
     // Remove copies left by a crash between publishing a hard link and removing its temporary name.
-    for (const entry of readdirSync(directory)) {
-      if (entry.startsWith(prefix)) {
-        rmSync(`${directory}/${entry}`, { force: true });
-      }
-    }
+    const temporary = `${directory}/${reference(identity)}-pending`;
+    rmSync(temporary, { force: true });
     syncPath(directory);
   }
   function encrypt(identity: MemoryIdentity, text: string) {
     memoryTextSchema.parse(text);
     const key = readKey(directory, identity);
-    if (key === null) {
-      throw new Error('Memory key missing or destroyed');
+    if (key === 'destroyed') {
+      throw new Error('Memory key destroyed');
     }
     const nonce = randomBytes(12);
-    const cipher = createCipheriv('aes-256-gcm', key, nonce);
+    const cipher = createCipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
     cipher.setAAD(binding(identity));
     const encrypted = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
     const bytes = Buffer.concat([nonce, cipher.getAuthTag(), encrypted]);
@@ -133,11 +153,15 @@ export function memoryKeys(directory: string) {
       throw new Error('Memory key identity mismatch');
     }
     const key = readKey(directory, identity);
-    if (key === null) {
+    if (key === 'destroyed') {
       return null;
     }
     const bytes = Buffer.from(value.ciphertext, 'base64');
-    const decipher = createDecipheriv('aes-256-gcm', key, bytes.subarray(0, 12));
+    if (bytes.length < 29 || bytes.length > 4124) {
+      throw new Error('Invalid memory ciphertext size');
+    }
+    const nonce = bytes.subarray(0, 12);
+    const decipher = createDecipheriv('aes-256-gcm', key, nonce, { authTagLength: 16 });
     decipher.setAAD(binding(identity));
     decipher.setAuthTag(bytes.subarray(12, 28));
     const text = Buffer.concat([decipher.update(bytes.subarray(28)), decipher.final()]);

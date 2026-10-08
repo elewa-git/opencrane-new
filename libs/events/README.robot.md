@@ -89,6 +89,11 @@ also reads the exact old unversioned shape. `memoryWrittenIdentity` returns null
 that shape: its ownership is unknown, so callers must quarantine it. No default
 audience or offline mapping is supplied. The other old memory schemas remain.
 
+Saved memory events must use `parseEventByType`, or `memoryWrittenIdentity` when
+only their ownership fields are needed. `getEventDefinition('memory.written')`
+returns a `dataSchema` for version 1 only. Calling its `dataSchema.parse` on
+unversioned saved data throws; it is not the replay parser.
+
 Server custody hashes JSON `[silo, scopeKind, ownerId]` with SHA-256 and checks
 the derived id before using any key. Version-1 event parsing checks identity field
 shapes, the subject, command/principal ids, personal-only

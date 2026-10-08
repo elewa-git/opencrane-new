@@ -1,5 +1,7 @@
+import { createHash } from 'node:crypto';
 import {
   getEventDefinition,
+  memoryWrittenIdentity,
   parseEventByType,
   type EventEnvelope,
 } from "@opencrane/events";
@@ -89,8 +91,15 @@ function validCurrentMemoryWrite(event: EventEnvelope): boolean {
   if (event.type !== 'memory.written') {
     return true;
   }
-  const definition = getEventDefinition(event.type);
-  return definition?.dataSchema.safeParse(event.data).success === true;
+  const identity = memoryWrittenIdentity(event);
+  if (identity === null) {
+    return false;
+  }
+  // Refuse an ownership mismatch before it can stop a later replay.
+  const scopeFields = [identity.silo, identity.scopeKind, identity.ownerId];
+  const hash = createHash('sha256');
+  hash.update(JSON.stringify(scopeFields));
+  return identity.scopeId === hash.digest('hex');
 }
 
 function validHistoryChecked(value: unknown): boolean {
