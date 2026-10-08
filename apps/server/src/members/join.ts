@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, currentMembership } from '@opencrane/models';
+import { authorityFence, currentMembership, isAuthorityChanged } from '@opencrane/models';
 import { memberInvitedDataSchema, memberJoinedDataSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 
@@ -18,13 +18,15 @@ export type JoinResult =
       | 'unknown_invitation' | 'expired_invitation' | 'unbound_invitation'
       | 'invitation_not_pending' | 'command_id_reused' | 'concurrent_change'
       | 'inviter_authority_ended' | 'invalid_request' | 'wrong_origin'
-      | 'invalid_history' | 'ownership_stream_required' }
+      | 'invalid_history' | 'ownership_stream_required' | 'sign_in_again'
+      | 'unsupported_email' | 'access_removed' }
   | { status: 'unavailable' };
 
 interface JoinContext {
   silo: string;
   issuer: string;
   sub: string;
+  authTime: number;
   email?: string | undefined;
   emailVerified?: boolean | undefined;
 }
@@ -68,10 +70,8 @@ function pending(events: StoredEvent[], input: JoinInput, context: JoinContext, 
   if (data.invitedIdentity.issuer !== context.issuer || data.invitedIdentity.sub !== context.sub) {
     return { status: 'refused', reason: 'wrong_identity' };
   }
-  if (context.emailVerified !== true || !context.email
-    || context.email.trim().toLowerCase() !== data.email.trim().toLowerCase()) {
-    return { status: 'refused', reason: 'wrong_identity' };
-  }
+  const identityRefusal = checkEmailAndSignIn(context, data.email, now);
+  if (identityRefusal) return identityRefusal;
   if (latest !== invitation) return { status: 'refused', reason: 'invitation_not_pending' };
   if (Date.parse(data.expiresAt) <= now.getTime()) return { status: 'refused', reason: 'expired_invitation' };
   const admission = admissionRefusal(events, data);
@@ -79,6 +79,41 @@ function pending(events: StoredEvent[], input: JoinInput, context: JoinContext, 
     return admission;
   }
   return data;
+}
+
+function isAscii(value: string): boolean {
+  for (const character of value) {
+    if (character.charCodeAt(0) > 127) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function checkEmailAndSignIn(context: JoinContext, invitedEmail: string,
+  now: Date): JoinResult | undefined {
+  if (!context.email || context.emailVerified === undefined) {
+    return { status: 'refused', reason: 'sign_in_again' };
+  }
+  const signedInEmail = context.email.trim();
+  const invitationEmail = invitedEmail.trim();
+  if (!isAscii(signedInEmail) || !isAscii(invitationEmail)) {
+    return { status: 'refused', reason: 'unsupported_email' };
+  }
+  const signedInAddress = signedInEmail.toLowerCase();
+  const invitedAddress = invitationEmail.toLowerCase();
+  if (context.emailVerified !== true || signedInAddress !== invitedAddress) {
+    return { status: 'refused', reason: 'wrong_identity' };
+  }
+  const signInAge = now.getTime() / 1000 - context.authTime;
+  if (signInAge < 0 || signInAge > 3600) {
+    return { status: 'refused', reason: 'sign_in_again' };
+  }
+  return undefined;
+}
+
+function isRemoval(row: StoredEvent): boolean {
+  return row.event.type === 'member.removed';
 }
 
 function validateHistory(events: StoredEvent[], input: JoinInput, context: JoinContext): JoinResult | undefined {
@@ -91,6 +126,10 @@ function validateHistory(events: StoredEvent[], input: JoinInput, context: JoinC
     return event.subject !== `member-${input.memberId}` || typeof data !== 'object' || data === null
       || !('memberId' in data) || data.memberId !== input.memberId;
   })) return { status: 'refused', reason: 'invalid_history' };
+  // Keep a removed admission closed, including repeats of its saved join.
+  if (events.some(isRemoval)) {
+    return { status: 'refused', reason: 'access_removed' };
+  }
   return undefined;
 }
 
@@ -187,6 +226,20 @@ async function confirmInvitation(store: JoinStore, events: StoredEvent[], input:
     return { status: 'refused', reason: 'inviter_authority_ended' };
   }
   // Recheck access and expiry just before the conditional append.
-  await fresh();
+  try {
+    await fresh();
+  } catch (error) {
+    if (!isAuthorityChanged(error)) {
+      throw error;
+    }
+    // Explain a confirmed inviter removal or demotion as an access refusal.
+    // Keep store errors and other concurrent changes unavailable.
+    const latestInviter = await currentMembership(
+      store, context.silo, invitation.invitedBy, fresh);
+    if (!['owner', 'admin'].includes(latestInviter.role)) {
+      return { status: 'refused', reason: 'inviter_authority_ended' };
+    }
+    throw error;
+  }
   return pending(events, input, context, now());
 }

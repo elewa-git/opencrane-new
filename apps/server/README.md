@@ -27,7 +27,8 @@ flowchart LR
   Production refuses extra sign-in identities. Development can allow named identities
   from another organisation, but session routes still need a configured organisation.
 - Checks permissions before returning private information or changing data.
-- Accepts bound invitations only for a verified email while the inviter is still an owner or admin.
+- Accepts bound invitations after a recent sign-in with a verified email, while
+  the inviter is still an owner or admin.
 - Checks an invitation email and explains that the person is confirmed when they accept.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.
@@ -69,7 +70,8 @@ use it to refuse calls if the tool changes to Ask during the turn.
 
 ## Processes it handles
 
-1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie.
+1. **A person signs in.** The server sends the browser to Zitadel and checks the returned identity. It keeps the session in an encrypted cookie. If the sign-in details are too large
+   for a browser cookie, it shows a clear error.
 2. **The first owner claims a new installation.** An operator runs the one-time command,
    which prints a token. The first person signs in and enters that token on the claim page.
    The server checks it and records them as the owner.

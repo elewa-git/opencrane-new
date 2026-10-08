@@ -49,6 +49,7 @@ export function registerMemberRoutes(app: FastifyInstance, config: AuthConfig, o
     const context = {
       silo: options.silo, issuer: config.issuerUrl, sub: session.sub,
       email: session.email, emailVerified: session.emailVerified,
+      authTime: session.authTime,
     };
     const result = await joinMember(options.store, input.data, context, now);
     if (result.status === 'unavailable') {
@@ -56,11 +57,19 @@ export function registerMemberRoutes(app: FastifyInstance, config: AuthConfig, o
       request.log.error({ operation: 'member.joined' }, 'member join unavailable');
       return send(503, { status: 'unavailable' });
     }
-    if (result.status === 'refused' && result.reason === 'inviter_authority_ended') {
-      return send(403, result);
-    }
-    return send(result.status === 'refused' ? 409 : 200, result);
+    return send(statusForJoin(result), result);
   }
+}
+
+function statusForJoin(result: JoinResult): number {
+  if (result.status !== 'refused') {
+    return 200;
+  }
+  const accessReasons = ['inviter_authority_ended', 'access_removed'];
+  if (accessReasons.includes(result.reason)) {
+    return 403;
+  }
+  return 409;
 }
 
 function currentTime() {

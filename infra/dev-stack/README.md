@@ -28,7 +28,8 @@ flowchart LR
 
 - Start and stop the local services and OpenCrane processes.
 - Create private local credentials for the services.
-- Set up four sign-in test users for each spare stack.
+- Set up four sign-in test users for each spare stack. Check that the sign-in apps
+  include email claims in their signed tokens.
 - Prepare the local Kubernetes cluster so that the server can start a sandboxed computer for each member.
 - Run a local stand-in for the AI model, so checks cost nothing and give the same answer every time.
 - Run browser checks against real local services. The approval check sends Codex's

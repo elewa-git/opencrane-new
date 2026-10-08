@@ -12,7 +12,7 @@ Existing bound invitations now require a verified sign-in email and the exact
 organisation. Acceptance checks the inviter's current member and ownership
 events immediately before saving a join. Removed streams and earlier bindings
 to another identity cannot be reused. Exact saved-command retries remain usable
-and never restore membership. The response reveals no invitation details to the
+for admissions that have not been removed. The response reveals no invitation details to the
 wrong account.
 
 The full email invitation flow needs more than about 600 changed lines once
@@ -55,3 +55,6 @@ its command without saving a second join.
 Safe local logs are under `/tmp/p4-3-*.log` on the builder host. The skipped join
 projection test is reported separately; passing local tests do not qualify a
 fresh installation or the remaining email invitation flow.
+
+The [first review fixes](p4-3-pr3-review1.md) record the later changes and checks
+after rebasing this branch onto current main.

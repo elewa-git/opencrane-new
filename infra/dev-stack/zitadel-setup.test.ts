@@ -39,6 +39,20 @@ test('owner restore removes secondary redirects, preserves other settings, and r
     assert.ok(!`${first.stdout}${first.stderr}`.includes('fake-test-pat'));
     assert.equal(JSON.parse((await restore()).stdout).changed, false);
     assert.deepEqual(JSON.parse(await readFile(providerFile, 'utf8')), expected);
+    for (const value of [false, undefined, 'true']) {
+      const config = { ...expected.apps[ownerApp.id]!.oidcConfig,
+        idTokenUserinfoAssertion: value };
+      const app = { ...expected.apps[ownerApp.id], oidcConfig: config };
+      const refused = { ...expected, apps: { ...expected.apps, [ownerApp.id]: app } };
+      const refusedJson = JSON.stringify(refused);
+      await writeFile(providerFile, refusedJson);
+      await assert.rejects(restore(), /must have idTokenUserinfoAssertion=true/u);
+      const savedJson = await readFile(providerFile, 'utf8');
+      const savedState = JSON.parse(savedJson);
+      const refusedState = JSON.parse(refusedJson);
+      assert.deepEqual(savedState, refusedState);
+    }
+    await writeFile(providerFile, JSON.stringify(expected));
     // Owner repair needs neither stack ownership nor stored client/user credentials.
     await assert.rejects(stat(`${home}/.config/opencrane/dev-stack`));
     await assert.rejects(restore('1'));
@@ -62,7 +76,7 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
   const providerFile = `${home}/provider.json`;
   const ownerApp = { id: '393311211707436433', name: 'OpenCrane 2 Dev Web',
     details: { resourceOwner: '393311211338337681' }, oidcConfig: {
-      clientId: '393311211707501969', devMode: false,
+      clientId: '393311211707501969', devMode: false, idTokenUserinfoAssertion: true,
       redirectUris: ['https://ocn-dev.tail00285e.ts.net/auth/callback'],
       postLogoutRedirectUris: ['https://ocn-dev.tail00285e.ts.net/'],
     } };
@@ -73,6 +87,18 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
   const setup = () => exec(process.execPath, ['--experimental-strip-types', '--import',
     './infra/dev-stack/test/zitadel-provider.mjs', 'infra/dev-stack/zitadel-setup.ts'], { env });
   try {
+    for (const value of [false, undefined, 'true']) {
+      const refused = { apps: { [ownerApp.id]: { ...ownerApp,
+        oidcConfig: { ...ownerApp.oidcConfig, idTokenUserinfoAssertion: value } } }, users: {} };
+      const refusedJson = JSON.stringify(refused);
+      await writeFile(providerFile, refusedJson);
+      await assert.rejects(setup(), /must have idTokenUserinfoAssertion=true/u);
+      const savedJson = await readFile(providerFile, 'utf8');
+      const savedState = JSON.parse(savedJson);
+      const refusedState = JSON.parse(refusedJson);
+      assert.deepEqual(savedState, refusedState);
+    }
+    await writeFile(providerFile, JSON.stringify({ apps: { [ownerApp.id]: ownerApp }, users: {} }));
     const first = await setup();
     const state = JSON.parse(await readFile(providerFile, 'utf8'));
     assert.deepEqual(state.apps[ownerApp.id], ownerApp);
@@ -106,6 +132,22 @@ test('secondary setup keeps the owner app unchanged and reuses its own private c
     for (const [name, value] of Object.entries(credentials)) {
       assert.equal(await readFile(`${directory}/zitadel-${name}`, 'utf8'), value);
     }
+    for (const value of [false, undefined, 'true']) {
+      const refused = structuredClone(state);
+      if (value === undefined) {
+        delete refused.apps[config.appId].oidcConfig.idTokenUserinfoAssertion;
+      } else {
+        refused.apps[config.appId].oidcConfig.idTokenUserinfoAssertion = value;
+      }
+      const refusedJson = JSON.stringify(refused);
+      await writeFile(providerFile, refusedJson);
+      await assert.rejects(setup(), /must have idTokenUserinfoAssertion=true/u);
+      const savedJson = await readFile(providerFile, 'utf8');
+      const savedState = JSON.parse(savedJson);
+      const refusedState = JSON.parse(refusedJson);
+      assert.deepEqual(savedState, refusedState);
+    }
+    await writeFile(providerFile, JSON.stringify(state));
     // Refuse an existing app with broad redirects without rewriting its config.
     state.apps[config.appId].oidcConfig.redirectUris = ['http://127.0.0.1:*/auth/callback'];
     await writeFile(providerFile, JSON.stringify(state));

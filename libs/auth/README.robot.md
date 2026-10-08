@@ -178,8 +178,16 @@ Use `computer-open 1 10000 1` to keep every turn open.
 ## Sign-in email claims
 
 `completeLogin` copies the signed ID token's string `email` into the encrypted
-session. `emailVerified` is true only for the boolean claim `email_verified=true`;
+session, with a maximum of 320 characters. `emailVerified` is true only for the boolean claim `email_verified=true`;
 missing, string or false values become false. Both session fields are optional
 so older cookies still decode. No request body supplies these claims.
 `test/oidc-client.test.ts` checks them through the loopback provider and a cookie
 round trip. The server uses them for fresh bound-invitation acceptance.
+
+Invitation acceptance depends on the
+[Zitadel deployment requirements](../../docs/api/members.md#zitadel-deployment-requirements):
+self-registration off in the silo's organisation, no external identity providers
+that assert verified emails, only trusted admins setting verified emails, and
+`idTokenUserinfoAssertion=true` on the app. Emails are not unique in Zitadel.
+The server limits the complete session cookie header to 3,800 bytes and refuses
+larger sign-in sessions with a clear error.

@@ -942,11 +942,25 @@ The response reports the oldest checkpoint among the member, group and model
 access tables. A lagging table is marked applying instead of being presented as
 current. Reads check authority once before loading their result; they do not keep
 a change watcher open while the result is assembled.
+
 ## Bound invitation checks
 
 `POST /members/join` uses the [member API contract](../../docs/api/members.md#bound-invitation-acceptance).
-It requires the exact organisation, verified session email and current inviter
-role for a fresh join. It keeps saved-command receipts readable without another
-join. Unavailable replies may follow a stored append.
+It requires the exact organisation, verified ASCII session email, a sign-in within
+60 minutes and current inviter role for a fresh join. Saved-command receipts stay
+readable while the admission has not been removed. Removed admissions return
+403 `access_removed`. Unavailable replies may follow a stored append.
 The join store supplies `readStream`, `head` and `append` so the shared
 `authorityFence` can check member and ownership events before the write.
+
+The API contract's [Zitadel deployment requirements](../../docs/api/members.md#zitadel-deployment-requirements)
+are required for acceptance: self-registration off; no external identity providers
+that assert verified emails; only trusted admins may mark an email verified; and
+`idTokenUserinfoAssertion=true` on the app. Emails are not unique in Zitadel.
+The contract records the accepted window between the last inviter check and the
+append, which is conditional only on the joining member stream.
+
+The sign-in callback limits the complete session cookie header to 3,800 bytes.
+Larger sessions return a clear 400 error and clear both cookies. Browser requests
+receive plain text for this error. Invalid session data, including an email longer
+than 320 characters, also fails sign-in before a session cookie is written.

@@ -89,3 +89,15 @@ describe('hasRecentAuth (step-up window from the config)', () => {
     expect(hasRecentAuth(testAuthConfig(), validSession({ authTime: 0 }), now)).toBe(false);
   });
 });
+
+function sessionEmailLimit() {
+  const allowed = validSession({ email: 'a'.repeat(320) });
+  const cookie = encodeSession(config, allowed);
+  expect(decodeSession(config, cookie, now).email).toHaveLength(320);
+  const oversized = validSession({ email: 'a'.repeat(321) });
+  function encodeOversized() {
+    encodeSession(config, oversized);
+  }
+  expect(encodeOversized).toThrow();
+}
+it('limits session email claims to 320 characters', sessionEmailLimit);

@@ -43,6 +43,10 @@ function readCookie(request: FastifyRequest, name: string): string | undefined {
 
 function rejectLogin(request: FastifyRequest, reply: FastifyReply, config: AuthConfig, reason: string) {
   reply.header('set-cookie', [clearCookie(config.flowCookieName, cookieAttrs(config)), clearCookie(config.cookieName, cookieAttrs(config))]);
+  if (reason === 'Sign-in details are too large for a session cookie' &&
+      request.headers.accept?.includes('text/html')) {
+    return reply.code(400).type('text/plain').send(reason);
+  }
   if (request.headers.accept?.includes('text/html')) {
     const code = reason === 'this account belongs to a different organisation' ? 'organisation'
       : reason === 'identity provider unavailable' ? 'unavailable' : 'rejected';
@@ -118,9 +122,21 @@ export function registerAuthRoutes(app: FastifyInstance, config: AuthConfig): vo
       }
       result.session.stepUpApproval = flow.stepUp.approvalId;
     }
-    const sessionCookie = encodeSession(config, result.session);
+    let sessionCookieHeader: string;
+    try {
+      const sessionCookie = encodeSession(config, result.session);
+      const attributes = { ...cookieAttrs(config), maxAgeSeconds: config.sessionMaxAgeSeconds };
+      sessionCookieHeader = serializeCookie(config.cookieName, sessionCookie, attributes);
+    } catch {
+      return rejectLogin(request, reply, config, 'Invalid sign-in session details');
+    }
+    // Stay below browser cookie limits, including the name and attributes.
+    if (Buffer.byteLength(sessionCookieHeader, 'utf8') > 3800) {
+      return rejectLogin(request, reply, config,
+        'Sign-in details are too large for a session cookie');
+    }
     reply.header('set-cookie', [
-      serializeCookie(config.cookieName, sessionCookie, { ...cookieAttrs(config), maxAgeSeconds: config.sessionMaxAgeSeconds }),
+      sessionCookieHeader,
       clearCookie(config.flowCookieName, cookieAttrs(config)),
     ]);
     request.log.info('sign-in completed');

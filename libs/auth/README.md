@@ -22,6 +22,7 @@ flowchart LR
 
 - Send a person to Zitadel and check the sign-in response using OIDC, a standard sign-in method.
 - Keep the email and its verification result from the checked sign-in token.
+  Limit the stored email length.
 - Keep the signed-in person, and the details of a sign-in still in progress, in encrypted cookies.
 - Check that a person belongs to this [silo](../../GLOSSARY.md#silo)'s organisation and that a sensitive action follows a recent sign-in.
 - Refuse identity exceptions at production startup. Development and tests can name

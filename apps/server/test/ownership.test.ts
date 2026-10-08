@@ -45,7 +45,8 @@ function resolveMemberId(_silo: string, _issuer: string, subject: string) {
 function request(method: 'GET' | 'POST', payload?: unknown, sub = 'idp-owner',
   url = '/api/ownership', orgId = 'org-acme') {
   const email = `${sub.slice(4)}@example.test`;
-  const session = { sub, orgId, roles: [], authTime: 1790856000, exp: 2000000000,
+  const authTime = Math.floor(Date.now() / 1000);
+  const session = { sub, orgId, roles: [], authTime, exp: 2000000000,
     email, emailVerified: true };
   const headers = {
     origin: 'https://app.example.test', 'content-type': 'application/json',

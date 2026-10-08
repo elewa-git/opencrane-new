@@ -8,7 +8,7 @@ export const sessionSchema = z
     /** Used only for provider logout; optional for existing and dev-only sessions. */
     idToken: z.string().min(1).optional(),
     // Keep only email claims checked during sign-in, never browser input.
-    email: z.string().optional(),
+    email: z.string().max(320).optional(),
     emailVerified: z.boolean().optional(),
     stepUpApproval: z.string().regex(/^[a-f0-9]{64}$/u).optional(),
     /** Display only; never used for authorisation. */

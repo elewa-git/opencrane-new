@@ -104,9 +104,10 @@ it('refuses an existing non-owner member without changing their identity binding
         invitedBy: 'admin', invitedIdentity: { issuer: config.issuerUrl, sub: session.sub },
         expiresAt: new Date(clock.getTime() + 60_000).toISOString() },
     } })).status).toBe('appended');
+    const joiningSession = { ...session, authTime: Math.floor(clock.getTime() / 1000) };
     const joined = await app.inject({ method: 'POST', url: '/members/join',
       payload: { memberId: 'alice', invitationId: 'invite-alice', commandId: 'join-alice', displayName: 'Alice' },
-      headers: { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(config, session)}` } });
+      headers: { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(config, joiningSession)}` } });
     expect(joined.statusCode).toBe(200);
     await runner.run(members);
     expect(await feed.memberId('test', config.issuerUrl, session.sub)).toBe('alice');

@@ -229,8 +229,10 @@ it('refuses command-id reuse with changed arguments, a second acceptance, and ac
     .toEqual({ status: 'refused', reason: 'invitation_not_pending' });
   await nats.store.append({ expectedSequence: 3, event: { ...event('removed', 'member-alice', 'member.removed'), silo: 'acme' } });
   expect((await accept({ ...input, commandId: 'third' })).json<JoinResult>())
-    .toEqual({ status: 'refused', reason: 'invitation_not_pending' });
-  expect((await accept()).json<JoinResult>().status).toBe('already_joined');
+    .toEqual({ status: 'refused', reason: 'access_removed' });
+  const replay = await accept();
+  expect(replay.statusCode).toBe(403);
+  expect(replay.json()).toEqual({ status: 'refused', reason: 'access_removed' });
   expect(await nats.store.head()).toBe(4);
 });
 
@@ -303,7 +305,8 @@ const emailRefusals = [
 async function emailRefusal({ identity }: { identity: SessionData }) {
   await invite();
   const response = await accept(input, identity);
-  expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity' });
+  const reason = identity.emailVerified === undefined ? 'sign_in_again' : 'wrong_identity';
+  expect(response.json()).toEqual({ status: 'refused', reason });
   expect(await history()).toHaveLength(1);
 }
 it.each(emailRefusals)('refuses $name and saves no join', emailRefusal);
@@ -357,6 +360,7 @@ async function invalidAdmission(kind: string) {
     .toBe('appended');
   const response = await accept();
   let reason = 'invitation_not_pending';
+  if (kind === 'removed') reason = 'access_removed';
   if (kind === 'rebound') reason = 'wrong_identity';
   if (kind === 'owner') reason = 'ownership_stream_required';
   expect(response.json()).toEqual({ status: 'refused', reason });
@@ -431,7 +435,9 @@ async function refusesChangedAuthority() {
   }
   const interception = vi.spyOn(nats.store, 'readStream').mockImplementation(changeDuringRead);
   try {
-    expect((await accept()).statusCode).toBe(503);
+    const response = await accept();
+    expect(response.statusCode).toBe(403);
+    expect(response.json()).toEqual({ status: 'refused', reason: 'inviter_authority_ended' });
     expect(await history()).toHaveLength(1);
   } finally {
     interception.mockRestore();
@@ -439,3 +445,118 @@ async function refusesChangedAuthority() {
 }
 it('refuses authority lost during the final event check without saving a join',
   refusesChangedAuthority);
+
+async function expiryAfterAuthority() {
+  await invite({ expiresAt: '2026-10-01T12:00:01Z' });
+  const head = nats.store.head.bind(nats.store);
+  async function advanceClock(subject?: string, deadline?: number) {
+    const position = await head(subject, deadline);
+    if (subject === 'member-admin') clock = new Date('2026-10-01T12:00:01Z');
+    return position;
+  }
+  const interception = vi.spyOn(nats.store, 'head').mockImplementation(advanceClock);
+  try {
+    const response = await accept();
+    expect(response.json()).toEqual({ status: 'refused', reason: 'expired_invitation' });
+    expect(await history()).toHaveLength(1);
+  } finally {
+    interception.mockRestore();
+  }
+}
+it('rechecks invitation expiry after the final authority check', expiryAfterAuthority);
+
+const identityOrderingCases = [
+  { state: 'expired', claim: 'account' },
+  { state: 'expired', claim: 'email' },
+  { state: 'accepted', claim: 'account' },
+  { state: 'accepted', claim: 'email' },
+];
+async function identityBeforeState({ state, claim }: { state: string; claim: string }) {
+  const patch = state === 'expired' ? { expiresAt: clock.toISOString() } : {};
+  await invite(patch);
+  if (state === 'accepted') expect((await accept()).statusCode).toBe(200);
+  const identity = { ...session };
+  if (claim === 'account') identity.sub = 'another-account';
+  else identity.email = 'another@example.test';
+  const command = { ...input, commandId: 'another-command' };
+  const before = await nats.store.head();
+  const response = await accept(command, identity);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity' });
+  expect(await nats.store.head()).toBe(before);
+}
+it.each(identityOrderingCases)(
+  'checks the $claim before revealing an $state invitation', identityBeforeState);
+
+async function noStoreReplies() {
+  await invite();
+  const joined = await accept();
+  const retry = await accept();
+  const refused = await accept(input, { ...session, sub: 'another-account' });
+  const missing = await app.inject({ method: 'POST', url: '/members/join', payload: input });
+  for (const response of [joined, retry, refused, missing]) {
+    expect(response.headers['cache-control']).toBe('no-store');
+  }
+  expect(await history()).toHaveLength(2);
+}
+it('marks acceptance, retry and refusal replies as no-store', noStoreReplies);
+
+async function inviterRefusalStatus() {
+  await invite({ invitedBy: 'absent-inviter' });
+  const response = await accept();
+  expect(response.statusCode).toBe(403);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'inviter_authority_ended' });
+  expect(await history()).toHaveLength(1);
+}
+it('returns 403 when inviter authority ended', inviterRefusalStatus);
+
+async function missingEmailClaim() {
+  await invite();
+  const { email: _omitted, ...identity } = session;
+  const response = await accept(input, identity);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'sign_in_again' });
+  expect(await history()).toHaveLength(1);
+}
+it('requires sign-in again when verified is true but the email claim is missing',
+  missingEmailClaim);
+
+async function ownerInviter() {
+  const roleChange = { ...event(randomUUID(), 'member-admin', 'member.role_changed'),
+    silo: 'acme', data: { memberId: 'admin', previousRole: 'admin', newRole: 'member',
+      changedBy: 'owner' } };
+  expect((await nats.store.append({ event: roleChange, expectedSequence: 1 })).status)
+    .toBe('appended');
+  const ownership = { ...event(randomUUID(), 'ownership-acme', 'ownership.seeded'),
+    silo: 'acme', data: { ownerIds: ['admin'] } };
+  expect((await nats.store.append({ event: ownership, expectedSequence: 0 })).status)
+    .toBe('appended');
+  await invite();
+  const response = await accept();
+  expect(response.statusCode).toBe(200);
+  expect(response.json()).toMatchObject({ status: 'joined' });
+  expect(await history()).toHaveLength(2);
+}
+it('accepts an invitation from an Owner recorded in ownership events', ownerInviter);
+
+async function recentSignIn(age: number) {
+  await invite();
+  const identity = { ...session, authTime: clock.getTime() / 1000 - age };
+  const response = await accept(input, identity);
+  if (age >= 0 && age <= 3600) {
+    expect(response.json()).toMatchObject({ status: 'joined' });
+    expect(await history()).toHaveLength(2);
+  } else {
+    expect(response.json()).toEqual({ status: 'refused', reason: 'sign_in_again' });
+    expect(await history()).toHaveLength(1);
+  }
+}
+it.each([3599, 3600, 3601, -1, 1790856000])('requires a sign-in within 60 minutes (age %s)', recentSignIn);
+
+async function nonAsciiEmail(email: string) {
+  await invite({ email: 'kelvin@example.test' });
+  const identity = { ...session, email };
+  const response = await accept(input, identity);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'unsupported_email' });
+  expect(await history()).toHaveLength(1);
+}
+it.each(['Kelvin@example.test', 'kelvin@éxample.test'])(
+  'refuses the non-ASCII session email %s', nonAsciiEmail);
