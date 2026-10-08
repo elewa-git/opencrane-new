@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -357,3 +357,24 @@ function scopeKindMismatch() {
   withKeys(check);
 }
 it('changing only scopeKind refuses key operations', scopeKindMismatch);
+
+function neverProvisionedKey() {
+  function check(keys: ReturnType<typeof memoryKeys>, directory: string) {
+    const current = currentIdentity();
+    keys.provision(current);
+    const encrypted = keys.encrypt(current, 'Delivery instructions');
+    const emptyDirectory = join(directory, 'empty');
+    mkdirSync(emptyDirectory, { mode: 0o700 });
+    const emptyKeys = memoryKeys(emptyDirectory);
+    function decrypt() {
+      emptyKeys.decrypt(current, encrypted);
+    }
+    function encrypt() {
+      emptyKeys.encrypt(current, 'Delivery instructions');
+    }
+    expect(decrypt).toThrow('Memory key store unavailable');
+    expect(encrypt).toThrow('Memory key store unavailable');
+  }
+  withKeys(check);
+}
+it('a never provisioned key is a store error', neverProvisionedKey);
