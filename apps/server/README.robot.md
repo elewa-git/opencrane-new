@@ -21,8 +21,10 @@ curl --fail http://localhost:8080/healthz
 Provision OIDC settings first; startup rejects missing or invalid configuration.
 Required: `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, `OIDC_REDIRECT_URI` and
 `OIDC_COOKIE_SECRET` (at least 32 bytes, injected from the secret store).
-Production also requires `OIDC_EXPECTED_ORG_ID`. `OIDC_EXTRA_IDENTITIES` may name exact
-issuer/subject exceptions; it is empty by default. The callback is `/auth/callback`.
+Production also requires `OIDC_EXPECTED_ORG_ID` and refuses `OIDC_EXTRA_IDENTITIES`
+whenever it is set, including empty values. Development and tests may use the latter
+to name exact issuer/subject exceptions; it is empty by default.
+The callback is `/auth/callback`.
 See [auth configuration and defaults](../../libs/auth/src/config.ts), including
 client-secret indirection, scopes, cookie settings and provider claim names.
 `HOST` defaults to `0.0.0.0`, `PORT` to `8080`, `LOG_LEVEL` to `info`.
@@ -70,7 +72,7 @@ one of its required settings is missing.
 | `OIDC_CLIENT_SECRET_ENV_VAR` | Server | No | None | Name of the environment variable holding the provider secret. |
 | `OIDC_POST_LOGOUT_REDIRECT_URI` | Server | No | None | Address to open after provider sign-out. |
 | `OIDC_EXPECTED_ORG_ID` | Server | Production, or with NATS | None | Organisation allowed to sign in to this silo. |
-| `OIDC_EXTRA_IDENTITIES` | Server | No | Empty list | JSON list of exact issuer and subject exceptions to the organisation check. |
+| `OIDC_EXTRA_IDENTITIES` | Server | Development and tests only | Empty list | JSON list of exact issuer and subject exceptions. Production refuses any set value. |
 | `OIDC_SCOPES` | Server | No | `openid profile email` | Sign-in details requested from the provider. |
 | `OIDC_COOKIE_NAME` | Server | No | `oc_session` | Browser session cookie name. |
 | `OIDC_FLOW_COOKIE_NAME` | Server | No | `oc_auth_flow` | Sign-in flow cookie name. |
@@ -126,6 +128,18 @@ and `NATS_KEY_FILE` to mounted files for the command role, and set
 Never put credentials in a URL or event. Fresh-silo qualification remains pending.
 
 ## Contract and verification
+
+Session routes and `/ws` use `isOrganisationSession`. Routes that already report
+503 without `OIDC_EXPECTED_ORG_ID` keep that response. Without that setting,
+`/ws` and `/auth/logout` refuse valid sessions with 403, and `/auth/me` reports
+`authenticated: false`. Development sign-in still works without the setting.
+The first-owner claim uses the stricter installation-organisation check.
+
+`test/organisation-check.test.ts` scans all server source files. It refuses calls
+to `isIdentityAllowed` outside `auth/routes.ts` and requires an
+`isOrganisationSession` call in each API route file. It reads TypeScript syntax,
+so imports, comments and strings do not count as calls. The first-owner claim is
+an explicit exception; `/healthz` is public and outside `/api`.
 
 `GET /auth/login` redirects to the provider; `GET /auth/me` reports the session,
 including the optional signed-in profile `user.name` for display.

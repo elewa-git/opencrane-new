@@ -8,9 +8,8 @@ import { attachWebSocketServer, WEBSOCKET_PATH } from '../src/websocket.ts';
 import { helloEchoSchema, errorMessageSchema, eventValidationResultSchema, type HelloEcho } from '@opencrane/protocol';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
-// The WebSocket endpoint now requires a session and a matching Origin (see
-// websocket-auth.test.ts), so every test below that opens one carries both.
-const authConfig = testAuthConfig();
+// Configure the session's organisation so these tests exercise WebSocket messages.
+const authConfig = testAuthConfig({ expectedOrgId: 'org-1' });
 const nowSeconds = Math.floor(Date.now() / 1000);
 const sessionCookie = encodeSession(authConfig, { sub: 'user-1', orgId: 'org-1', roles: ['member'], authTime: nowSeconds, exp: nowSeconds + 3600 });
 // testAuthConfig's redirectUri is https://app.example.test/auth/callback.

@@ -7,7 +7,13 @@ import { URL } from 'node:url';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { FastifyBaseLogger } from 'fastify';
 import { parseEventByType } from '@opencrane/events';
-import { decodeSession, isIdentityAllowed, parseCookieHeader, type AuthConfig, type SessionData } from '@opencrane/auth';
+import {
+  decodeSession,
+  isOrganisationSession,
+  parseCookieHeader,
+  type AuthConfig,
+  type SessionData,
+} from '@opencrane/auth';
 import {
   subscribeSchema,
   chatSubscribeSchema,
@@ -77,7 +83,7 @@ export function attachWebSocketServer(
           return;
         }
         const session = decodeSession(authConfig, cookie, sessionNow());
-        if (!isIdentityAllowed(authConfig, { issuer: authConfig.issuerUrl, subject: session.sub, orgId: session.orgId })) {
+        if (!isOrganisationSession(authConfig, session)) {
           callback(false, 403, 'Forbidden');
           return;
         }

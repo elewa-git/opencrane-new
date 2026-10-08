@@ -8,6 +8,49 @@ const requiredEnv = {
   OIDC_COOKIE_SECRET: 'a'.repeat(32),
 };
 
+const extraIdentities = [{ issuer: requiredEnv.OIDC_ISSUER_URL, subject: 'owner-1' }];
+
+function refusesProductionExtraIdentities(nodeEnv: string, value: string): void {
+  const env = {
+    ...requiredEnv,
+    NODE_ENV: nodeEnv,
+    OIDC_EXPECTED_ORG_ID: 'org-9',
+    OIDC_EXTRA_IDENTITIES: value,
+  };
+  function loadConfiguration(): void {
+    loadAuthConfig(env);
+  }
+  expect(loadConfiguration).toThrow(/OIDC_EXTRA_IDENTITIES.*NODE_ENV=production/u);
+}
+
+function acceptsDevelopmentExtraIdentities(nodeEnv: string): void {
+  const env = {
+    ...requiredEnv,
+    NODE_ENV: nodeEnv,
+    OIDC_EXPECTED_ORG_ID: 'org-9',
+    OIDC_EXTRA_IDENTITIES: JSON.stringify(extraIdentities),
+  };
+  const config = loadAuthConfig(env);
+  expect(config.extraIdentities).toEqual(extraIdentities);
+  expect(isOrganisationSession(config, { sub: 'owner-1', orgId: 'org-other' })).toBe(true);
+}
+
+const productionExtraIdentityCases: [string, string][] = [];
+for (const nodeEnv of ['production', 'Production', ' PRODUCTION ']) {
+  for (const value of [JSON.stringify(extraIdentities), '[]', '', '   ', 'not-json']) {
+    productionExtraIdentityCases.push([nodeEnv, value]);
+  }
+}
+
+it.each(productionExtraIdentityCases)(
+  'refuses OIDC_EXTRA_IDENTITIES when NODE_ENV=%j, including the value %j',
+  refusesProductionExtraIdentities,
+);
+it.each(['development', 'test'])(
+  'accepts exact identity exceptions when NODE_ENV=%j',
+  acceptsDevelopmentExtraIdentities,
+);
+
 describe('loadAuthConfig', () => {
   it('lists every missing required variable', () => {
     expect(() => loadAuthConfig({})).toThrowError(/OIDC_ISSUER_URL.*OIDC_CLIENT_ID.*OIDC_REDIRECT_URI.*OIDC_COOKIE_SECRET/s);
