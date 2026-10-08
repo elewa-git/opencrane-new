@@ -29,3 +29,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **memory ciphertext cannot exceed 5500 characters**. Mutation: `libs/events/src/memory.ts`, replace `.max(5500)` with `.max(5504)`. Expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "memory ciphertext cannot exceed 5500 characters"`.
+
+- **decrypt refuses a different key id**. Mutation: `libs/projections/src/memory-keys.ts`, replace `if (value.keyId !== `key:${reference(identity)}`)` with `if (false)`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "decrypt refuses a different key id"`.

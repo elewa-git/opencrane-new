@@ -267,3 +267,18 @@ function ciphertextLimit() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('memory ciphertext cannot exceed 5500 characters', ciphertextLimit);
+
+function mismatchedKeyId() {
+  function check(keys: ReturnType<typeof memoryKeys>) {
+    const current = currentIdentity();
+    keys.provision(current);
+    const encrypted = keys.encrypt(current, 'Delivery instructions');
+    const altered = { ...encrypted, keyId: `key:${'b'.repeat(64)}` };
+    function decrypt() {
+      keys.decrypt(current, altered);
+    }
+    expect(decrypt).toThrow('Memory key identity mismatch');
+  }
+  withKeys(check);
+}
+it('decrypt refuses a different key id', mismatchedKeyId);
