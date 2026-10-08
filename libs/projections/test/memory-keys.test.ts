@@ -224,3 +224,11 @@ function foreignDependency() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('memory dependencies stay in their scope', foreignDependency);
+
+function eventIdFormat() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const invalid = { ...event, id: 'event:invalid' };
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('memory event ids use the allowed format', eventIdFormat);

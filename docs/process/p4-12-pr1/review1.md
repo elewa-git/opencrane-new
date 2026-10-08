@@ -14,3 +14,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **memory dependencies stay in their scope**. Mutation: `libs/events/src/memory.ts`, replace `if (entry.scopeId !== data.scopeId)` with `if (false)`. Expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "memory dependencies stay in their scope"`.
+
+- **memory event ids use the allowed format**. Mutation: `libs/events/src/memory.ts`, replace `!identifier.safeParse(value).success` with `false`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "memory event ids use the allowed format"`.
