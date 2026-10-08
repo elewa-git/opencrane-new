@@ -77,3 +77,34 @@ from another silo makes the search unavailable. It appends nothing.
 
 The [rework receipt](../process/p4-3-pr2-rework.md) records the checks run for this route.
 The complete fresh-install invitation journey is NOT RUN.
+
+## Bound invitation acceptance
+
+The existing `POST /members/join` remains available for invitations already bound
+to an issuer and subject. Its strict body is `{ memberId, invitationId, commandId,
+displayName }`, at most 1 KiB. It returns `Cache-Control: no-store`.
+Fresh acceptance requires the exact Origin and configured organisation, including
+for accounts allowlisted for general sign-in. The encrypted session must keep an
+ID-token email with `email_verified=true`. That email must equal the invitation
+email after trimming and ignoring case. Request-body email claims are refused.
+Older sessions without these claims must sign in again before a fresh acceptance.
+
+A removed stream cannot accept a new invitation. An earlier event binding another
+issuer or subject also prevents acceptance. Active targets and owner-role
+invitations remain refused. The inviter must still be an active Owner or Admin by
+member and ownership events; otherwise the response is 403 with
+`{ status: refused, reason: inviter_authority_ended }`.
+The final access check watches only the joining member, inviter and ownership
+streams for at most two seconds. A changed stream or unavailable check returns
+503 and saves no join in that attempt.
+
+An exact saved-command retry returns its original receipt before checking expiry,
+email claims or the inviter again. It never restores membership after removal.
+Changed display-name or invitation arguments refuse reuse of the command id.
+A lost append reply can return 503 even though the join was stored; repeat the
+same command to find the saved result.
+
+The size-limited first change adds these protections and stores sign-in email
+claims. Email invitation creation, renewal, admission selection at acceptance and
+assistant choice follow in the second change. List/status reads remain separate
+work. No Zitadel directory request or credential is added.

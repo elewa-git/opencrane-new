@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { authorityFence, currentMembership } from '@opencrane/models';
 import { memberInvitedDataSchema, memberJoinedDataSchema } from '@opencrane/events';
 import type { EventStore, StoredEvent } from '@opencrane/event-store';
 
@@ -16,16 +17,19 @@ export type JoinResult =
   | { status: 'refused'; reason: 'no_session' | 'wrong_silo' | 'wrong_identity'
       | 'unknown_invitation' | 'expired_invitation' | 'unbound_invitation'
       | 'invitation_not_pending' | 'command_id_reused' | 'concurrent_change'
-      | 'invalid_request' | 'wrong_origin' | 'invalid_history' | 'ownership_stream_required' }
+      | 'inviter_authority_ended' | 'invalid_request' | 'wrong_origin'
+      | 'invalid_history' | 'ownership_stream_required' }
   | { status: 'unavailable' };
 
 interface JoinContext {
   silo: string;
   issuer: string;
   sub: string;
+  email?: string | undefined;
+  emailVerified?: boolean | undefined;
 }
 
-export type JoinStore = Pick<EventStore, 'readStream' | 'append'>;
+export type JoinStore = Pick<EventStore, 'readStream' | 'append' | 'head'>;
 type Outcome = JoinResult | { status: 'unavailable'; cause: unknown };
 type Invitation = z.infer<typeof memberInvitedDataSchema>;
 
@@ -64,6 +68,10 @@ function pending(events: StoredEvent[], input: JoinInput, context: JoinContext, 
   if (data.invitedIdentity.issuer !== context.issuer || data.invitedIdentity.sub !== context.sub) {
     return { status: 'refused', reason: 'wrong_identity' };
   }
+  if (context.emailVerified !== true || !context.email
+    || context.email.trim().toLowerCase() !== data.email.trim().toLowerCase()) {
+    return { status: 'refused', reason: 'wrong_identity' };
+  }
   if (latest !== invitation) return { status: 'refused', reason: 'invitation_not_pending' };
   if (Date.parse(data.expiresAt) <= now.getTime()) return { status: 'refused', reason: 'expired_invitation' };
   const admission = admissionRefusal(events, data);
@@ -74,6 +82,9 @@ function pending(events: StoredEvent[], input: JoinInput, context: JoinContext, 
 }
 
 function validateHistory(events: StoredEvent[], input: JoinInput, context: JoinContext): JoinResult | undefined {
+  if (hasDifferentIdentity(events, context)) {
+    return { status: 'refused', reason: 'wrong_identity' };
+  }
   if (events.some(({ event }) => event.silo !== context.silo)) return { status: 'refused', reason: 'wrong_silo' };
   if (events.some(({ event }) => {
     const data: unknown = event.data;
@@ -94,10 +105,10 @@ export async function joinMember(
     if (refused) return refused;
     const previous = retry(events, input, context);
     if (previous) return previous;
-    const invitation = pending(events, input, context, now());
+    const invitation = await confirmInvitation(store, events, input, context, now);
     if ('status' in invitation) return invitation;
     const id = randomUUID();
-    const result = await store.append({
+    const command = {
       expectedSequence: events.at(-1)?.sequence ?? 0,
       event: {
         id, commandId: input.commandId, type: 'member.joined', source: 'opencrane-server',
@@ -106,7 +117,8 @@ export async function joinMember(
         data: { memberId: input.memberId, invitationId: input.invitationId,
           displayName: input.displayName, email: invitation.email, role: invitation.role },
       },
-    });
+    };
+    const result = await store.append(command);
     if (result.status === 'unavailable') return result;
     if (result.status === 'rejected') throw new Error(`Join append rejected: ${result.reason}`);
     // The adapter can recognise a concurrent retry itself. Read the durable id
@@ -137,10 +149,44 @@ function admissionRefusal(events: StoredEvent[], invitation: Invitation): JoinRe
   if (invitation.role === 'owner') {
     return { status: 'refused', reason: 'ownership_stream_required' };
   }
-  // A new invitation cannot rewrite an active member's role or identity.
+  // Keep old access with the old member id. A return needs a new admission.
   const membership = events.findLast(isMembershipAdmission);
-  if (membership && membership.event.type !== 'member.removed') {
+  if (membership) {
     return { status: 'refused', reason: 'invitation_not_pending' };
   }
   return undefined;
+}
+
+function hasDifferentIdentity(events: StoredEvent[], context: JoinContext) {
+  for (const row of events) {
+    const fields = identityHistorySchema.parse(row.event.data);
+    const identity = fields.invitedIdentity ?? fields.identity;
+    if (identity && (identity.issuer !== context.issuer || identity.sub !== context.sub)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+const identityHistorySchema = z.object({
+  identity: z.object({ issuer: z.string(), sub: z.string() }).optional(),
+  invitedIdentity: z.object({ issuer: z.string(), sub: z.string() }).optional(),
+});
+
+
+async function confirmInvitation(store: JoinStore, events: StoredEvent[], input: JoinInput,
+  context: JoinContext, now: () => Date): Promise<Invitation | JoinResult> {
+  const invitation = pending(events, input, context, now());
+  if ('status' in invitation) return invitation;
+  const subjects = [
+    `member-${input.memberId}`, `member-${invitation.invitedBy}`, `ownership-${context.silo}`,
+  ];
+  const fresh = await authorityFence(store, performance.now(), subjects);
+  const inviter = await currentMembership(store, context.silo, invitation.invitedBy, fresh);
+  if (!['owner', 'admin'].includes(inviter.role)) {
+    return { status: 'refused', reason: 'inviter_authority_ended' };
+  }
+  // Recheck access and expiry just before the conditional append.
+  await fresh();
+  return pending(events, input, context, now());
 }

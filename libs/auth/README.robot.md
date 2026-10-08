@@ -174,3 +174,12 @@ nice -n 10 npm run measure:summaries:memory -w libs/models -- computer 3 10000 1
 The last argument is turns per thread. Add `unbounded` to compare without the
 memory budget. Use `computer 1 60000 1` for the oversized rebuild.
 Use `computer-open 1 10000 1` to keep every turn open.
+
+## Sign-in email claims
+
+`completeLogin` copies the signed ID token's string `email` into the encrypted
+session. `emailVerified` is true only for the boolean claim `email_verified=true`;
+missing, string or false values become false. Both session fields are optional
+so older cookies still decode. No request body supplies these claims.
+`test/oidc-client.test.ts` checks them through the loopback provider and a cookie
+round trip. The server uses them for fresh bound-invitation acceptance.

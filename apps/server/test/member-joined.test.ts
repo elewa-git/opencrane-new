@@ -15,6 +15,7 @@ const config = testAuthConfig({ expectedOrgId: 'org-acme',
   extraIdentities: [{ issuer: 'https://idp.example.test', subject: 'idp-owner' }] });
 let clock = new Date('2026-10-01T12:00:00Z');
 const session: SessionData = {
+  email: 'alice@example.test', emailVerified: true,
   sub: 'idp-alice', orgId: 'org-acme', roles: [], authTime: 1790856000, exp: 2000000000,
 };
 const input = { memberId: 'alice', invitationId: 'invite-alice', commandId: 'join-alice', displayName: 'Alice' };
@@ -24,6 +25,7 @@ let app: FastifyInstance;
 beforeEach(async () => {
   clock = new Date('2026-10-01T12:00:00Z');
   nats = await natsFixture();
+  await seedInviter();
   app = server(nats.store);
 });
 afterEach(async () => {
@@ -71,26 +73,26 @@ it.skipIf(!process.env['PG_TEST_URL'])('accepts through real NATS to PostgreSQL 
     await runner.initialise(members);
     await invite();
     await runner.run(members);
-    expect((await pool.query('SELECT status FROM members')).rows).toEqual([{ status: 'invited' }]);
+    expect((await pool.query('SELECT status FROM members WHERE member_id = \'alice\'')).rows).toEqual([{ status: 'invited' }]);
     const append = vi.spyOn(nats.store, 'append');
     const response = await accept();
     expect(response.statusCode).toBe(200);
-    expect(response.json<JoinResult>()).toEqual({ status: 'joined', memberId: 'alice', sequence: 2 });
+    expect(response.json<JoinResult>()).toEqual({ status: 'joined', memberId: 'alice', sequence: 3 });
     expect(append).toHaveBeenCalledTimes(1);
-    expect(append.mock.calls[0]?.[0].expectedSequence).toBe(1);
+    expect(append.mock.calls[0]?.[0].expectedSequence).toBe(2);
     // The command has no database handle; the row changes only when the listener runs.
-    expect((await pool.query('SELECT status FROM members')).rows).toEqual([{ status: 'invited' }]);
+    expect((await pool.query('SELECT status FROM members WHERE member_id = \'alice\'')).rows).toEqual([{ status: 'invited' }]);
     await runner.run(members);
     const expected = [{ silo: 'acme', member_id: 'alice', email: 'alice@example.test',
       display_name: 'Alice', role: 'admin', status: 'joined' }];
-    expect((await pool.query('SELECT * FROM members')).rows).toEqual(expected);
+    expect((await pool.query('SELECT * FROM members WHERE member_id = \'alice\'')).rows).toEqual(expected);
     await pool.end();
     pool = open();
     runner = new ProjectionRunner(pgDb(pool), nats.reader, createLogger('test'));
-    expect(await runner.checkpoint(members)).toBe(2);
+    expect(await runner.checkpoint(members)).toBe(3);
     await runner.rebuild(members);
-    expect((await pool.query('SELECT * FROM members')).rows).toEqual(expected);
-    expect((await pool.query('SELECT * FROM projection_events')).rows).toHaveLength(2);
+    expect((await pool.query('SELECT * FROM members WHERE member_id = \'alice\'')).rows).toEqual(expected);
+    expect((await pool.query('SELECT * FROM projection_events')).rows).toHaveLength(3);
     const stored = await history();
     expect(stored).toHaveLength(2);
     expect(stored[1]?.event).toMatchObject({ commandId: input.commandId, silo: 'acme',
@@ -110,16 +112,16 @@ it('recognises the same command after NATS restart and invitation expiry without
   await nats.restart();
   clock = new Date('2026-10-03T12:00:00Z');
   const append = vi.spyOn(nats.store, 'append');
-  expect((await accept()).json<JoinResult>()).toEqual({ status: 'already_joined', memberId: 'alice', sequence: 2 });
+  expect((await accept()).json<JoinResult>()).toEqual({ status: 'already_joined', memberId: 'alice', sequence: 3 });
   expect(append).not.toHaveBeenCalled();
   expect(await history()).toHaveLength(2);
 });
 
-it('accepts an exactly allowlisted identity from another organisation', async () => {
+it('refuses an allowlisted identity from another organisation for membership', async () => {
   const external = { ...session, sub: 'idp-owner', orgId: 'org-other' };
   await invite({ invitedIdentity: { issuer: config.issuerUrl, sub: external.sub } });
-  expect((await accept(input, external)).json<JoinResult>()).toMatchObject({ status: 'joined', memberId: 'alice' });
-  expect(await history()).toHaveLength(2);
+  expect((await accept(input, external)).json<JoinResult>()).toEqual({ status: 'refused', reason: 'wrong_silo' });
+  expect(await history()).toHaveLength(1);
 });
 
 // Both requests finish reading the same pending invitation before either publishes.
@@ -128,6 +130,7 @@ function racingStore(): JoinStore {
   let release = () => {};
   const barrier = new Promise<void>((resolve) => { release = resolve; });
   return {
+    head: nats.store.head.bind(nats.store),
     append: (command) => nats.store.append(command),
     async *readStream(subject, from, deadline) {
       const events: StoredEvent[] = [];
@@ -147,7 +150,7 @@ it.each([false, true])('concurrent accepts have exactly one durable winner (same
   expect(responses.map((response) => response.json<JoinResult>().status).sort())
     .toEqual(sameCommand ? ['already_joined', 'joined'] : ['joined', 'refused']);
   expect(await history()).toHaveLength(2);
-  expect(await nats.store.head()).toBe(2);
+  expect(await nats.store.head()).toBe(3);
 });
 
 it.each([
@@ -164,18 +167,18 @@ it.each([
   const append = vi.spyOn(nats.store, 'append');
   expect((await accept(input, identity)).json<JoinResult>()).toEqual({ status: 'refused', reason });
   expect(append).not.toHaveBeenCalled();
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
 });
 
 it('refuses a member stream that does not exist without appending', async () => {
   expect((await accept()).json<JoinResult>()).toEqual({ status: 'refused', reason: 'unknown_invitation' });
-  expect(await nats.store.head()).toBe(0);
+  expect(await nats.store.head()).toBe(1);
 });
 
 it('refuses inconsistent member ids in stored history', async () => {
   await invite({ memberId: 'someone-else' });
   expect((await accept()).json<JoinResult>()).toEqual({ status: 'refused', reason: 'invalid_history' });
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
 });
 
 it.each(['store', 'organisation'])('fails closed without the configured %s', async (missing) => {
@@ -189,7 +192,7 @@ it.each(['store', 'organisation'])('fails closed without the configured %s', asy
   const response = await accept();
   expect(response.statusCode).toBe(503);
   expect(response.json<JoinResult>()).toEqual({ status: 'unavailable' });
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
 });
 
 it('does not recognise another identity or issuer as the successful command principal', async () => {
@@ -203,7 +206,7 @@ it('does not recognise another identity or issuer as the successful command prin
   const response = await app.inject({ method: 'POST', url: '/members/join', payload: input,
     headers: { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(otherIssuer, session)}` } });
   expect(response.json<JoinResult>()).toEqual({ status: 'refused', reason: 'wrong_identity' });
-  expect(await nats.store.head()).toBe(2);
+  expect(await nats.store.head()).toBe(3);
 });
 
 it.each(['missing', 'tampered', 'expired'])('refuses a %s session without appending', async (kind) => {
@@ -214,7 +217,7 @@ it.each(['missing', 'tampered', 'expired'])('refuses a %s session without append
     headers: { origin: 'https://app.example.test', ...(kind === 'missing' ? {} : { cookie: `${config.cookieName}=${cookie}` }) } });
   expect(response.statusCode).toBe(401);
   expect(response.json<JoinResult>()).toEqual({ status: 'refused', reason: 'no_session' });
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
 });
 
 it('refuses command-id reuse with changed arguments, a second acceptance, and acceptance after removal', async () => {
@@ -224,18 +227,18 @@ it('refuses command-id reuse with changed arguments, a second acceptance, and ac
     .toEqual({ status: 'refused', reason: 'command_id_reused' });
   expect((await accept({ ...input, commandId: 'second' })).json<JoinResult>())
     .toEqual({ status: 'refused', reason: 'invitation_not_pending' });
-  await nats.store.append({ expectedSequence: 2, event: { ...event('removed', 'member-alice', 'member.removed'), silo: 'acme' } });
+  await nats.store.append({ expectedSequence: 3, event: { ...event('removed', 'member-alice', 'member.removed'), silo: 'acme' } });
   expect((await accept({ ...input, commandId: 'third' })).json<JoinResult>())
     .toEqual({ status: 'refused', reason: 'invitation_not_pending' });
   expect((await accept()).json<JoinResult>().status).toBe('already_joined');
-  expect(await nats.store.head()).toBe(3);
+  expect(await nats.store.head()).toBe(4);
 });
 
 it.each([{ ...input, role: 'owner' }, { ...input, memberId: '*' }, { ...input, silo: 'other' }, { ...input, commandId: '' }])(
   'rejects invalid input %j without appending', async (body) => {
     await invite();
     expect((await accept(body)).json<JoinResult>()).toEqual({ status: 'refused', reason: 'invalid_request' });
-    expect(await nats.store.head()).toBe(1);
+    expect(await nats.store.head()).toBe(2);
   },
 );
 it.each([undefined, 'https://evil.example.test'])('refuses origin %s', async (origin) => {
@@ -243,7 +246,7 @@ it.each([undefined, 'https://evil.example.test'])('refuses origin %s', async (or
   const response = await app.inject({ method: 'POST', url: '/members/join', payload: input,
     headers: { cookie: `${config.cookieName}=${encodeSession(config, session)}`, ...(origin ? { origin } : {}) } });
   expect(response.json<JoinResult>()).toEqual({ status: 'refused', reason: 'wrong_origin' });
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
 });
 
 it('reports unavailable when real NATS cannot be read, then safely retries', async () => {
@@ -253,7 +256,7 @@ it('reports unavailable when real NATS cannot be read, then safely retries', asy
   expect(response.statusCode).toBe(503);
   expect(response.json<JoinResult>()).toEqual({ status: 'unavailable' });
   await nats.restart();
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
   expect((await accept()).json<JoinResult>().status).toBe('joined');
 });
 
@@ -261,6 +264,7 @@ it('reports unavailable if NATS stops after validation and before append, with n
   await invite();
   await app.close();
   app = server({
+    head: nats.store.head.bind(nats.store),
     readStream: (...args) => nats.store.readStream(...args),
     async append(command) {
       await nats.stop();
@@ -271,7 +275,7 @@ it('reports unavailable if NATS stops after validation and before append, with n
   expect(response.statusCode).toBe(503);
   expect(response.json<JoinResult>()).toEqual({ status: 'unavailable' });
   await nats.restart();
-  expect(await nats.store.head()).toBe(1);
+  expect(await nats.store.head()).toBe(2);
 // EventStore still stops retrying after ten seconds. This limit also covers
 // stopping and restarting the real NATS process on a busy machine.
 }, 45_000);
@@ -283,8 +287,155 @@ it('uses the process connection adapter against real NATS', async () => {
     app = server(connected.store);
     await invite();
     expect((await accept()).json<JoinResult>().status).toBe('joined');
-    expect(await nats.store.head()).toBe(2);
+    expect(await nats.store.head()).toBe(3);
   } finally {
     await connected.close();
   }
 });
+
+
+const emailRefusals = [
+  { name: 'unverified email', identity: { ...session, emailVerified: false } },
+  { name: 'missing verified email', identity: { ...session, emailVerified: undefined } },
+  { name: 'different email', identity: { ...session, email: 'other@example.test' } },
+  { name: 'forwarded link with another account', identity: { ...session, sub: 'other' } },
+];
+async function emailRefusal({ identity }: { identity: SessionData }) {
+  await invite();
+  const response = await accept(input, identity);
+  expect(response.json()).toEqual({ status: 'refused', reason: 'wrong_identity' });
+  expect(await history()).toHaveLength(1);
+}
+it.each(emailRefusals)('refuses $name and saves no join', emailRefusal);
+
+async function matchingEmail() {
+  await invite();
+  const identity = { ...session, email: ' ALICE@Example.test ' };
+  expect((await accept(input, identity)).json()).toMatchObject({ status: 'joined' });
+  expect(await history()).toHaveLength(2);
+}
+it('accepts a verified email after trimming and ignoring case', matchingEmail);
+
+async function inviterEnded(type: string) {
+  await invite();
+  let data: Record<string, unknown>;
+  if (type === 'member.removed') {
+    data = { memberId: 'admin', removedBy: 'owner' };
+  } else {
+    data = { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' };
+  }
+  const changed = { ...event(randomUUID(), 'member-admin', type), silo: 'acme', data };
+  const position = await nats.store.head('member-admin');
+  const command = { event: changed, expectedSequence: position };
+  expect((await nats.store.append(command)).status).toBe('appended');
+  expect((await accept()).json()).toEqual({
+    status: 'refused', reason: 'inviter_authority_ended',
+  });
+  expect(await history()).toHaveLength(1);
+}
+const inviterChanges = ['member.role_changed', 'member.removed'];
+it.each(inviterChanges)('refuses an inviter after %s', inviterEnded);
+
+async function invalidAdmission(kind: string) {
+  let earlier: StoredEvent['event'] = invitation();
+  if (kind === 'removed') {
+    earlier = { ...earlier, type: 'member.removed',
+      data: { memberId: 'alice', removedBy: 'admin' } };
+  } else if (kind === 'active') {
+    earlier = { ...earlier, type: 'member.joined', data: {
+      memberId: 'alice', email: 'alice@example.test', displayName: 'Alice', role: 'member',
+    } };
+  } else if (kind === 'rebound') {
+    earlier = invitation({ invitedIdentity: { issuer: config.issuerUrl, sub: 'other' } });
+  }
+  expect((await nats.store.append({ event: earlier, expectedSequence: 0 })).status)
+    .toBe('appended');
+  const previous = await nats.store.head('member-alice');
+  const patch = kind === 'owner' ? { role: 'owner' } : {};
+  const next = invitation(patch);
+  expect((await nats.store.append({ event: next, expectedSequence: previous })).status)
+    .toBe('appended');
+  const response = await accept();
+  let reason = 'invitation_not_pending';
+  if (kind === 'rebound') reason = 'wrong_identity';
+  if (kind === 'owner') reason = 'ownership_stream_required';
+  expect(response.json()).toEqual({ status: 'refused', reason });
+  expect(await history()).toHaveLength(2);
+}
+const admissionRefusals = ['removed', 'rebound', 'active', 'owner'];
+it.each(admissionRefusals)('refuses a %s admission', invalidAdmission);
+
+
+async function seedInviter() {
+  const data = {
+    memberId: 'admin', displayName: 'Admin', email: 'admin@example.test', role: 'admin',
+  };
+  const joined = { ...event(randomUUID(), 'member-admin', 'member.joined'), silo: 'acme', data };
+  expect((await nats.store.append({ event: joined, expectedSequence: 0 })).status)
+    .toBe('appended');
+}
+
+
+async function lostReply() {
+  await invite();
+  const append = nats.store.append.bind(nats.store);
+  async function appendWithoutReply(command: Parameters<JoinStore['append']>[0]): Promise<never> {
+    const result = await append(command);
+    expect(result.status).toBe('appended');
+    throw new Error('Reply lost');
+  }
+  const interception = vi.spyOn(nats.store, 'append').mockImplementationOnce(appendWithoutReply);
+  const response = await accept();
+  expect(response.statusCode).toBe(503);
+  interception.mockRestore();
+  await nats.stop();
+  await nats.restart();
+  expect((await accept()).json()).toEqual({
+    status: 'already_joined', memberId: 'alice', sequence: 3,
+  });
+  expect(await history()).toHaveLength(2);
+}
+it('recovers a lost append reply after reconnecting without saving another join', lostReply);
+
+async function refusesBodyIdentity() {
+  await invite();
+  const mismatched = { ...input, memberId: 'other' };
+  expect((await accept(mismatched)).json()).toEqual({
+    status: 'refused', reason: 'unknown_invitation',
+  });
+  const forged = { ...input, email: session.email, emailVerified: true };
+  expect((await accept(forged)).json()).toEqual({
+    status: 'refused', reason: 'invalid_request',
+  });
+  const oversized = { ...input, displayName: 'x'.repeat(1100) };
+  const response = await accept(oversized);
+  expect(response.statusCode).toBe(413);
+  expect(await history()).toHaveLength(1);
+}
+it('rejects a different member id, body email claims and a body larger than 1 KiB',
+  refusesBodyIdentity);
+
+async function refusesChangedAuthority() {
+  await invite();
+  const read = nats.store.readStream.bind(nats.store);
+  let changed = false;
+  async function* changeDuringRead(subject: string, from?: number, deadline?: number) {
+    yield* read(subject, from, deadline);
+    if (subject !== 'member-admin' || changed) return;
+    changed = true;
+    const position = await nats.store.head(subject);
+    const data = { memberId: 'admin', removedBy: 'owner' };
+    const removal = { ...event(randomUUID(), subject, 'member.removed'), silo: 'acme', data };
+    const command = { event: removal, expectedSequence: position };
+    expect((await nats.store.append(command)).status).toBe('appended');
+  }
+  const interception = vi.spyOn(nats.store, 'readStream').mockImplementation(changeDuringRead);
+  try {
+    expect((await accept()).statusCode).toBe(503);
+    expect(await history()).toHaveLength(1);
+  } finally {
+    interception.mockRestore();
+  }
+}
+it('refuses authority lost during the final event check without saving a join',
+  refusesChangedAuthority);

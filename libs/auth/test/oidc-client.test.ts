@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 import { loadAuthConfig, type AuthConfig } from '../src/config.ts';
 import { buildLoginRedirect, buildLogoutUrl, completeLogin, OidcLoginError } from '../src/oidc-client.ts';
-import { hasRecentAuth } from '../src/session.ts';
+import { decodeSession, encodeSession, hasRecentAuth } from '../src/session.ts';
 import { testAuthConfig } from './fixtures.ts';
 import { DEFAULT_MOCK_USER, MOCK_ID_TOKEN_LIFETIME_SECONDS, startMockOidcProvider, type MockOidcOptions, type MockOidcProvider, type MockUser } from './mock-oidc-provider.ts';
 
@@ -296,3 +296,18 @@ describe('buildLogoutUrl', () => {
     expect(await buildLogoutUrl(config, 'test-id-token')).toBeNull();
   });
 });
+
+
+async function emailClaims(verified: unknown) {
+  const claims = { email: ' Alice@Example.test ', email_verified: verified };
+  const user = { ...member, claims };
+  const { config } = await setup({ user });
+  const session = await signIn(config);
+  const cookie = encodeSession(config, session);
+  const restored = decodeSession(config, cookie);
+  expect(restored).toMatchObject({
+    email: ' Alice@Example.test ', emailVerified: verified === true,
+  });
+}
+const verificationClaims = [true, false, 'true', undefined];
+it.each(verificationClaims)('keeps signed email claims safely (%s)', emailClaims);

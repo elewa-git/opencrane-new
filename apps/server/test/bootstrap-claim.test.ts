@@ -9,7 +9,10 @@ import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
 const config = testAuthConfig({ expectedOrgId: 'org-acme' });
-const session: SessionData = { sub: 'alice', orgId: 'org-acme', roles: [], authTime: 0, exp: 2_000_000_000 };
+const session: SessionData = {
+  email: 'alice@example.test', emailVerified: true, sub: 'alice', orgId: 'org-acme',
+  roles: [], authTime: 0, exp: 2_000_000_000,
+};
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let directory: string, path: string, token: string;
 let app: ReturnType<typeof buildServer>;
@@ -90,6 +93,11 @@ it('refuses an existing non-owner member without changing their identity binding
   const runner = new ProjectionRunner(pgDb(dbs.queue), nats.store, createLogger('bootstrap-test', { level: 'silent' }));
   try {
     await runner.initialise(members);
+    const adminEvent = { ...event('joined-admin', 'member-admin', 'member.joined'),
+      silo: 'test', data: { memberId: 'admin', displayName: 'Admin',
+        email: 'admin@example.test', role: 'admin' } };
+    const adminCommand = { event: adminEvent, expectedSequence: 0 };
+    expect((await nats.store.append(adminCommand)).status).toBe('appended');
     expect((await nats.store.append({ expectedSequence: 0, event: {
       ...event('invite-alice', 'member-alice', 'member.invited'), silo: 'test',
       data: { memberId: 'alice', invitationId: 'invite-alice', email: 'alice@example.test', role: 'member',
@@ -102,14 +110,16 @@ it('refuses an existing non-owner member without changing their identity binding
     expect(joined.statusCode).toBe(200);
     await runner.run(members);
     expect(await feed.memberId('test', config.issuerUrl, session.sub)).toBe('alice');
-    const original = [{ position: 1, member: { memberId: 'alice', email: 'alice@example.test', displayName: null,
-      role: 'member', status: 'invited' } }, { position: 2, member: { memberId: 'alice', email: 'alice@example.test',
+    const original = [{ position: 1, member: { memberId: 'admin',
+      email: 'admin@example.test', displayName: 'Admin', role: 'admin', status: 'joined' } },
+      { position: 2, member: { memberId: 'alice', email: 'alice@example.test', displayName: null,
+      role: 'member', status: 'invited' } }, { position: 3, member: { memberId: 'alice', email: 'alice@example.test',
       displayName: 'Alice', role: 'member', status: 'joined' } }];
     expect(await feed.read('test', 0)).toEqual(original);
     const response = await claim();
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({ status: 'refused', reason: 'members_exist' });
-    expect(await nats.store.head()).toBe(2);
+    expect(await nats.store.head()).toBe(3);
     await runner.run(members);
     expect(await feed.memberId('test', config.issuerUrl, session.sub)).toBe('alice');
     expect(await feed.read('test', 0)).toEqual(original);
@@ -145,6 +155,7 @@ it.each(['alice', 'bob'])('refuses a claim by %s when a member binds after the h
   const resume = new Promise<void>(resolve => { resumeAppend = resolve; });
   await app.close();
   app = buildServer(config, { membership: { silo: 'test', now: () => clock, store: {
+    head: nats.store.head.bind(nats.store),
     readStream: (...args) => nats.store.readStream(...args),
     async append(command) {
       reachedAppend();

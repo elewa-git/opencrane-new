@@ -144,7 +144,7 @@ async function readAt(store: EventStore, subject: string, head: number, deadline
 }
 
 /** Add exact subjects as they are discovered; all are fenced against the same starting head. */
-export async function authorityFence(store: EventStore, started: number,
+export async function authorityFence(store: Pick<EventStore, 'readStream' | 'head'>, started: number,
   subjects: string[] = [], callerDeadline = Infinity) {
   const authority = await createAuthorityFence(
     store, started, subjects, callerDeadline, checkOutputReports);
@@ -159,7 +159,7 @@ export async function conversationAccessFence(store: EventStore, started: number
   return authority.fresh;
 }
 
-async function createAuthorityFence(store: EventStore, started: number,
+async function createAuthorityFence(store: Pick<EventStore, 'readStream' | 'head'>, started: number,
   subjects: string[], callerDeadline: number, checkChanges: typeof checkOutputReports) {
   const deadline = Math.min(started + 2000, callerDeadline);
   const head = await store.head(undefined, deadline);
@@ -202,7 +202,7 @@ async function createAuthorityFence(store: EventStore, started: number,
   return { fresh: Object.assign(fresh, snapshot), confirm };
 }
 
-async function checkOutputReports(store: EventStore, subject: string, from: number,
+async function checkOutputReports(store: Pick<EventStore, 'readStream'>, subject: string, from: number,
   to: number, deadline: number) {
   if (!subject.startsWith('conversation-')) throw new Error('Authority changed');
   // Treat output reports, including lost output, as granting no authority.
@@ -215,7 +215,7 @@ async function checkOutputReports(store: EventStore, subject: string, from: numb
   }
 }
 
-async function checkChatAccessChanges(store: EventStore, subject: string, from: number,
+async function checkChatAccessChanges(store: Pick<EventStore, 'readStream'>, subject: string, from: number,
   to: number, deadline: number) {
   if (subject.startsWith('ownership-')) return;
   for await (const row of store.readStream(subject, from, deadline)) {
@@ -242,7 +242,7 @@ function changesChatAccess(subject: string, type: string) {
 export async function decisionAuthorityFence(store: EventStore, started: number,
   subjects: string[], requesterId: string, assistantId: string) {
   const grantees = new Set([requesterId, assistantId]);
-  async function checkDecisionChanges(store: EventStore, subject: string, from: number,
+  async function checkDecisionChanges(store: Pick<EventStore, 'readStream'>, subject: string, from: number,
     to: number, deadline: number) {
     for await (const row of store.readStream(subject, from, deadline)) {
       if (row.sequence > to) break;

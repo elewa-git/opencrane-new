@@ -942,3 +942,11 @@ The response reports the oldest checkpoint among the member, group and model
 access tables. A lagging table is marked applying instead of being presented as
 current. Reads check authority once before loading their result; they do not keep
 a change watcher open while the result is assembled.
+## Bound invitation checks
+
+`POST /members/join` uses the [member API contract](../../docs/api/members.md#bound-invitation-acceptance).
+It requires the exact organisation, verified session email and current inviter
+role for a fresh join. It keeps saved-command receipts readable without another
+join. Unavailable replies may follow a stored append.
+The join store supplies `readStream`, `head` and `append` so the shared
+`authorityFence` can check member and ownership events before the write.

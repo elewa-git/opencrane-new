@@ -11,7 +11,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 ```mermaid
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
-  server -.->|checks session organisation and permissions| libs["libs/*<br/>shared code"]
+  server -.->|checks organisation, access, invitations and spending| libs["libs/*<br/>shared code"]
   server -->|records changes and updates chat and computer facts| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
@@ -27,6 +27,7 @@ flowchart LR
   Production refuses extra sign-in identities. Development can allow named identities
   from another organisation, but session routes still need a configured organisation.
 - Checks permissions before returning private information or changing data.
+- Accepts bound invitations only for a verified email while the inviter is still an owner or admin.
 - Checks an invitation email and explains that the person is confirmed when they accept.
 - Returns member headers to members and the email directory to current owners and admins.
   Keeps checking their access while a live member connection is open.
