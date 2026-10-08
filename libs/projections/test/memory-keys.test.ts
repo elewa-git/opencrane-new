@@ -415,3 +415,26 @@ function lostDirectoryProvision() {
   withKeys(check);
 }
 it('an opened key store cannot recreate a lost volume', lostDirectoryProvision);
+
+async function wrongDerivedScopeAppend() {
+  const fixture = await natsFixture();
+  try {
+    const event = fixtureEvent('A'.repeat(40), `key:${'a'.repeat(64)}`);
+    const changes = [
+      { data: { ...event.data, ownerId: 'bob' } },
+      { data: { ...event.data, scopeKind: 'group' } },
+      { silo: 'other' },
+    ];
+    for (const change of changes) {
+      const invalid = { ...event, ...change };
+      const result = await fixture.store.append({ event: invalid, expectedSequence: 0 });
+      expect(result).toEqual({ status: 'rejected', reason: 'invalid_event' });
+    }
+    expect(await fixture.reader.head()).toBe(0);
+    const result = await fixture.store.append({ event, expectedSequence: 0 });
+    expect(result.status).toBe('appended');
+  } finally {
+    await fixture.close();
+  }
+}
+it('append refuses wrongly derived memory scopes', wrongDerivedScopeAppend);

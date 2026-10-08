@@ -56,3 +56,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **an opened key store cannot recreate a lost volume**. Original source: expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "an opened key store cannot recreate a lost volume"`.
+
+- **append refuses wrongly derived memory scopes**. Original source: expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "append refuses wrongly derived memory scopes"`.
