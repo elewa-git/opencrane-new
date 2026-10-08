@@ -1,1 +1,1 @@
-Computers paused on an older image resume on the checked image with their home files intact, and failed changes wait before retrying.
+Paused computers update in place to the checked image and keep their home files. Other computers can resume while an update waits.

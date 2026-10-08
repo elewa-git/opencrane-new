@@ -1,43 +1,13 @@
-import { generateKeyPairSync } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { computerFixture } from './computer-fixture.ts';
+import { rm } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import * as observability from '@opencrane/observability';
-import { tokenIssuer } from '@opencrane/auth';
 import { until } from '@opencrane/authz/testing';
-import { natsFixture } from '@opencrane/event-store/testing';
 import { envelope } from '@opencrane/models';
 import { expect, it, vi } from 'vitest';
 import { fakeKubectl } from './fake-kubectl.ts';
 import { SandboxClient } from '../src/kubernetes.ts';
 import { history, suspendComputer, watchComputers } from '../src/lifecycle.ts';
-
-async function computerFixture({ suspended = true } = {}) {
-  const nats = await natsFixture();
-  const directory = await mkdtemp(`${tmpdir()}/computer-idle-`);
-  const stop = new AbortController();
-  const keyOptions = {
-    namedCurve: 'P-256',
-    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-    publicKeyEncoding: { type: 'spki', format: 'pem' },
-  } as const;
-  const key = generateKeyPairSync('ec', keyOptions);
-  const privateKeyPath = `${directory}/key.pem`;
-  await writeFile(privateKeyPath, key.privateKey, { mode: 0o600 });
-  const tokens = await tokenIssuer({ privateKeyPath, issuer: 'https://idle.test/' });
-  const subject = 'computer-assistant';
-  async function record(type: string, extra: Record<string, unknown>) {
-    const rows = await history(nats.store, subject);
-    const data = { assistantId: 'assistant', computerId: 'computer', ...extra };
-    const event = envelope('test', subject, type, data);
-    const result = await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
-    expect(result.status).toBe('appended');
-  }
-  await record('computer.claimed', { generation: 1, tokenId: 'token:initial' });
-  await record('computer.ready', { generation: 1, podUid: 'old-pod' });
-  if (suspended) await record('computer.suspended', {});
-  return { nats, directory, stop, tokens, subject, record };
-}
 
 async function leavesIdleComputerAlone() {
   const fixture = await computerFixture();
@@ -45,7 +15,7 @@ async function leavesIdleComputerAlone() {
   const initialHead = await nats.store.head();
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
   const mode = vi.spyOn(kube, 'mode').mockResolvedValue();
-  const sandbox = { uid: 'sandbox', podUid: 'new-pod', ready: true, suspended: false };
+  const sandbox = { uid: 'sandbox', podUid: 'new-pod', ready: true, suspended: true };
   const state = vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
   const claim = vi.spyOn(kube, 'claim').mockResolvedValue('sandbox');
   const sink = vi.fn().mockResolvedValue(undefined);
@@ -308,7 +278,7 @@ async function correctsSuspendedComputerDrift() {
   }
   vi.spyOn(Date, 'now').mockImplementation(clock);
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
-  const sandbox = { uid: 'sandbox', podUid: 'outside-pod', ready: true, suspended: false };
+  const sandbox = { uid: 'sandbox', podUid: 'outside-pod', ready: true, suspended: true };
   const state = vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
   const sink = vi.fn().mockResolvedValue(undefined);
   const heads = vi.spyOn(nats.store, 'head');
@@ -329,6 +299,7 @@ async function correctsSuspendedComputerDrift() {
     }
     await until(threeMorePassesFinished);
     expect(await kubectl.commands()).toHaveLength(1);
+    sandbox.suspended = false;
     now += 60_000;
     async function driftWasCorrected() {
       const commands = await kubectl.commands();
@@ -406,7 +377,7 @@ async function backsOffRefusedModePatches() {
 it('backs off refused mode patches and logs the computer once for each retry',
   backsOffRefusedModePatches);
 
-async function replacesRunningComputerAtNextSuspend() {
+async function upgradesRunningComputerAtNextSuspend() {
   const fixture = await computerFixture({ suspended: false });
   const { nats, directory, stop, tokens, subject, record } = fixture;
   const kube = new SandboxClient('/unused-test-kubeconfig', 'test');
@@ -414,19 +385,19 @@ async function replacesRunningComputerAtNextSuspend() {
     suspended: false, outdated: true };
   vi.spyOn(kube, 'state').mockResolvedValue(sandbox);
   const mode = vi.spyOn(kube, 'mode').mockResolvedValue();
-  const replace = vi.spyOn(kube, 'replace').mockResolvedValue();
+  const upgrade = vi.spyOn(kube, 'upgrade').mockResolvedValue();
   vi.spyOn(kube, 'claim').mockResolvedValue('new-sandbox');
   const sink = vi.fn().mockResolvedValue(undefined);
   const work = watchComputers(nats.store, kube, tokens, sink, 'test', 600_000, stop.signal);
   function computerStillRunning() {
     return sink.mock.calls.length > 0;
   }
-  function computerReplaced() {
-    return mode.mock.calls.length > 0;
+  function computerUpgraded() {
+    return upgrade.mock.calls.length > 0;
   }
   try {
     await until(computerStillRunning);
-    expect(replace).not.toHaveBeenCalled();
+    expect(upgrade).not.toHaveBeenCalled();
     expect(mode).not.toHaveBeenCalled();
     const rows = await history(nats.store, subject);
     const ready = rows.at(-1)!.event;
@@ -437,14 +408,16 @@ async function replacesRunningComputerAtNextSuspend() {
       assistantId: 'assistant', computerId: 'computer', latest: ready, ready,
     });
     expect(busy.id).toBe(ready.id);
-    expect(replace).not.toHaveBeenCalled();
+    expect(upgrade).not.toHaveBeenCalled();
     await record('computer.turn_closed', { ...turn, status: 'completed' });
+    vi.spyOn(kube, 'state').mockResolvedValue({ uid: 'sandbox', ready: false,
+      suspended: true, outdated: true });
     await suspendComputer(nats.store, {
       assistantId: 'assistant', computerId: 'computer', latest: ready, ready,
     });
-    await until(computerReplaced, 1500);
-    expect(replace).toHaveBeenCalledExactlyOnceWith('computer', 'assistant');
-    expect(mode).toHaveBeenCalledExactlyOnceWith('computer', 'Suspended');
+    await until(computerUpgraded, 1500);
+    expect(upgrade).toHaveBeenCalledExactlyOnceWith('computer', 'assistant');
+    expect(mode).toHaveBeenCalledWith('computer', 'Suspended');
   } finally {
     stop.abort();
     await work;
@@ -455,4 +428,4 @@ async function replacesRunningComputerAtNextSuspend() {
 }
 
 it('keeps an outdated running computer until its next committed suspend',
-  replacesRunningComputerAtNextSuspend);
+  upgradesRunningComputerAtNextSuspend);

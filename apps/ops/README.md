@@ -41,7 +41,8 @@ flowchart LR
    Kubernetes to change a computer's mode when needed. It checks quiet computers less
    often and repairs outside changes to their mode. After an image update, a paused
    computer starts from the checked image and keeps its home files. A running computer
-   waits until its next pause. Failed changes wait before retrying.
+   waits until its next pause. The worker updates the paused computer in place.
+   Failed changes wait before retrying, while other computers continue to resume.
 4. **An operator rebuilds a table.** The replay command reads every saved event again, builds a fresh copy of the table and checks it before swapping it in.
 
 ## How to run or test it

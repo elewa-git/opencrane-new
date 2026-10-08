@@ -1,14 +1,10 @@
 import { spawn, execFile as execFileCallback } from 'node:child_process';
 import type { IssuedToken } from '@opencrane/auth';
-import { isDeepStrictEqual, promisify } from 'node:util';
-import { readFileSync } from 'node:fs';
+import { promisify } from 'node:util';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const execFile = promisify(execFileCallback);
 type Resource = object;
-const checkedTemplatePath = new URL('../../computer/sandbox-template.json', import.meta.url);
-const checkedTemplateJson = readFileSync(checkedTemplatePath, 'utf8');
-const checkedTemplate: unknown = JSON.parse(checkedTemplateJson);
-const checkedPodSpec = value(checkedTemplate, 'spec', 'podTemplate', 'spec');
 
 function value(object: unknown, ...path: string[]): unknown {
   let current = object;
@@ -54,14 +50,27 @@ export class SandboxClient {
   }
 
   private input(args: string[], object: Resource): Promise<void> {
-    return new Promise((resolve, reject) => {
-      const child = spawn('kubectl', this.args(args), { stdio: ['pipe', 'ignore', 'pipe'] });
+    const commandArgs = this.args(args);
+    function sendInput(resolve: () => void, reject: (error: Error) => void) {
+      const stdio: ['pipe', 'ignore', 'pipe'] = ['pipe', 'ignore', 'pipe'];
+      const options = { stdio,
+        timeout: 30_000, killSignal: 'SIGKILL' as const };
+      const child = spawn('kubectl', commandArgs, options);
       let error = '';
-      child.stderr.on('data', (chunk: Buffer) => { error += chunk.toString(); });
+      function recordError(chunk: Buffer) {
+        error += chunk.toString();
+      }
+      function finished(code: number | null) {
+        if (code === 0) resolve();
+        else reject(new Error(`kubectl failed: ${error.trim()}`));
+      }
+      child.stderr.on('data', recordError);
       child.once('error', reject);
-      child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`kubectl failed: ${error.trim()}`)));
+      child.stdin.once('error', reject);
+      child.once('exit', finished);
       child.stdin.end(JSON.stringify(object));
-    });
+    }
+    return new Promise(sendInput);
   }
 
   private async get(kind: string, name: string): Promise<Resource | undefined> {
@@ -72,7 +81,7 @@ export class SandboxClient {
     return parsed;
   }
 
-  async claim(name: string, assistantId: string, replaceOutdated = false): Promise<string> {
+  async claim(name: string, assistantId: string): Promise<string> {
     const existing = await this.get('sandboxclaim', name);
     if (!existing) {
       await this.input(['create', '-f', '-'], {
@@ -90,69 +99,55 @@ export class SandboxClient {
     while (Date.now() < deadline) {
       const claim = await this.get('sandboxclaim', name);
       const sandboxName = value(claim, 'status', 'sandbox', 'name') ?? name;
+      if (sandboxName !== name) {
+        throw new Error('Computer claim has a different Sandbox name');
+      }
       if (typeof sandboxName === 'string') {
         const sandbox = await this.get('sandbox', sandboxName);
         const uid = value(sandbox, 'metadata', 'uid');
         if (typeof uid === 'string' && await this.get('pvc', `home-${sandboxName}`)) {
-          if (replaceOutdated && this.isOutdated(sandbox)) {
-            await this.replace(name, assistantId);
-            continue;
-          }
           await this.bindClaim(name, assistantId, claim, sandbox);
           return uid;
         }
       }
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await delay(100);
     }
     throw new Error('Timed out waiting for Sandbox and PVC');
   }
 
-  private isOutdated(sandbox: unknown): boolean {
-    const app = value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels', 'app');
-    const checkedApp = value(checkedTemplate, 'spec', 'podTemplate', 'metadata', 'labels', 'app');
-    if (app !== checkedApp) {
-      return true;
+  private async isOutdated(name: string): Promise<boolean> {
+    const patch = { spec: { operatingMode: 'Running' } };
+    try {
+      await this.run('patch', `sandbox/${name}`, '--type=merge', '--dry-run=server',
+        '-p', JSON.stringify(patch));
+      return false;
+    } catch (error) {
+      // Treat only admission refusal as drift. Network and RBAC errors need a retry.
+      const policyName = `${this.namespace}-computer-sandbox`;
+      if (error instanceof Error && error.message.includes(policyName)
+        && error.message.includes('denied')) {
+        return true;
+      }
+      throw error;
     }
-    const podSpec = value(sandbox, 'spec', 'podTemplate', 'spec');
-    return !isDeepStrictEqual(podSpec, checkedPodSpec);
   }
 
-  async replace(name: string, assistantId: string): Promise<void> {
+  async upgrade(name: string, assistantId: string): Promise<void> {
     const sandbox = await this.get('sandbox', name);
-    if (!sandbox) {
-      return;
-    }
-    const labels = value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels');
-    if (value(labels, 'sandbox.users.io/assistant') !== assistantId
-      || value(labels, 'sandbox.users.io/computer') !== name) {
-      throw new Error('Retained Sandbox belongs to another computer or assistant');
+    if (!sandbox) throw new Error('Computer Sandbox is missing');
+    assertComputerLabels(sandbox, name, assistantId);
+    if (!isFullySuspended(sandbox) || await this.get('pod', name)) {
+      throw new Error('Computer must be suspended with no Pod before upgrading');
     }
     const pvc = await this.get('pvc', `home-${name}`);
-    if (!pvc || value(pvc, 'metadata', 'labels', 'sandbox.users.io/computer') !== name) {
-      throw new Error('Retained computer has no matching home volume');
-    }
-    const sandboxUid = value(sandbox, 'metadata', 'uid');
-    const owners = value(pvc, 'metadata', 'ownerReferences');
-    const references: unknown[] = Array.isArray(owners) ? owners : [];
-    function belongsToSandbox(owner: unknown) {
-      return value(owner, 'uid') === sandboxUid && value(owner, 'kind') === 'Sandbox';
-    }
-    function belongsToAnotherResource(owner: unknown) {
-      return !belongsToSandbox(owner);
-    }
-    if (references.some(belongsToAnotherResource)) {
-      throw new Error('Retained home volume belongs to another resource');
-    }
-    if (references.length > 0) {
-      const patch = { metadata: {
-        resourceVersion: value(pvc, 'metadata', 'resourceVersion'), ownerReferences: [],
-      } };
-      // Detach the disk first. Orphan deletion would need an update to the old Sandbox,
-      // which the unchanged admission rules refuse even for Kubernetes itself.
-      await this.input(['patch', `pvc/home-${name}`, '--type=merge',
-        '-p', JSON.stringify(patch)], {});
-    }
-    await this.run('delete', `sandbox/${name}`, '--cascade=background', '--wait=true');
+    assertHomeOwnership(pvc, sandbox, name);
+    const template = await this.get('sandboxtemplate', this.pool);
+    const podTemplate = checkedComputerTemplate(template, sandbox, name);
+    const spec = value(sandbox, 'spec');
+    if (typeof spec !== 'object' || spec === null) throw new Error('Invalid Sandbox spec');
+    // Keep the resource version and all other fields from this read. Refuse a competing update.
+    Reflect.set(spec, 'podTemplate', podTemplate);
+    await this.input(['replace', '-f', '-'], sandbox);
     this.forgetMode(name);
     this.delivered.delete(name);
   }
@@ -196,16 +191,15 @@ export class SandboxClient {
     const items = value(pods, 'items');
     const pod: unknown = (Array.isArray(items) ? items : []).find((item: unknown) => {
       const owners = value(item, 'metadata', 'ownerReferences');
-      return Array.isArray(owners) && owners.some((owner: unknown) => value(owner, 'uid') === uid)
-        && !value(item, 'metadata', 'deletionTimestamp');
+      return Array.isArray(owners) && owners.some((owner: unknown) => value(owner, 'uid') === uid);
     });
     const podUid = value(pod, 'metadata', 'uid');
     const podConditions = value(pod, 'status', 'conditions');
     const podReady = Array.isArray(podConditions) && podConditions.some((c: unknown) => value(c, 'type') === 'Ready' && value(c, 'status') === 'True');
     return {
-      uid, outdated: this.isOutdated(sandbox),
+      uid, outdated: await this.isOutdated(name),
       ready: value(ready, 'status') === 'True' && podReady,
-      suspended: value(condition('Suspended'), 'status') === 'True',
+      suspended: isFullySuspended(sandbox),
       ...(typeof podUid === 'string' ? { podUid } : {}) };
   }
 
@@ -228,4 +222,59 @@ export class SandboxClient {
     // Remember only successful patches so a failed request is retried.
     this.modes.set(name, operatingMode);
   }
+}
+
+function assertComputerLabels(sandbox: unknown, name: string, assistantId: string): void {
+  const labels = value(sandbox, 'spec', 'podTemplate', 'metadata', 'labels');
+  if (value(labels, 'sandbox.users.io/assistant') !== assistantId
+    || value(labels, 'sandbox.users.io/computer') !== name) {
+    throw new Error('Retained Sandbox belongs to another computer or assistant');
+  }
+}
+
+function isFullySuspended(sandbox: unknown): boolean {
+  if (value(sandbox, 'spec', 'operatingMode') !== 'Suspended') return false;
+  const conditions = value(sandbox, 'status', 'conditions');
+  if (!Array.isArray(conditions)) return false;
+  function confirmsNoPod(condition: unknown): boolean {
+    return value(condition, 'type') === 'Suspended' && value(condition, 'status') === 'True'
+      && value(condition, 'reason') === 'PodTerminated'
+      && value(condition, 'observedGeneration') === value(sandbox, 'metadata', 'generation');
+  }
+  return conditions.some(confirmsNoPod);
+}
+
+function assertHomeOwnership(pvc: unknown, sandbox: unknown, name: string): void {
+  if (!pvc || value(pvc, 'metadata', 'labels', 'sandbox.users.io/computer') !== name) {
+    throw new Error('Retained computer has no matching home volume');
+  }
+  const owners = value(pvc, 'metadata', 'ownerReferences');
+  function ownsHome(owner: unknown): boolean {
+    return value(owner, 'kind') === 'Sandbox' && value(owner, 'name') === name
+      && value(owner, 'uid') === value(sandbox, 'metadata', 'uid')
+      && value(owner, 'controller') === true;
+  }
+  if (!Array.isArray(owners) || owners.length !== 1 || !owners.every(ownsHome)) {
+    throw new Error('Retained home volume belongs to another resource');
+  }
+}
+
+function checkedComputerTemplate(template: unknown, sandbox: unknown, name: string): object {
+  const podTemplate = structuredClone(value(template, 'spec', 'podTemplate'));
+  const spec = value(podTemplate, 'spec');
+  const volumes = value(spec, 'volumes');
+  const labels = value(podTemplate, 'metadata', 'labels');
+  if (typeof podTemplate !== 'object' || podTemplate === null || !Array.isArray(volumes)
+    || typeof labels !== 'object' || labels === null) {
+    throw new Error('Checked computer template is missing');
+  }
+  // Preserve the controller's identity labels as well as the computer and assistant labels.
+  const metadata = structuredClone(value(sandbox, 'spec', 'podTemplate', 'metadata'));
+  Reflect.set(podTemplate, 'metadata', metadata);
+  for (let index = 0; index < volumes.length; index++) {
+    if (value(volumes[index], 'name') === 'home') {
+      volumes[index] = { name: 'home', persistentVolumeClaim: { claimName: `home-${name}` } };
+    }
+  }
+  return podTemplate;
 }

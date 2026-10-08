@@ -523,12 +523,15 @@ limit is 5,000 cents. It attempts every scope and reports any failed restoration
 
 ## Lifecycle image-update tests
 
-The lifecycle worker can delete Sandboxes and patch PVCs in its computer namespace.
-Before deleting a Sandbox with older Pod settings, it removes that Sandbox's ownership
-of the named home PVC. This preserves the disk while the claim controller creates
-from the checked template. Sandbox create and update admission checks stay unchanged.
+The lifecycle worker upgrades suspended Sandboxes in place. It reads the checked
+cluster template and sends one resource-version-checked update of `spec.podTemplate`.
+Admission requires the controller to confirm that the Pod is gone. It checks the
+exact new template, the named home PVC volume and unchanged metadata and other
+spec fields. The worker has no Sandbox delete or PVC write rights.
 
 `apps/ops/test/lifecycle-k3d.test.ts` requires a claimed secondary `DEV_STACK_ID`
-of 1 or 2. It creates and removes that slot's computer namespace and uses disposable
-PostgreSQL databases through `PG_TEST_URL`. Run it while the rest of the slot is
-stopped; it must never use the owner namespace or PostgreSQL service.
+of 1 or 2 and checks that this worktree owns it. It creates and removes only that
+slot's computer namespace and its three named admission policies. It builds a
+second image digest under a slot-specific tag. It uses disposable PostgreSQL
+databases through `PG_TEST_URL`. Run it with the rest of that slot stopped.
+The owner namespace and configuration directory must never be used.

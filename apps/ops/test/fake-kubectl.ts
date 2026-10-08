@@ -8,7 +8,8 @@ export async function fakeKubectl(script = '') {
   const executable = `#!/bin/sh
 printf '%s\\n' "$*" >> '${calls}'
 case "$*" in
-  *' get '*|*' delete '*) ;;
+  *' get '*|*' delete '*|*'--dry-run=server'*) ;;
+  *' replace '*) cat > '${calls}.input' ;;
   *) cat >/dev/null ;;
 esac
 ${script}
@@ -24,5 +25,8 @@ ${script}
     process.env['PATH'] = previousPath;
     await rm(directory, { recursive: true, force: true });
   }
-  return { commands, close };
+  async function input(): Promise<unknown> {
+    return JSON.parse(await readFile(`${calls}.input`, 'utf8'));
+  }
+  return { commands, close, input };
 }
