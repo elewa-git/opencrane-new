@@ -33,13 +33,80 @@ const security = [
   `variables.p.containers.all(c, size(c.volumeMounts) == ${spec.containers[0].volumeMounts.length} && c.volumeMounts.all(v, (!has(v.mountPropagation) || v.mountPropagation == 'None') && !has(v.subPath) && !has(v.subPathExpr) && (${spec.containers[0].volumeMounts.map(v => `(v.name == '${v.name}' && v.mountPath == '${v.mountPath}')`).join(' || ')})))`,
   `variables.p.containers.all(c, size(c.env) == 2 && c.env[0].name == 'GATEWAY' && has(c.env[0].valueFrom) && has(c.env[0].valueFrom.configMapKeyRef) && c.env[0].valueFrom.configMapKeyRef.name == 'computer-runtime' && c.env[0].valueFrom.configMapKeyRef.key == 'gateway' && c.env[1].name == 'POD_UID' && has(c.env[1].valueFrom) && has(c.env[1].valueFrom.fieldRef) && c.env[1].valueFrom.fieldRef.fieldPath == 'metadata.uid')`,
 ];
+function sameOptionalField(path) {
+  return `has(object.${path}) == has(oldObject.${path}) && `
+    + `(!has(object.${path}) || object.${path} == oldObject.${path})`;
+}
+function unchangedSpecExcept(field) {
+  return `object.spec.all(k, k == '${field}' || `
+    + `(k in oldObject.spec && object.spec[k] == oldObject.spec[k])) && `
+    + `oldObject.spec.all(k, k == '${field}' || k in object.spec)`;
+}
+const metadataFields = ['name', 'namespace', 'uid', 'creationTimestamp', 'generateName',
+  'deletionTimestamp', 'deletionGracePeriodSeconds', 'labels', 'annotations',
+  'ownerReferences', 'finalizers'];
+function metadataComparison(field) {
+  return sameOptionalField(`metadata.${field}`);
+}
+const metadataChecks = metadataFields.map(metadataComparison);
+const sameMetadata = metadataChecks.join(' && ');
+const worker = `request.userInfo.username == `
+  + `'system:serviceaccount:${namespace}:computer-lifecycle'`;
+function checkedVolume(volume) {
+  if (volume.name === 'home') {
+    return `{'name':dyn('home'), 'persistentVolumeClaim':dyn(`
+      + `{'claimName':dyn('home-' + object.metadata.name)})}`;
+  }
+  return cel(volume);
+}
+const checkedVolumes = spec.volumes.map(checkedVolume);
+function checkedSpecField([key, item]) {
+  if (key === 'volumes') return `${literal(key)}:dyn([${checkedVolumes.join(',')}])`;
+  return `${literal(key)}:dyn(${cel(item)})`;
+}
+const specEntries = Object.entries(spec);
+const specFields = specEntries.map(checkedSpecField);
+const checkedHomeSpec = `{${specFields.join(',')}}`;
+const checkedPodTemplate = `{'metadata':dyn(oldObject.spec.podTemplate.metadata), `
+  + `'spec':dyn(${checkedHomeSpec})}`;
+const suspensionProof = [
+  `oldObject.spec.operatingMode == 'Suspended'`,
+  `has(oldObject.status) && has(oldObject.status.conditions)`,
+  `oldObject.status.conditions.exists(c, c.type == 'Suspended' && c.status == 'True' `
+    + `&& c.reason == 'PodTerminated' && c.observedGeneration == oldObject.metadata.generation)`,
+].join(' && ');
+// Trust the controller's current-generation suspension report. It is true only after the Pod is gone.
+const upgrade = [
+  worker, `oldObject != null`, suspensionProof,
+  `object.metadata.resourceVersion == oldObject.metadata.resourceVersion`, sameMetadata,
+  unchangedSpecExcept('podTemplate'),
+  `object.spec.podTemplate == ${checkedPodTemplate}`,
+  `object.spec.podTemplate.metadata == oldObject.spec.podTemplate.metadata`,
+  `object.status == oldObject.status`,
+].join(' && ');
+const suspendOldTemplate = [worker, `oldObject != null`, sameMetadata,
+  unchangedSpecExcept('operatingMode'), `object.spec.operatingMode == 'Suspended'`,
+].join(' && ');
+const claimOwnerRepair = `has(object.metadata.ownerReferences) && `
+  + `size(object.metadata.ownerReferences) == 1 && object.metadata.ownerReferences.all(o, `
+  + `o.apiVersion == 'extensions.agents.x-k8s.io/v1beta1' && o.kind == 'SandboxClaim' && `
+  + `o.name == object.metadata.name && o.controller && o.blockOwnerDeletion)`;
+const ordinaryMetadataFields = metadataFields.filter(excludesOwners);
+function excludesOwners(field) {
+  return field !== 'ownerReferences';
+}
+const ordinaryMetadataChecks = ordinaryMetadataFields.map(metadataComparison);
+const ordinaryMetadata = ordinaryMetadataChecks.join(' && ');
+const ordinaryWorkerUpdate = [
+  `oldObject != null`, unchangedSpecExcept('operatingMode'), ordinaryMetadata,
+  `((${sameOptionalField('metadata.ownerReferences')}) || (${claimOwnerRepair}))`,
+].join(' && ');
 const policies = [
   ['sandbox', 'agents.x-k8s.io', ['sandboxes'], 'object.spec.podTemplate.spec', [
-    `variables.p == ${cel(spec)}`,
+    `(variables.p == ${cel(spec)} || variables.p == ${checkedHomeSpec} || `
+      + `(${suspendOldTemplate}))`,
     `variables.labels['app'] == 'computer'`,
-    // Keep Pod settings fixed. Let the lifecycle service account change its mode or attach the
-    // SandboxClaim with the same name as the Pod.
-    `request.userInfo.username != 'system:serviceaccount:${namespace}:computer-lifecycle' || (oldObject != null && object.spec.all(k, k == 'operatingMode' || (k in oldObject.spec && object.spec[k] == oldObject.spec[k])) && oldObject.spec.all(k, k == 'operatingMode' || k in object.spec) && object.metadata.labels == oldObject.metadata.labels && ((has(object.metadata.ownerReferences) == has(oldObject.metadata.ownerReferences) && (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences == oldObject.metadata.ownerReferences)) || (has(object.metadata.ownerReferences) && size(object.metadata.ownerReferences) == 1 && object.metadata.ownerReferences.all(o, o.apiVersion == 'extensions.agents.x-k8s.io/v1beta1' && o.kind == 'SandboxClaim' && o.name == object.metadata.name && o.controller && o.blockOwnerDeletion))) && has(object.metadata.annotations) == has(oldObject.metadata.annotations) && (!has(object.metadata.annotations) || object.metadata.annotations == oldObject.metadata.annotations) && has(object.metadata.finalizers) == has(oldObject.metadata.finalizers) && (!has(object.metadata.finalizers) || object.metadata.finalizers == oldObject.metadata.finalizers))`,
+    `!(${worker}) || (${ordinaryWorkerUpdate}) || (${upgrade})`,
   ]],
   ['pod', '', ['pods', 'pods/ephemeralcontainers'], 'object.spec', security],
   ['claim', 'extensions.agents.x-k8s.io', ['sandboxclaims'], 'object.spec', [
@@ -53,7 +120,7 @@ for (const [suffix, group, resources, expression, expressions] of policies) {
   const name = `${namespace}-computer-${suffix}`;
   const policy = { apiVersion: 'admissionregistration.k8s.io/v1', kind: 'ValidatingAdmissionPolicy', metadata: { name }, spec: {
     failurePolicy: 'Fail', matchConstraints: { resourceRules: [{ apiGroups: [group], apiVersions: ['*'], operations: ['CREATE', 'UPDATE'], resources }] },
-    variables: [{ name: 'p', expression }, ...(suffix === 'claim' ? [] : [{ name: 'labels', expression: suffix === 'pod' ? 'object.metadata.labels' : 'object.spec.podTemplate.metadata.labels' }])], validations: expressions.map(expression => ({ expression, message: 'Computer must use the checked template; worker may only change operatingMode or repair same-name claim ownership' })),
+    variables: [{ name: 'p', expression }, ...(suffix === 'claim' ? [] : [{ name: 'labels', expression: suffix === 'pod' ? 'object.metadata.labels' : 'object.spec.podTemplate.metadata.labels' }])], validations: expressions.map(expression => ({ expression, message: 'Computer must use the checked template; worker may only change mode, repair claim ownership or upgrade a suspended computer' })),
   } };
   const binding = { apiVersion: policy.apiVersion, kind: 'ValidatingAdmissionPolicyBinding', metadata: { name }, spec: {
     policyName: name, validationActions: ['Deny'], matchResources: { namespaceSelector: { matchLabels: { 'kubernetes.io/metadata.name': namespace } } },

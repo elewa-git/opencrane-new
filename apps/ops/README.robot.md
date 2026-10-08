@@ -113,10 +113,10 @@ single conditional appends made by reactions. `KUBECONFIG`, `KUBE_NAMESPACE`,
 path and token values never enter events. `COMPUTER_IDLE_MS` defaults to 15 minutes.
 Run one active lifecycle reconciler per silo. Commands append intent before any
 Kubernetes effect; restart retries claims, modes and credential delivery from events.
-The Kubernetes identity can create/get claims, get/patch Sandboxes, get PVCs, list
-Pods and POST the Pod proxy subresource in its namespace. It cannot exec, read Secrets
-or mutate Pods, templates or pools. Install `node infra/dev-stack/computer-admission.mjs <NAMESPACE>` before claims: fail-closed CEL policies pin the computer image and
-security fields and restrict worker Sandbox patches to `spec.operatingMode`.
+The Kubernetes identity can create/get claims, get/patch/update Sandboxes, get
+PVCs and checked templates, list Pods, exec in Pods and POST the Pod proxy subresource in its namespace.
+It cannot read Secrets, delete Sandboxes, write PVCs or change templates or pools. Install `node infra/dev-stack/computer-admission.mjs <NAMESPACE>` before claims: fail-closed CEL policies pin the computer image and
+security fields and restrict worker Sandbox writes to mode changes, claim ownership repair and the suspended-template update described below.
 Kubernetes RBAC has no field-level patch permission or operating-mode subresource.
 The policies cover all Pods in the dedicated computer namespace without a bypassable
 label selector; install service workloads elsewhere.
@@ -220,16 +220,56 @@ events after its last processed position. It keeps computer history and conversa
 activity in memory. These copies can be rebuilt from events.
 
 A successful mode patch is remembered by the Kubernetes client. The same mode is
-not patched again; a failed patch is retried. A reported suspension or a new claim
+not patched again; a failed change waits before retrying. Each computer retries after
+1, 2, 4, 8, 16, 32 and then 60 seconds. A successful check clears that delay. Each
+failed attempt logs the computer name and the wait time. Other computers keep running. A reported suspension or a new claim
 or loss event clears the remembered mode so outside changes cannot stop recovery.
 
 Ready computers check Pod identity and renew credentials at most every 30 seconds
 while the event log is unchanged. New events trigger a check on the next 250 ms
 poll. Suspended computers check for outside mode changes every 60 seconds and
 restore suspension when needed. Lost and retired computers wait for another
-lifecycle event. Claims and resumes keep retrying every 250 ms until ready.
+lifecycle event. Claims and resumes are checked every 250 ms until ready, unless a failed change
+requires a longer wait.
 
 Idle checks run at most once every 30 seconds, including during Kubernetes retries.
 They read any new events after the Pod check so a newly posted message prevents
 suspension. A pending message prevents suspension until a completed or failed turn
 is recorded.
+
+## Computer image updates
+
+The worker asks the cluster whether a Running mode patch would pass admission.
+A denied server-side dry-run means that the installed policy refuses the old template.
+The worker reads `SandboxTemplate/computer` from the cluster at upgrade time. It does
+not cache a template file or infer drift from that file.
+
+A Running computer keeps its Pod until its next committed suspension. Only the
+current computer generation's open turns prevent suspension or upgrade. An older
+turn that never closed cannot block a newly claimed generation.
+
+The worker updates a suspended Sandbox in place. It checks its computer and
+assistant labels, the named home PVC's labels and Sandbox owner, and the absence
+of a Pod. The update carries the resource version from the read and changes only
+`spec.podTemplate`. It copies the checked template with that computer's identity
+labels and `home-<computer>` PVC volume. Every other field stays unchanged.
+
+One narrow worker admission rule requires the controller's current-generation
+`Suspended=True`, `PodTerminated` report. It requires the exact checked Pod template,
+unchanged Pod metadata, unchanged Sandbox labels, owners, annotations and finalisers,
+and unchanged other spec fields. It refuses a simultaneous resume or ownership change.
+A worker may suspend an old template without changing it; it may resume only a checked
+one. Kubernetes RBAC gives it no Sandbox delete or PVC write permission.
+
+Each reconciliation attempts at most one template update, then reads again on the
+next pass. Computers run independently, with one active check per computer. A slow
+upgrade cannot hold up another resume. A new lifecycle event skips that computer's
+previous retry delay; successful work clears the delay.
+
+Run live tests only after `infra/dev-stack/claim.sh` returns a secondary id. Set
+`DEV_STACK_ID` to that id, 1 or 2. Tests verify the recorded worktree before using
+`opencrane-dev-<id>`. They refuse an occupied namespace and only remove that slot's
+three named admission policies. Use disposable PostgreSQL through `PG_TEST_URL`.
+The image test builds and pushes a second digest under a slot-specific tag in the
+local registry. It proves that v1.0.4 resumes from the updated template, with the
+same Sandbox UID, same PVC UID, a new Pod UID and a saved home file.

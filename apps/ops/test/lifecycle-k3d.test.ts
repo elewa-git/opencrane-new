@@ -1,7 +1,8 @@
 import { execFile as execFileCallback } from 'node:child_process';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdtemp, mkdir, copyFile, rm, writeFile, readFile } from 'node:fs/promises';
+import { tmpdir, homedir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, it } from 'vitest';
@@ -17,6 +18,34 @@ import { field, history, lifecycleHandlers, resumeComputer, suspendComputer, wat
 
 const execFile = promisify(execFileCallback);
 const live = process.env['LIFECYCLE_K3D'] === '1' && Boolean(process.env['PG_TEST_URL']);
+function testNamespace(): string {
+  const stackId = process.env['DEV_STACK_ID'];
+  if (stackId !== '1' && stackId !== '2') {
+    throw new Error('Claim a secondary dev-stack slot and set DEV_STACK_ID to 1 or 2');
+  }
+  const ownerPath = join(homedir(), '.config/opencrane', `dev-stack-${stackId}`, 'stack-owner');
+  const owner = readFileSync(ownerPath, 'utf8');
+  if (!owner.startsWith(`worktree=${resolve(import.meta.dirname, '../../..')}\n`)) {
+    throw new Error('The secondary slot belongs to another worktree');
+  }
+  return `opencrane-dev-${stackId}`;
+}
+
+async function waitForAdmissionRefusal(request: () => Promise<string>) {
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    try {
+      await request();
+    } catch (error) {
+      if (error instanceof Error && /denied/u.test(error.message)) return;
+      throw error;
+    }
+    // Wait for the API server to apply the changed policy before checking the worker.
+    await new Promise(resolveWait => setTimeout(resolveWait, 100));
+  }
+  throw new Error('Timed out waiting for the checked-image admission refusal');
+}
+
 function nested(input: unknown, name: string): unknown {
   if (typeof input !== 'object' || input === null) return undefined;
   const result: unknown = Reflect.get(input, name);
@@ -24,11 +53,14 @@ function nested(input: unknown, name: string): unknown {
 }
 
 it.skipIf(!live)('admits the checked computer template and rejects a forged Pod identity source', async () => {
-  const namespace = `p22-admission-${randomUUID().slice(0, 8)}`;
+  const namespace = testNamespace();
   const directory = await mkdtemp(join(tmpdir(), 'computer-admission-'));
   const k = async (...args: string[]) => (await execFile('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args])).stdout.trim();
+  let created = false;
   try {
+    expect(await k('get', 'namespace', namespace, '--ignore-not-found', '-o', 'name')).toBe('');
     await k('create', 'namespace', namespace);
+    created = true;
     await execFile('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
     const template: unknown = JSON.parse(await readFile('apps/computer/sandbox-template.json', 'utf8'));
     const spec = nested(nested(nested(template, 'spec'), 'podTemplate'), 'spec');
@@ -38,10 +70,39 @@ it.skipIf(!live)('admits the checked computer template and rejects a forged Pod 
     await k('create', '--dry-run=server', '-f', path);
     // The desktop helper must read its actual Pod UID, never a caller's literal or another field.
     await writeFile(path, JSON.stringify(pod).replace('metadata.uid', 'metadata.name'));
-    await expect(k('create', '--dry-run=server', '-f', path)).rejects.toThrow(/denied/u);
+    function createForgedIdentity() {
+      return k('create', '--dry-run=server', '-f', path);
+    }
+    await waitForAdmissionRefusal(createForgedIdentity);
+    await expect(createForgedIdentity()).rejects.toThrow(/denied/u);
+    const sandbox = {
+      apiVersion: 'agents.x-k8s.io/v1beta1', kind: 'Sandbox',
+      metadata: { name: 'checked' },
+      spec: { podTemplate: nested(nested(template, 'spec'), 'podTemplate'),
+        operatingMode: 'Suspended' },
+    };
+    await writeFile(path, JSON.stringify(sandbox));
+    await k('create', '-f', path);
+    const older = olderTemplate(template);
+    const oldPodTemplate = nested(nested(older.oldTemplate, 'spec'), 'podTemplate');
+    const oldPodSpec = nested(oldPodTemplate, 'spec');
+    const oldSandbox = { ...sandbox, metadata: { name: 'old-image' },
+      spec: { ...sandbox.spec, podTemplate: oldPodTemplate } };
+    await writeFile(path, JSON.stringify(oldSandbox));
+    function createOldImage() {
+      return k('create', '--dry-run=server', '-f', path);
+    }
+    await waitForAdmissionRefusal(createOldImage);
+    await expect(createOldImage()).rejects.toThrow(/denied/u);
+    const patch = { spec: { podTemplate: { spec: oldPodSpec } } };
+    const imagePatch = JSON.stringify(patch);
+    await expect(k('patch', 'sandbox/checked', '--type=merge', '--dry-run=server',
+      '-p', imagePatch)).rejects.toThrow(/denied/u);
   } finally {
-    for (const suffix of ['sandbox', 'pod', 'claim']) await k('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding', `${namespace}-computer-${suffix}`, '--ignore-not-found');
-    await k('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=120s');
+    if (created) {
+      for (const suffix of ['sandbox', 'pod', 'claim']) await k('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding', `${namespace}-computer-${suffix}`, '--ignore-not-found');
+      await k('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=120s');
+    }
     await rm(directory, { recursive: true, force: true });
   }
 }, 120_000);
@@ -53,7 +114,7 @@ it.skipIf(!live).each([
   ['computer.resumed', 'sandboxclaim', true],
 ] as const)(
   'recovers deleted resources while %s (delete: %s, retain disk: %s)', async (latestType, deleted, retainDisk) => {
-    const namespace = `p22-repair-${randomUUID().slice(0, 8)}`;
+    const namespace = testNamespace();
     const directory = await mkdtemp(join(tmpdir(), 'opencrane-repair-'));
     const k = async (...args: string[]) => (await execFile('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args],
       { timeout: 180_000 })).stdout.trim();
@@ -158,7 +219,7 @@ it.skipIf(!live).each([
 
 it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () => {
   expect(suspendComputer).toBeTypeOf('function');
-  const namespace = `p22-${randomUUID().slice(0, 8)}`;
+  const namespace = testNamespace();
   const directory = await mkdtemp(join(tmpdir(), 'opencrane-lifecycle-'));
   const kubeconfig = join(directory, 'kubeconfig.json');
   const signingKey = join(directory, 'signing.pem');
@@ -180,10 +241,12 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
   let watchTask: Promise<void> | undefined;
   const dispatcher = new AbortController();
   let watcher = new AbortController();
+  let created = false;
   try {
     expect(await run('config', 'current-context')).toBe('k3d-ocn');
     expect(await run('get', 'namespace', namespace, '--ignore-not-found', '-o', 'name')).toBe('');
     await run('create', 'namespace', namespace);
+    created = true;
     await execFile('node', ['infra/dev-stack/computer-admission.mjs', namespace], { cwd: root });
     await k('create', 'configmap', 'computer-runtime', '--from-literal=gateway=http://127.0.0.1:3000');
     await k('apply', '-f', 'apps/computer/sandbox-template.json');
@@ -371,7 +434,10 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
     expect(await restricted('auth', 'can-i', 'create', 'pods', '--subresource=exec', '-n', namespace)).toBe('yes');
     await expect(restricted('auth', 'can-i', 'get', 'secrets', '-n', namespace)).rejects.toThrow();
     await expect(restricted('auth', 'can-i', 'patch', 'pods', '-n', namespace)).rejects.toThrow();
-    await expect(restricted('auth', 'can-i', 'get', 'sandboxtemplates', '-n', namespace)).rejects.toThrow();
+    await expect(restricted('auth', 'can-i', 'get', 'sandboxtemplates', '-n', namespace))
+      .resolves.toBe('yes');
+    await expect(restricted('auth', 'can-i', 'patch', 'sandboxtemplates', '-n', namespace))
+      .rejects.toThrow();
     await expect(restricted('auth', 'can-i', 'get', 'sandboxes', '-n', 'default')).rejects.toThrow();
     await writeFile(join(directory, 'latency.json'), JSON.stringify({ joinReadyMs, resumeMs }));
     console.log(`LIFECYCLE_LATENCY ${JSON.stringify({ joinReadyMs, resumeMs })}`);
@@ -384,10 +450,323 @@ it.skipIf(!live)('qualifies the event-driven lifecycle on k3d gVisor', async () 
     await runtime?.stop();
     await nats?.close();
     await storage?.close();
-    for (const suffix of ['sandbox', 'pod', 'claim']) {
-      await run('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding', `${namespace}-computer-${suffix}`, '--ignore-not-found');
+    if (created) {
+      for (const suffix of ['sandbox', 'pod', 'claim']) {
+        await run('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding', `${namespace}-computer-${suffix}`, '--ignore-not-found');
+      }
+      await run('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=180s');
     }
-    await run('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=180s').catch(() => undefined);
     await rm(directory, { recursive: true, force: true });
   }
 }, 360_000);
+
+function olderTemplate(checked: unknown, image?: string) {
+  const oldTemplate = structuredClone(checked);
+  if (typeof oldTemplate !== 'object' || oldTemplate === null) throw new Error('Invalid template');
+  const podSpec = nested(nested(nested(oldTemplate, 'spec'), 'podTemplate'), 'spec');
+  const containers = nested(podSpec, 'containers');
+  if (!Array.isArray(containers)) throw new Error('Checked template has no containers');
+  const container: unknown = containers[0];
+  const checkedImage = nested(container, 'image');
+  if (typeof checkedImage !== 'string' || typeof container !== 'object' || container === null) {
+    throw new Error('Checked template has no computer image');
+  }
+  const oldImage = image ?? checkedImage.replace(/sha256:[a-f0-9]+/u, `sha256:${'0'.repeat(64)}`);
+  Reflect.set(container, 'image', oldImage);
+  return { oldTemplate, checkedImage, oldImage };
+}
+
+async function installsTestTemplate(directory: string, namespace: string, template: object) {
+  const scripts = join(directory, 'infra/dev-stack');
+  const computers = join(directory, 'apps/computer');
+  await mkdir(scripts, { recursive: true });
+  await mkdir(computers, { recursive: true });
+  const templatePath = join(computers, 'sandbox-template.json');
+  await writeFile(templatePath, JSON.stringify(template));
+  const admissionPath = join(scripts, 'computer-admission.mjs');
+  // Install the same admission rules with the older image for the starting computer.
+  await copyFile('infra/dev-stack/computer-admission.mjs', admissionPath);
+  await execFile('node', [admissionPath, namespace]);
+  await execFile('kubectl', ['--context=k3d-ocn', '-n', namespace, 'apply', '-f', templatePath]);
+}
+
+async function resumesOnCheckedImage(suspendBeforeUpgrade: boolean) {
+  const namespace = testNamespace();
+  const directory = await mkdtemp(join(tmpdir(), 'computer-image-upgrade-'));
+  const kubeconfig = join(directory, 'kubeconfig');
+  const signingKey = join(directory, 'signing.pem');
+  const nats = await natsFixture();
+  const stop = new AbortController();
+  let work: Promise<void> | undefined;
+  let watcherError: unknown;
+  let created = false;
+  async function k(...args: string[]) {
+    const options = { timeout: 180_000, maxBuffer: 4_000_000 };
+    const result = await execFile('kubectl', ['--context=k3d-ocn', '-n', namespace, ...args], options);
+    return result.stdout.trim();
+  }
+  async function until(check: () => Promise<boolean>) {
+    const deadline = Date.now() + 45_000;
+    while (!await check()) {
+      if (watcherError instanceof Error) throw watcherError;
+      expect(Date.now(), 'computer must resume on the checked image').toBeLessThan(deadline);
+      await new Promise(resolveWait => setTimeout(resolveWait, 250));
+    }
+  }
+  const assistantId = 'upgrade-assistant';
+  const computerId = 'upgrade-computer';
+  const subject = `computer-${assistantId}`;
+  async function record(type: string, extra: Record<string, unknown>) {
+    const rows = await history(nats.store, subject);
+    const event = {
+      id: randomUUID(), commandId: randomUUID(), type, subject, silo: 'test',
+      source: 'test', time: new Date().toISOString(),
+      principal: { kind: 'system' as const, id: 'test' },
+      data: { assistantId, computerId, ...extra },
+    };
+    const result = await nats.store.append({ event, expectedSequence: rows.at(-1)?.sequence ?? 0 });
+    expect(result.status).toBe('appended');
+  }
+  try {
+    expect(await k('get', 'namespace', namespace, '--ignore-not-found', '-o', 'name')).toBe('');
+    await k('create', 'namespace', namespace);
+    created = true;
+    const checked: unknown = JSON.parse(await readFile('apps/computer/sandbox-template.json', 'utf8'));
+    const olderImage = await buildOlderImage(checked, directory, namespace);
+    const { oldTemplate, checkedImage, oldImage } = olderTemplate(checked, olderImage);
+    expect(oldImage.split('@')[1]).not.toBe(checkedImage.split('@')[1]);
+    await installsTestTemplate(directory, namespace, oldTemplate);
+    await k('create', 'configmap', 'computer-runtime', '--from-literal=gateway=http://127.0.0.1:3000');
+    await k('apply', '-f', 'infra/dev-stack/computer-pool.json');
+    await k('apply', '-f', 'infra/dev-stack/computer-worker-rbac.yaml');
+    const configResult = await k('config', 'view', '--raw', '--minify', '--flatten', '-o', 'json');
+    const raw: unknown = JSON.parse(configResult);
+    const clusters = nested(raw, 'clusters');
+    const cluster = Array.isArray(clusters) ? nested(clusters[0], 'cluster') : undefined;
+    const token = await k('create', 'token', 'computer-lifecycle', '--duration=1h');
+    const config = { apiVersion: 'v1', kind: 'Config', clusters: [{ name: 'test', cluster }],
+      users: [{ name: 'worker', user: { token } }],
+      contexts: [{ name: 'test', context: { cluster: 'test', user: 'worker', namespace } }],
+      'current-context': 'test' };
+    await writeFile(kubeconfig, JSON.stringify(config), { mode: 0o600 });
+    const keyOptions = { namedCurve: 'P-256',
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' } } as const;
+    const key = generateKeyPairSync('ec', keyOptions);
+    await writeFile(signingKey, key.privateKey, { mode: 0o600 });
+    const tokens = await tokenIssuer({ privateKeyPath: signingKey, issuer: 'https://upgrade.test/' });
+    const kube = new SandboxClient(kubeconfig, namespace, 'computer', '1Gi');
+    await kube.claim(computerId, assistantId);
+    async function ready() {
+      return (await kube.state(computerId))?.ready === true;
+    }
+    await until(ready);
+    const firstState = (await kube.state(computerId))!;
+    const firstImageId = await k('get', `pod/${computerId}`, '-o',
+      'jsonpath={.status.containerStatuses[0].imageID}');
+    const pvcUid = await k('get', `pvc/home-${computerId}`, '-o', 'jsonpath={.metadata.uid}');
+    await k('exec', computerId, '--', 'node', '-e',
+      "require('fs').writeFileSync('/home/agent/workspace/preserved','yes')");
+    await record('computer.claimed', { generation: 1, tokenId: 'token:initial' });
+    await record('computer.ready', { generation: 1, podUid: firstState.podUid,
+      sandboxUid: firstState.uid });
+    async function suspended() {
+      return (await kube.state(computerId))?.suspended === true;
+    }
+    if (suspendBeforeUpgrade) {
+      await record('computer.suspended', {});
+      await kube.mode(computerId, 'Suspended');
+      await until(suspended);
+    }
+    await k('apply', '-f', 'apps/computer/sandbox-template.json');
+    await execFile('node', ['infra/dev-stack/computer-admission.mjs', namespace]);
+    const modePatch = JSON.stringify({ spec: { operatingMode: 'Running' } });
+    function patchOldImageMode() {
+      return k('--as', `system:serviceaccount:${namespace}:computer-lifecycle`,
+        'patch', `sandbox/${computerId}`, '--type=merge', '--dry-run=server', '-p', modePatch);
+    }
+    await waitForAdmissionRefusal(patchOldImageMode);
+    await expect(patchOldImageMode()).rejects.toThrow(/denied/u);
+    await verifyWorkerPermissions(kubeconfig, namespace, computerId);
+    if (suspendBeforeUpgrade) {
+      await verifyUpgradeGuards(kubeconfig, namespace, computerId, directory);
+    } else {
+      await expect(kube.upgrade(computerId, assistantId)).rejects.toThrow(/suspended/u);
+      await verifyUpgradeGuards(kubeconfig, namespace, computerId, directory, false);
+    }
+    if (suspendBeforeUpgrade) await resumeComputer(nats.store, tokens, 'test', assistantId);
+    let deliveries = 0;
+    async function deliver(name: string, credential: IssuedToken) {
+      await kube.credentials(name, credential);
+      deliveries++;
+    }
+    function failed(error: unknown) {
+      watcherError = error;
+    }
+    work = watchComputers(nats.store, kube, tokens, deliver, 'test', 600_000, stop.signal);
+    void work.catch(failed);
+    if (!suspendBeforeUpgrade) {
+      function credentialsRenewed() {
+        return Promise.resolve(deliveries > 0);
+      }
+      await until(credentialsRenewed);
+      const running = (await kube.state(computerId))!;
+      expect(running.uid).toBe(firstState.uid);
+      expect(running.podUid).toBe(firstState.podUid);
+      expect(await k('get', `pod/${computerId}`, '-o', 'jsonpath={.spec.containers[0].image}'))
+        .toBe(oldImage);
+      const rows = await history(nats.store, subject);
+      const readyEvent = rows.at(-1)!.event;
+      await suspendComputer(nats.store, {
+        assistantId, computerId, latest: readyEvent, ready: readyEvent,
+      });
+      await until(suspended);
+      await resumeComputer(nats.store, tokens, 'test', assistantId);
+    }
+    async function resumed() {
+      const rows = await history(nats.store, subject);
+      return rows.at(-1)?.event.type === 'computer.ready';
+    }
+    await until(resumed);
+    expect(watcherError).toBeUndefined();
+    await verifyWorkerModeAndTemplate(kubeconfig, namespace, computerId);
+    expect(await k('get', `sandbox/${computerId}`, '-o', 'jsonpath={.spec.operatingMode}'))
+      .toBe('Running');
+    expect(await k('get', `pod/${computerId}`, '-o', 'jsonpath={.spec.containers[0].image}'))
+      .toBe(checkedImage);
+    expect((await kube.state(computerId))!.uid).toBe(firstState.uid);
+    expect((await kube.state(computerId))!.podUid).not.toBe(firstState.podUid);
+    expect(await k('get', `pod/${computerId}`, '-o',
+      'jsonpath={.status.containerStatuses[0].imageID}')).not.toBe(firstImageId);
+    expect(await k('get', `pvc/home-${computerId}`, '-o', 'jsonpath={.metadata.uid}')).toBe(pvcUid);
+    expect(await k('exec', computerId, '--', 'cat', '/home/agent/workspace/preserved')).toBe('yes');
+  } finally {
+    stop.abort();
+    await work;
+    await nats.close();
+    if (created) {
+      for (const suffix of ['sandbox', 'pod', 'claim']) {
+        await k('delete', 'validatingadmissionpolicy,validatingadmissionpolicybinding',
+          `${namespace}-computer-${suffix}`, '--ignore-not-found');
+      }
+      await k('delete', 'namespace', namespace, '--ignore-not-found', '--wait=true', '--timeout=180s');
+    }
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+it.skipIf(!live).each([true, false])(
+  'resumes a retained computer on the checked image with its home intact (already suspended: %s)',
+  resumesOnCheckedImage, 240_000);
+
+async function buildOlderImage(checked: unknown, directory: string, namespace: string) {
+  const templateSpec = nested(nested(nested(checked, 'spec'), 'podTemplate'), 'spec');
+  const containers = nested(templateSpec, 'containers');
+  const image = Array.isArray(containers) ? nested(containers[0], 'image') : undefined;
+  if (typeof image !== 'string') throw new Error('Missing checked image');
+  const base = image.replace('k3d-ocn-registry:5000', '127.0.0.1:5001');
+  const addressResult = await execFile('docker', ['inspect', 'k3d-ocn-registry', '--format',
+    '{{(index .NetworkSettings.Networks "k3d-ocn").IPAddress}}']);
+  const address = addressResult.stdout.trim();
+  if (!/^\d+\.\d+\.\d+\.\d+$/u.test(address)) throw new Error('Missing registry address');
+  const tag = `${address}:5000/opencrane/computer:retained-${namespace}`;
+  const resultPath = join(directory, 'image-build.json');
+  const output = `type=image,name=${tag},push=true,registry.insecure=true`;
+  await writeFile(join(directory, 'Dockerfile'), `FROM ${base}\nLABEL test.image=retained\n`);
+  // Push a new tag through the private bridge. Keep every existing image tag unchanged.
+  await execFile('nice', ['-n', '10', 'docker', 'buildx', 'build', '--network=none',
+    '--output', output, '--metadata-file', resultPath, directory],
+  { timeout: 180_000, maxBuffer: 4_000_000 });
+  const result: unknown = JSON.parse(await readFile(resultPath, 'utf8'));
+  const digest = nested(result, 'containerimage.digest');
+  if (typeof digest !== 'string' || !/^sha256:[a-f0-9]{64}$/u.test(digest)) {
+    throw new Error('Older test image has no digest');
+  }
+  return `k3d-ocn-registry:5000/opencrane/computer@${digest}`;
+}
+
+async function verifyWorkerPermissions(kubeconfig: string, namespace: string, name: string) {
+  const prefix = ['--kubeconfig', kubeconfig, '-n', namespace];
+  const deleteArgs = [...prefix, 'delete', `sandbox/${name}`, '--dry-run=server'];
+  await expect.soft(execFile('kubectl', deleteArgs)).rejects.toThrow(/forbidden/u);
+  const patch = JSON.stringify({ metadata: { ownerReferences: [] } });
+  const pvcArgs = [...prefix, 'patch', `pvc/home-${name}`, '--type=merge',
+    '--dry-run=server', '-p', patch];
+  await expect.soft(execFile('kubectl', pvcArgs)).rejects.toThrow(/forbidden/u);
+}
+
+async function verifyWorkerModeAndTemplate(kubeconfig: string, namespace: string, name: string) {
+  const prefix = ['--kubeconfig', kubeconfig, '-n', namespace];
+  const patch = JSON.stringify({ spec: { operatingMode: 'Running' } });
+  await execFile('kubectl', [...prefix, 'patch', `sandbox/${name}`, '--type=merge',
+    '--dry-run=server', '-p', patch]);
+  const changed = JSON.stringify({ spec: { podTemplate: { spec: { hostNetwork: true } } } });
+  await expect(execFile('kubectl', [...prefix, 'patch', `sandbox/${name}`, '--type=merge',
+    '--dry-run=server', '-p', changed])).rejects.toThrow(/denied/u);
+}
+
+async function verifyUpgradeGuards(kubeconfig: string, namespace: string, name: string,
+  directory: string, suspended = true) {
+  const prefix = ['--kubeconfig', kubeconfig, '-n', namespace];
+  const current = await execFile('kubectl', [...prefix, 'get', `sandbox/${name}`, '-o', 'json']);
+  const sandbox: unknown = JSON.parse(current.stdout);
+  const templateResult = await execFile('kubectl', [...prefix, 'get', 'sandboxtemplate/computer',
+    '-o', 'json']);
+  const template: unknown = JSON.parse(templateResult.stdout);
+  const podTemplate = nested(nested(template, 'spec'), 'podTemplate');
+  const oldPodTemplate = nested(nested(sandbox, 'spec'), 'podTemplate');
+  setField(podTemplate, 'metadata', nested(oldPodTemplate, 'metadata'));
+  const podSpec = nested(podTemplate, 'spec');
+  const volumes = nested(podSpec, 'volumes');
+  if (!Array.isArray(volumes)) throw new Error('Missing volumes');
+  for (let index = 0; index < volumes.length; index++) {
+    if (nested(volumes[index], 'name') === 'home') {
+      volumes[index] = { name: 'home', persistentVolumeClaim: { claimName: `home-${name}` } };
+    }
+  }
+  setField(nested(sandbox, 'spec'), 'podTemplate', podTemplate);
+  const path = join(directory, 'upgrade.json');
+  const args = [...prefix, 'replace', '--dry-run=server', '-f', path];
+  await writeFile(path, JSON.stringify(sandbox));
+  if (!suspended) {
+    await expect(execFile('kubectl', args)).rejects.toThrow(/denied/u);
+    return;
+  }
+  await execFile('kubectl', args);
+  const guards = ['labels', 'owners', 'annotations', 'finalizers', 'mode', 'spec',
+    'image', 'volumes', 'other-home', 'pod-labels', 'pod-annotations', 'stale-version'];
+  for (const guard of guards) {
+    const changed = structuredClone(sandbox);
+    const metadata = nested(changed, 'metadata');
+    const spec = nested(changed, 'spec');
+    const proposed = nested(spec, 'podTemplate');
+    if (guard === 'labels') setField(metadata, 'labels', { changed: 'yes' });
+    if (guard === 'owners') setField(metadata, 'ownerReferences', []);
+    if (guard === 'annotations') setField(metadata, 'annotations', { changed: 'yes' });
+    if (guard === 'finalizers') setField(metadata, 'finalizers', ['test.example/keep']);
+    if (guard === 'mode') setField(spec, 'operatingMode', 'Running');
+    if (guard === 'spec') setField(spec, 'shutdownTime', '2099-01-01T00:00:00Z');
+    if (guard === 'image') {
+      const proposedContainers = nested(nested(proposed, 'spec'), 'containers');
+      if (!Array.isArray(proposedContainers)) throw new Error('Missing containers');
+      setField(proposedContainers[0], 'image', 'unreviewed:latest');
+    }
+    if (guard === 'volumes') setField(nested(proposed, 'spec'), 'volumes', []);
+    if (guard === 'other-home') {
+      const proposedVolumes = nested(nested(proposed, 'spec'), 'volumes');
+      if (!Array.isArray(proposedVolumes)) throw new Error('Missing volumes');
+      const otherHome = { name: 'home', persistentVolumeClaim: { claimName: 'home-other' } };
+      proposedVolumes[0] = otherHome;
+    }
+    if (guard === 'pod-labels') setField(nested(proposed, 'metadata'), 'labels', { app: 'computer' });
+    if (guard === 'pod-annotations') setField(nested(proposed, 'metadata'), 'annotations', { changed: 'yes' });
+    if (guard === 'stale-version') setField(metadata, 'resourceVersion', '1');
+    await writeFile(path, JSON.stringify(changed));
+    await expect.soft(execFile('kubectl', args), guard).rejects.toThrow(/denied|Conflict/u);
+  }
+}
+
+function setField(object: unknown, name: string, value: unknown): void {
+  if (typeof object !== 'object' || object === null) throw new Error('Missing object');
+  Reflect.set(object, name, value);
+}

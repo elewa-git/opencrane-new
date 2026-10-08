@@ -15,7 +15,7 @@ flowchart LR
   ops -.->|uses| libs["libs/*<br/>shared code"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   ops -->|updates permissions| fga["OpenFGA<br/>permission service"]
-  ops -->|checks computers and repairs mode changes| kube["Kubernetes<br/>computer manager"]
+  ops -->|checks and updates computers| kube["Kubernetes<br/>computer manager"]
   kube -->|runs| computer["apps/computer<br/>personal computer"]
 ```
 
@@ -39,7 +39,10 @@ flowchart LR
    pauses it. When a new message arrives, the server asks for the computer back and the
    worker starts it again. The watcher reads new events as they arrive and only asks
    Kubernetes to change a computer's mode when needed. It checks quiet computers less
-   often and repairs outside changes to their mode.
+   often and repairs outside changes to their mode. After an image update, a paused
+   computer starts from the checked image and keeps its home files. A running computer
+   waits until its next pause. The worker updates the paused computer in place.
+   Failed changes wait before retrying, while other computers continue to resume.
 4. **An operator rebuilds a table.** The replay command reads every saved event again, builds a fresh copy of the table and checks it before swapping it in.
 
 ## How to run or test it
