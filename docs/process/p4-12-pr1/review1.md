@@ -50,3 +50,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **a key store with the wrong mode is refused**. Original source: expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "a key store with the wrong mode is refused"`.
+
+- **provision never creates a missing key store**. Original source: expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "provision never creates a missing key store"`.

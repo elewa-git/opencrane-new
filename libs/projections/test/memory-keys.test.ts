@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, it } from 'vitest';
@@ -389,3 +389,16 @@ function wrongDirectoryMode() {
   withKeys(check);
 }
 it('a key store with the wrong mode is refused', wrongDirectoryMode);
+
+function missingDirectoryProvision() {
+  function check(_keys: ReturnType<typeof memoryKeys>, directory: string) {
+    const absent = join(directory, 'absent');
+    function provision() {
+      memoryKeys(absent).provision(currentIdentity());
+    }
+    expect(provision).toThrow('Memory key store unavailable');
+    expect(existsSync(absent)).toBe(false);
+  }
+  withKeys(check);
+}
+it('provision never creates a missing key store', missingDirectoryProvision);
