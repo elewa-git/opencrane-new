@@ -15,7 +15,8 @@ const CASE_TIMEOUT_MS = 30_000;
 function headers() {
   const now = Math.floor(Date.now() / 1000);
   return { origin: 'https://app.example.test', cookie: `${config.cookieName}=${encodeSession(config,
-    { sub: 'alice', orgId: 'org-acme', roles: [], authTime: now, exp: now + 60 })}` };
+    { sub: 'alice', orgId: 'org-acme', roles: [], email: 'alice@example.test', emailVerified: true,
+      authTime: now, exp: now + 60 })}` };
 }
 beforeEach(async () => { nats = await natsFixture(); });
 afterEach(async () => { await server?.stop(); await nats.close(); });
@@ -66,9 +67,12 @@ it('bounds a stalled partial body, reports timeout and invokes cleanup once', as
 }, CASE_TIMEOUT_MS);
 it('lets a 700 ms in-flight join finish with 200 and durable append during a 1000 ms grace', async () => {
   const running = await start({ TEST_APPEND_MS: '700' });
+  // Acceptance checks that the inviter is still an active Admin.
+  await appendInviter();
   const invitation = event('invite-process', 'member-alice', 'member.invited');
   await nats.store.append({ expectedSequence: 0, event: { ...invitation, silo: 'acme', data: { ...invitation.data,
-    invitationId: 'invite-process', invitedIdentity: { issuer: env.OIDC_ISSUER_URL, sub: 'alice' },
+    invitationId: 'invite-process', invitedBy: 'inviter', email: 'alice@example.test',
+    invitedIdentity: { issuer: env.OIDC_ISSUER_URL, sub: 'alice' },
     expiresAt: new Date(Date.now() + 60_000).toISOString() } } });
   const response = fetch(`http://127.0.0.1:${running.port}/members/join`, { method: 'POST',
     headers: { ...headers(), 'content-type': 'application/json' },
@@ -76,9 +80,9 @@ it('lets a 700 ms in-flight join finish with 200 and durable append during a 100
   await until(() => running.stdout().includes('test append started'));
   running.child.kill('SIGTERM');
   expect((await response).status).toBe(200);
-  expect(await (await response).json()).toMatchObject({ status: 'joined', sequence: 2 });
+  expect(await (await response).json()).toMatchObject({ status: 'joined', sequence: 4 });
   await exit(running, 0);
-  expect(await nats.store.head()).toBe(2);
+  expect(await nats.store.head()).toBe(4);
 }, CASE_TIMEOUT_MS);
 it.each(['fail', 'hang'])('exits non-zero on NATS close %s', async (mode) => {
   const running = await start({ TEST_CLOSE: mode });
@@ -110,3 +114,12 @@ async function servesAfterSeedFailure() {
 }
 it('a startup seed failure keeps the server available and able to shut down',
   servesAfterSeedFailure, CASE_TIMEOUT_MS);
+
+async function appendInviter() {
+  const invited = event('inviter-invite', 'member-inviter', 'member.invited');
+  await nats.store.append({ expectedSequence: 0, event: { ...invited, silo: 'acme',
+    data: { ...invited.data, invitationId: 'inviter-invite', role: 'admin' } } });
+  const joined = event('inviter-join', 'member-inviter', 'member.joined');
+  await nats.store.append({ expectedSequence: 1, event: { ...joined, silo: 'acme',
+    data: { ...joined.data, invitationId: 'inviter-invite', role: 'admin' } } });
+}
