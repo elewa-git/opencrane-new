@@ -77,3 +77,34 @@ a store with mode 0755. Provision created a missing directory, including after a
 opened store lost its directory. The NATS append test stored Bob's ownership in
 Alice's scope instead of rejecting it. The byte-size test reached authentication
 instead of rejecting the encrypted length. All six failed before the fix.
+
+## Final checks
+
+8 October 2026. Source: `2553af887543b232a50397729f2bab83b3c6c075`.
+Environment: local Linux development worktree, Node 22.23.3, disposable TLS/NATS
+fixtures. No fresh installation. The two test runs were sequential.
+
+| Result | Command or condition | Observed result |
+| --- | --- | --- |
+| PASS | Rebase onto `origin/main`, then `git merge-base --is-ancestor origin/main HEAD` | Completed; main is an ancestor. |
+| PASS | `nice -n 10 npm run lint` | No errors; 12 existing function-length warnings. Includes dependency, docs, links, fixtures, changelog and unused-code checks. |
+| PASS | `nice -n 10 npm run typecheck` | All workspace type checks passed. |
+| PASS | `nice -n 10 npm run check:events` | 98 event types match the catalogue. |
+| PASS | `nice -n 10 npx knip` | No unused-code findings; two configuration hints. |
+| PASS | Changed tests, first run | 10 files, 668 tests; 51.79 seconds. |
+| PASS | Changed tests, second run | 10 files, 668 tests; 53.37 seconds. |
+| NOT RUN | Full root test suite | Excluded by the task. |
+| NOT RUN | Memory projection, PostgreSQL rebuild/index equality and rollback | PR 1b adds these. |
+| NOT RUN | Second independent review and hosted CI for this revision | Required before landing. |
+| NOT RUN | Fresh-install memory journey, power-loss and customer key-store/backup/snapshot recovery | Still needs live qualification. |
+
+Both changed-test runs used:
+
+```sh
+nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts libs/events/test libs/event-store/test/append.test.ts --maxWorkers=2
+```
+
+The draft lands together with PR 1b. It must not land on its own. The command PR
+must reconcile unused revision keys and temporary key files after confirming the
+original append outcome. Deletion removes live file names; it does not claim to
+shred bytes in free blocks, journals or snapshots.
