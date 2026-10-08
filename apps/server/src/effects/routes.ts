@@ -1,7 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { z } from 'zod';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { isIdentityAllowed, type AuthConfig } from '@opencrane/auth';
+import { isOrganisationSession, type AuthConfig } from '@opencrane/auth';
 import { memberAuthorisation } from '@opencrane/authz';
 import { authorityFence, currentMembership, listEffects, readEffect, resolveEffect } from '@opencrane/models';
 import type { EventStore } from '@opencrane/event-store';
@@ -24,9 +24,9 @@ function registerRoutes(app: FastifyInstance, config: AuthConfig, options?: Inte
       const session = sessionFor(request, config, new Date());
       if (!session) return reply.code(401).send({ status: 'refused' });
       if (!options?.store || !config.expectedOrgId) return reply.code(503).send({ status: 'unavailable' });
-      if (options.silo !== options.binding.silo || !isIdentityAllowed(config, {
-        issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId,
-      })) return reply.code(403).send({ status: 'refused' });
+      if (options.silo !== options.binding.silo || !isOrganisationSession(config, session)) {
+        return reply.code(403).send({ status: 'refused' });
+      }
       try {
         const context = { ...options, store: options.store };
         if (request.method === 'GET') {

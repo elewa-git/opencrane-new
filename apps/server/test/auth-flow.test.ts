@@ -33,6 +33,7 @@ async function startStack(providerOptions: MockProviderOptions = {}, overrides: 
     redirectUri: 'http://app.example.test/auth/callback',
     cookieSecure: false,
     sessionMaxAgeSeconds: 3600,
+    expectedOrgId: 'org-1',
     // Our own loopback mock, never a real deployment's issuer.
     allowInsecureRequests: true,
     ...overrides,
@@ -208,6 +209,36 @@ describe('OIDC login flow (against a local mock provider)', () => {
     expect(await whoAmI(stack, cookie)).toEqual(NOT_SIGNED_IN);
   });
 
+  async function refusesSessionWithoutOrganisation(): Promise<void> {
+    const stack = await startStack();
+    delete stack.config.expectedOrgId;
+    const callback = await signIn(stack);
+    expect(callback.statusCode).toBe(302);
+    const cookie = cookieValue(callback, stack.config.cookieName);
+    expect(await whoAmI(stack, cookie)).toEqual(NOT_SIGNED_IN);
+  }
+
+  async function refusesLogoutWithoutOrganisation(): Promise<void> {
+    const stack = await startStack();
+    delete stack.config.expectedOrgId;
+    const callback = await signIn(stack);
+    const cookie = cookieValue(callback, stack.config.cookieName);
+    const request = {
+      method: 'POST' as const,
+      url: '/auth/logout',
+      headers: { origin: 'http://app.example.test' },
+      cookies: { [stack.config.cookieName]: cookie },
+    };
+    const response = await stack.app.inject(request);
+    expect(response.statusCode).toBe(403);
+    expect(response.headers['set-cookie']).toBeUndefined();
+  }
+
+  it('allows development sign-in but refuses session routes without an organisation',
+    refusesSessionWithoutOrganisation);
+  it('refuses logout without an organisation and keeps the session cookie',
+    refusesLogoutWithoutOrganisation);
+
   describe('returnTo after login', () => {
     it('keeps a genuine same-site path', async () => {
       const stack = await startStack();
@@ -271,7 +302,7 @@ describe('OIDC login flow (against a local mock provider)', () => {
       const rolesClaim = 'urn:zitadel:iam:org:project:roles';
       const stack = await startStack(
         { user: { sub: 'user-1', roles: [], authTime: 1_700_000_000, claims: { [orgClaim]: 'org-7', [rolesClaim]: { admin: { 'org-7': 'acme.example' }, member: { 'org-7': 'acme.example' } } } } },
-        { orgClaim, rolesClaim },
+        { orgClaim, rolesClaim, expectedOrgId: 'org-7' },
       );
       const me = await whoAmI(stack, cookieValue(await signIn(stack), stack.config.cookieName));
       expect(me.user).toMatchObject({ orgId: 'org-7', roles: ['admin', 'member'] });

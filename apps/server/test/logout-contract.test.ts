@@ -12,6 +12,28 @@ vi.mock('@opencrane/auth', async (importOriginal) => ({
 const { buildLogoutUrl, encodeSession } = await import('@opencrane/auth');
 const { buildServer } = await import('../src/server.ts');
 const { testAuthConfig } = await import('./support/test-auth-config.ts');
+const authConfig = testAuthConfig({ expectedOrgId: 'org' });
+
+function logoutRequest() {
+  const session = {
+    sub: 'user',
+    orgId: 'org',
+    roles: [],
+    authTime: 1,
+    exp: Math.floor(Date.now() / 1000) + 300,
+    idToken: 'test-id-token',
+  };
+  const cookie = encodeSession(authConfig, session);
+  const cookies = { [authConfig.cookieName]: cookie };
+  const origin = new URL(authConfig.redirectUri).origin;
+  const headers = { origin };
+  const request = { method: 'POST' as const, url: '/auth/logout', headers, cookies };
+  return request;
+}
+
+function isSessionCookie(cookie: { name: string }): boolean {
+  return cookie.name === authConfig.cookieName;
+}
 
 describe('POST /auth/logout reply', () => {
   let app: FastifyInstance | undefined;
@@ -26,7 +48,12 @@ describe('POST /auth/logout reply', () => {
   function loggingServer(): { app: FastifyInstance; lines: () => Record<string, unknown>[] } {
     vi.stubEnv('LOG_LEVEL', 'info');
     const chunks: string[] = [];
-    app = buildServer(testAuthConfig(), { logDestination: { write: (msg: string) => void chunks.push(msg) } });
+    function writeLog(message: string): void {
+      chunks.push(message);
+    }
+    const logDestination = { write: writeLog };
+    const options = { logDestination };
+    app = buildServer(authConfig, options);
     return { app, lines: () => chunks.join('').split('\n').filter(Boolean).map((line) => asRecord(JSON.parse(line))) };
   }
 
@@ -38,7 +65,8 @@ describe('POST /auth/logout reply', () => {
     vi.mocked(buildLogoutUrl).mockResolvedValue(address);
     const server = loggingServer();
 
-    const response = await server.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: new URL(testAuthConfig().redirectUri).origin }, cookies: { [testAuthConfig().cookieName]: encodeSession(testAuthConfig(), { sub: 'user', orgId: 'org', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 300, idToken: 'test-id-token' }) } });
+    const request = logoutRequest();
+    const response = await server.app.inject(request);
 
     expect(response.statusCode).toBe(address ? 303 : 200);
     expect(response.headers.location).toBe(address ?? undefined);
@@ -55,12 +83,14 @@ describe('POST /auth/logout reply', () => {
     vi.mocked(buildLogoutUrl).mockResolvedValue(address);
     const server = loggingServer();
 
-    const response = await server.app.inject({ method: 'POST', url: '/auth/logout', headers: { origin: new URL(testAuthConfig().redirectUri).origin }, cookies: { [testAuthConfig().cookieName]: encodeSession(testAuthConfig(), { sub: 'user', orgId: 'org', roles: [], authTime: 1, exp: Math.floor(Date.now() / 1000) + 300, idToken: 'test-id-token' }) } });
+    const request = logoutRequest();
+    const response = await server.app.inject(request);
 
     expect(response.statusCode).toBe(200);
     expect(response.headers.location).toBeUndefined();
     expect(response.body).toContain('Your identity provider session could not be ended.');
-    expect(response.cookies.find((cookie) => cookie.name === testAuthConfig().cookieName)).toMatchObject({ value: '', maxAge: 0 });
+    const sessionCookie = response.cookies.find(isSessionCookie);
+    expect(sessionCookie).toMatchObject({ value: '', maxAge: 0 });
     // The refused address is not in the log, only the fact that it was refused.
     expect(JSON.stringify(server.lines())).not.toContain(address);
     expect(server.lines().some((line) => line['level'] === 40 && String(line['msg']).includes('is not an http(s) address'))).toBe(true);

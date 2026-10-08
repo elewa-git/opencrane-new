@@ -7,7 +7,7 @@ import { buildServer } from '../src/server.ts';
 import { attachWebSocketServer, WEBSOCKET_PATH } from '../src/websocket.ts';
 import { replaceInCiphertext, tamperCookie, testAuthConfig, truncateAuthTag } from './support/test-auth-config.ts';
 
-const authConfig = testAuthConfig();
+const authConfig = testAuthConfig({ expectedOrgId: 'org-1' });
 const nowSeconds = Math.floor(Date.now() / 1000);
 // testAuthConfig's redirectUri is https://app.example.test/auth/callback,
 // so this is the one Origin the socket upgrade accepts.
@@ -126,6 +126,21 @@ describe('WebSocket upgrade requires a session', () => {
     const result = await attemptUpgrade(started.url, { Origin: ALLOWED_ORIGIN, Cookie: `${authConfig.cookieName}=${validSessionCookie()}` });
     expect(result).toBe('open');
   });
+
+  async function refusesWithoutOrganisation(): Promise<void> {
+    const config = testAuthConfig();
+    const started = await startServer(config);
+    app = started.app;
+    const headers = {
+      Origin: ALLOWED_ORIGIN,
+      Cookie: `${config.cookieName}=${encodeSession(config, validSession)}`,
+    };
+    const result = await attemptUpgrade(started.url, headers);
+    expect(result).toBe(403);
+  }
+
+  it('refuses a valid development session when no organisation is configured',
+    refusesWithoutOrganisation);
 
   it('keeps the organisation pin while accepting only an exact identity exception', async () => {
     const config = testAuthConfig({ expectedOrgId: 'org-1',

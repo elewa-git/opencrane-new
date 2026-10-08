@@ -44,6 +44,7 @@ async function startLoggedStack(): Promise<LoggedStack> {
     redirectUri: 'http://app.example.test/auth/callback',
     cookieSecure: false,
     sessionMaxAgeSeconds: 3600,
+    expectedOrgId: 'org-1',
     // Our own loopback mock, never a real deployment's issuer.
     allowInsecureRequests: true,
   });

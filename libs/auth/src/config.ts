@@ -58,6 +58,9 @@ export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env): AuthConfig
   // Case and spaces are ignored on purpose: " Production " must not quietly
   // count as "not production" and skip the pin.
   const inProduction = text(env, 'NODE_ENV').toLowerCase() === 'production';
+  if (inProduction && env['OIDC_EXTRA_IDENTITIES'] !== undefined) {
+    throw new Error('OIDC_EXTRA_IDENTITIES must be unset when NODE_ENV=production');
+  }
   const required: readonly string[] = inProduction ? [...REQUIRED_VARS, ...PRODUCTION_ONLY_VARS] : REQUIRED_VARS;
   const missing = required.filter((name) => !text(env, name));
   if (missing.length > 0) {

@@ -42,11 +42,16 @@ Defaults include secure cookies, a 12-hour session, five-minute step-up freshnes
 Zitadel needs its provider-specific claim names and matching scopes.
 Production requires an organisation pin. Keep the cookie key in the secret store;
 `OIDC_CLIENT_SECRET_ENV_VAR` names the variable through which a client secret is injected.
-`OIDC_EXTRA_IDENTITIES` is an environment-specific JSON array of `{ "issuer", "subject" }`
-objects and defaults to empty. An entry bypasses only the organisation mismatch: the
+`OIDC_EXTRA_IDENTITIES` is a development and test JSON array of `{ "issuer", "subject" }`
+objects and defaults to empty. Production startup refuses the variable whenever it is
+set, including an empty string or empty array. Production detection ignores case and
+surrounding spaces in `NODE_ENV`, as it does for `OIDC_EXPECTED_ORG_ID`.
+An entry bypasses only the organisation mismatch: the
 token must still be signed by the configured issuer, and both strings must match exactly.
-Never put email addresses, usernames or roles in this list. Servers must use
-`isIdentityAllowed` when rechecking an encrypted session as well as at callback time.
+Never put email addresses, usernames or roles in this list. Sign-in uses
+`isIdentityAllowed`. Server session routes use `isOrganisationSession`, which also
+refuses access when no organisation is configured. The first-owner claim still
+requires the installation's own organisation, even in development.
 Insecure HTTP and non-secure cookies expose credentials and are only for local tests.
 
 ```sh

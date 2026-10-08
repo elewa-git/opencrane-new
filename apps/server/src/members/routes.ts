@@ -1,5 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import { decodeSession, isIdentityAllowed, parseCookieHeader, SessionExpiredError, SessionInvalidError, type AuthConfig } from '@opencrane/auth';
+import {
+  decodeSession,
+  isOrganisationSession,
+  parseCookieHeader,
+  SessionExpiredError,
+  SessionInvalidError,
+  type AuthConfig,
+} from '@opencrane/auth';
 import { joinInputSchema, joinMember, type JoinResult, type JoinStore } from './join.ts';
 
 export interface MembershipOptions {
@@ -29,7 +36,7 @@ export function registerMemberRoutes(app: FastifyInstance, config: AuthConfig, o
       return send(403, { status: 'refused', reason: 'wrong_origin' });
     }
     if (!options?.silo || !config.expectedOrgId) return send(503, { status: 'unavailable' });
-    if (!isIdentityAllowed(config, { issuer: config.issuerUrl, subject: session.sub, orgId: session.orgId })) {
+    if (!isOrganisationSession(config, session)) {
       return send(403, { status: 'refused', reason: 'wrong_silo' });
     }
     const input = joinInputSchema.safeParse(request.body);
