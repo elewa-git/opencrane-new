@@ -23,3 +23,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **memory principal ids use the allowed format**. Mutation: `libs/events/src/memory.ts`, replace `!identifier.safeParse(value).success` with `false`. Expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "memory principal ids use the allowed format"`.
+
+- **memory events require a principal**. Mutation: `libs/events/src/memory.ts`, replace `!identifier.safeParse(value).success` with `false`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "memory events require a principal"`.

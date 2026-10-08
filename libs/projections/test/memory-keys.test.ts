@@ -249,3 +249,12 @@ function principalIdFormat() {
   expect(parseEventByType(invalid).success).toBe(false);
 }
 it('memory principal ids use the allowed format', principalIdFormat);
+
+function missingPrincipal() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const { principal: removedPrincipal, ...invalid } = event;
+  expect(removedPrincipal.id).toBe('alice');
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('memory events require a principal', missingPrincipal);
