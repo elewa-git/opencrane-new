@@ -263,7 +263,9 @@ class TurnRunner {
       this.state.waiting.delete(sequence);
       settle(new Error('Turn ended'));
     }
-    if (threadId && turn) void revokeGrant(this.driver, threadId, turn.conversationId);
+    if (threadId && turn) {
+      void releaseLoad(this.loads, this.driver, threadId, turn.conversationId);
+    }
   }
 
   private failTurn(input: Turn) {
@@ -446,6 +448,11 @@ class TurnRunner {
     return undefined;
   }
 
+  private releaseClosedThread(threadId: string, input: Turn | undefined) {
+    if (input) this.failTurn(input);
+    else void releaseLoad(this.loads, this.driver, threadId, '');
+  }
+
   complete(value: unknown) {
     const event = record(value);
     const params = record(event['params'] ?? {});
@@ -454,6 +461,10 @@ class TurnRunner {
       return;
     }
     const input = this.state.running.get(threadId);
+    if (event['method'] === 'thread/closed') {
+      this.releaseClosedThread(threadId, input);
+      return;
+    }
     if (!input) {
       return;
     }
@@ -503,6 +514,19 @@ class TurnRunner {
     }
     this.appendReport(input, 'agent.turn_completed');
     this.releaseTurn(input.id);
+  }
+}
+
+async function releaseLoad(loads: ReturnType<typeof threadLoads>, driver: TurnDriver,
+  threadId: string, conversationId: string) {
+  // Start revocation before waiting so a slow catalogue drop does not delay it.
+  const revoking = revokeGrant(driver, threadId, conversationId);
+  try {
+    await loads.forget(threadId);
+  } catch {
+    // Keep the independent grant revocation and catalogue expiry after a failed drop.
+  } finally {
+    await revoking;
   }
 }
 

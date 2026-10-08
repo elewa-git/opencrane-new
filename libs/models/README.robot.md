@@ -649,3 +649,13 @@ keeps the marker with no upstream call; an allowed call whose tool server forges
 the marker loses it, while its status and body stay unchanged. A malformed tool
 call checks the decision error path too. The marker proves refusal before sending;
 a body or `x-request-id` alone does not.
+
+## Allow-only turn tools
+
+The computer proxy sends `x-opencrane-tool-mode: allow` from the turn's saved tool
+mode, rather than accepting it from the caller. The gateway forwards the header to
+the decision service. If the current policy is Ask, `mcpPolicy` returns a
+`policy_block` denial before any approval card is created. Requests without the
+header keep the existing Ask flow. Unknown and repeated mode values are refused.
+The real gateway test covers Allow changing to Ask with no new tool request or
+`tool.approval_requested` event. No paid model call is made.

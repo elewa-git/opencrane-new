@@ -2,6 +2,25 @@
 
 For people, read [README.md](README.md) first.
 
+## Review fixes — 8 October 2026
+
+Findings 1 and 2 were confirmed with failing tests before changing production code.
+A reply exceeding 1 MiB left its call waiting. A timed-out resume followed by a
+late old load let the new load succeed without discovering its URL. Both tests now
+pass. The reply returns the existing “may have received” failure at once. A missing
+list discovery fails the turn before `turn/start` and leaves no confirmed fingerprint.
+
+The final changed-test checks passed twice: 135 computer/server tests and the one
+real-gateway regression on each pass. They cover the next turn after a stuck unload,
+wrong resumed ids, failed binding and drop, 200 finished conversations, catalogue
+limits and Allow changing to Ask without creating an approval card.
+The offline image check uses real `threadLoads()` to unload a loaded thread in
+Codex 0.159.2. Codex confirmed unload in 250 ms. It passed
+reload, removal, history, busy-thread isolation, shared keys and UID 1001 refusal.
+Docker networking was disabled. Both the model and MCP servers were local fixtures.
+No paid model was called. Publishing and a fresh-install chat journey remain untested.
+The current gate results and checked commit are recorded in the draft pull request.
+
 ## Governed tools — 7 October 2026
 
 The owner authorised reloading only the conversation whose tool list changed.
@@ -43,21 +62,36 @@ The initial run found the same reload behaviour; its timing bookkeeping was then
 corrected and repeated. It is not the saved result. Runtime reloads use zero delay.
 
 `memoryFreeConfig` enables `mcp_2026_07_28` and `thread_unload_delay_secs = 0`.
-The runner hashes the turn's tool list exactly as received. Its in-memory map holds
-a confirmed fingerprint and random 32-hex-character load key per thread. An unchanged list
-rejoins the thread. A changed list unsubscribes only that thread and checks
-`thread/loaded/list` for at most ten seconds. A paged or malformed list cannot
+The runner hashes the turn's tool list exactly as received. It remembers a confirmed
+fingerprint and random 32-hex-character load key while that turn uses the thread.
+Before unloading, it removes the fingerprint. It unsubscribes only that thread and
+checks `thread/loaded/list` for at most ten seconds. A paged or malformed list cannot
 confirm unload. The old proxy address is dropped before resuming with new config.
-A restart clears this map because Codex stops with the bridge. Resuming then supplies
-config again. No reload restarts Codex. A failed resume can leave a thread partly loaded; its
-missing fingerprint forces an unload before another attempt. A failed load reports a fixed plain message
-and fails the turn before `turn/start`.
+No reload restarts Codex.
+
+The proxy records the first `tools/list` for each server at the new load key.
+The bridge waits up to ten seconds for every listed server before starting a turn.
+Binding the returned thread id keeps that discovery record. A late old resume can
+cause Codex to ignore the new URL; missing discovery then fails the turn with the
+existing plain message. Failed loads keep no confirmed fingerprint. A successful
+`thread/start` whose binding fails is unsubscribed to release the orphan thread.
+
+Turn completion, failure and `thread/closed` release local load state and its proxy
+catalogue. The next turn confirms unload and resumes with a fresh list, preserving
+saved conversation history. A drop removes local state before waiting for its reply.
+Revoking a turn grant also removes that thread's catalogues. Replacing a conversation's
+list removes its previous catalogue. If the control socket cannot be reached,
+abandoned catalogues expire after two minutes; a live grant sets their expiry to its
+own deadline. The proxy keeps at most 64 catalogues and refuses further registrations
+until space is available. It never evicts another thread's active list.
 
 The owner-only control socket accepts `POST /catalogue` with `{loadKey, conversation,
-thread?, tools}` and `POST /catalogue/drop` with `{loadKey}`. Registration resets the
-ten-minute caller deadline. Register before loading so early discovery can succeed;
-bind the returned thread id before granting or starting a turn. The caller file and
-control socket are mode 0600. Shell tools run as UID 1001 and receive no caller token.
+thread?, tools}`, `POST /catalogue/drop` with `{loadKey}` and
+`POST /catalogue/ready` with `{loadKey}`. The last route waits for list discovery.
+Registration resets the ten-minute caller deadline. Register before loading so early
+discovery can succeed; bind the returned thread id before granting access or starting
+a turn. The caller file and control socket are mode 0600. Shell tools run as UID 1001
+and receive no caller token.
 
 `POST /mcp/<loadKey>/<serverKey>` accepts only authenticated stateless 2026-07-28
 requests. Discovery is a fixed private reply with the reviewed server information;
@@ -71,13 +105,16 @@ Requests and buffered tool replies are limited to 1 MiB. No automatic retry is m
 Only 402/403 replies marked `x-opencrane-decision: refused` say that nothing was sent.
 The real gateway test proves the decision marker survives a refusal and is removed
 from tool-server replies. Unmarked failures and lost replies say the tool may have
-received the request. Allow-only selection remains on the server; approval waits
-are later work.
+received the request. Each tool carries its `allow` mode in the turn list. The proxy sets
+`x-opencrane-tool-mode: allow` itself. The gateway passes it to the decision service,
+which refuses an Allow tool changed to Ask before creating an approval card.
+Approval waits are later work.
 
 `test/codex-mcp-wire.mjs` runs from `build.sh` against the built image with Docker
-networking disabled. It imports the real memory-free config and thread config builder,
-and uses the real proxy. It checks the Codex version, feature, reload history, busy
-thread isolation, shared server keys, stateless wire headers and UID 1001 refusal.
+networking disabled. It imports the real memory-free config and `threadLoads()`,
+and uses the real proxy. It asserts the production order: unsubscribe, confirm the
+thread is absent, drop the old catalogue, then resume. It checks the Codex version,
+feature, reload history, busy-thread isolation, shared server keys, stateless wire headers and UID 1001 refusal.
 Its shell check tries to reuse a real fixture call id and forge the decision header;
 it gets 401, cannot read the caller file and cannot reach the control socket.
 Removing the caller check in a disposable source copy makes that check fail (200

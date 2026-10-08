@@ -7,6 +7,7 @@ export interface ToolServer {
   connectionId: string;
   serverInfo?: { name: string; version: string };
   definitions: string[];
+  modes: Record<string, 'allow'>;
 }
 
 export interface Turn {
@@ -84,7 +85,7 @@ export function parseTools(value: unknown): ToolServer[] {
 
 function parseToolServer(value: unknown): ToolServer {
   const server = record(value);
-  checkFields(server, ['key', 'serverId', 'connectionId', 'serverInfo', 'definitions']);
+  checkFields(server, ['key', 'serverId', 'connectionId', 'serverInfo', 'definitions', 'modes']);
   const key = requiredString(server, 'key');
   const serverId = requiredString(server, 'serverId');
   const connectionId = requiredString(server, 'connectionId');
@@ -97,7 +98,13 @@ function parseToolServer(value: unknown): ToolServer {
     || !definitions.every(isDefinition)) {
     throw new Error('Invalid tool definitions');
   }
-  const toolServer: ToolServer = { key, serverId, connectionId, definitions };
+  const modes: Record<string, 'allow'> = {};
+  const suppliedModes = record(server['modes']);
+  for (const [name, mode] of Object.entries(suppliedModes)) {
+    if (!name || name.length > 200 || mode !== 'allow') throw new Error('Invalid tool mode');
+    modes[name] = mode;
+  }
+  const toolServer: ToolServer = { key, serverId, connectionId, definitions, modes };
   if (server['serverInfo'] !== undefined) {
     const info = record(server['serverInfo']);
     checkFields(info, ['name', 'version']);

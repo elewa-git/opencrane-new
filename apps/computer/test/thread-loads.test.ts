@@ -3,9 +3,12 @@ import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
 import { reportJournal, type BridgeReport } from '../src/report-journal.ts';
 import { parseTurn, turnRunner, type TurnDriver } from '../src/turn-runner.ts';
+import type { ToolServer } from '../src/turn-frame.ts';
 import { record } from '../src/http.ts';
+import { threadLoads } from '../src/thread-loads.ts';
 
-const tools = [{ key: 'oc_0123456789', serverId: 'server', connectionId: 'installed',
+const tools: ToolServer[] = [{ key: 'oc_0123456789', serverId: 'server', connectionId: 'installed',
+  modes: { read: 'allow' as const },
   definitions: ['{"name":"read","inputSchema":{"type":"object"}}'] }];
 
 function fixture() {
@@ -14,6 +17,7 @@ function fixture() {
   const operations: { method: string; params: Record<string, unknown> }[] = [];
   let staysLoaded = false;
   let refuseBinding = false;
+  let missingDiscovery = false;
   function rpc(method: string, params: Record<string, unknown>) {
     operations.push({ method, params });
     if (method === 'thread/loaded/list') {
@@ -46,8 +50,13 @@ function fixture() {
     operations.push({ method: 'dropCatalogue', params: { loadKey } });
     return Promise.resolve();
   }
+  function discovered(loadKey: string) {
+    if (missingDiscovery) return Promise.reject(new Error('No discovery'));
+    operations.push({ method: 'discovered', params: { loadKey } });
+    return Promise.resolve();
+  }
   const driver = { journal: `${directory}/reports`, rpc, grant, credential,
-    catalogue, dropCatalogue } satisfies TurnDriver;
+    catalogue, dropCatalogue, discovered } satisfies TurnDriver;
   const journal = reportJournal(driver);
   function send(report: BridgeReport) { reports.push(report); }
   function closeSocket() { throw new Error('Unexpected socket closure'); }
@@ -69,14 +78,16 @@ function fixture() {
       turn: { status: 'completed' } } });
   }
   function stuck() { staysLoaded = true; }
+  function unstuck() { staysLoaded = false; }
   function refuseNextBinding() { refuseBinding = true; }
+  function refuseDiscovery() { missingDiscovery = true; }
   function restart() { runner = turnRunner(driver, journal, send, closeSocket); }
   function close() { vi.restoreAllMocks(); rmSync(directory, { recursive: true, force: true }); }
-  return { start, finish, stuck, refuseNextBinding, restart, close, operations, reports,
+  return { start, finish, stuck, unstuck, refuseNextBinding, refuseDiscovery, restart, close, operations, reports,
     get runner() { return runner; } };
 }
 
-async function startsAndRejoins() {
+async function startsAndReloadsAfterCompletion() {
   const test = fixture();
   try {
     await test.start('first');
@@ -93,14 +104,15 @@ async function startsAndRejoins() {
     const previousCount = test.operations.length;
     await test.start('same');
     const expectedTurn: unknown = expect.objectContaining({ threadId: 'thread-chat-A' });
-    expect(test.operations.slice(previousCount)).toEqual([
-      { method: 'thread/resume', params: { threadId: 'thread-chat-A' } },
-      { method: 'turn/start', params: expectedTurn },
-    ]);
+    const methods: string[] = [];
+    for (const operation of test.operations.slice(previousCount)) methods.push(operation.method);
+    expect(methods).toEqual(['thread/unsubscribe', 'thread/loaded/list', 'catalogue',
+      'thread/resume', 'catalogue', 'discovered', 'turn/start']);
+    expect(test.operations.at(-1)?.params).toEqual(expectedTurn);
   } finally { test.close(); }
 }
 function isThreadStart(operation: { method: string }) { return operation.method === 'thread/start'; }
-it('registers before loading and rejoins an unchanged list without replacing its URL', startsAndRejoins);
+it('registers before loading and releases the list when the turn finishes', startsAndReloadsAfterCompletion);
 
 async function reloadsChangedList(empty: boolean) {
   const test = fixture();
@@ -109,17 +121,20 @@ async function reloadsChangedList(empty: boolean) {
     test.finish();
     await test.start('busy', tools, 'chat-B');
     const previousCount = test.operations.length;
-    let changed = [{ ...tools[0]!, definitions: ['{"name":"after"}'] }];
+    let changed = [{ ...tools[0]!, definitions: ['{"name":"after"}'], modes: { after: 'allow' as const } }];
     if (empty) changed = [];
     await test.start('changed', changed);
     const operations = test.operations.slice(previousCount);
     const methods: string[] = [];
     for (const operation of operations) methods.push(operation.method);
-    expect(methods).toEqual(['thread/unsubscribe', 'thread/loaded/list', 'dropCatalogue',
-      'catalogue', 'thread/resume', 'catalogue', 'turn/start']);
+    const expectedMethods = ['thread/unsubscribe', 'thread/loaded/list',
+      'catalogue', 'thread/resume', 'catalogue'];
+    if (!empty) expectedMethods.push('discovered');
+    expectedMethods.push('turn/start');
+    expect(methods).toEqual(expectedMethods);
     expect(operations[0]!.params).toEqual({ threadId: 'thread-chat-A' });
-    const resumeConfig = operations[4]!.params['config'];
-    expect(operations[4]!.params['threadId']).toBe('thread-chat-A');
+    const resumeConfig = operations[3]!.params['config'];
+    expect(operations[3]!.params['threadId']).toBe('thread-chat-A');
     if (empty) expect(resumeConfig).toEqual({ mcp_servers: {} });
     else {
       const config = record(resumeConfig);
@@ -148,6 +163,12 @@ async function failsUnconfirmedReload() {
     expect(test.reports.at(-1)).toMatchObject({ type: 'agent.turn_failed' });
     const message = test.reports.find(isReloadMessage);
     expect(message?.text).toBe('The tools for this conversation could not be reloaded. Send your message again.');
+    test.unstuck();
+    const retryStart = test.operations.length;
+    await test.start('next-after-stuck');
+    const nextOperations = test.operations.slice(retryStart);
+    expect(nextOperations[0]?.method).toBe('thread/unsubscribe');
+    expect(nextOperations.find(isThreadResume)?.params['config']).toBeDefined();
   } finally { test.close(); }
 }
 function isTurnStart(operation: { method: string }) { return operation.method === 'turn/start'; }
@@ -166,11 +187,11 @@ async function resumesAfterRestart() {
     const previousCount = test.operations.length;
     await test.start('next');
     const operations = test.operations.slice(previousCount);
-    expect(operations[0]!.method).toBe('catalogue');
-    expect(operations[1]).toMatchObject({ method: 'thread/resume', params: {
+    expect(operations[2]!.method).toBe('catalogue');
+    expect(operations[3]).toMatchObject({ method: 'thread/resume', params: {
       threadId: 'thread-chat-A',
     } });
-    expect(operations[1]!.params['config']).toBeDefined();
+    expect(operations[3]!.params['config']).toBeDefined();
   } finally { test.close(); }
 }
 it('resumes with a fresh list and URL when the bridge has no remembered loads', resumesAfterRestart);
@@ -181,7 +202,7 @@ async function unloadsAfterIncompleteReload() {
     await test.start('first');
     test.finish();
     test.refuseNextBinding();
-    const otherTools = [{ ...tools[0]!, definitions: ['{"name":"other"}'] }];
+    const otherTools = [{ ...tools[0]!, definitions: ['{"name":"other"}'], modes: { other: 'allow' as const } }];
     const failed = parseTurn({ id: 'failed', conversationId: 'chat-A', assistantId: 'assistant',
       requesterId: 'alice', text: 'Changed tools', token: 'frame',
       expiresAt: Date.now() + 60_000, tools: otherTools });
@@ -201,3 +222,68 @@ function isThreadResume(operation: { method: string }) {
   return operation.method === 'thread/resume';
 }
 it('unloads a partly loaded thread before retrying with another list', unloadsAfterIncompleteReload);
+
+async function refusesLateResume() {
+  const operations: string[] = [];
+  const discoveredKeys = new Set<string>();
+  let activeKey = '';
+  let lateKey = '';
+  let resumeCount = 0;
+  function catalogue(loadKey: string) {
+    activeKey = loadKey;
+    return Promise.resolve();
+  }
+  function dropCatalogue(loadKey: string) {
+    discoveredKeys.delete(loadKey);
+    return Promise.resolve();
+  }
+  function discovered(loadKey: string) {
+    if (!discoveredKeys.has(loadKey)) return Promise.reject(new Error('No discovery'));
+    return Promise.resolve();
+  }
+  function rpc(method: string) {
+    operations.push(method);
+    if (method === 'thread/loaded/list') return Promise.resolve({ data: [] });
+    if (method === 'thread/unsubscribe') return Promise.resolve({ status: 'notLoaded' });
+    if (method === 'thread/resume') {
+      resumeCount += 1;
+      if (resumeCount === 1) {
+        lateKey = activeKey;
+        return Promise.reject(new Error('Thread resume timed out after 30 seconds'));
+      }
+      if (resumeCount === 2) {
+        // Finish the old resume first. Codex then rejoins it and ignores the new config.
+        discoveredKeys.add(lateKey);
+      } else discoveredKeys.add(activeKey);
+      return Promise.resolve({ thread: { id: 'thread-chat-A' } });
+    }
+    return Promise.resolve({});
+  }
+  const driver = { rpc, catalogue, dropCatalogue, discovered };
+  const loads = threadLoads(driver);
+  const input = parseTurn({ id: 'failed', conversationId: 'chat-A', assistantId: 'assistant',
+    text: 'Local turn', token: 'frame', expiresAt: Date.now() + 60_000, tools });
+  await expect(loads.load(input, 'thread-chat-A', {})).rejects.toThrow();
+  await expect(loads.load(input, 'thread-chat-A', {})).rejects.toThrow();
+  const retryStart = operations.length;
+  await loads.load(input, 'thread-chat-A', {});
+  expect(operations.slice(retryStart)).toContain('thread/unsubscribe');
+  expect(resumeCount).toBe(3);
+}
+it('refuses a new load ignored after a timed-out resume finishes late', refusesLateResume);
+
+async function reportsMissingDiscovery() {
+  const test = fixture();
+  try {
+    test.refuseDiscovery();
+    const input = parseTurn({ id: 'missing', conversationId: 'chat-A', assistantId: 'assistant',
+      text: 'Local turn', token: 'frame', expiresAt: Date.now() + 60_000, tools });
+    await test.runner.start(input);
+    expect(test.operations.some(isTurnStart)).toBe(false);
+    expect(test.reports.at(-1)?.type).toBe('agent.turn_failed');
+    expect(test.reports.find(isReloadMessage)?.text).toBe(
+      'The tools for this conversation could not be reloaded. Send your message again.');
+  } finally { test.close(); }
+}
+it('fails with the existing plain message before a turn whose list was not discovered',
+  reportsMissingDiscovery);

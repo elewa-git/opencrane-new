@@ -3,10 +3,12 @@ import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { expect, it, vi } from 'vitest';
+import type { ToolServer } from '../src/turn-frame.ts';
 import { proxy } from '../src/proxy.ts';
 
 const definition = JSON.stringify({ name: 'read', inputSchema: { type: 'object' } });
-const tools = [{ key: 'oc_0123456789', serverId: 'server', connectionId: 'installed',
+const tools: ToolServer[] = [{ key: 'oc_0123456789', serverId: 'server', connectionId: 'installed',
+  modes: { read: 'allow' as const },
   definitions: [definition], serverInfo: { name: 'Reviewed', version: '1' } }];
 const metadata = { threadId: 'thread-A', callId: 'call',
   'io.modelcontextprotocol/protocolVersion': '2026-07-28' };
@@ -22,6 +24,7 @@ async function fixture() {
   let marked = false;
   let drop = false;
   let partial = false;
+  let oversized = false;
   let reply = '{"jsonrpc":"2.0","id":7,"result":{"content":[]}}';
   async function receive(incoming: IncomingMessage, response: ServerResponse) {
     const chunks: Buffer[] = [];
@@ -33,6 +36,11 @@ async function fixture() {
     received.push({ raw: Buffer.concat(chunks).toString(), headers: incoming.headers,
       url: incoming.url });
     if (drop) { incoming.socket.destroy(); return; }
+    if (oversized) {
+      response.writeHead(200);
+      response.write('x'.repeat(2 * 1024 * 1024));
+      return;
+    }
     if (partial) {
       response.writeHead(200);
       response.write('{"jsonrpc":');
@@ -101,6 +109,7 @@ async function fixture() {
   }
   function disconnect() { drop = true; }
   function partialReply() { partial = true; }
+  function oversizedReply() { oversized = true; }
   async function close() {
     vi.restoreAllMocks();
     await local.close();
@@ -108,14 +117,15 @@ async function fixture() {
     gateway.close();
     rmSync(directory, { recursive: true, force: true });
   }
-  return { catalogue, grant, send, sendRaw, control, answer, disconnect, partialReply, close, received };
+  return { catalogue, grant, send, sendRaw, control, answer, disconnect, partialReply,
+    oversizedReply, close, received };
 }
 
 async function discoveryIsPrivate() {
   const test = await fixture();
   try {
     await test.catalogue();
-    const other = [{ ...tools[0]!, definitions: ['{"name":"private_other"}'] }];
+    const other = [{ ...tools[0]!, definitions: ['{"name":"private_other"}'], modes: { private_other: 'allow' as const } }];
     await test.catalogue(loadB, 'chat-B', 'thread-B', other);
     const discovery = { ...call, method: 'server/discover', params: { ...call.params, name: '' } };
     const result = await test.send(discovery);
@@ -153,8 +163,11 @@ async function refusesOutsideList(kind: string) {
     }
     const result = await test.send(body);
     expect(result.status).toBe(200);
-    expect(result.text).toContain('"isError":true');
-    expect(result.text).toContain('Nothing was sent');
+    if (kind === 'ended') expect(result.text).toContain('Unknown tool list');
+    else {
+      expect(result.text).toContain('"isError":true');
+      expect(result.text).toContain('Nothing was sent');
+    }
     expect(test.received).toEqual([]);
   } finally { await test.close(); }
 }
@@ -166,12 +179,13 @@ async function forwardsExactly() {
   try {
     await test.catalogue();
     await test.grant();
-    const result = await test.send(call, { 'x-opencrane-decision': 'refused', 'x-secret': 'private' });
+    const result = await test.send(call, { 'x-opencrane-decision': 'refused', 'x-secret': 'private',
+      'x-opencrane-tool-mode': 'ask' });
     expect(result.status).toBe(200);
     expect(test.received).toHaveLength(1);
     expect(test.received[0]).toMatchObject({ raw: result.raw, url: '/mcp/server/installed',
       headers: { authorization: 'Bearer computer', 'x-turn-token': 'token-thread-A',
-        'session-id': 'thread-A', 'mcp-name': 'read' } });
+        'session-id': 'thread-A', 'mcp-name': 'read', 'x-opencrane-tool-mode': 'allow' } });
     expect(test.received[0]!.headers).not.toHaveProperty('x-secret');
     expect(test.received[0]!.headers).not.toHaveProperty('x-opencrane-decision');
     await test.catalogue(loadB, 'chat-B', 'thread-B');
@@ -276,3 +290,37 @@ async function replacedLoadIsUnavailable() {
 }
 it('refuses an older address as soon as the same conversation registers a replacement',
   replacedLoadIsUnavailable);
+
+async function settlesOversizedReply() {
+  const test = await fixture();
+  try {
+    await test.catalogue();
+    await test.grant();
+    test.oversizedReply();
+    const pending = test.send();
+    async function receivedFailure() {
+      const result = await pending;
+      expect(result.text.includes('may have received')).toBe(true);
+      expect(result.text).toContain('"isError":true');
+    }
+    await receivedFailure();
+    expect(test.received).toHaveLength(1);
+  } finally { await test.close(); }
+}
+it('settles an oversized tool reply at once without retrying', settlesOversizedReply, 1000);
+
+async function remembersFirstList() {
+  const test = await fixture();
+  try {
+    const input = { loadKey: loadA, conversation: 'chat-A', tools };
+    expect(await test.control('/catalogue', input)).toBe(200);
+    const list = { ...call, method: 'tools/list' };
+    expect((await test.send(list)).text).toContain('"name":"read"');
+    await test.catalogue();
+    expect(await test.control('/catalogue/ready', { loadKey: loadA })).toBe(200);
+    expect(await test.control('/catalogue', { ...input, tools: [] })).toBe(400);
+    expect(test.received).toEqual([]);
+  } finally { await test.close(); }
+}
+it('keeps the first list discovery when binding the thread and refuses changed definitions',
+  remembersFirstList);

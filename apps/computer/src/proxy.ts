@@ -28,13 +28,21 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
         json(res, { ok: true });
         return;
       }
+      if (req.url === '/catalogue/ready') {
+        await mcp.discovered(input);
+        json(res, { ok: true });
+        return;
+      }
       if (req.url === '/catalogue/drop') {
         mcp.drop(input);
         json(res, { ok: true });
         return;
       }
       if (typeof input['thread'] !== 'string') throw new Error('Bad request');
-      if (req.url === '/drop') turns.delete(input['thread']);
+      if (req.url === '/drop') {
+        turns.delete(input['thread']);
+        mcp.dropThread(input['thread']);
+      }
       else if (req.url === '/grant') {
         if (typeof input['computer'] !== 'string' || typeof input['token'] !== 'string' ||
             typeof input['expires'] !== 'number' || !Number.isSafeInteger(input['expires']) ||
@@ -47,6 +55,7 @@ export async function proxy(gateway: string, options = { callerPath: '/home/code
           expires: input['expires'] };
         if (typeof input['conversation'] === 'string') grant.conversation = input['conversation'];
         turns.set(input['thread'], grant);
+        mcp.extendThread(input['thread'], grant.expires);
       } else { json(res, { error: 'path' }, 404); return; }
       json(res, { ok: true });
     })().catch(() => json(res, { error: 'bad input' }, 400));

@@ -1,4 +1,5 @@
 import { request, type IncomingMessage, type ServerResponse } from 'node:http';
+import { setTimeout as pause } from 'node:timers/promises';
 import { json, record } from './http.ts';
 import { parseTools, type ToolServer } from './turn-frame.ts';
 
@@ -12,9 +13,12 @@ interface Catalogue {
   conversation: string;
   thread?: string;
   servers: Map<string, ToolServer>;
+  listed: Set<string>;
+  expiry: NodeJS.Timeout;
 }
 const VERSION = '2026-07-28';
 const MAX_REQUEST_BYTES = 1024 * 1024;
+const MAX_CATALOGUES = 64;
 const UNCONFIRMED = 'The tool did not confirm a result. It may have received the request. '
   + 'OpenCrane will not send it again.';
 const UNAVAILABLE = 'This tool is not available in this conversation. Nothing was sent.';
@@ -24,24 +28,37 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
   const current = new Map<string, string>();
 
   function catalogue(input: Record<string, unknown>) {
-    const key = input['loadKey'];
-    if (typeof key !== 'string' || !/^[a-f0-9]{32}$/u.test(key)) {
-      throw new Error('Invalid tool list address');
-    }
-    const conversation = input['conversation'];
-    const thread = input['thread'];
-    if (typeof conversation !== 'string' || !conversation || conversation.length > 200
-      || (thread !== undefined && (typeof thread !== 'string' || !thread || thread.length > 200))) {
-      throw new Error('Invalid tool list binding');
-    }
+    const { key, conversation, thread } = catalogueBinding(input);
     const tools = parseTools(input['tools']);
     const servers = new Map<string, ToolServer>();
     for (const server of tools) {
       if (servers.has(server.key)) throw new Error('Repeated server key');
-      for (const definition of server.definitions) toolDefinition(definition);
+      for (const text of server.definitions) {
+        const definition = toolDefinition(text);
+        if (server.modes[String(definition['name'])] !== 'allow') {
+          throw new Error('Tool is not Allow');
+        }
+      }
       servers.set(server.key, server);
     }
-    const entry: Catalogue = { conversation, servers };
+    const previous = catalogues.get(key);
+    if (previous) {
+      if (previous.conversation !== conversation
+        || JSON.stringify([...previous.servers]) !== JSON.stringify([...servers])) {
+        throw new Error('Tool list address was reused');
+      }
+      if (typeof thread === 'string') previous.thread = thread;
+      return;
+    }
+    const oldKey = current.get(conversation);
+    if (oldKey) drop({ loadKey: oldKey });
+    // Refuse more work rather than keep abandoned lists without a memory limit.
+    if (catalogues.size >= MAX_CATALOGUES) throw new Error('Too many tool lists');
+    function expired() { drop({ loadKey: key }); }
+    // Remove abandoned registrations even if the bridge cannot reach its control socket.
+    const expiry = setTimeout(expired, 120_000);
+    expiry.unref();
+    const entry: Catalogue = { conversation, servers, listed: new Set(), expiry };
     if (typeof thread === 'string') entry.thread = thread;
     catalogues.set(key, entry);
     current.set(conversation, key);
@@ -51,8 +68,38 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
     if (typeof input['loadKey'] !== 'string') throw new Error('Missing tool list address');
     const loadKey = input['loadKey'];
     const load = catalogues.get(loadKey);
+    if (load) clearTimeout(load.expiry);
     catalogues.delete(loadKey);
     if (load && current.get(load.conversation) === loadKey) current.delete(load.conversation);
+  }
+
+  function extendThread(thread: string, expires: number) {
+    for (const [loadKey, load] of catalogues) {
+      if (load.thread !== thread) continue;
+      clearTimeout(load.expiry);
+      function expired() { drop({ loadKey }); }
+      load.expiry = setTimeout(expired, Math.max(0, expires - Date.now()));
+      load.expiry.unref();
+    }
+  }
+
+  async function discovered(input: Record<string, unknown>) {
+    const key = input['loadKey'];
+    if (typeof key !== 'string') throw new Error('Missing tool list address');
+    const deadline = Date.now() + 10_000;
+    while (Date.now() < deadline) {
+      const load = catalogues.get(key);
+      if (!load) throw new Error('Unknown tool list');
+      if (load.listed.size === load.servers.size) return;
+      await pause(20);
+    }
+    throw new Error('Tools were not discovered');
+  }
+
+  function dropThread(thread: string) {
+    for (const [loadKey, load] of catalogues) {
+      if (load.thread === thread) drop({ loadKey });
+    }
   }
 
   async function handle(incoming: IncomingMessage, response: ServerResponse) {
@@ -78,6 +125,7 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
       return;
     }
     if (method === 'tools/list') {
+      load.listed.add(match[2]!);
       const tools = server.definitions.map(toolDefinition);
       json(response, { jsonrpc: '2.0', id, result: { tools } });
       return;
@@ -91,7 +139,23 @@ export function mcpProxy(gateway: string, grants: Map<string, ProxyGrant>) {
     }
     await forward(incoming, response, gateway, server, grant, String(thread), id, raw);
   }
-  return { catalogue, drop, handle };
+  return { catalogue, drop, dropThread, extendThread, discovered, handle,
+    get size() { return catalogues.size; },
+    get currentSize() { return current.size; } };
+}
+
+function catalogueBinding(input: Record<string, unknown>) {
+  const key = input['loadKey'];
+  if (typeof key !== 'string' || !/^[a-f0-9]{32}$/u.test(key)) {
+    throw new Error('Invalid tool list address');
+  }
+  const conversation = input['conversation'];
+  const thread = input['thread'];
+  if (typeof conversation !== 'string' || !conversation || conversation.length > 200
+    || (thread !== undefined && (typeof thread !== 'string' || !thread || thread.length > 200))) {
+    throw new Error('Invalid tool list binding');
+  }
+  return { key, conversation, thread };
 }
 
 function requireStateless(incoming: IncomingMessage, method: unknown,
@@ -127,7 +191,8 @@ function toolDefinition(text: string) {
 
 function listsTool(server: ToolServer, name: unknown) {
   for (const text of server.definitions) {
-    if (toolDefinition(text)['name'] === name) return true;
+    if (toolDefinition(text)['name'] === name && typeof name === 'string'
+      && server.modes[name] === 'allow') return true;
   }
   return false;
 }
@@ -184,7 +249,11 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
       let length = 0;
       function collect(chunk: Buffer) {
         length += chunk.length;
-        if (length > MAX_REQUEST_BYTES) { upstream.destroy(); return; }
+        if (length > MAX_REQUEST_BYTES) {
+          failed();
+          upstream.destroy();
+          return;
+        }
         chunks.push(chunk);
       }
       function end() {
@@ -207,7 +276,8 @@ function forward(incoming: IncomingMessage, response: ServerResponse, gateway: s
     const headers = { authorization: `Bearer ${grant.computer}`, 'x-turn-token': grant.token,
       'session-id': thread, 'content-type': 'application/json', accept: 'application/json',
       'mcp-protocol-version': VERSION, 'mcp-method': 'tools/call',
-      'mcp-name': String(incoming.headers['mcp-name']) };
+      'mcp-name': String(incoming.headers['mcp-name']),
+      'x-opencrane-tool-mode': server.modes[String(incoming.headers['mcp-name'])] };
     const path = `/mcp/${server.serverId}/${server.connectionId}`;
     const outgoing = request(`${gateway}${path}`, { method: 'POST', headers }, receive);
     function disconnected() { if (!response.writableEnded) outgoing.destroy(); }

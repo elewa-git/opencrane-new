@@ -6,7 +6,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { setTimeout as pause } from 'node:timers/promises';
-import { randomBytes } from 'node:crypto';
 
 const probeHome = mkdtempSync(join(tmpdir(), 'codex-resume-'));
 const startedAt = Date.now();
@@ -24,7 +23,7 @@ let nextRpc = 0;
 const wireMode = process.argv.includes('--wire');
 let runtimeProxy;
 let productionConfig;
-let productionThreadConfig;
+let productionThreadLoads;
 let control;
 const wireLoads = new Map();
 const wireConversations = new Map();
@@ -225,6 +224,31 @@ function startClient() {
     return new Promise(wait);
   }
 
+  let loads;
+  if (wireMode) {
+    async function catalogue(loadKey, conversation, tools, thread) {
+      const input = { loadKey, conversation, tools, thread };
+      capture.rpc.push({ stage, atMs: Date.now() - startedAt, method: 'catalogue', params: input });
+      await control('/catalogue', input);
+      if (thread) {
+        wireLoads.set(thread, loadKey);
+        wireConversations.set(thread, conversation);
+      }
+    }
+    async function dropCatalogue(loadKey) {
+      const input = { loadKey };
+      capture.rpc.push({ stage, atMs: Date.now() - startedAt,
+        method: 'dropCatalogue', params: input });
+      await control('/catalogue/drop', input);
+    }
+    async function discovered(loadKey) {
+      const input = { loadKey };
+      await control('/catalogue/ready', input);
+    }
+    const driver = { rpc: sendRpc, catalogue, dropCatalogue, discovered };
+    loads = productionThreadLoads(driver);
+  }
+
   async function rpc(method, params) {
     if (!wireMode) return sendRpc(method, params);
     if (method === 'thread/start' || method === 'thread/resume') {
@@ -234,27 +258,15 @@ function startClient() {
         const name = toolName(new URL(server.url).pathname);
         const definition = { name, inputSchema: { type: 'object' } };
         const serverId = new URL(server.url).pathname.slice(1);
+        const modes = { [name]: 'allow' };
         tools.push({ key, serverId, connectionId: 'installed',
-          definitions: [JSON.stringify(definition)] });
+          definitions: [JSON.stringify(definition)], modes });
       }
-      const loadKey = randomBytes(16).toString('hex');
-      const conversation = wireConversations.get(params.threadId) ?? `chat-${loadKey}`;
-      const input = { loadKey, conversation, tools, thread: params.threadId };
-      await control('/catalogue', input);
-      const config = productionThreadConfig({ tools }, loadKey,
-        `http://127.0.0.1:${mcp.address().port}`);
-      const configured = { ...params, config };
-      if (method === 'thread/start') configured.approvalPolicy = 'never';
-      const result = await sendRpc(method, configured);
-      input.thread = result.thread.id;
-      wireLoads.set(input.thread, loadKey);
-      wireConversations.set(input.thread, conversation);
-      await control('/catalogue', input);
-      return result;
-    }
-    if (method === 'thread/unsubscribe') {
-      const loadKey = wireLoads.get(params.threadId);
-      if (loadKey) await control('/catalogue/drop', { loadKey });
+      const conversationId = wireConversations.get(params.threadId) ?? `chat-${nextRpc}`;
+      const input = { tools, conversationId };
+      const startParams = { ...params, approvalPolicy: 'never' };
+      delete startParams.config;
+      return loads.load(input, params.threadId, startParams);
     }
     if (method === 'turn/start') {
       const input = { thread: params.threadId, conversation: wireConversations.get(params.threadId),
@@ -316,6 +328,47 @@ async function unload(threadId, timeoutMs = 10000) {
   }
   return { result, unloaded: !loaded.data.includes(threadId), closed,
     elapsedMs: Date.now() - beganAt };
+}
+
+function checkReloadOrder() {
+  const methods = [];
+  for (const operation of capture.rpc) {
+    if (operation.stage !== stage) continue;
+    const lastMethod = methods.at(-1);
+    if (operation.method === 'thread/loaded/list' && lastMethod === operation.method) continue;
+    methods.push(operation.method);
+  }
+  assert.deepEqual(methods.slice(0, 6), ['thread/unsubscribe', 'thread/loaded/list',
+    'dropCatalogue', 'catalogue', 'thread/resume', 'catalogue']);
+}
+
+async function productionZeroUnload(threadId) {
+  const beganAt = Date.now();
+  const params = { threadId, config: { mcp_servers: {} } };
+  await activeClient.rpc('thread/resume', params);
+  checkReloadOrder();
+  let unsubscribeId;
+  let listId;
+  for (const operation of capture.rpc) {
+    if (operation.stage !== stage) continue;
+    if (operation.method === 'thread/unsubscribe') unsubscribeId = operation.id;
+    if (operation.method === 'thread/loaded/list') listId = operation.id;
+  }
+  let result;
+  let loaded;
+  for (const reply of capture.replies) {
+    if (reply.id === unsubscribeId) result = reply.result;
+    if (reply.id === listId) loaded = reply.result;
+  }
+  assert.equal(result.status, 'unsubscribed');
+  assert.equal(loaded.data.includes(threadId), false);
+  function closedThread(notification) {
+    return notification.stage === stage && notification.method === 'thread/closed'
+      && notification.params.threadId === threadId;
+  }
+  const closed = capture.notifications.some(closedThread);
+  assert.equal(closed, true);
+  return { result, unloadedBeforeResume: true, closed, elapsedMs: Date.now() - beganAt };
 }
 
 function namespacesFor(prompt) {
@@ -467,11 +520,11 @@ try {
   const modelPort = await listen(model);
   if (wireMode) {
     const { memoryFreeConfig } = await import('../src/codex-config.ts');
-    const { threadToolsConfig } = await import('../src/thread-loads.ts');
+    const { threadLoads } = await import('../src/thread-loads.ts');
     const proxyModule = await import('../src/proxy.ts');
     const controlModule = await import('../src/proxy-control.ts');
     productionConfig = memoryFreeConfig;
-    productionThreadConfig = threadToolsConfig;
+    productionThreadLoads = threadLoads;
     const socketPath = join(probeHome, 'control.sock');
     const options = { port: 0, callerPath: join(probeHome, 'caller'), controlSocket: socketPath };
     runtimeProxy = await proxyModule.proxy(`http://127.0.0.1:${modelPort}`, options,
@@ -529,6 +582,11 @@ plugins = false
   await activeClient.rpc('thread/resume', { threadId: threadA, config: before });
 
   async function zeroUnload() {
+    if (wireMode) {
+      const result = await productionZeroUnload(threadA);
+      capture.zeroUnload = result;
+      return result;
+    }
     const result = await unload(threadA);
     capture.zeroUnload = result;
     assert.equal(result.result.status, 'unsubscribed');
@@ -546,12 +604,15 @@ plugins = false
     const input = JSON.stringify(capture.modelTools.at(-1).input);
     assert.match(input, /HISTORY_MARKER_A/u);
     assert.doesNotMatch(input, /mcp__oc_aaaaaaaaaa|read_before/u);
+    if (wireMode) checkReloadOrder();
   }
   const r2 = await check('R2', reload);
 
   async function removal() {
-    const result = await unload(threadA);
-    assert.equal(result.unloaded, true);
+    if (!wireMode) {
+      const result = await unload(threadA);
+      assert.equal(result.unloaded, true);
+    }
     await activeClient.rpc('thread/resume', { threadId: threadA, config: { mcp_servers: {} } });
     await activeClient.turn(threadA);
     checkNamespaces(stage);
@@ -566,8 +627,10 @@ plugins = false
     plans.set('BUSY_B', { kind: 'hold' });
     const busyTurn = activeClient.turn(threadB, 'BUSY_B');
     await holding;
-    const result = await unload(threadA);
-    assert.equal(result.unloaded, true);
+    if (!wireMode) {
+      const result = await unload(threadA);
+      assert.equal(result.unloaded, true);
+    }
     await activeClient.rpc('thread/resume', { threadId: threadA, config: before });
     await activeClient.turn(threadA, 'RELOADED_A_WHILE_B_BUSY');
     await busyTurn;

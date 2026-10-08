@@ -14,7 +14,8 @@ export function proxyControl(path: string, input: unknown, socketPath = '/run/co
     const outgoing = request({ socketPath, path, method: 'POST' }, receive);
     function timeout() { outgoing.destroy(new Error('Proxy control request timed out')); }
     outgoing.on('error', reject);
-    outgoing.setTimeout(5000, timeout);
+    const timeoutMs = path === '/catalogue/ready' ? 11_000 : 5000;
+    outgoing.setTimeout(timeoutMs, timeout);
     outgoing.end(JSON.stringify(input));
   }
   return new Promise<void>(send);

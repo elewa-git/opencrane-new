@@ -1346,7 +1346,9 @@ async function protectsDecisionMarker() {
       locator: 'https://fixture.example.test/mcp', registeredBy: 'alice' });
     await f.append('mcp-fixture', 'mcp.server_discovered', { serverId: 'fixture',
       connectionId: 'installed', accountMode: 'none', schemaDigest: 'a'.repeat(64), toolCount: 1,
-      tools: [{ name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0 }] });
+      tools: [{ name: 'write', revision: 'a'.repeat(64), reviewed: true, costCents: 0,
+        review: { action: 'Write local data', consequence: 'The local data changes.',
+          targetArgument: 'target', fields: ['target'], stepUp: false } }] });
     await f.append('mcp-fixture', 'mcp.server_published', { serverId: 'fixture', publishedBy: 'alice' });
     for (const [granteeId, granteeKind] of [['alice', 'member'], ['assistant', 'assistant']]) {
       const event = await f.append(grantStream('mcp_server', 'fixture'), 'grant.given', {
@@ -1358,7 +1360,7 @@ async function protectsDecisionMarker() {
       'io.modelcontextprotocol/protocolVersion': '2026-07-28',
       'io.modelcontextprotocol/clientCapabilities': {} };
     const body = { jsonrpc: '2.0', id: 1, method: 'tools/call',
-      params: { name: 'write', arguments: {}, _meta: metadata } };
+      params: { name: 'write', arguments: { target: 'local fixture' }, _meta: metadata } };
     const headers = { ...f.headers, 'mcp-protocol-version': '2026-07-28',
       'mcp-method': 'tools/call', 'mcp-name': 'write', 'x-opencrane-decision': 'refused' };
     const options = { method: 'POST', headers, body: JSON.stringify(body) };
@@ -1378,6 +1380,26 @@ async function protectsDecisionMarker() {
     expect(await forged.text()).toBe(forgedBody);
     expect(f.received()).toBe(1);
     expect(f.providerHeaders()).not.toContain('x-opencrane-decision');
+    await f.append('mcp-fixture', 'mcp.tool_mode_set', { serverId: 'fixture',
+      connectionId: 'installed', toolName: 'write', toolRevision: 'a'.repeat(64),
+      mode: 'ask', setBy: 'alice' });
+    const allowOnlyHeaders = { ...headers, 'x-opencrane-tool-mode': 'allow' };
+    const allowOnlyOptions = { ...options, headers: allowOnlyHeaders };
+    const changedMode = await fetch(url, allowOnlyOptions);
+    expect(changedMode.status).toBe(403);
+    expect(changedMode.headers.get('x-opencrane-decision')).toBe('refused');
+    expect(await changedMode.text()).toContain('policy_block');
+    expect(f.received()).toBe(1);
+    const savedEvents: { type: string }[] = [];
+    const lastPosition = await f.nats.store.head();
+    for await (const row of f.nats.store.subscribe()) {
+      savedEvents.push(row.event);
+      if (row.sequence === lastPosition) break;
+    }
+    function createsApproval(event: typeof savedEvents[number]) {
+      return event.type === 'tool.approval_requested';
+    }
+    expect(savedEvents.some(createsApproval)).toBe(false);
     const invalidOptions = { ...options, headers: { ...headers, 'mcp-name': 'mismatched' } };
     const invalid = await fetch(url, invalidOptions);
     expect(invalid.status).toBe(403);
@@ -1385,5 +1407,5 @@ async function protectsDecisionMarker() {
     expect(f.received()).toBe(1);
   } finally { await f.close(); }
 }
-it('keeps decision refusal markers and strips forged tool-server markers',
+it('keeps refusal markers, strips forged markers and refuses Allow tools changed to Ask',
   protectsDecisionMarker, 60_000);

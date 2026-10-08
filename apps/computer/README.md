@@ -16,7 +16,7 @@ This is the personal computers layer. `apps/ops` starts and pauses computers. `a
 flowchart LR
   kube["Kubernetes<br/>computer manager"] -->|runs| computer["apps/computer<br/>personal computer"]
   ops["apps/ops<br/>background workers"] -->|starts and pauses| computer
-  server["apps/server<br/>the back end"] <-->|chat turns and tool reports| computer
+  server["apps/server<br/>the back end"] <-->|turns, reviewed lists and reports| computer
   events["libs/events<br/>report text check"] -.-> computer
   computer -->|runs private turns| private["Private Codex<br/>temporary process"]
   private -->|sends model requests| gateway
@@ -37,10 +37,11 @@ flowchart LR
 
 Codex sees only the reviewed, free tools allowed for that chat turn. Each tool
 call goes through a local proxy and the gateway's current access checks. When
-the list changes, the bridge reloads only that conversation's Codex thread.
+a new turn begins, the bridge reloads only that conversation's Codex thread.
 It keeps the conversation history. Reloading stops any background terminals
 from that thread. If reload cannot be confirmed, the reply fails with a clear
-message and the person can send it again. Ask tools are not offered yet.
+message and the person can send it again. The proxy releases the list when the
+turn ends. A tool changed from Allow to Ask is refused. Ask tools are not offered yet.
 
 ## Processes it handles
 

@@ -145,6 +145,9 @@ const channel = bridgeChannel(server, {
   catalogue(loadKey, conversation, tools, thread) {
     return proxyControl('/catalogue', { loadKey, conversation, tools, thread });
   },
+  discovered(loadKey) {
+    return proxyControl('/catalogue/ready', { loadKey });
+  },
   dropCatalogue(loadKey) {
     return proxyControl('/catalogue/drop', { loadKey });
   },

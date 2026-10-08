@@ -4,12 +4,16 @@ import { parseTurn } from '../src/turn-frame.ts';
 const frame = { id: 'turn', conversationId: 'chat', assistantId: 'assistant',
   text: 'Use a tool', token: 'token', expiresAt: Date.now() + 60_000 };
 const server = { key: 'oc_0123456789', serverId: 'fixture', connectionId: 'installed',
+  modes: { write: 'allow' as const },
   serverInfo: { name: 'Fixture', version: '1' }, definitions: ['{"name":"write"}'] };
 
 function parsesBoundedTools() {
   expect(parseTurn({ ...frame, tools: [server] })).toMatchObject({ tools: [server] });
   expect(parseTurn(frame)).not.toHaveProperty('tools');
   const invalidLists = [
+    [{ ...server, modes: { write: 'ask' } }],
+    [{ ...server, modes: { write: 'block' } }],
+    [{ ...server, modes: undefined }],
     [{ ...server, key: 'fixture' }], [{ ...server, serverId: 'bad/id' }],
     [{ ...server, connectionId: 'x'.repeat(201) }],
     [{ ...server, discoverResult: '{}' }], [{ ...server, unexpected: true }],

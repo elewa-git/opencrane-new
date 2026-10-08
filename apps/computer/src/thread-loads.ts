@@ -8,15 +8,16 @@ export interface ThreadLoadDriver {
   catalogue?(loadKey: string, conversation: string, tools: NonNullable<Turn['tools']>,
     thread?: string): Promise<void>;
   dropCatalogue?(loadKey: string): Promise<void>;
+  discovered?(loadKey: string): Promise<void>;
 }
 
 const RELOAD_LIMIT_MS = 10_000;
 export class ThreadLoadFailed extends Error {}
 
-export function threadToolsConfig(turn: Turn, loadKey: string, proxyUrl = 'http://127.0.0.1:8080') {
+function threadToolsConfig(turn: Turn, loadKey: string) {
   const servers: Record<string, unknown> = {};
   for (const server of turn.tools ?? []) {
-    servers[server.key] = { url: `${proxyUrl}/mcp/${loadKey}/${server.key}`,
+    servers[server.key] = { url: `http://127.0.0.1:8080/mcp/${loadKey}/${server.key}`,
       bearer_token_env_var: 'PROXY_CALLER_TOKEN', tool_timeout_sec: 1200,
       startup_timeout_sec: 10 };
   }
@@ -32,6 +33,18 @@ export function threadLoads(driver: ThreadLoadDriver) {
     } else if (input.tools?.length) throw new Error('Tool catalogue unavailable');
   }
 
+  async function forget(thread: string) {
+    const previous = loaded.get(thread);
+    loaded.delete(thread);
+    if (previous) await driver.dropCatalogue?.(previous.loadKey);
+  }
+
+  async function requireDiscovery(input: Turn, loadKey: string) {
+    if (!input.tools?.length) return;
+    if (!driver.discovered) throw new Error('Tool discovery unavailable');
+    await driver.discovered(loadKey);
+  }
+
   async function prepare(input: Turn, previousThread: string | undefined,
     startParams: Record<string, unknown>) {
     const tools = JSON.stringify(input.tools ?? []);
@@ -40,16 +53,45 @@ export function threadLoads(driver: ThreadLoadDriver) {
     const fingerprint = hash.digest('hex');
     const previousLoad = previousThread && loaded.get(previousThread);
     if (previousLoad && previousLoad.fingerprint === fingerprint) {
-      return resumeLoadedThread(driver, previousThread);
+      try {
+        const response = await resumeLoadedThread(driver, previousThread);
+        await requireDiscovery(input, previousLoad.loadKey);
+        return response;
+      } catch (error) {
+        await forget(previousThread);
+        throw error;
+      }
     }
-    if (previousLoad && previousThread) {
-      await unload(driver, previousThread);
-      await driver.dropCatalogue?.(previousLoad.loadKey);
-      loaded.delete(previousThread);
-    }
-    const loadKey = randomBytes(16).toString('hex');
-    await register(input, loadKey, previousThread);
+    if (previousThread) await unloadPrevious(previousThread);
+    return startLoad(input, previousThread, startParams, fingerprint);
+  }
+
+  async function unloadPrevious(thread: string) {
+    const previousLoad = loaded.get(thread);
+    // Forget confirmation first: an unload can take effect even when its reply is lost.
+    if (previousLoad) delete previousLoad.fingerprint;
+    loaded.delete(thread);
     try {
+      await unload(driver, thread);
+    } finally {
+      if (previousLoad) await driver.dropCatalogue?.(previousLoad.loadKey);
+    }
+  }
+
+  async function abandon(loadKey: string, orphanThread: string | undefined) {
+    try {
+      if (orphanThread) await unload(driver, orphanThread);
+    } finally {
+      await driver.dropCatalogue?.(loadKey);
+    }
+  }
+
+  async function startLoad(input: Turn, previousThread: string | undefined,
+    startParams: Record<string, unknown>, fingerprint: string) {
+    const loadKey = randomBytes(16).toString('hex');
+    let newThread: string | undefined;
+    try {
+      await register(input, loadKey, previousThread);
       const config = threadToolsConfig(input, loadKey);
       let method = 'thread/start';
       let params: Record<string, unknown> = { ...startParams, config };
@@ -62,14 +104,17 @@ export function threadLoads(driver: ThreadLoadDriver) {
       if (typeof thread !== 'string' || (previousThread && previousThread !== thread)) {
         throw new Error('Thread load did not match');
       }
-      // Bind the address before installing any grant. Initial discovery has no thread id.
+      newThread = thread;
+      // Bind the address before granting access. Initial discovery has no thread id.
       await register(input, loadKey, thread);
+      await requireDiscovery(input, loadKey);
       loaded.set(thread, { fingerprint, loadKey });
       return response;
     } catch (error) {
-      // Unload on retry: Codex may have loaded the thread before its reply or binding failed.
-      if (previousThread) loaded.set(previousThread, { loadKey });
-      await driver.dropCatalogue?.(loadKey);
+      // Unsubscribe a newly started thread when its binding or discovery fails.
+      let orphanThread: string | undefined;
+      if (!previousThread) orphanThread = newThread;
+      await abandon(loadKey, orphanThread);
       throw error;
     }
   }
@@ -82,7 +127,7 @@ export function threadLoads(driver: ThreadLoadDriver) {
       throw new ThreadLoadFailed('Tools could not be reloaded', { cause: error });
     }
   }
-  return { load };
+  return { load, forget, get size() { return loaded.size; } };
 }
 
 async function resumeLoadedThread(driver: ThreadLoadDriver, threadId: string) {

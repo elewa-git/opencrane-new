@@ -16,7 +16,7 @@ flowchart LR
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members, chat rows, model access and computer state| postgres
-  server -->|sends turns and optional tool offers; receives reports| computer["apps/computer<br/>personal or group assistant"]
+  server -->|sends turns and Allow tool lists; receives reports| computer["apps/computer<br/>personal or group assistant"]
   server -->|sign-in| zitadel["Zitadel<br/>sign-in service"]
 ```
 
@@ -59,6 +59,9 @@ flowchart LR
 Private team turns receive earlier completed replies from the same member. The
 computer starts a fresh Codex process for each private team turn. Disk isolation is
 not yet proven on a live computer; memory features stay off until it is.
+
+The reviewed tool list includes each tool's Allow mode. The computer and gateway
+use it to refuse calls if the tool changes to Ask during the turn.
 
 ## Processes it handles
 
