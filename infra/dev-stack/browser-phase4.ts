@@ -669,10 +669,7 @@ async function qualifyDirectChat(
 ): Promise<void> {
   const beforeModelCount = await modelRequestCount(options.modelStubPort);
   await memberMobile.setViewportSize({ width: 390, height: 844 });
-  await memberMobile.goto(`${options.origin}/workspace/direct`);
-  await memberMobile.locator('#colleague-search').fill(ownerId);
-  await memberMobile.getByRole('button', { name: ownerId }).waitFor();
-  await memberMobile.getByRole('button', { name: ownerId }).click();
+  await startDirectDraft(memberMobile, options.origin);
   const recipientText = await memberMobile.locator('main').innerText();
   const mobileDraft = await screenshot(memberMobile, output, 'direct-chat-recipient-390');
   const mobileDraftEvidence = { colleague: ownerId };
@@ -682,9 +679,7 @@ async function qualifyDirectChat(
     mobileDraftEvidence, [mobileDraft]);
 
   await memberDesktop.setViewportSize({ width: 1280, height: 900 });
-  await memberDesktop.goto(`${options.origin}/workspace/direct`);
-  await memberDesktop.locator('#colleague-search').fill(ownerId);
-  await memberDesktop.getByRole('button', { name: ownerId }).click();
+  await startDirectDraft(memberDesktop, options.origin);
   const desktopDraft = await screenshot(memberDesktop, output, 'direct-chat-recipient-1280');
   const desktopDraftText = await memberDesktop.locator('main').innerText();
   const desktopRecipientIsClear = desktopDraftText.includes(ownerId)
@@ -746,6 +741,27 @@ async function qualifyDirectChat(
   record(options.assertions, 'direct_chat.exchange_and_no_agent',
     orderIsCorrect && countsAreZero,
     exchangeStatement, exchangeEvidence, memberScreens);
+}
+
+async function startDirectDraft(page: Page, origin: string): Promise<void> {
+  await page.goto(`${origin}/workspace/direct`);
+
+  // Return to a blank draft when a saved-data run opens the previous direct conversation.
+  const draftButtonNames = ['New chat', 'Change'];
+  for (const buttonName of draftButtonNames) {
+    const draftButton = page.getByRole('button', { name: buttonName, exact: true });
+    if (await draftButton.count()) {
+      await draftButton.click();
+      break;
+    }
+  }
+
+  const colleagueSearch = page.locator('#colleague-search');
+  await colleagueSearch.waitFor();
+  await colleagueSearch.fill(ownerId);
+  const colleagueButton = page.getByRole('button', { name: ownerId, exact: true });
+  await colleagueButton.waitFor();
+  await colleagueButton.click();
 }
 
 async function directConversations(page: Page): Promise<DirectConversation[]> {
