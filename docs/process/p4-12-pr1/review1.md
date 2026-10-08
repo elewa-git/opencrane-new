@@ -59,3 +59,6 @@ prove that the test detects the missing behaviour; they are not passing source c
 
 - **append refuses wrongly derived memory scopes**. Original source: expected assertion failure.
   Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "append refuses wrongly derived memory scopes"`.
+
+- **decrypt checks the encrypted byte limits**. Original source: expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "decrypt checks the encrypted byte limits"`.

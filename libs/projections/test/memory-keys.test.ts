@@ -438,3 +438,20 @@ async function wrongDerivedScopeAppend() {
   }
 }
 it('append refuses wrongly derived memory scopes', wrongDerivedScopeAppend);
+
+function ciphertextByteLimits() {
+  function check(keys: ReturnType<typeof memoryKeys>) {
+    const current = currentIdentity();
+    const keyId = keys.provision(current);
+    for (const length of [28, 4125]) {
+      const bytes = Buffer.alloc(length);
+      const encrypted = { ciphertext: bytes.toString('base64'), keyId };
+      function decrypt() {
+        keys.decrypt(current, encrypted);
+      }
+      expect(decrypt).toThrow('Invalid memory ciphertext size');
+    }
+  }
+  withKeys(check);
+}
+it('decrypt checks the encrypted byte limits', ciphertextByteLimits);
