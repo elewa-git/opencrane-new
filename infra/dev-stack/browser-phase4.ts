@@ -745,6 +745,7 @@ async function qualifyDirectChat(
 
 async function startDirectDraft(page: Page, origin: string): Promise<void> {
   await page.goto(`${origin}/workspace/direct`);
+  await page.locator('.transcript[aria-busy="false"]').waitFor();
 
   // Return to a blank draft when a saved-data run opens the previous direct conversation.
   const draftButtonNames = ['New chat', 'Change'];
