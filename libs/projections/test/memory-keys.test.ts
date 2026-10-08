@@ -206,3 +206,11 @@ async function replay() {
   }
 }
 it('replays encrypted NATS events without provisioning and quarantines legacy ownership', replay);
+
+function subjectMismatch() {
+  const event = fixtureEvent('A'.repeat(40), 'key:' + 'a'.repeat(64));
+  expect(parseEventByType(event).success).toBe(true);
+  const invalid = { ...event, subject: 'scope-other' };
+  expect(parseEventByType(invalid).success).toBe(false);
+}
+it('a memory subject must match its scope', subjectMismatch);

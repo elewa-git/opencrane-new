@@ -1,0 +1,13 @@
+# Memory storage review fixes
+
+8 October 2026. Tests run in the development worktree; no fresh installation.
+Rebase onto `origin/main` completed and its ancestry check passed before these changes.
+
+## Tests committed before fixes
+
+Each entry names a test committed separately. A mutation changes one existing guard,
+runs that test and restores the source before committing. Expected failures below
+prove that the test detects the missing behaviour; they are not passing source checks.
+
+- **a memory subject must match its scope**. Mutation: `libs/events/src/memory.ts`, replace `!identity.success || event.subject !== `scope-${data.scopeId}`` with `!identity.success`. Expected assertion failure.
+  Run: `nice -n 10 npx vitest run libs/projections/test/memory-keys.test.ts --maxWorkers=1 -t "a memory subject must match its scope"`.
