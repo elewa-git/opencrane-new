@@ -159,28 +159,79 @@ async function computerEvents(assistantId: string) {
   for await (const stored of events.store.readStream(`computer-${assistantId}`)) result.push(stored.event);
   return result;
 }
+type ModelGrantExpectation = {
+  granteeId: string;
+  modelIds: string[];
+};
+
+function isActiveModel(model: typeof models[number]) {
+  return !model.retired;
+}
+
+function isModelGrant(grant: unknown): grant is { resourceType: string; resourceId: string } {
+  if (!grant || typeof grant !== 'object') return false;
+  if (!('resourceType' in grant) || !('resourceId' in grant)) return false;
+  return grant.resourceType === 'model' && typeof grant.resourceId === 'string';
+}
+
+function selectedModelIds(data: Record<string, unknown>) {
+  const grants = data['grants'];
+  if (!Array.isArray(grants)) return [];
+  const modelGrants = grants.filter(isModelGrant);
+  return modelGrants.map(readModelGrantId);
+}
+
+function readModelGrantId(grant: { resourceType: string; resourceId: string }) {
+  return grant.resourceId;
+}
+
 async function modelGrantsRecorded() {
-  const grantees = new Map<string, string>();
+  const expectations = new Map<string, ModelGrantExpectation[]>();
   const grants = new Set<string>();
+  const activeModelIds = models.filter(isActiveModel).map(readActiveModelId);
   const head = await events.store.head();
   if (head) for await (const { event } of readEvents(events.store, 1, head)) {
     assert.equal(event.silo, silo);
     const data = event.data as Record<string, unknown>;
-    if (event.type === 'member.joined' || event.type === 'assistant.created') {
-      const grantee = data[event.type === 'member.joined' ? 'memberId' : 'assistantId'];
-      assert(typeof grantee === 'string');
-      grantees.set(event.subject, grantee);
+    if (event.type === 'member.joined') {
+      const memberId = data['memberId'];
+      assert(typeof memberId === 'string');
+      expectations.set(event.subject, [{ granteeId: memberId, modelIds: activeModelIds }]);
     }
-    if (event.type === 'member.removed') grantees.delete(event.subject);
+    if (event.type === 'assistant.created') {
+      const assistantId = data['assistantId'];
+      assert(typeof assistantId === 'string');
+      if (data['kind'] === 'team') {
+        // Keep shared assistants to the models named in their saved selection.
+        const ownerId = data['ownerId'];
+        assert(typeof ownerId === 'string');
+        const selectedIds = selectedModelIds(data);
+        expectations.set(event.subject, [
+          { granteeId: assistantId, modelIds: selectedIds },
+          { granteeId: ownerId, modelIds: selectedIds },
+        ]);
+      } else {
+        expectations.set(event.subject, [{ granteeId: assistantId, modelIds: activeModelIds }]);
+      }
+    }
+    if (event.type === 'member.removed') expectations.delete(event.subject);
     // An explicit revocation also counts: migration must preserve that decision.
     if (data['resourceType'] === 'model' && ['grant.given', 'grant.revoked'].includes(event.type)) {
       grants.add(JSON.stringify([data['resourceId'], data['granteeId']]));
     }
   }
-  for (const grantee of grantees.values()) for (const model of models.filter(model => !model.retired)) {
-    if (!grants.has(JSON.stringify([model.id, grantee]))) return false;
+  for (const entityExpectations of expectations.values()) {
+    for (const expectation of entityExpectations) {
+      for (const modelId of expectation.modelIds) {
+        if (!grants.has(JSON.stringify([modelId, expectation.granteeId]))) return false;
+      }
+    }
   }
   return true;
+}
+
+function readActiveModelId(model: typeof models[number]) {
+  return model.id;
 }
 try {
   await until(modelGrantsRecorded, 'model grant history for existing members/assistants');
