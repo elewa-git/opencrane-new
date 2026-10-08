@@ -41,10 +41,34 @@ startup after real browser sign-in. Use a new attempt name for each run. The dai
 does not set this name, so it does not run this journey. The dev stack guide describes the claim
 and release commands.
 
-## Receipt
+## Live evidence
 
-No live result is recorded yet. Each saved receipt will name the clean commit that ran and link to
-screenshots copied from that stack's private directory after qualification.
+The two requested fresh starts passed on commit
+`fd7a48add6948c3f93970a0c8ad7816f72247e91`. Their Phase 4 checks took **48.461 seconds** and
+**59.039 seconds**. The saved-data repeat is **NOT PROVEN**: later attempts found and fixed two
+repeat-only journey issues, but the final attempts stopped before every check passed.
+
+| Attempt | Start | Phase 4 | Time | Receipt |
+| --- | --- | --- | ---: | --- |
+| `fresh-1` | PASS | PASS | 48.461 s | [Receipt](run-fresh-1.json) |
+| `fresh-2` | PASS | PASS | 59.039 s | [Receipt](run-fresh-2.json) |
+| `repeat-1` | FAIL | NOT RUN | — | No receipt; the saved grant check expected every model for a shared assistant. |
+| `repeat-2` | FAIL | FAIL | 134.171 s | [Receipt](run-repeat-2.json) |
+| `recovery-fresh` | FAIL after Phase 4 | PASS | 80.596 s | [Receipt](run-recovery-fresh.json) |
+| `repeat-3` | FAIL | NOT RUN | — | No receipt; the earlier chat check stopped on a transport error. |
+| `repeat-4` | FAIL | FAIL | 58.636 s | [Receipt](run-repeat-4.json) |
+| `recovery-fresh-2` | FAIL | FAIL | 84.342 s | [Receipt](run-recovery-fresh-2.json) |
+| `repeat-5` | FAIL | NOT RUN | — | No receipt; the browser reported a network change before Phase 4. |
+
+Each receipt lists every assertion it reached as `PASS`, `FAIL`, `NOT PROVEN` or `PAID / NOT RUN`
+and links to its screenshots. The two requested fresh receipts pass the group, shared assistant,
+group removal, direct chat, provider list and fake key save checks. `ownership.transfer` and
+`shared_assistant.member_disk_isolation` are `NOT PROVEN`. The paid provider answer is `PAID / NOT
+RUN`. `providers.key_input_cleared` is `NOT PROVEN` across the fresh runs because the input was
+missing from two receipts; it passed in `fresh-1`.
+
+Zitadel setup succeeded on every start. No setup retry or five-minute wait was needed. We checked
+all **176** saved screenshots: none is a one-colour image or under 5 KB.
 
 `NOT PROVEN` means the browser could not establish the result. `PAID / NOT RUN` means no paid
 provider call was made.
