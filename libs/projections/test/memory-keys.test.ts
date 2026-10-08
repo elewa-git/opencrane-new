@@ -323,3 +323,8 @@ function flippedCiphertextBit() {
   checkAlteredByte(28);
 }
 it('decrypt refuses a flipped ciphertext bit', flippedCiphertextBit);
+
+function flippedTagBit() {
+  checkAlteredByte(12);
+}
+it('decrypt refuses a flipped tag bit', flippedTagBit);
