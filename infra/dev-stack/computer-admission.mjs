@@ -64,7 +64,8 @@ function checkedSpecField([key, item]) {
   if (key === 'volumes') return `${literal(key)}:dyn([${checkedVolumes.join(',')}])`;
   return `${literal(key)}:dyn(${cel(item)})`;
 }
-const specFields = Object.entries(spec).map(checkedSpecField);
+const specEntries = Object.entries(spec);
+const specFields = specEntries.map(checkedSpecField);
 const checkedHomeSpec = `{${specFields.join(',')}}`;
 const checkedPodTemplate = `{'metadata':dyn(oldObject.spec.podTemplate.metadata), `
   + `'spec':dyn(${checkedHomeSpec})}`;
