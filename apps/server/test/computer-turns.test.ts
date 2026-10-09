@@ -253,3 +253,24 @@ async function keepsConcurrentTurnCondition() {
   expect(refused[0]).toHaveProperty('message', 'Turn append conflict or unavailable');
 }
 it('keeps one conditional append when two new turns race on an assistant', keepsConcurrentTurnCondition);
+
+async function keepsRecordedProviderChoice() {
+  await setup();
+  const choice = { providerId: 'primary', bindingSequence: 12, model: 'gpt-6-luna' };
+  const started = { ...turnData, payingGroupId: 'personal', ...choice };
+  await nats.seed([computerEvent('bound-start', 'computer.turn_started', started)]);
+  const admitted = await turnCommand(nats.store, context, input);
+  expect(admitted).toMatchObject(choice);
+  const moved = { providerId: 'secondary', revision: 3, changedBy: 'alice',
+    kind: 'assistant', dependantId: 'assistant', task: 'chat_turn',
+    previousBindingSequence: 12, expectedProviderSequence: 12,
+    state: 'paused', model: 'gpt-6.1-sol', reason: 'Paused by an administrator' };
+  await nats.seed([{ ...event('moved', 'provider-secondary', 'provider.model_binding_set'),
+    data: moved }]);
+  expect(await turnCommand(nats.store, context, { ...input, replay: true })).toEqual(admitted);
+  await turnCommand(nats.store, context, { ...input, status: 'completed' });
+  const rows = await nats.store.readStream(subject);
+  expect(rows.at(-1)?.event.data).toMatchObject({ ...choice, status: 'completed' });
+}
+it('keeps the recorded provider and model on replay and closure after a binding moves',
+  keepsRecordedProviderChoice);
