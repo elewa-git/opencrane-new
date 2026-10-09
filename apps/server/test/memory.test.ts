@@ -32,7 +32,7 @@ async function append(subject: string, type: string, data: unknown, apply = true
   const record = { ...event(id, subject, type), silo, data, commandId: id,
     principal: principalValue };
   const command = { event: record, expectedSequence: await nats.store.head(subject),
-    historyChecked: true };
+    historyChecked: true as const };
   expect((await nats.store.append(command)).status).toBe('appended');
   if (apply && auth.handler.eventTypes.includes(type)) {
     await auth.handler.handle(record, pgDb(storage.queue));
@@ -40,17 +40,18 @@ async function append(subject: string, type: string, data: unknown, apply = true
   return record;
 }
 async function write(ownerId: string, scopeKind: MemoryIdentity['scopeKind'],
-  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme') {
+  memoryId: string, text = 'Deliveries café 東京', pinned = false, silo = 'acme',
+  sources: { conversationId: string; messageId: string }[] = []) {
   const scopeId = memoryScopeId(silo, scopeKind, ownerId);
   const identity = { silo, scopeId, scopeKind, ownerId, memoryId, revision: 1 };
   keys.provision(identity);
   const encrypted = keys.encrypt(identity, text);
   const data = { schemaVersion: 1, scopeId, scopeKind, ownerId, memoryId, revision: 1,
-    kind: 'fact', pinned, expiresAt: null, sources: [], dependsOn: [], ...encrypted };
+    kind: 'fact', pinned, expiresAt: null, sources, dependsOn: [], ...encrypted };
   return append(`scope-${scopeId}`, 'memory.written', data, true, silo);
 }
-async function resolveMember(_silo: string, _issuer: string, subject: string) {
-  return subject.replace('idp-', '');
+function resolveMember(_silo: string, _issuer: string, subject: string) {
+  return Promise.resolve(subject.replace('idp-', ''));
 }
 function get(url: string, memberId = 'bob', orgId = 'org-acme') {
   const session = { sub: `idp-${memberId}`, orgId, roles: ['owner'],
@@ -154,7 +155,9 @@ it('ranks pins, exact terms and prefixes, with bounded Unicode search', async fu
   await runner.run(projection);
   const response = await get(`${path('bob')}/facts?q=deliver`);
   expect(response.statusCode).toBe(200);
-  expect(response.json().facts.map((fact: { memoryId: string }) => fact.memoryId))
+  const results = response.json<{ facts: { memoryId: string }[] }>();
+  function factId(fact: { memoryId: string }) { return fact.memoryId; }
+  expect(results.facts.map(factId))
     .toEqual(['pin', 'exact', 'own', 'prefix']);
   expect((await get(`${path('bob')}/facts?q=${encodeURIComponent('café 東京')}`))
     .json()).toMatchObject({ returnedCount: 1 });
@@ -200,17 +203,60 @@ it('returns unavailable while projection is behind, including detail and status'
   expect((await get(`${path('bob')}/changes/missing`)).json()).toEqual({ outcome: 'unknown' });
 });
 it('keeps reads open during long-chat and memory activity without a write fence', async function activity() {
+  const message = { conversationId: 'busy', authorId: 'bob', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text' };
+  for (let index = 0; index < 100; index++) {
+    await append('conversation-busy', 'message.posted', message);
+  }
   const original = nats.store.head.bind(nats.store);
+  const originalRead = nats.store.readStream.bind(nats.store);
+  let readStarted: () => void;
+  const started = new Promise<void>(function ready(resolve) { readStarted = resolve; });
+  let delayed = false;
   async function head(subject?: string, deadline?: number) {
-    expect(subject).not.toMatch(/^conversation-/u);
-    if (subject?.startsWith('scope-')) {
+    const position = await original(subject, deadline);
+    if (subject?.startsWith('scope-') && !delayed) {
+      delayed = true;
+      readStarted();
       await new Promise(function wait(resolve) { setTimeout(resolve, 2100); });
     }
-    return original(subject, deadline);
+    return position;
   }
-  const spy = vi.spyOn(nats.store, 'head').mockImplementation(head);
-  expect((await get(`${path('bob')}/facts/own`)).statusCode).toBe(200);
-  spy.mockRestore();
+  function read(subject: string, from?: number, deadline?: number) {
+    expect(subject).not.toMatch(/^conversation-/u);
+    return originalRead(subject, from, deadline);
+  }
+  const headSpy = vi.spyOn(nats.store, 'head').mockImplementation(head);
+  const readSpy = vi.spyOn(nats.store, 'readStream').mockImplementation(read);
+  try {
+    const response = get(`${path('bob')}/facts/own`);
+    await started;
+    await append('conversation-busy', 'message.posted', message);
+    await write('bob', 'person', 'during-read');
+    await runner.run(projection);
+    expect((await response).statusCode).toBe(200);
+  } finally {
+    headSpy.mockRestore();
+    readSpy.mockRestore();
+  }
+});
+it('returns source links only after a separate message access check', async function sources() {
+  const created = { conversationId: 'source', createdBy: 'bob', mode: 'direct',
+    participantIds: ['bob', 'owner'] };
+  await append('conversation-source', 'conversation.created', created);
+  const message = await append('conversation-source', 'message.posted', {
+    conversationId: 'source', authorId: 'bob', authorKind: 'human',
+    ciphertext: 'AAAAAAAAAAAAAAAAAAAA', keyId: 'key:chat', contentType: 'text',
+  });
+  const sources = [{ conversationId: 'source', messageId: message.id }];
+  await write('bob', 'person', 'linked', 'Statement', false, 'acme', sources);
+  await runner.run(projection);
+  const url = `${path('bob')}/facts/linked`;
+  expect((await get(url)).json()).toMatchObject({ sources: [{ ...sources[0], status: 'available' }] });
+  await append('conversation-source', 'participant.removed', {
+    conversationId: 'source', participantId: 'bob', removedBy: 'owner',
+  }, false);
+  expect((await get(url)).json()).toMatchObject({ sources: [{ status: 'unavailable' }] });
 });
 it('refuses grants for outsiders, inactive assistants and unapplied revocations', async function revoke() {
   const scopeId = memoryScopeId('acme', 'assistant_notes', 'shared');
