@@ -14,6 +14,7 @@ interface CaptureWorkspace {
   setReply(status: number): void;
   denyFeedRead(): void;
   setMessageStatus(status: number): void;
+  setStopResponse(response: Promise<Response>): void;
   confirmPendingMessage(): void;
   rows: Record<string, unknown>[];
 }
@@ -32,6 +33,7 @@ async function createCaptureWorkspace(
   let denyMessages = false;
   let messageStatus = 200;
   let messageRecorded = false;
+  let stopResponse: Promise<Response> | undefined;
   const initialConversation = { conversationId: 'chat', assistantId: 'assistant', assistantKind,
     payingGroupId: assistantKind === 'team' ? 'opaque-sales' : undefined,
     createdBy: 'me', createdAt: '2026-10-03T10:00:00Z', status: 'open', mode: 'agent_session' };
@@ -85,7 +87,12 @@ async function createCaptureWorkspace(
     }
     if (pathname.endsWith('/messages')) {
       if (denyMessages) return Promise.resolve(new Response('{}', { status: 403 }));
-      if (messageStatus === 0) return Promise.reject(new TypeError('Network lost'));
+      if (init?.method === 'POST' && isStopRequestBody(init.body) && stopResponse) {
+        return stopResponse;
+      }
+      if (messageStatus === 0) {
+        return Promise.reject(new TypeError('Network lost'));
+      }
       if (messageStatus !== 200) {
         return Promise.resolve(new Response('{}', { status: messageStatus }));
       }
@@ -122,7 +129,15 @@ async function createCaptureWorkspace(
     denyFeedRead() { denyMessages = true; },
     confirmPendingMessage() { messageRecorded = true; },
     setMessageStatus(status) { messageStatus = status; },
+    setStopResponse(response) { stopResponse = response; },
   };
+}
+
+function isStopRequestBody(body: BodyInit | null | undefined): boolean {
+  if (typeof body !== 'string') return false;
+  const parsed: unknown = JSON.parse(body);
+  const request = z.record(z.string(), z.unknown()).safeParse(parsed);
+  return request.success && typeof request.data['stopTurnId'] === 'string';
 }
 
 function screenshotRow(position: number): Record<string, unknown> {
@@ -652,12 +667,13 @@ function runningToolRows(): Record<string, unknown>[] {
 function sendConversationRow(
   socket: SocketLike,
   row: Record<string, unknown>,
+  conversationId = 'chat',
 ): void {
   const position = Number(row['position']);
   const message = {
     version: 1,
     topic: 'conversation',
-    conversationId: 'chat',
+    conversationId,
     type: 'event',
     position,
     generation: 1,
@@ -796,6 +812,137 @@ it('shows stopping until the server ends the turn and keeps later tool reports',
   capture.fixture.destroy();
 });
 
+it('shows Stop not confirmed after a queued cancellation timeout without ending the turn', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ], [], undefined, 'starting');
+  vi.useFakeTimers();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    await chat.stop();
+    const stopRequested = { id: 'stop-requested', position: 3,
+      type: 'agent.turn_stop_requested', time: '2026-10-04T10:00:02Z',
+      data: { turnId: 'message' } };
+    sendConversationRow(capture.socket, stopRequested);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    capture.fixture.detectChanges();
+
+    expect(chat.turns().at(-1)?.state).toBe('working');
+    expect(capture.root.textContent).toContain('Stop not confirmed');
+    expect(capture.root.textContent).not.toContain('Stopped · partial reply kept');
+    expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
+
+    const ended = { id: 'turn-ended', position: 4, type: 'agent.turn_failed',
+      time: '2026-10-04T10:00:05Z', data: { turnId: 'message' } };
+    sendConversationRow(capture.socket, ended);
+    capture.fixture.detectChanges();
+    expect(chat.turns().at(-1)?.state).toBe('stopped');
+    expect(capture.root.textContent).toContain('Stopped · partial reply kept');
+    expect(capture.root.textContent).not.toContain('Stop not confirmed');
+  } finally {
+    vi.useRealTimers();
+    capture.fixture.destroy();
+  }
+});
+
+it('restores Stop when the stop request was not saved', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ]);
+  capture.setMessageStatus(409);
+  const chat = capture.fixture.componentInstance['chat'];
+
+  await chat.stop();
+  capture.fixture.detectChanges();
+
+  expect(capture.postBodies.filter(isStopBody)).toHaveLength(3);
+  expect(chat.turns().at(-1)?.state).toBe('working');
+  expect(capture.root.textContent).toContain('Stop not confirmed');
+  expect(capture.root.querySelector('oc-chat-composer .stop')).not.toBeNull();
+  const firstStopId = stopCommandId(capture.postBodies.filter(isStopBody)[0]);
+  expect(capture.calls).toContain(`GET /api/conversations/chat/changes/${firstStopId}`);
+
+  await chat.stop();
+  const stopIds = capture.postBodies.filter(isStopBody).map(stopCommandId);
+  expect(stopIds).toHaveLength(6);
+  expect(new Set(stopIds).size).toBe(2);
+  capture.fixture.destroy();
+});
+
+it('does not restore Stopping when the stop reply arrives after its timeout', async () => {
+  const capture = await createCaptureWorkspace([
+    { id: 'message', position: 1, type: 'message.posted',
+      time: '2026-10-04T10:00:00Z', data: { text: 'Read the order', authorId: 'me' } },
+    { id: 'delta', position: 2, type: 'agent.message_delta',
+      time: '2026-10-04T10:00:01Z',
+      data: { turnId: 'message', messageId: 'reply', text: 'Working' } },
+  ]);
+  let resolveStopResponse: (response: Response) => void = () => undefined;
+  const delayedStopResponse = new Promise<Response>(resolve => {
+    resolveStopResponse = resolve;
+  });
+  capture.setStopResponse(delayedStopResponse);
+  vi.useFakeTimers();
+  try {
+    const chat = capture.fixture.componentInstance['chat'];
+    const stopRequest = chat.stop();
+    await vi.advanceTimersByTimeAsync(10_000);
+    capture.fixture.detectChanges();
+    expect(capture.root.textContent).toContain('Stop not confirmed');
+
+    resolveStopResponse(new Response('{"status":"appended"}'));
+    await stopRequest;
+    capture.fixture.detectChanges();
+
+    expect(chat.turns().at(-1)?.state).toBe('working');
+    expect(capture.root.textContent).toContain('Stop not confirmed');
+    expect(capture.root.textContent).not.toContain('Stopping…');
+  } finally {
+    vi.useRealTimers();
+    capture.fixture.destroy();
+  }
+});
+
+it('keeps replacement subscription replay quiet until its ready message', async () => {
+  const capture = await createCaptureWorkspace();
+  const chat = capture.fixture.componentInstance['chat'];
+  sendConversationReady(capture.socket);
+  await capture.fixture.whenStable();
+  expect(chat['conversationReady']).toBe(true);
+
+  chat.newSession();
+  const sent = await chat.send('Start a session');
+  expect(sent).toBe(true);
+  const conversationId = chat.selected();
+  const messageBody = capture.postBodies.find(isMessageBody);
+  if (!messageBody) throw new Error('Missing sent message command');
+  const messageId = messageBody.id;
+  const replayedStart = { id: 'replacement-start', position: 1,
+    type: 'agent.tool_call_started', time: '2026-10-04T10:01:00Z',
+    data: { turnId: messageId, callId: 'tool-call-1', serverId: 'fixture-erp',
+      toolName: 'read_order' } };
+  capture.socket.onmessage?.(new MessageEvent('message', {
+    data: JSON.stringify({ version: 1, topic: 'conversation', conversationId,
+      type: 'row', position: 1, generation: 1, row: replayedStart }),
+  }));
+  await capture.fixture.whenStable();
+
+  expect(chat.announcement()).toBe('');
+  sendConversationReady(capture.socket, conversationId, 1);
+  await capture.fixture.whenStable();
+  expect(chat.announcement()).toBe('');
+  capture.fixture.destroy();
+});
+
 it('announces each live tool transition once and stays quiet during history replay', async () => {
   const rows = [
     { id: 'message', position: 1, type: 'message.posted',
@@ -905,17 +1052,37 @@ it('does not announce tool rows replayed before the socket is ready', async () =
   capture.fixture.destroy();
 });
 
-function sendConversationReady(socket: SocketLike): void {
+function sendConversationReady(
+  socket: SocketLike,
+  conversationId = 'chat',
+  position = 2,
+): void {
   const message = {
     version: 1,
     topic: 'conversation',
-    conversationId: 'chat',
+    conversationId,
     type: 'ready',
-    position: 2,
+    position,
     generation: 1,
     computerState: 'ready',
   };
   socket.onmessage?.(new MessageEvent('message', { data: JSON.stringify(message) }));
+}
+
+function isStopBody(value: unknown): boolean {
+  const body = z.record(z.string(), z.unknown()).safeParse(value);
+  return body.success && typeof body.data['stopTurnId'] === 'string';
+}
+
+function stopCommandId(value: unknown): string {
+  const body = z.object({ id: z.string() }).parse(value);
+  return body.id;
+}
+
+function isMessageBody(value: unknown): value is { id: string; text: string } {
+  const body = z.record(z.string(), z.unknown()).safeParse(value);
+  return body.success && typeof body.data['id'] === 'string'
+    && typeof body.data['text'] === 'string';
 }
 
 it('announces one recovery after the socket reconnects and its conversation is ready', async () => {

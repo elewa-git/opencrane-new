@@ -28,6 +28,7 @@ const sceneFrames = {
   'tool-activity-running': ['WRK-02'],
   'tool-activity-completed': ['WRK-03'],
   'tool-activity-long-name': ['WRK-02'],
+  'stop-not-confirmed': [],
   'activity-jump': ['WRK-07'],
   reconnected: ['WRK-22'],
 };
@@ -128,6 +129,7 @@ async function captureScene(browser, scene, width, motion) {
   if (scene === 'tool-activity-running') scenario = 'governed-tool-running';
   if (scene === 'tool-activity-completed') scenario = 'governed-tool-completed';
   if (scene === 'tool-activity-long-name') scenario = 'governed-tool-long-name';
+  if (scene === 'stop-not-confirmed') scenario = 'stop-not-confirmed';
   if (scene === 'approval-step-up') cards = [{ ...approvalCard(0), stepUp: true }];
   if (scene === 'approval-terminal') {
     cards = [
@@ -139,7 +141,7 @@ async function captureScene(browser, scene, width, motion) {
     ];
   }
   if (scene === 'tool-details' || scene === 'activity-jump' || scene === 'reconnected'
-    || scene.startsWith('tool-activity-')) {
+    || scene.startsWith('tool-activity-') || scene === 'stop-not-confirmed') {
     cards = undefined;
   }
   const { page, chat } = await openPage(browser, width, motion, scenario, cards, postResponseForScene(scene));
@@ -231,6 +233,22 @@ async function captureScene(browser, scene, width, motion) {
       assert.equal(await reconnectLine.count(), 1);
       assert(await page.evaluate(isActiveElement, activeBefore));
       await activeBefore.dispose();
+    } else if (scene === 'stop-not-confirmed') {
+      await page.clock.install();
+      const stopButton = page.locator('oc-chat-composer button.stop');
+      await stopButton.waitFor();
+      const stopReply = page.waitForResponse(response => {
+        const request = response.request();
+        return request.method() === 'POST'
+          && request.url().endsWith('/messages')
+          && typeof request.postDataJSON().stopTurnId === 'string';
+      });
+      await stopButton.click();
+      await stopReply;
+      await page.clock.fastForward(10_000);
+      await page.getByText('Stop not confirmed. The agent may still be working.').waitFor();
+      assert(await page.locator('oc-chat-composer button.stop').isVisible());
+      assert.equal(await page.getByText('Stopped · partial reply kept').count(), 0);
     }
     if (width < 700) await checkPhoneTargets(page, scene);
     const approvalText = await page.locator('oc-approval-cards').textContent();
@@ -440,7 +458,7 @@ try {
     'approval-requested', 'approval-details', 'approval-submitting',
     'approval-step-up', 'approval-terminal', 'tool-activity-running',
     'tool-activity-completed', 'tool-activity-long-name', 'tool-details',
-    'activity-jump', 'reconnected',
+    'activity-jump', 'reconnected', 'stop-not-confirmed',
   ];
   for (const scene of scenes) {
     for (const width of widths) {
@@ -465,7 +483,7 @@ try {
     environment: 'Built Angular assets; Chromium; intercepted fixtures; no live governed turn',
     frames: framesForAllCaptures(captureFiles),
     checks: [
-      '11 scenes captured at 1280, 390 and 320 pixels with both motion settings',
+      '12 scenes captured at 1280, 390 and 320 pixels with both motion settings',
       'Running and completed governed tool calls match WRK-02 and WRK-03',
       'A 200-character tool name wraps inside the transcript at every width',
       'No horizontal overflow in any capture',
@@ -477,6 +495,7 @@ try {
       'Tool and approval drawers open by keyboard and return focus after Escape',
       'No approval or tool details button offers retry wording',
       'The existing empty conversation still shows No messages yet',
+      'Stop timeout keeps the turn active, offers Stop again and never claims it ended',
     ],
   };
   await writeFile(`${output}/visual.json`, `${JSON.stringify(result, null, 2)}\n`);

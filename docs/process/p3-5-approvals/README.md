@@ -75,6 +75,14 @@ available. The reconnect line sits at the left and does not sit above a pending
 card. Folded cards do not show a decision time. Their wording names the viewer
 when the viewer asked for the approval and says “the requester” for anyone else.
 
+The Stop status is also captured at desktop and phone widths. If the server has
+not reported that a turn ended after ten seconds, the workspace says “Stop not
+confirmed”, keeps the turn active and offers Stop again.
+
+| State | 1280px | 390px |
+| --- | --- | --- |
+| Stop not confirmed | [Desktop capture](stop-not-confirmed-1280-no-preference.png) | [Phone capture](stop-not-confirmed-390-no-preference.png) |
+
 ## Checks
 
 The captures use sample data. They do not prove a live tool action with real approvals.
@@ -86,10 +94,10 @@ checks.
 | Lint | PASS | `nice -n 10 npm run lint`; 14 existing max-lines warnings. |
 | Web typecheck | PASS | `nice -n 10 npm run typecheck -w apps/web`. |
 | Root tests | NOT RUN | The requested checks excluded the full root suite. |
-| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 40 files, 607 tests. |
+| Web tests | PASS | `nice -n 10 npm run test -w apps/web -- --watch=false`; 40 files, 614 tests. |
 | Event catalogue | PASS | `nice -n 10 npm run check:events`; 96 event types agree. |
 | Web build | PASS | `nice -n 10 npm run build -w apps/web`; existing CSS budget and CommonJS warnings. |
-| Approval visuals | PASS | `nice -n 10 npm run visual:p3-5-approvals`; 82 captures at 1280, 390 and 320 pixels with both motion settings. Includes a 200-character tool name. |
+| Approval visuals | PASS | `nice -n 10 node scripts/check-p3-5-approvals.mjs`; 88 captures at 1280, 390 and 320 pixels with both motion settings. Includes a 200-character tool name and Stop timeout. |
 | F2 overlays | NOT RUN | Not part of the requested review checks. |
 | F5 workspace | PASS | `nice -n 10 npm run visual:f5-workspace`; 18 captures. |
 | Chat browser | PASS | `nice -n 10 npm run visual:chat`; keyboard, focus, phone, streaming and reconnect checks. |

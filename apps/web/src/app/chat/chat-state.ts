@@ -7,6 +7,7 @@ export interface Turn {
   tools: ToolActivityRecord[];
   files: string[]; budgetStop?: 'budget_exhausted'; screenshotRejected?: true;
   reason?: string; executionMode?: 'restricted' | 'memory_free';
+  stopRequested?: true;
 }
 
 export function turnContent(turn: Turn): string {
@@ -33,6 +34,10 @@ export function conversationStatus(state: Turn['state'] | undefined): ChatConver
 
 export function isActiveTurn(turn: Turn): boolean {
   return turn.author === 'agent' && (turn.state === 'working' || turn.state === 'stopping');
+}
+
+export function isBudgetStop(row: ChatRow): boolean {
+  return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
 }
 
 export interface ChatAttachment {
@@ -90,7 +95,12 @@ export function toolActivityResultLabel(record: ToolActivityRecord): string {
 }
 
 /** Build turns from saved rows. A stop request waits for a report that ends the turn. */
-export function transcript(rows: ChatRow[], memberId: string, stoppingTurnId = ''): Turn[] {
+export function transcript(
+  rows: ChatRow[],
+  memberId: string,
+  stoppingTurnId = '',
+  stopNotConfirmedTurnId = '',
+): Turn[] {
   const turns: Turn[] = [], agents = new Map<string, Turn>(), messages = new Map<string, Map<string, string>>();
   const seen = new Set<string>();
   const lostOutput = new Set<string>();
@@ -108,7 +118,7 @@ export function transcript(rows: ChatRow[], memberId: string, stoppingTurnId = '
     const turn = agents.get(data.turnId ?? '');
     if (!turn || turn.state === 'stopped') continue;
     if (row.type === 'agent.turn_stop_requested') {
-      turn.state = 'stopping';
+      recordStopRequest(turn, stopNotConfirmedTurnId);
       continue;
     }
     if (row.type === 'decision.recorded' && data.reason === 'budget_exhausted') {
@@ -118,6 +128,11 @@ export function transcript(rows: ChatRow[], memberId: string, stoppingTurnId = '
   }
   markStoppingTurn(turns, stoppingTurnId);
   return turns;
+}
+
+function recordStopRequest(turn: Turn, stopNotConfirmedTurnId: string): void {
+  turn.stopRequested = true;
+  turn.state = turn.id === stopNotConfirmedTurnId ? 'working' : 'stopping';
 }
 
 function addStandaloneTurn(row: ChatRow, memberId: string, turns: Turn[]): boolean {
@@ -164,7 +179,7 @@ function updateTurnOutcome(turn: Turn, row: ChatRow, lostOutput: Set<string>): v
     return;
   }
   if (row.type === 'agent.turn_failed') {
-    turn.state = turn.state === 'stopping' ? 'stopped' : 'failed';
+    turn.state = turn.stopRequested || turn.state === 'stopping' ? 'stopped' : 'failed';
     turn.endedAt = row.time;
     markRunningCallsUnconfirmed(turn);
     if (row.data.reason) turn.reason = row.data.reason;

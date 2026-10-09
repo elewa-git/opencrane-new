@@ -1,10 +1,11 @@
 import { sendUpload } from './upload';
+import { toolTransitionAnnouncement } from './chat-announcement';
 import { Injectable, computed, effect, inject, signal, type OnDestroy } from '@angular/core';
 import { z } from 'zod';
 import { sessionSlug, chatContextSchema, chatFeedSchema, chatListSchema, chatRowSchema, type ChatRow, type ChatConversation, type ServerMessage } from '@opencrane/protocol';
 import type { ComputerState, MemoryAdmission } from '@opencrane/protocol';
 import { WebSocketService } from '../core/websocket.service';
-import { conversationStatus, isActiveTurn, transcript, uploadedFile } from './chat-state';
+import { conversationStatus, isActiveTurn, isBudgetStop, transcript, uploadedFile } from './chat-state';
 import { shortTime } from './file-presentation';
 
 class ReadFailure extends Error {
@@ -37,6 +38,9 @@ export class ChatSession implements OnDestroy {
   readonly waiting = computed(() => this.queued() ? 'queued' : this.active() && this.computer() !== 'ready' ? 'starting' : this.selected() && !this.connected() && !this.loading() ? 'reconnecting' : '');
   readonly busy = signal(false);
   private readonly stoppingTurnId = signal('');
+  private readonly stopNotConfirmedTurnId = signal('');
+  private stopConfirmationTimer: ReturnType<typeof setTimeout> | undefined;
+  private stopAttempt = 0;
   readonly error = signal('');
   readonly announcement = signal('');
   readonly reconnectedAt = signal('');
@@ -44,7 +48,8 @@ export class ChatSession implements OnDestroy {
   readonly queued = signal(false);
   readonly connected = this.socket.isConnected;
   readonly turns = computed(() =>
-    transcript(this.rows(), this.memberId(), this.stoppingTurnId()));
+    transcript(this.rows(), this.memberId(), this.stoppingTurnId(),
+      this.stopNotConfirmedTurnId()));
   readonly selectedConversation = computed(() =>
     this.conversations().find(row => row.conversationId === this.selected()));
   readonly teamSession = computed(this.isTeamSession.bind(this));
@@ -118,6 +123,8 @@ export class ChatSession implements OnDestroy {
     this.sawReconnecting = false;
     this.conversationReady = false;
     this.stoppingTurnId.set('');
+    this.stopNotConfirmedTurnId.set('');
+    this.clearStopConfirmationTimer();
     this.reconnectCount = 0;
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
@@ -149,6 +156,8 @@ export class ChatSession implements OnDestroy {
     if (this.busy() || this.pending || this.uploading()) { this.error.set('↻ Retry the queued message before changing sessions.'); return; }
     ++this.revision; this.sawReconnecting = false; this.reconnectCount = 0;
     this.stoppingTurnId.set('');
+    this.stopNotConfirmedTurnId.set('');
+    this.clearStopConfirmationTimer();
     this.reconnectedAt.set('');
     this.clearUpload(); this.socket.disconnect(); this.announcement.set('');
     this.selected.set(''); this.rows.set([]); this.error.set('');
@@ -200,15 +209,53 @@ export class ChatSession implements OnDestroy {
   async stop(): Promise<void> {
     const turn = this.active();
     if (!turn || turn.state !== 'working' || this.busy()) return;
+    const attempt = ++this.stopAttempt;
+    const commandId = `stop-${turn.id}-${crypto.randomUUID()}`;
+    this.clearStopConfirmationTimer();
     this.stoppingTurnId.set(turn.id);
+    this.stopNotConfirmedTurnId.set('');
     this.busy.set(true); this.error.set('');
+    this.startStopConfirmationTimer(turn.id, attempt);
     try {
-      await this.request(`/api/conversations/${this.selected()}/messages`, { id: `stop-${turn.id}`, stopTurnId: turn.id });
+      await this.request(`/api/conversations/${this.selected()}/messages`, {
+        id: commandId,
+        stopTurnId: turn.id,
+      });
+      if (attempt !== this.stopAttempt) return;
       await this.catchUp(this.selected(), this.revision);
-    } catch (error) { this.fail(error); }
-    finally { this.busy.set(false); }
+    } catch {
+      try {
+        const recorded = await this.pendingWasRecorded({
+          id: commandId,
+          conversationId: this.selected(),
+        });
+        if (!recorded && attempt === this.stopAttempt) {
+          this.error.set('');
+          this.markStopNotConfirmed(turn.id);
+          return;
+        }
+        if (recorded && attempt === this.stopAttempt) {
+          await this.catchUp(this.selected(), this.revision);
+        }
+      } catch (statusError) {
+        this.fail(statusError);
+      }
+    }
+    finally {
+      if (attempt === this.stopAttempt) this.busy.set(false);
+    }
   }
-  ngOnDestroy(): void { this.transfer?.abort(); ++this.revision; this.subscription.unsubscribe(); this.socket.disconnect(); }
+  ngOnDestroy(): void {
+    this.transfer?.abort();
+    this.clearStopConfirmationTimer();
+    ++this.revision;
+    this.subscription.unsubscribe();
+    this.socket.disconnect();
+  }
+
+  stopNotConfirmedFor(turnId: string): boolean {
+    return this.stopNotConfirmedTurnId() === turnId;
+  }
 
   private async list(): Promise<void> {
     const value = chatListSchema.parse(await this.request('/api/conversations'));
@@ -257,6 +304,7 @@ export class ChatSession implements OnDestroy {
       this.sawReconnecting = true;
       this.conversationReady = false;
     }
+    if (state === 'connecting') this.conversationReady = false;
     if (state !== 'open') {
       return;
     }
@@ -400,7 +448,33 @@ export class ChatSession implements OnDestroy {
     this.position = row.position;
     this.rows.update(rows => [...rows.filter(existing => existing.id !== row.id), row].sort((a, b) => (a.position || Infinity) - (b.position || Infinity)));
     this.updateSummary();
+    this.clearStopStateWhenTurnEnds(row);
     return true;
+  }
+  private startStopConfirmationTimer(turnId: string, attempt: number): void {
+    this.stopConfirmationTimer = setTimeout(() => {
+      if (attempt !== this.stopAttempt || this.stoppingTurnId() !== turnId) return;
+      this.markStopNotConfirmed(turnId);
+    }, 10_000);
+  }
+  private markStopNotConfirmed(turnId: string): void {
+    this.clearStopConfirmationTimer();
+    this.stoppingTurnId.set('');
+    this.stopNotConfirmedTurnId.set(turnId);
+  }
+  private clearStopConfirmationTimer(): void {
+    if (this.stopConfirmationTimer) clearTimeout(this.stopConfirmationTimer);
+    this.stopConfirmationTimer = undefined;
+  }
+  private clearStopStateWhenTurnEnds(row: ChatRow): void {
+    if (row.type !== 'agent.turn_completed' && row.type !== 'agent.turn_failed'
+      && row.type !== 'agent.output_lost') return;
+    const turnId = row.data['turnId'];
+    if (typeof turnId !== 'string') return;
+    if (this.stoppingTurnId() !== turnId && this.stopNotConfirmedTurnId() !== turnId) return;
+    this.clearStopConfirmationTimer();
+    this.stoppingTurnId.set('');
+    this.stopNotConfirmedTurnId.set('');
   }
   private updateSummary(): void {
     const turns = this.turns(), latest = turns.filter(turn => turn.author === 'agent').at(-1);
@@ -432,84 +506,6 @@ function isSelectedConversation(
   row: ReturnType<typeof chatListSchema.parse>['rows'][number],
 ): boolean {
   return row.conversationId === conversationId;
-}
-
-function isBudgetStop(row: ChatRow): boolean {
-  return row.type === 'decision.recorded' && row.data['reason'] === 'budget_exhausted';
-}
-
-function toolTransitionAnnouncement(
-  added: boolean,
-  conversationReady: boolean,
-  row: ChatRow,
-  turns: ReturnType<typeof transcript>,
-): string {
-  if (!added || !conversationReady) return '';
-  if (row.type !== 'agent.tool_call_started' && row.type !== 'agent.tool_call_finished') {
-    return '';
-  }
-  const activeTurn = findActiveAgentTurn(turns, row.data.turnId);
-  if (!activeTurn) return '';
-  const toolName = findToolName(activeTurn, row);
-  const callNumber = findToolCallNumber(activeTurn, row.data.callId);
-  if (row.type === 'agent.tool_call_started') {
-    if (callNumber) return `${toolName} call ${callNumber} started.`;
-    return `${toolName} started.`;
-  }
-  if (row.data.status === 'completed') {
-    return finishedToolAnnouncement(toolName, callNumber, 'completed');
-  }
-  if (row.data.status === 'failed') {
-    return finishedToolAnnouncement(toolName, callNumber, 'failed');
-  }
-  return finishedToolAnnouncement(toolName, callNumber, 'finished');
-}
-
-function findActiveAgentTurn(
-  turns: ReturnType<typeof transcript>,
-  turnId: string | undefined,
-): ReturnType<typeof transcript>[number] | undefined {
-  if (!turnId) return undefined;
-  for (const turn of turns) {
-    if (turn.id === turnId && turn.author === 'agent' && isActiveTurn(turn)) {
-      return turn;
-    }
-  }
-  return undefined;
-}
-
-function findToolName(turn: ReturnType<typeof transcript>[number], row: ChatRow): string {
-  if (row.data.toolName) return row.data.toolName;
-  if (!row.data.callId) return 'Tool call';
-  for (const tool of turn.tools) {
-    if (tool.callId === row.data.callId) return tool.label;
-  }
-  return 'Tool call';
-}
-
-function findToolCallNumber(
-  turn: ReturnType<typeof transcript>[number],
-  callId: string | undefined,
-): number | undefined {
-  if (!callId) return undefined;
-  let callNumber = 0;
-  for (const tool of turn.tools) {
-    if (!tool.callId) continue;
-    callNumber += 1;
-    if (tool.callId === callId) return callNumber;
-  }
-  return undefined;
-}
-
-function finishedToolAnnouncement(
-  toolName: string,
-  callNumber: number | undefined,
-  result: 'completed' | 'failed' | 'finished',
-): string {
-  const callLabel = callNumber ? `${toolName} call ${callNumber}` : toolName;
-  if (result === 'completed') return `${callLabel} completed.`;
-  if (result === 'failed') return `${callLabel} failed.`;
-  return `${callLabel} finished without a reported result.`;
 }
 
 function isAgentTurn(turn: ReturnType<typeof transcript>[number]): boolean {

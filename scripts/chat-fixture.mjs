@@ -40,7 +40,9 @@ export async function chatFixture(page, scenario = 'live') {
   } else if (!['draft', 'empty-selected', 'attach', 'no-agent', 'queued', 'private-team-draft'].includes(scenario)) {
     const human = add('message.posted', { text: scenario === 'long-title' ? 'M'.repeat(500) : 'Pull the Q3 board pack together. Focus on the revenue story and flag anything that needs a decision.', authorId: 'me' });
     add('agent.turn_started', { turnId: human.id });
-    if (scenario === 'governed-tool-running') {
+    if (scenario === 'stop-not-confirmed') {
+      add('agent.message_delta', { turnId: human.id, messageId: 'reply', text: 'Still working.' });
+    } else if (scenario === 'governed-tool-running') {
       addGovernedToolStart(add, human.id);
     } else if (scenario === 'governed-tool-long-name') {
       add('agent.tool_call_started', { turnId: human.id, callId: 'tool-call-1',
@@ -108,6 +110,9 @@ export async function chatFixture(page, scenario = 'live') {
       if (command.stopTurnId && stopConflict) { stopConflict = false; return route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ status: 'conflict' }) }); }
       if (command.stopTurnId) {
         add('agent.turn_stop_requested', { turnId: command.stopTurnId });
+        if (scenario === 'stop-not-confirmed') {
+          return fulfil({ status: 'appended', sequence: rows.length });
+        }
         add('agent.turn_failed', { turnId: command.stopTurnId, reason: 'interrupted' });
         return fulfil({ status: 'appended', sequence: rows.length });
       }
