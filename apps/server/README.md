@@ -115,7 +115,9 @@ use it to refuse calls if the tool changes to Ask during the turn.
    The server checks it and records them as the owner.
 3. **An admin prepares an invitation.** The server checks the email input. The person
    is confirmed when they accept; the server does not look them up in Zitadel.
-   An admin can save or renew an email invitation and recover its saved result.
+   An admin can save or renew an email invitation and recover their own saved result.
+   Another admin cannot read that command receipt. Organisation history checks
+   current access and tells browsers and HTTP caches not to save its replies.
    The server finds matching emails in its member table and checks their events.
    Acceptance finds account records in the member table and checks their events.
    It reads newer events too, so delayed background work cannot hide an active account.

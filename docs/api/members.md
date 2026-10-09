@@ -99,8 +99,9 @@ check, the server returns the caller's saved receipt if their command is stored,
 Success returns `{ status: appended, memberId, invitationId, sequence, createdAt,
 expiresAt }`. An exact repeat returns that receipt without writing. A 503 or lost
 reply can follow a stored append. `GET /api/invitations/:memberId/changes/:commandId`
-finds its original receipt, or returns 404 `not_found`. This read requires current
-Owner/Admin events and OpenFGA, checks access once and appends nothing. All replies
+finds only the caller's own original receipt, or returns 404 `not_found`. Another
+admin's command also returns 404. This read requires current Owner/Admin events
+and OpenFGA, checks access once and appends nothing. All replies
 use `Cache-Control: no-store`. Invalid bodies return 400, missing sessions 401,
 access refusals 403 and unavailable dependencies 503.
 
@@ -286,7 +287,8 @@ Changed arguments return `command_id_reused` and append nothing.
 A matching refusal returns `status: refused`, its event reference, time and safe
 reason. A saved invitation always takes precedence. A missing result returns
 404 with `status: not_found` and `commandId`; an earlier request may still arrive.
-The older invitation status route retains its receipt shape.
+The older invitation status route retains its receipt shape and only returns
+commands created by the same human caller.
 
 Trusted create and acceptance refusals can save `member.command_refused` on
 `memberaudit-<memberId>`. Successful commands save only their business event.
@@ -305,6 +307,8 @@ They expose neither that account's email, name nor subject.
 
 `GET /api/org/history` exposes only safe member/invitation ids, operation, role,
 allowlisted reason and event time to an Owner/Admin in the exact organisation.
-The existing audit worker and rebuild restore these records without granting
+Every audit response uses `Cache-Control: no-store`, including refused and
+unavailable responses. Access is checked after the database read, so an admin
+removed during that read receives no history. The existing audit worker and rebuild restore these records without granting
 access or contacting outside services. Invitation lists, intended-person reads,
 invitation read-table rebuilds and acceptance-command status remain follow-up work.

@@ -1385,3 +1385,14 @@ The [approval API](../../docs/api/approvals.md) explains tool failure records an
 
 The [member API](../../docs/api/members.md#invitation-command-status-and-refusal-history)
 records saved invitation results and safe refusal history.
+
+Invitation status routes require the original human caller. The legacy route keeps
+its receipt shape and returns 404 for another admin's command. Audit routes set
+`Cache-Control: no-store` before handling success, refusal and errors.
+
+`test/invitations.test.ts` covers permission denial and outages, unapplied access
+changes, removal during an audit read, reads without writes, refusal recovery
+limits, daily join refusal limits and safe HTTP history after replay.
+`test/member-refusals.test.ts` checks refusal fields, invalid history, the
+10,000-record limit and real NATS read deadlines. Set `PG_TEST_URL` to a
+PostgreSQL service that allows disposable databases for the route tests.
