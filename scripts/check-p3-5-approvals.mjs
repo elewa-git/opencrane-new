@@ -122,6 +122,18 @@ async function checkFocusedOutline(locator) {
   assert.deepEqual(await locator.evaluate(outline), ['2px', 'rgb(10, 132, 151)', '2px']);
 }
 
+function checkApprovalFixture(card, rows) {
+  const requesterMessage = rows.find(row => row.type === 'message.posted'
+    && row.data.authorId === card.requesterId);
+  assert(requesterMessage, 'Approval requester wrote the message bound to this conversation');
+  const turnStart = rows.find(row => row.type === 'agent.turn_started'
+    && row.data.turnId === requesterMessage.id);
+  assert(turnStart, 'Approval request belongs to a started turn');
+  const turnEnded = rows.some(row => row.type === 'agent.turn_completed'
+    && row.data.turnId === turnStart.data.turnId);
+  assert.equal(turnEnded, false, 'Approval request belongs to an open turn');
+}
+
 async function captureScene(browser, scene, width, motion) {
   if (scene === 'approval-terminal' && width < 700) {
     await capturePhoneTerminalStates(browser, width, motion);
@@ -153,6 +165,7 @@ async function captureScene(browser, scene, width, motion) {
   if (scene === 'approval-waiting') scenario = 'approval-context';
   const { page, chat } = await openPage(browser, width, motion, scenario, cards, postResponseForScene(scene));
   try {
+    if (scene === 'approval-waiting') checkApprovalFixture(cards[0], chat.rows());
     if (scene === 'approval-requested') {
       const approval = page.getByRole('region', { name: 'Approval needed' });
       await approval.waitFor();
