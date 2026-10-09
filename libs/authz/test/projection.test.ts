@@ -746,3 +746,30 @@ async function grantAfterRejoinWaitsForCurrentMembership() {
 }
 it('keeps a current grant when membership projection is still catching up after a rejoin',
   grantAfterRejoinWaitsForCurrentMembership);
+
+async function legacyRemovalKeepsOnlyLaterGrant() {
+  const nats = await natsFixture();
+  try {
+    const subject = grantStream('model', 'gpt-6-luna');
+    const assistant = savedPermission('earlier-assistant-grant', 'grant.given', subject, {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice',
+      granteeKind: 'assistant', grantedBy: 'bob' });
+    const removed = savedPermission('old-legacy-removal', 'grant.revoked', subject, {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice', revokedBy: 'bob' });
+    const person = savedPermission('later-person-grant', 'grant.given', subject, {
+      resourceType: 'model', resourceId: 'gpt-6-luna', granteeId: 'alice',
+      granteeKind: 'member', grantedBy: 'bob' });
+    await nats.seed([assistant, removed, person]);
+    const projection = memberAuthorisation(await createStore(fga.apiUrl, 'test'), nats.store);
+    await apply(projection, [assistant, person, removed]);
+    expect(await projection.use('person', 'alice', 'model', 'gpt-6-luna'))
+      .toMatchObject({ allowed: true });
+    expect(await projection.use('assistant', 'alice', 'model', 'gpt-6-luna'))
+      .toMatchObject({ allowed: false });
+    expect(await projection.applied(removed.id)).toBe(true);
+  } finally {
+    await nats.close();
+  }
+}
+it('an old grant removal without a kind keeps a later grant and removes earlier grants',
+  legacyRemovalKeepsOnlyLaterGrant);
