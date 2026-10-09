@@ -30,7 +30,7 @@ const projection = memoryProjection({ decrypt });
 function decrypt(identity: MemoryIdentity, encrypted: { ciphertext: string; keyId: string }) {
   return keys.decrypt(identity, encrypted);
 }
-async function govern(target: Awaited<ReturnType<typeof fixture>>) {
+async function govern(target: Awaited<ReturnType<typeof fixture>>, recordedGrants = true) {
   await target.append('mcp-memory', 'mcp.server_registered', { serverId: 'memory',
     kind: 'hosted', locator: `registry.example.test/opencrane/server@sha256:${'a'.repeat(64)}`,
     registeredBy: 'alice' });
@@ -43,9 +43,11 @@ async function govern(target: Awaited<ReturnType<typeof fixture>>) {
   await mode(target, 'allow');
   for (const granteeKind of ['member', 'assistant']) {
     const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
-    const grant = await target.append(grantStream('mcp_server', 'memory'), 'grant.given', {
-      resourceType: 'mcp_server', resourceId: 'memory', granteeKind, granteeId,
-      grantedBy: 'alice' });
+    const subject = grantStream('mcp_server', 'memory');
+    const fields = { resourceType: 'mcp_server', resourceId: 'memory',
+      granteeKind, granteeId, grantedBy: 'alice' };
+    let grant = envelope('test', subject, 'grant.given', fields);
+    if (recordedGrants) grant = await target.append(subject, 'grant.given', fields);
     await target.auth.handler.handle(grant, target.db);
   }
 }
@@ -170,7 +172,7 @@ it('requires recorded member and assistant grants despite leftover OpenFGA permi
     try {
       await target.stopDispatch();
       await target.runtime.stop();
-      await govern(target);
+      await govern(target, false);
       backend = await isolatedBackend(target);
       // Leave real permissions without matching events, as after an incorrect rebuild.
       await grantMemory(target, 'member', 'alice', false);
@@ -186,6 +188,23 @@ it('requires recorded member and assistant grants despite leftover OpenFGA permi
       await grantMemory(target, 'assistant', 'assistant');
       await assertRecallRefused(target, backend);
       await grantMemory(target, 'member', 'alice');
+      await assertRecallRefused(target, backend);
+      for (const granteeKind of ['member', 'assistant']) {
+        const granteeId = granteeKind === 'member' ? 'alice' : 'assistant';
+        const fields = { resourceType: 'mcp_server', resourceId: 'memory',
+          granteeKind, granteeId, grantedBy: 'alice' };
+        const grant = await target.append(grantStream('mcp_server', 'memory'),
+          'grant.given', fields);
+        await target.auth.handler.handle(grant, target.db);
+        if (granteeKind === 'member') await assertRecallRefused(target, backend);
+      }
+      const revoked = await target.append(grantStream('memory_read', scopeId),
+        'grant.revoked', { resourceType: 'memory_read', resourceId: scopeId,
+          granteeId: 'assistant', revokedBy: 'alice' });
+      await target.auth.handler.handle(revoked, target.db);
+      await grantMemory(target, 'assistant', 'assistant', false);
+      await assertRecallRefused(target, backend);
+      await grantMemory(target, 'assistant', 'assistant');
       const allowed = await target.call(headers, call, route);
       expect(allowed.status, allowed.text).toBe(200);
     } finally {
@@ -333,13 +352,13 @@ const wrongIdentities = [
   { silo: 'other' }, { computer: 'other' }, { generation: 2 }, { requester: 'bob' },
   { conversation: 'other' }, { assistant: 'other' }, { turn: 'missing' },
 ];
-async function refusesBackendIdentity(overrides: Record<string, unknown>) {
-  const token = await signedRecall(setup, overrides);
+async function refusesBackendIdentity(overrides: Record<string, unknown>, body = call) {
+  const token = await signedRecall(setup, overrides, body);
   const database = vi.spyOn(setup.db, 'query');
   try {
     const requestHeaders = { ...headers, 'x-memory-context': token };
     const requestOptions = { method: 'POST' as const, url: route,
-      headers: requestHeaders, payload: call };
+      headers: requestHeaders, payload: body };
     const response = await app.inject(requestOptions);
     expect(response.statusCode).toBe(403);
     expect(database).not.toHaveBeenCalled();
@@ -371,15 +390,18 @@ it('refuses a signed body whose thread differs from the recorded start',
 it('refuses a start saved by another process and a computer that is no longer ready',
   async function computerState() {
     const fields = { assistantId: 'assistant', computerId: 'computer',
-      conversationId: 'conversation', turnId: 'forged', threadId: 'thread',
+      conversationId: 'conversation', turnId: 'forged', threadId: 'forged-thread',
       requesterId: 'alice', task: 'chat_turn', payingGroupId: 'personal-default',
       executionMode: 'restricted' };
     const start = envelope('test', 'computer-assistant', 'computer.turn_started', fields);
     start.source = 'opencrane-computer';
     await setup.nats.seed([start]);
-    await refusesBackendIdentity({ turn: 'forged' });
-    await setup.append('computer-assistant', 'computer.lost',
-      { assistantId: 'assistant', computerId: 'computer' });
+    const forgedMetadata = { ...metadata, threadId: 'forged-thread' };
+    const forgedBody = { ...call, params: { ...call.params, _meta: forgedMetadata } };
+    await refusesBackendIdentity({ turn: 'forged', thread: 'forged-thread' }, forgedBody);
+    await setup.append('computer-assistant', 'computer.claimed',
+      { assistantId: 'assistant', computerId: 'computer', generation: 1,
+        tokenId: 'token:initial' });
     try {
       await assertRecallRefused(setup, app);
     } finally {
@@ -431,14 +453,14 @@ it.each(revokedGrants)('refuses a pending backend $resourceType revoke for $gran
 it('refuses when signing or verification is unavailable without reading facts',
   async function unavailableKeys() {
     const noSigner = await startDecision(setup.actor, setup.identity, setup.binding);
-    const originalDecisionUrl = setup.options.decisionUrl;
     const database = vi.spyOn(setup.db, 'query');
     try {
-      setup.options.decisionUrl = noSigner.url;
-      await setup.restart();
-      capability = '';
-      expect((await setup.call(headers, call, route)).status).toBe(403);
-      expect(capability).toBe('');
+      const decisionHeaders = { ...setup.headers, ...headers };
+      const decisionRequest = { method: 'POST', headers: decisionHeaders,
+        body: JSON.stringify(call) };
+      const decision = await fetch(`${noSigner.url}/authorize${route}`, decisionRequest);
+      expect(decision.status).toBe(403);
+      expect(decision.headers.get('x-memory-context')).toBeNull();
       const identity = { ...setup.identity, jwks: { keys: [] } };
       const memory = { silo: 'test', store: setup.nats.store, db: setup.db,
         binding: setup.binding, feed: { memberId }, identity };
@@ -455,8 +477,6 @@ it('refuses when signing or verification is unavailable without reading facts',
       expect(database).not.toHaveBeenCalled();
     } finally {
       database.mockRestore();
-      setup.options.decisionUrl = originalDecisionUrl;
-      await setup.restart();
       await noSigner.close();
     }
   });
@@ -464,13 +484,14 @@ it('refuses when signing or verification is unavailable without reading facts',
 const admissionChanges = ['grant', 'computer', 'file', 'deadline'];
 async function changesDuringAdmission(change: string) {
   const subject = grantStream('memory_read', scopeId);
-  const originalHead = setup.nats.store.head;
+  const originalHead = setup.nats.store.head.bind(setup.nats.store);
   let injected = false;
+  let revoked: Awaited<ReturnType<typeof setup.append>> | undefined;
   async function readHead(watched?: string, deadline?: number) {
     if (watched === subject && !injected) {
       injected = true;
       if (change === 'grant') {
-        await setup.append(subject, 'grant.revoked', { resourceType: 'memory_read',
+        revoked = await setup.append(subject, 'grant.revoked', { resourceType: 'memory_read',
           resourceId: scopeId, granteeId: 'alice', revokedBy: 'alice' });
       } else if (change === 'computer') {
         await setup.append('computer-assistant', 'computer.lost',
@@ -478,7 +499,8 @@ async function changesDuringAdmission(change: string) {
       } else if (change === 'file') {
         await setup.append('conversation-conversation', 'file.uploaded', {
           conversationId: 'conversation', fileId: 'file', uploadedBy: 'alice',
-          name: 'notes.txt', sizeBytes: 1, mediaType: 'text/plain' });
+          name: 'notes.txt', size: 1, sha256: 'a'.repeat(64), mime: 'text/plain',
+          objectKey: 'test/conversation/file' });
       } else {
         await pause(2100);
       }
@@ -499,7 +521,10 @@ async function changesDuringAdmission(change: string) {
   } finally {
     reading.mockRestore();
     database.mockRestore();
-    if (change === 'grant') await grantMemory(setup, 'member', 'alice');
+    if (revoked) {
+      await setup.auth.handler.handle(revoked, setup.db);
+      await grantMemory(setup, 'member', 'alice');
+    }
     if (change === 'computer') {
       await setup.append('computer-assistant', 'computer.ready',
         { assistantId: 'assistant', computerId: 'computer', generation: 1, podUid: 'pod' });
@@ -552,7 +577,6 @@ it('recalls through the thread proxy, real gateway and backend with replaced cre
       const model = await setup.call({ 'x-memory-context': 'poisoned-memory-header' });
       expect(model.status, model.text).toBe(200);
       expect(setup.providerHeaders()).not.toContain('x-memory-context');
-      await setup.settled();
     } finally {
       await local.close();
     }
