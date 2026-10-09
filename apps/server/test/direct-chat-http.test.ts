@@ -983,3 +983,33 @@ it('keeps a lost creation reply tied to the reviewed audience for a member witho
 function participantIdAt(_value: unknown, index: number) {
   return `person-${index}`;
 }
+
+async function refusesForeignAndUnknownGroupMembers() {
+  const fixture = await directFixture();
+  try {
+    const foreignMember = envelope('other', 'member-foreign', 'member.joined', {
+      memberId: 'foreign', invitationId: 'invite-foreign', email: 'foreign@example.test',
+      displayName: 'Foreign member', role: 'member',
+    });
+    await fixture.nats.seed([foreignMember]);
+    await fixture.append('member-carol', 'member.removed', {
+      memberId: 'carol', removedBy: 'alice',
+    }, false);
+    for (const memberId of ['missing', 'foreign', 'carol']) {
+      const conversationId = `refused-${memberId}`;
+      const payload = { id: conversationId, conversationId, mode: 'group',
+        participantIds: ['alice', memberId] };
+      const request = { method: 'POST' as const, url: '/api/conversations',
+        headers: fixture.headers(), payload };
+      const response = await fixture.app.inject(request);
+      const saved = await history(fixture.nats.store, `conversation-${conversationId}`, 'test');
+      expect(saved).toEqual([]);
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toEqual({ status: 'refused' });
+    }
+  } finally {
+    await fixture.close();
+  }
+}
+it('gives foreign, unknown and removed group members the same generic refusal',
+  refusesForeignAndUnknownGroupMembers, 120_000);
