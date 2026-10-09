@@ -306,6 +306,7 @@ function firstEventArgument(value: unknown) {
 }
 
 async function* failedRead(): AsyncGenerator<never> {
+  yield* [];
   await Promise.resolve();
   throw new Error('Read unavailable');
 }
@@ -364,7 +365,7 @@ async function leavesQuietEntriesUnread() {
   await poll(approvals);
   expect(head.mock.calls).toEqual([[]]);
   // Check positions once a new event appears, even if it concerns another stream.
-  await append('unrelated', 'fixture.changed', {});
+  await append('fixture-unrelated', 'fixture.changed', {});
   head.mockClear();
   await poll(approvals);
   expect(head).toHaveBeenCalledWith(`approval-${approvalId}`, expect.any(Number));
