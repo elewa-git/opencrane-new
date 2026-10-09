@@ -72,7 +72,9 @@ The final check watches only member, assistant, team and write-grant streams. Ea
 makes one conditional append at the scope position read from history. A PostgreSQL advisory
 lock keeps attempts for the same command together across servers. Memory commands wait at
 most 100 ms for this lock; a busy lock returns 503. Work inside the lock uses its own
-checked-out database client. No conversation content is read inside the lock.
+checked-out database client. It reads only scope events newer than the earlier history,
+with a 100 ms deadline. Refusal checks use the same read limit and the remaining write
+deadline. No conversation content is read inside the lock.
 
 The full encrypted event size is checked before a revision key is created. Changed saved
 inputs return 409. Lost replies return `outcome: "unknown"`; clients check
@@ -81,13 +83,20 @@ this principal's original command, after projection catch-up, including for a no
 without a read grant. Receipts contain references and audience, never text.
 
 The existing 0700 key directory also holds temporary command records. Their fingerprint
-leaves text out. A resolved record is deleted. Unknown outcomes keep their key until the
-append deadline passes. A later status request or recovery check reads the scope stream
-again, then reports the saved result or a definite `failed` outcome. Failed commands keep
-only the destroyed-key marker and cannot append again. An unseen command stays unknown.
+leaves text out. A resolved record is deleted. Each new record stores the expected scope
+position used by its conditional append. A timeout alone cannot prove failure: NATS can
+still accept a delayed publish. After the append window ends, status, retry and recovery
+checks release an unknown key only when the scope has advanced beyond that expected
+position without saving the command. That proves the delayed append cannot succeed.
+An unchanged scope stays unknown and keeps its key. Older unknown records without the
+expected position also keep their keys, even if the scope advances. Prepared records
+can be removed because no append was issued. Failed commands keep only the destroyed-key
+marker and cannot append again. An unseen command stays unknown.
 Startup launches recovery in the background. Recovery reads directory entries gradually,
-yields after every 16 records and limits each scope read to one second. A damaged record,
-busy lock or event-store outage leaves the record for a later check and never stops startup.
+yields after every 16 records and limits each scope read to one second. It reads history
+before taking a database connection, then checks that the record has not changed under
+the command lock. A damaged record, busy lock or event-store outage leaves the record
+for a later check and never stops startup.
 Keep all servers for a silo on the same database and key directory.
 Fact detail is in the companion draft. Fresh-install memory journeys and native turns remain NOT RUN.
 

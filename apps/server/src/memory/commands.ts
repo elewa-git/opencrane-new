@@ -3,7 +3,7 @@ import { opendir } from 'node:fs/promises';
 import { setImmediate } from 'node:timers/promises';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { authorityFence, history, readActiveMember } from '@opencrane/models';
+import { authorityFence, readActiveMember } from '@opencrane/models';
 import { memoryKeys, memoryIdentity } from '@opencrane/projections';
 import { memoryTextSchema, memoryWrittenDataSchema, memoryWrittenEventSchema,
   } from '@opencrane/events';
@@ -28,9 +28,16 @@ function commandReference(silo: string, scopeId: string, requester: string, comm
   return hash.digest('hex');
 }
 async function commandHistory(options: MemoryOptions, scopeId: string,
-  requester: string, commandId: string, deadline = performance.now() + 10_000) {
-  const rows = await history(options.store, `scope-${scopeId}`, options.silo,
-    deadline);
+  requester: string, commandId: string, deadline = performance.now() + 10_000,
+  knownRows: StoredEvent[] = []) {
+  const rows = [...knownRows];
+  const fromSequence = (rows.at(-1)?.sequence ?? 0) + 1;
+  for await (const row of options.store.readStream(`scope-${scopeId}`, fromSequence, deadline)) {
+    if (row.event.silo !== options.silo) {
+      throw new Error('Wrong silo');
+    }
+    rows.push(row);
+  }
   function matches(row: StoredEvent) {
     return row.event.commandId === commandId && row.event.principal?.kind === 'human' &&
       row.event.principal.id === requester;
@@ -152,7 +159,10 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
   const keys = memoryKeys(options.keyDirectory!);
   const identity = { silo: options.silo, ...scope, memoryId: reference, revision: 1 };
   const journal = commandJournal(options.keyDirectory!, reference);
-  const state = await commandHistory(options, scope.scopeId, requester, input.commandId);
+  // Read only changes since the earlier history, and release the database client promptly
+  // if NATS is slow. Full scope replay must not occupy the shared connection pool.
+  const state = await commandHistory(options, scope.scopeId, requester, input.commandId,
+    performance.now() + 100, rows);
   // Read content first. Watch only streams that decide permission during the two-second check.
   const fresh = await authorityFence(options.store, performance.now(), [`member-${requester}`]);
   const checks = memoryAccessChecks(options, requester, fresh);
@@ -175,7 +185,7 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
     throw new MemoryConflict();
   }
   if (pending) {
-    if (pending.stage === 'unknown' && Date.now() <= pending.appendUntil) {
+    if (!definiteFailure(pending, state.rows)) {
       return { outcome: 'unknown', memoryId: reference };
     }
     keys.delete(identity);
@@ -187,6 +197,7 @@ async function rememberLocked(options: MemoryOptions, requester: string, scope: 
   }
   const entry = { identity, requester, commandId: input.commandId, inputDigest,
     appendUntil: Date.now() + Math.max(0, fresh.deadline - performance.now()),
+    expectedSequence: rows.at(-1)?.sequence ?? 0,
     stage: 'prepared' as const };
   return appendPrepared(options, input, entry, rows, fresh, access.audience);
 }
@@ -233,7 +244,9 @@ async function appendPrepared(options: MemoryOptions, input: Input,
       return savedReceipt({ event, sequence: result.sequence }, audience);
     }
     // Check the original command again before destroying any key after a definite refusal.
-    const reconciled = await commandHistory(options, scope.scopeId, requester, input.commandId);
+    const readDeadline = Math.min(fresh.deadline, performance.now() + 100);
+    const reconciled = await commandHistory(options, scope.scopeId, requester, input.commandId,
+      readDeadline, rows);
     if (reconciled.original) {
       journal.remove();
       return originalReceipt(reconciled.original, keys, input, audience);
@@ -263,10 +276,7 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
   if (!state.original) {
     const entry = journal.read();
     if (entry && (entry.stage !== 'unknown' || Date.now() > entry.appendUntil) && options.db.lock) {
-      async function reconcile() {
-        await reconcileCommand(options, memoryId);
-      }
-      await options.db.lock(`memory-command:${memoryId}`, reconcile, { timeoutMs: 100 });
+      await reconcileCommand(options, memoryId);
     }
     if (keys.status(identity) === 'destroyed') {
       return { outcome: 'failed', memoryId };
@@ -280,11 +290,32 @@ export async function readCommand(options: MemoryOptions, requester: string, sco
   return savedReceipt(state.original, audience);
 }
 
+type JournalEntry = NonNullable<ReturnType<ReturnType<typeof commandJournal>['read']>>;
+
+function definiteFailure(entry: JournalEntry, rows: StoredEvent[]) {
+  if (entry.stage !== 'unknown') {
+    return true;
+  }
+  if (Date.now() <= entry.appendUntil || entry.expectedSequence === undefined) {
+    return false;
+  }
+  // Keep the key until another scope event makes the delayed conditional append impossible.
+  // Treat older records without an expected position as unknown, however long they wait.
+  const latestSequence = rows.at(-1)?.sequence ?? 0;
+  return latestSequence > entry.expectedSequence;
+}
+
 async function reconcileCommand(options: MemoryOptions, reference: string) {
   const journal = commandJournal(options.keyDirectory!, reference);
   const entry = journal.read();
   if (!entry) {
-    rmSync(`${options.keyDirectory!}/command-${reference}.json-pending`, { force: true });
+    function removeOrphan() {
+      if (journal.read() === null) {
+        rmSync(`${options.keyDirectory!}/command-${reference}.json-pending`, { force: true });
+      }
+      return Promise.resolve();
+    }
+    await options.db.lock!(`memory-command:${reference}`, removeOrphan, { timeoutMs: 100 });
     return;
   }
   if (entry.identity.silo !== options.silo) {
@@ -300,10 +331,22 @@ async function reconcileCommand(options: MemoryOptions, reference: string) {
   }
   const state = await commandHistory(options, entry.identity.scopeId,
     entry.requester, entry.commandId, performance.now() + 1000);
-  if (!state.original) {
-    memoryKeys(options.keyDirectory!).delete(entry.identity);
+  function finishRecovery() {
+    const current = journal.read();
+    // Ignore a read taken while another server was changing this command's record.
+    if (current === null || JSON.stringify(current) !== JSON.stringify(entry)) {
+      return Promise.resolve();
+    }
+    if (!state.original) {
+      if (!definiteFailure(current, state.rows)) {
+        return Promise.resolve();
+      }
+      memoryKeys(options.keyDirectory!).delete(current.identity);
+    }
+    journal.remove();
+    return Promise.resolve();
   }
-  journal.remove();
+  await options.db.lock!(`memory-command:${reference}`, finishRecovery, { timeoutMs: 100 });
 }
 
 export async function reconcileCommands(options: MemoryOptions) {
@@ -318,11 +361,8 @@ export async function reconcileCommands(options: MemoryOptions) {
       continue;
     }
     const reference = match[1]!;
-    async function reconcile() {
-      await reconcileCommand(options, reference);
-    }
     try {
-      await options.db.lock(`memory-command:${reference}`, reconcile, { timeoutMs: 100 });
+      await reconcileCommand(options, reference);
     } catch {
       // Keep the record for a later check. One damaged file or outage must not stop startup.
     }

@@ -5,7 +5,9 @@ import { memoryRevisionIdentitySchema } from '@opencrane/events';
 
 const entrySchema = z.strictObject({ identity: memoryRevisionIdentitySchema,
   requester: z.string(), commandId: z.string(), inputDigest: z.string(),
-  appendUntil: z.number().optional(), stage: z.enum(['prepared', 'unknown', 'failed']) });
+  appendUntil: z.number().optional(),
+  expectedSequence: z.number().int().nonnegative().optional(),
+  stage: z.enum(['prepared', 'unknown', 'failed']) });
 function sync(path: string) {
   const descriptor = openSync(path, 'r');
   try {

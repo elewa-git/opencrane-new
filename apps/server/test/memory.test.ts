@@ -1,5 +1,6 @@
 import { mkdtemp, rm, readFile, writeFile, copyFile, access } from 'node:fs/promises';
 import { z } from 'zod';
+import { Pool } from 'pg';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { encodeSession } from '@opencrane/auth';
 import { createStore, grantStream, memberAuthorisation } from '@opencrane/authz';
@@ -1331,6 +1332,8 @@ it('keeps no text or text hash in a journal and removes resolved records', async
   const digest = fingerprint.digest('hex');
   expect(entry.inputDigest).not.toBe(digest);
   await new Promise(function appendWindow(resolve) { setTimeout(resolve, 2100); });
+  await write('bob', 'person', 'journal-competing-write');
+  await runner.run(projection);
   await reconcileCommands(memory);
   expect((await get(`${path('bob')}/changes/journal-private`)).json())
     .toMatchObject({ outcome: 'failed' });
@@ -1463,3 +1466,205 @@ it('resolves an unknown saved command across restart without resending', async f
     expect(appendSpy).not.toHaveBeenCalled();
   } finally { appendSpy.mockRestore(); }
 });
+
+it.each(['status', 'retry', 'recovery'] as const)(
+  'keeps a delayed append readable after %s checks an expired unknown command',
+  async function delayedCommit(action) {
+    const original = nats.store.append.bind(nats.store);
+    let delayedCommand: Parameters<typeof original>[0] | undefined;
+    function delay(command: Parameters<typeof original>[0]) {
+      delayedCommand = command;
+      const result = { status: 'unavailable' as const, cause: new Error('Publish reply timed out') };
+      return Promise.resolve(result);
+    }
+    const commandId = `delayed-${action}`;
+    const spy = vi.spyOn(nats.store, 'append').mockImplementation(delay);
+    let response;
+    try {
+      const extra = { text: `Delayed statement ${action}` };
+      response = await remember('bob', 'person', commandId, 'bob', extra);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(response.json()).toMatchObject({ outcome: 'unknown' });
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const journalPath = `${directory}/command-${memoryId}.json`;
+    const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+    const entry = z.record(z.string(), z.unknown()).parse(raw);
+    entry['appendUntil'] = 0;
+    await writeFile(journalPath, JSON.stringify(entry));
+    await runner.run(projection);
+    if (action === 'status') {
+      expect((await get(`${path('bob')}/changes/${commandId}`)).json())
+        .toMatchObject({ outcome: 'unknown' });
+    } else if (action === 'retry') {
+      const extra = { text: `Delayed statement ${action}` };
+      expect((await remember('bob', 'person', commandId, 'bob', extra)).json())
+        .toMatchObject({ outcome: 'unknown' });
+    } else {
+      await reconcileCommands(memory);
+    }
+    expect(delayedCommand).toBeDefined();
+    // Commit the publish already waiting at NATS, after the caller's timeout has elapsed.
+    const { deadline: _deadline, ...serverCommand } = delayedCommand!;
+    expect((await original(serverCommand)).status).toBe('appended');
+    await runner.run(projection);
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json())
+      .toMatchObject({ outcome: 'saved', memoryId });
+    const listed = await get(`${path('bob')}/facts?q=Delayed%20statement%20${action}`);
+    expect(listed.json()).toMatchObject({ facts: [
+      { memoryId, text: `Delayed statement ${action}` },
+    ] });
+    await expect(access(journalPath)).rejects.toThrow();
+  });
+
+
+it('keeps database queries available during distinct slow scope reads', async function slowScopes() {
+  const assistants = ['pool-first', 'pool-second'];
+  const scopes = new Set<string>();
+  for (const assistantId of assistants) {
+    await append(`assistant-${assistantId}`, 'assistant.created',
+      { assistantId, kind: 'personal', ownerId: 'bob' });
+    await writeGrant(assistantId);
+    scopes.add(`scope-${memoryScopeId('acme', 'assistant_notes', assistantId)}`);
+  }
+  await runner.run(computers);
+  const poolOptions = { ...storage.queue.options, max: 2, connectionTimeoutMillis: 300 };
+  const pool = new Pool(poolOptions);
+  const limitedMemory = { ...memory, db: pgDb(pool) };
+  const previousApp = app;
+  app = buildServer(config, { memory: limitedMemory });
+  await app.ready();
+  const original = nats.store.readStream.bind(nats.store);
+  const reads = new Map<string, number>();
+  let delayed = 0;
+  function noop() {}
+  let notifyBoth: () => void = noop;
+  function notifyWhenBothRead(resolve: () => void) {
+    notifyBoth = resolve;
+  }
+  const bothDelayed = new Promise<void>(notifyWhenBothRead);
+  let releaseReads: () => void = noop;
+  function releaseWhenFinished(resolve: () => void) {
+    releaseReads = resolve;
+  }
+  const released = new Promise<void>(releaseWhenFinished);
+  async function* slow(subject: string, from?: number, deadline = Infinity) {
+    if (scopes.has(subject)) {
+      const count = (reads.get(subject) ?? 0) + 1;
+      reads.set(subject, count);
+      if (count > 1) {
+        delayed++;
+        if (delayed === 2) {
+          notifyBoth();
+        }
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        function startDeadline(_resolve: (value: never) => void, reject: (error: Error) => void) {
+          function fail() {
+            reject(new Error('Scope read deadline elapsed'));
+          }
+          timer = setTimeout(fail, Math.max(0, deadline - performance.now()));
+        }
+        const expired = new Promise<never>(startDeadline);
+        try {
+          await Promise.race([released, expired]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+    }
+    yield* original(subject, from, deadline);
+  }
+  const spy = vi.spyOn(nats.store, 'readStream').mockImplementation(slow);
+  function send(assistantId: string) {
+    return remember(assistantId, 'assistant_notes', `slow-${assistantId}`);
+  }
+  const requests = assistants.map(send);
+  try {
+    await bothDelayed;
+    const result = await pool.query('SELECT 1');
+    expect(result.rows).toHaveLength(1);
+  } finally {
+    releaseReads();
+    await Promise.all(requests);
+    spy.mockRestore();
+    await app.close();
+    app = previousApp;
+    await pool.end();
+  }
+});
+
+
+it.each(['status', 'retry', 'recovery'] as const)(
+  'reports failure through %s only after another scope write and the append window',
+  async function provenFailure(action) {
+    const commandId = `proven-failure-${action}`;
+    const unavailable = { status: 'unavailable' as const, cause: new Error('Reply lost') };
+    const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+    let response;
+    try {
+      response = await remember('bob', 'person', commandId);
+    } finally {
+      spy.mockRestore();
+    }
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const journalPath = `${directory}/command-${memoryId}.json`;
+    const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+    const entry = z.record(z.string(), z.unknown()).parse(raw);
+    expect(entry['expectedSequence']).toEqual(expect.any(Number));
+    entry['appendUntil'] = Date.now() + 60_000;
+    await writeFile(journalPath, JSON.stringify(entry));
+    await write('bob', 'person', `competing-${action}`);
+    await runner.run(projection);
+    async function check() {
+      if (action === 'status') {
+        return get(`${path('bob')}/changes/${commandId}`);
+      }
+      if (action === 'retry') {
+        return remember('bob', 'person', commandId);
+      }
+      await reconcileCommands(memory);
+      return get(`${path('bob')}/changes/${commandId}`);
+    }
+    expect((await check()).json()).toMatchObject({ outcome: 'unknown' });
+    entry['appendUntil'] = 0;
+    await writeFile(journalPath, JSON.stringify(entry));
+    expect((await check()).json()).toMatchObject({ outcome: 'failed', memoryId });
+    await expect(access(journalPath)).rejects.toThrow();
+    const appendSpy = vi.spyOn(nats.store, 'append');
+    try {
+      expect((await remember('bob', 'person', commandId)).json())
+        .toMatchObject({ outcome: 'failed', memoryId });
+      expect(appendSpy).not.toHaveBeenCalled();
+    } finally {
+      appendSpy.mockRestore();
+    }
+  });
+
+it('keeps older unknown keys when their expected scope position was not recorded',
+  async function olderUnknown() {
+    const commandId = 'older-unknown';
+    const unavailable = { status: 'unavailable' as const, cause: new Error('Reply lost') };
+    const spy = vi.spyOn(nats.store, 'append').mockResolvedValue(unavailable);
+    let response;
+    try {
+      response = await remember('bob', 'person', commandId);
+    } finally {
+      spy.mockRestore();
+    }
+    const memoryId = response.json<{ memoryId: string }>().memoryId;
+    const journalPath = `${directory}/command-${memoryId}.json`;
+    const raw: unknown = JSON.parse(await readFile(journalPath, 'utf8'));
+    const entry = z.record(z.string(), z.unknown()).parse(raw);
+    delete entry['expectedSequence'];
+    entry['appendUntil'] = 0;
+    await writeFile(journalPath, JSON.stringify(entry));
+    await write('bob', 'person', 'older-unknown-competitor');
+    await runner.run(projection);
+    await reconcileCommands(memory);
+    expect((await get(`${path('bob')}/changes/${commandId}`)).json())
+      .toMatchObject({ outcome: 'unknown' });
+    expect((await remember('bob', 'person', commandId)).json())
+      .toMatchObject({ outcome: 'unknown', memoryId });
+    await expect(access(journalPath)).resolves.toBeUndefined();
+  });
