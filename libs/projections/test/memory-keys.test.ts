@@ -484,7 +484,10 @@ async function invalidMemoryAppend(kind: string) {
     const result = await fixture.store.append({ event: invalid, expectedSequence: 0 });
     expect(result).toEqual({ status: 'rejected', reason: 'invalid_event' });
     expect(await fixture.reader.head()).toBe(0);
-    const valid = { ...original, data: { ...original.data, dependsOn: [dependency] } };
+    const laterDependency = { ...dependency, revision: 2 };
+    const dataWithDependencies = { ...original.data,
+      dependsOn: [dependency, laterDependency] };
+    const valid = { ...original, data: dataWithDependencies };
     expect((await fixture.store.append({ event: valid, expectedSequence: 0 })).status)
       .toBe('appended');
   } finally {
