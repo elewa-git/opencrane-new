@@ -767,3 +767,16 @@ and revocations remain unchanged. Tests are `actor.test.ts`, `loss-backfill.test
 and `grants-backfill.test.ts`; settlement history remains covered by `reconcile.test.ts`.
 
 Provider bindings read history before the two-second authority check and make one category-conditional append with `historyChecked`. Moves require both creation receipts, manage permissions and reviewed revisions. The default reaction never replaces a recorded choice or pause. Ordinary-call activation remains unavailable.
+
+Binding commands find saved ids across actors on the same provider. Actor or request
+changes return a conflict. After append, `readEventAt` checks the stored event before
+returning its receipt, including duplicate recovery. The automatic default calls the
+private binding command with `system:seed-provider-default`; public command schemas
+reject its colon. Only automatic selection follows the first verified provider.
+Explicit initial choices can use any eligible connection.
+
+`apps/server/test/provider-binding-guards.test.ts` covers concurrent same-id requests,
+actor reuse, the reserved reaction id, explicit initial defaults, independent source
+and target access checks, key references, registry support, access rechecks, history
+ordering and changing reads, pause preservation, replay and status reads after role loss.
+It uses disposable NATS and OpenFGA plus PostgreSQL with `PG_TEST_URL` set.

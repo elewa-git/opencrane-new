@@ -13,7 +13,9 @@ import { providerDefaultHandler, providerSecretRef } from '@opencrane/models';
 import { buildServer } from '../src/server.ts';
 import { testAuthConfig } from './support/test-auth-config.ts';
 
-const config = testAuthConfig({ expectedOrgId: 'org-acme' });
+const configOptions = { expectedOrgId: 'org-acme' };
+const config = testAuthConfig(configOptions);
+const loggerOptions = { level: 'silent' as const };
 let nats: Awaited<ReturnType<typeof natsFixture>>;
 let fga: Awaited<ReturnType<typeof openfga>>;
 let dbs: Awaited<ReturnType<typeof databases>>;
@@ -47,15 +49,17 @@ async function append(subject: string, type: string, data: unknown,
 async function connection(providerId: string, enabled = ['gpt-6.1-sol'],
   provider = 'openai', createCommand?: string) {
   const common = { providerId, changedBy: 'owner' };
-  const created = await append(`provider-${providerId}`, 'provider.created',
-    { ...common, revision: 1, provider, name: providerId }, createCommand);
+  const creation = { ...common, revision: 1, provider, name: providerId };
+  const created = await append(`provider-${providerId}`, 'provider.created', creation, createCommand);
   const keyCommand = `key-${++counter}`;
-  await append(`provider-${providerId}`, 'provider.key_saved', { ...common, revision: 2,
-    secretRef: providerSecretRef('acme', providerId, keyCommand) }, keyCommand);
-  await append(`provider-${providerId}`, 'provider.verification_recorded',
-    { ...common, revision: 2, kind: 'reachability', attemptId: 'check', outcome: 'pass' });
-  const trigger = await append(`provider-${providerId}`, 'provider.models_selected',
-    { ...common, revision: 3, models: enabled });
+  const key = { ...common, revision: 2,
+    secretRef: providerSecretRef('acme', providerId, keyCommand) };
+  await append(`provider-${providerId}`, 'provider.key_saved', key, keyCommand);
+  const verification = { ...common, revision: 2, kind: 'reachability',
+    attemptId: 'check', outcome: 'pass' };
+  await append(`provider-${providerId}`, 'provider.verification_recorded', verification);
+  const selection = { ...common, revision: 3, models: enabled };
+  const trigger = await append(`provider-${providerId}`, 'provider.models_selected', selection);
   return { created, trigger };
 }
 async function initialise() {
@@ -64,19 +68,24 @@ async function initialise() {
   auth = memberAuthorisation(binding);
   for (const memberId of ['owner', 'admin']) {
     const role = memberId === 'owner' ? 'owner' : 'admin';
-    await append(`member-${memberId}`, 'member.joined', { memberId, role,
-      email: `${memberId}@example.test`, displayName: memberId, invitationId: 'invite' });
+    const membership = { memberId, role, email: `${memberId}@example.test`,
+      displayName: memberId, invitationId: 'invite' };
+    await append(`member-${memberId}`, 'member.joined', membership);
   }
   for (const assistantId of ['one', 'two']) {
-    await append(`assistant-${assistantId}`, 'assistant.created',
-      { assistantId, ownerId: 'owner', kind: 'personal' });
+    const creation = { assistantId, ownerId: 'owner', kind: 'personal' };
+    await append(`assistant-${assistantId}`, 'assistant.created', creation);
   }
   function memberId(_silo: string, _issuer: string, sub: string) {
     return Promise.resolve(sub);
   }
   const options = { silo: 'acme', binding, store: nats.store, db: pgDb(dbs.queue),
     feed: { memberId } };
-  app = buildServer(config, { providers: options });
+  const serverOptions = { providers: options };
+  app = buildServer(config, serverOptions);
+  const runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader,
+    createLogger('binding-guards-setup', loggerOptions));
+  await runner.initialise(providers);
 }
 beforeEach(initialise, 30_000);
 async function closeFixture() {
@@ -104,7 +113,9 @@ async function input(overrides: Record<string, unknown> = {}) {
 async function storedBindings(providerId: string) {
   const rows = [];
   for await (const row of nats.store.readStream(`provider-${providerId}`)) {
-    if (row.event.type === 'provider.model_binding_set') rows.push(row);
+    if (row.event.type === 'provider.model_binding_set') {
+      rows.push(row);
+    }
   }
   return rows;
 }
@@ -124,15 +135,20 @@ async function concurrentRetries(changed: boolean) {
   const barrier = Promise.withResolvers<void>();
   async function waitForBoth(command: AppendCommand) {
     arrivals++;
-    if (arrivals === 2) barrier.resolve();
+    if (arrivals === 2) {
+      barrier.resolve();
+    }
     await barrier.promise;
     return appendOriginal(command);
   }
-  const spy = vi.spyOn(nats.store, 'append').mockImplementation(waitForBoth);
+  const spy = vi.spyOn(nats.store, 'append');
+  spy.mockImplementation(waitForBoth);
   const pending = [request('POST', 'primary', first), request('POST', 'primary', second)];
   const responses = await Promise.all(pending);
   spy.mockRestore();
-  function status(response: (typeof responses)[number]) { return response.statusCode; }
+  function status(response: (typeof responses)[number]) {
+    return response.statusCode;
+  }
   const statuses = responses.map(status);
   statuses.sort();
   expect(statuses).toEqual(changed ? [200, 409] : [200, 200]);
@@ -141,13 +157,20 @@ async function concurrentRetries(changed: boolean) {
   const row = saved[0]!;
   for (const response of responses) {
     if (response.statusCode === 200) {
-      expect(response.json()).toMatchObject({ changeId: row.event.id, sequence: row.sequence });
+      const receipt = { changeId: row.event.id, sequence: row.sequence };
+      expect(response.json()).toMatchObject(receipt);
     }
   }
-  if (!changed) expect(responses[0]?.json()).toEqual(responses[1]?.json());
+  if (!changed) {
+    expect(responses[0]?.json()).toEqual(responses[1]?.json());
+  }
 }
-async function identicalRetries() { await concurrentRetries(false); }
-async function changedRetries() { await concurrentRetries(true); }
+async function identicalRetries() {
+  await concurrentRetries(false);
+}
+async function changedRetries() {
+  await concurrentRetries(true);
+}
 it('returns the saved event for concurrent identical retries behind an append barrier', identicalRetries);
 it('refuses changed dependants using the same command id behind an append barrier', changedRetries);
 async function actorReuse() {
@@ -156,11 +179,13 @@ async function actorReuse() {
   const saved = await request('POST', 'primary', command);
   expect(saved.statusCode).toBe(200);
   const before = await nats.store.head();
-  const reused = await input({ commandId: command.commandId,
-    expectedBindingSequence: saved.json<{ sequence: number }>().sequence });
+  const overrides = { commandId: command.commandId,
+    expectedBindingSequence: saved.json<{ sequence: number }>().sequence };
+  const reused = await input(overrides);
   expect((await request('POST', 'primary', reused, 'admin')).statusCode).toBe(409);
   expect(await nats.store.head()).toBe(before);
   const status = await request('GET', 'primary', undefined, 'admin', `changes/${command.commandId}`);
+  expect(status.statusCode).toBe(200);
   expect(status.json()).toMatchObject(saved.json());
 }
 it('refuses another administrator reusing a saved command id', actorReuse);
@@ -171,7 +196,8 @@ async function internalIdentity() {
   const saved = await storedBindings('primary');
   expect(saved).toHaveLength(1);
   const reservedId = saved[0]!.event.commandId;
-  const command = await input({ commandId: reservedId });
+  const overrides = { commandId: reservedId };
+  const command = await input(overrides);
   await refused('primary', command, 400);
   const before = await nats.store.head();
   await handler.handle(trigger, pgDb(dbs.queue));
@@ -184,7 +210,8 @@ async function explicitInitialDefault() {
   await providerDefaultHandler(nats.store, binding).handle(trigger, pgDb(dbs.queue));
   expect(await storedBindings('first')).toHaveLength(0);
   expect(await storedBindings('second')).toHaveLength(0);
-  const command = await input({ kind: 'silo_default', dependantId: 'acme' });
+  const overrides = { kind: 'silo_default', dependantId: 'acme' };
+  const command = await input(overrides);
   expect((await request('POST', 'second', command)).statusCode).toBe(200);
   const before = await nats.store.head();
   await providerDefaultHandler(nats.store, binding).handle(trigger, pgDb(dbs.queue));
@@ -193,8 +220,11 @@ async function explicitInitialDefault() {
 it('allows an explicit initial default on a later verified provider with the enabled chat model',
   explicitInitialDefault);
 
-function objectId(type: string, id: string) {
-  return `${type}:${Buffer.from(JSON.stringify(['acme', id])).toString('base64url')}`;
+function objectId(type: string, ...ids: string[]) {
+  const identity = JSON.stringify(['acme', ...ids]);
+  const bytes = Buffer.from(identity);
+  const encoded = bytes.toString('base64url');
+  return `${type}:${encoded}`;
 }
 async function removeTuple(user: string, relation: string, object: string) {
   const tuple = { user, relation, object };
@@ -205,7 +235,7 @@ async function removeTuple(user: string, relation: string, object: string) {
   expect(response.status).toBe(200);
 }
 async function removeManage(providerId: string) {
-  const silo = `silo:${Buffer.from(JSON.stringify(['acme'])).toString('base64url')}`;
+  const silo = objectId('silo');
   await removeTuple(silo, 'silo', objectId('provider', providerId));
   expect((await auth.provider('owner', providerId, 'manage')).allowed).toBe(false);
   expect((await auth.check('owner', 'admin')).allowed).toBe(true);
@@ -216,7 +246,7 @@ async function sourceGuard(receipt: boolean) {
   const saved = await request('POST', 'source', await input());
   expect(saved.statusCode).toBe(200);
   if (receipt) {
-    const silo = `silo:${Buffer.from(JSON.stringify(['acme'])).toString('base64url')}`;
+    const silo = objectId('silo');
     await removeTuple(silo, 'applied', objectId('projection_event', source.created.id));
     expect(await auth.applied(source.created.id)).toBe(false);
     expect((await auth.provider('owner', 'source', 'manage')).allowed).toBe(true);
@@ -225,12 +255,17 @@ async function sourceGuard(receipt: boolean) {
     expect(await auth.applied(source.created.id)).toBe(true);
   }
   expect((await auth.provider('owner', 'target', 'manage')).allowed).toBe(true);
-  const move = await input({ expectedSourceRevision: 3,
-    expectedBindingSequence: saved.json<{ sequence: number }>().sequence });
+  const overrides = { expectedSourceRevision: 3,
+    expectedBindingSequence: saved.json<{ sequence: number }>().sequence };
+  const move = await input(overrides);
   await refused('target', move);
 }
-async function sourceManage() { await sourceGuard(false); }
-async function sourceReceipt() { await sourceGuard(true); }
+async function sourceManage() {
+  await sourceGuard(false);
+}
+async function sourceReceipt() {
+  await sourceGuard(true);
+}
 it('checks source management separately from target management on a move', sourceManage);
 it('checks the source creation receipt even when source management allows a move', sourceReceipt);
 async function targetManage() {
@@ -251,19 +286,25 @@ async function wrongKey(commandMismatch: boolean) {
     silo = 'acme';
   }
   const common = { providerId: 'primary', changedBy: 'owner', revision: 4 };
-  await append('provider-primary', 'provider.key_saved', { ...common,
-    secretRef: providerSecretRef(silo, 'primary', referenceCommand) }, commandId);
-  await append('provider-primary', 'provider.verification_recorded', { ...common,
-    kind: 'reachability', attemptId: 'new-check', outcome: 'pass' });
-  await refused('primary', await input({ expectedRevision: 4 }));
+  const key = { ...common, secretRef: providerSecretRef(silo, 'primary', referenceCommand) };
+  await append('provider-primary', 'provider.key_saved', key, commandId);
+  const verification = { ...common, kind: 'reachability', attemptId: 'new-check', outcome: 'pass' };
+  await append('provider-primary', 'provider.verification_recorded', verification);
+  const overrides = { expectedRevision: 4 };
+  await refused('primary', await input(overrides));
 }
-async function foreignKey() { await wrongKey(false); }
-async function oldKeyCommand() { await wrongKey(true); }
+async function foreignKey() {
+  await wrongKey(false);
+}
+async function oldKeyCommand() {
+  await wrongKey(true);
+}
 it('refuses a key reference belonging to another silo with current verification', foreignKey);
 it('refuses a key reference that disagrees with the last key command', oldKeyCommand);
 async function unsupportedModel(model: string) {
   await connection('primary', [model]);
-  await refused('primary', await input({ model }));
+  const overrides = { model };
+  await refused('primary', await input(overrides));
 }
 it.each(['made-up', 'gpt-5-nano'])('refuses enabled unknown or retired registry model %s',
   unsupportedModel);
@@ -277,8 +318,9 @@ async function wrongPauseProvider() {
   await connection('target');
   const saved = await request('POST', 'source', await input());
   expect(saved.statusCode).toBe(200);
-  const command = await input({ action: 'pause', model: undefined, expectedSourceRevision: 3,
-    expectedBindingSequence: saved.json<{ sequence: number }>().sequence });
+  const overrides = { action: 'pause', model: undefined, expectedSourceRevision: 3,
+    expectedBindingSequence: saved.json<{ sequence: number }>().sequence };
+  const command = await input(overrides);
   await refused('target', command, 409);
 }
 it('refuses a pause naming a different provider even with both revisions correct', wrongPauseProvider);
@@ -286,7 +328,9 @@ it('refuses a pause naming a different provider even with both revisions correct
 async function finalAuthority(expired: boolean) {
   await connection('primary');
   const command = await input();
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(100);
+  const appendSpy = vi.spyOn(nats.store, 'append');
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockReturnValue(100);
   const original = authorisation.memberAuthorisation;
   function interruptAfterManage(currentBinding: authorisation.Binding) {
     const permissions = original(currentBinding);
@@ -295,19 +339,27 @@ async function finalAuthority(expired: boolean) {
       if (expired) {
         clock.mockReturnValue(2200);
       } else {
-        await append('member-owner', 'member.removed',
-          { memberId: 'owner', removedBy: 'admin' }, undefined, false);
+        const removal = { memberId: 'owner', removedBy: 'admin' };
+        await append('member-owner', 'member.removed', removal, undefined, false);
       }
       return result;
     }
     return { ...permissions, provider };
   }
-  vi.spyOn(authorisation, 'memberAuthorisation').mockImplementation(interruptAfterManage);
+  const authoritySpy = vi.spyOn(authorisation, 'memberAuthorisation');
+  authoritySpy.mockImplementation(interruptAfterManage);
   expect((await request('POST', 'primary', command)).statusCode).toBe(503);
   expect(await storedBindings('primary')).toHaveLength(0);
+  if (expired) {
+    expect(appendSpy).not.toHaveBeenCalled();
+  }
 }
-async function finalExpiry() { await finalAuthority(true); }
-async function finalRevocation() { await finalAuthority(false); }
+async function finalExpiry() {
+  await finalAuthority(true);
+}
+async function finalRevocation() {
+  await finalAuthority(false);
+}
 it('rechecks authority expiry after provider permission and before append', finalExpiry);
 it('rechecks authority after revocation following provider permission', finalRevocation);
 async function historyOrder() {
@@ -315,10 +367,13 @@ async function historyOrder() {
   const command = await input();
   const readOriginal = nats.store.readStream.bind(nats.store);
   const headOriginal = nats.store.head.bind(nats.store);
-  const clock = vi.spyOn(performance, 'now').mockReturnValue(100);
+  const clock = vi.spyOn(performance, 'now');
+  clock.mockReturnValue(100);
   let authorityStarted = false;
   async function head(subject?: string, deadline?: number) {
-    if (subject === undefined) authorityStarted = true;
+    if (subject === undefined) {
+      authorityStarted = true;
+    }
     return headOriginal(subject, deadline);
   }
   async function* slowHistory(subject: string, from?: number, deadline?: number) {
@@ -328,8 +383,10 @@ async function historyOrder() {
     }
     yield* readOriginal(subject, from, deadline);
   }
-  vi.spyOn(nats.store, 'head').mockImplementation(head);
-  vi.spyOn(nats.store, 'readStream').mockImplementation(slowHistory);
+  const headSpy = vi.spyOn(nats.store, 'head');
+  headSpy.mockImplementation(head);
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementation(slowHistory);
   expect((await request('POST', 'primary', command)).statusCode).toBe(200);
 }
 it('finishes slow provider and assistant histories before starting the access deadline', historyOrder);
@@ -349,32 +406,36 @@ async function reactionEnabled() {
   const before = await nats.store.head();
   await handler.handle(trigger, pgDb(dbs.queue));
   expect(await nats.store.head()).toBe(before);
-  const enabled = await append('provider-first', 'provider.models_selected',
-    { providerId: 'first', changedBy: 'owner', revision: 4, models: ['gpt-6.1-sol'] });
+  const selection = { providerId: 'first', changedBy: 'owner', revision: 4,
+    models: ['gpt-6.1-sol'] };
+  const enabled = await append('provider-first', 'provider.models_selected', selection);
   await handler.handle(enabled, pgDb(dbs.queue));
   expect(await storedBindings('first')).toHaveLength(1);
 }
 it('waits for the first verified provider to enable the chat model', reactionEnabled);
 async function pausedReplay() {
   const { trigger } = await connection('primary');
-  const selected = await input({ kind: 'silo_default', dependantId: 'acme' });
+  const selectedOverrides = { kind: 'silo_default', dependantId: 'acme' };
+  const selected = await input(selectedOverrides);
   const saved = await request('POST', 'primary', selected);
   expect(saved.statusCode).toBe(200);
-  const pause = await input({ kind: 'silo_default', dependantId: 'acme', action: 'pause',
-    model: undefined, expectedBindingSequence: saved.json<{ sequence: number }>().sequence });
+  const pauseOverrides = { kind: 'silo_default', dependantId: 'acme', action: 'pause',
+    model: undefined, expectedBindingSequence: saved.json<{ sequence: number }>().sequence };
+  const pause = await input(pauseOverrides);
   expect((await request('POST', 'primary', pause)).statusCode).toBe(200);
   const before = await nats.store.head();
   await providerDefaultHandler(nats.store, binding).handle(trigger, pgDb(dbs.queue));
   expect(await nats.store.head()).toBe(before);
   const runner = new ProjectionRunner(pgDb(dbs.queue), nats.reader,
-    createLogger('binding-guards', { level: 'silent' }));
+    createLogger('binding-guards', loggerOptions));
   await runner.initialise(providers);
   await runner.run(providers);
   const original = await dbs.queue.query('SELECT * FROM model_bindings');
   expect(original.rows).toHaveLength(1);
   expect(original.rows[0]).toMatchObject({ state: { state: 'paused' } });
+  const replayOptions = { verify: true };
   await rebuildProviderProjection(pgDb(dbs.queue), nats.reader,
-    createLogger('binding-guards-replay', { level: 'silent' }), { verify: true });
+    createLogger('binding-guards-replay', loggerOptions), replayOptions);
   expect((await dbs.queue.query('SELECT * FROM model_bindings')).rows).toEqual(original.rows);
   expect(await nats.store.head()).toBe(before);
 }
@@ -383,9 +444,12 @@ async function historyLag() {
   await connection('primary');
   const readOriginal = nats.store.readStream.bind(nats.store);
   async function* lag(subject: string, from?: number, deadline?: number) {
-    if (subject !== 'assistant-*') yield* readOriginal(subject, from, deadline);
+    if (subject !== 'assistant-*') {
+      yield* readOriginal(subject, from, deadline);
+    }
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(lag);
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementation(lag);
   expect((await request('GET', 'primary')).statusCode).toBe(503);
 }
 it('refuses assistant history behind its checked position', historyLag);
@@ -396,14 +460,15 @@ async function historyChanges(subjectToChange: string) {
     yield* readOriginal(subject, from, deadline);
     if (subject === subjectToChange) {
       if (subject === 'assistant-*') {
-        await append('assistant-new', 'assistant.created',
-          { assistantId: 'new', ownerId: 'owner', kind: 'personal' });
+        const creation = { assistantId: 'new', ownerId: 'owner', kind: 'personal' };
+        await append('assistant-new', 'assistant.created', creation);
       } else {
         await connection('new');
       }
     }
   }
-  vi.spyOn(nats.store, 'readStream').mockImplementation(change);
+  const readSpy = vi.spyOn(nats.store, 'readStream');
+  readSpy.mockImplementation(change);
   expect((await request('GET', 'primary')).statusCode).toBe(503);
 }
 it.each(['assistant-*', 'provider-*'])('refuses dependency history changing during %s reads',
@@ -414,8 +479,9 @@ async function lostStatusAuthority() {
   expect((await request('POST', 'primary', command, 'admin')).statusCode).toBe(200);
   const suffix = `changes/${command.commandId}`;
   expect((await request('GET', 'primary', undefined, 'admin', suffix)).statusCode).toBe(200);
-  await append('member-admin', 'member.role_changed',
-    { memberId: 'admin', previousRole: 'admin', newRole: 'member', changedBy: 'owner' }, undefined, false);
+  const roleChange = { memberId: 'admin', previousRole: 'admin',
+    newRole: 'member', changedBy: 'owner' };
+  await append('member-admin', 'member.role_changed', roleChange, undefined, false);
   expect((await request('GET', 'primary', undefined, 'admin', suffix)).statusCode).toBe(403);
 }
 it('checks current authority on binding status reads after an administrator loses their role',
@@ -424,7 +490,9 @@ async function foldRevision() {
   const { created } = await connection('primary');
   let state = applyProvider(undefined, created, 1);
   for await (const row of nats.store.readStream('provider-primary')) {
-    if (row.event.id !== created.id) state = applyProvider(state, row.event, row.sequence);
+    if (row.event.id !== created.id) {
+      state = applyProvider(state, row.event, row.sequence);
+    }
   }
   const data = { providerId: 'primary', changedBy: 'owner', revision: 2, kind: 'assistant',
     dependantId: 'one', task: 'chat_turn', state: 'active', model: 'gpt-6.1-sol',

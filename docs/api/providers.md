@@ -212,3 +212,10 @@ Its `routines.status` is `absent` after checked empty history, otherwise `unsupp
 `POST` accepts `commandId`, `expectedProviderSequence`, `expectedRevision`, `kind` (`assistant` or `silo_default`), `dependantId`, `task: chat_turn`, `expectedBindingSequence`, and `action: select|pause`.
 Select requires `model`; a move also requires `expectedSourceRevision`. Pause keeps the provider and model. The existing changes GET recovers the original receipt; retry uses the same body and id.
 Saved choices do not yet control ordinary calls. Retirement remains unavailable.
+
+Identical concurrent retries return the saved event id and sequence. A different actor or
+changed request reusing a command id on the same provider gets 409. The automatic default
+uses a reserved internal command id that user requests cannot supply. It chooses the
+first verified provider only when there is no saved default or pause, and waits for that
+provider to enable the chat model. An administrator can explicitly choose any eligible
+verified provider as the initial default.
