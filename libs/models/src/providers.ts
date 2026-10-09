@@ -1,9 +1,10 @@
 import { activeMember, MemberAccessRefused } from './member-authority.ts';
-import { providerIdSchema, providerModelIdSchema } from '@opencrane/events';
+import { parseEventByType, providerIdSchema, providerModelIdSchema,
+  type EventEnvelope } from '@opencrane/events';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { memberAuthorisation, type Binding } from '@opencrane/authz';
-import type { EventStore, StoredEvent } from '@opencrane/event-store';
+import { readEventAt, type EventStore, type StoredEvent } from '@opencrane/event-store';
 import { applyProvider, type ProviderState } from '@opencrane/projections';
 import { authorityFence } from './authority.ts';
 import { history } from './actor.ts';
@@ -136,18 +137,41 @@ export async function appendProvider(store: EventStore, silo: string, providerId
   memberId: string, commandId: string, type: string, payload: unknown,
   expectedSequence: number, fresh: () => Promise<void>) {
   const subject = `provider-${providerId}`;
-  const event = { id: randomUUID(), commandId, subject, silo, type, data: payload,
+  const event: EventEnvelope = { id: randomUUID(), commandId, subject, silo, type, data: payload,
     time: new Date().toISOString(), source: 'opencrane-server', correlation: {},
     principal: { kind: 'human' as const, id: memberId } };
   await fresh();
   const result = await store.append({ expectedSequence, event });
   if (result.status === 'appended') {
-    return providerReceipt({ event, sequence: result.sequence });
+    // Check the saved event because another operation can use the same command id.
+    const deadline = performance.now() + 10_000;
+    const saved = await readEventAt(store, subject, result.sequence, deadline);
+    if (!saved) {
+      throw new Error('Saved provider change unavailable');
+    }
+    reconcileProvider(saved, event);
+    return providerReceipt(saved);
   }
   if (result.status === 'conflict') {
     throw new ProviderConflict();
   }
   throw new Error('Provider append unavailable');
+}
+function reconcileProvider(saved: StoredEvent, attempted: EventEnvelope) {
+  // Compare both payloads in schema order, as the event store does when saving them.
+  const parsed = parseEventByType(attempted);
+  if (!parsed.success) {
+    throw new ProviderConflict();
+  }
+  const expected = parsed.event;
+  const event = saved.event;
+  if (event.silo !== expected.silo || event.subject !== expected.subject ||
+    event.commandId !== expected.commandId || event.type !== expected.type ||
+    event.principal?.kind !== expected.principal?.kind ||
+    event.principal?.id !== expected.principal?.id ||
+    JSON.stringify(event.data) !== JSON.stringify(expected.data)) {
+    throw new ProviderConflict();
+  }
 }
 /** Commands append once. Secret custody and live verification belong to their adapters. */
 export async function providerCommand(store: EventStore, binding: Binding,

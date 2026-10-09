@@ -1165,3 +1165,9 @@ subscriptions refuse group mode until its bounded access reader is introduced.
 Creation and participant commands for that mode are not exposed yet.
 
 Provider binding POSTs use the existing organisation, exact Origin and current Owner/Admin checks with a 4,096-byte limit. GET reads checked event histories, reports real default counts and marks routine history as absent or unsupported. Reader failure or changing history returns 503. See [the provider API](../../docs/api/providers.md).
+
+Concurrent binding and configuration requests with the same command id return
+one saved receipt and one 409 response. Both must finish their final access checks
+before the test lets either append. `changes/:commandId` returns the saved operation
+and its original event id. Configuration replies also read the saved event before
+reporting success, so a binding cannot be mistaken for a saved model change.

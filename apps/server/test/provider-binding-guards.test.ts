@@ -5,7 +5,7 @@ import * as authorisation from '@opencrane/authz';
 import { databases, openfga } from '@opencrane/authz/testing';
 import { event, natsFixture } from '@opencrane/event-store/testing';
 import type { AppendCommand, AppendResult } from '@opencrane/event-store';
-import type { EventEnvelope } from '@opencrane/events';
+import { parseEventByType, type EventEnvelope } from '@opencrane/events';
 import { applyProvider, pgDb, providers, ProjectionRunner,
   rebuildProviderProjection } from '@opencrane/projections';
 import { createLogger } from '@opencrane/observability';
@@ -192,7 +192,11 @@ async function mixedOperations(configurationFirst: boolean) {
       bothReady.resolve();
     }
     await bothReady.promise;
-    const isConfiguration = command.event.type === 'provider.models_selected';
+    const parsed = parseEventByType(command.event);
+    if (!parsed.success) {
+      throw new Error('Invalid test append');
+    }
+    const isConfiguration = parsed.event.type === 'provider.models_selected';
     if (isConfiguration !== configurationFirst) {
       await firstSaved.promise;
       return appendOriginal(command);
@@ -424,7 +428,8 @@ async function finalAuthority(expired: boolean, retry = false) {
   expect(await storedBindings('primary')).toHaveLength(retry ? 1 : 0);
   if (expired || retry) {
     function bindingAppend(call: [AppendCommand]) {
-      return call[0].event.type === 'provider.model_binding_set';
+      const parsed = parseEventByType(call[0].event);
+      return parsed.success && parsed.event.type === 'provider.model_binding_set';
     }
     expect(appendSpy.mock.calls.filter(bindingAppend)).toHaveLength(0);
   }
@@ -468,7 +473,7 @@ function changeSavedEnvelope(record: EventEnvelope, fault: SavedFault): EventEnv
     case 'command id':
       return { ...record, commandId: 'foreign' };
     case 'principal kind':
-      return { ...record, principal: { kind: 'computer', id: 'owner' } };
+      return { ...record, principal: { kind: 'agent', id: 'owner' } };
     case 'principal id':
       return { ...record, principal: { kind: 'human', id: 'admin' } };
     case 'event type':

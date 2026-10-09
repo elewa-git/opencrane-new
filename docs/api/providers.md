@@ -45,6 +45,12 @@ never complete. Check status never saves or verifies again. A repeated accepted
 key command returns the original receipt and ignores the transient replacement
 value; another rotation requires a new command id and the current revision.
 
+A configuration request and a provider-choice request that use the same command
+id on one provider cannot both succeed. The saved request returns its receipt;
+the other request gets 409. The changes GET returns the saved operation and its
+original event id. An unavailable read of that saved event returns 503, so the
+reply cannot confirm a change that was never saved.
+
 Rows contain name, provider, revision, position and enabled model ids. `saved`,
 `reachable`, `modelAnswer` and `modelsChanged` are independent recorded facts with
 actual event time, revision and change id. Model evidence also carries the model,

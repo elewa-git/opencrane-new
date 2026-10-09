@@ -780,3 +780,14 @@ actor reuse, the reserved reaction id, explicit initial defaults, independent so
 and target access checks, key references, registry support, access rechecks, history
 ordering and changing reads, pause preservation, replay and status reads after role loss.
 It uses disposable NATS and OpenFGA plus PostgreSQL with `PG_TEST_URL` set.
+
+The shared provider append helper reads the event at the returned position before
+returning a receipt. It checks the silo, subject, command id, actor, event type and
+request data. A binding and a configuration request that reuse one command id
+cannot both report success. The request for the other operation returns a conflict;
+status GET reports the operation that was saved. A missing saved event refuses the
+receipt as unavailable. This check also applies to verification records.
+
+The binding guard tests cover both save orders with an append barrier, status
+recovery, retry access expiry and revocation, failed appends and individual saved
+event identity checks.

@@ -12,7 +12,7 @@ This is the back-end layer. `apps/web` sends it requests and live connections. I
 flowchart LR
   web["apps/web<br/>the website"] -->|requests and live updates| server["apps/server<br/>sign-in, chat and permission checks"]
   server -.->|checks organisation, access, invitation accounts and spending| libs["libs/*<br/>shared code"]
-  server -->|records changes, model grants, chat, computer facts and provider choices| nats["NATS<br/>event log"]
+  server -->|records changes, model grants, chat, computer facts and confirmed provider choices| nats["NATS<br/>event log"]
   nats -->|new events| ops["apps/ops<br/>background workers"]
   ops -->|updates tables; memory needs its key directory| postgres["PostgreSQL<br/>read tables"]
   server -->|reads members and invitation accounts, chat rows, memory sources, models and computers| postgres
@@ -22,7 +22,9 @@ flowchart LR
 
 ## What it is responsible for
 
-- Lets owners and admins save provider choices and pauses, count affected assistants and recover saved results. Ordinary calls keep their existing setup.
+- Lets owners and admins save provider choices and pauses, count affected assistants
+  and recover saved results. Conflicting requests cannot report an unsaved change
+  as saved. Ordinary calls keep their existing setup.
 - Signs people in and keeps their browser session.
 - Uses the shared organisation check for session routes and WebSocket connections.
   Production refuses extra sign-in identities. Development can allow named identities
